@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -10,9 +11,11 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
+import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -76,18 +79,57 @@ public final class ContainerCounts {
     }
 
     /**
-     * A rule's statement: {@code form} stands {@code rel} to nought.
+     * A rule's statement: {@code form} stands {@code rel} to nought, wherever working the rule out
+     * answers.
      *
-     * @param written the expression each place was written as, the first time it was met, for a
-     *                reader asking about the place in its own terms. Not part of what is stated.
+     * <p>Two claims, held apart because they are asked apart. That the rule, where it answers,
+     * states this is the reading of what it says, and is what a builder of values needs: a value it
+     * composes that the rule stops on is refused where it is made. That the rule answers for every
+     * value of its places is the second, and is what a reader standing the statement in for the rule
+     * needs — one saying the values composed for it all keep it, one checking a decoded value by it
+     * alone. {@code 9223372036854775807 * List.length(xs) == 9223372036854775807 * List.length(ys)}
+     * states the counts are equal where it answers, and answers only where neither counts past one.
+     *
+     * @param answersEverywhere whether working the rule out is shown to end no run, whatever its
+     *                          places are: every step of the arithmetic it writes held on the order of
+     *                          its type, where the counts it is made of lie as the library bounds them
+     *                          ({@link ComputedNumber.Range}), and everything else it works out —
+     *                          the operations it counts through and every closure they are handed,
+     *                          what a closure works out and is not read as well — ending none, as the
+     *                          owners of what may end a run say ({@link WhatARunMayEndFor}). False
+     *                          where that is not shown, which is not that the rule stops
+     * @param written           the expression each place was written as, the first time it was met,
+     *                          for a reader asking about the place in its own terms. Not part of what
+     *                          is stated
      */
-    public record Stated(LinearForm<Count> form, Rel rel, Map<Place, Core> written) {
+    public record Stated(LinearForm<Count> form, Rel rel, boolean answersEverywhere,
+                         Map<Place, Core> written) {
 
         public Stated {
             Objects.requireNonNull(form, "a statement is about some form");
             Objects.requireNonNull(rel, "and stands some way to nought");
             written = Map.copyOf(written);
         }
+    }
+
+    /**
+     * A number a rule writes: the form it is over counts, where it lies, and whether working it out
+     * is shown to end no run.
+     *
+     * @param range where it lies with every count it is made of where the library bounds it, or
+     *              null where that is not known
+     */
+    private record Number(LinearForm<Count> form, ComputedNumber.Range range, boolean answers) {}
+
+    /** The values an {@code Int} holds, which is the order every step of a count's arithmetic is
+     *  worked out on. */
+    private static final ComputedNumber.Range AN_INT = new ComputedNumber.Range(
+            endOf(Carrier.WHOLE.extent().low()), endOf(Carrier.WHOLE.extent().high()));
+
+    private static ExactRatio endOf(Endpoint end) {
+        // The numeric Count is named in full: this class has a Count of its own.
+        return end.at() instanceof souther.compiler.numeric.Count whole
+                ? ExactRatio.of(whole.at()) : null;
     }
 
     private final DeclarationNewtypes newtypes;
@@ -104,11 +146,12 @@ public final class ContainerCounts {
      */
     public static Stated of(StatedComparison compares, DeclarationNewtypes newtypes) {
         ContainerCounts reading = new ContainerCounts(newtypes);
-        LinearForm<Count> left = reading.number(compares.left());
-        LinearForm<Count> right = left == null ? null : reading.number(compares.right());
-        LinearForm<Count> form = right == null ? null : left.minus(right).orNull();
-        return form == null ? null
-                : new Stated(form, compares.relationUnder(true), reading.written);
+        Number left = reading.number(compares.left());
+        Number right = left == null ? null : reading.number(compares.right());
+        LinearForm<Count> form = right == null ? null : left.form().minus(right.form()).orNull();
+        // A comparison itself ends no run, so the rule answers wherever both sides do.
+        return form == null ? null : new Stated(form, compares.relationUnder(true),
+                left.answers() && right.answers(), reading.written);
     }
 
     /**
@@ -128,35 +171,96 @@ public final class ContainerCounts {
         ContainerCounts reading = new ContainerCounts(newtypes);
         AnOperationApplied applied = AnOperationApplied.of(call);
         LinearForm<Count> form = law.over(number -> reading.lawNumber(applied, number));
-        return form == null ? null
-                : new Stated(form, positive ? states : states.denied(), reading.written);
+        // The call, the closures it is handed and everything they work out: what its law states
+        // is what it answers, and it answers wherever none of that ends a run.
+        return form == null ? null : new Stated(form, positive ? states : states.denied(),
+                WhatARunMayEndFor.endsNoneBeneath(call), reading.written);
     }
 
-    /** {@code e} as a form over counts, or null where it is no number this names. */
-    private LinearForm<Count> number(Core e) {
+    /** {@code e} as a number over counts, or null where it is no number this names. */
+    private Number number(Core e) {
         Core bare = Core.withoutStanding(e);
         return switch (bare) {
-            case Core.Int literal -> LinearForm.constant(ExactRatio.of(literal.value()));
+            case Core.Int literal -> {
+                ExactRatio at = ExactRatio.of(literal.value());
+                yield new Number(LinearForm.constant(at), ComputedNumber.Range.at(at), true);
+            }
             case Core.Neg negated -> {
-                LinearForm<Count> of = number(negated.operand());
-                yield of == null ? null : of.negate();
+                Number of = number(negated.operand());
+                yield of == null ? null : step(negated.type(), of.form().negate(),
+                        of.range() == null ? null : of.range().negated(), of.answers());
             }
             case Core.Binary bin when bin.op() == BinOp.ADD || bin.op() == BinOp.SUB -> {
-                LinearForm<Count> left = number(bin.left());
-                LinearForm<Count> right = left == null ? null : number(bin.right());
-                yield right == null ? null
-                        : (bin.op() == BinOp.ADD ? left.plus(right) : left.minus(right)).orNull();
+                Number left = number(bin.left());
+                Number right = left == null ? null : number(bin.right());
+                if (right == null) {
+                    yield null;
+                }
+                boolean adds = bin.op() == BinOp.ADD;
+                LinearForm<Count> form = (adds ? left.form().plus(right.form())
+                        : left.form().minus(right.form())).orNull();
+                ComputedNumber.Range range = left.range() == null || right.range() == null ? null
+                        : left.range().plus(adds ? right.range() : right.range().negated());
+                yield form == null ? null
+                        : step(bin.type(), form, range, left.answers() && right.answers());
             }
             case Core.Binary bin when bin.op() == BinOp.MUL -> {
-                LinearForm<Count> left = number(bin.left());
-                LinearForm<Count> right = left == null ? null : number(bin.right());
-                yield right == null ? null : product(left, right);
+                Number left = number(bin.left());
+                Number right = left == null ? null : number(bin.right());
+                LinearForm<Count> form = right == null ? null
+                        : product(left.form(), right.form());
+                ComputedNumber.Range range = form == null || left.range() == null
+                        || right.range() == null ? null : left.range().times(right.range());
+                yield form == null ? null
+                        : step(bin.type(), form, range, left.answers() && right.answers());
             }
             default -> {
                 Core counted = countedBy(bare);
-                yield counted == null ? null : count(counted);
+                LinearForm<Count> form = counted == null ? null : count(counted);
+                // The count and everything it is taken through, closures and all: an operation
+                // the library writes may stop where an answer it builds has no place, and a
+                // closure may work out what is not read and stop on it.
+                yield form == null ? null
+                        : new Number(form, boundsOf(bare), WhatARunMayEndFor.endsNoneBeneath(bare));
             }
         };
+    }
+
+    /**
+     * One step of the arithmetic, answering wherever what it is made of answers and what it comes
+     * to lies on the values of its type — which is where the run time answers it, an {@code Int}
+     * that overflows ending the run rather than wrapping. Shown only for an {@code Int}, whose
+     * values this holds the order of.
+     */
+    private static Number step(Type type, LinearForm<Count> form, ComputedNumber.Range range,
+                               boolean madeOfWhatAnswers) {
+        return new Number(form, range, madeOfWhatAnswers && Type.INT.equals(type)
+                && range != null && range.liesOn(AN_INT));
+    }
+
+    /** Where the count {@code e} lies, as the library bounds what its operation answers whatever
+     *  it is handed, or null where it bounds it on neither side. */
+    private static ComputedNumber.Range boundsOf(Core e) {
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        if (applied == null) {
+            return null;
+        }
+        ExactRatio low = null;
+        ExactRatio high = null;
+        for (ResultBound<DeclaredArgument> bound
+                : DefaultBoundOperationFacts.get().everyBoundOnTheResult(applied.operation())) {
+            if (bound.against() != null
+                    || !(bound.provided() instanceof ResultBound.Provided.Always<DeclaredArgument>)) {
+                continue;
+            }
+            ExactRatio at = ExactRatio.of(bound.offset());
+            switch (bound.rel()) {
+                case GE -> low = low == null || at.compareTo(low) > 0 ? at : low;
+                case LE -> high = high == null || at.compareTo(high) < 0 ? at : high;
+                default -> { }
+            }
+        }
+        return low == null && high == null ? null : new ComputedNumber.Range(low, high);
     }
 
     /** {@code left} times {@code right}, which is a form only where one of them is a constant. */
@@ -202,9 +306,12 @@ public final class ContainerCounts {
                 Core given = applied.argument(of);
                 yield given == null ? null : count(given);
             }
+            // What the argument works out to answers wherever the call does, and whether the call
+            // answers is asked of the call.
             case LawNumber.AnArgument<DeclaredArgument>(DeclaredArgument of) -> {
                 Core given = applied.argument(of);
-                yield given == null ? null : number(given);
+                Number read = given == null ? null : number(given);
+                yield read == null ? null : read.form();
             }
             case LawNumber.HowManyDifferent<DeclaredArgument>(DeclaredArgument over,
                     LawSubject<DeclaredArgument> each) -> {

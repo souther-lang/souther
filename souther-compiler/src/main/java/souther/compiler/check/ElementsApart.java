@@ -96,6 +96,9 @@ public final class ElementsApart {
                 for (InvariantStatement one : states) {
                     // The run as a place of a value names its fields, as every reader of what the
                     // builders keep names it: apart at a newtype's own value is apart as wholes.
+                    // Told whether or not the rule answers for every value: what the builders keep
+                    // is what the rule says where it answers, and a value composed that it stops on
+                    // is refused where it is made.
                     Stated stated = stated(one, source.newtypes());
                     RuleKey where = stated == null ? null
                             : placeOf(stated.container(), fields, record, source.newtypes());
@@ -327,12 +330,21 @@ public final class ElementsApart {
     }
 
     /**
-     * What a call says no two elements of share, and at which run of fields of an element.
+     * What a rule says no two elements of share, and at which run of fields of an element.
      *
-     * @param container the value whose elements it is about, as the call was handed it
-     * @param run       the fields its closure reads off an element, empty for the element itself
+     * <p>Said of where the rule answers. A builder composing values apart needs nothing more: a
+     * value the rule stops on is refused where it is made. A reader standing this in for the rule —
+     * one saying every value composed keeps it, one checking a decoded value by it alone, one saying
+     * the rule reads nothing of an element but the run — needs the rule to answer for every value as
+     * well, which is {@code answersEverywhere} ({@link ContainerCounts.Stated}).
+     *
+     * @param container         the value whose elements it is about, as the rule was handed it
+     * @param run               the fields its closure reads off an element, empty for the element
+     *                          itself
+     * @param answersEverywhere whether working the rule out is shown to end no run, whatever the
+     *                          container holds
      */
-    public record Stated(Core container, List<String> run) {
+    public record Stated(Core container, List<String> run, boolean answersEverywhere) {
 
         public Stated {
             run = List.copyOf(run);
@@ -401,8 +413,8 @@ public final class ElementsApart {
         // The form is the different values less the elements, weighed by one number; weighed
         // below nought it stands the other way round to them.
         Rel rel = byDifferent.signum() > 0 ? stated.rel() : stated.rel().turned();
-        return rel == Rel.EQ || rel == Rel.GE
-                ? new Stated(stated.written().get(different.at()), different.run()) : null;
+        return rel == Rel.EQ || rel == Rel.GE ? new Stated(stated.written().get(different.at()),
+                different.run(), stated.answersEverywhere()) : null;
     }
 
     /**
@@ -432,15 +444,14 @@ public final class ElementsApart {
     }
 
     /**
-     * The run of fields {@code statement} says no two elements of the value bound at
-     * {@code container} share, or null where it says no such thing of that value or its closure is
-     * none this reads.
+     * What {@code statement} says no two elements of the value bound at {@code container} share,
+     * or null where it says no such thing of that value or its closure is none this reads.
      */
-    public static List<String> apartAt(InvariantStatement statement, BindingId container) {
+    public static Stated apartAt(InvariantStatement statement, BindingId container) {
         Stated stated = stated(statement, null);
         return stated != null
                 && Core.withoutStanding(stated.container()) instanceof Core.Read read
-                && read.binding().equals(container) ? stated.run() : null;
+                && read.binding().equals(container) ? stated : null;
     }
 
     /** The fields {@code closure} reads off its one parameter in order, or null where it does

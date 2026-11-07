@@ -27,6 +27,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -423,20 +424,54 @@ class CompileInvariantConstraintTest {
     }
 
     /** The same rule written as the law the call comes to — as many different elements as
-     *  elements — is the same constraint, reported the same way. */
+     *  elements — and shown to answer for every list, is the same constraint, reported the same
+     *  way. */
     @Test
     void aRepeatedElementOfARuleWrittenByCountIsADuplicate() throws Exception {
         String call = """
                 data V = List<Int>
                     invariant List.allDistinctBy(x -> x, value)
                 """;
-        for (String rule : List.of("List.length(List.distinct(value)) == List.length(value)",
-                "List.length(value) == List.length(List.distinct(value))")) {
+        for (String rule : List.of("Set.size(Set.fromList(value)) == List.length(value)",
+                "List.length(value) == Set.size(Set.fromList(value))",
+                "2 * Set.size(Set.fromList(value)) == 2 * List.length(value)")) {
             String counted = call.replace("List.allDistinctBy(x -> x, value)", rule);
             assertEquals(soleIssue(call, List.of(1L, 2L, 1L)),
                     soleIssue(counted, List.of(1L, 2L, 1L)), rule);
             assertTrue(decoded(counted, List.of(1L, 2L)) instanceof Ok, rule);
         }
+    }
+
+    /**
+     * A rule that keeps the elements apart where it answers and is not shown to answer for every
+     * list is no constraint: the decoder works the clause out, and a list it stops on stops there
+     * as it would without the reading — a repeat included, which the constraint would have
+     * reported as a repeat instead. A count multiplied past what an {@code Int} holds, and a key
+     * filed beside a number added past it, are two such rules; a count through
+     * {@code List.distinct} is a third, which the library does not show to answer for every list.
+     */
+    @Test
+    void aRuleNotShownToAnswerForEveryListIsWorkedOutAsItIs() throws Exception {
+        for (String rule : List.of(
+                "9223372036854775807 * Set.size(Set.fromList(value))"
+                        + " == 9223372036854775807 * List.length(value)",
+                "Map.size(Map.fromList(List.map(x -> (x, 9223372036854775807 + x), value)))"
+                        + " == List.length(value)")) {
+            String data = "data V = List<Int>\n    invariant " + rule + "\n";
+            for (List<Long> stops : List.of(List.of(0L, 1L), List.of(1L, 1L))) {
+                Throwable thrown = assertThrows(Throwable.class,
+                        () -> decoded(data, stops), rule + " " + stops);
+                assertTrue(String.valueOf(thrown.getMessage()).contains("overflow"),
+                        () -> rule + " " + stops + ": " + thrown);
+            }
+        }
+        String distinct = """
+                data V = List<Int>
+                    invariant List.length(List.distinct(value)) == List.length(value)
+                """;
+        assertTrue(decoded(distinct, List.of(1L, 2L)) instanceof Ok);
+        assertEquals("invariant_violation", firstIssue(decoded(distinct, List.of(1L, 2L, 1L))).code(),
+                "worked out as the clause, which says it was broken and not which element repeats");
     }
 
     /**

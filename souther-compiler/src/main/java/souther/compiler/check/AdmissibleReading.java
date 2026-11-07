@@ -333,11 +333,19 @@ final class AdmissibleReading {
                 ElementsApart.stated(part.of(), part.positive(), terms.newtypes());
         FactSubject container = stated != null && ElementsApart.readsAPlace(stated.container())
                 ? positionIn(stated.container(), at) : null;
-        return container == null ? null : new KeptApart(container, stated.run());
+        return container == null ? null
+                : new KeptApart(container, stated.run(), stated.answersEverywhere());
     }
 
-    /** A leaf saying no two elements of {@code container} share what {@code run} reads off one. */
-    record KeptApart(FactSubject container, List<String> run) {}
+    /**
+     * A leaf saying no two elements of {@code container} share what {@code run} reads off one,
+     * where it answers.
+     *
+     * @param answersEverywhere whether the leaf is shown to answer for every container
+     *                          ({@link ElementsApart.Stated}): a reading saying every container
+     *                          composed apart keeps it has to know
+     */
+    record KeptApart(FactSubject container, List<String> run, boolean answersEverywhere) {}
 
     /**
      * The map and the key {@code part} asks the map for an entry under, or null where it asks no

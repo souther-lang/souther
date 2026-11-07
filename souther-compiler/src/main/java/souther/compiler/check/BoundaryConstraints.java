@@ -409,10 +409,15 @@ public final class BoundaryConstraints {
      * there is no constraint for that, so the clause keeps its own check. Nor is there one where
      * the elements have no message form: the constraint reports the elements it finds repeated, and
      * a decoder library cannot write them.
+     *
+     * <p>And only where the clause is shown to answer for every list. The constraint checks a value
+     * in the clause's place, so a clause that stops on some list the constraint lets through — a
+     * count multiplied past what an {@code Int} holds — is a clause the constraint is not.
      */
     private Optional<BoundaryConstraint> unique(InvariantStatement statement, Type base) {
-        List<String> apart = ElementsApart.apartAt(statement, field);
-        if (base instanceof Type.ListOf list && apart != null && apart.isEmpty()) {
+        ElementsApart.Stated apart = ElementsApart.apartAt(statement, field);
+        if (base instanceof Type.ListOf list && apart != null && apart.run().isEmpty()
+                && apart.answersEverywhere()) {
             MessageForm element = messageForm(list.element(), Set.of());
             return element == null ? Optional.empty() : Optional.of(new Unique(element));
         }

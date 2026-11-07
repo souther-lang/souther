@@ -176,11 +176,17 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
      * A count of the different values held against the count of the elements is the call's law
      * written out, and tells the builders what the call does: the same runs, whichever side it is
      * written on, under a denial of its opposite, through a binding, and whichever operation
-     * answers one of each different value. The accounting agrees with what the builders were told.
+     * answers one of each different value. The forms that say something weaker or about two
+     * containers tell nothing.
      *
-     * <p>The call is the oracle. Each count form is held to what {@code List.allDistinctBy} with the
-     * same closure tells, and the forms that say something weaker or about two containers tell
-     * nothing.
+     * <p>Taken in where it is also shown to answer for every container, as the call is: every step
+     * of its arithmetic held on what an {@code Int} holds where the counts lie as the library bounds
+     * them, and nothing else it works out ending a run. A count multiplied past the {@code Int}s, a
+     * key filed beside a number added past them, and a count through {@code List.distinct}, whose
+     * answer the library does not show always has a place, keep the elements apart where they answer
+     * and are not shown to answer everywhere: told, and not taken in.
+     *
+     * <p>The call is the oracle for what is told, and its accounting for what is taken in.
      */
     @Test
     void aCountOfDifferentValuesTellsTheBuildersWhatTheCallTells() {
@@ -196,13 +202,26 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
                         + "\n    }",
                 "List.length(List.distinct(items)) - List.length(items) == 0",
                 "List.length(List.distinct(items)) + 0 == List.length(items)",
-                "2 * List.length(List.distinct(items)) == 2 * List.length(items)");
+                "2 * List.length(List.distinct(items)) == 2 * List.length(items)",
+                "Set.size(Set.fromList(items)) - List.length(items) == 0",
+                "2 * Set.size(Set.fromList(items)) == 2 * List.length(items)",
+                "9223372036854775807 * Set.size(Set.fromList(items))"
+                        + " == 9223372036854775807 * List.length(items)");
         List<String> byId = List.of(
                 "List.length(List.distinctBy(.id, items)) == List.length(items)",
                 "List.length(List.distinctBy(x -> x.id, items)) == List.length(items)",
                 "List.length(List.distinct(List.map(.id, items))) == List.length(items)",
                 "List.length(List.distinct(List.map(.id, items)))"
                         + " == List.length(List.map(.id, items))",
+                "Set.size(Set.fromList(List.map(.id, items))) == List.length(items)",
+                "List.allDistinctBy(x -> x, List.map(.id, items))",
+                "Map.size(Map.fromList(List.map(x -> (x.id, x), items))) == List.length(items)",
+                "Map.size(Map.fromList(List.map(x -> (x.id, 9223372036854775807 + x.id), items)))"
+                        + " == List.length(items)");
+        Set<String> answeringEverywhere = Set.of(
+                "Set.size(Set.fromList(items)) == List.length(items)",
+                "Set.size(Set.fromList(items)) - List.length(items) == 0",
+                "2 * Set.size(Set.fromList(items)) == 2 * List.length(items)",
                 "Set.size(Set.fromList(List.map(.id, items))) == List.length(items)",
                 "List.allDistinctBy(x -> x, List.map(.id, items))",
                 "Map.size(Map.fromList(List.map(x -> (x.id, x), items))) == List.length(items)");
@@ -238,7 +257,7 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
 
             assertEquals(runs, told, rule);
             if (!runs.isEmpty()) {
-                assertFalse(anyUnaccounted(read), rule);
+                assertEquals(answeringEverywhere.contains(rule), !anyUnaccounted(read), rule);
             }
         });
     }

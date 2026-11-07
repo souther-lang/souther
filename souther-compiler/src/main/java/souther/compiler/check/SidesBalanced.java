@@ -90,10 +90,14 @@ public final class SidesBalanced {
      * <p>As the comparison it is, with its denial spent, and its sides read as the library says
      * they come to: an answer whose sign is the order of two arguments, held at nought, is their
      * equality ({@link BoundOperationFacts#statesTheOrderOfItsArguments}), and a sum or difference
-     * of totals is a form over them — so {@code Decimal.compare(d, c) == 0} and
-     * {@code Decimal.subtract(d, c) == 0.0m} both say {@code d == c}. What is left has to be one
-     * total less another of the same list, at two cases, and nothing beside: a constant or a
-     * third total is another rule.
+     * of totals is a form over them — so {@code Decimal.compare(d, c) == 0} says {@code d == c}.
+     * What is left has to be one total less another of the same list, at two cases, and nothing
+     * beside: a constant or a third total is another rule.
+     *
+     * <p>And it adds nothing that ends a run to what the totals work out: an operation the library
+     * says may stop is a rule over the totals that the rule written as their equality is not, where
+     * it stops. {@code Decimal.subtract(d, c) == 0.0m} is one, since a decimal's difference may have
+     * no place ({@link WhatARunMayEndFor}).
      */
     static Stated read(StatedComparison stated) {
         if (stated.relationUnder(true) != Rel.EQ) {
@@ -144,7 +148,7 @@ public final class SidesBalanced {
                 : DefaultBoundOperationFacts.get().statesTheOrderOfItsArguments(
                         applied.operation());
         if (order == null || !(Core.withoutStanding(nought) instanceof Core.Int zero)
-                || zero.value() != 0) {
+                || zero.value() != 0 || !WhatARunMayEndFor.itself(sign).endsNone()) {
             return null;
         }
         Core greater = applied.argument(order.greater());
@@ -163,7 +167,11 @@ public final class SidesBalanced {
         }
         AnOperationApplied applied = AnOperationApplied.of(bare);
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        // Only an addition the library says ends no run: one that stops where its answer has no
+        // place stops on totals the rule written as their order does not, and is another rule
+        // there. A decimal's sum is one of those.
         if (applied != null && applied.args().size() == 2
+                && WhatARunMayEndFor.itself(bare).endsNone()
                 && (facts.computing(BinOp.ADD).contains(applied.operation())
                         || facts.computing(BinOp.SUB).contains(applied.operation()))) {
             LinearForm<Side> first = totals(applied.args().get(0), lists);
@@ -208,7 +216,11 @@ public final class SidesBalanced {
                 && filter.argument(assembled.closure()) != null
                 && LetBound.resolved(filter.argument(assembled.closure()), given)
                         instanceof Core.Block keep
-                && keep.params().size() == 1) {
+                && keep.params().size() == 1
+                // The filter and its condition ending no run, as the step's own condition does in
+                // the walk that adds under it: what is kept is then every element meeting it.
+                && WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(walked).endsNone()
+                && WhatARunMayEndFor.endsNoneBeneath(keep.body())) {
             kept = caseOf(keep.body(), keep.params().getFirst().binding(), given);
             if (kept == null || filter.argument(assembled.source()) == null) {
                 return null;

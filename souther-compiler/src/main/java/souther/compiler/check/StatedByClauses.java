@@ -903,7 +903,10 @@ sealed interface StatedByClauses {
                 return Adoption.at(both, built ? both : Set.of(), !built);
             }
             Set<FactSubject> container = Set.of(stated.container());
-            boolean kept = ElementsApart.covers(
+            // Kept where the builders keep the run and the leaf answers for every container they
+            // compose: a container composed apart that the leaf stops on is one that does not keep
+            // it, whatever the leaf says where it answers.
+            boolean kept = stated.answersEverywhere() && ElementsApart.covers(
                     keptApart.getOrDefault(stated.container(), List.of()), stated.run());
             return Adoption.at(container, kept ? container : Set.of(), !kept);
         }
