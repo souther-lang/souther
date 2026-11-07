@@ -211,7 +211,8 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
                 Set<String> fields = new java.util.TreeSet<>();
                 said.propertyNames().forEach(fields::add);
                 assertEquals(Set.of("structuralWays", "numericallyConsistentWays",
-                        "partsSplitOn", "unattributed", "factors", "diagnosed"), fields,
+                        "partsSplitOn", "unattributed", "factors", "multipliedHelpers",
+                        "diagnosed"), fields,
                         "the counts, what made the parts, and what the numbers leave: " + said);
                 for (JsonNode diagnosis : said.path("diagnosed")) {
                     bounded |= diagnosis.path("kind").asString().equals("orderedBoundaries");

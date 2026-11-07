@@ -437,7 +437,7 @@ public sealed interface Reachability {
          *  denial; a condition of a shape that has none is not shown to be met. */
         private static boolean heldAtEveryRow(TakenConstraint each, SearchRegion before,
                                               SearchRegion region) {
-            return each instanceof TakenConstraint.Affine(var form, var rel)
+            return each instanceof TakenConstraint.Affine(var form, var rel, var _)
                     && (TakenConstraint.holdsOverTheRunsOf(form, rel, before)
                             || TakenConstraint.nothingMeetsAll(
                                     List.of(new TakenConstraint.Affine(form, rel.denied())),

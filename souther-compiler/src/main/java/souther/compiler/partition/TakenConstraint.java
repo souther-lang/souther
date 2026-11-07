@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.SearchRegion;
@@ -11,9 +12,11 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.SequencedSet;
 import java.util.Set;
 
@@ -182,9 +185,37 @@ public sealed interface TakenConstraint {
      * <p>The threshold is inside the form as its constant, so a rule and the same rule with the
      * threshold moved across are one value. What this is over is every term the arithmetic could
      * name, however many of them there are.
+     *
+     * <p><b>Its terms are put in order once.</b> Putting them in the one order names every term
+     * and sorts by the names, and a way asks the terms of each condition it took in at every step
+     * it is walked past, so a condition is asked many times over for the one answer. The answer is
+     * kept in a cell the rest decides, as a proposition keeps its denial.
+     *
+     * @param inOrder where the terms in the one order are kept once asked for, made here whatever
+     *                is handed in
      */
-    record Affine(LinearForm<NumericTerm> form, Rel rel)
+    record Affine(LinearForm<NumericTerm> form, Rel rel, @DecidedByTheRest TermsInOrder inOrder)
             implements TakenConstraint, JointDemand {
+
+        public Affine {
+            inOrder = new TermsInOrder();
+        }
+
+        public Affine(LinearForm<NumericTerm> form, Rel rel) {
+            this(form, rel, null);
+        }
+
+        /** As the record would fold its two components, so a constraint hashes as it always has. */
+        @Override
+        public int hashCode() {
+            return 31 * Objects.hashCode(form) + Objects.hashCode(rel);
+        }
+
+        /** Written as the two things it is, and not the cell beside them. */
+        @Override
+        public String toString() {
+            return "Affine[form=" + form + ", rel=" + rel + "]";
+        }
 
         /**
          * Every number of the form, and the value a count of how often a key occurs, or a total
@@ -194,6 +225,10 @@ public sealed interface TakenConstraint {
          */
         @Override
         public SequencedSet<NumericTerm> terms() {
+            return inOrder.of(this);
+        }
+
+        private SequencedSet<NumericTerm> putInOrder() {
             if (form.coefs().keySet().stream().noneMatch(term ->
                     term instanceof NumericTerm.OccurrencesOfAKey
                             || term instanceof NumericTerm.GatheredUnderAKey
@@ -216,7 +251,49 @@ public sealed interface TakenConstraint {
                 }
                 out.add(term);
             }
-            return out;
+            return Collections.unmodifiableSequencedSet(out);
+        }
+    }
+
+    /**
+     * Where a form's terms in the one order are kept, once asked for: one cell for each
+     * {@link Affine}, which every cell is equal to, since what it keeps is decided by the form.
+     */
+    final class TermsInOrder {
+
+        private volatile SequencedSet<NumericTerm> kept;
+
+        TermsInOrder() {
+        }
+
+        /** The terms kept, or those {@code of} puts in order, kept from now on. */
+        SequencedSet<NumericTerm> of(Affine of) {
+            SequencedSet<NumericTerm> held = kept;
+            if (held != null) {
+                return held;
+            }
+            SequencedSet<NumericTerm> made = of.putInOrder();
+            synchronized (this) {
+                if (kept == null) {
+                    kept = made;
+                }
+                return kept;
+            }
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof TermsInOrder;
+        }
+
+        @Override
+        public int hashCode() {
+            return 0;
+        }
+
+        @Override
+        public String toString() {
+            return "TermsInOrder";
         }
     }
 

@@ -1643,8 +1643,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 default -> ModelOccurrences.NONE;
             });
         }
-        // And the copies each case of a line not worked out was read at.
-        expanded.forEach(each -> each.readings().forEach(reading -> copies.add(reading.readAt())));
+        // And the copies each case of a line not worked out was read at, and those of the helpers
+        // its choices multiply.
+        expanded.forEach(each -> each.readings().forEach(reading -> {
+            copies.add(reading.readAt());
+            if (reading.cameTo().attributed() instanceof CaseExpansion.Attributed attributed) {
+                attributed.multiplied().forEach(helper -> helper.madeAt().forEach(copies::add));
+            }
+        }));
         Map<ModelOccurrence, CopyShown> out = new LinkedHashMap<>();
         for (ModelOccurrence copy : copies.gathered()) {
             out.computeIfAbsent(copy, _ -> new CopyShown(
@@ -2164,8 +2170,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             partition.caseExpansions().forEach(each -> each.readings().forEach(reading -> {
                 if (reading.cameTo().attributed()
                         instanceof CaseExpansion.Attributed attributed) {
-                    attributed.factors().forEach(factor -> factor.constructs().forEach(
-                            construct -> whereItIsWritten(construct).ifPresent(take)));
+                    attributed.constructsNamed().forEach(
+                            construct -> whereItIsWritten(construct).ifPresent(take));
                 }
             }));
         }
@@ -4122,7 +4128,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             inCopies(reading.readAt(), behavior.conditionPlaces().copies(),
                                     rendering, declaredIn),
                             caseExpansionSaid(reading.cameTo(), construct -> writtenIn(
-                                    construct, parts, rendering, declaredIn))));
+                                    construct, parts, rendering, declaredIn),
+                                    copy -> chain(callsAt(behavior.conditionPlaces().copies(),
+                                            copy).calls(), rendering, declaredIn))));
                 }
             }
         }
@@ -9084,6 +9092,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ArrayNode factors = into.putArray("factors");
                 attributed.factors().forEach(each ->
                         factor(factors.addObject(), each, parts, sources));
+                ArrayNode multiplied = into.putArray("multipliedHelpers");
+                attributed.multiplied().forEach(each ->
+                        multipliedHelper(multiplied.addObject(), each, parts, sources));
             }
         }
         ArrayNode diagnosed = into.putArray("diagnosed");
@@ -9146,6 +9157,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
+    /** A helper whose readings the choices of a case multiply, with each comparison of it that
+     *  made their parts and the helpers its call is written inside. */
+    private static void multipliedHelper(ObjectNode into, CaseExpansion.MultipliedHelper helper,
+                                         WhereAPartIs parts, DocumentSources sources) {
+        into.put("helper", helper.helper().toString());
+        ArrayNode madeAt = into.putArray("madeAt");
+        for (ModelOccurrence each : helper.madeAt()) {
+            ObjectNode one = madeAt.addObject();
+            copyId(one.putObject("construct"), each);
+            writtenAt(one, each, parts, sources);
+            ArrayNode inside = one.putArray("calledInside");
+            CaseExpansion.MultipliedHelper.calledInside(each).forEach(
+                    caller -> inside.add(caller.toString()));
+        }
+    }
+
     /**
      * Where an author goes about a construct of the model a count names: the construct they wrote,
      * which every copy of it through a helper's calls is, and nothing where a pass composed it.
@@ -9177,7 +9204,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * a sign of multiplication, which would say the count is their product.
      */
     private static String caseExpansionSaid(CaseExpansion.CameTo expansion,
-                                            Function<ModelOccurrence, String> writtenIn) {
+                                            Function<ModelOccurrence, String> writtenIn,
+                                            Function<ModelOccurrence, String> calledAt) {
         StringBuilder out = new StringBuilder(switch (expansion.counted().structuralWays()) {
             case CaseCount.Ways.Exactly(var ways) ->
                     String.format(Locale.ROOT, "%,d structural ways", ways);
@@ -9210,6 +9238,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             ". %,d of its %,d parts were made by nothing named here",
                             attributed.unattributed(), attributed.partsSplitOn()));
                 }
+                attributed.multiplied().forEach(helper -> out.append(
+                        multipliedHelperSaid(helper, writtenIn, calledAt)));
             }
         }
         if (!expansion.diagnosed().isEmpty()) {
@@ -9231,6 +9261,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     remainders.comparisons(), remainders.dividend(), remainders.divisor(),
                     remainders.ways(), remainders.ways() == 1 ? "way" : "ways");
         };
+    }
+
+    /**
+     * A helper whose readings a case's choices multiply, as a suggestion an author can take: what
+     * the helper is, where its comparisons were read, and the helpers its call has to move out of.
+     * Nothing about what the case would come to, which is another compilation.
+     */
+    private static String multipliedHelperSaid(CaseExpansion.MultipliedHelper helper,
+                                               Function<ModelOccurrence, String> writtenIn,
+                                               Function<ModelOccurrence, String> calledAt) {
+        Set<String> at = new LinkedHashSet<>();
+        Set<ValueName.Helper> inside = new LinkedHashSet<>();
+        for (ModelOccurrence each : helper.madeAt()) {
+            String calls = calledAt.apply(each);
+            at.add(writtenIn.apply(each) + (calls.isEmpty() ? "" : " in " + calls));
+            inside.addAll(CaseExpansion.MultipliedHelper.calledInside(each));
+        }
+        return String.format(Locale.ROOT, ". Choices held together multiply what more than one"
+                        + " reading of the helper `%s` made (%s): declared as a behavior, it is"
+                        + " not expanded here, and each reading is its answer%s",
+                helper.helper().name(), String.join("; ", at), inside.isEmpty() ? ""
+                        : ". A helper cannot call a behavior, and the call is written inside "
+                                + inside.stream().map(each -> "`" + each.name() + "`")
+                                        .collect(Collectors.joining(", "))
+                                + ", so it moves into a behavior's own let");
     }
 
     /** One thing that made some of a case's parts, as an author would find it. */

@@ -79,7 +79,7 @@ class HoldingWhatEveryCaseHoldsFirstKeepsTheOrderTheCasesWereWrittenInTest {
                     : new DecidingCase.Cases.One(truth(dice.nextInt(6)));
             case 2, 3 -> new DecidingCase.Cases.EachOf(
                     group(dice, depth, before, dice.nextInt(3), sharing, nobodyTookApart));
-            default -> new DecidingCase.Cases.Together(
+            default -> DecidingCase.Cases.together(
                     group(dice, depth, before, dice.nextInt(4), sharing, nobodyTookApart));
         };
         before.add(made);

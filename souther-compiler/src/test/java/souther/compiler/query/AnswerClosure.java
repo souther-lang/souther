@@ -1192,7 +1192,10 @@ final class AnswerClosure {
                 "souther.compiler.meaning.Proposition$SoManyHold#denial",
                 // What an entry on a way hashes as, folded from its other components where it is
                 // made, since it is looked up in every set a way is compared by.
-                "souther.compiler.partition.OnTheWay$TakenIn#hash");
+                "souther.compiler.partition.OnTheWay$TakenIn#hash",
+                // The terms of a condition over a form in the one order, kept once asked for,
+                // which the form decides ({@code TakenConstraint.TermsInOrder}).
+                "souther.compiler.partition.TakenConstraint$Affine#inOrder");
     }
 
     /** Every place written down here, whichever detector or scenario meets it. */
