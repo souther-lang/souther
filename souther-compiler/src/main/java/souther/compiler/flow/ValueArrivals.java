@@ -3,6 +3,7 @@ package souther.compiler.flow;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.TruthRestatement;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -659,46 +660,151 @@ public final class ValueArrivals<P> {
                                 inside(into, naming, comparisons, bound))
                         : new Paths.Held<>(List.of());
             }
-            // Not inside a copy of an application: the operation stopping early is its own walk,
-            // and the value comes out as the application answers.
-            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled()
-                    && !inACopy(binary) -> through(binary, naming, comparisons, bound);
             // A fork inside one of the language's own operations is the operation's and not the
             // body's: what the language defines the meaning of is the operation, so the ways
             // through the walk it does are no ways of the body. It arrives as one value, as a call
-            // of the operation standing does.
+            // of the operation standing does. Asked of every kind of fork, by where it stands.
             case Core.If iff when !statedByTheModel(iff.place()) -> {
                 into.put(iff, new IntoArms(iff, naming).withNoWaysKnown());
                 enters.put(iff, new boolean[] {true, true});
-                yield built(iff, naming, comparisons, bound);
+                yield valueOf(iff, naming, comparisons, bound);
             }
             case Core.Match match when !statedByTheModel(match.place()) ->
-                    built(match, naming, comparisons, bound);
+                    valueOf(match, naming, comparisons, bound);
+            case Core.IfConstructed constructed when !statedByTheModel(constructed.place()) ->
+                    valueOf(constructed, naming, comparisons, bound);
             case Core.If iff -> fork(iff, naming, comparisons, bound);
             case Core.Match match -> arms(match, naming, comparisons, bound);
             case Core.IfConstructed constructed -> attempted(constructed, naming, comparisons, bound);
             // A call kept standing where the operations are expanded is one this compiler failed to
             // expand, and is refused. Where they stand, it is the model naming an operation: its
-            // arguments are evaluated and what it answers is a value with no truth this reading
-            // says, which is what a value made of several already comes to — unless the operation
-            // answers its argument's truth denied.
+            // arguments are evaluated, and what it answers is read as any other value is.
             case Core.PreservedCall preserved -> {
                 if (operations == WhereTheOperationsAre.ARE_EXPANDED_IN_IT) {
                     throw preserved.unexpectedIn("value-flow analysis");
                 }
-                yield madeOf(e, naming, comparisons, bound);
+                yield valueOf(e, naming, comparisons, bound);
             }
-            default -> madeOf(e, naming, comparisons, bound);
+            default -> valueOf(e, naming, comparisons, bound);
         };
     }
 
-    /** A value made out of its parts: as the truth it restates where it restates one, and as a
-     *  value {@link #built} out of several otherwise. */
-    private Paths<P> madeOf(Core e, Naming<P> naming, ComparisonWays comparisons,
-                            Map<BindingId, Bound<P>> bound) {
+    /**
+     * A value that is no fork of the model's: one value of the application where it is code of a
+     * copy of one, and read for what it means where it is the model's own.
+     *
+     * <p>The one place the two are told apart. A copy's code is the walk an operation of the
+     * language does, and nothing in it is a way of the body: the application comes out the way it
+     * answers, where the copy is entered ({@link #answering}). So no reading of a value by what it
+     * means — an operator that stops early, a truth restated, a truth taken off a record, a truth
+     * split two ways — is made of a copy's code, and what it comes to there does not turn on how the
+     * library happened to write the operation. Each such reading is in {@link #meant}, behind this.
+     */
+    private Paths<P> valueOf(Core e, Naming<P> naming, ComparisonWays comparisons,
+                             Map<BindingId, Bound<P>> bound) {
+        return inACopy(e) ? built(e, naming, comparisons, bound)
+                : meant(e, naming, comparisons, bound);
+    }
+
+    /**
+     * A value of the model's own code, read for what it means: an operator that stops as soon as
+     * its answer is settled ({@link #through}), the truth it restates ({@link #restating}), the
+     * truth written where it is taken off a value written out ({@link #takenOff}), and otherwise a
+     * value {@link #built} out of its parts and split the ways it comes out
+     * ({@link #answeredWhole}).
+     */
+    private Paths<P> meant(Core e, Naming<P> naming, ComparisonWays comparisons,
+                           Map<BindingId, Bound<P>> bound) {
+        if (e instanceof Core.Binary binary && binary.op().stopsWhenItsAnswerIsSettled()) {
+            return through(binary, naming, comparisons, bound);
+        }
         TruthRestatement restated = TruthRestatement.of(e);
-        return restated == null ? built(e, naming, comparisons, bound)
-                : restating(e, restated, naming, comparisons, bound);
+        if (restated != null) {
+            return restating(e, restated, naming, comparisons, bound);
+        }
+        Paths<P> written = takenOff(e, naming, comparisons, bound);
+        return written != null ? written
+                : answeredWhole(e, built(e, naming, comparisons, bound), naming, comparisons, bound);
+    }
+
+    /**
+     * The ways to a truth taken off a value written out — a field of a record built here, or of
+     * one a name was bound to — which are the ways of the truth written there, or null where it
+     * is taken off nothing written.
+     *
+     * <p>{@code s.hit} with {@code s} bound to {@code Seen { hit = a || b, ... }} is {@code a || b}
+     * read through a record, as {@code c} bound to {@code a || b} is read through a name, and is
+     * settled where and how {@code a || b} is. A value made of its parts arrives with no truth along
+     * any of its ways, so a fork on the field would otherwise have only its arms to tell them apart
+     * by. What the field is taken off is evaluated all the same, and where it arrives at no value,
+     * neither does the field. How far a field is followed is {@link ValueStanding}'s, with this
+     * reading's names as what each name was settled to.
+     *
+     * <p>A truth only. The ways a value of another type arrives carry nothing of it, and a value
+     * written there that arrives one way whose truth nobody read is read as one built out of its
+     * parts, as a restatement of one is ({@link #restating}).
+     */
+    private Paths<P> takenOff(Core e, Naming<P> naming, ComparisonWays comparisons,
+                              Map<BindingId, Bound<P>> bound) {
+        if (!Type.BOOL.equals(e.type()) || !(e instanceof Core.FieldAccess
+                || e instanceof Core.TupleGet || e instanceof Core.FieldProjection)) {
+            return null;
+        }
+        for (Core part : partsOf(e)) {
+            settle(part, naming, comparisons, bound);
+            if (!arrivesAt(part)) {
+                return new Paths.Held<>(List.of());
+            }
+        }
+        Core stands = ValueStanding.one(e, bound, new SettledNames(bound)).value();
+        Paths<P> ways = stands == e ? null : settled.get(stands);
+        if (ways instanceof Paths.Held<P> held && held.arrivals().size() == 1
+                && held.arrivals().getFirst().value() == Truth.UNREAD) {
+            return null;
+        }
+        return ways;
+    }
+
+    /**
+     * What each name of this reading was settled to, as the environment a value is followed in.
+     *
+     * <p>A name is the value it was bound to where the body bound it to one, and stands for itself
+     * where it was bound to nothing this reading can read — a position, an arm's binding. Nothing
+     * here is several values, and a binding met inside what is followed is not entered: its names
+     * are not this reading's, so the walk stops in front of them.
+     */
+    private final class SettledNames
+            implements ValueStanding.Names<Map<BindingId, Bound<P>>, SettledNames> {
+
+        private final Map<BindingId, Bound<P>> bound;
+
+        SettledNames(Map<BindingId, Bound<P>> bound) {
+            this.bound = bound;
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<Map<BindingId, Bound<P>>> readThrough(
+                Core.Read read, Map<BindingId, Bound<P>> at) {
+            Bound<P> named = at.get(read.binding());
+            return named == null || named.settledBy() == null ? null
+                    : new ValueStanding.ReadThrough<>(named.settledBy(), at);
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<Map<BindingId, Bound<P>>>> alternativesOf(
+                Core.Read read, Map<BindingId, Bound<P>> at) {
+            return null;
+        }
+
+        @Override
+        public Map<BindingId, Bound<P>> inside(Core.LetIn li, Map<BindingId, Bound<P>> at) {
+            return at;
+        }
+
+        @Override
+        public SettledNames oneAtATime() {
+            return this;
+        }
     }
 
     /**
@@ -727,7 +833,8 @@ public final class ValueArrivals<P> {
         }
         List<Arrival<P>> ways = held.arrivals();
         if (ways.size() == 1 && ways.getFirst().value() == Truth.UNREAD) {
-            return built(e, naming, comparisons, bound);
+            return answeredWhole(e, built(e, naming, comparisons, bound), naming, comparisons,
+                    bound);
         }
         if (!restated.denies()) {
             return operand;
@@ -743,7 +850,8 @@ public final class ValueArrivals<P> {
      * <p>One rule and not a case each: what it does not cover is exactly what forks, what stops
      * early, what names, and what comes out one of two ways against another value. A part that
      * arrives at no value leaves the whole arriving at none, which is what makes this the reading of
-     * everything strict as well.
+     * everything strict as well. What the value comes to is no part of this; the model's own values
+     * are split the ways they come out by {@link #answeredWhole}.
      */
     private Paths<P> built(Core e, Naming<P> naming, ComparisonWays comparisons,
                             Map<BindingId, Bound<P>> bound) {
@@ -758,19 +866,24 @@ public final class ValueArrivals<P> {
                 return out;
             }
         }
-        // A value of an application's code is the application's, and comes out the way the
-        // application answers ({@link #answering}).
-        if (out.orNone().size() == 1 && !inACopy(e)) {
-            Paths<P> settledTwoWays = comparedOut(e, out.orNone().get(0), naming, comparisons,
-                    read -> {
-                        Bound<P> named = bound.get(read.binding());
-                        return named == null ? null : named.settledBy();
-                    });
-            if (settledTwoWays != null) {
-                return settledTwoWays;
-            }
-        }
         return out;
+    }
+
+    /**
+     * {@code out}, the ways to a value of the model's own, split by the truth the value comes out
+     * where it arrives one way and comes out a truth one way or both.
+     */
+    private Paths<P> answeredWhole(Core e, Paths<P> out, Naming<P> naming,
+                                   ComparisonWays comparisons, Map<BindingId, Bound<P>> bound) {
+        if (out.orNone().size() != 1) {
+            return out;
+        }
+        Paths<P> settledTwoWays = comparedOut(e, out.orNone().get(0), naming, comparisons,
+                read -> {
+                    Bound<P> named = bound.get(read.binding());
+                    return named == null ? null : named.settledBy();
+                });
+        return settledTwoWays != null ? settledTwoWays : out;
     }
 
     /**

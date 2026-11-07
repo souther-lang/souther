@@ -756,6 +756,14 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "Ljava/util/Set;)Ljava/util/List;", 1,
                 "whether values meet at the node the walk stands at: a Widen is one value standing"
                         + " as another, so none meet there");
+        String ways = "(" + core + "L" + c + "flow/Naming;L" + c
+                + "flow/ComparisonWays;Ljava/util/Map;)L" + c + "flow/Paths;";
+        row(out, c + "flow/ValueArrivals", "meant", ways, 1,
+                "whether the node the walk stands at is an operator that stops early: a Widen has"
+                        + " its own reading, as the value it holds, and never arrives here");
+        row(out, c + "flow/ValueArrivals", "takenOff", ways, 3,
+                "whether the node the walk stands at takes a value off another: a Widen has its"
+                        + " own reading, as the value it holds, and never arrives here");
         return out;
     }
 

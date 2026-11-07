@@ -426,7 +426,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.DataChecker.collectConstructions",
                     "asks the enum whether the right operand runs on every run, for which"
                             + " constructions building a value runs"),
-            new Held("souther.compiler.flow.ValueArrivals.reading",
+            new Held("souther.compiler.flow.ValueArrivals.meant",
                     "asks the enum whether the right operand runs on every run"),
             new Held("souther.compiler.flow.ValueArrivals.through", "and which way it runs under"),
             new Held("souther.compiler.reading.CoverageRead.descend",
