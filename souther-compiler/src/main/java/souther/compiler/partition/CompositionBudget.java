@@ -751,11 +751,12 @@ public enum CompositionBudget {
     }
 
     /**
-     * The figure itself, as the compilation reading it holds it ({@link Allowances}). What is
-     * done on reaching it is the member's to say.
+     * The figure itself, as the compilation reading it holds it ({@link Allowances}); for a
+     * budget no compilation may hold to another figure, the one declared. What is done on
+     * reaching it is the member's to say.
      */
     public int maximum() {
-        return Allowances.inForce(this);
+        return Allowances.SETTABLE.contains(this) ? Allowances.inForce(this) : maximum;
     }
 
     /** The figure written down here, which a compilation holds this to where it says nothing
@@ -764,9 +765,10 @@ public enum CompositionBudget {
         return maximum;
     }
 
-    /** This budget as a figure something stopped at. */
+    /** This budget as a figure something stopped at, at the figure it is held to where this is
+     *  asked: made where it is reached, it carries the figure the compilation reaching it used. */
     public Figure figure() {
-        return new Figure.Budget(this);
+        return new Figure.Budget(this, maximum());
     }
 
     /**

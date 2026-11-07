@@ -1001,6 +1001,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param offered what this run offers, one entry per module it was asked about
      */
     public static AdequacyReport of(Compilation compilation, Map<String, Offering> offered) {
+        // Under the figures the compilation was held to, which a figure made of what its answers
+        // carry is said at: what put a report together outside the asking would say the ones
+        // declared.
+        return compilation.db().allowances().over(() -> assembled(compilation, offered));
+    }
+
+    private static AdequacyReport assembled(Compilation compilation,
+                                            Map<String, Offering> offered) {
         List<ModuleReport> modules = new ArrayList<>();
         WeakeningSet overall = WeakeningSet.none();
         for (String name : compilation.modules()) {

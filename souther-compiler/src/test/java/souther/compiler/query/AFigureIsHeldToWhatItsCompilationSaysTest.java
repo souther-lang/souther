@@ -2,10 +2,12 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.Allowances;
 import souther.compiler.partition.CompositionBudget;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -37,6 +39,29 @@ class AFigureIsHeldToWhatItsCompilationSaysTest {
         assertEquals(SETTABLE.declared(), SETTABLE.maximum(), "and outside it, as declared");
         assertEquals(SETTABLE.declared(), new Db().ask(new TheFigure()).value(),
                 "a store that says nothing holds the figure declared");
+    }
+
+    /** A question whose answer is the figure reached, as a reader is told it. */
+    private record TheFigureReached() implements Key<Figure> {
+
+        @Override
+        public Answer<Figure> compute(Db db) {
+            return Answer.of(SETTABLE.figure());
+        }
+    }
+
+    /**
+     * A figure reached carries the number it stood at: told after the store answered, it says
+     * the store's, and figures two stores reached at two numbers are two figures.
+     */
+    @Test
+    void aFigureReachedIsTheNumberItStoodAt() {
+        Figure reached = new Db().allowing(Allowances.DECLARED.with(SETTABLE, 3))
+                .ask(new TheFigureReached()).value();
+        assertEquals("3", reached.most(), "the store's figure, told outside it");
+        Figure declared = new Db().ask(new TheFigureReached()).value();
+        assertEquals(Integer.toString(SETTABLE.declared()), declared.most());
+        assertNotEquals(declared, reached, "a budget reached at two numbers is two figures");
     }
 
     @Test

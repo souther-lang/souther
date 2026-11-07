@@ -25,6 +25,12 @@ import java.util.function.Supplier;
  * changing; so they are said once, before anything is asked ({@code Db#allowing}), and are in force
  * for every question it answers. A figure read outside any compilation's answering is the one
  * declared.
+ *
+ * <p><b>And carried, where a figure is reached.</b> What stopped at a figure says the number it
+ * stood at ({@link CompositionBudget#figure}), made where the figure was reached and so under the
+ * compilation reaching it, and a reader is told that number however long after. A reader putting
+ * figures together out of the budgets an answer names does so under the compilation's figures as
+ * well ({@code AdequacyReport#of}).
  */
 public final class Allowances {
 

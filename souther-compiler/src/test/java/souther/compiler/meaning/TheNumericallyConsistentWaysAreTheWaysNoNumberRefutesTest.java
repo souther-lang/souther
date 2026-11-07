@@ -324,6 +324,30 @@ class TheNumericallyConsistentWaysAreTheWaysNoNumberRefutesTest {
         }
     }
 
+    /**
+     * A count given up for its own states leaves the other's. Remainders of one number moved
+     * apart, more of them than the intervals' states hold, are one interval each to the
+     * intervals' count, so it reaches a state for every way of choosing them; the numbers' count
+     * reaches one for each remainder the number may leave, and is said.
+     */
+    @Test
+    void theIntervalsGivingUpLeavesTheNumbersCounted() {
+        int moved = Integer.SIZE - Integer.numberOfLeadingZeros(
+                NumericallyConsistentWays.STATES_A_COUNT_IS_TAKEN_IN);
+        List<DecidingCase.Cases> choices = new ArrayList<>();
+        for (int by = 0; by < moved; by++) {
+            Proposition nought = onARemainder(by, Rel.EQ, 0, true);
+            choices.add(new DecidingCase.Cases.EachOf(List.of(new DecidingCase.Cases.One(nought),
+                    new DecidingCase.Cases.One(nought.denied()))));
+        }
+        assertEquals(new NumericallyConsistentWays.Counts(
+                        new NumericallyConsistentWays.Counted.NotCounted(
+                                NumericallyConsistentWays.WhyNotCounted.STATES_A_COUNT_IS_TAKEN_IN),
+                        new NumericallyConsistentWays.Counted.AtMost(BigInteger.valueOf(DIVISOR))),
+                NumericallyConsistentWays.counted(new DecidingCase.Cases.Together(choices)),
+                moved + " remainders moved apart");
+    }
+
     @Test
     void pastTheStatesACountIsTakenInNothingIsCounted() {
         // One choice of each side of a line for each of seventeen numbers, every way consistent and
