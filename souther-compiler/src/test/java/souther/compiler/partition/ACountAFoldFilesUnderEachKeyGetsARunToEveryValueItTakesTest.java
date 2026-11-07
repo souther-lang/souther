@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -293,7 +294,7 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
     void aCountOverContainersHeldToMoreThanOneElementIsNotClaimed() {
         List<UndividedPosition.Reason> paired =
                 reasonsAt(THE_COUNT, List.of("countedPaired")).get("countedPaired");
-        assertEquals(false, paired.contains(RELATES), paired.toString());
+        assertFalse(paired.contains(RELATES), paired.toString());
     }
 
     /** The places the count's walk reads, read after it: the count's own operations stop no run

@@ -4171,20 +4171,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         List<TermPath> reads = List.copyOf(readOff);
         List<TermPath> standing = new ArrayList<>();
-        amongThemselves.forEach(each -> standing.add(each.path()));
+        // A count stands at the container it counts. Where nothing else stands there, the place
+        // asks nothing of the witness the count does not ask itself (Witness#standsOnlyAsACount).
+        Set<TermPath> asACount = new HashSet<>();
+        Set<TermPath> otherwise = new HashSet<>();
+        amongThemselves.forEach(each -> {
+            standing.add(each.path());
+            otherwise.add(each.path());
+        });
         for (Side side : sides) {
             Optional<List<TermPath>> placesOfTheSide = whereItsNumbersStand(side);
             if (placesOfTheSide.isEmpty()) {
                 return Optional.empty();
             }
             standing.addAll(placesOfTheSide.get());
+            TermPath counted = containerItCounts(side.number());
+            for (TermPath place : placesOfTheSide.get()) {
+                (place.equals(counted) ? asACount : otherwise).add(place);
+            }
         }
-        Witness witness = new Witness(reads, standing, read, region, conditions, declined,
-                Set.of());
+        asACount.removeAll(otherwise);
+        Witness witness = new Witness(reads, standing, asACount, read, region, conditions,
+                declined, Set.of());
         Optional<Set<TermPath>> walked = walkedByTheApplicationsBefore(past, read);
         if (walked.isPresent()) {
-            Witness ofOne = new Witness(reads, standing, read, region, conditions, declined,
-                    walked.get());
+            Witness ofOne = new Witness(reads, standing, asACount, read, region, conditions,
+                    declined, walked.get());
             if (walked.get().stream()
                     .allMatch(each -> ofOne.holds(each).equals(Optional.of(BigInteger.ONE)))) {
                 return stopsOn(past, reads, ofOne, false, read, collecting, false, accountedFor)
@@ -4510,6 +4522,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         private final List<TermPath> reads;
         private final InputReading read;
         private final List<TermPath> standing;
+        private final Set<TermPath> standsOnlyAsACount;
         private final SearchRegion region;
         private final List<OnAWay> conditions;
         private final Optional<Set<String>> declined;
@@ -4633,12 +4646,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * @param heldToOne the collections held to the one element the relation is read at
          * @param standing  where each number the relation reads stands in an element
          *                  ({@link #whereItsNumbersStand}), which a cut must not read whole
+         * @param standsOnlyAsACount those of {@code standing} at which nothing stands but a count
+         *                  of the container there ({@link #containerItCounts}): that container is
+         *                  held at as many as it holds, and what is inside it is no part of how
+         *                  many it holds, so neither is a cut that reads it whole
          */
-        Witness(List<TermPath> reads, List<TermPath> standing, InputReading read,
-                SearchRegion region, List<OnAWay> conditions, Optional<Set<String>> declined,
-                Set<TermPath> heldToOne) {
+        Witness(List<TermPath> reads, List<TermPath> standing, Set<TermPath> standsOnlyAsACount,
+                InputReading read, SearchRegion region, List<OnAWay> conditions,
+                Optional<Set<String>> declined, Set<TermPath> heldToOne) {
             this.reads = reads;
             this.standing = standing;
+            this.standsOnlyAsACount = Set.copyOf(standsOnlyAsACount);
             this.read = read;
             this.region = region;
             this.conditions = conditions;
@@ -4733,7 +4751,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             boolean aTotal = false;
             boolean asManyAsItCounts = false;
-            Set<TermPath> countedHere = new HashSet<>();
             for (Side side : sides) {
                 Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(side);
                 boolean ofTheCollection = placesOfTheSide.isEmpty() || placesOfTheSide.get()
@@ -4743,7 +4760,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     case AT_ONE -> aTotal |= ofTheCollection;
                     case BY_ITS_COUNT -> {
                         TermPath counted = containerItCounts(side.number());
-                        countedHere.add(counted);
                         if (ofTheCollection) {
                             if (collection.equals(counted)) {
                                 asManyAsItCounts = true;
@@ -4763,10 +4779,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             BigInteger inside = BigInteger.ZERO;
             for (TermPath at : standing) {
-                // A count stands at the container it counts, which is held at as many as it holds
-                // above, and what is inside that container is no part of how many it holds.
                 if ((at.equals(collection) || collection.isAtOrUnder(at))
-                        && !countedHere.contains(at)) {
+                        && !standsOnlyAsACount.contains(at)) {
                     return Optional.empty();
                 }
                 if (at.isAtOrUnder(collection)) {
@@ -4904,7 +4918,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * value it does on a row of that many elements each holding what is counted once — or null
      * where it is no such count.
      *
-     * <p>How many a position holds counts that position. How many values a run has, and how often
+     * <p>How many a position holds counts that position, as the library declares the operation
+     * that answers it ({@code TakenAs.HowManyItHolds}): a list's elements, a set's, a map's
+     * entries, and a string's code points alike. A witness cuts collections only, so a string's
+     * count is of no collection it cuts, and the collections around the string are cut as around
+     * any number of an element. How many values a run has, and how often
      * one value occurs among them, whether the value at a place of the run or one a key names,
      * count the outermost container of the run: a row of as many copies of one element, each
      * holding the value once, takes the count. A count of occurrences a selection keeps is not
