@@ -194,7 +194,8 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
      * another compilation.
      *
      * @param helper the helper
-     * @param madeAt the comparisons and the conditions of choices it wrote that made those parts,
+     * @param madeAt the constructs it wrote those parts were read at — comparisons, and choices of
+     *               every kind, an operation's law among them —
      *               each in the copy of the body it was read in, in the order the cases meet them
      */
     public record MultipliedHelper(ValueName.Helper helper, List<ModelOccurrence> madeAt) {
