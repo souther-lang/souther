@@ -7,15 +7,17 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 
 import java.math.BigInteger;
+import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Every value a count moves to under a key is {@code first + step * k} for the {@code k} elements
- * before it that have the key, fewer than a collection holds: so the moves stay within what an
- * {@code Int} holds exactly where the last of them does, which is one element short of
- * {@link GetsPast#MOST_ELEMENTS}.
+ * Every value a count finds under a key is {@code first + step * (k - 1)} for the {@code k}
+ * elements before it that have the key, one at least and fewer than a collection holds: so what
+ * is found lies from {@code first} to {@code first + step * (MOST_ELEMENTS - 2)}, and the move
+ * {@code n + step} stays within what an {@code Int} holds exactly where the last of those does.
  *
  * <p>Each case sits on one side of that end, worked out from the ends of an {@code Int} and the
  * most a collection holds rather than written down, so a law reading {@code k} up to the most a
@@ -27,9 +29,29 @@ class WhatACountMovesToLiesWithinItsOperatorTest {
     private static final BigInteger GREATEST = WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS.greatest();
     private static final BigInteger MOST_BEFORE = GetsPast.MOST_ELEMENTS.subtract(BigInteger.ONE);
 
+    /** Whether the move by {@code step} of every value found lies within an {@code Int}. */
     private static boolean within(BigInteger first, BigInteger step) {
-        return new KeyedAccumulation.Filed.Counted(ExactRatio.of(first), ExactRatio.of(step))
-                .everyValueMovedLiesWithin(LEAST, GREATEST);
+        List<ExactRatio> ends = new KeyedAccumulation.Filed.Counted(ExactRatio.of(first),
+                ExactRatio.of(step)).endsOfWhatIsFound();
+        ExactRatio least = ends.getFirst().plus(ExactRatio.of(step)).orNull();
+        ExactRatio greatest = ends.getLast().plus(ExactRatio.of(step)).orNull();
+        return least.compareTo(ExactRatio.of(LEAST)) >= 0
+                && greatest.compareTo(ExactRatio.of(GREATEST)) <= 0;
+    }
+
+    @Test
+    void whatACountByOneFindsIsFromOneToTheElementsBeforeTheLastOfAFullCollection() {
+        assertEquals(List.of(ExactRatio.ONE, ExactRatio.of(MOST_BEFORE)),
+                new KeyedAccumulation.Filed.Counted(ExactRatio.ONE, ExactRatio.ONE)
+                        .endsOfWhatIsFound());
+    }
+
+    @Test
+    void aCountDownFindsTheLesserEndFirst() {
+        List<ExactRatio> ends = new KeyedAccumulation.Filed.Counted(ExactRatio.ONE,
+                ExactRatio.of(-1)).endsOfWhatIsFound();
+        assertTrue(ends.getFirst().compareTo(ends.getLast()) <= 0);
+        assertEquals(ExactRatio.ONE, ends.getLast());
     }
 
     @Test

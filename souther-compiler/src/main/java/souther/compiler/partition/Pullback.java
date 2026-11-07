@@ -1601,10 +1601,8 @@ final class Pullback {
      *
      * <p>Nothing in a closure no run applies ({@link Operators#neverApplied}): it ends no run. Nor
      * does a construction that no clause of its type refuses a run of, an operation that comes
-     * to a number where it answers whatever its operands come to, or an operation of the step of
-     * a walk that files under each key which that walk shows to stop none of its runs, where it
-     * stands in that step ({@link #completionOf}): what those operands work out is still asked
-     * below.
+     * to a number where it answers whatever its operands come to ({@link #completionOf}): what
+     * those operands work out is still asked below.
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
@@ -1647,137 +1645,90 @@ final class Pullback {
                 operated.unsaidElsewhere = elsewhereBefore;
             }
         }
-        ShownByAWalk around = operated.shownByAWalk;
+        WhatTheStepsNamesHold around = operated.stepsNames;
         SeededWalk walk = e instanceof Core.PreservedCall call
                 ? SeededWalk.enteredHoweverFar(call, blocksAt(new Denotation(call, reads))) : null;
-        ShownByAWalk ofTheStep = walk == null ? null
-                : ShownByAWalk.ofTheStep(KeyedAccumulation.of(e, reads, sides(),
-                        blocksAt(new Denotation(e, reads))));
-        Function<Core, ShownByAWalk> under = child -> walk != null
-                ? ShownByAWalk.inTheWalk(walk.step(), ofTheStep, child)
+        KeyedAccumulation filed = walk == null ? null
+                : KeyedAccumulation.of(e, reads, sides(), blocksAt(new Denotation(e, reads)));
+        Function<Core, WhatTheStepsNamesHold> under = child -> walk != null
+                ? around.inTheWalk(walk.step(), filed, child)
                 : around.under(e, child);
         try {
             if (e instanceof Core.LetIn li) {
-                operated.shownByAWalk = under.apply(li.value());
+                operated.stepsNames = under.apply(li.value());
                 leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
-                operated.shownByAWalk = under.apply(li.body());
+                operated.stepsNames = under.apply(li.body());
                 leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
             } else if (e instanceof Core.IfConstructed attempt) {
                 WhatARunMayEndFor.forEachWorkedOut(attempt, part -> {
-                    operated.shownByAWalk = under.apply(part);
+                    operated.stepsNames = under.apply(part);
                     leaveUnsaidWhatMayEndARunUnder(part, reads, bound);
                 });
             } else {
                 Core.forEachChild(e, child -> {
-                    operated.shownByAWalk = under.apply(child);
+                    operated.stepsNames = under.apply(child);
                     leaveUnsaidWhatMayEndARunUnder(child, reads,
                             Core.withoutStanding(child) instanceof Core.Block block
                                     ? boundInside(e, block, reads, bound) : bound);
                 });
             }
         } finally {
-            operated.shownByAWalk = around;
+            operated.stepsNames = around;
         }
     }
 
     /**
-     * What a walk that files under the key of each element ({@link KeyedAccumulation}) shows of
-     * the operations of its step, at the place in the tree the walk of what may end a run stands.
+     * What the names a walk that files under each key binds in its step to the value found under
+     * the key hold ({@link KeyedAccumulation.Found}), where the walk of what may end a run stands.
      *
-     * <p>Shown by position and not by node. The walk's runs are what make what it files into and
-     * what it finds under a key what the walk says, so what is shown holds of the operations
-     * where they stand in its step: the step written at the walk, and none it reaches by a name,
-     * which is walked where it is written. That a node stands at one place of the tree only is
-     * nothing anything here states, so the same operation met in the seed, in what is walked, or
-     * in the step of another walk is not shown by this one: entering another walk shows what that
-     * walk shows, and nothing of this one's.
+     * <p>Such a name holds what the walk's law says of every value found
+     * ({@link KeyedAccumulation.Filed.Counted#endsOfWhatIsFound}), and is given it where it
+     * receives the value: under the part of the site that binds it, in the step written at the
+     * walk. The site is looked for in that step only — the walk's seed, what it walks, and the
+     * step of a walk inside look for their own — since the law is of the values the walk hands
+     * its step. Once given, the name holds the range wherever it is read under that part, since
+     * one binder binds it and nothing else does.
      *
-     * <p>Within the step, the same operation that files met at another place is shown there too,
-     * and is what it is shown to be: what it answers turns on the names it reads, each bound by
-     * one binder ({@code BindingId}), and in one application of the step the answer so far and
-     * the element are each bound once. The move is not so: the closure it is written in is
-     * applied to whatever value the operation handed it finds, so it is shown only under the
-     * argument of the operation shown, and the same closure handed to anything else is not.
-     *
-     * <p>In the step, each operation that files is shown to stop no run where it ends one only on
-     * an answer that holds more than a collection does ({@link GetsPast.WhereTheAnswerFits}),
-     * which what it files into never comes to ({@link KeyedAccumulation.Filing}). Under the
-     * argument of such an operation that moves the value found, the move of a count is shown to
-     * stop no run where every value it works out is one its operator answers
-     * ({@link KeyedAccumulation.Filed.Counted#everyValueMovedLiesWithin}).
-     *
-     * @param filings the operations of the step that file, each with a move only where that
-     *                move is shown to stop no run: empty outside the step of a walk that files
-     * @param fit     those of {@code filings} shown to stop no run themselves
-     * @param move    the move shown to stop no run, where the place is under the argument it
-     *                moves by; null elsewhere
+     * @param found where the step of the walk around binds the value found, until the walk of
+     *              what may end a run reaches it; null elsewhere
+     * @param range what the name bound at {@code found} holds, where {@code found} is not null
+     * @param held  every name given a range here, with it
      */
-    record ShownByAWalk(List<KeyedAccumulation.Filing> filings, List<Core> fit, Core move) {
+    record WhatTheStepsNamesHold(KeyedAccumulation.Found found, FormRange range,
+                                 Map<BindingId, FormRange> held) {
 
-        static final ShownByAWalk NOTHING = new ShownByAWalk(List.of(), List.of(), null);
+        static final WhatTheStepsNamesHold NOTHING =
+                new WhatTheStepsNamesHold(null, null, Map.of());
 
-        /** What a walk read as {@code filed} shows of its step, where {@code filed} is not null:
-         *  a walk that files under the key of each element. */
-        static ShownByAWalk ofTheStep(KeyedAccumulation filed) {
-            if (filed == null) {
-                return NOTHING;
-            }
-            List<KeyedAccumulation.Filing> filings = new ArrayList<>();
-            List<Core> fit = new ArrayList<>();
-            for (KeyedAccumulation.Filing each : filed.filings()) {
-                filings.add(each.move() != null
-                        && filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
-                        && movesWithin(counted, each.move()) ? each
-                        : new KeyedAccumulation.Filing(each.operation(), null, null));
-                if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(each.operation())
-                        instanceof GetsPast.WhereTheAnswerFits) {
-                    fit.add(each.operation());
-                }
-            }
-            return new ShownByAWalk(filings, fit, null);
+        /** What is held at {@code child}, a part of a walk whose step is {@code step}, read as
+         *  {@code filed} where that is not null: in the step, where it binds the value found. */
+        WhatTheStepsNamesHold inTheWalk(Core step, KeyedAccumulation filed, Core child) {
+            List<ExactRatio> ends = Core.withoutStanding(child) == step && filed != null
+                    && filed.found() != null
+                    && filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
+                    ? counted.endsOfWhatIsFound() : List.of();
+            return ends.isEmpty() ? new WhatTheStepsNamesHold(null, null, held)
+                    : new WhatTheStepsNamesHold(filed.found(),
+                            new FormRange(ends.getFirst(), ends.getLast()), held);
         }
 
-        /** Whether every value {@code move}, the move of {@code counted}, works out is one its
-         *  operator answers. */
-        private static boolean movesWithin(KeyedAccumulation.Filed.Counted counted, Core move) {
-            return Core.withoutStanding(move) instanceof Core.Binary binary
-                    && AffineForms.whereItAnswers(binary)
-                    instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
-                            var least, var greatest)
-                    && counted.everyValueMovedLiesWithin(least, greatest);
-        }
-
-        /** What is shown at {@code child}, a part of a walk whose step is {@code step} and which
-         *  shows {@code ofTheStep}: that in the step, and nothing in its seed or what it walks. */
-        static ShownByAWalk inTheWalk(Core step, ShownByAWalk ofTheStep, Core child) {
-            return Core.withoutStanding(child) == step ? ofTheStep : NOTHING;
-        }
-
-        /** Whether {@code e}, where it stands here, is shown to stop no run. */
-        boolean stopsNoRunAt(Core e) {
-            return e == move || fit.stream().anyMatch(each -> each == e);
-        }
-
-        /** What is shown at {@code child}, a part of {@code e} that is no walk. Under an
-         *  operation shown, only the move under the argument it moves by; elsewhere what is shown
-         *  here. */
-        ShownByAWalk under(Core e, Core child) {
-            KeyedAccumulation.Filing filing = filingAt(e);
-            if (filing == null) {
+        /** What is held at {@code child}, a part of {@code e} that is no walk: at the site, the
+         *  name it binds under the part that binds it. */
+        WhatTheStepsNamesHold under(Core e, Core child) {
+            if (found == null || e != found.site()) {
                 return this;
             }
-            return filing.movedBy() != null
-                    && Core.withoutStanding(child) == Core.withoutStanding(filing.movedBy())
-                    ? new ShownByAWalk(List.of(), List.of(), filing.move()) : NOTHING;
+            if (Core.withoutStanding(child) != Core.withoutStanding(found.under())) {
+                return new WhatTheStepsNamesHold(null, null, held);
+            }
+            Map<BindingId, FormRange> more = new HashMap<>(held);
+            more.put(found.name(), range);
+            return new WhatTheStepsNamesHold(null, null, Map.copyOf(more));
         }
 
-        private KeyedAccumulation.Filing filingAt(Core e) {
-            for (KeyedAccumulation.Filing each : filings) {
-                if (each.operation() == e) {
-                    return each;
-                }
-            }
-            return null;
+        /** What {@code name} holds here, or null where it is given nothing. */
+        FormRange of(BindingId name) {
+            return held.get(name);
         }
     }
 
@@ -1785,14 +1736,14 @@ final class Pullback {
      * What a run gets past at {@code e}, apart from the closures written at it: on every run,
      * where it is a construction no clause of its type refuses
      * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}), comes to a number where it answers
-     * whatever its operands are ({@link #comesToWhereItAnswers}), or is shown to stop no run where
-     * it stands by the walk the place is in the step of ({@link ShownByAWalk}); else as the owner
-     * of what a node ends a run for says ({@link WhatARunMayEndFor}).
+     * whatever its operands are ({@link #comesToWhereItAnswers}); else as the owner of what a node
+     * ends a run for says ({@link WhatARunMayEndFor}). An operation answering where the collection
+     * it answers fits is owed ({@link StopObligation}), and a reader asks how many its collections
+     * hold on the runs it reads.
      */
     private GetsPast completionOf(Core e, InputReads reads) {
         boolean always = (Core.withoutStanding(e) instanceof Core.Construct made
                 && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads))
-                || operated.shownByAWalk.stopsNoRunAt(Core.withoutStanding(e))
                 || comesToWhereItAnswers(e, reads);
         return always ? new GetsPast.Always()
                 : WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
@@ -1899,14 +1850,16 @@ final class Pullback {
      * over the numbers each says it lies between ({@link FormRange#ofNumbers}); a number rounded
      * to a whole one, the numbers the ends of what it rounds round to, since rounding keeps their
      * order; a whole number an operation of the library answers, where the library bounds it
-     * ({@link #whatTheLibraryBounds}) — a remainder by a divisor below nought as by one above; and
-     * a sum, a difference, a product or a negation of numbers each of which is known, where the
-     * arithmetic composes it as no form.
+     * ({@link #whatTheLibraryBounds}) — a remainder by a divisor below nought as by one above; a
+     * name the step of a walk around binds to the value found under a key, what the walk's law
+     * says it holds there ({@link WhatTheStepsNamesHold}), where nothing else says; and a sum, a
+     * difference, a product or a negation of numbers each of which is known, where the arithmetic
+     * composes it as no form.
      */
     private FormRange exactRangeOf(Core e, InputReads reads) {
         if (AffineForms.outcome(e, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
-            return FormRange.ofNumbers(form, read);
+            return FormRange.ofNumbers(form, read, operated.stepsNames::of);
         }
         RoundedToAWholeNumber.Written rounding = writtenRounding(e, reads);
         if (rounding != null) {
@@ -1919,6 +1872,9 @@ final class Pullback {
         if (here instanceof Core.PreservedCall call) {
             return call.type() == Type.INT
                     ? FormRange.ofTheWholeNumbersIn(whatTheLibraryBounds(call, reads)) : null;
+        }
+        if (here instanceof Core.Read name) {
+            return operated.stepsNames.of(name.binding());
         }
         if (!isAnOperator(here)) {
             return null;
@@ -7838,9 +7794,9 @@ final class Pullback {
         /** The closures no run applies ({@link InputReads.Applications.NoneMade}), whose bodies
          *  stop no run. */
         private final Set<Core> neverApplied = Collections.newSetFromMap(new IdentityHashMap<>());
-        /** What the walk the walk of what may end a run is in the step of shows, where it stands
-         *  now ({@link ShownByAWalk}). */
-        private ShownByAWalk shownByAWalk = ShownByAWalk.NOTHING;
+        /** What the names of the step of a walk around hold, where the walk of what may end a run
+         *  stands now ({@link WhatTheStepsNamesHold}). */
+        private WhatTheStepsNamesHold stepsNames = WhatTheStepsNamesHold.NOTHING;
         private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
         private Set<TermPath> unsaidAt = new LinkedHashSet<>();
         private boolean unsaidElsewhere;

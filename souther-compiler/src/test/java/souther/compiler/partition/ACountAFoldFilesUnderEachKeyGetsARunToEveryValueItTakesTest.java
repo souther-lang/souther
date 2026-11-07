@@ -100,6 +100,32 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
                         acc), Map.empty, issues)
             let nextOf (issues: List<Issue>): List<String> =
                 List.fold((l, i) -> List.append(l, [String.fromInt(i.n + 1)]), [], issues)
+            let byDown (ks: List<String>): Map<String, Int> =
+                List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n - 1, acc), Map.empty, ks)
+            let lessInside (ks: List<String>): Map<String, Int> =
+                List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> {
+                    let less = n - 1
+                    n + 1
+                }, acc), Map.empty, ks)
+            let doubledInside (ks: List<String>): Map<String, Int> =
+                List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> {
+                    let twice = n * 2
+                    n + 1
+                }, acc), Map.empty, ks)
+            let farInside (ks: List<String>): Map<String, Int> =
+                List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> {
+                    let far = n * 4294967301
+                    n + 1
+                }, acc), Map.empty, ks)
+            let walkInStep (ks: List<String>): Map<String, Int> =
+                List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> {
+                    let inner = List.fold((a, _) -> a * 3, n, ks)
+                    n + 1
+                }, acc), Map.empty, ks)
+            let gathered (ks: List<String>): Set<String> =
+                List.fold((s, k) -> Set.insert(k, s), Set.empty, ks)
+            let doubled (ks: List<String>): List<String> =
+                List.fold((l, _) -> List.append(l, l), ks, ks)
 
             behavior countedByOne : (board: Board, atLeast: Int) -> Usage
                 constructs Usage
@@ -232,6 +258,78 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
                 guard List.length(board.issues) >= atLeast else No
                 Usage { counts = counts }
             }
+
+            behavior downThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let downThenGuard (board, atLeast) = {
+                let counts = byDown(keysOf(board.issues))
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = counts }
+            }
+
+            behavior lessInsideThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let lessInsideThenGuard (board, atLeast) = {
+                let counts = lessInside(keysOf(board.issues))
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = counts }
+            }
+
+            behavior doubledInsideThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let doubledInsideThenGuard (board, atLeast) = {
+                let counts = doubledInside(keysOf(board.issues))
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = counts }
+            }
+
+            behavior farInsideThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let farInsideThenGuard (board, atLeast) = {
+                let counts = farInside(keysOf(board.issues))
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = counts }
+            }
+
+            behavior walkInStepThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let walkInStepThenGuard (board, atLeast) = {
+                let counts = walkInStep(keysOf(board.issues))
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = counts }
+            }
+
+            behavior lookedThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let lookedThenGuard (board, atLeast) = {
+                let counts = looked(keysOf(board.issues))
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = counts }
+            }
+
+            behavior stepNamedThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let stepNamedThenGuard (board, atLeast) = {
+                let counts = stepNamed(keysOf(board.issues))
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = counts }
+            }
+
+            behavior gatheredThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let gatheredThenGuard (board, atLeast) = {
+                let seen = gathered(keysOf(board.issues))
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = Map.insert("seen", Set.size(seen), Map.empty) }
+            }
+
+            behavior doubledThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let doubledThenGuard (board, atLeast) = {
+                let twice = doubled(keysOf(board.issues))
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = Map.insert("twice", List.length(twice), Map.empty) }
+            }
             """;
 
     private static final String THE_COUNT = "occurrences(board.issues[*].labels[*])";
@@ -310,6 +408,39 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
         expected.put("moveNamedThenGuard", List.of(NOT_REACHED));
         expected.put("walkInsideThenGuard", List.of(NOT_REACHED));
         expected.put("outsideThenGuard", List.of(NOT_REACHED));
+        expected.put("downThenGuard", List.of(RELATES));
+        expected.put("lookedThenGuard", List.of(RELATES));
+        expected.put("stepNamedThenGuard", List.of(RELATES));
+        assertEquals(expected, reasonsAt(HOW_MANY_ISSUES, expected.keySet()));
+    }
+
+    /**
+     * What the count finds under a key lies between one and the elements before the last of a
+     * full collection, and any arithmetic over it is asked against that: one less and twice stay
+     * within an {@code Int}, a product by more than a full collection keeps inside one may pass
+     * it. A walk inside the step is asked of its own: what it carries holds nothing the count
+     * says.
+     */
+    @Test
+    void whatIsWorkedOutOfTheValueFoundIsAskedOfWhereThatValueLies() {
+        Map<String, List<UndividedPosition.Reason>> expected = new LinkedHashMap<>();
+        expected.put("lessInsideThenGuard", List.of(RELATES));
+        expected.put("doubledInsideThenGuard", List.of(RELATES));
+        expected.put("farInsideThenGuard", List.of(NOT_REACHED));
+        expected.put("walkInStepThenGuard", List.of(NOT_REACHED));
+        assertEquals(expected, reasonsAt(HOW_MANY_ISSUES, expected.keySet()));
+    }
+
+    /**
+     * A walk that puts one element in what it carries at each element holds no more than the
+     * elements it walks, whatever it is built for: a set gathered from the empty set fits on every
+     * run. One that joins what it carries to itself doubles it, and still stops a run.
+     */
+    @Test
+    void aWalkPuttingInOneElementAtEachFitsOnEveryRun() {
+        Map<String, List<UndividedPosition.Reason>> expected = new LinkedHashMap<>();
+        expected.put("gatheredThenGuard", List.of(RELATES));
+        expected.put("doubledThenGuard", List.of(NOT_REACHED));
         assertEquals(expected, reasonsAt(HOW_MANY_ISSUES, expected.keySet()));
     }
 

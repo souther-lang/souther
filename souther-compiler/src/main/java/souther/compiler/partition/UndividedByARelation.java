@@ -127,6 +127,7 @@ import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -4204,6 +4205,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             standing.add(each.path());
             otherwise.add(each.path());
         });
+        List<TermPath> counts = new ArrayList<>();
         for (Side side : sides) {
             Optional<List<TermPath>> placesOfTheSide = whereItsNumbersStand(side);
             if (placesOfTheSide.isEmpty()) {
@@ -4211,17 +4213,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             standing.addAll(placesOfTheSide.get());
             TermPath counted = containerItCounts(side.number());
+            counts.add(counted);
             for (TermPath place : placesOfTheSide.get()) {
                 (place.equals(counted) ? asACount : otherwise).add(place);
             }
         }
         asACount.removeAll(otherwise);
-        Witness witness = new Witness(reads, standing, asACount, read, region, conditions,
-                declined, Set.of());
+        Witness witness = new Witness(reads, standing, asACount, counts, read, region,
+                conditions, declined, Set.of());
         Optional<Set<TermPath>> walked = walkedByTheApplicationsBefore(past, read);
         if (walked.isPresent()) {
-            Witness ofOne = new Witness(reads, standing, asACount, read, region, conditions,
-                    declined, walked.get());
+            Witness ofOne = new Witness(reads, standing, asACount, counts, read, region,
+                    conditions, declined, walked.get());
             if (walked.get().stream()
                     .allMatch(each -> ofOne.holds(each).equals(Optional.of(BigInteger.ONE)))) {
                 return stopsOn(past, reads, ofOne, false, read, collecting, false, accountedFor)
@@ -4548,6 +4551,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         private final InputReading read;
         private final List<TermPath> standing;
         private final Set<TermPath> standsOnlyAsACount;
+        private final List<TermPath> counts;
         private final SearchRegion region;
         private final List<OnAWay> conditions;
         private final Optional<Set<String>> declined;
@@ -4648,13 +4652,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     return false;
                 }
             }
-            for (Side side : sides) {
-                Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(side);
+            for (int i = 0; i < sides.size(); i++) {
+                Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(sides.get(i));
                 if (placesOfTheSide.isEmpty()) {
                     return false;
                 }
                 if (placesOfTheSide.get().stream().anyMatch(at -> at.bearsOn(list))
-                        && !keptByCopies(side)) {
+                        && !keptByCopies(sides.get(i), counts.get(i))) {
                     return false;
                 }
             }
@@ -4675,13 +4679,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *                  of the container there ({@link #containerItCounts}): that container is
          *                  held at as many as it holds, and what is inside it is no part of how
          *                  many it holds, so neither is a cut that reads it whole
+         * @param counts    the container each side counts ({@link #containerItCounts}), in the
+         *                  order of the sides, null for a side that counts none
          */
         Witness(List<TermPath> reads, List<TermPath> standing, Set<TermPath> standsOnlyAsACount,
-                InputReading read, SearchRegion region, List<OnAWay> conditions,
-                Optional<Set<String>> declined, Set<TermPath> heldToOne) {
+                List<TermPath> counts, InputReading read, SearchRegion region,
+                List<OnAWay> conditions, Optional<Set<String>> declined,
+                Set<TermPath> heldToOne) {
             this.reads = reads;
             this.standing = standing;
             this.standsOnlyAsACount = Set.copyOf(standsOnlyAsACount);
+            this.counts = Collections.unmodifiableList(new ArrayList<>(counts));
             this.read = read;
             this.region = region;
             this.conditions = conditions;
@@ -4717,9 +4725,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return statement.elementsOf() == null && !statement.whatStands()
                     && statement.relation() instanceof TakenConstraint.Affine(var form, var _, var _)
                     && form.coefs().size() == 1
-                    && sides.stream().anyMatch(side ->
-                            form.coefs().containsKey(side.number())
-                                    && containerItCounts(side.number()) instanceof TermPath counted
+                    && IntStream.range(0, sides.size()).anyMatch(i ->
+                            form.coefs().containsKey(sides.get(i).number())
+                                    && counts.get(i) instanceof TermPath counted
                                     && collection.isAtOrUnder(counted));
         }
 
@@ -4781,15 +4789,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             boolean aTotal = false;
             boolean asManyAsItCounts = false;
-            for (Side side : sides) {
+            for (int i = 0; i < sides.size(); i++) {
+                Side side = sides.get(i);
+                TermPath counted = counts.get(i);
                 Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(side);
                 boolean ofTheCollection = placesOfTheSide.isEmpty() || placesOfTheSide.get()
                         .stream().anyMatch(at -> at.bearsOn(collection));
-                switch (keptCutDown(side)) {
+                switch (keptCutDown(side, counted)) {
                     case AT_ANY_SIZE -> { }
                     case AT_ONE -> aTotal |= ofTheCollection;
                     case BY_ITS_COUNT -> {
-                        TermPath counted = containerItCounts(side.number());
                         if (ofTheCollection) {
                             if (collection.equals(counted)) {
                                 asManyAsItCounts = true;
@@ -4902,23 +4911,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the element's own and every copy holds it; anything else is asked as it is when the
      * collection is cut down ({@link #keptCutDown}), which does not say what a string side keeps.
      */
-    private static boolean keptByCopies(Side side) {
+    private static boolean keptByCopies(Side side, TermPath counted) {
         if (side.number() == null && side.along() == null
                 && (side.text() != null || side.piece() != null)) {
             return true;
         }
-        return keptCutDown(side) == CutDown.AT_ANY_SIZE;
+        return keptCutDown(side, counted) == CutDown.AT_ANY_SIZE;
     }
 
-    /** How {@code side} keeps its value where a collection it is made of is cut down. */
-    private static CutDown keptCutDown(Side side) {
+    /** How {@code side}, counting the elements of {@code counted} where that is not null
+     *  ({@link #containerItCounts}), keeps its value where a collection it is made of is cut
+     *  down. */
+    private static CutDown keptCutDown(Side side, TermPath counted) {
         if (side.along() instanceof Quantity.KeptSoFar) {
             return CutDown.AT_ANY_SIZE;
         }
         if (side.along() != null) {
             return CutDown.NOT;
         }
-        if (containerItCounts(side.number()) != null) {
+        if (counted != null) {
             return CutDown.BY_ITS_COUNT;
         }
         return switch (side.number()) {
