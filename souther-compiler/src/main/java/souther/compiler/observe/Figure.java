@@ -30,7 +30,9 @@ public sealed interface Figure permits Figure.Budget, WorkFigure.At {
 
     /**
      * One of the composing stage's budgets, and the figure it stood at where it was reached
-     * ({@link CompositionBudget#figure}): the one the compilation reaching it held it to.
+     * ({@link CompositionBudget#reached}): the one the compilation reaching it held it to, or the
+     * share of it the work that stopped was held to where the budget is shared out among several
+     * ({@link CompositionBudget#reachedAShareOf}).
      */
     record Budget(CompositionBudget budget, int at) implements Figure {
 

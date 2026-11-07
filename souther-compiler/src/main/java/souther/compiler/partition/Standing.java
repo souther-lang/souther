@@ -252,6 +252,13 @@ public sealed interface Standing {
                         + NumericTerms.inOrder(form.coefs().keySet())
                         + " against " + NumericTerms.inOrder(on.keySet()));
             }
+            // The levels are the form's own, so a constant belongs to them and not to the form:
+            // the walk puts the coefficients at a level, and a constant left here would be one it
+            // never adds, placing positions at a level the form does not come to.
+            if (form.constant().signum() != 0) {
+                throw new IllegalArgumentException("a form carries no constant; it belongs to the"
+                        + " levels: " + form);
+            }
         }
     }
 

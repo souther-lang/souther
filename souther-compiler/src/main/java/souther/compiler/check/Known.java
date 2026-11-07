@@ -9,6 +9,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.values.Allowance;
 
@@ -103,7 +104,9 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
          * choice kept so far, and a count kept per reading would have the path pay the whole of it
          * at each. Where it runs out the choices left stay undecided as they were when kept, and
          * what the path rules out then turns on the order the conditions were written in; nothing
-         * is ruled out that is not.
+         * is ruled out that is not. A part taken in short of it is said to have stopped at it
+         * ({@link WorkFigure#PARTS_A_PATH_SETTLES}), at this figure and
+         * not at what was left of it.
          */
         static final int PARTS_A_PATH_SETTLES = 4096;
 

@@ -158,6 +158,7 @@
         "values_a_position_on_the_way_is_tried_at",
         "places_a_position_on_the_way_is_looked_at",
         "assignments_on_the_way_composed_for",
+        "values_the_positions_on_the_way_are_tried_at",
         "values_a_point_is_tried_with",
         "rows_beside_a_run_are_made_for_a_point",
         "paths_of_a_decision_read",
@@ -190,6 +191,7 @@
         "readings_of_a_row_at_a_point",
         "elements_a_walk_writes_out",
         "fields_a_rule_is_followed_down",
+        "parts_a_path_settles",
         "pairs_of_classes_counted",
         "combinations_of_a_group_measured",
         "runs_replacing_an_arm",
@@ -7002,6 +7004,7 @@
                           "ways_a_total_is_spread",
                           "places_a_pair_is_tried_at_on_a_line",
                           "values_that_answer_several_of_their_numbers",
+                          "values_at_a_remainder_of_a_form_not_of_whole_numbers",
                           "places_in_a_run_that_are_named",
                           "elements_chosen_for_a_count",
                           "keys_placed_at_the_number_their_elements_come_to",
@@ -7042,7 +7045,8 @@
                               "values_a_total_is_spread_over",
                               "the_least_count_asked_for",
                               "counts_an_item_is_tried_at",
-                              "places_an_element_turns_at"
+                              "places_an_element_turns_at",
+                              "what_a_value_named_comes_to"
                             ]
                           },
                           "why": {

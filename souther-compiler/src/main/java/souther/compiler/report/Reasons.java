@@ -165,6 +165,8 @@ final class Reasons {
                         "the places on a line between two positions a pair is tried at";
                 case VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS ->
                         "the values that answer several of their own numbers";
+                case VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS ->
+                        "the values at a remainder of a form weighed by what is not whole";
                 case PLACES_IN_A_RUN_THAT_ARE_NAMED ->
                         "the places inside one run a value is named at";
                 case ELEMENTS_CHOSEN_FOR_A_COUNT ->
@@ -237,6 +239,7 @@ final class Reasons {
                 case COUNTS_AN_ITEM_IS_TRIED_AT -> "a count a line on a count is tried at";
                 case PLACES_AN_ELEMENT_TURNS_AT ->
                         "a place a statement about an element turns over at";
+                case WHAT_A_VALUE_NAMED_COMES_TO -> "what a value the rules name comes to";
             };
             out.add(what + switch (each.why()) {
                 case MORE_ROOM_COULD_ANSWER -> ", which this host had no room to work out";

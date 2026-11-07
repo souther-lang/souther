@@ -462,6 +462,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " which travel nowhere because reaching that one gives nothing up:"
                             + " the walk carries on against the wider box, which offers every"
                             + " assignment the narrowing would have and skips none of them"),
+            Map.entry("souther.compiler.partition.LevelRealizer$Steps#spentSaying("
+                            + "Ljava/util/Set;)Z",
+                    "says the steps into what the item stopped at where they are spent, in place"
+                            + " of a walk that would stop at its first step and say them"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofTwo("
                             + "Lsouther/compiler/partition/Standing$OfTwoOnOneCarrier;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
@@ -649,6 +653,30 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
                     "stops trying values of a position on the way and says which figure"),
+            Map.entry("souther.compiler.partition.NumericWitness$Tries#<init>()V",
+                    "how many values the positions of one question on the way are tried at"
+                            + " together"),
+            Map.entry("souther.compiler.partition.NumericWitness#tryingAt("
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/inputs/NumericTerm;"
+                            + "Lsouther/compiler/numeric/Place;Ljava/util/List;I"
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Lsouther/compiler/partition/NumericWitness$Composing;"
+                            + "Lsouther/compiler/partition/NumericWitness$Congruent;"
+                            + "Ljava/util/SequencedMap;"
+                            + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
+                    "stops trying values of the positions on the way once they come to the"
+                            + " figure together, and says so"),
+            Map.entry("souther.compiler.partition.NumericWitness#of("
+                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/List;"
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Lsouther/compiler/partition/NumericWitness$Composing;"
+                            + "Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/NumericWitness$Standing;",
+                    "leaves the congruences after the figure unwalked once the positions have"
+                            + " come to it together, and says so"),
             Map.entry("souther.compiler.partition.Generator$WayComposer#composes("
                             + "Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;"
                             + "Ljava/util/SequencedMap;Ljava/util/SequencedMap;Ljava/util/List;)"
@@ -874,9 +902,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.
-            Map.entry("souther.compiler.check.MeaningAssumptions$Tries#<init>()V",
+            Map.entry("souther.compiler.check.MeaningAssumptions$Tries#reading()"
+                            + "Lsouther/compiler/check/MeaningAssumptions$Tries;",
                     "how many parts of a disjunction one reading of a condition takes alone,"
-                            + " past which the disjunction is declined for that figure"),
+                            + " past which the disjunction is declined naming that figure"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
                             + "Lsouther/compiler/check/DeclaredArgument;"
                             + "Ljava/util/List;"

@@ -177,28 +177,45 @@ public final class CodeMap {
     private static BitSet dependingOnWhatStandsBeside(UnaryOperator<String> conversion,
                                                       int[] candidates, int[] targets,
                                                       int count) {
-        String letter = conversion.apply("a");
-        String gap = conversion.apply(" ");
+        int[] letter = conversion.apply("a").codePoints().toArray();
+        int[] gap = conversion.apply(" ").codePoints().toArray();
         BitSet depends = new BitSet(count);
         Deque<int[]> asked = new ArrayDeque<>();
         for (int from = count; from > 0; from -= ASKED_TOGETHER) {
             asked.push(new int[] {Math.max(0, from - ASKED_TOGETHER), from});
         }
+        // Each group written into code points and made a string once: a million candidates
+        // written a string at a time were six strings each, and a builder widened partway.
+        int[] text = new int[ASKED_TOGETHER * 9];
+        int[] expected = new int[ASKED_TOGETHER * (3 + 4 * letter.length + 2 * gap.length)];
         while (!asked.isEmpty()) {
             int[] group = asked.pop();
-            StringBuilder text = new StringBuilder();
-            StringBuilder expected = new StringBuilder();
+            int written = 0;
+            int answered = 0;
             for (int at = group[0]; at < group[1]; at++) {
-                String own = Character.toString(candidates[at]);
-                String sent = Character.toString(targets[at]);
-                text.append("a").append(own).append(" ")
-                        .append(" ").append(own).append("a")
-                        .append("a").append(own).append("a");
-                expected.append(letter).append(sent).append(gap)
-                        .append(gap).append(sent).append(letter)
-                        .append(letter).append(sent).append(letter);
+                int own = candidates[at];
+                int sent = targets[at];
+                text[written++] = 'a';
+                text[written++] = own;
+                text[written++] = ' ';
+                text[written++] = ' ';
+                text[written++] = own;
+                text[written++] = 'a';
+                text[written++] = 'a';
+                text[written++] = own;
+                text[written++] = 'a';
+                answered = put(expected, answered, letter);
+                expected[answered++] = sent;
+                answered = put(expected, answered, gap);
+                answered = put(expected, answered, gap);
+                expected[answered++] = sent;
+                answered = put(expected, answered, letter);
+                answered = put(expected, answered, letter);
+                expected[answered++] = sent;
+                answered = put(expected, answered, letter);
             }
-            if (conversion.apply(text.toString()).equals(expected.toString())) {
+            if (conversion.apply(new String(text, 0, written))
+                    .equals(new String(expected, 0, answered))) {
                 continue;
             }
             if (group[1] - group[0] == 1) {
@@ -210,6 +227,12 @@ public final class CodeMap {
             asked.push(new int[] {group[0], middle});
         }
         return depends;
+    }
+
+    /** {@code codePoints} written into {@code into} from {@code at}, and where they end. */
+    private static int put(int[] into, int at, int[] codePoints) {
+        System.arraycopy(codePoints, 0, into, at, codePoints.length);
+        return at + codePoints.length;
     }
 
     /** The code points the map is defined on. A string of only these converts to the string its
