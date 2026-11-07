@@ -245,6 +245,9 @@ public final class LevelRealizer {
                             UnheldNumber.NO_REPRESENTATION_EXISTS));
                     continue;
                 }
+                if (steps.spent()) {
+                    continue;
+                }
                 // The count is the one being tried, and stands beside the form's numbers in the
                 // arrangement a row is built from. The numbers beside the elements are chosen after
                 // this walk, so an arrangement that has them is asked of the rows already tried
@@ -945,6 +948,11 @@ public final class LevelRealizer {
                                 Set<CompositionBudget> stoppedBy,
                                 Set<CompositionCapacity> unheld, Steps steps,
                                 Map<RealizationTarget, Place> alongside) {
+        // Nothing is walked once the item's steps are spent, and the walk that spent them said
+        // the figure. Not a proof either way: the search that spent them left the item open.
+        if (steps.spent()) {
+            return new LevelWalk(null, false);
+        }
         AtTheLevel here = atTheLevel(form, target, within, runs);
         if (here == null) {
             // The rules leave nothing at this level: a proof about it and about no other.
@@ -1228,6 +1236,9 @@ public final class LevelRealizer {
                             CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT,
                             UnheldNumber.NO_REPRESENTATION_EXISTS));
                     bounded = false;
+                    continue;
+                }
+                if (steps.spent()) {
                     continue;
                 }
                 Congruences wanted = new Congruences(remainder.subtract(moved), over.divisor())
@@ -1772,6 +1783,16 @@ public final class LevelRealizer {
      */
     private static final class Steps {
         private int taken;
+
+        /**
+         * Whether the walks have taken every step there is between them. A walk asked after that
+         * stops at its first step having met the figure, which the item's search has already said,
+         * so it is not asked. What the item counts on the way to the walks it would have asked is
+         * counted still: a figure of its own that it reaches is a second thing it left untried.
+         */
+        boolean spent() {
+            return taken > STEPS_A_SEARCH_MAY_TAKE;
+        }
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
