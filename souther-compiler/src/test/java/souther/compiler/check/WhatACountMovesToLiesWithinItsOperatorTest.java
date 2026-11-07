@@ -28,7 +28,7 @@ class WhatACountMovesToLiesWithinItsOperatorTest {
     private static final BigInteger MOST_BEFORE = GetsPast.MOST_ELEMENTS.subtract(BigInteger.ONE);
 
     private static boolean within(BigInteger first, BigInteger step) {
-        return new KeyedAccumulation.Filed.Counted(ExactRatio.of(first), ExactRatio.of(step), null)
+        return new KeyedAccumulation.Filed.Counted(ExactRatio.of(first), ExactRatio.of(step))
                 .everyValueMovedLiesWithin(LEAST, GREATEST);
     }
 

@@ -48,21 +48,49 @@ import java.util.stream.Stream;
  * @param inTheListsOrder whether the walk hands the step the elements of {@code walked} in the
  *                order the list holds them, rather than from the last of them: which element of
  *                a key was handed last turns on it ({@link Filed.SummedSinceAPut})
- * @param files   the operations of the step that file into the answer so far, as written. Each
- *                reads the step's accumulator, so it is worked out only inside the step, and
- *                what it answers, on a run of this walk that gets to it, holds no more keys than
- *                the elements the walk has handed the step — by induction over the walk and not
- *                by its end: the run got past every earlier step, each of which filed under one
- *                key from the empty map, and one filing adds at most one. A walk hands its step
- *                no more elements than a collection holds ({@link GetsPast#MOST_ELEMENTS}), so
- *                none answers more entries than a map holds
+ * @param filings where in the step it files into the answer so far: what {@link #filed} says of
+ *                the map is a law, and these are the operations of this step that make it hold
  */
 public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Filed filed,
-                                boolean inTheListsOrder, List<Core> files) {
+                                boolean inTheListsOrder, List<Filing> filings) {
 
     public KeyedAccumulation {
         Objects.requireNonNull(filed, "a map built so holds something under each of its keys");
-        files = List.copyOf(files);
+        filings = List.copyOf(filings);
+    }
+
+    /**
+     * One operation of the step that files into the answer so far, as written, and where in it
+     * the value filed is worked out of the value found.
+     *
+     * <p>What it answers, on a run of this walk that gets to it, holds no more keys than the
+     * elements the walk has handed the step — by induction over the walk and not by its end: the
+     * run got past every earlier step, each of which filed under one key from the empty map, and
+     * one filing adds at most one. A walk hands its step no more elements than a collection holds
+     * ({@link GetsPast#MOST_ELEMENTS}), so it answers no more entries than a map holds.
+     *
+     * <p>Said of this operation where it stands in the step and nowhere else: the same node may be
+     * written elsewhere too, by a definition two places use, and what it answers there is no part
+     * of this walk.
+     *
+     * @param operation the operation that files: an update of the key, or an insert under it
+     * @param movedBy   the argument of {@code operation} under which the value filed is worked out
+     *                  of the value found — the closure written at an update, or the value an
+     *                  insert files after a lookup found one — or null where it files without
+     *                  reading what was found, or moves it by a closure handed by name, which
+     *                  something besides the update may apply
+     * @param move      the operation under {@code movedBy} that moves the value found, where the
+     *                  map holds a count ({@link Filed.Counted}) moved by a step that is not
+     *                  nought; null otherwise
+     */
+    public record Filing(Core operation, Core movedBy, Core move) {
+
+        public Filing {
+            Objects.requireNonNull(operation, "a filing is an operation of the step");
+            if ((move == null) != (movedBy == null)) {
+                throw new IllegalArgumentException("a move stands under the argument it moves by");
+            }
+        }
     }
 
     /**
@@ -81,17 +109,12 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
          *
          * @param first the value filed under a key the first time an element has it
          * @param step  what a further element of the same key adds to the value
-         * @param moves the operation of the step that works out the value a further element
-         *              files from the one found, as written: it reads what was found, so it is
-         *              worked out on no other value and only inside the step. Null where the step
-         *              files what it found as it is, or moves it by a closure handed by name,
-         *              which something besides the update may apply.
          */
-        record Counted(ExactRatio first, ExactRatio step, Core moves) implements Filed {
+        record Counted(ExactRatio first, ExactRatio step) implements Filed {
 
             /**
-             * Whether every value {@link #moves} works out lies from {@code least} to
-             * {@code greatest}, on every run that gets to it.
+             * Whether every value a further element moves to lies from {@code least} to
+             * {@code greatest}, on every run that gets to it ({@link Filing#move}).
              *
              * <p>By induction over the walk, not by its end: the run got past every earlier step,
              * so a key's earlier elements each filed by this law, and what is found under the key
@@ -204,8 +227,8 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                 KeyedUpdates.of(DefaultStdlib.get());
     }
 
-    /** What one step of the walk files, under which key, and the operations that file it. */
-    private record Filing(Core key, Filed filed, List<Core> files) {}
+    /** What one step of the walk files, under which key, and where it files it. */
+    private record StepRead(Core key, Filed filed, List<Filing> filings) {}
 
     /**
      * The map {@code applied} reads a key of, where it is a lookup in it or an operation the
@@ -251,7 +274,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         }
         AStep<E> step = new AStep<>(walk.accumulator().binding(), sides, blockOf);
         ValueStanding.ReadThrough<E> body = sides.standing(walk.step().body(), at);
-        Filing filing = step.filingOf(body);
+        StepRead filing = step.filingOf(body);
         if (filing == null) {
             filing = step.byTheArmsOfAChoice(body);
         }
@@ -259,7 +282,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             return null;
         }
         return new KeyedAccumulation(walk.container(), walk.element(), filing.key(),
-                filing.filed(), walk.inTheContainersOrder(), filing.files());
+                filing.filed(), walk.inTheContainersOrder(), filing.filings());
     }
 
     /**
@@ -279,8 +302,8 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
 
         /** The filing {@code body} is: an operation that files under a key, or the same written
          *  out as a lookup and a filing. */
-        Filing filingOf(ValueStanding.ReadThrough<E> body) {
-            Filing filing = byAnOperation(body);
+        StepRead filingOf(ValueStanding.ReadThrough<E> body) {
+            StepRead filing = byAnOperation(body);
             return filing != null ? filing : afterALookup(body);
         }
 
@@ -301,7 +324,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
          * answer so far chooses where an element is filed by what came before, as a key reading it
          * would.
          */
-        Filing byTheArmsOfAChoice(ValueStanding.ReadThrough<E> body) {
+        StepRead byTheArmsOfAChoice(ValueStanding.ReadThrough<E> body) {
             if (!(Core.withoutStanding(body.value()) instanceof Core.Match written)
                     || written.cases().size() < 2) {
                 return null;
@@ -318,7 +341,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             List<Core> values = new ArrayList<>();
             List<Core> added = new ArrayList<>();
             List<Core> puts = new ArrayList<>();
-            List<Core> files = new ArrayList<>();
+            List<Filing> filings = new ArrayList<>();
             boolean somePut = false;
             for (Core.Case arm : match.cases()) {
                 ValueStanding.ReadThrough<E> filing = sides.standing(arm.body(), body.at());
@@ -327,24 +350,24 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                     keys.add(put.key());
                     values.add(put.value());
                     added.add(put.value());
-                    files.add(Core.withoutStanding(filing.value()));
+                    filings.add(new Filing(Core.withoutStanding(filing.value()), null, null));
                     somePut = true;
-                } else if (filingOf(filing) instanceof Filing(
-                        Core key, Filed.Summed(Core value, Core adds), List<Core> filedBy)) {
+                } else if (filingOf(filing) instanceof StepRead(
+                        Core key, Filed.Summed(Core value, Core adds), List<Filing> filedBy)) {
                     keys.add(key);
                     values.add(value);
                     added.add(adds);
-                    files.addAll(filedBy);
+                    filings.addAll(filedBy);
                 } else {
                     return null;
                 }
                 puts.add(new Core.Bool(put != null, Type.BOOL, arm.pos()));
             }
             Core key = choosing(match, keys);
-            return somePut ? new Filing(key, new Filed.SummedSinceAPut(choosing(match, values),
-                            choosing(match, added), choosing(match, puts)), files)
-                    : new Filing(key, new Filed.Summed(choosing(match, values),
-                            choosing(match, added)), files);
+            return somePut ? new StepRead(key, new Filed.SummedSinceAPut(choosing(match, values),
+                            choosing(match, added), choosing(match, puts)), filings)
+                    : new StepRead(key, new Filed.Summed(choosing(match, values),
+                            choosing(match, added)), filings);
         }
 
         /** A value put under a key in place of what is found there, each as written. */
@@ -378,7 +401,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         }
 
         /** The filing {@code body} is, where it applies an operation that files under a key. */
-        Filing byAnOperation(ValueStanding.ReadThrough<E> body) {
+        StepRead byAnOperation(ValueStanding.ReadThrough<E> body) {
             if (!(AnOperationApplied.of(body.value()) instanceof AnOperationApplied filing)
                     || !(filing.operation() instanceof ValueName.Stdlib.Operation named)) {
                 return null;
@@ -396,19 +419,34 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                     || closure.params().getFirst().binding() == null) {
                 return null;
             }
-            Filed filed = filedOf(args.get(update.absentArg()), body.at(),
-                    sides.standing(closure.body(), body.at()),
-                    closure.params().getFirst().binding(),
-                    Core.withoutStanding(args.get(update.closureArg())) instanceof Core.Block);
-            return filed == null ? null
-                    : new Filing(key, filed, List.of(Core.withoutStanding(body.value())));
+            ValueStanding.ReadThrough<E> moved = sides.standing(closure.body(), body.at());
+            Filed filed = filedOf(args.get(update.absentArg()), body.at(), moved,
+                    closure.params().getFirst().binding());
+            // A closure handed by name may be applied to other values besides the one found.
+            Core written = Core.withoutStanding(args.get(update.closureArg()));
+            return filed == null ? null : new StepRead(key, filed,
+                    List.of(filingAt(Core.withoutStanding(body.value()),
+                            written instanceof Core.Block ? written : null, moved, filed)));
+        }
+
+        /**
+         * {@code operation} filing under its key, where it works the value it files out of the
+         * one found under {@code movedBy} as {@code moved}: the move of a count told where the
+         * count moves by something, and nothing where {@code movedBy} is none.
+         */
+        private Filing filingAt(Core operation, Core movedBy, ValueStanding.ReadThrough<E> moved,
+                                Filed filed) {
+            return movedBy != null && filed instanceof Filed.Counted counted
+                    && counted.step().signum() != 0
+                    ? new Filing(operation, movedBy, Core.withoutStanding(moved.value()))
+                    : new Filing(operation, null, null);
         }
 
         /**
          * The filing {@code body} is, where it looks the key up in the answer so far and files
          * under the key what it worked out of what it found, or a figure where it found nothing.
          */
-        Filing afterALookup(ValueStanding.ReadThrough<E> body) {
+        StepRead afterALookup(ValueStanding.ReadThrough<E> body) {
             if (!(Core.withoutStanding(body.value()) instanceof Core.Match match)
                     || match.cases().size() != 2
                     || !(AnOperationApplied.of(valueOf(match.scrutinee(), body.at()))
@@ -431,31 +469,27 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             ValueStanding.ReadThrough<E> first = filedUnder(filingFirst, keyRead);
             ValueStanding.ReadThrough<E> moved = filedUnder(filingMoved, keyRead);
             Filed filed = first == null || moved == null ? null
-                    : filedOf(first.value(), first.at(), moved, found.binder().binding(), true);
-            return filed == null ? null : new Filing(key, filed,
-                    List.of(Core.withoutStanding(filingFirst.value()),
-                            Core.withoutStanding(filingMoved.value())));
+                    : filedOf(first.value(), first.at(), moved, found.binder().binding());
+            // What the found arm files is the value it inserts, written in the arm that binds
+            // what was found, so that value is worked out of nothing else.
+            return filed == null ? null : new StepRead(key, filed, List.of(
+                    new Filing(Core.withoutStanding(filingFirst.value()), null, null),
+                    filingAt(Core.withoutStanding(filingMoved.value()),
+                            Core.withoutStanding(moved.value()), moved, filed)));
         }
 
         /**
          * What the map holds under a key where an element finding nothing there files
          * {@code first}, read in {@code firstAt}, and one finding {@code found} there files
          * {@code moved} — or null where that is neither a counter nor an end kept.
-         *
-         * <p>{@code foundOnlyHere} is whether {@code found} is bound by nothing but the update of
-         * this step: an arm of its lookup, or a closure written at the operation that files. One
-         * handed by name may be applied to other values too, and what it works out there is no
-         * value of the law.
          */
         Filed filedOf(Core first, E firstAt, ValueStanding.ReadThrough<E> moved,
-                      BindingId found, boolean foundOnlyHere) {
+                      BindingId found) {
             Core firstRead = valueOf(first, firstAt);
             ExactRatio figure = constant(firstRead);
             ExactRatio step = figure == null ? null : stepOf(moved, found);
             if (step != null) {
-                return new Filed.Counted(figure, step,
-                        foundOnlyHere && step.signum() != 0
-                                ? Core.withoutStanding(moved.value()) : null);
+                return new Filed.Counted(figure, step);
             }
             if (WhatABodyReads.binding(firstRead, accumulator)) {
                 return null;

@@ -1602,8 +1602,8 @@ final class Pullback {
      * <p>Nothing in a closure no run applies ({@link Operators#neverApplied}): it ends no run. Nor
      * does a construction that no clause of its type refuses a run of
      * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}), nor an operation of the step of a walk
-     * that files under each key which that walk shows to stop none of its runs
-     * ({@link #whatAWalkThatFilesStopsNoRunAt}), while the walk here is under it.
+     * that files under each key which that walk shows to stop none of its runs, where it stands
+     * in that step ({@link ShownByAWalk}).
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
@@ -1613,7 +1613,7 @@ final class Pullback {
         operated.readsAt.putIfAbsent(e, reads);
         GetsPast completion = (e instanceof Core.Construct made
                 && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads))
-                || operated.stopNoRunUnderTheWalk.contains(e)
+                || operated.shownByAWalk.stopsNoRunAt(e)
                 ? new GetsPast.Always()
                 : WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
@@ -1650,66 +1650,126 @@ final class Pullback {
                 operated.unsaidElsewhere = elsewhereBefore;
             }
         }
-        List<Core> shown = new ArrayList<>();
-        if (e instanceof Core.PreservedCall call) {
-            for (Core each : whatAWalkThatFilesStopsNoRunAt(call, reads)) {
-                if (operated.stopNoRunUnderTheWalk.add(each)) {
-                    shown.add(each);
-                }
-            }
-        }
+        ShownByAWalk around = operated.shownByAWalk;
+        SeededWalk walk = e instanceof Core.PreservedCall call
+                ? SeededWalk.enteredHoweverFar(call, blocksAt(new Denotation(call, reads))) : null;
+        ShownByAWalk ofTheStep = walk == null ? null
+                : ShownByAWalk.ofTheStep(KeyedAccumulation.of(e, reads, sides(),
+                        blocksAt(new Denotation(e, reads))));
+        Function<Core, ShownByAWalk> under = child -> walk != null
+                ? Core.withoutStanding(child) == walk.step() ? ofTheStep : ShownByAWalk.NOTHING
+                : around.under(e, child);
         try {
             if (e instanceof Core.LetIn li) {
+                operated.shownByAWalk = under.apply(li.value());
                 leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
+                operated.shownByAWalk = under.apply(li.body());
                 leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
             } else if (e instanceof Core.IfConstructed attempt) {
-                WhatARunMayEndFor.forEachWorkedOut(attempt,
-                        part -> leaveUnsaidWhatMayEndARunUnder(part, reads, bound));
+                WhatARunMayEndFor.forEachWorkedOut(attempt, part -> {
+                    operated.shownByAWalk = under.apply(part);
+                    leaveUnsaidWhatMayEndARunUnder(part, reads, bound);
+                });
             } else {
-                Core.forEachChild(e, child -> leaveUnsaidWhatMayEndARunUnder(child, reads,
-                        Core.withoutStanding(child) instanceof Core.Block block
-                                ? boundInside(e, block, reads, bound) : bound));
+                Core.forEachChild(e, child -> {
+                    operated.shownByAWalk = under.apply(child);
+                    leaveUnsaidWhatMayEndARunUnder(child, reads,
+                            Core.withoutStanding(child) instanceof Core.Block block
+                                    ? boundInside(e, block, reads, bound) : bound);
+                });
             }
         } finally {
-            operated.stopNoRunUnderTheWalk.removeAll(shown);
+            operated.shownByAWalk = around;
         }
     }
 
     /**
-     * The operations of {@code call}'s step shown to stop no run, where {@code call} is a walk
-     * that files under the key of each element ({@link KeyedAccumulation}): each operation that
-     * files, where it ends a run only on an answer that holds more than a collection does
-     * ({@link GetsPast.WhereTheAnswerFits}), which what it files into never comes to; and of a
-     * count ({@link KeyedAccumulation.Filed.Counted}), the move of what a key holds, where every
-     * value it works out is one its operator answers ({@link WhereAnOperatorAnswers}).
+     * What a walk that files under the key of each element ({@link KeyedAccumulation}) shows of
+     * the operations of its step, at the place in the tree the walk of what may end a run stands.
      *
-     * <p>Shown of this walk alone, whose runs are what make what is filed into and what is found
-     * under a key what the walk says: a walk reaches the step's body under it only where the step
-     * is written at it. A step handed by name is walked where it is written, which may be a
-     * closure handed to another fold, and what it works out there is left as anything else is.
+     * <p>Shown by position and not by node. The walk's runs are what make what it files into and
+     * what it finds under a key what the walk says, so what is shown holds of the operations
+     * where they stand in its step: the step written at the walk, and none it reaches by a name,
+     * which is walked where it is written. A node is the same object wherever a definition two
+     * places use is written out, so the same operation met in the seed, in what is walked, or in
+     * the step of another walk is not shown by this one: entering another walk shows what that
+     * walk shows, and nothing of this one's.
+     *
+     * <p>In the step, each operation that files is shown to stop no run where it ends one only on
+     * an answer that holds more than a collection does ({@link GetsPast.WhereTheAnswerFits}),
+     * which what it files into never comes to ({@link KeyedAccumulation.Filing}). Under the
+     * argument of such an operation that moves the value found, the move of a count is shown to
+     * stop no run where every value it works out is one its operator answers
+     * ({@link KeyedAccumulation.Filed.Counted#everyValueMovedLiesWithin}).
+     *
+     * @param filings the operations of the step that file, each with a move only where that
+     *                move is shown to stop no run: empty outside the step of a walk that files
+     * @param fit     those of {@code filings} shown to stop no run themselves
+     * @param move    the move shown to stop no run, where the place is under the argument it
+     *                moves by; null elsewhere
      */
-    private List<Core> whatAWalkThatFilesStopsNoRunAt(Core.PreservedCall call, InputReads reads) {
-        KeyedAccumulation filed = KeyedAccumulation.of(call, reads, sides(),
-                blocksAt(new Denotation(call, reads)));
-        if (filed == null) {
-            return List.of();
-        }
-        List<Core> shown = new ArrayList<>();
-        for (Core files : filed.files()) {
-            if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(files)
-                    instanceof GetsPast.WhereTheAnswerFits) {
-                shown.add(files);
+    private record ShownByAWalk(List<KeyedAccumulation.Filing> filings, List<Core> fit,
+                                Core move) {
+
+        static final ShownByAWalk NOTHING = new ShownByAWalk(List.of(), List.of(), null);
+
+        /** What a walk read as {@code filed} shows of its step, where {@code filed} is not null:
+         *  a walk that files under the key of each element. */
+        static ShownByAWalk ofTheStep(KeyedAccumulation filed) {
+            if (filed == null) {
+                return NOTHING;
             }
+            List<KeyedAccumulation.Filing> filings = new ArrayList<>();
+            List<Core> fit = new ArrayList<>();
+            for (KeyedAccumulation.Filing each : filed.filings()) {
+                filings.add(each.move() != null
+                        && filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
+                        && movesWithin(counted, each.move()) ? each
+                        : new KeyedAccumulation.Filing(each.operation(), null, null));
+                if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(each.operation())
+                        instanceof GetsPast.WhereTheAnswerFits) {
+                    fit.add(each.operation());
+                }
+            }
+            return new ShownByAWalk(filings, fit, null);
         }
-        if (filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
-                && counted.moves() != null
-                && Core.withoutStanding(counted.moves()) instanceof Core.Binary move
-                && AffineForms.whereItAnswers(move)
-                instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest)
-                && counted.everyValueMovedLiesWithin(least, greatest)) {
-            shown.add(move);
+
+        /** Whether every value {@code move}, the move of {@code counted}, works out is one its
+         *  operator answers. */
+        private static boolean movesWithin(KeyedAccumulation.Filed.Counted counted, Core move) {
+            return Core.withoutStanding(move) instanceof Core.Binary binary
+                    && AffineForms.whereItAnswers(binary)
+                    instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
+                            var least, var greatest)
+                    && counted.everyValueMovedLiesWithin(least, greatest);
         }
-        return shown;
+
+        /** Whether {@code e}, where it stands here, is shown to stop no run. */
+        boolean stopsNoRunAt(Core e) {
+            return e == move || fit.stream().anyMatch(each -> each == e);
+        }
+
+        /** What is shown at {@code child}, a part of {@code e} that is no walk. Under an
+         *  operation shown, only the move under the argument it moves by; elsewhere what is shown
+         *  here. */
+        ShownByAWalk under(Core e, Core child) {
+            KeyedAccumulation.Filing filing = filingAt(e);
+            if (filing == null) {
+                return this;
+            }
+            return filing.movedBy() != null
+                    && Core.withoutStanding(child) == Core.withoutStanding(filing.movedBy())
+                    ? new ShownByAWalk(List.of(), List.of(), filing.move()) : NOTHING;
+        }
+
+        private KeyedAccumulation.Filing filingAt(Core e) {
+            for (KeyedAccumulation.Filing each : filings) {
+                if (each.operation() == e) {
+                    return each;
+                }
+            }
+            return null;
+        }
     }
 
     /**
@@ -7668,11 +7728,9 @@ final class Pullback {
         /** The closures no run applies ({@link InputReads.Applications.NoneMade}), whose bodies
          *  stop no run. */
         private final Set<Core> neverApplied = Collections.newSetFromMap(new IdentityHashMap<>());
-        /** The operations of a step a walk that files shows to stop no run, while the walk of
-         *  what may end a run is under that walk
-         *  ({@link Pullback#whatAWalkThatFilesStopsNoRunAt}). */
-        private final Set<Core> stopNoRunUnderTheWalk =
-                Collections.newSetFromMap(new IdentityHashMap<>());
+        /** What the walk the walk of what may end a run is in the step of shows, where it stands
+         *  now ({@link ShownByAWalk}). */
+        private ShownByAWalk shownByAWalk = ShownByAWalk.NOTHING;
         private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
         private Set<TermPath> unsaidAt = new LinkedHashSet<>();
         private boolean unsaidElsewhere;
