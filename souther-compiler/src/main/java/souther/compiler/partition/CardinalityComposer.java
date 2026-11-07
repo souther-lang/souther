@@ -561,7 +561,7 @@ final class CardinalityComposer {
         // region leave it ({@link ContainerAsAWhole#admitsNone}): where the region leaves an
         // element nothing, it is still a container.
         if ((size == null || size.holds(Count.of(0), Carrier.WHOLE))
-                && whole.admitsNone(view, within, reading)) {
+                && whole.admitsNone(within)) {
             writtenIfAsked(List.of(), standing.read(withNumbersBeside(
                             ElementValues.holding(container, reading, sourceType, List.of()),
                             outside)),
@@ -672,10 +672,11 @@ final class CardinalityComposer {
                     }
                     break;
                 }
-                // Nor where the totals fixed ask two things of one place for so many elements:
-                // no elements come to both, which is said before any is drawn.
+                // Nor where the totals fixed ask two things of one place for so many elements, or
+                // the region leaves so many nothing coming to them: no elements meet both, which
+                // is said before any is drawn.
                 if (fixed != null && ((fixed.many() != null && elements != fixed.many())
-                        || !fixed.comesTogetherIn(elements))) {
+                        || !fixed.comesTogetherIn(elements) || !fixed.standsIn(within, elements))) {
                     continue;
                 }
                 boolean walkedThem = sharing.each(elements, share -> {

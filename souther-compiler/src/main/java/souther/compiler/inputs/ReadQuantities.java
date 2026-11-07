@@ -55,7 +55,6 @@ import java.util.RandomAccess;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
 
 /**
  * The one reading of a behavior's input, asked about a quantity over several of its positions.
@@ -93,10 +92,10 @@ final class ReadQuantities implements Quantities {
      *  its own term runs between, and the reading that relates positions has a name for some of
      *  those terms and not for others. */
     private final Map<TermPath, Position> byPath;
-    /** The term a body reading a total a rule speaks of holds, or null where none is made
-     *  ({@link InputNumber#totalOf}): what the rules' total is called here
-     *  ({@link #totalCalled}). */
-    private final Function<TotalOfTheElements, NumericTerm> totalTerms;
+    /** The totals of this input's containers, as the input names them: what a total the rules
+     *  speak of is called here ({@link #totalCalled}), and what a total of a form of each
+     *  element's places comes to ({@link #withWhatItAddsUp}). */
+    private final TotalsOfTheInput totals;
     /**
      * What stands where a path names, as the reading that made this has it.
      *
@@ -494,7 +493,7 @@ final class ReadQuantities implements Quantities {
 
     private ReadQuantities(Map<TermPath, OpenedRules> byRoot, Roots roots,
                            Map<TermPath, Position> byPath,
-                           Function<TotalOfTheElements, NumericTerm> totalTerms,
+                           TotalsOfTheInput totals,
                            List<CasesRead> cases,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
@@ -517,7 +516,7 @@ final class ReadQuantities implements Quantities {
         this.byRoot = Collections.unmodifiableMap(new LinkedHashMap<>(byRoot));
         this.roots = roots;
         this.byPath = Map.copyOf(byPath);
-        this.totalTerms = totalTerms;
+        this.totals = totals;
         // Kept in the order the fixings arrived, so that the order they are answered in is chosen
         // here rather than inherited. An immutable copy iterates in an order salted once per JVM
         // run, which is a fine order and not one anybody chose — read off it, which of two
@@ -545,8 +544,8 @@ final class ReadQuantities implements Quantities {
                              Map<TermPath, Position> byPath, List<CasesRead> cases,
                              java.util.function.Function<TermPath, Type> typeAt,
                              RuleReadingContext ruleReading,
-                             Function<TotalOfTheElements, NumericTerm> totalTerms) {
-        return new ReadQuantities(byRoot, new Roots(roots), byPath, totalTerms, cases, typeAt,
+                             TotalsOfTheInput totals) {
+        return new ReadQuantities(byRoot, new Roots(roots), byPath, totals, cases, typeAt,
                 Map.of(),
                 ruleReading, TakenIn.NOTHING, List.of(), new Contexts(), null, null,
                 new ConcurrentHashMap<>());
@@ -562,7 +561,7 @@ final class ReadQuantities implements Quantities {
      */
     private ReadQuantities unrefined() {
         return fixed.isEmpty() && assumed.isEmpty() ? this
-                : new ReadQuantities(byRoot, roots, byPath, totalTerms, cases, typeAt, Map.of(),
+                : new ReadQuantities(byRoot, roots, byPath, totals, cases, typeAt, Map.of(),
                         ruleReading, TakenIn.NOTHING, List.of(), contexts, null, null,
                         new ConcurrentHashMap<>());
     }
@@ -577,7 +576,7 @@ final class ReadQuantities implements Quantities {
      */
     private ReadQuantities unfixed() {
         return fixed.isEmpty() ? this
-                : new ReadQuantities(byRoot, roots, byPath, totalTerms, cases, typeAt, Map.of(),
+                : new ReadQuantities(byRoot, roots, byPath, totals, cases, typeAt, Map.of(),
                         ruleReading, assumed, heldAgainst, contexts, null, oneMoreTaken, answered);
     }
 
@@ -605,7 +604,7 @@ final class ReadQuantities implements Quantities {
             rest.put(root, here == null ? opened : new OpenedRules(
                     PlacedRules.leavingOut(opened.rules(), here), opened.opening()));
         });
-        return new ReadQuantities(rest, roots, byPath, totalTerms, cases, typeAt, fixed,
+        return new ReadQuantities(rest, roots, byPath, totals, cases, typeAt, fixed,
                 ruleReading, assumed, heldAgainst, new Contexts(), null, null,
                 new ConcurrentHashMap<>());
     }
@@ -1072,11 +1071,12 @@ final class ReadQuantities implements Quantities {
      */
     private UnderAContext readUnder(StructuralContext under) {
         Map<TermPath, FieldDomains.Carried<InputAtom>> carried = new LinkedHashMap<>();
+        Set<NumericTerm> totalsSpokenOf = new LinkedHashSet<>();
         byRoot.forEach((root, opened) -> {
             if (under.holds(opened.opening())) {
                 carried.put(root, opened.rules().bounds().constraintsOver(
                         at -> called(root, at, under),
-                        total -> totalCalled(root, total, under),
+                        total -> totalCalled(root, total, under, totalsSpokenOf),
                         subject -> new InputAtom.Anonymous(root.toString(), subject),
                         InputAtom.inOneOrder()));
             }
@@ -1099,6 +1099,11 @@ final class ReadQuantities implements Quantities {
         // rather than left as a fact about whose rules to read.
         for (StructuralContext.Assumption each : under.assumptions()) {
             made = alsoStating(made, each, under);
+        }
+        // And what each total the rules speak of comes to as the totals of its places, so a rule
+        // about one bounds what a body asks of the other.
+        for (NumericTerm each : totalsSpokenOf) {
+            made = withWhatItAddsUp(made, each, under);
         }
         return new UnderAContext(Collections.unmodifiableMap(carried), made);
     }
@@ -1280,7 +1285,7 @@ final class ReadQuantities implements Quantities {
         // Carried on from only where this one had taken something in: otherwise the rules before it
         // are the declarations' own, and taking one condition in is all there is to do.
         OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(both.last(), answered);
-        return new ReadQuantities(byRoot, roots, byPath, totalTerms, cases, typeAt, fixed,
+        return new ReadQuantities(byRoot, roots, byPath, totals, cases, typeAt, fixed,
                 ruleReading, both, pairs, contexts, null, oneMore, new ConcurrentHashMap<>());
     }
 
@@ -1719,18 +1724,53 @@ final class ReadQuantities implements Quantities {
      * What a total the rules of the value at {@code root} speak of is called here: the name of the
      * term a body reading the same total holds, so a rule bounding it or relating it to another
      * number reaches a search asking about that term — or null where no term is made for it, and
-     * it stays a subject nothing here names.
+     * it stays a subject nothing here names. The term is put in {@code spokenOf}, for what it
+     * comes to as the totals of its places to be said with the rules ({@link #withWhatItAddsUp}).
      */
     private InputAtom totalCalled(TermPath root, FieldDomains.TotalSpokenOf total,
-                                  StructuralContext under) {
+                                  StructuralContext under, Set<NumericTerm> spokenOf) {
         if (!(total.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
         TermPath container = standingUnder(pathOf(root, total.container()), under);
-        NumericTerm term = totalTerms.apply(new TotalOfTheElements(operation,
+        NumericTerm term = totals.termOf(new TotalOfTheElements(operation,
                 container.element(), new ElementValue.Affine(total.each().over(fields ->
                         LinearForm.atom(ElementProjection.ofFields(fields))))));
-        return term == null ? null : called(term, under);
+        if (term == null) {
+            return null;
+        }
+        spokenOf.add(term);
+        return called(term, under);
+    }
+
+    /**
+     * {@code rules} with what {@code term} comes to as the totals of the places it adds up said
+     * as well ({@link TotalsOfTheInput#whatItAddsUp}): the total of twice each amount is twice
+     * the total of the amounts. Onto the rules and not met against an answer, since it relates
+     * two numbers and says nothing of either alone. The rules as they were where it is no such
+     * total, or where a number in it is spaced by nothing.
+     */
+    private ConstraintState<InputAtom> withWhatItAddsUp(ConstraintState<InputAtom> rules,
+                                                        NumericTerm term,
+                                                        StructuralContext under) {
+        LinearForm<NumericTerm> parts = totals.whatItAddsUp(term);
+        LinearForm<NumericTerm> same = parts == null ? null
+                : LinearForm.atom(term).minus(parts).orNull();
+        if (same == null) {
+            return rules;
+        }
+        Map<InputAtom, NumberSpace> spaces = new LinkedHashMap<>();
+        for (NumericTerm each : same.coefs().keySet()) {
+            InputAtom atom = called(each, under);
+            NumberSpace space = spaceOf(rules.numbers(), each, atom);
+            if (space == null) {
+                return rules;
+            }
+            spaces.put(atom, space);
+        }
+        LinearForm<InputAtom> over = over(same, under);
+        return over == null ? rules : insideItsOrder(rules.taking(over, Rel.EQ, spaces),
+                NumericTerms.ordered(List.copyOf(same.coefs().keySet())), under);
     }
 
     /** Whether any narrowing this context selects is one of the readings this input holds, which
@@ -1817,6 +1857,10 @@ final class ReadQuantities implements Quantities {
     private ConstraintState<InputAtom> holding(ConstraintState<InputAtom> rules, NumericTerm term,
                                                StructuralContext under) {
         STEPS_PUT_ON.incrementAndGet();
+        // And what a total of a form of each element's places comes to as the totals of those
+        // places, which is as much what the term is as its own range: a rule bounding the totals
+        // of the places bounds it.
+        rules = withWhatItAddsUp(rules, term, under);
         NumericDomain.Bounds runs = whereOneTermRuns(term, false);
         if (runs == null || (asCut(runs.min()) == null && asCut(runs.max()) == null)) {
             return rules;
@@ -2172,7 +2216,7 @@ final class ReadQuantities implements Quantities {
         if (both.equals(fixed)) {
             return this;
         }
-        return new ReadQuantities(byRoot, roots, byPath, totalTerms, cases, typeAt, both,
+        return new ReadQuantities(byRoot, roots, byPath, totals, cases, typeAt, both,
                 ruleReading, assumed, heldAgainst, contexts, oneMoreThan(both), oneMoreTaken,
                 answered);
     }

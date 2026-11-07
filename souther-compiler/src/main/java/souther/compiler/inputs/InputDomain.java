@@ -907,10 +907,7 @@ public final class InputDomain {
         // The same world, handed on whole. What a quantity reaches below is a declaration this
         // reading already reached, so it is read from the same rules under the same budget.
         return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, cases,
-                path -> typeAt(path, source), world,
-                // A total a rule speaks of is the term a body reading it holds, made by the one
-                // maker of those terms, so the rule reaches whoever asks about it.
-                total -> source == null ? null : InputNumber.totalOf(total, this, source));
+                path -> typeAt(path, source), world, new TotalsOfTheInput(this, source));
     }
 
     /**

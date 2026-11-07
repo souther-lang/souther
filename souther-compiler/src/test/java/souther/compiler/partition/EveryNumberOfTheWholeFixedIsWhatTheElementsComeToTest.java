@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
-import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -95,13 +94,9 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
         return new Read(input.quantities(rules), reading, xs, view, total, totalOfEachAndOne);
     }
 
-    private static ContainerAsAWhole.ATotal asked(NumericTerm term, long... at) {
-        List<Place> places = new ArrayList<>();
-        for (long each : at) {
-            places.add(Count.of(each));
-        }
-        return new ContainerAsAWhole.ATotal(term, new NumericSet.At(places.getFirst()),
-                Carrier.WHOLE, TermRealizations.Tried.allOf(places));
+    private static ContainerAsAWhole.ATotal asked(Read read, NumericTerm term, long at) {
+        return new ContainerAsAWhole.ATotal(term, new NumericSet.At(Count.of(at)), Count.of(at),
+                read.measuring().ordersOf(term));
     }
 
     private static ContainerAsAWhole whole(Read read, List<ContainerAsAWhole.ATotal> totals,
@@ -129,13 +124,24 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
     @Test
     void twoTotalsOfOnePlaceAreMetTogetherOrNotAtAll() {
         Read read = read();
-        ContainerAsAWhole whole = whole(read, List.of(asked(read.total(), 5),
-                asked(read.totalOfEachAndOne(), 6, 7, 8)), 2);
         List<ObservedValue> drawn = List.of(new ObservedValue.Integer(0),
                 new ObservedValue.Integer(0));
         int met = 0;
         int refused = 0;
-        for (List<Place> chosen : whole.choices().each()) {
+        List<List<Place>> every = new ArrayList<>();
+        List<ContainerAsAWhole> wholes = new ArrayList<>();
+        for (long second : List.of(6L, 7L, 8L)) {
+            ContainerAsAWhole whole = whole(read, List.of(asked(read, read.total(), 5),
+                    asked(read, read.totalOfEachAndOne(), second)), 2);
+            for (List<Place> chosen : whole.choices().each()) {
+                every.add(chosen);
+                wholes.add(whole);
+            }
+        }
+        assertEquals(3, every.size(), "one choice of each pair");
+        for (int each = 0; each < every.size(); each++) {
+            List<Place> chosen = every.get(each);
+            ContainerAsAWhole whole = wholes.get(each);
             ContainerAsAWhole.Fixed fixed = whole.at(chosen);
             Map<NumericTerm, Place> at = fixed.beside(Map.of());
             long first = Count.number(at.get(read.total())).at().longValueExact();
@@ -163,7 +169,7 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
     @Test
     void aPlaceTheRegionLeavesNothingMovesNoElement() {
         Read read = read();
-        ContainerAsAWhole whole = whole(read, List.of(asked(read.total(), 5)), 2);
+        ContainerAsAWhole whole = whole(read, List.of(asked(read, read.total(), 5)), 2);
         ContainerAsAWhole.Fixed fixed = whole.at(whole.choices().each().getFirst());
         assertNull(fixed.spread(List.of(new ObservedValue.Integer(0),
                         new ObservedValue.Integer(0)), null, 0, _ -> List.of(), _ -> null));
@@ -177,7 +183,7 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
     @Test
     void aGroupIsReadWithTheTotalFixedAndNotWithWhatItComesTo() {
         Read read = read();
-        ContainerAsAWhole whole = whole(read, List.of(asked(read.total(), 100)), 1);
+        ContainerAsAWhole whole = whole(read, List.of(asked(read, read.total(), 100)), 1);
         ContainerAsAWhole.Fixed fixed = whole.at(whole.choices().each().getFirst());
         NumericTerm.ValueOf number = new NumericTerm.ValueOf(read.xs().element());
         // the total less twice the number is not above nought
@@ -193,10 +199,10 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
         assertInstanceOf(AStatementAtARow.Answer.Fails.class, atOrAboveHalf.at(
                         CardinalityComposer.withNumbersBeside(alone, fixed.beside(Map.of()))),
                 "read with the total fixed at a hundred");
-        assertFalse(whole.admitsNone(read.view(), read.measuring().region(), read.reading()),
+        assertFalse(whole.admitsNone(read.measuring().region()),
                 "and the container of none does not come to a hundred");
-        assertTrue(whole(read, List.of(asked(read.total(), 0)), 1)
-                        .admitsNone(read.view(), read.measuring().region(), read.reading()),
+        assertTrue(whole(read, List.of(asked(read, read.total(), 0)), 1)
+                        .admitsNone(read.measuring().region()),
                 "where nought is asked, it does");
     }
 }

@@ -12,8 +12,10 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeSymbol;
 
@@ -65,17 +67,24 @@ final class ContainerAsAWhole {
      * A total the row asks of the container, and the numbers it is tried at.
      *
      * @param term  the total
-     * @param asked the numbers the demand on it leaves, on the order {@code on}: what a container
-     *              composed comes to is one of them, the container of none's nought among them
-     * @param tried the numbers the demand on it leaves, as its builder hands them over
+     * @param asked the numbers the demand on it leaves: what a container composed comes to is one
+     *              of them, the container of none's nought among them. Which of them are tried is
+     *              chosen where every number of the whole is ({@link ContainerAsAWhole#of})
+     * @param named the number the demand names, where it names one
+     * @param adds  the orders the total is measured on
      */
-    record ATotal(NumericTerm term, NumericSet asked, Carrier on, TermRealizations.Tried tried) {
+    record ATotal(NumericTerm term, NumericSet asked, Place named, TermOrders adds) {
 
         ATotal {
             Objects.requireNonNull(term, "a total is a number");
             Objects.requireNonNull(asked, "asked to be some numbers");
-            Objects.requireNonNull(on, "on some order");
-            Objects.requireNonNull(tried, "a total is tried at some numbers");
+            Objects.requireNonNull(adds, "on some order");
+            Objects.requireNonNull(adds.answered(), "that answers a number");
+        }
+
+        /** The order the total's numbers are answered on. */
+        Carrier on() {
+            return adds.answered();
         }
     }
 
@@ -95,15 +104,19 @@ final class ContainerAsAWhole {
     /** What the row asks the container to come to, which the container of none is held to as
      *  every container is. */
     private final List<ATotal> asked;
+    /** The number the rules count the container by, or null where nothing counts it
+     *  ({@link ContainersAddingUp#countTaken}). */
+    private final NumericTerm.FromOnePosition counted;
     /** Whether a statement reads how many the container holds, which then stands beside an
      *  element as the totals do. */
     private final boolean sizeIsRead;
 
     private ContainerAsAWhole(TermPath container, List<OneNumber> numbers, List<ATotal> asked,
-                              boolean sizeIsRead) {
+                              NumericTerm.FromOnePosition counted, boolean sizeIsRead) {
         this.container = container;
         this.numbers = List.copyOf(numbers);
         this.asked = List.copyOf(asked);
+        this.counted = counted;
         this.sizeIsRead = sizeIsRead;
     }
 
@@ -136,13 +149,19 @@ final class ContainerAsAWhole {
                                 RuleReadingContext reading) {
         Map<NumericTerm, OneNumber> out = new LinkedHashMap<>();
         boolean howManyIsRead = false;
+        NumericTerm.FromOnePosition counted = ContainersAddingUp.countTaken(view, container,
+                reading);
+        SearchRegion composable = composableIn(view, container, within, reading);
         for (ATotal each : totals) {
             NumbersOfTheWhole.AddedUp added = NumbersOfTheWhole.addedUp(each.term());
             Carrier carrier = carrierAt(added, measuring);
             if (added == null || carrier == null) {
                 return null;
             }
-            out.put(each.term(), new OneNumber(each.term(), added, carrier, each.tried()));
+            out.put(each.term(), new OneNumber(each.term(), added, carrier,
+                    TermRealizations.onTheOrder(each.asked(), each.adds(), each.named(),
+                            composable, UsualPlaces.of(each.adds().term(), each.on(),
+                                    reading.today()))));
         }
         NumericTerm many = null;
         for (CardinalityComposer.Asked each : asked) {
@@ -164,7 +183,7 @@ final class ContainerAsAWhole {
                 NumbersOfTheWhole.AddedUp added = NumbersOfTheWhole.addedUp(term);
                 Carrier carrier = carrierAt(added, measuring);
                 TermRealizations.Tried left = carrier == null ? null
-                        : turningOn(term, asked, beside, measuring, within, reading);
+                        : turningOn(term, asked, beside, measuring, composable, reading);
                 if (left == null) {
                     return null;
                 }
@@ -174,13 +193,31 @@ final class ContainerAsAWhole {
         boolean formed = out.values().stream().anyMatch(each ->
                 !each.added().weight().equals(ExactRatio.ONE) || !each.added().constant().isZero());
         if (howManyIsRead || formed) {
-            NumericTerm counted = many != null ? many
-                    : new NumericTerm.ValueOf(container);
-            out.put(counted, new OneNumber(counted, null, null, sizes(
+            NumericTerm holds = many != null ? many : new NumericTerm.ValueOf(container);
+            out.put(holds, new OneNumber(holds, null, null, sizes(
                     ContainersAddingUp.howMany(view, container, within, reading, null), size)));
         }
-        return new ContainerAsAWhole(container, new ArrayList<>(out.values()), totals,
+        return new ContainerAsAWhole(container, new ArrayList<>(out.values()), totals, counted,
                 howManyIsRead);
+    }
+
+    /**
+     * The region the numbers of {@code container} as a whole are chosen in: {@code within}, with
+     * the container holding no more elements than a count composes one with.
+     *
+     * <p>Every number of the whole is chosen here — a total the row asks ({@link ATotal}) and one
+     * the statements only read ({@link #turningOn}). Where a rule relates a total to how many
+     * elements add up to it, the region asked of every size leaves a total no container composed
+     * here comes to, and a total chosen there is one no elements are drawn for. The region as it
+     * is where nothing counts the container, or it cannot carry the bound.
+     */
+    private static SearchRegion composableIn(TypeView view, TermPath container,
+                                             SearchRegion within, RuleReadingContext reading) {
+        NumericTerm.FromOnePosition counted =
+                ContainersAddingUp.countTaken(view, container, reading);
+        return counted != null && within.assuming(new LinearForm<>(
+                        ExactRatio.of(-MOST_ELEMENTS), Map.of(counted, ExactRatio.ONE)), Rel.LE)
+                instanceof SearchRegion.Assumption.Taken(SearchRegion taken) ? taken : within;
     }
 
     /**
@@ -282,26 +319,33 @@ final class ContainerAsAWhole {
      * row written of it is read against the rules where every row is. And where neither, it is
      * one.
      */
-    boolean admitsNone(TypeView view, SearchRegion within, RuleReadingContext reading) {
+    boolean admitsNone(SearchRegion within) {
         for (ATotal each : asked) {
             if (!each.asked().holds(Count.of(0), each.on())) {
                 return false;
             }
         }
-        if (within.emptiness().isPresent()) {
-            return true;
-        }
         Map<NumericTerm, Place> none = new LinkedHashMap<>();
-        NumericTerm.FromOnePosition many = ContainersAddingUp.countTaken(view, container, reading);
-        if (many != null) {
-            none.put(many, Count.of(0));
-        }
         for (OneNumber one : numbers) {
             if (one.added() != null) {
                 none.put(one.term(), Count.of(0));
             }
         }
-        return none.isEmpty() || within.given(none).emptiness().isEmpty();
+        return leaves(within, none, 0);
+    }
+
+    /**
+     * Whether the region leaves something with {@code fixed} standing and the container holding
+     * {@code held} elements — true where it was shown to leave nothing before either was fixed,
+     * which says nothing of these ({@link #admitsNone}).
+     */
+    private boolean leaves(SearchRegion within, Map<NumericTerm, Place> fixed, int held) {
+        Map<NumericTerm, Place> standing = new LinkedHashMap<>(fixed);
+        if (counted != null) {
+            standing.put(counted, Count.of(held));
+        }
+        return standing.isEmpty() || within.emptiness().isPresent()
+                || within.given(standing).emptiness().isEmpty();
     }
 
     /**
@@ -379,6 +423,15 @@ final class ContainerAsAWhole {
          */
         boolean comesTogetherIn(int held) {
             return owedAtEachPlace(held) != null;
+        }
+
+        /**
+         * Whether the region leaves a container of {@code held} elements coming to these numbers:
+         * where a rule relates a total to how many add up to it, a size it refuses is one no
+         * elements are drawn for.
+         */
+        boolean standsIn(SearchRegion within, int held) {
+            return leaves(within, fixed, held);
         }
 
         /**

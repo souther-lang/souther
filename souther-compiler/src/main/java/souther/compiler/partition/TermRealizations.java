@@ -1405,8 +1405,8 @@ final class TermRealizations {
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
                 nothingInside(inside);
-                // Each total at the numbers its demand leaves, as a container composed for its
-                // totals alone is tried at them.
+                // Each total with the numbers its demand leaves, which are tried where every
+                // number of the container as a whole is chosen ({@link ContainerAsAWhole#of}).
                 List<ContainerAsAWhole.ATotal> asked = new ArrayList<>();
                 for (RealizationTarget.OfANumber each : totals) {
                     TermOrders adds = measuring.ordersOf(each.term());
@@ -1416,10 +1416,8 @@ final class TermRealizations {
                         return new Realization.None(
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
                     }
-                    asked.add(new ContainerAsAWhole.ATotal(each.term(), total, adds.answered(),
-                            onTheOrder(total, adds, comesToAt.named(), within,
-                                    UsualPlaces.of(adds.term(), adds.answered(),
-                                            reading.today()))));
+                    asked.add(new ContainerAsAWhole.ATotal(each.term(), total, comesToAt.named(),
+                            adds));
                 }
                 return CardinalityComposer.compose(sourceType, keptApart, container, counts,
                         together, demands, manyItHolds, standingAt, asked, measuring, within,
@@ -3108,8 +3106,8 @@ final class TermRealizations {
      *
      * @param usual where the number is usually near ({@link UsualPlaces})
      */
-    private static Tried onTheOrder(NumericSet wanted, TermOrders orders, Place named,
-                                    SearchRegion within, UsualPlace usual) {
+    static Tried onTheOrder(NumericSet wanted, TermOrders orders, Place named,
+                            SearchRegion within, UsualPlace usual) {
         Set<CompositionRepertoire> ofTheRun =
                 Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
         // What the declarations leave the value on its order, and which of its values they admit:

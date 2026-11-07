@@ -350,6 +350,8 @@ class AnElementsLineReadingItsContainersTotalIsComposedTest {
                 + counted(HALF).replaceAll("\\bfs\\b", "b.fs") + ") else 0\n");
         models.put("a total its record holds", inABox("List.sum(List.map(.amount, fs)) >= 100",
                 counted(HALF)));
+        models.put("a total of twice each its record holds",
+                inABox("List.sum(List.map(e -> e.amount * 2, fs)) >= 200", counted(HALF)));
         models.put("a length its record holds", inABox("List.length(fs) >= 10",
                 counted("f.amount > List.length(fs)")));
         models.put("another container's total", source("fs: List<Forecast>, gs: List<Forecast>",
