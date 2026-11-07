@@ -261,7 +261,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     }
 
     /** The same, with {@code worked} the operations told, none of them or more. */
-    private static Leaves leftOfAmounts(int asked, Long mostOfS, List<DecimalOperation> worked,
+    private static Leaves leftOfAmounts(int asked, Long mostOfS, List<DecimalWork> worked,
                                         NumericDomain.Bounds aRunsTo) {
         NumericDomain.Bounds amounts = new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(0)), null);
@@ -332,7 +332,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
      */
     @Test
     void theSumIsWorkedOutOnTheRowsBesideTheLineHoweverFarOutTheTermAskedOfStands() {
-        List<DecimalOperation> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
+        List<DecimalWork> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
         for (int digits : new int[] {3, 30, DecimalOperation.PLACES_A_ROW_IS_BUILT_AT, 100_000}) {
             ExactRatio far = ExactRatio.of(BigInteger.TEN.pow(digits));
             for (String beside : new String[] {"-5.1", "-4.9", "-5.0"}) {
@@ -397,7 +397,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
      */
     @Test
     void theNumbersStoodBesideALineAreWrittenAtFewPlacesHoweverFarOutTheLineIs() {
-        List<DecimalOperation> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
+        List<DecimalWork> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
         ExactRatio third = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3));
         for (int digits : new int[] {3, 300, DecimalOperation.PLACES_A_ROW_IS_BUILT_AT, 100_000}) {
             ExactRatio far = ExactRatio.of(BigInteger.TEN.pow(digits));
@@ -422,7 +422,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
      */
     @Test
     void aNumberPastTheEdgeOfWhatIsBuiltIsNoRowAndNoSumWithItIsClaimed() {
-        List<DecimalOperation> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
+        List<DecimalWork> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
         ExactRatio past = ExactRatio.of(new BigDecimal(BigInteger.ONE,
                 DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1));
         assertFalse(DecimalOperation.allCompleteAt(plusFive, Map.of("s", past)));
@@ -475,7 +475,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                 Map.of("h", ExactRatio.ONE, "s", ExactRatio.ONE), ExactRatio.ZERO), S);
         assertFalse(DecimalOperation.everyOperationHasRoomAtEveryNumber(List.of(twoPlaces)));
         // And through an operation told before.
-        List<DecimalOperation> throughOne = List.of(sum(new Formed(Map.of("h", huge),
+        List<DecimalWork> throughOne = List.of(sum(new Formed(Map.of("h", huge),
                 ExactRatio.ZERO), S), sum(new Worked(0), S));
         assertFalse(DecimalOperation.everyOperationHasRoomAtEveryNumber(throughOne));
     }
@@ -561,11 +561,11 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
 
     @Test
     void anOperationWorkedOutOfBothIsReadAsBothThoughNoOperandNamesThem() {
-        List<DecimalOperation> operations = List.of(product(H, new Written(AT_THE_FLOOR)),
+        List<DecimalWork> operations = List.of(product(H, new Written(AT_THE_FLOOR)),
                 sum(new Worked(0), S));
         assertFalse(DecimalOperation.allowAClaimOver(operations, "h", "s"));
         assertFalse(DecimalOperation.allowAClaimOver(operations, "s", "h"));
-        List<DecimalOperation> atFewPlaces = List.of(product(H, new Written(BigDecimal.ONE)),
+        List<DecimalWork> atFewPlaces = List.of(product(H, new Written(BigDecimal.ONE)),
                 sum(new Worked(0), S));
         assertTrue(DecimalOperation.allowAClaimOver(atFewPlaces, "h", "s"));
         assertTrue(DecimalOperation.allowAClaimOver(atFewPlaces, "s", "h"));
@@ -573,10 +573,18 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
 
     @Test
     void readsOfAnOperationAreThePlacesOfTheInputItIsWorkedOutOf() {
-        List<DecimalOperation> operations = List.of(product(H, new Written(BigDecimal.ONE)),
+        List<DecimalWork> operations = List.of(product(H, new Written(BigDecimal.ONE)),
                 sum(new Worked(0), new Written(BigDecimal.TEN)), product(S, S));
         assertEquals(List.of(Set.of("h"), Set.of("h"), Set.of("s")),
                 DecimalOperation.readsOf(operations));
+    }
+
+    /** A walk reads the total it adds up, and what is worked out of it reads that through it. */
+    @Test
+    void aWalkReadsTheTotalItAddsUp() {
+        List<DecimalWork> worked = List.of(new DecimalAdditiveWalk(BigDecimal.ZERO, "s"),
+                sum(new Worked(0), H));
+        assertEquals(List.of(Set.of("s"), Set.of("s", "h")), DecimalOperation.readsOf(worked));
     }
 
     @Test
@@ -589,7 +597,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
 
     @Test
     void aChainOfOperationsOverTheTermPutBesideItGrowsPastWhatIsShownRoomFor() {
-        List<DecimalOperation> chain = new ArrayList<>();
+        List<DecimalWork> chain = new ArrayList<>();
         chain.add(product(S, S));
         for (int i = 1; i < 40_000; i++) {
             chain.add(product(new Worked(i - 1), S));

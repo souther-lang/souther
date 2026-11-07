@@ -24,7 +24,9 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.core.Kernel;
+import souther.compiler.inputs.DecimalAdditiveWalk;
 import souther.compiler.inputs.DecimalOperation;
+import souther.compiler.inputs.DecimalWork;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
@@ -55,6 +57,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -1551,6 +1554,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * Where every number on the way is shown to lie between nought and the answer
              * ({@link NumbersOnTheWayToATotal}), a run stops only where the answer has no place,
              * which is told as the one operation it is; otherwise not every operation is told.
+             *
+             * <p>A walk of decimals stops where a step has no room for its digits, which is no
+             * fact of the numbers on the way, so none of that is asked of it: it is told as the
+             * walk it is ({@link DecimalAdditiveWalk}) where its step adds the element as the row
+             * holds it to a seed written out, and otherwise not every operation is told.
              */
             private LinearForm<NumericTerm> walkAddingOverAContainer(Core node, InputReads at) {
                 InputNumber.SeedAndAdded walk = InputNumber.ofAWalkAdding(node, inputs, at,
@@ -1567,7 +1575,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 LinearForm<NumericTerm> answer = new LinearForm<>(walk.seed(),
                         walk.added().coefs());
                 named.addAll(answer.coefs().keySet());
-                if (NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, answer,
+                if (Core.withoutStanding(node).type() == Type.DECIMAL) {
+                    BigDecimal seed = theSeedOfAWalkAddingDecimals(node);
+                    if (seed == null || !told.walksAddingDecimals(answer, seed, walk.added())) {
+                        told.exact = false;
+                    }
+                } else if (NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, answer,
                         ofTheInput, at)) {
                     tellAnIntTotal(node, answer, List.of());
                 } else {
@@ -1649,6 +1662,67 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         || (isRead(sum.right(), carried) && writtenAs(sum.left(), element, total));
             }
 
+            /**
+             * The seed of {@code node}, where it is a walk from a decimal written out whose step is
+             * a sum of decimals of the answer so far and the element, or a path of fields inside
+             * it, as it is written and no more: the decimal at the scale it is written. Null where
+             * it is anything else. An operation written in the step beside the sum is one a run
+             * can stop at, and a step that is a form of the element and no path of it is worked
+             * out by operations this is not told of.
+             */
+            private BigDecimal theSeedOfAWalkAddingDecimals(Core node) {
+                SeededWalk walk = SeededWalk.of(node, closure -> Core.withoutStanding(closure)
+                        instanceof Core.Block block ? block : null);
+                List<Core> added = walk == null ? null : addendsOfADecimalSum(walk.step().body());
+                if (added == null) {
+                    return null;
+                }
+                BigDecimal seed = switch (Core.withoutStanding(walk.seed())) {
+                    case Core.Decimal written -> written.value();
+                    case Core.Neg negated when Core.withoutStanding(negated.operand())
+                            instanceof Core.Decimal written -> written.value().negate();
+                    default -> null;
+                };
+                BindingId carried = walk.accumulator().binding();
+                BindingId element = walk.element().binding();
+                boolean adds = (isRead(added.get(0), carried)
+                        && isAPathInside(added.get(1), element))
+                        || (isRead(added.get(1), carried) && isAPathInside(added.get(0), element));
+                return adds ? seed : null;
+            }
+
+            /** The two operands of {@code e}, where it is a sum of two decimals written as the
+             *  operator or as the library's addition; null where it is anything else. */
+            private List<Core> addendsOfADecimalSum(Core e) {
+                return switch (Core.withoutStanding(e)) {
+                    case Core.Binary sum when sum.op() == BinOp.ADD && sum.type() == Type.DECIMAL ->
+                            List.of(sum.left(), sum.right());
+                    case Core.PreservedCall call when call.args().size() == 2
+                            && call.operation() instanceof ValueName.Stdlib.Operation operation
+                            && ruleSource.symbols().kernelOf(operation) == Kernel.DECIMAL_ADD ->
+                            call.args();
+                    default -> null;
+                };
+            }
+
+            /** Whether {@code e} is {@code element}, or fields of it one inside another. */
+            private static boolean isAPathInside(Core e, BindingId element) {
+                Core here = Core.withoutStanding(e);
+                while (true) {
+                    switch (here) {
+                        case Core.Read read -> {
+                            return element.equals(read.binding());
+                        }
+                        case Core.FieldAccess access -> here = Core.withoutStanding(access.target());
+                        case Core.FieldProjection projection ->
+                                here = Core.withoutStanding(projection.base());
+                        default -> {
+                            return false;
+                        }
+                    }
+                }
+            }
+
             private static boolean isRead(Core e, BindingId name) {
                 return Core.withoutStanding(e) instanceof Core.Read read
                         && name.equals(read.binding());
@@ -1671,19 +1745,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return multipliesFieldsOf(product.left(), element)
                             && multipliesFieldsOf(product.right(), element);
                 }
-                while (true) {
-                    switch (here) {
-                        case Core.Read read -> {
-                            return element.equals(read.binding());
-                        }
-                        case Core.FieldAccess access -> here = Core.withoutStanding(access.target());
-                        case Core.FieldProjection projection ->
-                                here = Core.withoutStanding(projection.base());
-                        default -> {
-                            return false;
-                        }
-                    }
-                }
+                return isAPathInside(here, element);
             }
 
             /**
@@ -1940,8 +2002,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final Set<UndividedByARelation.IntOperation> toldOnce = new HashSet<>();
         /** The node each of {@link #operations} was told at, by where it is among them. */
         private final List<Core> at = new ArrayList<>();
-        /** The operations of decimals, in the order they were told. */
-        private final List<DecimalOperation> decimals = new ArrayList<>();
+        /** The operations and walks of decimals, in the order they were told. */
+        private final List<DecimalWork> decimals = new ArrayList<>();
         /** Where in {@link #decimals} the operation a form is the result of is, by the form. */
         private final Map<LinearForm<NumericTerm>, Integer> resultOf = new IdentityHashMap<>();
         /** The forms that are a place of the input read as it is, a number a row is built with. */
@@ -2054,7 +2116,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 add(apart.at.get(i), apart.operations.get(i).shifted(ofWholeNumbers));
             }
             int ofDecimals = decimals.size();
-            for (DecimalOperation each : apart.decimals) {
+            for (DecimalWork each : apart.decimals) {
                 decimals.add(each.shifted(ofDecimals));
             }
             apart.resultOf.forEach((form, where) -> resultOf.put(form, where + ofDecimals));
@@ -2211,6 +2273,28 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 decimals.add(told);
             }
             resultOf.put(result, at);
+            return true;
+        }
+
+        /**
+         * Tells a walk adding the decimals that make {@code total} to {@code seed}, one step per
+         * element ({@link DecimalAdditiveWalk}), as what {@code answer} is worked out by; false
+         * where {@code total} is no total of the elements as a row holds them, and nothing is
+         * told. The walk is worked out of the seed and the input alone.
+         */
+        boolean walksAddingDecimals(LinearForm<NumericTerm> answer, BigDecimal seed,
+                                    LinearForm<NumericTerm> total) {
+            NumericTerm added = aPlainTotal(total);
+            if (added == null) {
+                return false;
+            }
+            DecimalAdditiveWalk told = new DecimalAdditiveWalk(seed, added);
+            int at = decimals.indexOf(told);
+            if (at < 0) {
+                at = decimals.size();
+                decimals.add(told);
+            }
+            resultOf.put(answer, at);
             return true;
         }
 

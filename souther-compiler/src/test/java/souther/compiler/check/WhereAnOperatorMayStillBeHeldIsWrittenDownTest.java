@@ -509,6 +509,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.AffineReading.1.onlyAddsTheElement",
                     "asks whether a walk's step is the answer so far and the element added, as"
                             + " it is written: an operation not written is one no run can stop at"),
+            new Held("souther.compiler.partition.AffineReading.1.addendsOfADecimalSum",
+                    "asks whether a walk's step is a sum of two decimals as it is written, by the"
+                            + " operator or the library's addition: each step is one addition a"
+                            + " run can stop at, and nothing else"),
             new Held("souther.compiler.partition.AffineReading.1.multipliesFieldsOf",
                     "asks whether an expression is fields of the one element multiplied and"
                             + " nothing else, so that the product is worked out as it is written"),

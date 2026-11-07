@@ -29,7 +29,9 @@ import souther.compiler.check.ValueUniverse;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DecimalAdditiveWalk;
 import souther.compiler.inputs.DecimalOperation;
+import souther.compiler.inputs.DecimalWork;
 import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
@@ -390,7 +392,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                 is written by one element alone ({@link #operationsOverTheSides})
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                   boolean onEveryRun, List<DecimalOperation> decimals,
+                   boolean onEveryRun, List<DecimalWork> decimals,
                    List<NumericTerm> partials) {
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
@@ -403,7 +405,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                boolean onEveryRun, List<DecimalOperation> decimals) {
+                boolean onEveryRun, List<DecimalWork> decimals) {
             this(operations, told, onEveryRun, decimals, List.of());
         }
 
@@ -463,8 +465,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 // What an operation is worked out of is told by where it stands among them.
                 both.add(each.shifted(earlier.operations.size()));
             }
-            List<DecimalOperation> bothDecimals = new ArrayList<>(earlier.decimals);
-            for (DecimalOperation each : decimals) {
+            List<DecimalWork> bothDecimals = new ArrayList<>(earlier.decimals);
+            for (DecimalWork each : decimals) {
                 bothDecimals.add(each.shifted(earlier.decimals.size()));
             }
             List<NumericTerm> bothPartials = new ArrayList<>();
@@ -1396,7 +1398,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // relation, or is two sides, leaves them all out.
         boolean decimalsOverTheSides = working.decimals().stream()
                 .allMatch(each -> overTheSides(each, named));
-        List<DecimalOperation> decimals = decimalsOverTheSides ? working.decimals() : List.of();
+        List<DecimalWork> decimals = decimalsOverTheSides ? working.decimals() : List.of();
         leftOut |= !decimalsOverTheSides;
         // An operation left out is one a row is not asked to get past here: not every one told.
         WhatARelationLeavesUndivided.Told told =
@@ -1593,13 +1595,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         };
     }
 
-    /** Whether every number {@code operation} reads from a row is a side of this relation, once. */
-    private static boolean overTheSides(DecimalOperation operation,
-                                        Map<Object, Integer> named) {
-        return operation.operands().stream().allMatch(operand -> !(operand
-                instanceof DecimalOperation.Formed formed)
-                || formed.coefs().keySet().stream()
-                        .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom))));
+    /** Whether every number {@code work} reads from a row as a place of it is a side of this
+     *  relation, once. A total is read as the row holds it, by a walk as by an operation. */
+    private static boolean overTheSides(DecimalWork work, Map<Object, Integer> named) {
+        return switch (work) {
+            case DecimalAdditiveWalk _ -> true;
+            case DecimalOperation operation -> operation.operands().stream()
+                    .allMatch(operand -> !(operand instanceof DecimalOperation.Formed formed)
+                            || formed.coefs().keySet().stream()
+                                    .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom))));
+        };
     }
 
     /**
