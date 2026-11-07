@@ -108,8 +108,7 @@ final class LibraryEndings {
             library.rewrites().keySet().forEach(reading::of);
             Map<ValueName.Stdlib.Operation, GetsPast> completions = new HashMap<>();
             reading.settled.forEach((operation, ends) -> completions.put(operation,
-                    reading.walksNoFurtherThanItsList(operation) ? new GetsPast.Always()
-                            : completionOf(library, proved, operation, ends, reading)));
+                    completionOf(library, proved, operation, ends, reading)));
             apart = new Apart(Map.copyOf(reading.settled), Map.copyOf(completions));
         }
         return apart;
@@ -245,7 +244,9 @@ final class LibraryEndings {
      * caller's to read and one the body built is read where it is built. And two operations end
      * nothing of their own by what is proved of them rather than by a reading of their bodies,
      * which a body cannot say: the walk, and one that assembles its answer of at most one element
-     * for each element of a list ({@link #endsNothingOfItsOwn}).
+     * for each element of a list ({@link #endsNothingOfItsOwn}). Nor does one whose body walks a
+     * list once and builds no more than it walks ({@link #walksNoFurtherThanItsList}), which is
+     * read off the body by induction over the walk; an operation calling it reads that answer.
      */
     private static final class Reading {
         private final Stdlib library;
@@ -303,7 +304,8 @@ final class LibraryEndings {
         }
 
         private Endings worked(ValueName.Stdlib.Operation operation) {
-            if (facts != null && endsNothingOfItsOwn(operation)) {
+            if (facts != null
+                    && (endsNothingOfItsOwn(operation) || walksNoFurtherThanItsList(operation))) {
                 return NONE;
             }
             Stdlib.Intrinsic intrinsic = library.intrinsicOf(operation);
@@ -329,7 +331,8 @@ final class LibraryEndings {
          *
          * <p>The body is one walk of the library, and nothing else in it ends a run. The walk
          * starts from a collection holding nothing, or from a tuple of such collections and of
-         * whole numbers written out; and its step answers what it carries with each collection
+         * whole numbers written out; and its step answers, in every arm of each {@code if} and
+         * {@code match} it goes through, what it carries with each collection
          * as it was or with at most one element put into it, by an operation that answers where
          * the collection fits ({@link GetsPast.WhereTheAnswerFits}), and each number as it was
          * or with a number written out, not below nought, added to it. Nothing else in the step
@@ -342,7 +345,7 @@ final class LibraryEndings {
          * ({@link GetsPast#MOST_ELEMENTS}), so where that far still lies where an {@code Int} sum
          * answers ({@link WhereAnOperatorAnswers}), every sum worked out on the way is one.
          */
-        boolean walksNoFurtherThanItsList(ValueName.Stdlib.Operation operation) {
+        private boolean walksNoFurtherThanItsList(ValueName.Stdlib.Operation operation) {
             Hir.FnDef declaration = library.helpers().get(operation);
             if (declaration == null || facts == null) {
                 return false;
@@ -522,6 +525,10 @@ final class LibraryEndings {
                                 added, mostAdded)
                         && answersWhatItCarriedGrown(fork.els(), carried, counts, parts,
                                 added, mostAdded);
+                case Hir.Match match -> of(match.scrutinee()).endsNone()
+                        && !match.cases().isEmpty()
+                        && match.cases().stream().allMatch(arm -> answersWhatItCarriedGrown(
+                                arm.body(), carried, counts, parts, added, mostAdded));
                 case Hir.Tuple tuple -> grownPartByPart(tuple, counts, parts, added, mostAdded);
                 default -> {
                     if (counts.size() != 1 || counts.getFirst().aNumber()) {

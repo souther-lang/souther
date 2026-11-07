@@ -33,6 +33,8 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
             ValueName.Stdlib.operation("List", "any");
     private static final ValueName.Stdlib.Operation LENGTH =
             ValueName.Stdlib.operation("List", "length");
+    private static final ValueName.Stdlib.Operation FILTER_MAP =
+            ValueName.Stdlib.operation("List", "filterMap");
 
     private static final String IS_EMPTY_BODY = "List.length(xs) == 0";
     private static final String APPEND_BODY = "= a ++ b";
@@ -217,10 +219,43 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     @Test
     void aWalkThatPutsInOneForEachElementAnswersAlways() {
         LibraryEndings endings = LibraryEndings.shipped();
-        for (String each : new String[] {"take", "drop", "indexBy"}) {
-            assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(
-                    ValueName.Stdlib.operation("List", each)), each);
+        for (String each : new String[] {"take", "drop", "indexBy", "filterMap"}) {
+            ValueName.Stdlib.Operation operation = ValueName.Stdlib.operation("List", each);
+            assertEquals(NONE, endings.apartFromWhatItIsHanded(operation), each);
+            assertEquals(new GetsPast.Always(),
+                    endings.completionApartFromWhatItIsHanded(operation), each);
         }
+        assertEquals(new Endings.NotKnown(), endings.of(FILTER_MAP));
+    }
+
+    /**
+     * A walk whose step chooses by a {@code match} puts in what each arm puts in, so one arm
+     * putting two in, a choice made by what may end a run, or an element put in that may end
+     * one, says nothing of where it answers.
+     */
+    @Test
+    void aWalkChoosingByAMatchAnswersWhatEveryArmDoes() {
+        for (String[] rewrite : new String[][] {
+                {"| Some v -> acc ++ [v],", "| Some v -> acc ++ [v, v],"},
+                {"match f(x) with", "match (if 1 / List.length(acc) == 0 then f(x) else f(x)) with"},
+                {"| Some v -> acc ++ [v],",
+                        "| Some v -> acc ++ [if 1 / List.length(acc) == 0 then v else v],"}}) {
+            LibraryEndings endings = LibraryEndings.of(rewritten(rewrite[0], rewrite[1]));
+            assertTrue(!endings.apartFromWhatItIsHanded(FILTER_MAP).endsNone(), rewrite[1]);
+            assertEquals(new GetsPast.NotKnown(),
+                    endings.completionApartFromWhatItIsHanded(FILTER_MAP), rewrite[1]);
+        }
+    }
+
+    /** What a walk is proved to end of its own is what an operation calling it reads, as it reads
+     *  any operation it calls. */
+    @Test
+    void anOperationCallingAWalkProvedToEndNoneEndsNoneApartFromWhatItIsHanded() {
+        LibraryEndings endings = LibraryEndings.of(rewritten(ANY_BODY,
+                "List.all(p, List.take(1, xs))"));
+
+        assertEquals(NONE, endings.apartFromWhatItIsHanded(ANY));
+        assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(ANY));
     }
 
     /**
