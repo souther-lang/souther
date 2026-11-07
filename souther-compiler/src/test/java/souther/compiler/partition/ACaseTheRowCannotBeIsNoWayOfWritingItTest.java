@@ -98,7 +98,7 @@ class ACaseTheRowCannotBeIsNoWayOfWritingItTest {
         Axis fixed = axisAt("n");
         Count at = Count.of(4);
         SearchRegion region = domain().quantities(rules()).region();
-        if (ABOVE_TEN instanceof TakenConstraint.Affine(var form, var rel)) {
+        if (ABOVE_TEN instanceof TakenConstraint.Affine(var form, var rel, var _)) {
             region = region.assuming(form, rel).taken();
         }
         return Generator.probeFixing(subject(), "n = " + at,

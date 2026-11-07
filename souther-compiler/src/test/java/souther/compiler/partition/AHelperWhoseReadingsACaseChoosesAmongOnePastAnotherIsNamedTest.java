@@ -102,7 +102,11 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
 
     /** What each case of each line not worked out came to, at each copy it was read at. */
     private static List<JsonNode> readings(Compilation compilation) {
-        JsonNode partition = JSON.readTree(AdequacyReport.of(compilation)
+        return readings(AdequacyReport.of(compilation), compilation);
+    }
+
+    private static List<JsonNode> readings(AdequacyReport report, Compilation compilation) {
+        JsonNode partition = JSON.readTree(report
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
                 .path("modules").get(0).path("behaviors").get(0).path("partition");
         List<JsonNode> out = new ArrayList<>();
@@ -154,7 +158,8 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
     @Test
     void aHelperCalledInsideOtherHelpersIsNamedWithTheHelpersItsCallHasToMoveOutOf() {
         Compilation compilation = compiled(CALLED_INSIDE_HELPERS);
-        for (JsonNode reading : readings(compilation)) {
+        AdequacyReport report = AdequacyReport.of(compilation);
+        for (JsonNode reading : readings(report, compilation)) {
             JsonNode helper = onlyHelper(reading);
             assertEquals("demo.ok", helper.path("helper").asString());
             Set<String> copies = new TreeSet<>();
@@ -167,8 +172,7 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
             assertEquals(2, copies.size(), "a copy of ok in each copy of first, one on each arm"
                     + " of pick's if: " + helper);
         }
-        String text = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        String text = report.human(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> told = text.lines().filter(line -> line.contains("case expansion")).toList();
         assertFalse(told.isEmpty(), text);
         for (String line : told) {

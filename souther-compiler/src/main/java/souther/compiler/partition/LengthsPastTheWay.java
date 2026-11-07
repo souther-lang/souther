@@ -186,7 +186,7 @@ final class LengthsPastTheWay {
         Set<NumericTerm> others = new LinkedHashSet<>();
         for (TakenConstraint each : system) {
             if (!(each instanceof TakenConstraint.Affine(LinearForm<NumericTerm> form,
-                    var rel))) {
+                    var rel, var _))) {
                 return null;
             }
             Inequality inequality = inequalityOf(form);

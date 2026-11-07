@@ -74,7 +74,7 @@ class ASizeThatTurnsOnHowTheArgumentsStandIsReadInEachCaseTest {
     private static boolean holds(OnTheWay asked, long wanted, long items) {
         return switch (asked) {
             case OnTheWay.TakenIn taken -> switch (taken.demand()) {
-                case RowDemand.Relational(TakenConstraint.Affine(var form, var rel)) -> {
+                case RowDemand.Relational(TakenConstraint.Affine(var form, var rel, var _)) -> {
                     BigInteger sum = whole(form.constant());
                     for (var term : form.coefs().entrySet()) {
                         long value = switch (term.getKey()) {
