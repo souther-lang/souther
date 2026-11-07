@@ -857,7 +857,8 @@ public final class Generator {
                              // came to is about the values it tried.
                              VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
                              PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
-                             ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR -> HowFar.CUT_SHORT;
+                             ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR,
+                             VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT -> HowFar.CUT_SHORT;
                         // Reaching these stops no composing, so no search comes back from one of
                         // them and there is no word to give. Asked for one all the same, this says
                         // so rather than lending a word from a budget that does stop something.

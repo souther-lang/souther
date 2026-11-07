@@ -649,6 +649,21 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
                     "stops trying values of a position on the way and says which figure"),
+            Map.entry("souther.compiler.partition.NumericWitness$Tries#<init>()V",
+                    "how many values the positions of one question on the way are tried at"
+                            + " together"),
+            Map.entry("souther.compiler.partition.NumericWitness#tryingAt("
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/inputs/NumericTerm;"
+                            + "Lsouther/compiler/numeric/Place;Ljava/util/List;I"
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Lsouther/compiler/partition/NumericWitness$Composing;"
+                            + "Lsouther/compiler/partition/NumericWitness$Congruent;"
+                            + "Ljava/util/SequencedMap;"
+                            + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
+                    "stops trying values of the positions on the way once they come to the"
+                            + " figure together, and says so"),
             Map.entry("souther.compiler.partition.Generator$WayComposer#composes("
                             + "Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;"
                             + "Ljava/util/SequencedMap;Ljava/util/SequencedMap;Ljava/util/List;)"

@@ -158,6 +158,7 @@
         "values_a_position_on_the_way_is_tried_at",
         "places_a_position_on_the_way_is_looked_at",
         "assignments_on_the_way_composed_for",
+        "values_the_positions_on_the_way_are_tried_at",
         "values_a_point_is_tried_with",
         "rows_beside_a_run_are_made_for_a_point",
         "paths_of_a_decision_read",

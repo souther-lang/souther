@@ -299,6 +299,27 @@ public enum CompositionBudget {
     ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR(64),
 
     /**
+     * How many values the positions of one such walk are tried at together, counted over every
+     * position it fixes.
+     *
+     * <p>Its own figure for the reason the one above is: the values of one position are bounded,
+     * and the walk tries each of them under every value of the positions before it, so how many it
+     * tries grows as their product. Most of those never reach the composing the one above counts —
+     * the region refuses what the values fixed above leave, or a congruence leaves the last
+     * position no value inside its run — so a walk over many positions is held by neither of them.
+     * Spent over every congruence the walk is asked under, which is one question asked several
+     * ways.
+     *
+     * <p>The figure of one position ({@link #VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT}) to the
+     * third: what the last of three positions is tried at where each of them is tried at that
+     * figure under every value of the ones before it.
+     *
+     * <p>Its outcome is the outcome of the ones above: what was not tried is one condition on the
+     * way ({@link ReachabilityGap}).
+     */
+    VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT(512),
+
+    /**
      * How many values a point is tried with after a row composed for one of them does not stand
      * there.
      *
@@ -874,6 +895,8 @@ public enum CompositionBudget {
                     "how many places of a position on the way are looked at";
             case ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR ->
                     "how many values of the numbers on the way a row is composed for";
+            case VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT ->
+                    "how many values the positions on the way are tried at together";
             case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
             case ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT ->
                     "how many candidates beside the rows run are made for a point";
@@ -962,6 +985,10 @@ public enum CompositionBudget {
             // And the composing of what that walk tries, which bounds the same walk from the other
             // end: the values it reaches, each composed for.
             case ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR -> VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
+            // And the product of the values each position is tried at, which bounds it across
+            // the positions.
+            case VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT ->
+                    VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
             case CHOICES_ON_A_WAY_LOOKED_AT -> WAYS_A_WAY_IS_LOOKED_ALONG;
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,

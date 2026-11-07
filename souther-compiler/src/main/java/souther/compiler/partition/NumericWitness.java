@@ -117,7 +117,7 @@ final class NumericWitness {
         if (leavesTheQuestionNothing(within, terms)) {
             return new Standing.ProvedImpossible();
         }
-        return walked(within, terms, on, looking, composing, null);
+        return walked(within, terms, on, looking, composing, null, new Tries());
     }
 
     /**
@@ -164,8 +164,9 @@ final class NumericWitness {
         nearFirst.addAll(rest);
         boolean proved = true;
         CompositionShortfall met = CompositionShortfall.NONE;
+        Tries tries = new Tries();
         for (Congruent congruent : congruents) {
-            switch (walked(within, nearFirst, on, looking, composing, congruent)) {
+            switch (walked(within, nearFirst, on, looking, composing, congruent, tries)) {
                 case Standing.Found found -> {
                     return found;
                 }
@@ -181,9 +182,9 @@ final class NumericWitness {
 
     private static Standing walked(SearchRegion within, List<? extends NumericTerm> terms,
                                    Function<NumericTerm, Carrier> on, WitnessSearch looking,
-                                   Composing composing, Congruent congruent) {
+                                   Composing composing, Congruent congruent, Tries tries) {
         SequencedMap<NumericTerm, Place> standing = new LinkedHashMap<>();
-        Met met = new Met();
+        Met met = new Met(tries);
         if (walk(within, terms, 0, on, looking, composing, congruent, standing, met)) {
             return Standing.Found.walked(standing);
         }
@@ -323,6 +324,7 @@ final class NumericWitness {
      */
     private static final class Met {
 
+        private final Tries tries;
         private final Set<CompositionBudget> figures = EnumSet.noneOf(CompositionBudget.class);
         private final Set<CompositionCapacity> unheld = new HashSet<>();
         private CompositionShortfall composing = CompositionShortfall.NONE;
@@ -332,6 +334,10 @@ final class NumericWitness {
         private boolean refuted;
         private boolean notBuilt;
         private boolean leftUnwalked;
+
+        Met(Tries tries) {
+            this.tries = tries;
+        }
 
         CompositionShortfall shortfall() {
             return CompositionShortfall.of(figures, Set.of(), unheld).and(composing);
@@ -343,6 +349,25 @@ final class NumericWitness {
          */
         boolean settlesTheQuestion() {
             return refuted && !notBuilt && !leftUnwalked && shortfall().nothing();
+        }
+    }
+
+    /**
+     * How many more values the positions of one question may be tried at, counted over every
+     * position and every congruence it is asked under
+     * ({@link CompositionBudget#VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT}).
+     */
+    private static final class Tries {
+
+        private int left = CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT.maximum();
+
+        /** Whether another value may be tried, counting it where it may. */
+        boolean another() {
+            if (left == 0) {
+                return false;
+            }
+            left--;
+            return true;
         }
     }
 
@@ -687,6 +712,11 @@ final class NumericWitness {
                                     Function<NumericTerm, Carrier> on, WitnessSearch looking,
                                     Composing composing, Congruent congruent,
                                     SequencedMap<NumericTerm, Place> standing, Met met) {
+        if (!met.tries.another()) {
+            met.leftUnwalked = true;
+            met.figures.add(CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT);
+            return false;
+        }
         SearchRegion next = within.given(term, tried);
         if (next.emptiness().isPresent()) {
             return false;

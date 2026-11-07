@@ -352,6 +352,7 @@ public final class PublicationOrders {
                     CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT,
                     CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
                     CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR,
+                    CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT,
                     CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                     // The walking a way past the ways looked along is read again with for one
                     // relation, beside the walking of the way it reads again.
