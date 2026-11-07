@@ -229,6 +229,33 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                 kindsOfTheElementsRead(both), "a conjunct needs what it holds");
     }
 
+    /**
+     * The same rule written as the law the call comes to — as many different ids as elements —
+     * reads what the call reads, and is needed where the call is: the call is the oracle.
+     */
+    @Test
+    void aCountOfDifferentValuesReadsWhatTheCallReads() {
+        String call = "List.allDistinctBy(i -> i.id, items)";
+        String counted = "List.length(List.distinctBy(i -> i.id, items)) == List.length(items)";
+        for (String clause : List.of("%s", "%s || List.length(items) >= 3",
+                "%s && List.length(items) >= 2")) {
+            assertEquals(clausesSay(itemsUnder(clause.formatted(call)), ClauseMeaning.Stated::reads),
+                    clausesSay(itemsUnder(clause.formatted(counted)), ClauseMeaning.Stated::reads),
+                    clause);
+        }
+    }
+
+    private static Compilation itemsUnder(String clause) {
+        return started("""
+                module shop.prices exposing ( Item, Range )
+
+                data Item = { id: Int, price: Int }
+
+                data Range = { items: List<Item> }
+                    invariant %s
+                """.formatted(clause));
+    }
+
     /** The kinds of read of elements the clauses of {@code c} say, one entry per kind. */
     private static Set<ClauseRead.Kind> kindsOfTheElementsRead(Compilation c) {
         Set<ClauseRead.Kind> out = new HashSet<>();

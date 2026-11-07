@@ -44,10 +44,10 @@ public final class InvariantStatements {
     }
 
     /**
-     * The calls a conjunct states, for a consumer that reads nothing else of it. A comparison is
-     * {@link InvariantStatement.Unread} here: what a comparison states takes a reading of the
-     * declarations ({@link #of(RuleReadingContext)}), and a consumer of calls has no budget to
-     * read under.
+     * What a conjunct states, for a consumer with no budget to read the declarations under. A
+     * comparison is the one written, with its denials spent: reading a comparison of the sign of an
+     * order as that order takes a reading of the declarations ({@link #of(RuleReadingContext)}), and
+     * the comparison written is true of the values all the same.
      */
     public static InvariantStatements ofTheCalls(RuleReadingSource source) {
         return new InvariantStatements(null, new Clauses(source));
@@ -158,6 +158,15 @@ public final class InvariantStatements {
                 : null;
         if (entry != null) {
             return new InvariantStatement.HoldsAnEntry(reached.statement(), entry);
+        }
+        // With no reading of the declarations, a comparison is the one its author wrote with the
+        // denials above it spent: true of the values all the same, and all a reader of calls asks.
+        StatedComparison written = terms == null
+                && Core.withoutStanding(Clauses.substituted(reached.said().of(), given))
+                        instanceof Core.Binary bin
+                ? StatedComparison.of(bin, reached.said().positive()) : null;
+        if (written != null) {
+            return new InvariantStatement.Compares(reached.statement(), written);
         }
         return new InvariantStatement.Unread(reached.statement(),
                 Clauses.substituted(reached.said().of(), given), reached.said().positive());

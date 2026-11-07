@@ -304,11 +304,13 @@ final class AdmissibleReading {
 
     /**
      * Whether {@code part} states that no two elements of a position come to one answer of a
-     * closure this compiler reads ({@link ElementsApart#stated}), of a container the builders of
-     * that position are told about ({@link ElementsApart#readsAPlace}).
+     * closure this compiler reads, by a call or by a count of different values
+     * ({@link ElementsApart#stated(Core, boolean, DeclarationNewtypes)}), of a container the
+     * builders of that position are told about ({@link ElementsApart#readsAPlace}).
      *
-     * <p>Stated and not denied. Denied it says some two elements are alike, which nothing here
-     * builds for, and a closure this does not read is a form this did not read whatever it is
+     * <p>Not where it says some two elements are alike, which nothing here builds for — a call
+     * denied, or a count of different values held below the count of elements — and a closure
+     * this does not read is a form this did not read whatever it is
      * handed — so both stay {@link UnreadReason#FORM_NOT_READ}. So does a container written any
      * other way: a rule this calls one about how the elements stand is one a container composed
      * for the position keeps.
@@ -326,11 +328,7 @@ final class AdmissibleReading {
      * against what the builders of the position keep ({@link ReadingLanguage.Elements}).
      */
     KeptApart keptApartAt(ClauseExpr.Part part, Denotations at) {
-        if (!part.positive()
-                || !(Core.withoutStanding(part.of()) instanceof Core.PreservedCall call)) {
-            return null;
-        }
-        ElementsApart.Stated stated = ElementsApart.stated(call);
+        ElementsApart.Stated stated = ElementsApart.stated(part.of(), part.positive(), null);
         FactSubject container = stated != null && ElementsApart.readsAPlace(stated.container())
                 ? positionIn(stated.container(), at) : null;
         return container == null ? null : new KeptApart(container, stated.run());

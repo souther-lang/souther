@@ -12,7 +12,9 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.UnreadReason;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -168,6 +170,72 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
                 """).heldAt(RuleKey.of("items"));
         assertEquals(List.of(List.of("id")), control.keptApart(),
                 "the conjunction tells the builders, so the pairing above is not two absences");
+    }
+
+    /**
+     * A count of the different values held against the count of the elements is the call's law
+     * written out, and tells the builders what the call does: the same runs, whichever side it is
+     * written on, under a denial of its opposite, through a binding, and whichever operation
+     * answers one of each different value. The accounting agrees with what the builders were told.
+     *
+     * <p>The call is the oracle. Each count form is held to what {@code List.allDistinctBy} with the
+     * same closure tells, and the forms that say something weaker or about two containers tell
+     * nothing.
+     */
+    @Test
+    void aCountOfDifferentValuesTellsTheBuildersWhatTheCallTells() {
+        List<String> identity = List.of(
+                "List.length(List.distinct(items)) == List.length(items)",
+                "List.length(items) == List.length(List.distinct(items))",
+                "Bool.not(List.length(List.distinct(items)) /= List.length(items))",
+                "List.length(List.distinct(items)) >= List.length(items)",
+                "Bool.not(List.length(items) > List.length(List.distinct(items)))",
+                "List.length(List.distinctBy(x -> x, items)) == List.length(items)",
+                "Set.size(Set.fromList(items)) == List.length(items)",
+                "{\n        let xs = items\n        List.length(List.distinct(xs)) == List.length(xs)"
+                        + "\n    }");
+        List<String> byId = List.of(
+                "List.length(List.distinctBy(.id, items)) == List.length(items)",
+                "List.length(List.distinctBy(x -> x.id, items)) == List.length(items)");
+        List<String> none = List.of(
+                "List.length(List.distinct(items)) <= List.length(items)",
+                "List.length(List.distinct(items)) /= List.length(items)",
+                "List.length(List.distinct(items)) < List.length(items)",
+                "List.length(List.distinct(items)) == List.length(others)",
+                "List.length(List.distinct(items)) == List.length(List.distinct(items))",
+                "List.length(items) == List.length(items)",
+                "List.length(List.distinctBy(x -> x.id + 1, items)) == List.length(items)",
+                "List.length(List.distinct(items)) == List.length(items) || n < 0");
+        Map<String, List<List<String>>> expected = new LinkedHashMap<>();
+        identity.forEach(rule -> expected.put(rule, toldBy("List.allDistinctBy(x -> x, items)")));
+        byId.forEach(rule -> expected.put(rule, toldBy("List.allDistinctBy(.id, items)")));
+        none.forEach(rule -> expected.put(rule, List.of()));
+        assertEquals(List.of(List.of()), expected.get(identity.getFirst()), "the oracle tells");
+        assertEquals(List.of(List.of("id")), expected.get(byId.getFirst()), "the oracle tells");
+
+        expected.forEach((rule, runs) -> {
+            FieldDomains read = read(withCounts(rule));
+            FieldDomains.Held held = read.heldAt(RuleKey.of("items"));
+            List<List<String>> told = held == null ? List.of() : held.keptApart();
+
+            assertEquals(runs, told, rule);
+            if (!runs.isEmpty()) {
+                assertFalse(anyUnaccounted(read), rule);
+            }
+        });
+    }
+
+    /** What a record holding two lists of items is told of {@code items} under {@code rule}. */
+    private static List<List<String>> toldBy(String rule) {
+        FieldDomains.Held held = read(withCounts(rule)).heldAt(RuleKey.of("items"));
+        return held == null ? List.of() : held.keptApart();
+    }
+
+    private static String withCounts(String rule) {
+        return """
+                data N = { n: Int, items: List<Item>, others: List<Item> }
+                    invariant %s
+                """.formatted(rule);
     }
 
     @Test

@@ -238,6 +238,10 @@ public final class BoundaryConstraints {
      * empty when this cannot prove one.
      */
     private Optional<BoundaryConstraint> of(InvariantStatement statement, Type base) {
+        Optional<BoundaryConstraint> unique = unique(statement, base);
+        if (unique.isPresent()) {
+            return unique;
+        }
         return switch (statement) {
             case InvariantStatement.Unread _, InvariantStatement.HoldsAnEntry _,
                  InvariantStatement.BalancesSides _ -> Optional.empty();
@@ -382,14 +386,24 @@ public final class BoundaryConstraints {
                 && isValue(call.args().get(1))) {
             return Optional.of(matching(call));
         }
-        // `List.allDistinctBy(x -> x, value)` says of the elements that no two are equal, by the same
-        // value equality (spec §collections). Read where every builder of a list reads it
-        // (ElementsApart), so the decoder and the rows composed for it agree about which rule says
-        // so. Apart at a run of fields says it of something else — the elements' ids — and there is
-        // no constraint for that, so the clause keeps its own check. Nor is there one where the
-        // elements have no message form: the constraint reports the elements it finds repeated, and
-        // a decoder library cannot write them.
-        List<String> apart = ElementsApart.apartAt(call, field);
+        return Optional.empty();
+    }
+
+    /**
+     * The uniqueness {@code statement} states of the value's elements, or empty where it states
+     * none.
+     *
+     * <p>{@code List.allDistinctBy(x -> x, value)} says of the elements that no two are equal, by
+     * the same value equality (spec §collections), and so does
+     * {@code List.length(List.distinct(value)) == List.length(value)}. Read where every builder of a
+     * list reads it (ElementsApart), so the decoder and the rows composed for it agree about which
+     * rule says so. Apart at a run of fields says it of something else — the elements' ids — and
+     * there is no constraint for that, so the clause keeps its own check. Nor is there one where
+     * the elements have no message form: the constraint reports the elements it finds repeated, and
+     * a decoder library cannot write them.
+     */
+    private Optional<BoundaryConstraint> unique(InvariantStatement statement, Type base) {
+        List<String> apart = ElementsApart.apartAt(statement, field);
         if (base instanceof Type.ListOf list && apart != null && apart.isEmpty()) {
             MessageForm element = messageForm(list.element(), Set.of());
             return element == null ? Optional.empty() : Optional.of(new Unique(element));

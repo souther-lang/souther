@@ -406,6 +406,23 @@ class CompileInvariantConstraintTest {
         assertEquals(List.of(1L), issue.meta().get("duplicates"));
     }
 
+    /** The same rule written as the law the call comes to — as many different elements as
+     *  elements — is the same constraint, reported the same way. */
+    @Test
+    void aRepeatedElementOfARuleWrittenByCountIsADuplicate() throws Exception {
+        String call = """
+                data V = List<Int>
+                    invariant List.allDistinctBy(x -> x, value)
+                """;
+        for (String rule : List.of("List.length(List.distinct(value)) == List.length(value)",
+                "List.length(value) == List.length(List.distinct(value))")) {
+            String counted = call.replace("List.allDistinctBy(x -> x, value)", rule);
+            assertEquals(soleIssue(call, List.of(1L, 2L, 1L)),
+                    soleIssue(counted, List.of(1L, 2L, 1L)), rule);
+            assertTrue(decoded(counted, List.of(1L, 2L)) instanceof Ok, rule);
+        }
+    }
+
     /**
      * {@code Unique} reports what Raoh's own reports for it. Where an element's Java equality is
      * Souther's too — an {@code Int}, unlike a {@code Decimal} — {@code RaohListUnique} and Raoh's

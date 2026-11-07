@@ -918,30 +918,28 @@ public final class BoundOperationFacts {
 
     /**
      * Where {@code operation} comes out true exactly where no two elements of a container it is
-     * handed come to one answer of a closure it is handed: which argument is the container and
-     * which the closure — or null where it states no such thing.
+     * handed come to one value of what an element is read as: how many different such values
+     * there are, over which argument — or null where it states no such thing.
      *
-     * <p>Read off the law its body is proved to come to: as many different answers of that closure
-     * on the container's elements as the container holds elements.
+     * <p>Read off the law its body is proved to come to: as many different values on the
+     * container's elements as the container holds elements. That is the whole of what the elements
+     * being apart is, since there are never more different values than elements.
      */
-    public NoTwoAlike statesNoTwoAlike(ValueName operation) {
+    public LawNumber.HowManyDifferent<DeclaredArgument> statesNoTwoAlike(ValueName operation) {
         if (!(settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
                 OperationLaw.Observation<DeclaredArgument>(var _,
                         LawProposition.Compared<DeclaredArgument>(var form, Rel states)), var _))
                 || states != Rel.EQ || !form.constant().isZero() || form.coefs().size() != 2) {
             return null;
         }
-        DeclaredArgument container = null;
-        DeclaredArgument by = null;
+        LawNumber.HowManyDifferent<DeclaredArgument> counted = null;
         DeclaredArgument sized = null;
         ExactRatio different = null;
         ExactRatio size = null;
         for (var term : form.coefs().entrySet()) {
             switch (term.getKey()) {
-                case LawNumber.HowManyDifferent<DeclaredArgument>(var over,
-                        LawSubject.WhatTheClosureAnswers<DeclaredArgument>(var closure)) -> {
-                    container = over;
-                    by = closure;
+                case LawNumber.HowManyDifferent<DeclaredArgument> each -> {
+                    counted = each;
                     different = term.getValue();
                 }
                 case LawNumber.SizeOf<DeclaredArgument>(
@@ -954,13 +952,34 @@ public final class BoundOperationFacts {
                 }
             }
         }
-        return container == null || !container.equals(sized)
-                || !different.negated().equals(size) ? null : new NoTwoAlike(container, by);
+        return counted == null || !counted.container().equals(sized)
+                || !different.negated().equals(size) ? null : counted;
     }
 
-    /** The container no two elements of which are alike, and the closure whose answers they are
-     *  alike by. */
-    public record NoTwoAlike(DeclaredArgument container, DeclaredArgument by) {}
+    /**
+     * How many different values {@code operation}'s answer holds one of each of, over which
+     * argument — or null where its law of how many it holds says anything else.
+     *
+     * <p>Read off that law whatever the arguments are ({@link OperationLaw.Size#unconditional}),
+     * and only where it is that one number and nothing beside it: a distinct list of a list, a set
+     * made of one. Held against how many the container itself holds, this number says what
+     * {@link #statesNoTwoAlike} reads off a truth.
+     */
+    public LawNumber.HowManyDifferent<DeclaredArgument> holdsOneOfEachDifferent(
+            ValueName operation) {
+        if (!(settled(operation, OperationLaw.Observed.SIZE) instanceof Settled.ByALaw(
+                OperationLaw.Size<DeclaredArgument> law, var _))) {
+            return null;
+        }
+        LinearForm<LawNumber<DeclaredArgument>> form = law.unconditional();
+        if (form == null || !form.constant().isZero() || form.coefs().size() != 1) {
+            return null;
+        }
+        var only = form.coefs().entrySet().iterator().next();
+        return only.getValue().equals(ExactRatio.ONE)
+                && only.getKey() instanceof LawNumber.HowManyDifferent<DeclaredArgument> different
+                ? different : null;
+    }
 
     /** Whether {@code operation} states its predicate of every element. */
     public boolean statesItsPredicateOfEveryElement(ValueName operation) {
