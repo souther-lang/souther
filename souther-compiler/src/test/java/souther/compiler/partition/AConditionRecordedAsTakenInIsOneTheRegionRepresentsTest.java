@@ -117,6 +117,13 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
                         "the region has no order for either position").why());
         assertEquals(pathOf("recordsAreEqual", "a"), why.term().subjectPath(),
                 "and it names the position it has none for");
+
+        // Of two it has none for, the first in the one order the terms are walked in, however the
+        // form was written.
+        SearchRegion.Assumption writtenTheOtherWay = regionOf("recordsAreEqual")
+                .assuming(difference("recordsAreEqual", "b", "a"), Rel.EQ);
+        assertEquals(why, assertInstanceOf(SearchRegion.Assumption.Refused.class,
+                writtenTheOtherWay).why());
     }
 
     /**

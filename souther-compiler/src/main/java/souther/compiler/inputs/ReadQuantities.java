@@ -286,7 +286,7 @@ final class ReadQuantities implements Quantities {
      * own {@link #answered} — and not that reading.
      */
     private record OneMoreTaken(
-            Assumed taken,
+            TakenIn.Taken taken,
             Map<StructuralContext, ConstraintState<InputAtom>> takenBefore) {}
 
     /**
@@ -312,13 +312,20 @@ final class ReadQuantities implements Quantities {
 
         static final TakenIn NOTHING = new TakenIn(List.of(), Set.of());
 
-        private final List<Assumed> inOrder;
+        private final List<Taken> inOrder;
         private final Set<Member> members;
 
-        private TakenIn(List<Assumed> inOrder, Set<Member> members) {
+        private TakenIn(List<Taken> inOrder, Set<Member> members) {
             this.inOrder = inOrder;
             this.members = members;
         }
+
+        /**
+         * One thing taken in, with its terms in the one order ({@link NumericTerms.InOrder}): put
+         * in order once where it is taken in, and not again each time the rules under a context
+         * are made by taking everything in again ({@link #constraints}).
+         */
+        private record Taken(Assumed taken, NumericTerms.InOrder terms) {}
 
         /** An entry that says its hash, which is worked out once where it is taken in and never
          *  again as the set that holds it is copied for the next one. */
@@ -338,9 +345,9 @@ final class ReadQuantities implements Quantities {
 
         /** These with {@code taking} last; the order is the order they were taken in. */
         TakenIn and(Assumed taking) {
-            List<Assumed> longer = new ArrayList<>(inOrder.size() + 1);
+            List<Taken> longer = new ArrayList<>(inOrder.size() + 1);
             longer.addAll(inOrder);
-            longer.add(taking);
+            longer.add(new Taken(taking, NumericTerms.ordered(taking.terms())));
             Set<Member> more = new HashSet<>(members);
             more.add(new Member(taking, taking.hashCode()));
             return new TakenIn(Collections.unmodifiableList(longer),
@@ -354,7 +361,17 @@ final class ReadQuantities implements Quantities {
 
         @Override
         public Assumed get(int at) {
+            return inOrder.get(at).taken();
+        }
+
+        /** The {@code at}th taken in, with its terms in the one order. */
+        Taken taken(int at) {
             return inOrder.get(at);
+        }
+
+        /** The last one taken in, with its terms in the one order. */
+        Taken last() {
+            return inOrder.getLast();
         }
 
         @Override
@@ -1109,12 +1126,21 @@ final class ReadQuantities implements Quantities {
                 instanceof StructuralContext.Merge.Together(StructuralContext under))) {
             return new Taking.Taken(alsoAssuming(new Assumed.OverAForm(form, rel)));
         }
-        // Walked by the terms, because which term is named in the refusal is the answer here and a
-        // form holds its terms without holding an order they were written in.
-        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
+        // Which term is named in a refusal is the answer here, and a form holds its terms without
+        // holding an order they were written in: the first in the one order of those with no
+        // spacing. The terms are put in order only where there is a refusal to name, since most
+        // forms taken in have none, and then all of them, so that two of them written alike are
+        // found here as they are where a form taken in is put in order (`TakenIn.and`).
+        Set<NumericTerm> unspaced = new HashSet<>();
+        for (NumericTerm term : form.coefs().keySet()) {
             if (spaceOf(constraints(under).numbers(), term, called(term, under)) == null) {
-                return new Taking.Refused(new SearchRegion.Refusal.NoOrderUnderATerm(term));
+                unspaced.add(term);
             }
+        }
+        if (!unspaced.isEmpty()) {
+            NumericTerm named = NumericTerms.inOrder(form.coefs().keySet()).stream()
+                    .filter(unspaced::contains).findFirst().orElseThrow();
+            return new Taking.Refused(new SearchRegion.Refusal.NoOrderUnderATerm(named));
         }
         return new Taking.Taken(alsoAssuming(new Assumed.OverAForm(form, rel)));
     }
@@ -1235,7 +1261,7 @@ final class ReadQuantities implements Quantities {
         }
         // Carried on from only where this one had taken something in: otherwise the rules before it
         // are the declarations' own, and taking one condition in is all there is to do.
-        OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(taking, answered);
+        OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(both.last(), answered);
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
                 both, pairs, contexts, null, oneMore, new ConcurrentHashMap<>());
     }
@@ -1302,8 +1328,8 @@ final class ReadQuantities implements Quantities {
             made = takingIn(before, one.taken(), under);
         } else {
             made = declared;
-            for (Assumed taken : assumed) {
-                made = takingIn(made, taken, under);
+            for (int at = 0; at < assumed.size(); at++) {
+                made = takingIn(made, assumed.taken(at), under);
             }
         }
         answered.put(under, made);
@@ -1325,15 +1351,16 @@ final class ReadQuantities implements Quantities {
      * solve with the relations and is read back where a term is asked as itself; brought in here, it
      * would be a rule over a number nothing can space.
      */
-    private ConstraintState<InputAtom> takingIn(ConstraintState<InputAtom> made, Assumed taken,
-                                                StructuralContext under) {
+    private ConstraintState<InputAtom> takingIn(ConstraintState<InputAtom> made,
+                                                TakenIn.Taken taken, StructuralContext under) {
         STEPS_PUT_ON.incrementAndGet();
-        if (!(taken instanceof Assumed.OverAForm each)
+        if (!(taken.taken() instanceof Assumed.OverAForm each)
                 || !stands(each.form().coefs().keySet(), under)) {
             return made;
         }
         Map<InputAtom, NumberSpace> spaces = new LinkedHashMap<>();
-        for (NumericTerm term : NumericTerms.inOrder(each.form().coefs().keySet())) {
+        NumericTerms.InOrder inOrder = taken.terms();
+        for (NumericTerm term : inOrder.terms()) {
             NumberSpace space = spaceOf(made.numbers(), term, called(term, under));
             if (space == null) {
                 return made;
@@ -1345,7 +1372,7 @@ final class ReadQuantities implements Quantities {
         // less is not to take a step at all.
         LinearForm<InputAtom> over = over(each.form(), under);
         return over == null ? made : insideItsOrder(made.taking(over, each.rel(), spaces),
-                each.form().coefs().keySet(), under);
+                inOrder, under);
     }
 
     /**
@@ -1764,7 +1791,7 @@ final class ReadQuantities implements Quantities {
             return rules;
         }
         return insideItsOrder(rules.taking(atom, numbersOf(runs), Map.of(atom, space)),
-                Set.of(term), under);
+                NumericTerms.ordered(List.of(term)), under);
     }
 
     /** A range with only the ends the arithmetic has a number for. */
@@ -1944,7 +1971,8 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         ConstraintState<InputAtom> rules = insideItsOrder(
-                holding(effectiveConstraints(under), term, under), Set.of(term), under);
+                holding(effectiveConstraints(under), term, under),
+                NumericTerms.ordered(List.of(term)), under);
         return rules.numbers().wholeRunOf(called(term, under));
     }
 
@@ -1957,12 +1985,14 @@ final class ReadQuantities implements Quantities {
      * rules, and a question that listed the terms again would know only the ones it was handed. A
      * term whose order is not known has none recorded, and a system it is in is not shown to leave
      * a row.
+     *
+     * @param terms in the one order, which is the order they are recorded in
      */
     private ConstraintState<InputAtom> insideItsOrder(ConstraintState<InputAtom> rules,
-                                                      Set<NumericTerm> terms,
+                                                      NumericTerms.InOrder terms,
                                                       StructuralContext under) {
         Map<InputAtom, NumberSpace> told = new LinkedHashMap<>();
-        for (NumericTerm each : NumericTerms.inOrder(terms)) {
+        for (NumericTerm each : terms.terms()) {
             TermOrders orders = ordersOf(each);
             Carrier order = orders == null ? null : orders.answered();
             if (order != null) {

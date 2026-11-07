@@ -1189,7 +1189,10 @@ final class AnswerClosure {
                 "souther.compiler.meaning.Proposition$Any#denial",
                 "souther.compiler.meaning.Proposition$Compared#denial",
                 "souther.compiler.meaning.Proposition$OnAnApplication#denial",
-                "souther.compiler.meaning.Proposition$SoManyHold#denial");
+                "souther.compiler.meaning.Proposition$SoManyHold#denial",
+                // What an entry on a way hashes as, folded from its other components where it is
+                // made, since it is looked up in every set a way is compared by.
+                "souther.compiler.partition.OnTheWay$TakenIn#hash");
     }
 
     /** Every place written down here, whichever detector or scenario meets it. */

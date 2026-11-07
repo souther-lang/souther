@@ -409,7 +409,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     public TruthsAsked.Merge truths() {
         List<RowDemand.ATruth> asked = new ArrayList<>();
         for (OnTheWay each : onTheWay) {
-            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _)) {
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _, var _)) {
                 asked.add(truth);
             }
         }
@@ -701,7 +701,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
          */
         Step<HeldTogether, Reachability> relating(OnTheWay entry) {
             if (!(entry instanceof OnTheWay.TakenIn(var _, RowDemand.Relational(
-                    TakenConstraint.Affine affine), var _))) {
+                    TakenConstraint.Affine affine), var _, var _))) {
                 return new Step.Held<>(this);
             }
             // The ones taken in before have not been proved to leave none, since the way was
@@ -878,21 +878,21 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 case Requirements.Merge.Conflict conflict -> new Step.Closed<>(
                         new Reachability.NothingReaches(new Reachability.TwoAtOnce.Cases(conflict)));
             };
-            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _) -> so.asking(truth);
-            case OnTheWay.TakenIn(var _, RowDemand.Exists exists, var _)
+            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _, var _) -> so.asking(truth);
+            case OnTheWay.TakenIn(var _, RowDemand.Exists exists, var _, var _)
                     when exists.counted().isPresent() ->
                     so.counting(exists.counted().get(), ONE_OR_MORE);
-            case OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _)
+            case OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _, var _)
                     when every.counted().isPresent() ->
                     so.counting(every.counted().get(), NONE);
-            case OnTheWay.TakenIn(var _, RowDemand.SoMany many, var _)
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany many, var _, var _)
                     when !many.againstNumbers() ->
                     so.counting(many.count(), many.counts().values());
-            case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _) ->
+            case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _, var _) ->
                     so.leaving(remainder);
             // A relation over a number written under a case is a relation of a value that is
             // that case: the number is nowhere else.
-            case OnTheWay.TakenIn(var _, RowDemand.Relational relation, var _) -> {
+            case OnTheWay.TakenIn(var _, RowDemand.Relational relation, var _, var _) -> {
                 Requirements required = so.requirements();
                 for (NumericTerm term : relation.terms()) {
                     switch (required.merge(term.subjectPath().requirements())) {

@@ -38,6 +38,14 @@ import java.util.function.Predicate;
  * <p>Everything a caller asks is answered as the view over a {@code LinkedHashMap} answers it: in
  * the order given, a null value held, a null key held and asked about, equal to any map or set of
  * the same entries and hashed as one, and every change refused.
+ *
+ * <p><b>Of values, whose hashes do not change.</b> A copy is made of what is not changed after
+ * it: each key's hash is worked out once where the copy is made, which is what finds it again, and
+ * so is the hash of the whole, which is what a value holding the copy is hashed by. A key or a
+ * value changed after the copy is made — an element added to a list held as a value — leaves the
+ * copy unable to find that key, or hashed as it was, and so told apart from a copy of what it now
+ * holds. Every copy this compiler makes holds values: exact numbers, paths, the immutable copies
+ * of the language and of this class, and the answers a store holds.
  */
 public final class InTheOrderGiven {
 
@@ -162,11 +170,19 @@ public final class InTheOrderGiven {
         private final Object[] entries;
         private final int[] hashes;
         private final int[] table;
+        /** What the map hashes as, worked out once: a copy is hashed every time a value holding
+         *  it is a key, and its entries never change. */
+        private final int hash;
 
         HeldMap(Object[] entries, int[] hashes, int[] table) {
             this.entries = entries;
             this.hashes = hashes;
             this.table = table;
+            int summed = 0;
+            for (int at = 0; at < entries.length; at += 2) {
+                summed += Objects.hashCode(entries[at]) ^ Objects.hashCode(entries[at + 1]);
+            }
+            this.hash = summed;
         }
 
         @Override
@@ -297,7 +313,8 @@ public final class InTheOrderGiven {
             if (this == other) {
                 return true;
             }
-            if (!(other instanceof Map<?, ?> that) || that.size() != hashes.length) {
+            if (!(other instanceof Map<?, ?> that) || that.size() != hashes.length
+                    || (other instanceof Refusing<?, ?> held && held.hashCode() != hash)) {
                 return false;
             }
             for (int at = 0; at < entries.length; at += 2) {
@@ -313,10 +330,6 @@ public final class InTheOrderGiven {
 
         @Override
         public int hashCode() {
-            int hash = 0;
-            for (int at = 0; at < entries.length; at += 2) {
-                hash += Objects.hashCode(entries[at]) ^ Objects.hashCode(entries[at + 1]);
-            }
             return hash;
         }
     }
@@ -355,7 +368,12 @@ public final class InTheOrderGiven {
         }
     }
 
-    /** A map every change to which is refused, whether or not it would have changed it. */
+    /**
+     * A map every change to which is refused, whether or not it would have changed it.
+     *
+     * <p>Each says what it hashes as without walking its entries, worked out where it is made, so
+     * two of them whose hashes differ are told apart before an entry is compared.
+     */
     private abstract static class Refusing<K, V> extends AbstractMap<K, V> {
 
         /** The keys in the order given, read where they are held. */
@@ -437,10 +455,13 @@ public final class InTheOrderGiven {
 
         private final K key;
         private final V value;
+        /** What the map hashes as, worked out once, as {@link HeldMap}'s is. */
+        private final int hash;
 
         OneEntry(K key, V value) {
             this.key = key;
             this.value = value;
+            this.hash = Objects.hashCode(key) ^ Objects.hashCode(value);
         }
 
         @Override
@@ -538,7 +559,8 @@ public final class InTheOrderGiven {
             if (this == other) {
                 return true;
             }
-            if (!(other instanceof Map<?, ?> that) || that.size() != 1) {
+            if (!(other instanceof Map<?, ?> that) || that.size() != 1
+                    || (other instanceof Refusing<?, ?> held && held.hashCode() != hash)) {
                 return false;
             }
             Object theirs = that.get(key);
@@ -547,7 +569,7 @@ public final class InTheOrderGiven {
 
         @Override
         public int hashCode() {
-            return Objects.hashCode(key) ^ Objects.hashCode(value);
+            return hash;
         }
     }
 
@@ -561,11 +583,18 @@ public final class InTheOrderGiven {
         private final Object[] elements;
         private final int[] hashes;
         private final int[] table;
+        /** What the set hashes as, worked out once, as {@link HeldMap}'s is. */
+        private final int hash;
 
         HeldSet(Object[] elements, int[] hashes, int[] table) {
             this.elements = elements;
             this.hashes = hashes;
             this.table = table;
+            int summed = 0;
+            for (Object each : elements) {
+                summed += Objects.hashCode(each);
+            }
+            this.hash = summed;
         }
 
         @Override
@@ -602,7 +631,8 @@ public final class InTheOrderGiven {
             if (this == other) {
                 return true;
             }
-            if (!(other instanceof Set<?> that) || that.size() != elements.length) {
+            if (!(other instanceof Set<?> that) || that.size() != elements.length
+                    || (other instanceof HeldSet<?> held && held.hash != hash)) {
                 return false;
             }
             for (Object each : elements) {
@@ -615,10 +645,6 @@ public final class InTheOrderGiven {
 
         @Override
         public int hashCode() {
-            int hash = 0;
-            for (Object each : elements) {
-                hash += Objects.hashCode(each);
-            }
             return hash;
         }
 

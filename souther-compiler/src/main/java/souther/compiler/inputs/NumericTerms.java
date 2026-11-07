@@ -47,6 +47,47 @@ public final class NumericTerms {
         return walked(new ArrayList<>(terms), NumericTerms::nameOf);
     }
 
+    /** These terms, in the one order, as what says so ({@link InOrder}). */
+    public static InOrder ordered(Collection<NumericTerm> terms) {
+        return new InOrder(inOrder(terms));
+    }
+
+    /**
+     * Terms in the one order, which only this hands out.
+     *
+     * <p>For a reader that records terms in the order it is handed them, and is handed them by
+     * another that put them in order already: taking this rather than a list, it cannot be
+     * handed the order some form happened to hold them in.
+     */
+    public static final class InOrder {
+
+        private final List<NumericTerm> terms;
+
+        private InOrder(List<NumericTerm> terms) {
+            this.terms = terms;
+        }
+
+        /** The terms, in the one order. */
+        public List<NumericTerm> terms() {
+            return terms;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof InOrder that && terms.equals(that.terms);
+        }
+
+        @Override
+        public int hashCode() {
+            return terms.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return terms.toString();
+        }
+    }
+
     /** These terms as a set that is walked in the one order, for a reader whose answer holds the
      *  order it was handed them in. */
     public static SequencedSet<NumericTerm> setInOrder(Collection<NumericTerm> terms) {

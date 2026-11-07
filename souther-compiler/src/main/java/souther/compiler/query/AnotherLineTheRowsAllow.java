@@ -1470,7 +1470,7 @@ public sealed interface AnotherLineTheRowsAllow {
                             }
                         }
                     }
-                    case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken), var _) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken), var _, var _) -> {
                         switch (onto(taken.terms(), from, at)) {
                             case Stepped.Left _ -> { }   // the row's answer at it, unmoved
                             case Stepped.Unsaid _ -> {
@@ -1488,26 +1488,27 @@ public sealed interface AnotherLineTheRowsAllow {
                     // element they are about, and which elements those are is nothing an input's
                     // numbers say — nor is whether an element is still the value it was compared
                     // with, once a number of either moved.
-                    case OnTheWay.TakenIn(var _, RowDemand.Exists exists, var _) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.Exists exists, var _, var _) -> {
                         if (movesAnyOf(exists.positions())) {
                             return false;
                         }
                     }
-                    case OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _, var _) -> {
                         if (movesAnyOf(every.positions())) {
                             return false;
                         }
                     }
                     // How many elements meet a statement, for the same reason: a step moving a
                     // number the statement reads may move which elements meet it.
-                    case OnTheWay.TakenIn(var _, RowDemand.SoMany many, var _) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.SoMany many, var _, var _) -> {
                         if (movesAnyOf(many.positions())) {
                             return false;
                         }
                     }
                     // What a division leaves of a form, worked out of the form where the input holds
                     // its numbers: still one of the remainders asked for, or the row turns away.
-                    case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _,
+                                          var _) -> {
                         switch (onto(remainder.terms(), from, at)) {
                             case Stepped.Left _ -> { }
                             case Stepped.Unsaid _ -> {
@@ -1522,21 +1523,21 @@ public sealed interface AnotherLineTheRowsAllow {
                     }
                     // Which of two values stands at a position, and a step moves numbers: what
                     // stands there is what the row had.
-                    case OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _, var _) -> {
                         if (movesAnyOf(truth.positions())) {
                             return false;
                         }
                     }
                     // Whether two positions hold one value, which a step moving a number of
                     // either may change.
-                    case OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth both, var _) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth both, var _, var _) -> {
                         if (movesAnyOf(both.positions())) {
                             return false;
                         }
                     }
                     // A statement no composer writes toward, which a step moving any number may
                     // turn: which numbers it turns on is the run's to say.
-                    case OnTheWay.TakenIn(var _, RowDemand.ForTheRun _, var _) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.ForTheRun _, var _, var _) -> {
                         if (!moved.isEmpty()) {
                             return false;
                         }

@@ -220,6 +220,9 @@ public sealed interface NumericTerm
         private final ValueName.Stdlib operation;
         private final ObservationSource source;
         private final TakenArguments arguments;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         /**
          * Built only where the operation and what stands at the location have been put to the one
@@ -243,6 +246,7 @@ public sealed interface NumericTerm
             this.arguments = java.util.Objects.requireNonNull(arguments,
                     "and with whatever it was given beside that value, which is nothing where it"
                             + " was given nothing");
+            this.hash = Objects.hash(operation, source, arguments);
         }
 
         /**
@@ -387,14 +391,14 @@ public sealed interface NumericTerm
          *  which is what makes two of these one term. */
         @Override
         public boolean equals(Object other) {
-            return other instanceof TakenOf taken
+            return other instanceof TakenOf taken && hash == taken.hash
                     && operation.equals(taken.operation) && source.equals(taken.source)
                     && arguments.equals(taken.arguments);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, source, arguments);
+            return hash;
         }
 
         @Override
@@ -437,12 +441,16 @@ public sealed interface NumericTerm
         private final TermPath position;
         private final CodePointClass counted;
         private final CaseMapping through;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         private CodePointClassCount(TermPath position, CodePointClass counted,
                                     CaseMapping through) {
             this.position = Objects.requireNonNull(position, "counted of somewhere");
             this.counted = Objects.requireNonNull(counted, "and of some code points");
             this.through = Objects.requireNonNull(through, "of the string or of what it maps to");
+            this.hash = Objects.hash(position, counted, through);
         }
 
         /**
@@ -479,14 +487,14 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof CodePointClassCount count
+            return other instanceof CodePointClassCount count && hash == count.hash
                     && position.equals(count.position) && counted.equals(count.counted)
                     && through.equals(count.through);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(position, counted, through);
+            return hash;
         }
 
         @Override
@@ -510,9 +518,13 @@ public sealed interface NumericTerm
     final class CodePointValueSum implements FromOnePosition {
 
         private final TermPath position;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         private CodePointValueSum(TermPath position) {
             this.position = Objects.requireNonNull(position, "added up of somewhere");
+            this.hash = Objects.hash(CodePointValueSum.class, position);
         }
 
         /**
@@ -538,12 +550,13 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof CodePointValueSum sum && position.equals(sum.position);
+            return other instanceof CodePointValueSum sum && hash == sum.hash
+                    && position.equals(sum.position);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(CodePointValueSum.class, position);
+            return hash;
         }
 
         @Override
@@ -568,6 +581,9 @@ public sealed interface NumericTerm
 
         private final TermPath position;
         private final int index;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         private CodePointAt(TermPath position, int index) {
             this.position = Objects.requireNonNull(position, "a code point of somewhere");
@@ -576,6 +592,7 @@ public sealed interface NumericTerm
                         + index);
             }
             this.index = index;
+            this.hash = Objects.hash(CodePointAt.class, position, index);
         }
 
         /**
@@ -617,13 +634,13 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof CodePointAt at && position.equals(at.position)
-                    && index == at.index;
+            return other instanceof CodePointAt at && hash == at.hash
+                    && position.equals(at.position) && index == at.index;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(CodePointAt.class, position, index);
+            return hash;
         }
 
         @Override
@@ -666,6 +683,9 @@ public sealed interface NumericTerm
         private final NumericDomain.Bounds image;
         /** Whether every step of the answer's order is one of them. */
         private final boolean fills;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         private WholeUnitsOf(ValueName.Stdlib operation, TermPath position,
                              NumericDomain.Bounds image, boolean fills) {
@@ -673,6 +693,7 @@ public sealed interface NumericTerm
             this.position = Objects.requireNonNull(position, "of somewhere");
             this.image = image;
             this.fills = fills;
+            this.hash = Objects.hash(WholeUnitsOf.class, operation, position);
         }
 
         /**
@@ -809,13 +830,13 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof WholeUnitsOf units && operation.equals(units.operation)
-                    && position.equals(units.position);
+            return other instanceof WholeUnitsOf units && hash == units.hash
+                    && operation.equals(units.operation) && position.equals(units.position);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(WholeUnitsOf.class, operation, position);
+            return hash;
         }
 
         @Override
@@ -845,9 +866,14 @@ public sealed interface NumericTerm
         private final TermPath container;
         private final TermPath place;
 
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
         private Multiplicity(TermPath container, TermPath place) {
             this.container = Objects.requireNonNull(container, "counted among a container's elements");
             this.place = Objects.requireNonNull(place, "by the value standing at a place");
+            this.hash = Objects.hash(container, place);
         }
 
         /**
@@ -900,13 +926,13 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Multiplicity that
+            return other instanceof Multiplicity that && hash == that.hash
                     && container.equals(that.container) && place.equals(that.place);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(container, place);
+            return hash;
         }
 
         @Override
@@ -938,6 +964,10 @@ public sealed interface NumericTerm
         private final Extreme extreme;
         private final WholeUnitsOf steps;
 
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
         private ExtremeOfItsKey(TermPath container, TermPath key, TermPath value,
                                 Extreme extreme, WholeUnitsOf steps) {
             this.container = Objects.requireNonNull(container, "taken among a container's elements");
@@ -945,6 +975,7 @@ public sealed interface NumericTerm
             this.value = Objects.requireNonNull(value, "of what they hold at another");
             this.extreme = Objects.requireNonNull(extreme, "and one end of it");
             this.steps = steps;
+            this.hash = Objects.hash(container, key, value, extreme, steps);
         }
 
         /**
@@ -1086,14 +1117,15 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof ExtremeOfItsKey that && container.equals(that.container)
+            return other instanceof ExtremeOfItsKey that && hash == that.hash
+                    && container.equals(that.container)
                     && key.equals(that.key) && value.equals(that.value)
                     && extreme.equals(that.extreme) && Objects.equals(steps, that.steps);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(container, key, value, extreme, steps);
+            return hash;
         }
 
         @Override
@@ -1125,9 +1157,14 @@ public sealed interface NumericTerm
         private final RunSource run;
         private final KeptOccurrences selection;
 
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
         private OccurrencesOfItsValue(RunSource run, KeptOccurrences selection) {
             this.run = Objects.requireNonNull(run, "counted among the values of a run");
             this.selection = selection;
+            this.hash = Objects.hash(OccurrencesOfItsValue.class, run, selection);
         }
 
         /** The number of times the value standing at a place of {@code run} occurs among all of
@@ -1189,13 +1226,14 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof OccurrencesOfItsValue that && run.equals(that.run)
+            return other instanceof OccurrencesOfItsValue that && hash == that.hash
+                    && run.equals(that.run)
                     && Objects.equals(selection, that.selection);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(OccurrencesOfItsValue.class, run, selection);
+            return hash;
         }
 
         @Override
@@ -1228,9 +1266,14 @@ public sealed interface NumericTerm
         private final RunSource.FlattenedOccurrences run;
         private final TermPath key;
 
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
         private OccurrencesOfAKey(RunSource.FlattenedOccurrences run, TermPath key) {
             this.run = Objects.requireNonNull(run, "counted among the values of a run");
             this.key = Objects.requireNonNull(key, "counted as often as a key occurs");
+            this.hash = Objects.hash(OccurrencesOfAKey.class, run, key);
         }
 
         /** The number of values of {@code run} equal to the one at {@code key}, which stands
@@ -1272,13 +1315,14 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof OccurrencesOfAKey that && run.equals(that.run)
+            return other instanceof OccurrencesOfAKey that && hash == that.hash
+                    && run.equals(that.run)
                     && key.equals(that.key);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(OccurrencesOfAKey.class, run, key);
+            return hash;
         }
 
         @Override
@@ -1867,7 +1911,7 @@ public sealed interface NumericTerm
          *  term. */
         @Override
         public boolean equals(Object other) {
-            return other instanceof TakenOver over
+            return other instanceof TakenOver over && hash == over.hash
                     && operation.equals(over.operation) && source.equals(over.source);
         }
 
@@ -1920,6 +1964,10 @@ public sealed interface NumericTerm
          *  value, or null where it stands where that factor is one. */
         private final ExactRatio fixedAt;
 
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
         /**
          * Each factor holds its numbers in the order {@link NumericTerms} walks a form in, whatever
          * order the form it was made from held them. Two products that are equal are then the same
@@ -1931,6 +1979,7 @@ public sealed interface NumericTerm
             this.one = inTheOneOrder(one);
             this.other = inTheOneOrder(other);
             this.fixedAt = fixedAt;
+            this.hash = Objects.hash(ProductOf.class, this.one, this.other, fixedAt);
         }
 
         private static LinearForm<NumericTerm> inTheOneOrder(LinearForm<NumericTerm> form) {
@@ -2194,13 +2243,14 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object that) {
-            return that instanceof ProductOf product && one.equals(product.one)
+            return that instanceof ProductOf product && hash == product.hash
+                    && one.equals(product.one)
                     && other.equals(product.other) && Objects.equals(fixedAt, product.fixedAt);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(ProductOf.class, one, other, fixedAt);
+            return hash;
         }
 
         @Override
