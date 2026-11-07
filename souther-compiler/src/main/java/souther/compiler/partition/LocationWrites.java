@@ -26,8 +26,9 @@ import java.util.Map;
  * happen is taking one of them and writing it as though it were the whole: the row then stands
  * where one number said and says nothing about the other, and the point it was composed for is
  * offered half-answered. So an ask that does not agree with what is already here comes back as
- * {@link Written#CONFLICTING}, and a caller says {@code NOTHING_COMPOSES_ONE} — which is what that
- * reason is for: not that the model has no such value, but that this compiler composed none.
+ * {@link Written.Conflicting}, and a caller says {@code NOTHING_COMPOSES_ONE} — which is what that
+ * reason is for: not that the model has no such value, but that this compiler composed none — in
+ * the words the conflict gives, which name the two locations.
  *
  * <p>The same ask twice is one ask. What is held here is what will be written, and asking for what
  * is already going to be written changes nothing about the row.
@@ -35,14 +36,45 @@ import java.util.Map;
 final class LocationWrites {
 
     /** What an ask came to. */
-    enum Written {
+    sealed interface Written {
+
         /** Nothing had been asked for here, and this is what will be written. */
-        FIRST,
+        record First() implements Written {}
+
         /** What is already going to be written is what was asked for. */
-        AGAIN,
-        /** Something else is already going to be written here, and nothing composes the two. */
-        CONFLICTING
+        record Again() implements Written {}
+
+        /**
+         * Something else is already going to be written at this location, and nothing composes
+         * the two.
+         *
+         * @param asked   where the ask that was refused is
+         * @param already where the ask taken before it is: the same path, a path inside it, or a
+         *                path it is inside
+         */
+        record Conflicting(TermPath asked, TermPath already) implements Written {
+
+            /**
+             * What a reader is told of it: which two places are asked for values, and how they
+             * are one location. A place inside another is said as that, and never as one place
+             * asked two things, which is what a reader would go looking for at the wrong place.
+             */
+            String said() {
+                if (asked.equals(already)) {
+                    return "`" + asked + "` would have to hold two values at once";
+                }
+                boolean askedInside = asked.isAtOrUnder(already);
+                TermPath inner = askedInside ? asked : already;
+                TermPath outer = askedInside ? already : asked;
+                return "`" + inner + "` is inside `" + outer + "`, and each is asked for a value"
+                        + " of its own";
+            }
+        }
     }
+
+    private static final Written FIRST = new Written.First();
+
+    private static final Written AGAIN = new Written.Again();
 
     private final Map<TermPath, List<FixtureTemplate>> written = new LinkedHashMap<>();
 
@@ -81,7 +113,7 @@ final class LocationWrites {
     Written size(TermPath at, DeclaredBounds.CountRange holds) {
         for (TermPath whole : written.keySet()) {
             if (at.isAtOrUnder(whole)) {
-                return Written.CONFLICTING;
+                return new Written.Conflicting(at, whole);
             }
         }
         DeclaredBounds.CountRange already = sized.get(at);
@@ -90,13 +122,13 @@ final class LocationWrites {
                     Math.max(already.least(), holds.least()),
                     Math.min(already.most(), holds.most()));
             if (both.empty()) {
-                return Written.CONFLICTING;
+                return new Written.Conflicting(at, at);
             }
             sized.put(at, both);
-            return Written.AGAIN;
+            return AGAIN;
         }
         sized.put(at, holds);
-        return Written.FIRST;
+        return FIRST;
     }
 
     /**
@@ -109,22 +141,22 @@ final class LocationWrites {
     Written write(TermPath at, List<FixtureTemplate> values) {
         List<FixtureTemplate> already = written.get(at);
         if (already != null) {
-            return already.equals(values) ? Written.AGAIN : Written.CONFLICTING;
+            return already.equals(values) ? AGAIN : new Written.Conflicting(at, at);
         }
         for (TermPath other : written.keySet()) {
             if (oneLocation(at, other)) {
-                return Written.CONFLICTING;
+                return new Written.Conflicting(at, other);
             }
         }
         // A value written whole at a container asked to hold so many, or at a value around it,
         // would say again how many it holds.
         for (TermPath counted : sized.keySet()) {
             if (counted.isAtOrUnder(at)) {
-                return Written.CONFLICTING;
+                return new Written.Conflicting(at, counted);
             }
         }
         written.put(at, values);
-        return Written.FIRST;
+        return FIRST;
     }
 
     /**

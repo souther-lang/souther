@@ -5445,7 +5445,7 @@ public final class Generator {
             // for the other, so it writes neither and says the parameter cannot be written — which
             // is what every other thing it cannot do here answers with.
             if (writing.write(axis.path(), values.written())
-                    == LocationWrites.Written.CONFLICTING
+                    instanceof LocationWrites.Written.Conflicting
                     || !moves.put(axis.path(), values.written())) {
                 return null;
             }
@@ -6436,11 +6436,18 @@ public final class Generator {
                             && (narrowedStrictlyUnder(rowIs, at)
                                     || truthAskedStrictlyUnder(truthsWritten, at))
                             ? sizesOf(edge.values()) : null;
-            if ((holds != null ? decided.size(at, holds) : decided.write(at, edge.values()))
-                    != LocationWrites.Written.FIRST) {
-                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
-                        where.unrepresented());
+            switch (holds != null ? decided.size(at, holds) : decided.write(at, edge.values())) {
+                case LocationWrites.Written.First _ -> { }
+                case LocationWrites.Written.Again _ -> {
+                    return new BoundaryAttempt.Unresolved(new UnresolvedCombination(
+                            List.of(label), UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                            where.unrepresented());
+                }
+                case LocationWrites.Written.Conflicting conflict -> {
+                    return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
+                            UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, conflict.said()),
+                            where.unrepresented());
+                }
             }
             if (edge.settledAt() != null) {
                 settled.put(at, edge.settledAt());
@@ -7462,9 +7469,18 @@ public final class Generator {
         }
         // And a number of the item inside an element of such a container is where some element
         // stands, which the container is composed holding — its elements are not written alike,
-        // so there is no every element for it to be the value of.
+        // so there is no every element for it to be the value of. So is one inside an element of
+        // a container the item's own total adds up: the item is read at one element against what
+        // the container comes to, and the element is one of the numbers that total is made of.
+        Set<TermPath> composedWhole = new HashSet<>(byCounts);
         for (RealizationTarget each : fixing.keySet()) {
-            if (insideAnElementOf(each, byCounts)) {
+            if (each instanceof RealizationTarget.OfANumber number
+                    && ContainersAddingUp.containerAddedUp(number.term()) instanceof TermPath added) {
+                composedWhole.add(added);
+            }
+        }
+        for (RealizationTarget each : fixing.keySet()) {
+            if (insideAnElementOf(each, composedWhole)) {
                 someElement.add(each);
             }
         }
@@ -9900,9 +9916,12 @@ public final class Generator {
      * and a position inside it are one location and are two entries here, which leaves them where
      * they were: nothing composes those together, and {@link LocationWrites} is what says so.
      *
-     * <p>But for one: a container composed for how many of its elements meet something chooses its
-     * elements, so a value some element of it is to stand at goes in with the counts
-     * ({@link CardinalityComposer}).
+     * <p>But for a container composed element by element. One composed for how many of its elements
+     * meet something chooses its elements, so a value some element of it is to stand at goes in
+     * with the counts ({@link CardinalityComposer}); one composed for what its elements come to
+     * holds a value some element stands at as one of the numbers the total is made of, so the value
+     * goes in with the total ({@link ContainersAddingUp.SomeElementHolding}). Whether one value
+     * answers the group gathered so is the realizer's ({@link TermRealizations#jointRealizationOf}).
      *
      * <p>The numbers as the sets they are asked for out of, which a point of a border and a class
      * both are: the arrangement is the same either way, and reading it twice would be two answers
@@ -9925,9 +9944,9 @@ public final class Generator {
     }
 
     /**
-     * The element of each container {@code with} composes for how many of its elements meet
-     * something, or for a statement they meet together, and where that container is written.
-     * Empty where there is neither among them, which is every row of a model that counts nothing.
+     * The element of each container {@code with} composes element by element — for how many of its
+     * elements meet something, for a statement they meet together, or for what they come to — and
+     * where that container is written. Empty where there is none among them.
      */
     private static Map<TermPath, TermPath> countedAmong(Collection<RealizationTarget> with) {
         Map<TermPath, TermPath> out = Map.of();
@@ -9935,7 +9954,8 @@ public final class Generator {
             TermPath container = switch (each) {
                 case RealizationTarget.ACount count -> count.count().container();
                 case RealizationTarget.ElementsMeetingTogether together -> together.container();
-                case RealizationTarget.OfANumber _ -> null;
+                case RealizationTarget.OfANumber number ->
+                        ContainersAddingUp.containerAddedUp(number.term());
             };
             if (container != null) {
                 if (out.isEmpty()) {
@@ -9949,12 +9969,13 @@ public final class Generator {
 
     /**
      * Where {@code target} is written: its own root, or where it is a value some element of a
-     * container composed for how many of its elements meet something is to stand at
-     * ({@link #countedAmong}), that container's.
+     * container composed element by element is to stand at ({@link #countedAmong}), that
+     * container's.
      *
      * <p>Some element and not every one. A value placed for every element of a container to meet
-     * something is a value of each, and composing the container for its counts chooses elements
-     * that value does not hold of; it is a second write of the location, said where it is.
+     * something is a value of each, and composing the container element by element chooses
+     * elements that value does not hold of; it is a second write of the location, said where it
+     * is.
      *
      * @param someElement the numbers some element is to stand at, which a condition that some
      *                    element meets something placed
@@ -12336,14 +12357,13 @@ public final class Generator {
                     if (cls.selects() == null && !inThatValue
                             && (holds != null ? decided.size(path, holds)
                                     : decided.write(path, offered))
-                                    == LocationWrites.Written.CONFLICTING) {
+                                    instanceof LocationWrites.Written.Conflicting conflict) {
                         // Two of this row's classes are of one location and offer different values
                         // for it. Taking either leaves the other's class unanswered while the row
                         // is offered as covering it, so neither is taken.
                         return RowComposed.Failed.ofTheRow(new Attempt(null,
                                 UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
-                                Optional.of("`" + path
-                                        + "` would have to hold two values at once")));
+                                Optional.of(conflict.said())));
                     }
                 }
                 // Not a value but how one is arrived at: the walk below builds one at this position,
@@ -12406,11 +12426,10 @@ public final class Generator {
         for (Map.Entry<TermPath, List<FixtureTemplate>> each : together.entrySet()) {
             if (decided.at(each.getKey()) == null && required.at(each.getKey()) == null
                     && decided.write(each.getKey(), each.getValue())
-                            != LocationWrites.Written.FIRST) {
+                            instanceof LocationWrites.Written.Conflicting conflict) {
                 return RowComposed.Failed.ofTheRow(new Attempt(null,
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        each.getKey().toString(), Optional.of("`" + each.getKey()
-                                + "` would have to hold two values at once")));
+                        each.getKey().toString(), Optional.of(conflict.said())));
             }
         }
         TruthsAsked truthsAsked = holding.reaching() == null ? TruthsAsked.NONE

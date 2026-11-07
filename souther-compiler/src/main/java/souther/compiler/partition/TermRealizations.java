@@ -469,6 +469,23 @@ final class TermRealizations {
                 }
             }
         }
+        // A value some element of a container stands at, beside what the container comes to where
+        // the total adds up what the elements hold at that place: the element is one share of the
+        // total, so the container is composed with it at its value and the rest coming to what it
+        // leaves, a size the length leaves where that is asked too.
+        if (itself != null && takenOfIt.isEmpty() && whatItComesTo.size() == 1
+                && itself.term() instanceof NumericTerm.ValueOf value && value.position()
+                        .equals(ContainersAddingUp.placeAddedUp(whatItComesTo.getFirst().term()))) {
+            RealizationTarget.OfANumber element = itself;
+            RealizationTarget.OfANumber many = manyItHolds;
+            List<RealizationTarget> owned = new ArrayList<>(whatItComesTo);
+            owned.add(element);
+            if (many != null) {
+                owned.add(many);
+            }
+            return wholly(targets, owned,
+                    () -> new JointBuilder.TotalsOfOneContainer(whatItComesTo, many, element));
+        }
         // The place's own value beside numbers taken of it, which is one question about one value.
         // What may stand there is what the place's own demand admits, and a number taken of one of
         // those values is what reading that value comes to — so the candidates are that demand's
@@ -506,7 +523,7 @@ final class TermRealizations {
                 owned.add(many);
             }
             return wholly(targets, owned,
-                    () -> new JointBuilder.TotalsOfOneContainer(whatItComesTo, many));
+                    () -> new JointBuilder.TotalsOfOneContainer(whatItComesTo, many, null));
         }
         // The remainders of one place by their divisors, with nothing else asked of it. A value
         // that is none of them is nothing these write, so a quotient or a part beside them is a
@@ -1254,15 +1271,30 @@ final class TermRealizations {
          * way. So this hands the size demand over rather than filtering what came back: a size the
          * demand refuses is no candidate, and a walk that filled one would spend a figure of this
          * compiler's on a container nobody asked for.
+         *
+         * <p><b>And a value of some element is one of its shares.</b> Where the group asks the
+         * value an element stands at the place the total adds up, that element is one of the
+         * numbers the total is made of, so the container is filled with it at its value and the
+         * rest coming to what it leaves ({@link ContainersAddingUp.SomeElementHolding}). Some
+         * element and not every one: the rest are chosen as any total's elements are.
+         *
+         * @param manyItHolds how many elements the container holds, or null where nothing asks
+         * @param standingAt  the value some element stands at where the one total adds it up, or
+         *                    null where nothing is asked of any one element
          */
         record TotalsOfOneContainer(List<RealizationTarget.OfANumber> whatItComesTo,
-                                    RealizationTarget.OfANumber manyItHolds)
+                                    RealizationTarget.OfANumber manyItHolds,
+                                    RealizationTarget.OfANumber standingAt)
                 implements JointBuilder {
 
             public TotalsOfOneContainer {
                 if (whatItComesTo.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a container composed for its totals is asked for at least one");
+                }
+                if (standingAt != null && whatItComesTo.size() != 1) {
+                    throw new IllegalArgumentException("an element is held at its value beside"
+                            + " one total of what it holds");
                 }
                 whatItComesTo = List.copyOf(whatItComesTo);
             }
@@ -1305,13 +1337,38 @@ final class TermRealizations {
                     candidates.add(onTheOrder(total, adds, comesToAt.named(), within,
                             UsualPlaces.of(adds.term(), adds.answered(), reading.today())));
                 }
+                // The value some element stands at, tried beside the totals as one more number
+                // of the container: the last of each choice.
+                if (standingAt != null) {
+                    TermOrders stands = measuring.ordersOf(standingAt.term());
+                    AskedAt standsAt = demands.get(standingAt);
+                    NumericSet value = standsAt == null ? null : standsAt.walking();
+                    if (stands == null || stands.answered() == null || value == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    candidates.add(onTheOrder(value, stands, standsAt.named(), within,
+                            UsualPlaces.of(stands.term(), stands.answered(), reading.today())));
+                }
                 ContainersAddingUp.HowManyIsAskedFor sizes = holding;
                 Together together = Together.of(candidates);
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
                         together.each(), together.rest(),
-                        at -> ContainersAddingUp.to(at.getFirst(), sourceType, keptApart,
-                                adding.getFirst(), within, reading, sizes,
-                                alsoAddingUp(adding, at), inside));
+                        at -> {
+                            ContainersAddingUp.SomeElementHolding held = null;
+                            if (standingAt != null) {
+                                // A number a total adds up is a count on its order, so a value
+                                // that is none is no share of it.
+                                if (!(at.getLast() instanceof Count value)) {
+                                    return new Realization.None(Generator.UnresolvedCombination
+                                            .Reason.NOTHING_COMPOSES_ONE);
+                                }
+                                held = new ContainersAddingUp.SomeElementHolding(value);
+                            }
+                            return ContainersAddingUp.to(at.getFirst(), sourceType, keptApart,
+                                    adding.getFirst(), within, reading, sizes,
+                                    alsoAddingUp(adding, at), held, inside);
+                        });
             }
 
             /** The totals after the first, each with the number tried for it. */

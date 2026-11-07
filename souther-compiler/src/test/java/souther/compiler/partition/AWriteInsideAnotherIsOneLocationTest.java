@@ -18,7 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>What comes back is that nothing here composes one, and not that no such value exists. A
  * container answering both asks is a value a model may well have; what this compiler has no way to
- * do is compose a whole value and a value inside it into one write.
+ * do is compose a whole value and a value inside it into one write. And it comes back naming the two
+ * places, the one inside the other, so a reader is not sent to look for one place asked two things.
  */
 class AWriteInsideAnotherIsOneLocationTest {
 
@@ -30,11 +31,14 @@ class AWriteInsideAnotherIsOneLocationTest {
 
     private static final List<FixtureTemplate> ANOTHER = List.of(FixtureTemplate.integer(2));
 
+    private static final LocationWrites.Written FIRST = new LocationWrites.Written.First();
+
     @Test
     void aValueInsideOneAlreadyWrittenConflicts() {
         LocationWrites writes = new LocationWrites();
-        assertEquals(LocationWrites.Written.FIRST, writes.write(LINES, A_VALUE));
-        assertEquals(LocationWrites.Written.CONFLICTING, writes.write(AN_AMOUNT, ANOTHER),
+        assertEquals(FIRST, writes.write(LINES, A_VALUE));
+        assertEquals(new LocationWrites.Written.Conflicting(AN_AMOUNT, LINES),
+                writes.write(AN_AMOUNT, ANOTHER),
                 "the container was written whole, so a position inside it is the same value asked"
                         + " for a second time");
     }
@@ -42,24 +46,42 @@ class AWriteInsideAnotherIsOneLocationTest {
     @Test
     void aValueAroundOneAlreadyWrittenConflicts() {
         LocationWrites writes = new LocationWrites();
-        assertEquals(LocationWrites.Written.FIRST, writes.write(AN_AMOUNT, A_VALUE));
-        assertEquals(LocationWrites.Written.CONFLICTING, writes.write(LINES, ANOTHER),
+        assertEquals(FIRST, writes.write(AN_AMOUNT, A_VALUE));
+        assertEquals(new LocationWrites.Written.Conflicting(LINES, AN_AMOUNT),
+                writes.write(LINES, ANOTHER),
                 "and the order the two arrive in says nothing about whether they are one location");
+    }
+
+    @Test
+    void aConflictOfOnePlaceInsideAnotherNamesBothWhicheverCameFirst() {
+        String inside = "`lines[*].amount` is inside `lines`, and each is asked for a value of its"
+                + " own";
+        assertEquals(inside, new LocationWrites.Written.Conflicting(AN_AMOUNT, LINES).said());
+        assertEquals(inside, new LocationWrites.Written.Conflicting(LINES, AN_AMOUNT).said());
+        assertEquals("`lines` would have to hold two values at once",
+                new LocationWrites.Written.Conflicting(LINES, LINES).said());
     }
 
     @Test
     void theSameAskTwiceIsStillOneAsk() {
         LocationWrites writes = new LocationWrites();
-        assertEquals(LocationWrites.Written.FIRST, writes.write(LINES, A_VALUE));
-        assertEquals(LocationWrites.Written.AGAIN, writes.write(LINES, A_VALUE));
+        assertEquals(FIRST, writes.write(LINES, A_VALUE));
+        assertEquals(new LocationWrites.Written.Again(), writes.write(LINES, A_VALUE));
+    }
+
+    @Test
+    void anotherValueAtTheSamePlaceConflictsWithThatPlace() {
+        LocationWrites writes = new LocationWrites();
+        assertEquals(FIRST, writes.write(LINES, A_VALUE));
+        assertEquals(new LocationWrites.Written.Conflicting(LINES, LINES),
+                writes.write(LINES, ANOTHER));
     }
 
     @Test
     void locationsNeitherOfWhichHoldsTheOtherAreTwoWrites() {
         LocationWrites writes = new LocationWrites();
-        assertEquals(LocationWrites.Written.FIRST, writes.write(AN_AMOUNT, A_VALUE));
-        assertEquals(LocationWrites.Written.FIRST,
-                writes.write(LINES.element().then("free"), ANOTHER));
-        assertEquals(LocationWrites.Written.FIRST, writes.write(TermPath.of("k"), ANOTHER));
+        assertEquals(FIRST, writes.write(AN_AMOUNT, A_VALUE));
+        assertEquals(FIRST, writes.write(LINES.element().then("free"), ANOTHER));
+        assertEquals(FIRST, writes.write(TermPath.of("k"), ANOTHER));
     }
 }

@@ -213,6 +213,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "Lsouther/compiler/numeric/Place;" + TYPE + "Ljava/util/List;L" + INPUTS
                             + "TermOrders;L" + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
                             + "ContainersAddingUp$HowManyIsAskedFor;Ljava/util/List;L" + PARTITION
+                            + "ContainersAddingUp$SomeElementHolding;L" + PARTITION
                             + "DemandsInside;)" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "ElementsKeptApart", "keysMayRepeat",

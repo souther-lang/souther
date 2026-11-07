@@ -33,6 +33,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.UsualPlace;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -143,12 +144,12 @@ final class ContainersAddingUp {
                                            HowManyIsAskedFor alsoHolding,
                                            DemandsInside inside) {
         return to(answer, container, keptApart, orders, within, reading, alsoHolding, List.of(),
-                inside);
+                null, inside);
     }
 
     /**
-     * The same, where the elements are to come to other totals as well: one container, each element
-     * of which holds a share of every total at the field that total reads.
+     * The same, where the elements are to come to other totals as well, or some element is to hold
+     * {@code oneOf} at the place the total adds up.
      *
      * <p><b>The elements are chosen once, for all of the totals.</b> One element holds a figure at
      * each field a total reads, so a container composed for the first and checked against the rest
@@ -156,7 +157,20 @@ final class ContainersAddingUp {
      * shared, each total is spread over it the way the first is, and element {@code i} takes the
      * {@code i}-th share of each.
      *
+     * <p><b>And an element held at its value is one of the numbers the total is made of, and not
+     * every one.</b> The element is one share of the total, so the rest of the elements come to
+     * what it leaves, and the container holds it at each position in turn: which element stands at
+     * the value is nothing the total says, and a rule over the positions may leave it standing at
+     * some of them only.
+     *
+     * <p>Only beside a total of what each element holds at that place ({@link #placeAddedUp}),
+     * and only beside no other total. What is computed of the field, and a second field spread
+     * beside the first, are shares this does not leave one element of, which is a population this
+     * compiler writes none of.
+     *
      * @param alsoAddingUp the other totals, each of a field of its own that no other total reads
+     * @param oneOf        what some element holds where the total reads it, or null where nothing
+     *                     is asked of any one element
      */
     static TermRealizations.Realization to(Place answer, Type container,
                                            List<List<String>> keptApart,
@@ -164,7 +178,13 @@ final class ContainersAddingUp {
                                            RuleReadingContext reading,
                                            HowManyIsAskedFor alsoHolding,
                                            List<AlsoAddingUp> alsoAddingUp,
+                                           SomeElementHolding oneOf,
                                            DemandsInside inside) {
+        if (oneOf != null && (!alsoAddingUp.isEmpty()
+                || placeAddedUp(orders.term()) == null)) {
+            return severalTotalsNotComposed(
+                    "an element is held at its value only beside one total of what it holds");
+        }
         // What the caller asked inside an element contradicting itself is no way down that did not
         // plan: it is every way down, settled before any of them is tried. Met inside the walk it
         // was a refusal of one way that the walk had no account of.
@@ -201,10 +221,22 @@ final class ContainersAddingUp {
             }
             return throughEach(ways, solved -> walkedInPartWhereHeldStill(solved,
                     composedThrough(solved, answer, container, keptApart, orders, within,
-                            reading, alsoHolding, alsoAddingUp, inside)));
+                            reading, alsoHolding, alsoAddingUp, oneOf, inside)));
         }
         return composedThrough(null, answer, container, keptApart, orders, within, reading,
-                alsoHolding, alsoAddingUp, inside);
+                alsoHolding, alsoAddingUp, oneOf, inside);
+    }
+
+    /**
+     * What some element of the container holds at the place the total adds up.
+     *
+     * @param value the number, on the order the total adds the elements up on
+     */
+    record SomeElementHolding(Count value) {
+
+        SomeElementHolding {
+            Objects.requireNonNull(value, "an element holds a number");
+        }
     }
 
     /**
@@ -254,6 +286,43 @@ final class ContainersAddingUp {
             read.add(field);
         }
         return true;
+    }
+
+    /**
+     * The place inside each element of one container whose values {@code total} adds up, where it
+     * adds up what each element holds there and nothing computed of it — or null where it is no
+     * such total: a sum of one field of the elements of one container, or of what a list of
+     * numbers holds.
+     *
+     * <p>The place a value of some element is written at as one of the numbers the total is made
+     * of. A total of what is computed of the field adds up something else at the same place, so a
+     * value standing there is not one of its numbers.
+     */
+    static TermPath placeAddedUp(NumericTerm total) {
+        return switch (total) {
+            case NumericTerm.TakenOver over
+                    when over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                            && over.source() instanceof RunSource.ProjectedOccurrences run ->
+                    run.subjectPath();
+            case NumericTerm.TakenOf taken
+                    when taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                            && !taken.position().insideAContainer() ->
+                    taken.position().element();
+            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
+                 NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
+                 NumericTerm.OccurrencesOfAKey _, NumericTerm.ExtremeOfItsKey _,
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
+                 NumericTerm.ProductOf _ -> null;
+        };
+    }
+
+    /**
+     * The container whose elements {@code total} adds up what each holds at one place of
+     * ({@link #placeAddedUp}), or null where it is no such total.
+     */
+    static TermPath containerAddedUp(NumericTerm total) {
+        TermPath place = placeAddedUp(total);
+        return place == null ? null : place.containersHoldingIt().getLast();
     }
 
     /**
@@ -372,12 +441,19 @@ final class ContainersAddingUp {
     /**
      * What is written for {@code answer} where the elements are chosen on what {@code solved}
      * solves for, or on the total's own values where it is null.
+     *
+     * @param oneOf what some element holds where the total reads it, or null; never beside
+     *              {@code unsettled}, which solves for something other than what stands there
      */
     private static TermRealizations.Realization composedThrough(
             FieldSolved unsettled, Place answer, Type container, List<List<String>> keptApart,
             TermOrders orders, SearchRegion within, RuleReadingContext reading,
             HowManyIsAskedFor alsoHolding, List<AlsoAddingUp> alsoAddingUp,
-            DemandsInside demanded) {
+            SomeElementHolding oneOf, DemandsInside demanded) {
+        if (oneOf != null && unsettled != null) {
+            throw new IllegalArgumentException("an element held at its value is one share of a"
+                    + " total of what it holds, and nothing is solved for through it");
+        }
         // A field held still at no value the region leaves it is a way this did not try, which is
         // not the region leaving the total no row.
         FieldSolved solved = unsettled == null ? null : unsettled.settledIn(within);
@@ -422,6 +498,10 @@ final class ContainersAddingUp {
         TypeView view = TypeView.of(container, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         if (view.shape() instanceof Shape.Mapping map) {
+            if (oneOf != null) {
+                return severalTotalsNotComposed(
+                        "a map whose values come to a total is written with one entry");
+            }
             return aMapHoldingTheTotalInOneEntry(total, map, view, target, occurring, elements,
                     within, reading, alsoHolding, alsoAddingUp, inside);
         }
@@ -514,9 +594,42 @@ final class ContainersAddingUp {
         if (!also.isEmpty()) {
             left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
         }
+        // The value one element is held at is put to the rules and the carrier as every share is
+        // ({@link #splitting}): a value they refuse is no element's, at any count.
+        if (oneOf != null && (!ends.runs().admits(oneOf.value())
+                || !(elements.onTheGrid(oneOf.value()) instanceof Count on)
+                || on.at().compareTo(oneOf.value().at()) != 0)) {
+            return new TermRealizations.Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    "no element holds " + oneOf.value() + " at `" + occurring + "`");
+        }
+        // What the others come to, worked out exactly as every share is, and once: it is the same
+        // at every count. A difference the exact arithmetic could not hold is no count written,
+        // and no proof that none is.
+        BigDecimal others = null;
+        if (oneOf != null) {
+            switch (ExactRatio.of(total.at()).minus(oneOf.value().exactly())
+                    .flatMap(DecimalOperation::writtenForARow)) {
+                case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> {
+                    left.unheld(new CompositionCapacity(
+                            CompositionCapacity.Where.VALUES_A_TOTAL_IS_SPREAD_OVER, unheld.why()));
+                    return new TermRealizations.Realization.Unexhausted(left.shortfall(), null);
+                }
+                case ExactAnswer.Held<Optional<BigDecimal>> written -> {
+                    if (written.value().isEmpty()) {
+                        left.unheld(new CompositionCapacity(
+                                CompositionCapacity.Where.VALUES_A_TOTAL_IS_SPREAD_OVER,
+                                UnheldNumber.NO_REPRESENTATION_EXISTS));
+                        return new TermRealizations.Realization.Unexhausted(left.shortfall(),
+                                null);
+                    }
+                    others = written.value().get();
+                }
+            }
+        }
         WhatIsOffered offered = new WhatIsOffered();
         Makings makings = new Makings(total.at(), ends, holding, view, elements, ways, apart,
-                reading, solved, also);
+                reading, solved, also, oneOf, others);
         // Every count the rules leave, which are all the counts there are: what the container may
         // hold is what the rules say, so a walk that runs out of them has run out of the population
         // and not only of what this compiler writes.
@@ -860,10 +973,15 @@ final class ContainersAddingUp {
      *                  that is chosen and solved for; null where the total is of what the elements
      *                  hold
      * @param also      the other totals the same elements come to, each at a field of its own
+     * @param oneOf     what some element holds where the total reads it, or null where nothing
+     *                  is asked of any one element
+     * @param others    what the elements besides that one come to, or null where there is no
+     *                  such element
      */
     private record Makings(BigDecimal total, Ends ends, Shape.Sequence holding, TypeView container,
                            Carrier elements, Ways ways, KeptApart apart,
-                           RuleReadingContext reading, FieldSolved solved, List<Also> also) {}
+                           RuleReadingContext reading, FieldSolved solved, List<Also> also,
+                           SomeElementHolding oneOf, BigDecimal others) {}
 
     /**
      * The one field of each element a total of what a walk computed of it is solved for.
@@ -1277,6 +1395,9 @@ final class ContainersAddingUp {
             if (alsoTotals == null) {
                 return Taken.AND_MORE;
             }
+            if (makings.oneOf() != null) {
+                return withOneElementHeld(many);
+            }
             // Said of the shapes this count is spread in, before any of them is walked, because it
             // is about which arrangements there are rather than about what came of trying two of
             // them. Nothing bounds this loop but the shapes there are to write, so a shape is never
@@ -1313,6 +1434,52 @@ final class ContainersAddingUp {
                         if (asFarAs(containers(written, sharesOfTheRest), offered, left)
                                 == Traversal.STOPPED) {
                             return Taken.AND_DONE;
+                        }
+                    }
+                }
+            }
+            return Taken.AND_MORE;
+        }
+
+        /**
+         * The containers of {@code many} elements coming to the total with one of them at the
+         * value {@link Makings#oneOf} names: the others spread over what it leaves
+         * ({@link Makings#others}), and the one standing at each position in turn.
+         *
+         * <p>A position the element would stand at with the element before it at the same value
+         * is the container already offered at the position before, and is not built again.
+         */
+        private Taken withOneElementHeld(int many) {
+            if (many < 1) {
+                return Taken.AND_MORE;
+            }
+            BigDecimal held = makings.oneOf().value().at();
+            BigDecimal rest = makings.others();
+            int others = many - 1;
+            if (!coversEveryArrangement(others, rest)) {
+                left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
+            }
+            boolean apart = makings.apart().numbersApart();
+            for (Spread how : Spread.values()) {
+                switch (splitting(rest, others, makings.ends(), how, makings.elements(), apart)) {
+                    case Split.None _ -> { }
+                    case Split.NotWorkedOut(UnheldNumber why) ->
+                            left.unheld(new CompositionCapacity(
+                                    CompositionCapacity.Where.VALUES_A_TOTAL_IS_SPREAD_OVER, why));
+                    case Split.Some(List<BigDecimal> values) -> {
+                        if (apart && values.stream().anyMatch(each -> each.compareTo(held) == 0)) {
+                            continue;
+                        }
+                        for (int at = 0; at <= others; at++) {
+                            if (at > 0 && values.get(at - 1).compareTo(held) == 0) {
+                                continue;
+                            }
+                            List<BigDecimal> written = new ArrayList<>(values);
+                            written.add(at, held);
+                            if (asFarAs(containers(written, List.of()), offered, left)
+                                    == Traversal.STOPPED) {
+                                return Taken.AND_DONE;
+                            }
                         }
                     }
                 }
