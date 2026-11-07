@@ -550,7 +550,11 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
         assertFalse(DecimalOperation.allCompleteAt(List.of(minusTheTotal), Map.of("t",
                 ExactRatio.of(new BigDecimal(BigInteger.ONE,
                         DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1)))));
-        assertFalse(DecimalOperation.allCompleteAt(List.of(minusTheTotal), Map.of()));
+        // A total the row does not name is held by the list the row is built with, at no more
+        // places than that, and the room of the operation does not turn on it.
+        assertTrue(DecimalOperation.allCompleteAt(List.of(minusTheTotal), Map.of()));
+        // A place the row does not name is no row's.
+        assertFalse(DecimalOperation.allCompleteAt(List.of(sum(H, new Total("t"))), Map.of()));
     }
 
     @Test

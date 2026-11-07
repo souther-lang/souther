@@ -1596,19 +1596,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** Whether every number {@code work} reads from a row as a place of it is a side of this
-     *  relation, once: what an operation's operand comes to, and what a walk adds up. */
+     *  relation, once. A total, an operand's or what a walk adds up, is held by the list a row is
+     *  built with, which the relation may name as no term of its own. */
     private static boolean overTheSides(DecimalWork work, Map<Object, Integer> named) {
         return switch (work) {
-            case DecimalAdditiveWalk walk -> overTheSides(walk.added(), named);
+            case DecimalAdditiveWalk _ -> true;
             case DecimalOperation operation -> operation.operands().stream()
                     .allMatch(operand -> !(operand instanceof DecimalOperation.Formed formed)
-                            || overTheSides(formed, named));
+                            || formed.coefs().keySet().stream()
+                                    .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom))));
         };
-    }
-
-    private static boolean overTheSides(DecimalOperation.Formed formed, Map<Object, Integer> named) {
-        return formed.coefs().keySet().stream()
-                .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
     }
 
     /**
@@ -8138,7 +8135,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         List<NumericTerm.ValueOf> values = valuesOfOneElement(over);
-        return values.isEmpty() ? null : values.getFirst();
+        if (!values.isEmpty()) {
+            return values.getFirst();
+        }
+        // Fields of the element added or taken away are counted on the order the fields are: a
+        // weight of one or minus one moves no value off it.
+        if (over.source() instanceof RunSource.ComputedOccurrences computed
+                && computed.computation() instanceof ElementValue.Affine weighed
+                && weighed.form().constant().isZero() && !weighed.form().coefs().isEmpty()
+                && weighed.form().coefs().values().stream().allMatch(weight ->
+                        ExactRatio.ONE.equals(weight.abs()))) {
+            return new NumericTerm.ValueOf(weighed.form().coefs().keySet().iterator().next()
+                    .from(computed.elements()));
+        }
+        return null;
     }
 
     /**
@@ -8205,7 +8215,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         NumericDomain.Bounds alone;
-        if (elements.isEmpty()) {
+        if (elements.isEmpty() && over.source() instanceof RunSource.ComputedOccurrences computed
+                && computed.computation() instanceof ElementValue.Affine weighed
+                && weighed.form().constant().isZero()) {
+            alone = summedOverWeighedFieldsOfOneElement(computed.elements(), weighed, read,
+                    region, stated.rest(), carrier);
+        } else if (elements.isEmpty()) {
             alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
         } else {
             List<TermPath> containers = over.subjectPath().containersHoldingIt();
@@ -8214,6 +8229,59 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             stated.rest(), carrier);
         }
         return alone == null ? null : alone.meet(stated.run());
+    }
+
+    /**
+     * A run every value of which a total of {@code weighed}, fields of each element of
+     * {@code elements} added or taken away, is shown to take — or null where none is shown, or a
+     * field is weighed by anything else: one element comes to what its fields do, added or taken
+     * away. Each field is shown to take its run
+     * with nothing but that field asked of the element, and no rule of the declarations ties two
+     * of the fields to one another ({@link #tiedByARule}), so the fields are written apart and
+     * every sum of a value of each is one element's. Nought, the total of a container holding
+     * none, is the whole's and no field's, so it joins the sum once.
+     */
+    private static NumericDomain.Bounds summedOverWeighedFieldsOfOneElement(
+            TermPath elements, ElementValue.Affine weighed, InputReading read, SearchRegion region,
+            List<OnAWay> conditions, Carrier carrier) {
+        List<TermPath> places = new ArrayList<>();
+        TermPath container = null;
+        NumericDomain.Bounds sum = null;
+        for (Map.Entry<ElementProjection, ExactRatio> each : weighed.form().coefs().entrySet()) {
+            // A run is an interval and says nothing of a step between its values: a field weighed
+            // two takes every other whole number of the interval it is moved to.
+            if (!ExactRatio.ONE.equals(each.getValue().abs())) {
+                return null;
+            }
+            TermPath place = each.getKey().from(elements);
+            List<TermPath> containers = place.containersHoldingIt();
+            if (containers.size() != 1
+                    || (container != null && !container.equals(containers.getFirst()))) {
+                return null;
+            }
+            container = containers.getFirst();
+            NumericDomain.Bounds field = shownOfAnElementAlone(
+                    List.of(new NumericTerm.ValueOf(place)), container, read, region, conditions,
+                    null);
+            NumericDomain.Bounds part = field == null ? null : field.timesEach(each.getValue());
+            if (part == null) {
+                return null;
+            }
+            for (TermPath before : places) {
+                if (tiedByARule(before, place, read)) {
+                    return null;
+                }
+            }
+            places.add(place);
+            sum = sum == null ? part : sum.plus(part);
+            if (sum == null) {
+                return null;
+            }
+        }
+        NumericDomain.Bounds held = container == null ? null
+                : howManyAreHeld(container, read, region);
+        return sum == null || held == null ? null
+                : held.admits(Count.ZERO) ? withNought(sum, carrier) : sum;
     }
 
     /**

@@ -3,20 +3,17 @@ package souther.compiler.partition;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.core.Kernel;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
+import souther.compiler.inputs.WrittenOperation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What a walk's step, or a closure whose answers a total adds up, adds of each element it is
@@ -44,12 +41,6 @@ record AddedOfEachElement(int sign, int factors) {
         }
     }
 
-    /** The operators a step or a part is written with, as the language's or the library's. */
-    private static final Map<BinOp, Set<Kernel>> WRITTEN_AS = Map.of(
-            BinOp.ADD, Set.of(Kernel.INT_ADD, Kernel.DECIMAL_ADD),
-            BinOp.SUB, Set.of(Kernel.INT_SUBTRACT, Kernel.DECIMAL_SUBTRACT),
-            BinOp.MUL, Set.of(Kernel.INT_MULTIPLY, Kernel.DECIMAL_MULTIPLY));
-
     /**
      * What {@code walk}'s step adds of each element: the answer so far, on either side, plus a
      * part of the element, or the answer so far less one. Null where the step is anything else.
@@ -58,12 +49,12 @@ record AddedOfEachElement(int sign, int factors) {
         BindingId carried = walk.accumulator().binding();
         BindingId element = walk.element().binding();
         Core body = walk.step().body();
-        List<Core> sum = operandsOf(body, BinOp.ADD, symbols);
+        List<Core> sum = WrittenOperation.operandsOf(body, BinOp.ADD, symbols);
         if (sum != null) {
             return isRead(sum.get(0), carried) ? of(1, sum.get(1), element, symbols)
                     : isRead(sum.get(1), carried) ? of(1, sum.get(0), element, symbols) : null;
         }
-        List<Core> difference = operandsOf(body, BinOp.SUB, symbols);
+        List<Core> difference = WrittenOperation.operandsOf(body, BinOp.SUB, symbols);
         return difference != null && isRead(difference.get(0), carried)
                 ? of(-1, difference.get(1), element, symbols) : null;
     }
@@ -128,32 +119,13 @@ record AddedOfEachElement(int sign, int factors) {
     /** How many paths of {@code element} {@code e} multiplies, or nought where it is anything
      *  but a path of it or a product of such. */
     private static int factorsOf(Core e, BindingId element, Symbols symbols) {
-        List<Core> product = operandsOf(e, BinOp.MUL, symbols);
+        List<Core> product = WrittenOperation.operandsOf(e, BinOp.MUL, symbols);
         if (product != null) {
             int left = factorsOf(product.get(0), element, symbols);
             int right = factorsOf(product.get(1), element, symbols);
             return left < 1 || right < 1 ? 0 : left + right;
         }
         return isAPathInside(e, element) ? 1 : 0;
-    }
-
-    /** The two operands of {@code e}, where it is {@code op} of two whole numbers or two
-     *  decimals, written as the operator or as the library's operation; null otherwise. */
-    private static List<Core> operandsOf(Core e, BinOp op, Symbols symbols) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.Binary binary when binary.op() == op
-                    && (binary.type() == Type.INT || binary.type() == Type.DECIMAL) ->
-                    List.of(binary.left(), binary.right());
-            case Core.PreservedCall call when call.args().size() == 2
-                    && call.operation() instanceof ValueName.Stdlib.Operation operation
-                    && isTheLibrarys(op, symbols.kernelOf(operation)) -> call.args();
-            default -> null;
-        };
-    }
-
-    /** Whether {@code kernel} is the library's {@code op}; a kernel of none is no operator. */
-    private static boolean isTheLibrarys(BinOp op, Kernel kernel) {
-        return kernel != null && WRITTEN_AS.get(op).contains(kernel);
     }
 
     /** Whether {@code e} is {@code element}, or fields of it one inside another. */

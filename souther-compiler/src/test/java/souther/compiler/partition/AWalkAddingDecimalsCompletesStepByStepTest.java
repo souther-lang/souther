@@ -28,6 +28,7 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
                 invariant value >= 0.0m
             data Note = { gross: Amount }
             data Line = { price: Amount, qty: Amount }
+            data Totals = { gross: Decimal, count: Int }
             """;
 
     private static final String INPUTS =
@@ -141,6 +142,74 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
                                                                         l.qty.value), lines)),
                                 c.value) <= 0""");
         assertEquals(Set.of(products, "c"), related(summed), summed);
+    }
+
+    /**
+     * Two totals of one list, added, are named by the comparison as the one total of what each
+     * element comes to. The operations read the two, which a row holds by the list it is built
+     * with and not as terms of its own, and a row of one element writes what the one total takes.
+     */
+    @Test
+    void twoTotalsOfOneListAreReadAsTheOneTotalTheComparisonNames() {
+        String merged = "List.sum({1·price + 1·qty + 0 | lines[*]})";
+        String summed = report("lines: List<Line>, c: Amount", """
+                Decimal.compare(Decimal.add(List.sum(List.map(l -> l.price.value, lines)),
+                                            List.sum(List.map(l -> l.qty.value, lines))),
+                                c.value) <= 0""");
+        assertEquals(Set.of(merged, "c"), related(summed), summed);
+        String walked = report("lines: List<Line>, c: Amount", """
+                Decimal.compare(Decimal.add(
+                        List.fold((acc, l) -> Decimal.add(acc, l.price.value), 0.0m, lines),
+                        List.fold((acc, l) -> Decimal.add(acc, l.qty.value), 0.0m, lines)),
+                    c.value) <= 0""");
+        assertEquals(Set.of(merged, "c"), related(walked), walked);
+    }
+
+    /** A total of what a closure makes of each number of a list written out is told as the
+     *  library adds the answers up: from nought, one after another. */
+    @Test
+    void aTotalOfAClosureOverAListWrittenOutIsToldAsItIsAddedUp() {
+        String report = report("a: Amount, b: Amount, c: Amount", """
+                Decimal.compare(List.sum(List.map(x -> Decimal.add(x, 1.0m),
+                                                  [a.value, b.value])), c.value) <= 0""");
+        assertEquals(Set.of(), notShown(report), report);
+        assertTrue(related(report).containsAll(Set.of("a", "b")), report);
+    }
+
+    /** A walk over a map of decimals adding the product of each value and what another map holds
+     *  under its key, or nought, is a walk of products. */
+    @Test
+    void aWalkJoiningTwoMapsOfDecimalsIsAWalkOfProducts() {
+        String report = report(
+                "qty: Map<String, Decimal>, prices: Map<String, Decimal>, c: Amount", """
+                Decimal.compare(Map.fold((acc, k, q) -> Decimal.add(acc, Decimal.multiply(q,
+                                    Option.withDefault(0.0m, Map.get(k, prices)))), 0.0m, qty),
+                                c.value) <= 0""");
+        assertEquals(Set.of("List.sum({qty[*] * prices[*] under one key})", "c"), related(report),
+                report);
+    }
+
+    /**
+     * A field of what a walk carrying a record answers is read as that field's own walk. Every
+     * field is worked out at every step, so every field's walk is told: the gross added as a walk
+     * of decimals, the count by one. A field whose step does more than that tells nothing.
+     */
+    @Test
+    void aFieldOfAWalkCarryingARecordIsToldWithEveryFieldsWalk() {
+        String carried = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, n) -> Totals {
+                                        gross = Decimal.add(acc.gross, n.gross.value),
+                                        count = acc.count + 1 },
+                                    Totals { gross = 0.0m, count = 0 }, existing).gross,
+                                c.value) <= 0""");
+        assertEquals(Set.of("List.sum(existing[*].gross)", "c"), related(carried), carried);
+        String doubling = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, n) -> Totals {
+                                        gross = Decimal.add(acc.gross, n.gross.value),
+                                        count = acc.count * 2 },
+                                    Totals { gross = 0.0m, count = 1 }, existing).gross,
+                                c.value) <= 0""");
+        assertEquals(Set.of(), related(doubling), doubling);
     }
 
     /** A walk a helper works out is worked out where the helper is called. */

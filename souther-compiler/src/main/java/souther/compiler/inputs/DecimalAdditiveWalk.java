@@ -1,11 +1,7 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.ExactRatio;
-import souther.exact.ExactDecimals;
-
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -64,16 +60,6 @@ public record DecimalAdditiveWalk(BigDecimal seed, DecimalOperation.Formed added
      *  further from nought than room is shown for. */
     boolean everyStepHasRoom() {
         return scaleOfEveryStep() <= DecimalOperation.SCALE_THE_ROOM_IS_SHOWN_FOR;
-    }
-
-    /**
-     * What the walk answers on a row whose terms stand at {@code values}: the seed added to what
-     * it adds at the fewest places that number is written with, the representative a total is
-     * worked out with ({@link DecimalOperation.Total}). Null where the row has no total.
-     */
-    BigDecimal workedOut(Map<Object, ExactRatio> values) {
-        return added.at(values).map(sum -> ExactDecimals.sumWhereThereIsRoom(seed, sum))
-                .orElse(null);
     }
 
     @Override

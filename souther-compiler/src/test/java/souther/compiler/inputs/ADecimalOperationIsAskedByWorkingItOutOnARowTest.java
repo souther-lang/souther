@@ -156,11 +156,17 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
         assertFalse(DecimalOperation.allCompleteAt(List.of(walk), totalOf(elements)));
     }
 
-    /** A walk reads the total the row holds, and a row that holds none is no row of it. */
+    /**
+     * A walk adds up the list a row is built with, whether or not the row names its total: the
+     * total is no more places than a row is built at either way. One the row names at more is
+     * no row's.
+     */
     @Test
-    void aWalkOverATotalTheRowDoesNotNameIsNoRow() {
+    void aWalkIsAskedOfTheListTheRowIsBuiltWith() {
         DecimalAdditiveWalk walk = new DecimalAdditiveWalk(BigDecimal.ZERO, ADDING_T, 1);
-        assertFalse(DecimalOperation.allCompleteAt(List.of(walk), Map.of("s", ExactRatio.ONE)));
+        assertTrue(DecimalOperation.allCompleteAt(List.of(walk), Map.of("s", ExactRatio.ONE)));
+        assertFalse(DecimalOperation.allCompleteAt(List.of(walk), Map.of("t", ExactRatio.of(
+                new BigDecimal(BigInteger.ONE, DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1)))));
     }
 
     /**

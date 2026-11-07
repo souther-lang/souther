@@ -232,22 +232,8 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * and is asked as one.
      */
     static boolean leavesNoCompletionToHowATotalIsWritten(List<DecimalWork> all) {
-        boolean[] dependsOnATotal = new boolean[all.size()];
-        boolean any = false;
-        for (int i = 0; i < all.size(); i++) {
-            switch (all.get(i)) {
-                case DecimalAdditiveWalk _ -> dependsOnATotal[i] = true;
-                case DecimalOperation each -> {
-                    for (Operand operand : each.operands) {
-                        dependsOnATotal[i] |= operand instanceof Total
-                                || (operand instanceof Worked worked && worked.operation() < i
-                                && dependsOnATotal[worked.operation()]);
-                    }
-                }
-            }
-            any |= dependsOnATotal[i];
-        }
-        if (!any) {
+        BitSet dependsOnATotal = dependsOnATotal(all);
+        if (dependsOnATotal.isEmpty()) {
             return true;
         }
         Rooms rooms = roomsOf(all);
@@ -255,11 +241,31 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
             return false;
         }
         for (int i = 0; i < all.size(); i++) {
-            if (dependsOnATotal[i] && !rooms.bounded().get(i)) {
+            if (dependsOnATotal.get(i) && !rooms.bounded().get(i)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /** Which of {@code all} are worked out of a total, directly or through those before them; a
+     *  walk adding a list up is one. */
+    private static BitSet dependsOnATotal(List<DecimalWork> all) {
+        BitSet out = new BitSet(all.size());
+        for (int i = 0; i < all.size(); i++) {
+            switch (all.get(i)) {
+                case DecimalAdditiveWalk _ -> out.set(i);
+                case DecimalOperation each -> {
+                    for (Operand operand : each.operands) {
+                        if (operand instanceof Total || (operand instanceof Worked worked
+                                && worked.operation() < i && out.get(worked.operation()))) {
+                            out.set(i);
+                        }
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -447,8 +453,15 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * {@code values}, each by its key, in the order they are told — and so whether a run that
      * works them out gets past them. False where an operand is a number the row does not have,
      * and where an operation's room turns on how a total is written
-     * ({@link #leavesNoCompletionToHowATotalIsWritten}): a row has a representative of a total,
-     * and an operation it is no fact of is not shown worked out on it.
+     * ({@link #leavesNoCompletionToHowATotalIsWritten}).
+     *
+     * <p>An operation worked out of a total, and a walk adding one up, is then bounded, and has
+     * room at every row that is built whatever the total comes to; it is not worked out here.
+     * What is asked of it is that the row is one that is built: the places it reads are the row's,
+     * and a total the row names is one a list it is built with comes to, at no more places than a
+     * row is built at. A total the row does not name is held by the list the row is built with
+     * all the same, at such places: the relation may name it as no term of its own, as two totals
+     * of one run are named as one ({@link TotalsOfOneRun#addedUp}).
      */
     public static boolean allCompleteAt(List<DecimalWork> all, Map<Object, ExactRatio> values) {
         if (all.isEmpty()) {
@@ -457,20 +470,41 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
         if (!leavesNoCompletionToHowATotalIsWritten(all)) {
             return false;
         }
+        BitSet ofATotal = dependsOnATotal(all);
         BigDecimal[] results = new BigDecimal[all.size()];
         for (int i = 0; i < all.size(); i++) {
-            // A walk's steps are shown to get through on every row by its bound, and are asked
-            // so; what it answers is worked out for what is worked out of it.
-            results[i] = switch (all.get(i)) {
-                case DecimalOperation each -> each.workedOut(results, values);
-                case DecimalAdditiveWalk walk ->
-                        walk.everyStepHasRoom() ? walk.workedOut(values) : null;
-            };
+            if (ofATotal.get(i)) {
+                if (!readsWhatARowIsBuiltWith(all.get(i), values)) {
+                    return false;
+                }
+                continue;
+            }
+            results[i] = ((DecimalOperation) all.get(i)).workedOut(results, values);
             if (results[i] == null) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Whether what {@code work} reads of a row at {@code values} is what a row that is built
+     * holds: each place it reads, at a decimal a row is built at, and each total the row names,
+     * at no more places than a row is built at.
+     */
+    private static boolean readsWhatARowIsBuiltWith(DecimalWork work,
+                                                    Map<Object, ExactRatio> values) {
+        return switch (work) {
+            case DecimalAdditiveWalk walk -> !values.keySet().containsAll(
+                    walk.added().coefs().keySet()) || walk.added().at(values).isPresent();
+            case DecimalOperation each -> each.operands.stream().allMatch(operand ->
+                    switch (operand) {
+                        case Formed formed -> formed.at(values).isPresent();
+                        case Total total -> !values.containsKey(total.term())
+                                || total.at(values).isPresent();
+                        case Written _, Worked _ -> true;
+                    });
+        };
     }
 
     /** The number this comes to, or null where the row has no operand for it or the run time has

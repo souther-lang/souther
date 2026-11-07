@@ -1936,6 +1936,33 @@ public final class NumericDomain<A> {
             return by.signum() > 0 ? new Bounds(low, high) : new Bounds(high, low);
         }
 
+        /**
+         * Every sum of a value of this and a value of {@code other}: the ends added, an end
+         * reached where both are, and no end on a side where either has none. Null where the sum
+         * of two ends is no number written down.
+         */
+        public Bounds plus(Bounds other) {
+            Endpoint low = plusEnd(min, other.min);
+            Endpoint high = plusEnd(max, other.max);
+            if ((min != null && other.min != null && low == null)
+                    || (max != null && other.max != null && high == null)) {
+                return null;
+            }
+            return new Bounds(low, high);
+        }
+
+        private static Endpoint plusEnd(Endpoint one, Endpoint two) {
+            if (one == null || two == null) {
+                return null;
+            }
+            ExactRatio at = Count.number(one.at()).exactly()
+                    .plus(Count.number(two.at()).exactly()).orNull();
+            return at != null && Count.written(at)
+                    instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> written) && written.isPresent()
+                    ? new Endpoint(written.get(), one.inclusive() && two.inclusive()) : null;
+        }
+
         private static Endpoint timesEnd(Endpoint end, ExactRatio by) {
             if (end == null) {
                 return null;
