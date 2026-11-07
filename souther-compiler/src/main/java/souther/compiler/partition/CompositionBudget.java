@@ -770,7 +770,22 @@ public enum CompositionBudget {
      * compilation stopping there held it to. What carries the stop carries this.
      */
     public Figure.Budget reached() {
-        return new Figure.Budget(this, maximum());
+        return reachedAShareOf(maximum());
+    }
+
+    /**
+     * This budget as the figure one of the questions it is shared out among stopped at: the share
+     * {@code share} that question was held to, which is the number it was compared against. Still
+     * this budget, because the share is worked out of its figure and raising it raises the share.
+     *
+     * @throws IllegalArgumentException where {@code share} is more than the figure it is a share of
+     */
+    public Figure.Budget reachedAShareOf(int share) {
+        if (share > maximum()) {
+            throw new IllegalArgumentException(this + " stands at " + maximum()
+                    + ", and a share of it at no more: " + share);
+        }
+        return new Figure.Budget(this, share);
     }
 
     /**

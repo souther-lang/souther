@@ -874,9 +874,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.
-            Map.entry("souther.compiler.check.MeaningAssumptions$Tries#<init>()V",
+            Map.entry("souther.compiler.check.MeaningAssumptions$Tries#reading()"
+                            + "Lsouther/compiler/check/MeaningAssumptions$Tries;",
                     "how many parts of a disjunction one reading of a condition takes alone,"
-                            + " past which the disjunction is declined for that figure"),
+                            + " past which the disjunction is declined naming that figure"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
                             + "Lsouther/compiler/check/DeclaredArgument;"
                             + "Ljava/util/List;"
