@@ -25,6 +25,7 @@ import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
@@ -107,6 +108,11 @@ class WhatStoppedACountAndTheNumberBesideItAreBothSaidTest {
      *  reach. */
     private static BorderQuantity.Observation unreadRow() {
         return new BorderQuantity.Observation() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

@@ -810,7 +810,7 @@ public final class Generator {
                              CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                              CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
-                             TOTALS_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
+                             COUNTS_OF_KEYS_TRIED,
                              VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
@@ -7797,7 +7797,7 @@ public final class Generator {
                     !asked.contains(new Level.OfTheQuantity(ExactRatio.ZERO)), looking)) {
                 case NumericWitness.Standing.Found beside -> {
                     for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
-                        if (placed.term().subjectPath().insideAContainer()) {
+                        if (!count.standsBeside(placed.term())) {
                             continue;
                         }
                         RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
@@ -9449,8 +9449,7 @@ public final class Generator {
                     counted = new ArrayList<>();
                     for (souther.compiler.observe.ObservedValue value : values) {
                         switch (kept.perElement().at(new CardinalityComposer.AnElementRead(
-                                kept.position(), occurrences.subjectPath(), Map.of(),
-                                List.of(value)))) {
+                                kept.position(), occurrences.subjectPath(), List.of(value)))) {
                             case AStatementAtARow.Answer.Holds _ -> counted.add(value);
                             case AStatementAtARow.Answer.Fails _ -> { }
                             case AStatementAtARow.Answer.CouldNotTell(Set<ReadingGap> why) ->
@@ -9642,6 +9641,12 @@ public final class Generator {
                     : WalkResult.couldNotWalk();
         }
 
+        /** Nothing is fixed beside an element read whole: the element is all it holds. */
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return null;
+        }
+
         @Override
         public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
             return of.equals(container) ? WalkResult.reached(List.of(this))
@@ -9738,8 +9743,10 @@ public final class Generator {
      * which is counted for the value of another location. Every other group is composed out
      * of its own numbers and the way's region, which is what it is handed.
      *
-     * <p>Not a number inside a container. A value placed at an element is some element standing
-     * there, and fixed in the region it would be every element.
+     * <p>Not a number of an element. A value placed at an element is some element standing there,
+     * and fixed in the region it would be every element. What another container comes to is one
+     * number of the row and is fixed ({@link NumbersOfTheWhole#oneNumberOfTheRow}); what the
+     * container composed here comes to is the composing's to fix.
      *
      * <p>And with the elements of a container written at {@code at} held to what every element of
      * it is to meet, where a condition on the way says so ({@link ElementBound}).
@@ -9765,7 +9772,8 @@ public final class Generator {
                 Map<NumericTerm, Place> fixed = new LinkedHashMap<>();
                 standing.forEach((target, place) -> {
                     if (target instanceof RealizationTarget.OfANumber number
-                            && !number.term().subjectPath().insideAContainer()) {
+                            && NumbersOfTheWhole.oneNumberOfTheRow(number.term())
+                            && !ofWhatIsComposedHere(number.term(), at)) {
                         fixed.put(number.term(), place);
                     }
                 });
@@ -9773,6 +9781,16 @@ public final class Generator {
             }
         }
         return new RegionToCompose(region, null, here);
+    }
+
+    /**
+     * Whether {@code term} is a number of a container composed at {@code at} as a whole, which the
+     * composing fixes with its elements ({@link ContainerAsAWhole}) and is no number of another
+     * location standing beside them.
+     */
+    private static boolean ofWhatIsComposedHere(NumericTerm term, TermPath at) {
+        TermPath whole = NumbersOfTheWhole.containerOf(term);
+        return whole != null && whole.isAtOrUnder(at);
     }
 
     /**

@@ -35,6 +35,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
+import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
@@ -3038,6 +3039,23 @@ final class TermRealizations {
                         new Remainder.StoppedAt(CompositionBudget.NUMBERS_OF_A_SET_TRIED))
                 : Tried.allOf(List.copyOf(out));
     }
+
+    /**
+     * The numbers {@code term} is tried at where nothing is asked of it but that it be a number some
+     * input has: wherever the region leaves it, as a number something is asked of is tried inside
+     * what is asked ({@link #onTheOrder}). Null where the term is measured on no order.
+     */
+    static Tried whereverItIsLeft(NumericTerm term, Quantities measuring, SearchRegion within,
+                                  RuleReadingContext reading) {
+        TermOrders orders = measuring.ordersOf(term);
+        return orders == null ? null
+                : onTheOrder(THE_WHOLE_ORDER, orders, null, within,
+                        UsualPlaces.of(orders.term(), orders.answered(), reading.today()));
+    }
+
+    /** Every number of an order, which is what nothing asked of a number leaves it. */
+    private static final NumericSet THE_WHOLE_ORDER = new NumericSet.InARun(new Band(
+            new BandEnd.AtOrderEnd(Towards.BELOW), new BandEnd.AtOrderEnd(Towards.ABOVE)));
 
     /** The first whole number at or above an end, or the window's own start where the set runs
      *  past it or the exact arithmetic could not hold the edge — the same answer either way, since

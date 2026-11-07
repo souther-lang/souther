@@ -1,12 +1,15 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ProjectionEvidence;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.regex.Language;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.ValueSet;
 
@@ -62,6 +65,30 @@ public sealed interface Position permits ReadPosition {
      * such number" are different answers and only the second is about the model.
      */
     List<PositionBounds> bounds();
+
+    /**
+     * What the rules leave each total of the elements this position holds, one entry per rule
+     * reaching it that writes one.
+     *
+     * <p>Beside {@link #bounds()} and not in it, because a total is no number of the position: it is
+     * taken over what every element of it holds, and a body reads it as a run of the elements
+     * ({@link NumericTerm.TakenOver}) and never as a number one place answers.
+     */
+    List<FieldDomains.TotalLeft> totalsLeft();
+
+    /**
+     * Where the rules leave {@code operation} accumulated over what each element holds at
+     * {@code inside}, or null where none of them says.
+     */
+    default NumericDomain.Bounds totalLeft(ValueName operation, RuleKey inside) {
+        NumericDomain.Bounds out = null;
+        for (FieldDomains.TotalLeft each : totalsLeft()) {
+            if (each.operation().equals(operation) && each.inside().equals(inside)) {
+                out = out == null ? each.left() : out.meet(each.left());
+            }
+        }
+        return out;
+    }
 
     /** The numbers this position has, which is what {@link #bounds()} is keyed by. */
     default List<NumericTerm.FromOnePosition> numbers() {

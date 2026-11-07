@@ -186,13 +186,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // handed over as the remainder of the numbers it is tried at, which the composing
             // says in what it comes back with.
             Map.entry("souther.compiler.partition.ContainerAsAWhole#<clinit>()V",
-                    "how many whole numbers a total is tried at, and how many elements a"
-                            + " container is composed with"),
-            Map.entry("souther.compiler.partition.ContainerAsAWhole#nearestNoughtFirst()"
-                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
-                    "stops at the totals tried and hands the figure over as what is left of"
-                            + " them"),
+                    "how many elements a container is composed with"),
             Map.entry("souther.compiler.partition.ContainerAsAWhole#sizes("
+                            + "Lsouther/compiler/check/DeclaredBounds$CountRange;"
                             + "Lsouther/compiler/partition/NumericSet;)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "stops at the most elements a container is composed with and hands the"

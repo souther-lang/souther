@@ -81,5 +81,21 @@ final class NumbersOfTheWhole {
                 && !taken.position().insideAContainer() ? taken.position() : null;
     }
 
+    /**
+     * Whether {@code term} is one number of a row and no number of an element: an input standing
+     * outside every container, or a number of a container as a whole that stands outside every
+     * container.
+     *
+     * <p>Asked of where the number stands and not of the path it reads. What a container's
+     * elements come to reads a place inside the container and is one number however many elements
+     * it holds; a reader asking whether that place is inside a container takes the total of another
+     * container for a number of some element of it, and leaves a statement reading one with nothing
+     * standing beside its elements.
+     */
+    static boolean oneNumberOfTheRow(NumericTerm term) {
+        TermPath whole = containerOf(term);
+        return !(whole != null ? whole : term.subjectPath()).insideAContainer();
+    }
+
     private NumbersOfTheWhole() {}
 }

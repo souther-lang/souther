@@ -29,11 +29,13 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.StringsHeldAsWritten;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -2935,8 +2937,8 @@ final class ReadQuantities implements Quantities {
      */
     private NumericDomain.Bounds whereItsValuesAre(NumericTerm term) {
         return switch (term) {
-            case NumericTerm.FromOnePosition one -> ownOf(one);
-            case NumericTerm.TakenOver over -> contexts.runOf(over, this);
+            case NumericTerm.FromOnePosition one -> meeting(ownOf(one), totalLeftBy(one));
+            case NumericTerm.TakenOver over -> meeting(contexts.runOf(over, this), totalLeftBy(over));
             // Nothing the rules of the elements say bounds how often one of them occurs besides
             // the term's own floor, which every term is read with.
             case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
@@ -2957,6 +2959,41 @@ final class ReadQuantities implements Quantities {
             // Made of the numbers of two forms, which bound it only together.
             case NumericTerm.ProductOf _ -> null;
         };
+    }
+
+    /**
+     * Where the rules of the value holding a container leave {@code term}, where it is a total of
+     * the elements of that container ({@link Position#totalLeft}); null where it is no such total or
+     * no rule says.
+     *
+     * <p>Beside what the values walked guarantee and never instead of it. Those are what every
+     * element holds; this is what the container as a whole is held to, which no element says — a
+     * record whose amounts are any whole numbers can still hold them to a total of at least a
+     * hundred, and a search choosing a total outside that chooses one no input has.
+     */
+    private NumericDomain.Bounds totalLeftBy(NumericTerm term) {
+        TermPath container;
+        RuleKey inside;
+        ValueName operation;
+        switch (term) {
+            case NumericTerm.TakenOver over
+                    when over.source() instanceof RunSource.ProjectedOccurrences run -> {
+                container = run.subjectPath().containersHoldingIt().getFirst();
+                inside = run.subjectPath().ruleKeyUnder(container.element());
+                operation = over.operation();
+            }
+            case NumericTerm.TakenOf taken when taken.transformation().equals(ValueTransformation.NONE)
+                    && taken.arguments().equals(TakenArguments.NONE) -> {
+                container = taken.position();
+                inside = RuleKey.THE_VALUE;
+                operation = taken.operation();
+            }
+            default -> {
+                return null;
+            }
+        }
+        Position at = inside == null ? null : byPath.get(container);
+        return at == null ? null : at.totalLeft(operation, inside);
     }
 
     /** An end as a number the arithmetic can cut at, or null where it stops at a value there is no

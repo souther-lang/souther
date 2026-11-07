@@ -545,12 +545,12 @@ final class CardinalityComposer {
         List<FixtureTemplate> built = new ArrayList<>();
         Set<ReadingGap> unread = new LinkedHashSet<>();
         // The numbers the statements read beside an element, each at the one value the row was
-        // fixed at, which the row an element is read in holds too.
-        Map<TermPath, ObservedValue> written = new LinkedHashMap<>();
-        Map<NumericTerm, Place> outside = settledOutside(asked, measuring, within, written);
+        // fixed at, which the row an element is read in holds too ({@link #withNumbersBeside}).
+        Map<NumericTerm, Place> outside = settledOutside(asked, container, within);
         // And the numbers of the container as a whole the row asks or the statements read, each
         // fixed at one number before an element is chosen: what an element answers reads them.
-        ContainerAsAWhole whole = ContainerAsAWhole.of(container, asked, totals, size, measuring);
+        ContainerAsAWhole whole = ContainerAsAWhole.of(container, view, asked, totals, size,
+                measuring, within, reading);
         if (whole == null) {
             return notChosen("a number of `" + container + "` as a whole is a total of a place"
                     + " whose numbers are not whole ones, and nothing here moves its elements to"
@@ -599,7 +599,7 @@ final class CardinalityComposer {
             anElementCanBe |= !listed.values().isEmpty();
             Function<List<ObservedValue>, BorderQuantity.Observation> holdingThem =
                     values -> standing.read(withNumbersBeside(
-                            ofTheElement.holding(sourceType, values), written));
+                            ofTheElement.holding(sourceType, values), outside));
             // What a group of elements answers is read inside a container coming to the numbers
             // of the whole fixed, where any are ({@link ContainerAsAWhole.Fixed#readingOf}).
             Function<List<ObservedValue>, BorderQuantity.Observation> readingOf = fixed == null
@@ -1232,8 +1232,7 @@ final class CardinalityComposer {
                         Optional.empty()));
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        Map<TermPath, ObservedValue> written = new LinkedHashMap<>();
-        Map<NumericTerm, Place> beside = settledOutside(asked, measuring, within, written);
+        Map<NumericTerm, Place> beside = settledOutside(asked, container, within);
         List<List<String>> apart = ElementsKeptApart.at(view, keptApart, reading);
         Quantity.TheValue value = new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(place));
         ListedByValue byValue = listedByValue(container, holding.element(), reading, value,
@@ -1257,7 +1256,7 @@ final class CardinalityComposer {
             refused.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG);
         }
         UnderEachValue under = UnderEachValue.of(byValue.values().size(), byValue.under(),
-                values -> withNumbersBeside(ofTheElement.holding(sourceType, values), written),
+                values -> withNumbersBeside(ofTheElement.holding(sourceType, values), beside),
                 container, value, asked, !apart.isEmpty(),
                 UnderEachValue.oneEachUnder(container, value, apart), refused);
         Groups<HeldUnder> groups = under.groups();
@@ -1796,7 +1795,7 @@ final class CardinalityComposer {
         }
         List<Place> out = new ArrayList<>();
         for (Place each : near) {
-            BorderQuantity.Observation row = new AnElementRead(container, place, Map.of(),
+            BorderQuantity.Observation row = new AnElementRead(container, place,
                     List.of(carrier.valueOf(each)));
             if (kept.perElement().at(row) instanceof AStatementAtARow.Answer.Holds) {
                 out.add(each);
@@ -2032,49 +2031,32 @@ final class CardinalityComposer {
     }
 
     /**
-     * What a row holds at the position of {@code term} once the number stands at {@code at}, put
-     * in {@code written} — nothing where the number is not what the position holds.
+     * The numbers {@code asked} reads that are one number of the row and no number of
+     * {@code container} as a whole, each at the one value the region leaves it at; a number the
+     * region leaves at more or none is not among them.
      *
-     * <p>A position holds the number only of a term that is the position's own value. A number
-     * taken of the position, the year of a date, stands at a place on the order its answer is
-     * measured on, and a value written at the position from it would be a whole number where a date
-     * is: the value of such a position is another term's to construct, and a statement reading it
-     * is one the row cannot yet be asked.
+     * <p>One number of the row is what stands beside every element alike
+     * ({@link NumbersOfTheWhole#oneNumberOfTheRow}): an input outside every container, or what
+     * another container comes to. What is of this container as a whole is fixed with its elements
+     * ({@link ContainerAsAWhole}) and does not stand beside them. A row of the container alone
+     * holds none of these, so it is read holding them where they were fixed
+     * ({@link #withNumbersBeside}).
      */
-    private static void writtenAt(NumericTerm term, Place at, Quantities measuring,
-                                  Map<TermPath, ObservedValue> written) {
-        if (!(term instanceof NumericTerm.ValueOf)) {
-            return;
-        }
-        TermOrders orders = measuring.ordersOf(term);
-        Carrier on = orders == null ? null : orders.observed();
-        if (on != null) {
-            written.put(term.subjectPath(), on.valueOf(at));
-        }
-    }
-
-    /**
-     * The numbers {@code asked} reads that stand outside every container, each at the one value
-     * the region leaves it at, and the value it is written as in {@code written}; a number the
-     * region leaves at more or none, or that stands on no order, is in neither.
-     */
-    static Map<NumericTerm, Place> settledOutside(List<Asked> asked,
-                                                          Quantities measuring,
-                                                          SearchRegion within,
-                                                          Map<TermPath, ObservedValue> written) {
+    static Map<NumericTerm, Place> settledOutside(List<Asked> asked, TermPath container,
+                                                  SearchRegion within) {
         Map<NumericTerm, Place> out = new LinkedHashMap<>();
         for (Asked one : asked) {
             if (!(one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _))) {
                 continue;
             }
             for (NumericTerm term : perElement.numbers()) {
-                if (term.subjectPath().insideAContainer()) {
+                if (!NumbersOfTheWhole.oneNumberOfTheRow(term)
+                        || container.equals(NumbersOfTheWhole.containerOf(term))) {
                     continue;
                 }
                 Place at = settled(within, term);
                 if (at != null) {
                     out.put(term, at);
-                    writtenAt(term, at, measuring, written);
                 }
             }
         }
@@ -2504,26 +2486,30 @@ final class CardinalityComposer {
         }
     }
 
-    /** {@code row}, with {@code written} in it where there is any: a row asked once for each way
-     *  the elements are shared out is not wrapped for nothing. */
+    /** {@code row}, holding {@code beside} where there is any: a row asked once for each way the
+     *  elements are shared out is not wrapped for nothing. */
     static BorderQuantity.Observation withNumbersBeside(
-            BorderQuantity.Observation row, Map<TermPath, ObservedValue> written) {
-        return written.isEmpty() ? row : new WithNumbersBeside(row, written);
+            BorderQuantity.Observation row, Map<NumericTerm, Place> beside) {
+        return beside.isEmpty() ? row : new WithNumbersBeside(row, beside);
     }
 
     /**
-     * A row with the numbers beside its elements written at the values they were fixed at, which
-     * a row of the container alone does not hold.
+     * A row holding the numbers beside its elements at the places they were fixed at, which a row
+     * of the container alone does not hold ({@link BorderQuantity.Observation#fixedAt}).
      */
     private record WithNumbersBeside(BorderQuantity.Observation holding,
-                                     Map<TermPath, ObservedValue> written)
+                                     Map<NumericTerm, Place> beside)
             implements BorderQuantity.Observation {
 
         @Override
         public WalkResult<ObservationAtPoint> at(TermPath path) {
-            ObservedValue value = written.get(path);
-            return value == null ? holding.at(path)
-                    : WalkResult.reached(new ObservationAtPoint.Value(value));
+            return holding.at(path);
+        }
+
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            Place fixed = beside.get(term);
+            return fixed != null ? fixed : holding.fixedAt(term);
         }
 
         @Override
@@ -2539,7 +2525,7 @@ final class CardinalityComposer {
                 case WalkResult.Reached<List<BorderQuantity.Observation>>(var elements) ->
                         WalkResult.reached(elements.stream()
                                 .<BorderQuantity.Observation>map(each ->
-                                        new WithNumbersBeside(each, written))
+                                        new WithNumbersBeside(each, beside))
                                 .toList());
             };
         }
@@ -3211,8 +3197,7 @@ final class CardinalityComposer {
     }
 
     /**
-     * A row holding nothing but a container of these elements and the numbers beside them, read
-     * the way a row is.
+     * A row holding nothing but a container of these elements, read the way a row is.
      *
      * <p>Each element is a reading of its own ({@link #elements}), and the container is walked
      * through them. Anything else the statements ask for — a position this does not hold, the
@@ -3220,28 +3205,28 @@ final class CardinalityComposer {
      * able to tell and never as failing.
      */
     record AnElementRead(TermPath container, TermPath element,
-                                 Map<TermPath, ObservedValue> written,
                                  List<ObservedValue> held) implements BorderQuantity.Observation {
 
         /** Each element, read as this row with that element chosen. */
         List<BorderQuantity.Observation> elements() {
             List<BorderQuantity.Observation> out = new ArrayList<>();
             for (ObservedValue each : held) {
-                out.add(new AnElementRead(container, element, written, List.of(each)));
+                out.add(new AnElementRead(container, element, List.of(each)));
             }
             return out;
         }
 
         @Override
         public WalkResult<ObservationAtPoint> at(TermPath path) {
-            if (path.equals(element)) {
-                return held.size() == 1
-                        ? WalkResult.reached(new ObservationAtPoint.Value(held.getFirst()))
-                        : WalkResult.couldNotWalk();
-            }
-            ObservedValue value = written.get(path);
-            return value == null ? WalkResult.couldNotWalk()
-                    : WalkResult.reached(new ObservationAtPoint.Value(value));
+            return path.equals(element) && held.size() == 1
+                    ? WalkResult.reached(new ObservationAtPoint.Value(held.getFirst()))
+                    : WalkResult.couldNotWalk();
+        }
+
+        /** Nothing is fixed beside the elements: the row holds them and nothing else. */
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return null;
         }
 
         @Override

@@ -90,6 +90,13 @@ class AnElementsLineReadingItsContainersTotalIsComposedTest {
         return source("fs: List<Forecast>", "fs", body);
     }
 
+    /** {@code body} over the list {@code fs} of a record whose rule is {@code rule}. */
+    private static String inABox(String rule, String body) {
+        return "module probe\n\n" + DATA + "data Box = { fs: List<Forecast> } invariant " + rule
+                + "\n\nbehavior f : (b: Box) -> Int\nlet f (b) = "
+                + body.replaceAll("\\bfs\\b", "b.fs") + "\n";
+    }
+
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         assertEquals(List.of(), compilation.errors().stream()
@@ -262,10 +269,14 @@ class AnElementsLineReadingItsContainersTotalIsComposedTest {
                         .map(Forecast::currency).distinct().count() == 1 ? 1 : 0);
     }
 
+    /** The two lists a row of two parameters holds, in the order they are written. */
+    private static final Pattern BETWEEN_TWO_LISTS = Pattern.compile("\\]\\s*,\\s*\\[");
+
     /**
      * An element read against the total of another container is no share of it: the element and
      * the total are written at two locations, and the line has a row at each point as it does
-     * where nothing groups them.
+     * where nothing groups them — some element of the first container standing at the point
+     * against what the second comes to.
      */
     @Test
     void anElementReadAgainstAnotherContainersTotalIsComposedApartFromIt() {
@@ -278,9 +289,28 @@ class AnElementsLineReadingItsContainersTotalIsComposedTest {
         String comparison = comparisonOf(source, statement);
         Set<String> filled = new HashSet<>();
         for (Row row : rowsOf(compilation)) {
-            filled.addAll(row.fills().getOrDefault(comparison, Set.of()));
+            String[] lists = BETWEEN_TWO_LISTS.split(row.text(), 2);
+            assertEquals(2, lists.length, row.text());
+            List<Forecast> fs = elementsIn(lists[0]);
+            int gs = elementsIn(lists[1]).stream().mapToInt(Forecast::amount).sum();
+            for (String name : row.fills().getOrDefault(comparison, Set.of())) {
+                Point point = points.get(name);
+                assertNotNull(point, name);
+                assertTrue(fs.stream().anyMatch(each -> stands(2 * each.amount() - gs, point)),
+                        () -> name + " " + point + " in " + row.text());
+                filled.add(name);
+            }
         }
         assertEquals(points.keySet(), filled);
+    }
+
+    private static List<Forecast> elementsIn(String text) {
+        List<Forecast> out = new ArrayList<>();
+        Matcher found = ELEMENT.matcher(text);
+        while (found.find()) {
+            out.add(new Forecast(found.group(1), Integer.parseInt(found.group(2))));
+        }
+        return out;
     }
 
     /**
@@ -289,6 +319,11 @@ class AnElementsLineReadingItsContainersTotalIsComposedTest {
      * numbers comes to, what another of their fields comes to, two totals at once, what a list of
      * numbers comes to — and a total a condition on the way asks rather than the point. Every
      * point of every line of each has a row or is owed none.
+     *
+     * <p>And fixed where the rules leave it. A record holding its total to at least a hundred, or
+     * its length to at least ten, leaves no row at a number below, so a number tried there is one
+     * no input has; and a total of another container is one number of the row, fixed beside the
+     * elements as an input is.
      */
     @Test
     void everyNumberOfTheWholeAnElementIsReadAgainstIsFixedBeforeTheElementIsChosen() {
@@ -308,6 +343,12 @@ class AnElementsLineReadingItsContainersTotalIsComposedTest {
         models.put("a list of numbers", "module probe\n\nbehavior f : (xs: List<Int>) -> Int\n"
                 + "let f (xs) = if List.length(List.filter(x -> x * 2 > List.sum(xs), xs)) == 1"
                 + " then 1 else 0\n");
+        models.put("a total its record holds", inABox("List.sum(List.map(.amount, fs)) >= 100",
+                counted(HALF)));
+        models.put("a length its record holds", inABox("List.length(fs) >= 10",
+                counted("f.amount > List.length(fs)")));
+        models.put("another container's total", source("fs: List<Forecast>, gs: List<Forecast>",
+                "fs, gs", counted("f.amount * 2 > List.sum(List.map(.amount, gs))")));
         models.forEach((name, source) -> {
             Compilation compilation = measured(source);
             JsonNode report = JSON.readTree(AdequacyReport.of(compilation)

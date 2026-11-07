@@ -1,8 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -47,10 +51,6 @@ import java.util.function.Function;
  * comes of that is read again whole before it is offered, as every container is.
  */
 final class ContainerAsAWhole {
-
-    /** The most whole numbers a total the statements read and nothing fixes is tried at. */
-    private static final int MOST_TOTALS =
-            CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT.maximum();
 
     private static final int MOST_ELEMENTS =
             CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
@@ -104,14 +104,18 @@ final class ContainerAsAWhole {
      * of them is a number this does not fix: a total of a place whose elements are not written on
      * whole numbers.
      *
-     * <p>A total the statements read and the row does not ask is tried at the whole numbers
-     * nearest nought first: any number does, the elements being moved to come to it, so the
-     * nearest are the ones least likely to leave an element past what its type admits. How many
-     * the container holds is fixed where a statement reads it, or where a total is of a form of
-     * its elements' numbers, which comes to so much more for each element it holds.
+     * <p>A total the statements read and the row does not ask is tried wherever the region leaves
+     * it ({@link TermRealizations#whereverItIsLeft}), the elements being moved to come to it. How
+     * many the container holds is fixed where a statement reads it, or where a total is of a form
+     * of its elements' numbers, which comes to so much more for each element it holds; it is tried
+     * at what the rules and the region leave it ({@link ContainersAddingUp#howMany}) and the row
+     * asks of it ({@code size}). Both are asked of the owner every other search asks, so a number
+     * the rules refuse is never one a container is composed to come to.
      */
-    static ContainerAsAWhole of(TermPath container, List<CardinalityComposer.Asked> asked,
-                                List<ATotal> totals, NumericSet size, Quantities measuring) {
+    static ContainerAsAWhole of(TermPath container, TypeView view,
+                                List<CardinalityComposer.Asked> asked, List<ATotal> totals,
+                                NumericSet size, Quantities measuring, SearchRegion within,
+                                RuleReadingContext reading) {
         Map<NumericTerm, OneNumber> out = new LinkedHashMap<>();
         boolean howManyIsRead = false;
         for (ATotal each : totals) {
@@ -141,10 +145,12 @@ final class ContainerAsAWhole {
                 }
                 NumbersOfTheWhole.AddedUp added = NumbersOfTheWhole.addedUp(term);
                 Carrier carrier = carrierAt(added, measuring);
-                if (carrier == null) {
+                TermRealizations.Tried left = carrier == null ? null
+                        : TermRealizations.whereverItIsLeft(term, measuring, within, reading);
+                if (left == null) {
                     return null;
                 }
-                out.put(term, new OneNumber(term, added, carrier, nearestNoughtFirst()));
+                out.put(term, new OneNumber(term, added, carrier, left));
             }
         }
         boolean formed = out.values().stream().anyMatch(each ->
@@ -152,7 +158,9 @@ final class ContainerAsAWhole {
         if (howManyIsRead || formed) {
             NumericTerm counted = many != null ? many
                     : new NumericTerm.ValueOf(container);
-            out.put(counted, new OneNumber(counted, null, null, sizes(size)));
+            out.put(counted, new OneNumber(counted, null, null,
+                    sizes(ContainersAddingUp.howMany(view, container, within, reading, null),
+                            size)));
         }
         return new ContainerAsAWhole(container, new ArrayList<>(out.values()), howManyIsRead);
     }
@@ -168,29 +176,26 @@ final class ContainerAsAWhole {
         return carrier != null && carrier.countsInWholeNumbers() ? carrier : null;
     }
 
-    /** The whole numbers nearest nought first, as many as a total is tried at. */
-    private static TermRealizations.Tried nearestNoughtFirst() {
-        List<Place> out = new ArrayList<>();
-        for (int at = 0; out.size() < MOST_TOTALS; at++) {
-            out.add(Count.of(at));
-            if (at != 0 && out.size() < MOST_TOTALS) {
-                out.add(Count.of(-at));
-            }
+    /**
+     * How many the container may hold: what {@code left} leaves, of the counts the row asks for
+     * where it asks ({@code size}), up to the most a count composes it with. Nothing where the
+     * rules leave no count at all; stopped at that most where they leave more.
+     */
+    private static TermRealizations.Tried sizes(DeclaredBounds.CountRange left, NumericSet size) {
+        if (left == null || left.empty()) {
+            return new TermRealizations.Tried(List.of(),
+                    new TermRealizations.Remainder.Exhausted());
         }
-        return new TermRealizations.Tried(out, new TermRealizations.Remainder.StoppedAt(
-                CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT));
-    }
-
-    /** How many the container may hold, from none up to the most a count composes it with. */
-    private static TermRealizations.Tried sizes(NumericSet size) {
         List<Place> out = new ArrayList<>();
-        for (int many = 0; many <= MOST_ELEMENTS; many++) {
+        for (int many = left.least(); many <= Math.min(left.most(), MOST_ELEMENTS); many++) {
             if (size == null || size.holds(Count.of(many), Carrier.WHOLE)) {
                 out.add(Count.of(many));
             }
         }
-        return new TermRealizations.Tried(out, new TermRealizations.Remainder.StoppedAt(
-                CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH));
+        return new TermRealizations.Tried(out, left.most() > MOST_ELEMENTS
+                ? new TermRealizations.Remainder.StoppedAt(
+                        CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH)
+                : new TermRealizations.Remainder.Exhausted());
     }
 
     /**
@@ -554,6 +559,13 @@ final class ContainerAsAWhole {
         @Override
         public WalkResult<ObservationAtPoint> at(TermPath path) {
             return ofTheWhole(path) ? whole.at(path) : group.at(path);
+        }
+
+        /** What the group's reading holds fixed beside it; the whole is a row of this container
+         *  and holds nothing of another location. */
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return group.fixedAt(term);
         }
 
         @Override
