@@ -890,7 +890,8 @@ final class AWayReadForARelation {
         private FormsLeft leftBy(OnTheWay condition) {
             return switch (condition) {
                 case OnTheWay.TakenIn(var _, RowDemand.Relational(
-                        TakenConstraint.Affine(LinearForm<NumericTerm> written, Rel rel)), var _,
+                        TakenConstraint.Affine(LinearForm<NumericTerm> written, Rel rel, var _)),
+                        var _,
                         var _)
                         when WayToTheBorder.ofOnePosition(condition) -> leftBy(written, rel);
                 case OnTheWay.OneOf several -> {

@@ -2554,7 +2554,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             TakenConstraint relation = taken.demand() instanceof RowDemand.Relational(
                     TakenConstraint constraint) ? constraint : null;
             out.add(new OnAWay(positionsADemandTurnsOn(taken.demand()),
-                    relation instanceof TakenConstraint.Affine(var form, var rel)
+                    relation instanceof TakenConstraint.Affine(var form, var rel, var _)
                             && rel != Rel.NE && form.coefs().size() == 1
                             && form.coefs().keySet().iterator().next()
                             instanceof NumericTerm.TakenOf count
@@ -3364,7 +3364,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean endsACountOfAStringAt(OnAWay statement, TermPath mine,
                                                  TermPath theirs) {
-        return statement.relation() instanceof TakenConstraint.Affine(var form, _)
+        return statement.relation() instanceof TakenConstraint.Affine(var form, _, _)
                 && !form.coefs().isEmpty()
                 && form.coefs().keySet().stream().allMatch(term ->
                         isACountOfAStringAt(term, mine) || isACountOfAStringAt(term, theirs));
@@ -4044,7 +4044,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (statement.elementsOf() != null
                 || !statement.positions().equals(Set.of(string))
                 || !(statement.relation() instanceof TakenConstraint.Affine(
-                        LinearForm<NumericTerm> form, Rel rel)) || rel != Rel.GE
+                        LinearForm<NumericTerm> form, Rel rel, var _)) || rel != Rel.GE
                 || form.coefs().size() != 1) {
             return false;
         }
@@ -4868,7 +4868,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static Optional<BigInteger> holdsAtLeast(OnAWay statement, TermPath collection,
                                                      InputReading read) {
         if (!statement.positions().equals(Set.of(collection))
-                || !(statement.relation() instanceof TakenConstraint.Affine(var form, var rel))
+                || !(statement.relation()
+                        instanceof TakenConstraint.Affine(var form, var rel, var _))
                 || (rel != Rel.GE && rel != Rel.GT) || form.coefs().size() != 1) {
             return Optional.empty();
         }
@@ -6909,7 +6910,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * and holds of a string of {@code length} code points.
      */
     private static boolean heldByEveryStringOf(OnAWay each, TermPath string, int length) {
-        if (!(each.relation() instanceof TakenConstraint.Affine(var form, var rel))) {
+        if (!(each.relation() instanceof TakenConstraint.Affine(var form, var rel, var _))) {
             return false;
         }
         ExactRatio at = form.constant();
@@ -7670,7 +7671,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             WhatARelationLeavesUndivided.OnTheDifference statement =
-                    each instanceof TakenConstraint.Affine(var form, var rel)
+                    each instanceof TakenConstraint.Affine(var form, var rel, var _)
                     ? onTheDifference(form, rel, pair) : null;
             if (statement == null) {
                 return null;
@@ -8214,7 +8215,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<OnAWay> beside = new ArrayList<>();
         boolean statedOfIt = false;
         for (OnAWay each : conditions) {
-            if (each.relation() instanceof TakenConstraint.Affine(var form, var _)
+            if (each.relation() instanceof TakenConstraint.Affine(var form, var _, var _)
                     && form.coefs().containsKey(product)) {
                 statedOfIt = true;
             } else {

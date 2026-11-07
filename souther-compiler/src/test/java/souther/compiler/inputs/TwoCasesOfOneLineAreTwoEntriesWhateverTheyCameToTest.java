@@ -64,11 +64,12 @@ class TwoCasesOfOneLineAreTwoEntriesWhateverTheyCameToTest {
     private static CaseExpansion.CameTo madeByTheIfAt(int ordinal) {
         return new CaseExpansion.CameTo(COUNTED, new CaseExpansion.Attributed(List.of(
                 new CaseExpansion.Choice(construct(ordinal, SourceConstruct.IF),
-                        CaseExpansion.ChoiceKind.IF, 2, 4, Optional.empty())), 4, 0), List.of());
+                        CaseExpansion.ChoiceKind.IF, 2, 4, Optional.empty())), 4, 0, List.of()),
+                List.of());
     }
 
     private static final CaseExpansion.CameTo NOTHING_NAMED = new CaseExpansion.CameTo(COUNTED,
-            new CaseExpansion.Attributed(List.of(), 4, 4), List.of());
+            new CaseExpansion.Attributed(List.of(), 4, 4, List.of()), List.of());
 
     private static CaseExpansion ofTheCase(Proposition condition) {
         return ofTheCase(WrittenLine.THE_COMPARISON, condition, NOTHING_NAMED);
