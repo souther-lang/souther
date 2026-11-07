@@ -19,7 +19,6 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.ConstantComparison;
 import souther.compiler.check.CallArguments;
-import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DateMonthMoves;
@@ -3085,18 +3084,12 @@ final class Pullback {
                         new WhyUnread.AClauseOfAnInvariant(unread.clause(), unread.why()), false);
             });
         }
-        Set<ClauseName> named = new HashSet<>();
-        attempt.els().forEach(arm -> arm.clause().ifPresent(name ->
-                named.add(new ClauseName(name))));
         List<Derivation> out = new ArrayList<>();
         out.add(new Derivation.ItWasBuilt(holds));
         for (Core.ElseArm arm : attempt.els()) {
-            Optional<ClauseName> answering = arm.clause().map(ClauseName::new);
+            Choice.Decides.ItDeparted departure = Choice.Decides.ofDeparture(attempt, arm);
             List<Boolean> answers = clauses.inOrder().stream()
-                    .map(clause -> answering.isPresent()
-                            ? clause.clause().name().equals(answering)
-                            : clause.clause().name().map(name -> !named.contains(name))
-                                    .orElse(true))
+                    .map(clause -> departure.answers(clause.clause()))
                     .toList();
             out.add(new Derivation.ItDeparted(holds, answers));
         }

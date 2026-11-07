@@ -174,7 +174,7 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
                 behavior f : (n: Int) -> Bool
                 let f (n) =
                   (if Amount(n) as a then inner else false)
-                  || (if Amount(n - 1) as b then false else inner)
+                  || (if Amount(n + 1) as b then false else inner)
                 """);
     }
 

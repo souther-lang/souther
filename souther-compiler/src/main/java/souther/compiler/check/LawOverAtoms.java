@@ -60,16 +60,161 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
 
     /**
      * How many {@code applied}'s answer holds, read in {@code at}, where its law says it in one
-     * case met whatever the arguments are — or null where no law says, it says it case by case
-     * ({@link #sizeInCases}), or names a number this cannot.
+     * case met whatever the arguments are, or in two told apart by whether a container holding
+     * each value once holds one ({@link #byAValueHeldOnce}) — or null where no law says, it says
+     * it in other cases ({@link #sizeInCases}), or names a number this cannot.
      */
-    static LinearForm<FactSubject> sizeOf(AnOperationApplied applied, Denotations at,
-                                          Terms terms) {
+    static Sized sizeOf(AnOperationApplied applied, Denotations at, Terms terms) {
         OperationLaw.Size<DeclaredArgument> law = sizeLawOf(applied);
-        LinearForm<LawNumber<DeclaredArgument>> unconditional =
-                law == null ? null : law.unconditional();
-        return unconditional == null ? null
-                : new LawOverAtoms(applied, at, terms).form(unconditional);
+        if (law == null) {
+            return null;
+        }
+        LawOverAtoms reading = new LawOverAtoms(applied, at, terms);
+        LinearForm<LawNumber<DeclaredArgument>> unconditional = law.unconditional();
+        if (unconditional == null) {
+            return reading.byAValueHeldOnce(law.cases());
+        }
+        LinearForm<FactSubject> form = reading.form(unconditional);
+        return form == null ? null : new Sized(form, null);
+    }
+
+    /**
+     * How many an answer holds: the law's one form, or its two cases of a value held once
+     * ({@code byTheValue}) — one of the two, and the other null.
+     */
+    record Sized(LinearForm<FactSubject> form, ByAValueHeldOnce byTheValue) {
+
+        Sized {
+            if ((form == null) == (byTheValue == null)) {
+                throw new IllegalArgumentException("a size is said by one form or by two cases");
+            }
+        }
+
+        /**
+         * What {@code answer}, the atom of how many the answer holds, is held to whatever the
+         * path: the form, or where the law was in cases, the answer between what the two cases
+         * come to.
+         *
+         * <p>The span and not one form of the count. The span relates two atoms each way, which
+         * is what a reading closes over, and says what the cases say read forward; which case it
+         * is, is what the count settles where a reading settles it ({@link #guaranteedOf}).
+         */
+        List<NumericConstraint> carriedBy(FactSubject answer) {
+            List<NumericConstraint> out = new ArrayList<>();
+            if (byTheValue == null) {
+                stating(LinearForm.atom(answer).minus(form).orNull(), Rel.EQ, out);
+            } else {
+                boolean fewerWhereHeld = byTheValue.fewerWhereHeld();
+                stating(LinearForm.atom(answer).minus(fewerWhereHeld ? byTheValue.held()
+                        : byTheValue.notHeld()).orNull(), Rel.GE, out);
+                stating(LinearForm.atom(answer).minus(fewerWhereHeld ? byTheValue.notHeld()
+                        : byTheValue.held()).orNull(), Rel.LE, out);
+            }
+            return out;
+        }
+
+        /**
+         * What {@code answer} comes to where a reading settles the count: the one case's answer
+         * where the value is held, and the other's where it is not. Asked of the reading's bounds
+         * on the count and opening no case, so a chain of such operations is read once.
+         */
+        List<ConditionalConstraint> guaranteedOf(FactSubject answer) {
+            if (byTheValue == null) {
+                return List.of();
+            }
+            LinearForm<FactSubject> atLeastOne = byTheValue.count()
+                    .minus(LinearForm.constant(ExactRatio.ONE)).orNull();
+            LinearForm<FactSubject> asHeld = LinearForm.atom(answer).minus(byTheValue.held())
+                    .orNull();
+            LinearForm<FactSubject> asNotHeld = LinearForm.atom(answer)
+                    .minus(byTheValue.notHeld()).orNull();
+            if (atLeastOne == null || asHeld == null || asNotHeld == null) {
+                return List.of();
+            }
+            return List.of(
+                    new ConditionalConstraint(new NumericConstraint(atLeastOne, Rel.GE),
+                            new NumericConstraint(asHeld, Rel.EQ)),
+                    new ConditionalConstraint(new NumericConstraint(byTheValue.count(), Rel.LE),
+                            new NumericConstraint(asNotHeld, Rel.EQ)));
+        }
+
+        private static void stating(LinearForm<FactSubject> form, Rel rel,
+                                    List<NumericConstraint> out) {
+            if (form != null) {
+                out.add(new NumericConstraint(form, rel));
+            }
+        }
+    }
+
+    /**
+     * Two cases of how many an answer holds, told apart by how many of a container that holds
+     * each value once are one value: {@code held} where it is one, {@code notHeld} where none is.
+     */
+    record ByAValueHeldOnce(LinearForm<FactSubject> count, LinearForm<FactSubject> held,
+                            LinearForm<FactSubject> notHeld) {
+
+        /** Whether the answer is the smaller where the value is held, as an insert's is. */
+        boolean fewerWhereHeld() {
+            LinearForm<FactSubject> step = held.minus(notHeld).orNull();
+            return step != null && step.constant().signum() < 0;
+        }
+    }
+
+    /**
+     * Two cases that are a container holding one value, or not, where the container holds each
+     * value once — a set its elements, a map its keys — and the two answers differ by a number.
+     *
+     * <p>Not cases to open. The answer lies between the two whichever holds, and is the one the
+     * count picks where a reading settles the count; read as cases, every value built by a chain
+     * of such operations is a split in each reading that bounds it, for a count no reading may
+     * say anything of.
+     */
+    private Sized byAValueHeldOnce(List<OperationLaw.Size.Case<DeclaredArgument>> cases) {
+        if (cases.size() != 2) {
+            return null;
+        }
+        LinearForm<FactSubject> count = null;
+        LinearForm<FactSubject> held = null;
+        LinearForm<FactSubject> notHeld = null;
+        for (OperationLaw.Size.Case<DeclaredArgument> each : cases) {
+            if (!(each.where() instanceof LawProposition.SomeElement<DeclaredArgument> some)
+                    || !heldOnce(some)) {
+                return null;
+            }
+            LinearForm<FactSubject> answer = form(each.equalTo());
+            LinearForm<FactSubject> counted = switch (LawAtACall.of(each.where(), this)) {
+                case Holding.Something(LinearForm<FactSubject> c) -> c;
+                case Holding.Not(Holding.Something(LinearForm<FactSubject> c)) -> c;
+                case null, default -> null;
+            };
+            if (answer == null || counted == null || (count != null && !count.equals(counted))) {
+                return null;
+            }
+            count = counted;
+            if (some.holds()) {
+                held = answer;
+            } else {
+                notHeld = answer;
+            }
+        }
+        LinearForm<FactSubject> step = held == null || notHeld == null ? null
+                : held.minus(notHeld).orNull();
+        return step == null || !step.coefs().isEmpty() ? null
+                : new Sized(null, new ByAValueHeldOnce(count, held, notHeld));
+    }
+
+    /** Whether {@code some} asks of a container that holds each value once: some element of a
+     *  set being a value, or some key of a map. */
+    private boolean heldOnce(LawProposition.SomeElement<DeclaredArgument> some) {
+        Core container = applied.argument(some.container());
+        if (container == null || !(some.ofTheElement() instanceof LawProposition.Same<
+                DeclaredArgument>(var one, var other, boolean same)) || !same) {
+            return false;
+        }
+        AddsWhatItDoesNotHold.Of once = AddsWhatItDoesNotHold.Of.heldOnceIn(
+                TypeOps.base(Core.withoutStanding(container).type(), terms.newtypeInners()));
+        LawSubject<DeclaredArgument> asked = once == null ? null : heldAs(some.container(), once);
+        return asked != null && (asked.equals(one) || asked.equals(other));
     }
 
     /**
@@ -92,6 +237,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             return null;
         }
         LawOverAtoms reading = new LawOverAtoms(applied, at, terms);
+        if (reading.byAValueHeldOnce(law.cases()) != null) {
+            return null;
+        }
         List<Derivation.Chosen.Arm> arms = new ArrayList<>();
         for (OperationLaw.Size.Case<DeclaredArgument> each : law.cases()) {
             LinearForm<FactSubject> answer = reading.form(each.equalTo());
@@ -276,10 +424,47 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return form == null ? null : new Holding.Stands(form, compared.states());
     }
 
-    /** Some element of a container no walk writes out, which no atom here names. */
+    /**
+     * Some element of a container no walk writes out being an argument, or some key of it, by how
+     * many of its elements or keys are that argument ({@link Terms#howManyAreAtomFor}). Nothing
+     * else an element of one meets is a number here.
+     */
     @Override
     public Holding someElement(LawProposition.SomeElement<DeclaredArgument> some) {
+        if (!(some.ofTheElement() instanceof LawProposition.Same<DeclaredArgument>(
+                var one, var other, boolean same)) || !same) {
+            return null;
+        }
+        for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+            LawSubject<DeclaredArgument> held = heldAs(some.container(), of);
+            DeclaredArgument value = held.equals(one) ? argumentIn(other)
+                    : held.equals(other) ? argumentIn(one) : null;
+            Core container = applied.argument(some.container());
+            Core given = value == null ? null : applied.argument(value);
+            FactSubject count = container == null || given == null ? null
+                    : terms.howManyAreAtomFor(container, given, of, at);
+            if (count != null) {
+                Holding something = new Holding.Something(LinearForm.atom(count));
+                return some.holds() ? something : new Holding.Not(something);
+            }
+        }
         return null;
+    }
+
+    /** What of {@code container} a value is held as, as {@code of} says: one of its elements, or
+     *  one of its keys. */
+    private static LawSubject<DeclaredArgument> heldAs(DeclaredArgument container,
+                                                       AddsWhatItDoesNotHold.Of of) {
+        return switch (of) {
+            case ELEMENTS -> new LawSubject.ElementOf<>(container);
+            case KEYS -> new LawSubject.KeyOf<>(container);
+        };
+    }
+
+    /** The argument {@code subject} is, or null where it is no argument. */
+    private static DeclaredArgument argumentIn(LawSubject<DeclaredArgument> subject) {
+        return subject instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at)
+                ? at : null;
     }
 
     @Override
@@ -300,8 +485,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return null;
     }
 
-    /** The size of an argument, by the count its type is counted by, and an argument that is a
-     *  number; nothing else. */
+    /** The size of an argument, by the count its type is counted by; an argument that is a
+     *  number; and how many elements of an argument another argument holds ({@link #heldOf}).
+     *  Nothing else. */
     @Override
     public LinearForm<FactSubject> counted(LawNumber<DeclaredArgument> number) {
         return switch (number) {
@@ -314,8 +500,8 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                 FactSubject count = countOf(applied.argument(which));
                 yield count == null ? null : LinearForm.atom(count);
             }
+            case LawNumber.HowManyMeet<DeclaredArgument> meet -> heldOf(meet);
             case LawNumber.SizeOf<DeclaredArgument> _,
-                 LawNumber.HowManyMeet<DeclaredArgument> _,
                  LawNumber.HowManyDifferent<DeclaredArgument> _,
                  LawNumber.SumOver<DeclaredArgument> _,
                  LawNumber.CodePointsOf<DeclaredArgument> _ -> null;
@@ -326,6 +512,34 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     public LinearForm<FactSubject> writtenOut(LawNumber.HowManyMeet<DeclaredArgument> number,
                                               long many) {
         return LinearForm.constant(ExactRatio.of(many));
+    }
+
+    /**
+     * How many elements of one argument another holds ({@link Terms#howManyAreInAtomFor}), where
+     * {@code meet} counts the elements some element of the other is, or those whose key some key
+     * of the other is. Null where it counts anything else.
+     */
+    private LinearForm<FactSubject> heldOf(LawNumber.HowManyMeet<DeclaredArgument> meet) {
+        if (!(meet.ofTheElement() instanceof LawProposition.SomeElement<DeclaredArgument>(
+                DeclaredArgument holder, LawProposition.Same<DeclaredArgument>(
+                        var one, var other, boolean same), boolean some))
+                || !same || !some) {
+            return null;
+        }
+        Core counted = applied.argument(meet.container());
+        Core holding = applied.argument(holder);
+        for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+            LawSubject<DeclaredArgument> ofCounted = heldAs(meet.container(), of);
+            LawSubject<DeclaredArgument> ofHolder = heldAs(holder, of);
+            boolean alike = (one.equals(ofCounted) && other.equals(ofHolder))
+                    || (one.equals(ofHolder) && other.equals(ofCounted));
+            FactSubject held = !alike || counted == null || holding == null ? null
+                    : terms.howManyAreInAtomFor(counted, holding, of, at);
+            if (held != null) {
+                return LinearForm.atom(held);
+            }
+        }
+        return null;
     }
 
     /** {@code form}, over numbers of the arguments, as a form over the atoms each is — or null

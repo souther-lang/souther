@@ -3659,10 +3659,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param over the strings the conversion is done to, or null where they are not a language
      */
     private static List<String> operationsNotExactOver(CaseMapping conversion, Language over) {
-        List<String> operations = conversion.operations();
         if (over == null) {
-            return operations;
+            return conversion.operations();
         }
+        // A function of the two alone, read against an allowance of its own: what a reading asked
+        // once it is handed back ({@link OneReading#notExactOver}).
+        return OneReading.notExactOver(conversion, over, () -> notExactOver(conversion, over));
+    }
+
+    /** {@link #operationsNotExactOver}, worked out, over strings that are a language. */
+    private static List<String> notExactOver(CaseMapping conversion, Language over) {
+        List<String> operations = conversion.operations();
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
         List<CaseMapping> doneSoFar = conversion.doneSoFar();
         List<String> named = new ArrayList<>();
@@ -3858,6 +3865,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static StringsAPartnerCanHold piecesOfWhatAConversionAnswers(
             PiecesOfAString piece, CaseMapping conversion, Language whole, ValueSet mine,
             String called) {
+        // A function of the piece's separator and window, the conversion and the strings alone,
+        // read against an allowance of its own: what a reading asked once it is handed back
+        // ({@link OneReading#piecesAConversionAnswers}).
+        Optional<OneReading.PiecesAnswered> read = OneReading.piecesAConversionAnswers(
+                piece.separator(), piece.window(), conversion, whole,
+                () -> piecesAnswered(piece, conversion, whole));
+        if (read.isEmpty()) {
+            return null;
+        }
+        StringsOfAPiece.Shown shown = read.get().shown();
+        Language mayBe = read.get().mayBe();
+        List<String> notShown = operationsNotExactOver(conversion, whole);
+        if (shown.upTo() < 0) {
+            return StringsAPartnerCanHold.unreached(ValueSet.NONE, ValueSet.matching(mayBe), null,
+                    called).withTheImagesNotShownOf(notShown);
+        }
+        Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
+        long longest = longestOf(held);
+        return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
+                ValueSet.matching(mayBe), longest <= shown.upTo() ? null : shown.upTo(), called)
+                .withTheImagesNotShownOf(notShown);
+    }
+
+    /**
+     * The pieces of what {@code conversion} answers of the strings of {@code whole} that are pieces
+     * of its values, and what a piece may be besides — or empty past the allowance.
+     */
+    private static Optional<OneReading.PiecesAnswered> piecesAnswered(
+            PiecesOfAString piece, CaseMapping conversion, Language whole) {
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
         CodeMap map = CaseMaps.of(conversion);
         Language exact = map.strings(meter);
@@ -3869,19 +3905,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Language alone = CodeMap.stringsOf(map.leftAlone(), meter);
         Language mayBe = shown == null || alone == null ? null
                 : alone.or(shown.ofTheValues(), meter);
-        if (mayBe == null) {
-            return null;
-        }
-        List<String> notShown = operationsNotExactOver(conversion, whole);
-        if (shown.upTo() < 0) {
-            return StringsAPartnerCanHold.unreached(ValueSet.NONE, ValueSet.matching(mayBe), null,
-                    called).withTheImagesNotShownOf(notShown);
-        }
-        Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
-        long longest = longestOf(held);
-        return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
-                ValueSet.matching(mayBe), longest <= shown.upTo() ? null : shown.upTo(), called)
-                .withTheImagesNotShownOf(notShown);
+        return mayBe == null ? Optional.empty()
+                : Optional.of(new OneReading.PiecesAnswered(shown, mayBe));
     }
 
     /**
