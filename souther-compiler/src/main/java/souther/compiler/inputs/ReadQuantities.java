@@ -44,6 +44,7 @@ import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -55,6 +56,7 @@ import java.util.RandomAccess;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /**
  * The one reading of a behavior's input, asked about a quantity over several of its positions.
@@ -183,6 +185,16 @@ final class ReadQuantities implements Quantities {
      * region it makes once for each number the relation names.
      */
     private volatile StructuralContext.Merge accumulated;
+    /**
+     * The terms {@link #accumulated} is worked out over, in the order it puts them in
+     * ({@link Listed#ORDER}); null until anybody asks, where this reading was not handed them.
+     *
+     * <p>A reading made by fixing one more term or taking one more condition in lists what the one
+     * it was made from lists and the terms it adds, so it is handed that list with those put where
+     * they go. A search fixes one more term at each step of a path hundreds of terms long, and each
+     * step putting all of them in order again compared every pair a sort compares.
+     */
+    private volatile List<Listed> listed;
     /**
      * What the declarations leave under each context, before anything is fixed or taken in.
      *
@@ -495,6 +507,21 @@ final class ReadQuantities implements Quantities {
                            List<HeldAgainst> heldAgainst, Contexts contexts,
                            OneMoreFixed oneMoreFixed, OneMoreTaken oneMoreTaken,
                            Map<StructuralContext, ConstraintState<InputAtom>> answered) {
+        this(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading, assumed, heldAgainst,
+                contexts, oneMoreFixed, oneMoreTaken, answered, null);
+    }
+
+    /** The same, handed the terms it lists in order ({@link #listed}), or null. */
+    private ReadQuantities(Map<TermPath, OpenedRules> byRoot, Roots roots,
+                           Map<TermPath, Position> byPath, List<CasesRead> cases,
+                           java.util.function.Function<TermPath, Type> typeAt,
+                           Map<NumericTerm, Fixed> fixed,
+                           RuleReadingContext ruleReading, TakenIn assumed,
+                           List<HeldAgainst> heldAgainst, Contexts contexts,
+                           OneMoreFixed oneMoreFixed, OneMoreTaken oneMoreTaken,
+                           Map<StructuralContext, ConstraintState<InputAtom>> answered,
+                           List<Listed> listed) {
+        this.listed = listed;
         this.contexts = contexts;
         this.answered = answered;
         this.oneMoreFixed = oneMoreFixed;
@@ -919,10 +946,11 @@ final class ReadQuantities implements Quantities {
         private final RecentAnswers<List<NumericTerm>, StructuralContext.Merge> standings =
                 new RecentAnswers<>(12);
 
-        StructuralContext.Merge standing(List<NumericTerm> terms) {
-            return standings.answer(List.copyOf(terms), listed -> {
+        StructuralContext.Merge standing(List<NumericTerm> terms,
+                                         Supplier<StructuralContext.Merge> worked) {
+            return standings.answer(List.copyOf(terms), _ -> {
                 STANDINGS_WORKED_OUT.incrementAndGet();
-                return whereTermsStand(listed);
+                return worked.get();
             });
         }
 
@@ -1267,8 +1295,15 @@ final class ReadQuantities implements Quantities {
         // Carried on from only where this one had taken something in: otherwise the rules before it
         // are the declarations' own, and taking one condition in is all there is to do.
         OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(both.last(), answered);
+        List<Listed> before = listed();
+        int taken = (int) before.stream().filter(Listed::takenIn).count();
+        List<Listed> more = new ArrayList<>();
+        for (NumericTerm term : taking.terms()) {
+            more.add(new Listed(term.spelling(), term.subjectPath(), true, taken++));
+        }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
-                both, pairs, contexts, null, oneMore, new ConcurrentHashMap<>());
+                both, pairs, contexts, null, oneMore, new ConcurrentHashMap<>(),
+                Listed.with(before, more));
     }
 
     /**
@@ -1566,23 +1601,76 @@ final class ReadQuantities implements Quantities {
     private StructuralContext.Merge whereItStands() {
         List<NumericTerm> terms = new ArrayList<>(fixed.keySet());
         assumed.forEach(each -> terms.addAll(each.terms()));
-        return contexts.standing(terms);
+        return contexts.standing(terms, () -> whereTheyStand(listed()));
     }
 
     /**
-     * Where the numbers {@code terms} stand together, which is settled by the terms and the order
-     * they are listed in and by nothing a reading holds: not the values fixed, not the rules.
-     *
-     * <p>Each term spelled once to be put in order, and each place once: a place put together with
-     * itself is what it was. Listed in the order they were fixed and taken in, since two terms
-     * spelled alike are put in the order they are listed.
+     * The terms fixed and taken in, in the order {@link #accumulated} puts them in: handed on by the
+     * reading this one was made from where it was ({@link #listed}), and otherwise put in order
+     * here, once.
      */
-    private static StructuralContext.Merge whereTermsStand(List<NumericTerm> terms) {
-        List<Map.Entry<Spelling, TermPath>> said = new ArrayList<>();
-        terms.forEach(term -> said.add(Map.entry(term.spelling(), term.subjectPath())));
-        said.sort(Map.Entry.comparingByKey());
+    private List<Listed> listed() {
+        List<Listed> had = listed;
+        if (had != null) {
+            return had;
+        }
+        List<Listed> made = new ArrayList<>();
+        int at = 0;
+        for (NumericTerm term : fixed.keySet()) {
+            made.add(new Listed(term.spelling(), term.subjectPath(), false, at++));
+        }
+        int[] taken = {0};
+        assumed.forEach(each -> each.terms().forEach(term -> made.add(
+                new Listed(term.spelling(), term.subjectPath(), true, taken[0]++))));
+        made.sort(Listed.ORDER);
+        had = Collections.unmodifiableList(made);
+        listed = had;
+        return had;
+    }
+
+    /**
+     * A term where {@link #accumulated} lists it: its spelling, its place, and where it was listed —
+     * among what was fixed or what was taken in after it, and how far along.
+     *
+     * <p>{@link #ORDER} is the spelling's, and two terms spelled alike are in the order they were
+     * listed: what was fixed first, then what was taken in, each in the order it arrived. That is a
+     * whole order, so a list in it with more terms put where they go is the list those terms would
+     * have been put in order with ({@link #with}).
+     */
+    private record Listed(Spelling spelling, TermPath place, boolean takenIn, int at) {
+
+        static final Comparator<Listed> ORDER = (one, other) -> {
+            int bySpelling = one.spelling.compareTo(other.spelling);
+            if (bySpelling != 0) {
+                return bySpelling;
+            }
+            if (one.takenIn != other.takenIn) {
+                return one.takenIn ? 1 : -1;
+            }
+            return Integer.compare(one.at, other.at);
+        };
+
+        /** {@code before}, in order, with each of {@code more} put where it goes. */
+        static List<Listed> with(List<Listed> before, List<Listed> more) {
+            List<Listed> out = new ArrayList<>(before.size() + more.size());
+            out.addAll(before);
+            for (Listed each : more) {
+                int found = Collections.binarySearch(out, each, ORDER);
+                out.add(found < 0 ? -found - 1 : found, each);
+            }
+            return Collections.unmodifiableList(out);
+        }
+    }
+
+    /**
+     * Where the numbers of {@code listed} stand together, which is settled by the terms and the
+     * order they are listed in and by nothing a reading holds: not the values fixed, not the rules.
+     *
+     * <p>Each place once: a place put together with itself is what it was.
+     */
+    private static StructuralContext.Merge whereTheyStand(List<Listed> listed) {
         Set<TermPath> places = new LinkedHashSet<>();
-        said.forEach(each -> places.add(each.getValue()));
+        listed.forEach(each -> places.add(each.place()));
         StructuralContext.Merge merged = new StructuralContext.Merge.Together(
                 StructuralContext.NONE);
         for (TermPath place : places) {
@@ -2141,8 +2229,19 @@ final class ReadQuantities implements Quantities {
         if (both.equals(fixed)) {
             return this;
         }
+        // The terms fixed for the first time are listed after the ones fixed before, in the order
+        // they arrive, and before what was taken in.
+        List<Listed> firstFixed = new ArrayList<>();
+        int at = 0;
+        for (NumericTerm term : both.keySet()) {
+            if (!fixed.containsKey(term)) {
+                firstFixed.add(new Listed(term.spelling(), term.subjectPath(), false, at));
+            }
+            at++;
+        }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
-                assumed, heldAgainst, contexts, oneMoreThan(both), oneMoreTaken, answered);
+                assumed, heldAgainst, contexts, oneMoreThan(both), oneMoreTaken, answered,
+                Listed.with(listed(), firstFixed));
     }
 
     /**
