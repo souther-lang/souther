@@ -756,7 +756,7 @@ public final class ValueArrivals<P> {
                 return new Paths.Held<>(List.of());
             }
         }
-        Core stands = ValueStanding.one(e, bound, new SettledNames(bound)).value();
+        Core stands = ValueStanding.one(e, bound, new SettledNames()).value();
         Paths<P> ways = stands == e ? null : settled.get(stands);
         if (ways instanceof Paths.Held<P> held && held.arrivals().size() == 1
                 && held.arrivals().getFirst().value() == Truth.UNREAD) {
@@ -775,12 +775,6 @@ public final class ValueArrivals<P> {
      */
     private final class SettledNames
             implements ValueStanding.Names<Map<BindingId, Bound<P>>, SettledNames> {
-
-        private final Map<BindingId, Bound<P>> bound;
-
-        SettledNames(Map<BindingId, Bound<P>> bound) {
-            this.bound = bound;
-        }
 
         @Override
         public ValueStanding.ReadThrough<Map<BindingId, Bound<P>>> readThrough(
