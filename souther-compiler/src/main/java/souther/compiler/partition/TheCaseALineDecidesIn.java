@@ -299,6 +299,10 @@ public final class TheCaseALineDecidesIn {
 
         private final Map<Proposition, Integer> asked;
         private final Boolean[] truths;
+        /** What each part came to under the truths settled when it was last worked out: emptied
+         *  before each working out, and read by nothing after it, so one table serves every one
+         *  rather than one grown again for each. */
+        private final Map<Proposition, Object> worked = new IdentityHashMap<>();
         private int tried;
 
         /** The first question met unsettled while working {@code stated} out, signed as it is
@@ -324,7 +328,8 @@ public final class TheCaseALineDecidesIn {
          */
         boolean refuted(Proposition stated) {
             firstOpen = 0;
-            Boolean now = valueOf(stated, new IdentityHashMap<>());
+            worked.clear();
+            Boolean now = valueOf(stated, worked);
             if (now != null) {
                 return !now;
             }

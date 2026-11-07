@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.numeric.ExactRatio;
@@ -13,6 +14,7 @@ import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -45,12 +47,39 @@ import java.util.function.Predicate;
  * @param inTheListsOrder whether the walk hands the step the elements of {@code walked} in the
  *                order the list holds them, rather than from the last of them: which element of
  *                a key was handed last turns on it ({@link Filed.SummedSinceAPut})
+ * @param found   where the step binds a name to the value found under the key, or null where it
+ *                binds none this says: what {@link #filed} says of the map is a law, and this is
+ *                where in the step the law says what that name holds
  */
 public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Filed filed,
-                                boolean inTheListsOrder) {
+                                boolean inTheListsOrder, Found found) {
 
     public KeyedAccumulation {
         Objects.requireNonNull(filed, "a map built so holds something under each of its keys");
+    }
+
+    /**
+     * Where the step binds {@code name} to the value found under the key: at {@code site}, for
+     * what is worked out under {@code under}, one of the parts {@code site} is made of — the
+     * closure written at an update, which the update applies to the value found, or the arm of a
+     * lookup that takes the value found.
+     *
+     * <p>Said of that part where it stands under {@code site}, and nowhere else: the closure a
+     * site applies is applied there to the value found, and the same closure anywhere else to
+     * whatever is handed it there. A closure handed to the update by name is no such part, since
+     * something besides the update may apply it.
+     *
+     * @param site  the update, or the lookup's {@code match}, as written in the step
+     * @param under the part of {@code site} the name holds the value found in
+     * @param name  the name the value found is bound to
+     */
+    public record Found(Core site, Core under, BindingId name) {
+
+        public Found {
+            Objects.requireNonNull(site, "a name is bound at a part of the step");
+            Objects.requireNonNull(under, "for what is worked out under a part of it");
+            Objects.requireNonNull(name, "and it is some name");
+        }
     }
 
     /**
@@ -70,7 +99,31 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
          * @param first the value filed under a key the first time an element has it
          * @param step  what a further element of the same key adds to the value
          */
-        record Counted(ExactRatio first, ExactRatio step) implements Filed {}
+        record Counted(ExactRatio first, ExactRatio step) implements Filed {
+
+            /**
+             * The two ends between which every value found under a key lies, on every run that
+             * finds one ({@link Found}) — the lesser first — or none where they are no numbers
+             * this holds.
+             *
+             * <p>By induction over the walk, not by its end: the run got past every earlier step,
+             * so a key's earlier elements each filed by this law, and what is found under the key
+             * is {@code first + step * (k - 1)} for the {@code k} elements before that have the
+             * key. There is one at least, or nothing is found, and they are fewer than the
+             * elements walked, which no collection holds more of than
+             * {@link GetsPast#MOST_ELEMENTS}. So what is found lies between what the ends of
+             * {@code k} make of it.
+             */
+            public List<ExactRatio> endsOfWhatIsFound() {
+                ExactRatio furthest = step.times(ExactRatio.of(
+                        GetsPast.MOST_ELEMENTS.subtract(BigInteger.TWO))).orNull();
+                ExactRatio last = furthest == null ? null : first.plus(furthest).orNull();
+                if (last == null) {
+                    return List.of();
+                }
+                return first.compareTo(last) <= 0 ? List.of(first, last) : List.of(last, first);
+            }
+        }
 
         /**
          * The least or the greatest of what {@code value} is for the elements that have the key:
@@ -162,8 +215,8 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                 KeyedUpdates.of(DefaultStdlib.get());
     }
 
-    /** What one step of the walk files, and under which key. */
-    private record Filing(Core key, Filed filed) {}
+    /** What one step of the walk files, under which key, and where it binds what it found. */
+    private record Filing(Core key, Filed filed, Found found) {}
 
     /**
      * The map {@code applied} reads a key of, where it is a lookup in it or an operation the
@@ -171,11 +224,18 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
      */
     public static Core mapOf(AnOperationApplied applied) {
         if (applied.operation().equals(GET)) {
-            return applied.args().size() == 2 ? applied.args().get(1) : null;
+            return mapLookedUpIn(applied);
         }
         KeyedUpdates.Update update = applied.operation() instanceof ValueName.Stdlib.Operation named
                 ? Derived.UPDATES.get(named) : null;
         return update == null ? null : applied.args().get(update.mapArg());
+    }
+
+    /** The map {@code applied} looks a key up in, which it reads and changes nothing of — or null
+     *  where it is no lookup. */
+    public static Core mapLookedUpIn(AnOperationApplied applied) {
+        return applied.operation().equals(GET) && applied.args().size() == 2
+                ? applied.args().get(1) : null;
     }
 
     /**
@@ -217,7 +277,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             return null;
         }
         return new KeyedAccumulation(walk.container(), walk.element(), filing.key(),
-                filing.filed(), walk.inTheContainersOrder());
+                filing.filed(), walk.inTheContainersOrder(), filing.found());
     }
 
     /**
@@ -286,7 +346,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                     added.add(put.value());
                     somePut = true;
                 } else if (filingOf(filing) instanceof Filing(
-                        Core key, Filed.Summed(Core value, Core adds))) {
+                        Core key, Filed.Summed(Core value, Core adds), var _)) {
                     keys.add(key);
                     values.add(value);
                     added.add(adds);
@@ -297,9 +357,9 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             }
             Core key = choosing(match, keys);
             return somePut ? new Filing(key, new Filed.SummedSinceAPut(choosing(match, values),
-                            choosing(match, added), choosing(match, puts)))
+                            choosing(match, added), choosing(match, puts)), null)
                     : new Filing(key, new Filed.Summed(choosing(match, values),
-                            choosing(match, added)));
+                            choosing(match, added)), null);
         }
 
         /** A value put under a key in place of what is found there, each as written. */
@@ -351,10 +411,15 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                     || closure.params().getFirst().binding() == null) {
                 return null;
             }
+            BindingId foundAs = closure.params().getFirst().binding();
             Filed filed = filedOf(args.get(update.absentArg()), body.at(),
-                    sides.standing(closure.body(), body.at()),
-                    closure.params().getFirst().binding());
-            return filed == null ? null : new Filing(key, filed);
+                    sides.standing(closure.body(), body.at()), foundAs);
+            // A closure handed by name may be applied to other values besides the one found.
+            Core written = Core.withoutStanding(args.get(update.closureArg()));
+            return filed == null ? null : new Filing(key, filed,
+                    filed instanceof Filed.Counted && written instanceof Core.Block
+                            ? new Found(Core.withoutStanding(body.value()), written, foundAs)
+                            : null);
         }
 
         /**
@@ -385,7 +450,10 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                     filedUnder(sides.standing(found.body(), body.at()), keyRead);
             Filed filed = first == null || moved == null ? null
                     : filedOf(first.value(), first.at(), moved, found.binder().binding());
-            return filed == null ? null : new Filing(key, filed);
+            // The arm that finds a value binds it to what the lookup found under the key.
+            return filed == null ? null : new Filing(key, filed,
+                    filed instanceof Filed.Counted
+                            ? new Found(match, found.body(), found.binder().binding()) : null);
         }
 
         /**

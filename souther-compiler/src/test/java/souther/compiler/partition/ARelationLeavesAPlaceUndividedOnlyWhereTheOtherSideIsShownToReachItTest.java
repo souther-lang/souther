@@ -1843,14 +1843,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * {@code Int} at most draws the same line as the model's, and a count has no position to draw
      * it at.
      *
-     * <p>Read so, the count is not shown to get to the comparison at every value: a count of so
-     * many is a list of so many issues, which no witness of fewer stands for, and counting each
-     * label adds one to what it has counted, which nothing here holds to an {@code Int}.
+     * <p>Read so, the count gets to the comparison at every value: a count of so many is a list of
+     * so many issues each carrying the label once, whose labels a list holds, and counting each
+     * label adds one to how many came before it, which are fewer than a list holds.
      */
     @Test
     void aCountSettledOnlyWhereTheOtherTypeStopsIsRead() {
         String inputs = "issues: List<Issue>, atLeast: Int";
-        assertEquals(Map.of("occurrences(issues[*].labels[*])", NOT_REACHED),
+        assertEquals(Map.of("occurrences(issues[*].labels[*])", RELATES),
                 left(inputs, LABELLED, BUSY, atThe(">=", LABELLED, inputs, BUSY)));
 
         String barred = "issues: List<Issue>, atLeast: Bar";
