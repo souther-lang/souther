@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
 import souther.compiler.numeric.ExactAnswer;
@@ -1703,12 +1704,29 @@ final class Predicates {
         List<Quantified> quantified = new ArrayList<>();
         quantifiedBy(cond, at, positive, quantified);
         out = out.and(quantified);
+        // And what the law of the operation answering it says of its arguments, where it comes out
+        // this way: `Set.contains(x, s)` holds exactly where some element of `s` is `x`. The law as
+        // {@link LawOverAtoms} names it, which is the law an arm of a match on what an operation
+        // answered is entered by, and of it only what is certain this way. A condition read by
+        // what the reading of the model says it states takes the same number in there
+        // ({@link MeaningAssumptions}).
+        Derivation.HoldsSomethingWhere.Holding law = LawOverAtoms.whereItHolds(
+                AnOperationApplied.of(cond), AnswerAspect.TRUTH, at, terms);
+        List<NumericConstraint> certain = law == null ? List.of()
+                : LawOverAtoms.certain(law, positive);
+        if (certain == null) {
+            return new Assumed(out.reachingNothing(), true, true);
+        }
+        for (NumericConstraint each : certain) {
+            out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
+                    terms.spacesOf(each.form()));
+        }
         // Two answers and not one, as everywhere here: what a proof may rest on, and what an
         // unsettled arm may be explained by. They move together on this route and are still asked
         // apart, because one of them coming to answer the other is how a limit of this compiler
         // gets reported as a fact about the model.
-        boolean taken = !known.isEmpty() || !quantified.isEmpty();
-        boolean shapeRead = !known.isEmpty() || !quantified.isEmpty();
+        boolean taken = !known.isEmpty() || !quantified.isEmpty() || !certain.isEmpty();
+        boolean shapeRead = !known.isEmpty() || !quantified.isEmpty() || !certain.isEmpty();
         return settling(out, Conditions.Polar.itself(cond, positive), at, taken, shapeRead);
     }
 

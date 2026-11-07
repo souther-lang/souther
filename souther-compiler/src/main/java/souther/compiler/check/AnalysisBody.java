@@ -48,13 +48,18 @@ import java.util.Set;
  *                  time a template comes up, everything that could have entered it has been read.
  *                  Found from the tree by what it builds, so a template nothing builds is not here,
  *                  and worked out once where the body is made and not by every reader
+ * @param departures which departures of the attempts in this tree the discharge check, reading it,
+ *                  found no run takes. Of this tree because the check reads this tree: the one that
+ *                  runs holds an operation as the walk it lowers to, and a reader of that tree asks
+ *                  this for what its own reading cannot say
  */
 public record AnalysisBody(Core core, ElementProvenance elements, ValueTemplates templates,
-                           List<Core> templatesAfterTheirBuilders) {
+                           List<Core> templatesAfterTheirBuilders,
+                           DeparturesNoRunTakes departures) {
 
     public AnalysisBody {
         if (core == null || elements == null || templates == null
-                || templatesAfterTheirBuilders == null) {
+                || templatesAfterTheirBuilders == null || departures == null) {
             throw new IllegalArgumentException(
                     "a body the analysis reads is some tree; a behavior with none has no reading"
                             + " rather than one holding nothing");
@@ -62,9 +67,16 @@ public record AnalysisBody(Core core, ElementProvenance elements, ValueTemplates
         templatesAfterTheirBuilders = List.copyOf(templatesAfterTheirBuilders);
     }
 
-    /** A body, with the order its templates are read in worked out from what it builds. */
+    /** A body nothing has checked yet, with the order its templates are read in worked out from
+     *  what it builds. */
     public AnalysisBody(Core core, ElementProvenance elements, ValueTemplates templates) {
-        this(core, elements, templates, afterTheirBuilders(core, templates));
+        this(core, elements, templates, DeparturesNoRunTakes.NONE);
+    }
+
+    /** A body the discharge check read, finding {@code departures} of it. */
+    public AnalysisBody(Core core, ElementProvenance elements, ValueTemplates templates,
+                        DeparturesNoRunTakes departures) {
+        this(core, elements, templates, afterTheirBuilders(core, templates), departures);
     }
 
     private static List<Core> afterTheirBuilders(Core core, ValueTemplates templates) {

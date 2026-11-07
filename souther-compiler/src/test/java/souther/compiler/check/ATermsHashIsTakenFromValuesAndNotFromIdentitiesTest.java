@@ -141,7 +141,9 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                 interned.none(Type.INT),
                 interned.opened(one, Type.INT),
                 interned.matched(one, List.of(List.of(data)), List.of(one)),
-                interned.attempted(one, List.of("c"), List.of(one)))) {
+                interned.attempted(one, List.of("c"), List.of(one)),
+                interned.howManyAre(evaluated, one, AddsWhatItDoesNotHold.Of.ELEMENTS),
+                interned.howManyAreIn(evaluated, evaluated, AddsWhatItDoesNotHold.Of.KEYS))) {
             built.add(term.shape());
         }
 

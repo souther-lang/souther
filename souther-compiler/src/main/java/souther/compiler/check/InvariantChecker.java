@@ -32,6 +32,7 @@ import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -40,10 +41,8 @@ import souther.compiler.values.TextExtent;
 import souther.compiler.values.ValueSet;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -125,13 +124,14 @@ public final class InvariantChecker {
      * construction is discharged is asserting something about an analysis that ran, and without this
      * it would pass just as well on one that did not.
      */
-    record Findings(List<CompileException> errors, List<InvariantFinding> warnings, Status status) {
+    record Findings(List<CompileException> errors, List<InvariantFinding> warnings, Status status,
+                    DeparturesNoRunTakes departures) {
 
         /** What an analysis that was never run has to say, which is nothing and says so. A caller
          *  without the representation this reads takes this rather than running the analysis over
          *  an empty one — the same findings, and the opposite claim about the module. */
         static Findings notRun() {
-            return new Findings(List.of(), List.of(), Status.ABANDONED);
+            return new Findings(List.of(), List.of(), Status.ABANDONED, DeparturesNoRunTakes.NONE);
         }
     }
 
@@ -276,11 +276,6 @@ public final class InvariantChecker {
      * question they add up to — can anything stand here — has more than this one reader, and a
      * second walk deriving it again would be a second set of rules. */
     private final PathEngine engine;
-    /** Which form each declaration was written in and which of them wrap one value. Beside the
-     * scope and not read off it: what a construction is judged against turns on the form
-     * its name was declared in, which was settled when the module was indexed. */
-    private final DeclarationKinds kinds;
-    private final DeclarationNewtypes newtypes;
     /** The declarations' invariants, typed where they are declared and read where a value is built. */
     private final Clauses clauses;
     /** Where a value is, what it is called, and what can be said of it. */
@@ -303,6 +298,9 @@ public final class InvariantChecker {
     private StringMachineAnswers answers;
     private final List<CompileException> errors = new ArrayList<>();
     private final List<InvariantFinding> warnings = new ArrayList<>();
+    /** Each copy of an attempt read, with each departure as whether no reading of it found a run
+     *  taking it. */
+    private final Map<ConstructOccurrence, List<Boolean>> departures = new LinkedHashMap<>();
 
     /** What each value the body builds comes to. */
     private final ValueTemplates templates;
@@ -331,8 +329,6 @@ public final class InvariantChecker {
         this.answers = StringMachineAnswers.unborrowed(reading.readings().revision());
         // Named here because this check reads them directly and often. They are the engine's, not a
         // second copy: one engine builds them once and everything below sees those.
-        this.kinds = reading.source().kinds();
-        this.newtypes = reading.source().newtypes();
         this.clauses = engine.clauses();
         this.terms = engine.terms();
         this.predicates = engine.predicates();
@@ -4561,7 +4557,7 @@ public final class InvariantChecker {
                             Scope params, ValueTemplates templates) {
         InvariantChecker c = new InvariantChecker(reading, contracts, templates);
         if (body == null) {
-            return new Findings(c.errors, c.warnings, Status.ABANDONED);
+            return new Findings(c.errors, c.warnings, Status.ABANDONED, DeparturesNoRunTakes.NONE);
         }
         Entered in = c.engine.nothingEntered();
         for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
@@ -4569,7 +4565,8 @@ public final class InvariantChecker {
                     body.pos()), in.known(), in.at());
         }
         c.entering(body, in.known(), in.at(), ONE_READING);
-        return new Findings(c.errors, c.warnings, Status.COMPLETE);
+        return new Findings(c.errors, c.warnings, Status.COMPLETE,
+                new DeparturesNoRunTakes(c.departures));
     }
 
     /**
@@ -4807,7 +4804,7 @@ public final class InvariantChecker {
                 // is written after it is written after nothing — the same shape as an operation
                 // that answers no value, and taken in through the same door. So is one no way the
                 // conditions on the path come apart in reaches.
-                yield carriedOn(out, judge(made, out, at, false, copies));
+                yield carriedOn(out, judge(made, out, at, copies));
             }
             case Core.If iff -> {
                 Known out = walk(iff.cond(), k, at, copies);
@@ -4831,7 +4828,7 @@ public final class InvariantChecker {
                 // departure is taken and the run carries on, so what this comes out as says nothing
                 // about whether anything is reached — but one no way reaches is reached by nothing,
                 // and neither is what follows it.
-                out = carriedOn(out, judge(ic.construct(), out, at, true, copies));
+                out = carriedOn(out, judgeAttempt(ic, out, at, copies));
                 if (engine.reachability().reachesNothing(out)) {
                     yield out;
                 }
@@ -5062,25 +5059,44 @@ public final class InvariantChecker {
      * comes to. What can still be found here is a way nothing enters under what was learned of the
      * values after the conditions were taken in, and only where the invariant is taken apart.
      */
-    private Completion judge(Core.Construct made, Known k, Denotations at, boolean attempted,
+    private Completion judge(Core.Construct made, Known k, Denotations at,
                              ContextMultiplicity copies) {
-        // Which form the name was declared in, asked of what was settled when its module was
-        // indexed. Only a product carries an invariant to judge a construction against; reading the
-        // declaration to find that out is what had this check re-run for a declaration of another
-        // module that had only moved.
-        if (!(made.typeName() instanceof TypeSymbol.AtModule type)
-                || kinds.of(type.key()) != DeclarationKind.PRODUCT) {
+        TypeSymbol.AtModule type = engine.verdicts().productOf(made);
+        if (type == null) {
             return Completion.MAY;
         }
-        Judgment judged = verdictOf(made, type, k, at, copies);
+        Judgment judged = engine.verdicts().of(made, type, k, at, copies);
         if (judged == null) {
             return new Completion.CannotComplete(new Completion.NoCompletionProof.NoWayIn(made));
         }
-        report(made, type, made.pos(), attempted, judged);
-        return !attempted && refused(judged)
+        report(made, type, made.pos(), false, judged);
+        return refused(judged)
                 ? new Completion.CannotComplete(
                         new Completion.NoCompletionProof.RefutedConstruction(made))
                 : Completion.MAY;
+    }
+
+    /**
+     * The same of an attempt's construction, which does not abort — a failing invariant is a
+     * departure taken — and whose departures no run takes on this reading are recorded
+     * ({@link DeparturesNoRunTakes}).
+     */
+    private Completion judgeAttempt(Core.IfConstructed attempt, Known k, Denotations at,
+                                    ContextMultiplicity copies) {
+        Core.Construct made = attempt.construct();
+        TypeSymbol.AtModule type = engine.verdicts().productOf(made);
+        if (type == null) {
+            return Completion.MAY;
+        }
+        Judgment judged = engine.verdicts().of(made, type, k, at, copies);
+        departures.merge(attempt.place().occurrence(),
+                engine.verdicts().departuresUnder(attempt, type, judged, at),
+                DeparturesNoRunTakes::together);
+        if (judged == null) {
+            return new Completion.CannotComplete(new Completion.NoCompletionProof.NoWayIn(made));
+        }
+        report(made, type, made.pos(), true, judged);
+        return Completion.MAY;
     }
 
     /** Whether the value a construction builds is one its invariant rejects wherever it is built,
@@ -5089,115 +5105,6 @@ public final class InvariantChecker {
      * added later can land in differently. */
     private static boolean refused(Judgment judged) {
         return judged.verdict().refuted();
-    }
-
-    /**
-     * The verdict for one construction, over what each field is being given, or null where the
-     * conditions on the path leave no way to it. A case split never reaches here: the walk opens it
-     * before anything is checked, so what a field is given is a value and not a choice of arms.
-     */
-    private Judgment verdictOf(Core.Construct nd, TypeSymbol.AtModule type, Known k, Denotations at,
-                               ContextMultiplicity copies) {
-        Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName());
-        Map<BindingId, Core> given = new HashMap<>();
-        for (Core.FieldValue fv : nd.values()) {
-            BindingId field = fields.get(fv.field());
-            if (field == null) {
-                continue;
-            }
-            // A name given a value written out hands over that value: the clause folds over what
-            // was written, wherever the writing was done.
-            Core written = terms.writtenValue(fv.value(), at);
-            given.put(field, written != null ? written : fv.value());
-        }
-        return verdictOf(nd.typeName(), given, k, at, !constantlyBuilt(type, nd), copies);
-    }
-
-    /**
-     * The verdict for a construction of {@code named}, with the conditions on the path that hold as
-     * one of their parts taken apart where the whole of each leaves the invariant not shown to
-     * hold — or null where no combination of their parts is entered, so no value is built here.
-     *
-     * <p>Only there. A clause established without them is established in each way they could be
-     * taken apart, since each way knows more than this; so is a clause that could not be read,
-     * since which clauses are read turns on the values the path has named, and no way names one
-     * the whole did not ({@link Predicates#eachWayOf}). A clause refuted without them is refuted in
-     * each way as well. Whether the conditions leave a way at all was kept where they were taken
-     * in ({@link Predicates#assumeCond}); what taking them apart here can still find is a way that
-     * what was learned of the values since leaves nothing.
-     *
-     * <p>One condition at a time, in the order they are held, and every one of them taken apart
-     * while the copies allow. Nothing passes a condition over for looking as though it could not
-     * matter: what a part says may be a relation between values none of whose bounds it moves, as
-     * {@code x >= y || x == y} says of {@code x - y}, and the only answer to whether it changes
-     * what the clauses come to is the verdict under it.
-     *
-     * <p>A way nothing enters is no value built and is not judged. The ways that are left are
-     * combined as the arms of a split are ({@link Judgment#of}): a clause holds where it holds in
-     * every one of them and is refuted where every one refutes it.
-     *
-     * <p>Each way entered is this construction judged again under what it knows, which is a copy of
-     * the reading the walk made here, and it is counted with the copies the walk has made already
-     * ({@link ContextMultiplicity}); a condition only one of whose ways is entered copies nothing.
-     * A condition whose ways would compound past that is not taken apart, and nor is any condition
-     * after it on this way. What is answered then is the verdict without them: a judgment made of
-     * the ways that were taken apart and not the others would be a proof over some of the values.
-     * Which conditions the copies reach is the order they are held in, as it is for any bound on
-     * a search.
-     */
-    private Judgment verdictOf(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
-                               Denotations at, boolean decidesFalse, ContextMultiplicity copies) {
-        return takenApart(named, given, k, at, decidesFalse, copies,
-                judging(named, given, k, at, decidesFalse), Set.of());
-    }
-
-    /** The same, where {@code whole} is what the construction came to under {@code k} as it
-     * stands, and {@code apart} the conditions {@code k} holds that it already holds a part of. */
-    private Judgment takenApart(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
-                                Denotations at, boolean decidesFalse, ContextMultiplicity copies,
-                                Judgment whole, Set<Known.OneOf> apart) {
-        if (whole.verdict().holds()) {
-            return whole;
-        }
-        for (Known.OneOf condition : k.heldAsOneOfTheirParts()) {
-            if (apart.contains(condition)) {
-                continue;
-            }
-            List<Known> entered = predicates.eachWayOf(condition, k).stream()
-                    .filter(way -> !predicates.leavesNoRun(way))
-                    .toList();
-            if (entered.isEmpty()) {
-                return null;
-            }
-            ContextMultiplicity opened = copies.opening(entered.size());
-            if (opened == null) {
-                return whole;
-            }
-            Set<Known.OneOf> further = new HashSet<>(apart);
-            further.add(condition);
-            Judgment together = null;
-            for (Known way : entered) {
-                Judgment here = takenApart(named, given, way, at, decidesFalse, opened,
-                        judging(named, given, way, at, decidesFalse), further);
-                if (here != null) {
-                    together = together == null ? here : Judgment.of(together, here);
-                }
-            }
-            return together;
-        }
-        return whole;
-    }
-
-    /** Which of the values a construction hands over is not one a clause may be read against
-     * ({@link Terms#reportableSite}) — by identity, since it is these very values that stand in the clause. */
-    private Set<Core> unnamed(Collection<Core> given, Known k, Denotations at) {
-        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Core value : given) {
-            if (terms.reportableSite(value, at, k) == null) {
-                out.add(value);
-            }
-        }
-        return out;
     }
 
     /**
@@ -5243,7 +5150,7 @@ public final class InvariantChecker {
          * <p>Where both fail and only one of them fails on the values alone, the two together are
          * said not to: what is claimed of the construction is what the weaker of the two readings
          * supports. The other direction is the clauses of one invariant, which are conjoined rather
-         * than alternative and are combined at {@link #verdictOf} the other way round.
+         * than alternative and are combined at {@link ConstructionVerdicts#of} the other way round.
          *
          * <p>A branch nothing reaches finds nothing to combine: {@link #reading} answers it with no
          * findings at all, and a position only one branch found is read as discharged on the other.
@@ -5262,148 +5169,6 @@ public final class InvariantChecker {
         }
     }
 
-    /** The discharge verdict for a construction of {@code type} whose fields are being given
-     * {@code given}, under {@code k} as it stands. */
-    private Judgment judging(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
-                             Denotations at, boolean decidesFalse) {
-        // What the construction hands over that no clause may be read against. A clause naming one of
-        // them is left to the run-time check, and one that is decided outright is still decided: what
-        // cannot be guarded is not the same as what cannot be computed.
-        Set<Core> unnamed = unnamed(given.values(), k, at);
-        List<Owing> owed = new ArrayList<>();
-        // Every clause that was read, in the order it was declared, and what was proved about it.
-        // Every clause, whether or not the author named it: what a diagnostic can say about one is
-        // the clause's to answer, and a clause left out of here because it could not be named is a
-        // clause nothing downstream can point at either. One entry per clause, so no clause can be
-        // on two sides of this at once.
-        SequencedMap<Clause.Id, Judged> found = new LinkedHashMap<>();
-        boolean refutedAlone = false;
-        // Whether any clause is unsettled, which is not the same as whether any named one is: a
-        // clause MAY be written without a name, and one that was is still a clause the guards did
-        // not establish. Reading the answer off the names alone made an unnamed clause discharge.
-        boolean unknown = false;
-        // A clause the check cannot read here owes nothing and proves nothing, and the two are not
-        // the same answer. Kept apart: a clause that owes nothing because it folded to what it is read
-        // with is discharged, and one that owes nothing because nothing here could be asked of it is
-        // left to the run-time check.
-        boolean unreadable = false;
-        // A newtype construction from a value written out is the constant check's to report: it names
-        // the clause that failed. It reads the construction as written, so a name given the value is
-        // not one it sees, and this check says it instead — which is what `decidesFalse` carries.
-        // The clauses that state something here, and not whether they are all of them: a clause
-        // stating nothing readable at this construction is one the run-time check stands for, which
-        // is what `unreadable` below already carries for the ones that were read.
-        for (Clauses.Stated stated : clauses.statedAt(named, given).clauses()) {
-            for (Clauses.StatedPart part : stated.parts()) {
-                Predicates.Owed o =
-                        predicates.obligations(part.expr(), k, at, unnamed, decidesFalse);
-                unreadable |= o.unreadable();
-                for (Predicates.Part eachOne : o.parts()) {
-                    if (!(eachOne instanceof Predicates.Part.Carried carriedOne)) {
-                        continue;
-                    }
-                    owed.add(new Owing(stated, carriedOne.clause()));
-                }
-            }
-        }
-        if (owed.isEmpty()) {
-            return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED,
-                    ClauseJudgments.of(found));
-        }
-        // What the clauses are decided by, which is one half of what the reading can reach. The
-        // other half is what the domain speaks of, and that is the domain's own to answer.
-        Set<FactSubject> asked = new LinkedHashSet<>();
-        for (Owing owing : owed) {
-            asked.addAll(owing.owed().atomsItIsDecidedBy());
-        }
-        NumericDomain<FactSubject> dom = readingOf(k.numbers(), asked);
-        // The same clauses read against the same site, under what would be known here had no
-        // condition on the path settled anything. What each clause states of the sizes it names holds
-        // either way, so both readings take it. Made where a clause is refuted and nowhere else:
-        // which of the two readings refutes it is the one question this answers, and a construction
-        // with no clause refuted would pay for a second reading nobody reads.
-        NumericDomain<FactSubject> alone = null;
-        // An invariant is the conjunction of its clauses, so every one of them is read before what
-        // the invariant came out as is decided. A clause the values alone refute is the whole
-        // invariant refuted on the values alone, whatever another clause needed to be refuted —
-        // stopping at the first refutation would answer with whichever clause was declared first.
-        boolean alongside = false;
-        for (Owing owing : owed) {
-            Predicates.Clause c = owing.owed();
-            ClauseStatus status = statusOf(c, dom, k, owing.clause());
-            if (status == ClauseStatus.REFUTED) {
-                if (alone == null) {
-                    alone = readingOf(k.unguarded().numbers(), asked);
-                }
-                if (c.refutedByTheValuesAlone(alone, k.unguarded().facts())) {
-                    refutedAlone = true;
-                }
-                alongside = true;
-            } else if (status == ClauseStatus.UNKNOWN) {
-                unknown = true;
-            }
-            put(found, owing.clause(), status);
-        }
-        // Every clause that could be read and is discharged leaves the invariant proven, except where
-        // one could not be read and still stands.
-        Verdict verdict = refutedAlone ? Verdict.REFUTED_ALONE
-                : alongside ? Verdict.REFUTED_NOT_ALONE
-                : unknown ? Verdict.UNKNOWN
-                : unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED;
-        return new Judgment(verdict, ClauseJudgments.of(found));
-    }
-
-    /**
-     * The domain clauses decided by {@code asked} are read against, built from what {@code base}
-     * holds.
-     *
-     * <p>Two steps that are one operation, and both are inside {@link DerivedNumericFacts}: what
-     * every value the reading can reach carries is taken as holding, and then what follows about the
-     * arithmetic the domain cannot carry — a product of two values, a truncating quotient — is
-     * derived from what the reading proves of the values it was computed from. The second reads the
-     * first, so the order is not a caller's to keep and cannot be: a reading is made by the one
-     * function that makes one ({@link DerivedNumericFacts#readingOf}).
-     *
-     * <p>Each reading answers with its own. A bound derived here is derived from what this reading
-     * assumed, so it belongs to the reading and not to the value — which is why the construction's
-     * two readings are built by two calls rather than sharing one domain.
-     */
-    private NumericDomain<FactSubject> readingOf(NumericDomain<FactSubject> base,
-                                                 Set<FactSubject> asked) {
-        return DerivedNumericFacts.refine(base, terms, asked);
-    }
-
-    /**
-     * What was proved about one clause where the value is built.
-     *
-     * <p>Established and refused are asked for separately and are not each other's negation, so
-     * asking one of them and reading the other off it is what puts a clause the check merely could
-     * not decide among the ones a value fails. A clause that comes out both is neither: it says the
-     * two questions were answered against a reading that proves everything, and a check that filed
-     * it under either answer would report a clause the value does not fail, or leave one it does.
-     */
-    private static ClauseStatus statusOf(Predicates.Clause owed, NumericDomain<FactSubject> dom, Known k,
-                                         Clause.Ref clause) {
-        boolean established = owed.dischargedBy(dom, k.facts());
-        boolean refused = owed.refutedBy(dom, k.facts());
-        if (established && refused) {
-            throw new Clause.NotOneClause("clause " + clause.id()
-                    + " is established and refused by what is known where it is built");
-        }
-        if (established) {
-            return ClauseStatus.SETTLED;
-        }
-        return refused ? ClauseStatus.REFUTED : ClauseStatus.UNKNOWN;
-    }
-
-    /** Records what was proved about {@code clause}, joining it with what is already there for it:
-     * one clause reached twice — through two spreads, or read again under a rewrite — is one
-     * clause. */
-    private static void put(SequencedMap<Clause.Id, Judged> found, Clause.Ref clause,
-                            ClauseStatus status) {
-        found.merge(clause.id(), new Judged(clause, status), Judged::merge);
-    }
-
     /**
      * The clauses one construction was judged against, in the order they were declared, with what
      * was proved about each.
@@ -5417,7 +5182,7 @@ public final class InvariantChecker {
      *
      * <p>Each clause once. Which of the three a clause came out as is one answer, and a clause
      * reached twice — through two spreads, or read again under a rewrite — is one clause, joined
-     * where it is recorded ({@link #put}). Two entries for one clause would be this check
+     * where it is recorded ({@link ConstructionVerdicts}). Two entries for one clause would be this check
      * disagreeing with itself about a clause it read, and there would be no answer to which of them
      * a report is about.
      *
@@ -5480,17 +5245,6 @@ public final class InvariantChecker {
         }
     }
 
-    /** One obligation and the clause it was owed by. */
-    private record Owing(Clauses.Stated from, Predicates.Clause owed) {
-
-        /** The clause this was owed by: which one it is and what a sentence may call it. Neither is
-         * read here — this hands the clause on whole, so that a site choosing what to say asks it
-         * rather than being handed one of its answers. */
-        Clause.Ref clause() {
-            return from.clause();
-        }
-    }
-
     /**
      * What the check found: the verdict on the invariant, and the names of the clauses on each side
      * of it.
@@ -5512,8 +5266,17 @@ public final class InvariantChecker {
      *
      * <p>In the order the clauses were declared, which {@link ClauseJudgments} holds and is part of
      * what this says.
+     *
+     * <p>{@code held} is a different question about the same clauses: which of them hold wherever
+     * the value is built, every part of each read and established — a clause that folds to what it
+     * is read with among them, though it owes nothing and so is not in {@code found}. A clause not
+     * in it is one a run may fail, which is what an attempt's departure is taken on.
      */
-    record Judgment(Verdict verdict, ClauseJudgments found) {
+    record Judgment(Verdict verdict, ClauseJudgments found, Set<Clause.Id> held) {
+
+        Judgment {
+            held = Collections.unmodifiableSet(new LinkedHashSet<>(held));
+        }
 
         /**
          * What two readings of one construction found, together.
@@ -5545,8 +5308,11 @@ public final class InvariantChecker {
                     found.add(one.whereTheOtherReadingSaysNothing());
                 }
             }
+            // A clause holds of a value that is one of two where it holds of both.
+            Set<Clause.Id> held = new LinkedHashSet<>(a.held());
+            held.retainAll(b.held());
             return new Judgment(Verdict.of(a.verdict(), b.verdict()),
-                    new ClauseJudgments(found));
+                    new ClauseJudgments(found), held);
         }
 
         /** The clauses nothing known there establishes — the ones this check could not settle and
@@ -5621,13 +5387,6 @@ public final class InvariantChecker {
                 SequencedMap<Clause.Id, Clause.Ref> side, ClauseLocations written) {
             return side.keySet().stream().map(written::of);
         }
-    }
-
-    /** Whether the constant check reads this construction: a newtype's, over a value written where
-     * it is built. That check names the clause that failed, so it is left to say it — and it reads
-     * the construction as written, so a name given the value is not one it sees. */
-    private boolean constantlyBuilt(TypeSymbol.AtModule type, Core.Construct nd) {
-        return newtypes.of(type.key()) && Terms.isWritten(nd.values().get(0).value());
     }
 
     /** Says what {@code verdict} found. A definite violation is an error and an unproven one a
