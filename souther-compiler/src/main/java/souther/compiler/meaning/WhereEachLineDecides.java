@@ -310,25 +310,17 @@ public final class WhereEachLineDecides {
     }
 
     /** The values of the input a part of a case is about, where it is one thing of one value;
-     *  none for a part that is more than that. */
+     *  none for a part that is more than that. A number of the input is about every place it is
+     *  read off ({@link NumericTerm#placesReadOff}): a product is filed under one of its factors,
+     *  and the case the other is narrowed to is as much the line's. */
     private static List<Place> positionsOf(Proposition part) {
         List<Place> out = new ArrayList<>();
         switch (part) {
             case Proposition.Compared compared -> {
                 switch (compared.relation()) {
                     case Relation.Affine affine -> affine.form().coefs().keySet()
-                            .forEach(quantity -> {
-                                if (quantity instanceof DecisionAtom.OfTheInput(var term,
-                                        var identity)) {
-                                    out.add(new Place(term.subjectPath(), identity));
-                                }
-                            });
-                    case Relation.Ordered ordered -> {
-                        if (ordered.term() instanceof DecisionAtom.OfTheInput(var term,
-                                var identity)) {
-                            out.add(new Place(term.subjectPath(), identity));
-                        }
-                    }
+                            .forEach(quantity -> placesOf(quantity, out));
+                    case Relation.Ordered ordered -> placesOf(ordered.term(), out);
                 }
             }
             case Proposition.Truth(DecisionSubject.AnInput(TermPath of, var identity), var _,
@@ -347,6 +339,14 @@ public final class WhereEachLineDecides {
             case Proposition.OfTheWays ways -> out.addAll(positionsOf(ways.written()));
         }
         return out;
+    }
+
+    /** Adds to {@code out} each place {@code quantity} is read off, where it is a number of the
+     *  input, as the value it names there; nothing for any other. */
+    private static void placesOf(Quantity quantity, List<Place> out) {
+        if (quantity instanceof DecisionAtom.OfTheInput(var term, var identity)) {
+            term.placesReadOff().forEach(at -> out.add(new Place(at, identity)));
+        }
     }
 
     /**

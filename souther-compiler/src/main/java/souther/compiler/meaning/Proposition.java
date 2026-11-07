@@ -250,11 +250,14 @@ public sealed interface Proposition {
     }
 
     /** Whether {@code quantity} may be read off an element of {@code container}. A value a body
-     *  bound or a dependency answered is computed from something nothing here names, so it may. */
+     *  bound or a dependency answered is computed from something nothing here names, so it may.
+     *  A number of the input is asked of every place it is read off
+     *  ({@link NumericTerm#placesReadOff}): a product is filed under one of its factors, and the
+     *  other may be the element's. */
     private static boolean mayBeAnElementOf(Quantity quantity, DecisionSubject container) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(var term, var _) ->
-                    isAnElementOf(new DecisionSubject.AnInput(term.subjectPath()), container);
+            case DecisionAtom.OfTheInput(var term, var _) -> term.placesReadOff().stream()
+                    .anyMatch(at -> isAnElementOf(new DecisionSubject.AnInput(at), container));
             // What a recursion carries stands for any number, which may be any element's.
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _, Quantity.HowManyCarried _,
                  Quantity.TheKeptTotal _ -> true;
