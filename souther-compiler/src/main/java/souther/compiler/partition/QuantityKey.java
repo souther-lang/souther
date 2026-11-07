@@ -51,8 +51,26 @@ public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
     }
 
     /**
+     * As the direction hashes, which is what finds a quantity already made by the map it would be
+     * made of ({@link #tryOf}) before its terms are put in order.
+     */
+    @Override
+    public int hashCode() {
+        return direction.hashCode();
+    }
+
+    /** The same direction, whatever order either map was filled in. */
+    @Override
+    public boolean equals(Object other) {
+        return this == other || (other instanceof QuantityKey that
+                && direction.equals(that.direction));
+    }
+
+    /**
      * The quantities made last. A cut, a reading and a border each work out the quantity of the
-     * form they hold, and every one of them was held: the same few directions, many times over.
+     * form they hold, and every one of them was held: the same few directions, many times over —
+     * so one is found by the coefficients it would be made of, and only one not found is made,
+     * its terms put in order and copied.
      */
     private static final HeldOnce<QuantityKey> MADE = new HeldOnce<>(14);
 
@@ -86,7 +104,7 @@ public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
             }
             smallest.put(each.getKey(), over);
         }
-        return MADE.held(new QuantityKey(smallest));
+        return MADE.held(smallest, QuantityKey::direction, QuantityKey::new);
     }
 
     /**

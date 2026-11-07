@@ -974,7 +974,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         following.all(said);
         List<PutBy> runs = new ArrayList<>();
         said.entries().forEach((entry, by) -> {
-            if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run, var _)) {
+            if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run, var _, var _)) {
                 runs.add(new PutBy(run, by));
             }
         });
@@ -1011,7 +1011,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                 at++;
                 continue;
             }
-            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.OnARemainder follows, var _)) {
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.OnARemainder follows, var _,
+                    var _)) {
                 Set<RowDemand.ForTheRun> from = new HashSet<>(follows.from());
                 for (PutBy put : runs) {
                     if (from.contains(put.run())) {

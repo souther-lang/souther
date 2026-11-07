@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.collect.HeldOnce;
 import souther.compiler.core.EnteredArm;
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.NameReach;
@@ -101,12 +102,39 @@ public sealed interface OnTheWay {
      * positions, and two names for two elements of one container are one position, so two
      * entries alike but for the names are two conditions until the way is put together
      * ({@link ElementsOnTheWay}).
+     *
+     * @param hash worked out from the rest when it is made, whatever is handed in: an entry is a
+     *             member of the sets a way is compared by and is asked for its hash at every
+     *             lookup in them, and what it is made of is a tree of records down to where the
+     *             condition was written
      */
     record TakenIn(ConditionReportAnchor anchor, RowDemand.OfACondition demand,
-                   NamedElements named) implements OnTheWay {
+                   NamedElements named, @DecidedByTheRest int hash) implements OnTheWay {
 
         public TakenIn {
             Objects.requireNonNull(named, "the elements a condition was read of, or none");
+            // Folded as the record folds its components, so the entry hashes as it always has.
+            hash = (31 * Objects.hashCode(anchor) + Objects.hashCode(demand)) * 31
+                    + named.hashCode();
+        }
+
+        public TakenIn(ConditionReportAnchor anchor, RowDemand.OfACondition demand,
+                       NamedElements named) {
+            this(anchor, demand, named, 0);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        /** The rest compared, the hash first: two entries that differ almost always differ in
+         *  it. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof TakenIn that && hash == that.hash
+                    && Objects.equals(anchor, that.anchor) && Objects.equals(demand, that.demand)
+                    && named.equals(that.named));
         }
     }
 

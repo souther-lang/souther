@@ -180,7 +180,7 @@ final class WaysToACase {
         for (int at = 0; at < putOn.size(); at++) {
             OnTheWay entry = putOn.get(at);
             if (!(entry instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth(TermPath of, var _),
-                    var _) && aloneIn(of, putOn, at))) {
+                    var _, var _) && aloneIn(of, putOn, at))) {
                 out.add(entry);
             }
         }

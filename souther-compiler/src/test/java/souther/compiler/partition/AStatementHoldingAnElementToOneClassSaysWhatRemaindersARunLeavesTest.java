@@ -218,7 +218,7 @@ class AStatementHoldingAnElementToOneClassSaysWhatRemaindersARunLeavesTest {
     }
 
     private static void statementsIn(OnTheWay entry, List<Proposition> into) {
-        if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run, var _)) {
+        if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run, var _, var _)) {
             into.add(run.statement());
         } else if (entry instanceof OnTheWay.OneOf several) {
             several.alternatives().forEach(way -> way.forEach(each -> statementsIn(each, into)));
