@@ -185,7 +185,8 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
      * ({@code ReadingsChosenOneBesideAnother}). Made together as two choices held together, or as
      * a choice made again past more than one alternative of the other, which is how a walk that
      * reaches a candidate only past every way the one before it fails is taken apart. Declared as
-     * a behavior, the helper is not expanded, and each reading is its answer.
+     * a behavior, the helper is not expanded, and each reading is its answer; named only where
+     * saying some reading of it as its answer is shown to leave the case fewer ways.
      *
      * <p>Not every helper whose comparisons made parts. Readings chosen among as alternatives to
      * each other add to the ways and multiply nothing, and so does a choice inside one alternative
