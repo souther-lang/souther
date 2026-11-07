@@ -21,59 +21,63 @@ import net.unit8.notation199x.pattern.CodePoints;
  * {@link StringsHeldAsWritten} is: a language is carried under a great many answers, and a field
  * on it would put one more object that compares by address under every one of them. Keyed by the
  * machine itself, which compares by address, and held weakly so that an entry goes with its
- * machine. Two threads that ask first work out two equal values and keep one.
+ * machine.
+ *
+ * <p>What is held is the ends and nothing else, and never the machine: an entry is let go only
+ * once nothing holds its key strongly, and the entry's own value holding it would be something
+ * that does. So the machine is handed in by whoever asks, as it is by the language it is the
+ * machine of. Two threads that ask first work out two equal values and keep one.
  */
 final class EndsOfAMachine {
 
     private static final Map<Automaton, EndsOfAMachine> HELD =
             Collections.synchronizedMap(new WeakHashMap<>());
 
-    private final Automaton machine;
     private volatile Optional<Language.Ends> lengths;
     private volatile Optional<Language.Ends> sums;
     private final Map<Integer, Optional<Language.Ends>> atIndex = new ConcurrentHashMap<>();
 
-    private EndsOfAMachine(Automaton machine) {
-        this.machine = machine;
+    private EndsOfAMachine() {
     }
 
-    /** The ends of {@code machine}'s strings, a {@link Language}'s canonical machine. */
-    static EndsOfAMachine of(Automaton machine) {
+    /** {@link Language#lengths} of {@code machine}, a {@link Language}'s canonical machine. */
+    static Language.Ends lengths(Automaton machine) {
+        EndsOfAMachine held = heldFor(machine);
+        Optional<Language.Ends> worked = held.lengths;
+        if (worked == null) {
+            worked = Optional.ofNullable(CodePointSums.range(machine, _ -> 1, _ -> 1));
+            held.lengths = worked;
+        }
+        return worked.orElse(null);
+    }
+
+    /** {@link Language#sumsOfCodePoints} of {@code machine}. */
+    static Language.Ends sumsOfCodePoints(Automaton machine) {
+        EndsOfAMachine held = heldFor(machine);
+        Optional<Language.Ends> worked = held.sums;
+        if (worked == null) {
+            worked = Optional.ofNullable(CodePointSums.range(machine, CodePoints::least,
+                    over -> over.ranges().getLast().to()));
+            held.sums = worked;
+        }
+        return worked.orElse(null);
+    }
+
+    /** {@link Language#codePointsAt(int)} of {@code machine}. */
+    static Language.Ends codePointsAt(Automaton machine, int index) {
+        return heldFor(machine).atIndex.computeIfAbsent(index,
+                at -> Optional.ofNullable(CodePointSums.atIndex(machine, at))).orElse(null);
+    }
+
+    private static EndsOfAMachine heldFor(Automaton machine) {
         EndsOfAMachine had = HELD.get(machine);
         if (had == null) {
-            had = new EndsOfAMachine(machine);
+            had = new EndsOfAMachine();
             EndsOfAMachine raced = HELD.putIfAbsent(machine, had);
             if (raced != null) {
                 had = raced;
             }
         }
         return had;
-    }
-
-    /** {@link Language#lengths}. */
-    Language.Ends lengths() {
-        Optional<Language.Ends> held = lengths;
-        if (held == null) {
-            held = Optional.ofNullable(CodePointSums.range(machine, _ -> 1, _ -> 1));
-            lengths = held;
-        }
-        return held.orElse(null);
-    }
-
-    /** {@link Language#sumsOfCodePoints}. */
-    Language.Ends sumsOfCodePoints() {
-        Optional<Language.Ends> held = sums;
-        if (held == null) {
-            held = Optional.ofNullable(CodePointSums.range(machine, CodePoints::least,
-                    over -> over.ranges().getLast().to()));
-            sums = held;
-        }
-        return held.orElse(null);
-    }
-
-    /** {@link Language#codePointsAt(int)}. */
-    Language.Ends codePointsAt(int index) {
-        return atIndex.computeIfAbsent(index,
-                at -> Optional.ofNullable(CodePointSums.atIndex(machine, at))).orElse(null);
     }
 }
