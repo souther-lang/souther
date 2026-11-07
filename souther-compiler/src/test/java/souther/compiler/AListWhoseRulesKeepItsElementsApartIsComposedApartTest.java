@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -577,6 +579,116 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
     }
 
     /**
+     * {@code model} with each call keeping elements apart written as the law it is proved to come
+     * to: as many different values as elements, counted by {@code List.distinct} where the
+     * closure is the element itself and by {@code List.distinctBy} with the same closure where it
+     * is not.
+     */
+    private static String byCount(String model) {
+        return byCount(model, false);
+    }
+
+    /**
+     * The same, with {@code mapped} counting the different values of the list the closure maps
+     * the elements to — {@code List.distinct(List.map(k, xs))} — where the closure is not the
+     * element itself.
+     */
+    private static String byCount(String model, boolean mapped) {
+        Matcher call = Pattern.compile("List\\.allDistinctBy\\(([^,]+), ([\\w.]+)\\)")
+                .matcher(model);
+        StringBuilder out = new StringBuilder();
+        while (call.find()) {
+            String closure = call.group(1);
+            String container = call.group(2);
+            String different = closure.matches("(\\w+) -> \\1")
+                    ? "List.distinct(" + container + ")"
+                    : mapped ? "List.distinct(List.map(" + closure + ", " + container + "))"
+                    : "List.distinctBy(" + closure + ", " + container + ")";
+            call.appendReplacement(out, Matcher.quoteReplacement("List.length(" + different
+                    + ") == List.length(" + container + ")"));
+        }
+        call.appendTail(out);
+        assertFalse(out.toString().contains("allDistinctBy"), out::toString);
+        return out.toString();
+    }
+
+    /**
+     * The same rules written by count compose what the calls compose: a list of a name, at a run
+     * of fields, at a field of a record, and counted besides. The rows composed for the calls are
+     * the oracle, and each list composed is apart at every run the call keeps it apart at.
+     */
+    @Test
+    void theRuleWrittenByCountComposesWhatTheCallComposes() {
+        // A run of fields twice: counted by a closure, and through the list it maps to.
+        Map<String, List<Boolean>> spellings = new LinkedHashMap<>();
+        spellings.put(SOME, List.of(false));
+        spellings.put(SOME_BY_FIELD, List.of(false, true));
+        spellings.put(SOME_IN_A_RECORD, List.of(false));
+        spellings.put(COUNTED, List.of(false));
+        spellings.forEach((model, mappedOrNot) -> mappedOrNot.forEach(mapped ->
+                composesWhatTheCallComposes(model, byCount(model, mapped))));
+    }
+
+    /** {@code counted} composes the rows {@code model} composes, every list apart as the call in
+     *  {@code model} keeps it. */
+    private static void composesWhatTheCallComposes(String model, String counted) {
+        assertEquals(composedForTheRules(measured(model)),
+                composedForTheRules(measured(counted)), counted);
+        int lists = 0;
+        for (GenerationOutcome outcome : outcomes(measured(counted))) {
+            if (!(outcome instanceof GenerationOutcome.Generated made)) {
+                continue;
+            }
+            for (var row : made.candidates()) {
+                List<Hir.Expr> elements = elementsOf(row.inputs().getFirst().value());
+                lists++;
+                for (List<String> run : APART_AT.get(model)) {
+                    Set<Hir.Expr> seen = new HashSet<>();
+                    for (Hir.Expr each : elements) {
+                        assertTrue(seen.add(at(each, run)), () -> counted + " composed "
+                                + row.inputs().getFirst().text() + ", repeated at " + run);
+                    }
+                }
+            }
+        }
+        assertTrue(lists > 0, counted);
+    }
+
+    /**
+     * A list of numbers no two of which are alike, written by count, is composed at two elements
+     * and more, where a body asks how many it holds.
+     */
+    @Test
+    void aListWrittenByCountIsComposedAtSeveralElements() {
+        String byLength = """
+                module p
+                data ByLength = List<Int>
+                    invariant List.length(List.distinct(value)) == List.length(value)
+                behavior count : (ids: ByLength) -> Int
+                let count (ids) = if List.length(ids.value) >= 2 then 1 else 0
+                example count
+                    | "none" : (ByLength([])) -> 0
+                """;
+        Compilation compilation = measured(byLength);
+        List<String> several = new ArrayList<>();
+        for (var generated : Adequacy.generatedOf(compilation.db(),
+                compilation.modules().get(0)).get("count").generation()) {
+            if (!(generated.outcome() instanceof GenerationOutcome.Generated made)) {
+                continue;
+            }
+            for (var row : made.candidates()) {
+                List<Hir.Expr> elements = elementsOf(row.inputs().getFirst().value());
+                assertEquals(elements.size(), new HashSet<>(elements).size(),
+                        row.inputs().getFirst().text());
+                if (elements.size() >= 2) {
+                    several.add(row.inputs().getFirst().text());
+                }
+            }
+        }
+        assertFalse(several.isEmpty(), () -> report(compilation));
+    }
+
+    /**
      * A list of booleans the rules keep apart and make hold three is a list no value is, and
      * nothing here proves it: the values put beside each other ran out, which is this compiler
      * not finding a third and not the model refusing one. So nothing composed for it is said as
@@ -595,17 +707,20 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
                 example pick
                     | "a" : (Flags([true, false, true])) -> 0
                 """;
-        List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
-        for (GenerationOutcome outcome : outcomes(measured(bools))) {
-            assertFalse(outcome instanceof GenerationOutcome.Generated, outcome::toString);
-            if (outcome instanceof GenerationOutcome.CannotGenerate(List<CameToNothing> why)) {
-                why.forEach(each -> said.add(each.why().reason()));
+        // And the same written by count, which is the same rule: nothing is made up for it either.
+        for (String model : List.of(bools, byCount(bools))) {
+            List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
+            for (GenerationOutcome outcome : outcomes(measured(model))) {
+                assertFalse(outcome instanceof GenerationOutcome.Generated, outcome::toString);
+                if (outcome instanceof GenerationOutcome.CannotGenerate(List<CameToNothing> why)) {
+                    why.forEach(each -> said.add(each.why().reason()));
+                }
             }
+            assertFalse(said.isEmpty(), model);
+            assertFalse(said.contains(
+                    Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
+                    said::toString);
         }
-        assertFalse(said.isEmpty());
-        assertFalse(said.contains(
-                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
-                said::toString);
     }
 
     /**

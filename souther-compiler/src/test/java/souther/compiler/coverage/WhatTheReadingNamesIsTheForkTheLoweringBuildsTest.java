@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.ast.Hir;
@@ -53,7 +54,7 @@ class WhatTheReadingNamesIsTheForkTheLoweringBuildsTest {
         Hir.ListComp comp = comprehensionOf(fn);
 
         Map<SourceConstructOrigin, DecisionSource> read =
-                DecisionSources.of(Map.of(), Map.of(DECLARATION, fn)).byFork();
+                DecisionSources.of(DefaultStdlib.get(), Map.of(), Map.of(DECLARATION, fn)).byFork();
         List<SourceConstructOrigin> built = forksBuiltFor(comp);
 
         List<String> namedByTheReading = new ArrayList<>();

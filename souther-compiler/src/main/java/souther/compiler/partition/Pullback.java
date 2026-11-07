@@ -91,6 +91,8 @@ import souther.compiler.meaning.PieceDemand;
 import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.PositionsAStatementReads;
+import souther.compiler.meaning.PositionsAStatementReads.ReadSubject;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.Spelling;
@@ -1327,12 +1329,7 @@ final class Pullback {
         switch (e) {
             case Core.Binary binary when apart != null && binary.op().compares()
                     && WhatABodyReads.holds(binary, apart) -> { }
-            case Core.Binary binary when binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
-                    || binary.op() == BinOp.MUL -> {
-                anOperator(e, reads);
-                operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
-            }
-            case Core.Neg _ -> {
+            case Core.Binary _, Core.Neg _ when isAnOperator(e) -> {
                 anOperator(e, reads);
                 operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
             }
@@ -1481,13 +1478,19 @@ final class Pullback {
             return false;
         }
         NumericDomain.Bounds run = DeclaredBounds.wholeRunOf(made, read.ruleReading());
-        if (run == null) {
-            return false;
-        }
-        Function<Core, BigDecimal> constant = argument -> writtenConstant(argument, number.at());
+        return run != null && whatTheLibraryBounds(call, number.at()).liesWithin(run);
+    }
+
+    /**
+     * Where what {@code call}, an operation of the library, answers lies, as the library bounds
+     * it by the arguments that are constants in {@code reads} ({@link ResultRange}) and as a choice
+     * between two values keeps an end of them ({@link Extreme#boundsOf}).
+     */
+    private NumericDomain.Bounds whatTheLibraryBounds(Core.PreservedCall call, InputReads reads) {
+        Function<Core, BigDecimal> constant = argument -> writtenConstant(argument, reads);
         return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(call.operation()),
                         CallArguments.readAs(call, constant))
-                .meet(Extreme.boundsOf(call, constant)).liesWithin(run);
+                .meet(Extreme.boundsOf(call, constant));
     }
 
     /**
@@ -1559,9 +1562,7 @@ final class Pullback {
      * it is none.
      */
     private Rounding roundingOf(Core e, InputReads reads) {
-        RoundedToAWholeNumber.Written written = RoundedToAWholeNumber.written(e,
-                policy -> WrittenOutElements.reading(read.rules().symbols(),
-                        read.rules().newtypes()).standing(policy, reads).value());
+        RoundedToAWholeNumber.Written written = writtenRounding(e, reads);
         return written != null && AffineForms.outcome(written.value(), reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var before)
                 ? new Rounding(before, written.way()) : null;
@@ -1599,8 +1600,9 @@ final class Pullback {
      * holds the places it reads as ones it may stop on.
      *
      * <p>Nothing in a closure no run applies ({@link Operators#neverApplied}): it ends no run. Nor
-     * does a construction that no clause of its type refuses a run of
-     * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}).
+     * does a construction that no clause of its type refuses a run of, or an operation that comes
+     * to a number where it answers whatever its operands come to ({@link #completionOf}): what
+     * those operands work out is still asked below.
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
@@ -1608,12 +1610,9 @@ final class Pullback {
             return;
         }
         operated.readsAt.putIfAbsent(e, reads);
-        GetsPast completion = e instanceof Core.Construct made
-                && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads)
-                ? new GetsPast.Always()
-                : WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
-        if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
-                && !(completion instanceof GetsPast.Always)) {
+        boolean told = operated.nodes.contains(e) || operated.nodes.contains(standing);
+        GetsPast completion = told ? null : completionOf(e, reads);
+        if (!told && !(completion instanceof GetsPast.Always)) {
             operated.beginGroup();
             boolean[] hasOperands = {false};
             boolean elsewhereBefore = operated.unsaidElsewhere;
@@ -1660,6 +1659,21 @@ final class Pullback {
     }
 
     /**
+     * What a run gets past at {@code e}, apart from the closures written at it: on every run,
+     * where it is a construction no clause of its type refuses
+     * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}) or comes to a number where it answers
+     * whatever its operands are ({@link #comesToWhereItAnswers}); else as the owner of what a node
+     * ends a run for says ({@link WhatARunMayEndFor}).
+     */
+    private GetsPast completionOf(Core e, InputReads reads) {
+        boolean always = (Core.withoutStanding(e) instanceof Core.Construct made
+                && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads))
+                || comesToWhereItAnswers(e, reads);
+        return always ? new GetsPast.Always()
+                : WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
+    }
+
+    /**
      * The operand {@code e} stops a run on alone, or null where it has none, as the owner's own
      * account says: the divisor of a quotient that stops where it is nought, and not of one that
      * may stop on its operands' sizes ({@link WhereAnOperatorAnswers}), and of a remainder
@@ -1700,6 +1714,96 @@ final class Pullback {
         return divisor != null && AffineForms.outcome(divisor, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
                 && form.coefs().isEmpty() && !form.constant().isZero();
+    }
+
+    /**
+     * Whether {@code e}, worked out over operands that came to numbers, comes to a number where
+     * its own account says it answers: an operator whose number an {@code Int} holds, a rounding
+     * whose whole number its type holds ({@link RoundedToAWholeNumber#whereTheRoundedNumberIsHeld}),
+     * an operation that ends a run only where the form it is handed has no place
+     * ({@link AffineForms#whereAFormItIsHandedAnswers}) — and the number it comes to, before it is
+     * held to anything, lies there whatever its operands are ({@link #exactRangeOf}).
+     *
+     * <p>Of {@code e} alone. What its operands work out stops a run or not as each of them says,
+     * and is asked of each: {@code Int.floorMod(m - k, 12) + 1} adds within an {@code Int}
+     * whatever {@code m - k} is, and {@code m - k} may still pass one.
+     */
+    private boolean comesToWhereItAnswers(Core e, InputReads reads) {
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld held = whereItsNumberIsHeld(e, reads);
+        FormRange range = held == null ? null : exactRangeOf(e, reads);
+        return range != null && range.liesWithin(held.least(), held.greatest());
+    }
+
+    /** Where {@code e} answers as the number it comes to is held, or null where its account is
+     *  anything else, or it is none of the operations {@link #comesToWhereItAnswers} reads. */
+    private WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereItsNumberIsHeld(Core e,
+                                                                               InputReads reads) {
+        Core here = Core.withoutStanding(e);
+        if (isAnOperator(here)) {
+            return AffineForms.whereItAnswers(here)
+                    instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held ? held : null;
+        }
+        if (!(here instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        return writtenRounding(call, reads) != null
+                ? RoundedToAWholeNumber.whereTheRoundedNumberIsHeld(call.type(),
+                        read.rules().declarations())
+                : AffineForms.whereAFormItIsHandedAnswers(call, read.rules().declarations());
+    }
+
+    /** Whether {@code e} is a sum, a difference, a product or a negation. */
+    private static boolean isAnOperator(Core e) {
+        Core here = Core.withoutStanding(e);
+        return here instanceof Core.Neg || (here instanceof Core.Binary binary
+                && (binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
+                        || binary.op() == BinOp.MUL));
+    }
+
+    /** {@code e} as a rounding to a whole number with its policy written out, the policy read
+     *  where it stands in {@code reads} ({@link RoundedToAWholeNumber#written}), or null. */
+    private RoundedToAWholeNumber.Written writtenRounding(Core e, InputReads reads) {
+        return RoundedToAWholeNumber.written(e,
+                policy -> WrittenOutElements.reading(read.rules().symbols(),
+                        read.rules().newtypes()).standing(policy, reads).value());
+    }
+
+    /**
+     * The numbers {@code e} comes to on every run that works it out, as a number and before it is
+     * held to its type — or null where they are not known: what the arithmetic composes it as,
+     * over the numbers each says it lies between ({@link FormRange#ofNumbers}); a number rounded
+     * to a whole one, the numbers the ends of what it rounds round to, since rounding keeps their
+     * order; a whole number an operation of the library answers, where the library bounds it
+     * ({@link #whatTheLibraryBounds}) — a remainder by a divisor below nought as by one above; and
+     * a sum, a difference, a product or a negation of numbers each of which is known, where the
+     * arithmetic composes it as no form.
+     */
+    private FormRange exactRangeOf(Core e, InputReads reads) {
+        if (AffineForms.outcome(e, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
+            return FormRange.ofNumbers(form, read);
+        }
+        RoundedToAWholeNumber.Written rounding = writtenRounding(e, reads);
+        if (rounding != null) {
+            FormRange before = exactRangeOf(rounding.value(), reads);
+            ExactRatio least = before == null ? null : rounding.roundedFrom(before.least());
+            ExactRatio greatest = before == null ? null : rounding.roundedFrom(before.greatest());
+            return least == null || greatest == null ? null : new FormRange(least, greatest);
+        }
+        Core here = Core.withoutStanding(e);
+        if (here instanceof Core.PreservedCall call) {
+            return call.type() == Type.INT
+                    ? FormRange.ofTheWholeNumbersIn(whatTheLibraryBounds(call, reads)) : null;
+        }
+        if (!isAnOperator(here)) {
+            return null;
+        }
+        return switch (here) {
+            case Core.Neg negated -> FormRange.negated(exactRangeOf(negated.operand(), reads));
+            case Core.Binary binary -> FormRange.combined(binary.op(),
+                    exactRangeOf(binary.left(), reads), exactRangeOf(binary.right(), reads));
+            default -> null;
+        };
     }
 
     /**
@@ -7678,8 +7782,9 @@ final class Pullback {
         }
 
         /** An operator that may stop a run where nothing is said, over {@code reads}: the places
-         *  of the numbers among them are the ones it may stop on, and a quantity that is no
-         *  number of a place leaves it stopping on no place this can name. */
+         *  each of them is read off are the ones it may stop on, a remainder's those of its
+         *  dividend ({@link PositionsAStatementReads#ofANumber}), and a quantity read off
+         *  anything else leaves it stopping on no place this can name. */
         void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound) {
             leaveUnsaid(reads, bound, null);
         }
@@ -7688,14 +7793,19 @@ final class Pullback {
          *  {@code at}. */
         void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound, InputReads at) {
             for (Quantity each : reads) {
-                if (each instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
-                    unsaidAt.add(term.subjectPath());
-                } else if (each instanceof Quantity.OfABinding named) {
-                    leaveUnsaidOver(at != null && bound != null
-                            && !bound.names().contains(named.binding())
-                            ? at.namedBy(named.binding()) : named.binding(), bound);
-                } else {
+                Optional<Set<ReadSubject>> read = PositionsAStatementReads.ofANumber(each);
+                if (read.isEmpty()) {
                     unsaidElsewhere = true;
+                    continue;
+                }
+                for (ReadSubject subject : read.get()) {
+                    switch (subject) {
+                        case ReadSubject.At(TermPath path) -> unsaidAt.add(path);
+                        case ReadSubject.Bound(var named) ->
+                                leaveUnsaidOver(at != null && bound != null
+                                        && !bound.names().contains(named.binding())
+                                        ? at.namedBy(named.binding()) : named.binding(), bound);
+                    }
                 }
             }
         }

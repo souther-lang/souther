@@ -229,6 +229,41 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                 kindsOfTheElementsRead(both), "a conjunct needs what it holds");
     }
 
+    /**
+     * The same rule written as the law the call comes to — as many different ids as elements —
+     * reads what the call reads, and is needed where the call is: the call is the oracle. Only
+     * where the count is shown to answer for every list: one that may stop works out more of each
+     * element than its id, and whether it stops turns on that, so it reads the elements whole.
+     */
+    @Test
+    void aCountOfDifferentValuesReadsWhatTheCallReads() {
+        String call = "List.allDistinctBy(i -> i.id, items)";
+        String counted = "Set.size(Set.fromList(List.map(i -> i.id, items))) == List.length(items)";
+        for (String clause : List.of("%s", "%s || List.length(items) >= 3",
+                "%s && List.length(items) >= 2")) {
+            assertEquals(clausesSay(itemsUnder(clause.formatted(call)), ClauseMeaning.Stated::reads),
+                    clausesSay(itemsUnder(clause.formatted(counted)), ClauseMeaning.Stated::reads),
+                    clause);
+        }
+        String stopping = "Map.size(Map.fromList(List.map(i -> (i.id, i.price + 9223372036854775807),"
+                + " items))) == List.length(items)";
+        assertTrue(clausesSay(itemsUnder(stopping), ClauseMeaning.Stated::reads).getFirst()
+                        .contains(new ClauseRead(new RuleKey(List.of("items")),
+                                ClauseRead.Kind.ITS_VALUES, RuleKey.THE_VALUE)),
+                "a price added past an Int is read with the ids");
+    }
+
+    private static Compilation itemsUnder(String clause) {
+        return started("""
+                module shop.prices exposing ( Item, Range )
+
+                data Item = { id: Int, price: Int }
+
+                data Range = { items: List<Item> }
+                    invariant %s
+                """.formatted(clause));
+    }
+
     /** The kinds of read of elements the clauses of {@code c} say, one entry per kind. */
     private static Set<ClauseRead.Kind> kindsOfTheElementsRead(Compilation c) {
         Set<ClauseRead.Kind> out = new HashSet<>();

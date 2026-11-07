@@ -916,52 +916,6 @@ public final class BoundOperationFacts {
                 && aspect == AnswerAspect.TRUTH;
     }
 
-    /**
-     * Where {@code operation} comes out true exactly where no two elements of a container it is
-     * handed come to one answer of a closure it is handed: which argument is the container and
-     * which the closure — or null where it states no such thing.
-     *
-     * <p>Read off the law its body is proved to come to: as many different answers of that closure
-     * on the container's elements as the container holds elements.
-     */
-    public NoTwoAlike statesNoTwoAlike(ValueName operation) {
-        if (!(settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
-                OperationLaw.Observation<DeclaredArgument>(var _,
-                        LawProposition.Compared<DeclaredArgument>(var form, Rel states)), var _))
-                || states != Rel.EQ || !form.constant().isZero() || form.coefs().size() != 2) {
-            return null;
-        }
-        DeclaredArgument container = null;
-        DeclaredArgument by = null;
-        DeclaredArgument sized = null;
-        ExactRatio different = null;
-        ExactRatio size = null;
-        for (var term : form.coefs().entrySet()) {
-            switch (term.getKey()) {
-                case LawNumber.HowManyDifferent<DeclaredArgument>(var over,
-                        LawSubject.WhatTheClosureAnswers<DeclaredArgument>(var closure)) -> {
-                    container = over;
-                    by = closure;
-                    different = term.getValue();
-                }
-                case LawNumber.SizeOf<DeclaredArgument>(
-                        LawSubject.Argument<DeclaredArgument>(var of)) -> {
-                    sized = of;
-                    size = term.getValue();
-                }
-                default -> {
-                    return null;
-                }
-            }
-        }
-        return container == null || !container.equals(sized)
-                || !different.negated().equals(size) ? null : new NoTwoAlike(container, by);
-    }
-
-    /** The container no two elements of which are alike, and the closure whose answers they are
-     *  alike by. */
-    public record NoTwoAlike(DeclaredArgument container, DeclaredArgument by) {}
-
     /** Whether {@code operation} states its predicate of every element. */
     public boolean statesItsPredicateOfEveryElement(ValueName operation) {
         return one(BoundOperationFact.StatesItsPredicateOfEveryElement.class, operation) != null;
