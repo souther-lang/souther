@@ -69,9 +69,9 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
      * one filing adds at most one. A walk hands its step no more elements than a collection holds
      * ({@link GetsPast#MOST_ELEMENTS}), so it answers no more entries than a map holds.
      *
-     * <p>Said of this operation where it stands in the step and nowhere else: the same node may be
-     * written elsewhere too, by a definition two places use, and what it answers there is no part
-     * of this walk.
+     * <p>Said of this operation where it stands in the step and nowhere else: that a node stands at
+     * one place of the tree only is nothing this states, and what it answers anywhere else is no
+     * part of this walk.
      *
      * @param operation the operation that files: an update of the key, or an insert under it
      * @param movedBy   the argument of {@code operation} under which the value filed is worked out

@@ -1657,7 +1657,7 @@ final class Pullback {
                 : ShownByAWalk.ofTheStep(KeyedAccumulation.of(e, reads, sides(),
                         blocksAt(new Denotation(e, reads))));
         Function<Core, ShownByAWalk> under = child -> walk != null
-                ? Core.withoutStanding(child) == walk.step() ? ofTheStep : ShownByAWalk.NOTHING
+                ? ShownByAWalk.inTheWalk(walk.step(), ofTheStep, child)
                 : around.under(e, child);
         try {
             if (e instanceof Core.LetIn li) {
@@ -1690,9 +1690,9 @@ final class Pullback {
      * <p>Shown by position and not by node. The walk's runs are what make what it files into and
      * what it finds under a key what the walk says, so what is shown holds of the operations
      * where they stand in its step: the step written at the walk, and none it reaches by a name,
-     * which is walked where it is written. A node is the same object wherever a definition two
-     * places use is written out, so the same operation met in the seed, in what is walked, or in
-     * the step of another walk is not shown by this one: entering another walk shows what that
+     * which is walked where it is written. That a node stands at one place of the tree only is
+     * nothing anything here states, so the same operation met in the seed, in what is walked, or
+     * in the step of another walk is not shown by this one: entering another walk shows what that
      * walk shows, and nothing of this one's.
      *
      * <p>In the step, each operation that files is shown to stop no run where it ends one only on
@@ -1708,8 +1708,7 @@ final class Pullback {
      * @param move    the move shown to stop no run, where the place is under the argument it
      *                moves by; null elsewhere
      */
-    private record ShownByAWalk(List<KeyedAccumulation.Filing> filings, List<Core> fit,
-                                Core move) {
+    record ShownByAWalk(List<KeyedAccumulation.Filing> filings, List<Core> fit, Core move) {
 
         static final ShownByAWalk NOTHING = new ShownByAWalk(List.of(), List.of(), null);
 
@@ -1742,6 +1741,12 @@ final class Pullback {
                     instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
                             var least, var greatest)
                     && counted.everyValueMovedLiesWithin(least, greatest);
+        }
+
+        /** What is shown at {@code child}, a part of a walk whose step is {@code step} and which
+         *  shows {@code ofTheStep}: that in the step, and nothing in its seed or what it walks. */
+        static ShownByAWalk inTheWalk(Core step, ShownByAWalk ofTheStep, Core child) {
+            return Core.withoutStanding(child) == step ? ofTheStep : NOTHING;
         }
 
         /** Whether {@code e}, where it stands here, is shown to stop no run. */
