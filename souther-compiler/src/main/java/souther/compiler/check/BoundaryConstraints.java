@@ -28,6 +28,7 @@ import souther.compiler.core.Kernel;
 import souther.compiler.core.MessageForm;
 import souther.compiler.core.ValueShape;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
@@ -238,6 +239,10 @@ public final class BoundaryConstraints {
      * empty when this cannot prove one.
      */
     private Optional<BoundaryConstraint> of(InvariantStatement statement, Type base) {
+        Optional<BoundaryConstraint> unique = unique(statement, base);
+        if (unique.isPresent()) {
+            return unique;
+        }
         return switch (statement) {
             case InvariantStatement.Unread _, InvariantStatement.HoldsAnEntry _,
                  InvariantStatement.BalancesSides _ -> Optional.empty();
@@ -334,7 +339,7 @@ public final class BoundaryConstraints {
         if (n == null) {
             return Optional.empty();
         }
-        return switch (placed) {
+        return switch (ofASize(placed, n)) {
             case ComparisonClaim.Singled singled ->
                     singled.holdsAtTheValue() ? Optional.of(new FixedSize(n)) : Optional.empty();
             case ComparisonClaim.Cut cut -> {
@@ -355,7 +360,7 @@ public final class BoundaryConstraints {
      */
     private static Optional<BoundaryConstraint> ofMapSize(ComparisonClaim placed, Core against) {
         Integer n = sizeBound(against);
-        if (n == null || !(placed instanceof ComparisonClaim.Cut cut)) {
+        if (n == null || !(ofASize(placed, n) instanceof ComparisonClaim.Cut cut)) {
             return Optional.empty();
         }
         EndSide end = endOf(cut);
@@ -364,6 +369,17 @@ public final class BoundaryConstraints {
                 : Optional.of(end == EndSide.LOWER
                         ? at == 1 ? new MapNonEmpty() : new MapMinSize(at.intValue())
                         : new MapMaxSize(at.intValue()));
+    }
+
+    /**
+     * {@code placed}, of a size held against {@code n}, as the cut it is where it holds the size
+     * unequal to nought: no size is lower than nought, so a size that is not nought is above it —
+     * which is how {@code Bool.not(List.isEmpty(value))} arrives, and is a non-emptiness. Anywhere
+     * else a disequality parts the sizes in two and is the disequality it is.
+     */
+    private static ComparisonClaim ofASize(ComparisonClaim placed, int n) {
+        return placed instanceof ComparisonClaim.Singled singled && !singled.holdsAtTheValue()
+                && n == 0 ? ComparisonClaim.stating(Rel.GT) : placed;
     }
 
     /** The literal bound a size is held against, or null when it is held against something else. */
@@ -382,15 +398,30 @@ public final class BoundaryConstraints {
                 && isValue(call.args().get(1))) {
             return Optional.of(matching(call));
         }
-        // `List.allDistinctBy(x -> x, value)` says of the elements that no two are equal, by the same
-        // value equality (spec §collections). Read where every builder of a list reads it
-        // (ElementsApart), so the decoder and the rows composed for it agree about which rule says
-        // so. Apart at a run of fields says it of something else — the elements' ids — and there is
-        // no constraint for that, so the clause keeps its own check. Nor is there one where the
-        // elements have no message form: the constraint reports the elements it finds repeated, and
-        // a decoder library cannot write them.
-        List<String> apart = ElementsApart.apartAt(call, field);
-        if (base instanceof Type.ListOf list && apart != null && apart.isEmpty()) {
+        return Optional.empty();
+    }
+
+    /**
+     * The uniqueness {@code statement} states of the value's elements, or empty where it states
+     * none.
+     *
+     * <p>{@code List.allDistinctBy(x -> x, value)} says of the elements that no two are equal, by
+     * the same value equality (spec §collections), and so does
+     * {@code List.length(List.distinct(value)) == List.length(value)}. Read where every builder of a
+     * list reads it (ElementsApart), so the decoder and the rows composed for it agree about which
+     * rule says so. Apart at a run of fields says it of something else — the elements' ids — and
+     * there is no constraint for that, so the clause keeps its own check. Nor is there one where
+     * the elements have no message form: the constraint reports the elements it finds repeated, and
+     * a decoder library cannot write them.
+     *
+     * <p>And only where the clause is shown to answer for every list. The constraint checks a value
+     * in the clause's place, so a clause that stops on some list the constraint lets through — a
+     * count multiplied past what an {@code Int} holds — is a clause the constraint is not.
+     */
+    private Optional<BoundaryConstraint> unique(InvariantStatement statement, Type base) {
+        ElementsApart.Stated apart = ElementsApart.apartAt(statement, field);
+        if (base instanceof Type.ListOf list && apart != null && apart.run().isEmpty()
+                && apart.answersEverywhere()) {
             MessageForm element = messageForm(list.element(), Set.of());
             return element == null ? Optional.empty() : Optional.of(new Unique(element));
         }

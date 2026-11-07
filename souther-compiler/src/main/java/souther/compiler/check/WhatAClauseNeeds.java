@@ -54,8 +54,8 @@ final class WhatAClauseNeeds {
         return new WhatAClauseNeeds(lookup, answerOfNoMember(lookup)).work(clause) == Worked.FALSE;
     }
 
-    /** Whether {@code clause} is false wherever {@code apart}, a call of it saying the elements
-     *  of a container are apart, says they are not. */
+    /** Whether {@code clause} is false wherever {@code apart}, a part of it saying the elements
+     *  of a container are apart — a call or a comparison — says they are not. */
     static boolean elementsApart(Core clause, Core apart) {
         return new WhatAClauseNeeds(apart, Worked.FALSE).work(clause) == Worked.FALSE;
     }

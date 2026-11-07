@@ -183,6 +183,19 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.operatorsIn",
                     "which operators a body works out, which a sum, a difference and a product"
                             + " are and a comparison is not"),
+            new Held("souther.compiler.partition.Pullback.isAnOperator",
+                    "which operators a run works out over the numbers of its operands and answers"
+                            + " where the number it comes to is held: a sum, a difference and a"
+                            + " product, and not a quotient or a comparison"),
+            new Held("souther.compiler.partition.FormRange.combined",
+                    "what a sum, a difference and a product come to of two runs of numbers, each"
+                            + " its own arithmetic of the ends"),
+            new Held("souther.compiler.partition.FormRange.asWorkedOut",
+                    "a product of two forms is what its factors come to multiplied, and not the"
+                            + " ends of the type it is answered in"),
+            new Held("souther.compiler.partition.Pullback.exactRangeOf",
+                    "hands the operator a run works out to the arithmetic of the runs of its"
+                            + " operands, where no form says what it comes to"),
             new Held("souther.compiler.partition.Pullback.theDivisorItAloneStopsOn",
                     "which operand of a quotient it stops a run on, the one it divides by and not"
                             + " the one it divides, where the operator's account says its divisor"
@@ -247,11 +260,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.EntryHeld.valueIs",
                     "asks whether a statement about the value a lookup found is an equality with"
                             + " a written number"),
-            new Held("souther.compiler.check.SidesBalanced.read",
-                    "asks whether two totals are compared for equality"),
+            new Held("souther.compiler.check.SidesBalanced.caseOf",
+                    "asks whether a condition on an element compares a field of it for equality"
+                            + " with a case"),
             new Held("souther.compiler.check.SidesBalanced.side",
-                    "asks whether the step of a walk adding a number compares a field of the"
-                            + " element for equality with a case"),
+                    "asks the operations that add, by the operator the library says each"
+                            + " computes, for the number a walk adds to its total"),
+            new Held("souther.compiler.check.ContainerCounts.number",
+                    "keeps the three operators that are exact arithmetic over counts, and leaves"
+                            + " a number written with any other unread"),
             new Held("souther.compiler.check.ComputedNumber.operated",
                     "keeps the three operators that are exact arithmetic over places, and leaves"
                             + " a number written with any other unread"),

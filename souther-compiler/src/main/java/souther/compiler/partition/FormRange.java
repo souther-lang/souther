@@ -3,14 +3,20 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.types.BinOp;
 
 import java.math.BigInteger;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -39,6 +45,68 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
                         Map<NumericTerm, FormRange> standIns) {
         return of(form, term -> standIns.containsKey(term) ? standIns.get(term)
                 : endsOf(term, read));
+    }
+
+    /**
+     * The range of {@code form}, worked out as it is written and before any type holds it, over
+     * numbers each of which says where it lies whatever the declarations say: a number of the
+     * input as it is worked out ({@link #asWorkedOut}), and a remainder between the ends its
+     * operation states by its divisor ({@link #ofARemainder}). Null where some number is anything
+     * else.
+     */
+    static FormRange ofNumbers(LinearForm<Quantity> form, InputReading read) {
+        return of(form, quantity -> quantity instanceof DecisionAtom.OfTheInput(var term, var _)
+                ? asWorkedOut(term, read) : ofARemainder(quantity));
+    }
+
+    /**
+     * The numbers {@code term} comes to as a run works it out: a product, what its two factors
+     * come to multiplied, since the type it is answered in is what is being asked of it; anything
+     * else, the ends of its place ({@link #endsOf}), which a value there is held to. Null where
+     * the reading answers nothing of the term ({@link Quantities#answersFor}).
+     */
+    private static FormRange asWorkedOut(NumericTerm term, InputReading read) {
+        if (term instanceof NumericTerm.ProductOf product) {
+            Function<NumericTerm, FormRange> factor = each -> asWorkedOut(each, read);
+            return combined(BinOp.MUL, of(product.one(), factor), of(product.other(), factor));
+        }
+        return read.quantities().answersFor(term) ? endsOf(term, read) : null;
+    }
+
+    /**
+     * The whole numbers {@code quantity} comes to, where it is what a division by a written number
+     * leaves: where its operation states its answers lie by its divisor
+     * ({@link Quantity.RemainderOfADividend#whatTheOperationStates}), whatever its dividend comes
+     * to. Null where it is no such remainder.
+     */
+    static FormRange ofARemainder(Quantity quantity) {
+        return quantity instanceof Quantity.RemainderOfADividend remainder
+                ? ofTheWholeNumbersIn(remainder.whatTheOperationStates()) : null;
+    }
+
+    /**
+     * The whole numbers {@code runs} holds, from the least to the greatest — or null where it has
+     * no end on a side. A remainder is whole, so {@code r < 7} is {@code r <= 6}.
+     */
+    static FormRange ofTheWholeNumbersIn(NumericDomain.Bounds runs) {
+        ExactRatio least = onAWholeNumber(runs.min(), false);
+        ExactRatio greatest = onAWholeNumber(runs.max(), true);
+        return least == null || greatest == null ? null : new FormRange(least, greatest);
+    }
+
+    /** {@code end} of a run of whole numbers, as the whole number nearest it the run reaches —
+     *  or null, where it has no end. */
+    private static ExactRatio onAWholeNumber(Endpoint end, boolean upper) {
+        if (end == null) {
+            return null;
+        }
+        ExactRatio at = Count.number(end.at()).exactly();
+        if (!((upper ? at.floor() : at.ceiling()) instanceof ExactAnswer.Held<BigInteger>(
+                BigInteger whole))) {
+            return null;
+        }
+        return ExactRatio.of(end.inclusive() || ExactRatio.of(whole).compareTo(at) != 0 ? whole
+                : upper ? whole.subtract(BigInteger.ONE) : whole.add(BigInteger.ONE));
     }
 
     /** The range of {@code form} over atoms each of whose range {@code rangeOf} answers, null
@@ -123,6 +191,41 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
                 wholeEnd(carrier == null ? null : carrier.greatestWholeNumber()), reach.max(),
                 false);
         return least == null || greatest == null ? null : new FormRange(least, greatest);
+    }
+
+    /** The numbers {@code range} holds, negated — or null where it is not known. */
+    static FormRange negated(FormRange range) {
+        return range == null ? null
+                : new FormRange(range.greatest.negated(), range.least.negated());
+    }
+
+    /**
+     * The numbers {@code op}, a sum, a difference or a product, comes to of a number {@code left}
+     * holds and one {@code right} holds, exactly and whatever type would hold them — or null where
+     * either is not known, or an end has no number the exact arithmetic holds.
+     */
+    static FormRange combined(BinOp op, FormRange left, FormRange right) {
+        if (left == null || right == null) {
+            return null;
+        }
+        List<ExactAnswer<ExactRatio>> ends = switch (op) {
+            case ADD -> List.of(left.least.plus(right.least), left.greatest.plus(right.greatest));
+            case SUB -> List.of(left.least.minus(right.greatest),
+                    left.greatest.minus(right.least));
+            case MUL -> List.of(left.least.times(right.least), left.least.times(right.greatest),
+                    left.greatest.times(right.least), left.greatest.times(right.greatest));
+            default -> List.of();
+        };
+        ExactRatio least = null;
+        ExactRatio greatest = null;
+        for (ExactAnswer<ExactRatio> each : ends) {
+            if (!(each instanceof ExactAnswer.Held<ExactRatio>(ExactRatio end))) {
+                return null;
+            }
+            least = least == null || end.compareTo(least) < 0 ? end : least;
+            greatest = greatest == null || end.compareTo(greatest) > 0 ? end : greatest;
+        }
+        return least == null ? null : new FormRange(least, greatest);
     }
 
     /** Whether every number this holds lies from {@code least} to {@code greatest}. */

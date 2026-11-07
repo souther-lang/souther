@@ -615,6 +615,11 @@ final class ReadQuantities implements Quantities {
         return contexts.ordersOf(term, this);
     }
 
+    @Override
+    public boolean answersFor(NumericTerm term) {
+        return rootOf(term.subjectPath()) != null;
+    }
+
     /** {@link #ordersOf}, worked out from where {@code term} sits. */
     private TermOrders ordersWorkedOut(NumericTerm term) {
         if (term instanceof NumericTerm.ProductOf product) {
@@ -2535,7 +2540,7 @@ final class ReadQuantities implements Quantities {
      * nor could check it: a path is a location and the declarations are what say what is at one.
      */
     private NumericTerm held(NumericTerm term) {
-        if (rootOf(term.subjectPath()) == null) {
+        if (!answersFor(term)) {
             throw new IllegalArgumentException(
                     "`" + term.subjectPath().discriminated() + "` is under no value whose rules this"
                             + " reading holds and can name it by, so there is nothing here to answer"

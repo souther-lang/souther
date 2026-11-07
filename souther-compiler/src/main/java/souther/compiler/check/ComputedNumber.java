@@ -99,6 +99,21 @@ final class ComputedNumber {
         private static ExactRatio sum(ExactRatio one, ExactRatio other) {
             return one == null || other == null ? null : one.plus(other).orNull();
         }
+
+        /**
+         * Whether every number of this lies on {@code order}: what a step of a type that stops
+         * somewhere answers, worked out where its operands lie, is a number of a run only where it
+         * does. Not where either end is not known.
+         */
+        boolean liesOn(Range order) {
+            if (order == null) {
+                return false;
+            }
+            boolean below = order.low() == null || (low != null && low.compareTo(order.low()) >= 0);
+            boolean above = order.high() == null
+                    || (high != null && high.compareTo(order.high()) <= 0);
+            return below && above;
+        }
     }
 
     /** One end of a range, which may be past every number. */
@@ -378,14 +393,7 @@ final class ComputedNumber {
 
     /** {@code range} on {@code order}, or null where it reaches past it or either is not known. */
     private static Range stays(Range range, Range order) {
-        if (range == null || order == null) {
-            return null;
-        }
-        boolean low = order.low() == null
-                || (range.low() != null && range.low().compareTo(order.low()) >= 0);
-        boolean high = order.high() == null
-                || (range.high() != null && range.high().compareTo(order.high()) <= 0);
-        return low && high ? range : null;
+        return range != null && range.liesOn(order) ? range : null;
     }
 
     /** {@code value} rounded to a whole multiple of ten to the minus {@code scale}, the way the
