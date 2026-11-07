@@ -1,6 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.regex.Language;
+import souther.compiler.regex.StringsOfAPiece;
+import souther.compiler.semantics.CaseMapping;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -12,8 +15,10 @@ import java.util.function.Supplier;
 /**
  * What one reading of a body's guards works out once and hands back to whoever asks the same
  * again while the reading lasts: the walk of a way ({@link WayToTheBorder#along}), what a run's
- * answers narrow a region by ({@link Reachability.Reaching#narrowedPast}), and what a statement
- * says of its remainder ({@link ARemainderMoved#saidBy}).
+ * answers narrow a region by ({@link Reachability.Reaching#narrowedPast}), what a statement
+ * says of its remainder ({@link ARemainderMoved#saidBy}), which operations of a case conversion
+ * are not exact over the strings it is done to ({@link #notExactOver}), and which pieces of what
+ * it answers are pieces of its values ({@link #piecesAConversionAnswers}).
  *
  * <p>A reading reads one way over many regions and for many relations, each building the way afresh
  * from the same conditions; and it takes the way to each case, and each way that is split into,
@@ -46,6 +51,11 @@ final class OneReading {
     private final Map<RegionPast, Reachability.Reaching.NarrowedPast> narrowed = new HashMap<>();
     private final Map<RowDemand.OnARemainder, Optional<ARemainderMoved.Said>> remaindersSaid =
             new IdentityHashMap<>();
+    /** By value: a conversion is a value, and a language is its strings, hashed off the table it
+     *  was made into when it was made. */
+    private final Map<ConvertedOver, List<String>> notExact = new HashMap<>();
+    /** By value, for the same reason. */
+    private final Map<PiecesAsked, Optional<PiecesAnswered>> piecesAnswered = new HashMap<>();
 
     private OneReading() {
     }
@@ -82,6 +92,30 @@ final class OneReading {
                 ? kept(READING.get().remaindersSaid, statement, reading)
                 : reading.get();
     }
+
+    /** The operations of {@code conversion} whose image is not shown over {@code over}: as this
+     *  reading worked them out already, or {@code working}'s, now. */
+    static List<String> notExactOver(CaseMapping conversion, Language over,
+                                     Supplier<List<String>> working) {
+        return READING.isBound()
+                ? kept(READING.get().notExact, new ConvertedOver(conversion, over), working)
+                : working.get();
+    }
+
+    /** The pieces of what {@code conversion} answers of {@code whole} at {@code separator} in
+     *  {@code window}: as this reading worked them out already, or {@code working}'s, now. */
+    static Optional<PiecesAnswered> piecesAConversionAnswers(
+            int separator, PieceWindow window, CaseMapping conversion, Language whole,
+            Supplier<Optional<PiecesAnswered>> working) {
+        return READING.isBound()
+                ? kept(READING.get().piecesAnswered,
+                        new PiecesAsked(separator, window, conversion, whole), working)
+                : working.get();
+    }
+
+    /** The pieces of a conversion's answers that are pieces of its values, and what a piece may be
+     *  besides. */
+    record PiecesAnswered(StringsOfAPiece.Shown shown, Language mayBe) {}
 
     /** The answer kept in {@code in} for {@code asked}, or {@code working}'s, kept from now on.
      *  Looked up and put in apart, so working one out may ask for another. */
@@ -152,4 +186,11 @@ final class OneReading {
             return 31 * System.identityHashCode(region) + System.identityHashCode(answered);
         }
     }
+
+    /** A conversion and the strings it is done to. */
+    private record ConvertedOver(CaseMapping conversion, Language over) {}
+
+    /** Which pieces of what a conversion answers of some strings are asked for. */
+    private record PiecesAsked(int separator, PieceWindow window, CaseMapping conversion,
+                               Language whole) {}
 }

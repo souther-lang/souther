@@ -16,10 +16,11 @@ package souther.compiler.reach;
  * added to a proof, from being a change to what an obligation or a claim comes to.
  *
  * <pre>
- *                   obligation      a dead branch      an `unreachable` the author wrote
- *   Unreachable     taken out       warned about       borne out
- *   Reachable       left standing   nothing said       refuted
- *   Unsettled       left standing   nothing said       neither
+ *                          obligation      a dead branch      an `unreachable` the author wrote
+ *   Unreachable, here      taken out       warned about       borne out
+ *   Unreachable, above     taken out       said above         borne out
+ *   Reachable              left standing   nothing said       refuted
+ *   Unsettled              left standing   nothing said       neither
  * </pre>
  *
  * <p>The two columns on the right are why this is not a boolean. Taking an obligation out and
@@ -36,13 +37,42 @@ public sealed interface Reachability {
      * arrive: a set disjoint from a superset is disjoint from the set. That is the one direction
      * claimed, and both readers of this rest on the same claim.
      */
-    record Unreachable(Proof proof) implements Reachability {
+    record Unreachable(Proof proof, Said said) implements Reachability {
 
         public Unreachable {
             if (proof == null) {
                 throw new IllegalArgumentException("nothing arrives here for no reason");
             }
+            if (said == null) {
+                throw new IllegalArgumentException("nothing arriving is said somewhere");
+            }
         }
+
+        /** Nothing arrives here, said of this place. */
+        public Unreachable(Proof proof) {
+            this(proof, Said.HERE);
+        }
+
+        /** Whether this is said with an arm the place is inside, which is the one reported. */
+        public boolean saidAbove() {
+            return said == Said.ABOVE;
+        }
+    }
+
+    /**
+     * Where the place nothing arrives at is said to be one.
+     *
+     * <p>Both take the place's obligation out, and only one is a dead branch to report. A place
+     * inside an arm nothing enters is one nothing arrives at, and no row can be owed there; what
+     * an author takes out is the arm it is inside, and that is the arm reported.
+     */
+    enum Said {
+
+        /** Of this place: the fork it is an arm of is where nothing gets in. */
+        HERE,
+
+        /** Of an arm this place is inside, which nothing enters. */
+        ABOVE
     }
 
     /**

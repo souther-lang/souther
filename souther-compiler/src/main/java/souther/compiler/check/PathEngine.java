@@ -76,6 +76,8 @@ final class PathEngine {
     private final Terms terms;
     /** What a clause owes and what a guard settles. */
     private final Predicates predicates;
+    /** What a construction's clauses come to where it stands, read by these rules. */
+    private final ConstructionVerdicts verdicts;
 
     /** The one reading of what a declaration guarantees, which this reading owns and this walk is
      * one consumer of. */
@@ -141,6 +143,8 @@ final class PathEngine {
         this.terms = new Terms(reading, ruleReading, templates, elements, reachability);
         this.clauses = terms.clauses();
         this.predicates = terms.predicates();
+        this.verdicts = new ConstructionVerdicts(ruleReading.source().kinds(),
+                ruleReading.source().newtypes(), clauses, terms, predicates);
         this.guarantees = terms.guarantees();
         this.walk = terms.walk();
         this.contracts = Map.copyOf(contracts);
@@ -171,6 +175,10 @@ final class PathEngine {
 
     Predicates predicates() {
         return predicates;
+    }
+
+    ConstructionVerdicts verdicts() {
+        return verdicts;
     }
 
     /**

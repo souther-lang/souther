@@ -392,6 +392,22 @@ final class MeaningAssumptions {
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
                             WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
                             .forEach(this::notTaken);
+            // Some element being a value is how many of the container's elements are that value,
+            // which a path holds; and the container holding one where some is.
+            case Proposition.Some(DecisionSubject.AnInput(TermPath container,
+                                          ValueIdentity identity),
+                                  Proposition.SameValue(DecisionSubject one, DecisionSubject other,
+                                          boolean same, var _), boolean holds, var _)
+                    when same && howManyAre(container, identity, one, other) != null -> {
+                FactSubject count = howManyAre(container, identity, one, other);
+                known = known.taking(LinearForm.atomMinusConstant(count, ExactRatio.ONE),
+                        holds ? Rel.GE : Rel.LT, Known.Held.ON_THE_PATH,
+                        terms.spacesOf(LinearForm.atom(count)));
+                taken = true;
+                if (holds) {
+                    tookTheCount(container, identity, true);
+                }
+            }
             // Some element, asked nothing of it, is the container holding one: a count, which a path
             // holds.
             case Proposition.Some(DecisionSubject.AnInput(TermPath container,
@@ -999,6 +1015,38 @@ final class MeaningAssumptions {
         if (!tookTheCount(container, identity, holds)) {
             outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
         }
+    }
+
+    /**
+     * How many elements of the container at {@code container}, or keys, are the value one of
+     * {@code one} and {@code other} names, where the other is the element or the key — or null
+     * where neither is, the value is no input, or either is a place a path does not read.
+     */
+    private FactSubject howManyAre(TermPath container, ValueIdentity identity, DecisionSubject one,
+                                   DecisionSubject other) {
+        for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+            DecisionSubject value = heldAs(container, of, one) ? other
+                    : heldAs(container, of, other) ? one : null;
+            FactSubject count = value instanceof DecisionSubject.AnInput(TermPath at,
+                    ValueIdentity named)
+                    ? terms.howManyAreAtPlace(placeOf(container, identity), placeOf(at, named), of)
+                    : null;
+            if (count != null) {
+                return count;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code subject} is what of the container at {@code container} a value is held as,
+     *  as {@code of} says: its element, or its key. */
+    private static boolean heldAs(TermPath container, AddsWhatItDoesNotHold.Of of,
+                                  DecisionSubject subject) {
+        return subject instanceof DecisionSubject.AnInput(TermPath at, var _)
+                && at.equals(switch (of) {
+                    case ELEMENTS -> container.element();
+                    case KEYS -> container.key();
+                });
     }
 
     /** The same, saying whether the count was named here at all, and nothing about why not. */
