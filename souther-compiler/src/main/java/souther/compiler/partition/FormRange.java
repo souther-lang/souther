@@ -14,6 +14,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -51,12 +52,19 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
      * The range of {@code form}, worked out as it is written and before any type holds it, over
      * numbers each of which says where it lies whatever the declarations say: a number of the
      * input as it is worked out ({@link #asWorkedOut}), and a remainder between the ends its
-     * operation states by its divisor ({@link #ofARemainder}). Null where some number is anything
-     * else.
+     * operation states by its divisor ({@link #ofARemainder}), and a name {@code named} answers a
+     * range of, which it holds where it is read: a name is no number of the input and no
+     * remainder, so this is asked of it and of nothing else. The name itself only, and not a field
+     * read off it. Null where some number is anything else.
      */
-    static FormRange ofNumbers(LinearForm<Quantity> form, InputReading read) {
-        return of(form, quantity -> quantity instanceof DecisionAtom.OfTheInput(var term, var _)
-                ? asWorkedOut(term, read) : ofARemainder(quantity));
+    static FormRange ofNumbers(LinearForm<Quantity> form, InputReading read,
+                               Function<BindingId, FormRange> named) {
+        return of(form, quantity -> switch (quantity) {
+            case DecisionAtom.OfTheInput(var term, var _) -> asWorkedOut(term, read);
+            case Quantity.OfABinding bound when bound.steps().isEmpty() ->
+                    named.apply(bound.binding());
+            default -> ofARemainder(quantity);
+        });
     }
 
     /**
