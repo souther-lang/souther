@@ -9,6 +9,7 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -62,7 +63,25 @@ public sealed interface AddsWhatItDoesNotHold {
     }
 
     /** Where in the holder a value added is looked for. */
-    enum Of { ELEMENTS, KEYS }
+    enum Of {
+        ELEMENTS, KEYS;
+
+        /**
+         * Where a container of {@code type} holds each value once, or null where it holds none
+         * that way: a set its elements and a map its keys. A list may hold a value any number of
+         * times, and so may a map among its values.
+         *
+         * <p>The type and not a law, since it is what the type is: a set given a value it holds
+         * is the same set, which the laws of the operations over one are written knowing.
+         */
+        static Of heldOnceIn(Type type) {
+            return switch (type) {
+                case Type.SetOf _ -> ELEMENTS;
+                case Type.MapOf _ -> KEYS;
+                case null, default -> null;
+            };
+        }
+    }
 
     /**
      * How whether a container holds a value is asked: {@code operation}, handed the value at

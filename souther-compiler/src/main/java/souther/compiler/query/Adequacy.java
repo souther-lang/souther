@@ -78,6 +78,7 @@ import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BoundaryOutput;
+import souther.compiler.check.DeparturesNoRunTakes;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PathReachability;
 import souther.compiler.inputs.ValueDefinitions;
@@ -1444,7 +1445,9 @@ public final class Adequacy {
                                 ruleReading),
                         checked.value().elementBindings()
                                 .getOrDefault(spec.name(), ElementBindings.NONE),
-                        ValueDefinitions.of(both.analysis(), Shapes.declarationNewtypes(db))));
+                        ValueDefinitions.of(both.analysis(), Shapes.declarationNewtypes(db)),
+                        both.analysis() == null ? DeparturesNoRunTakes.NONE
+                                : both.analysis().departures()));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1934,6 +1937,7 @@ public final class Adequacy {
             CoverageSites.Plan plan = checked.value().plan();
             Map<CoverageSites.AsWritten, Dead> dead = new LinkedHashMap<>();
             Set<CoverageSites.AsWritten> taken = new HashSet<>();
+            Map<CoverageSites.AsWritten, SourceOutcome.Arm> outcomes = new LinkedHashMap<>();
             arrives.value().forEach((behavior, asRun) -> {
                 for (CoverageSites.ArmSite site : plan.arms(behavior)) {
                     ControlPlace.Arm arm = site.place();
@@ -1952,17 +1956,22 @@ public final class Adequacy {
                     }
                     CoverageSites.AsWritten written =
                             new CoverageSites.AsWritten(arm.origin(), arm.part());
+                    outcomes.put(written, site.outcome());
                     if (asRun.answers().found().get(arm)
-                            instanceof souther.compiler.reach.Reachability.Unreachable unreachable) {
-                        dead.merge(written, new Dead(arm, Optional.of(unreachable.proof())),
-                                Dead::alongside);
+                            instanceof Reachability.Unreachable unreachable) {
+                        dead.merge(written, new Dead(arm, site.outcome(),
+                                Optional.of(unreachable.proof()),
+                                unreachable.saidAbove()), Dead::alongside);
                     } else {
                         taken.add(written);
                     }
                 }
             });
             taken.forEach(dead::remove);
-            List<Dead> found = new ArrayList<>(dead.values());
+            // An arm inside one nothing enters at every place it stands is said with that arm,
+            // which is the one an author takes out.
+            List<Dead> found = new ArrayList<>(dead.values().stream()
+                    .filter(each -> !each.saidAbove()).toList());
             // In the order an author reads them. The walk numbers an inner fork while it is inside
             // the arm that holds it, so what order it finds them in is a fact about the traversal;
             // where a warning sits in the output should be a fact about the source.
@@ -1970,9 +1979,63 @@ public final class Adequacy {
                     SourcePos.IN_WRITTEN_ORDER));
             List<Report> reports = new ArrayList<>();
             for (Dead each : found) {
-                reports.add(warning(db, name, each.arm(), each.proof()));
+                reports.add(warning(db, name, each.arm(),
+                        whatToDo(each, dead.keySet(), outcomes), each.proof()));
             }
             return Answer.of(true, reports);
+        }
+
+        /** What is done about a dead branch, which turns on what else of its fork is dead. */
+        private enum WhatToDo {
+            /** Take the branch out, or let something reach it. */
+            TAKE_IT_OUT,
+            /** No departure of the attempt is taken: build the value outright. */
+            BUILD_THE_VALUE,
+            /** Another departure is taken, and this one stays for its clause. */
+            ANSWER_WITH_UNREACHABLE,
+            /** The attempt never builds the value: answer what it departs with. */
+            ANSWER_THE_DEPARTURE
+        }
+
+        /**
+         * What to do about {@code each}, by which arms of its fork are dead: {@code dead}, by the
+         * arm the source wrote, among the arms written {@code outcomes} holds.
+         *
+         * <p>An attempt's departures are answered together. Each answers its clause, and a named
+         * clause has to have one, so a departure nothing takes is taken out by building the value
+         * outright only where no departure is taken; where another is, it stays and says it is
+         * reached by nothing. And where every arm of the attempt is dead, nothing reaches the
+         * attempt, which is taken out as any other branch is.
+         */
+        private static WhatToDo whatToDo(Dead each, Set<CoverageSites.AsWritten> dead,
+                                         Map<CoverageSites.AsWritten, SourceOutcome.Arm> outcomes) {
+            boolean departure = each.outcome() instanceof SourceOutcome.Failed(
+                    SourceOutcome.FailedBy.Construction _);
+            boolean built = each.outcome() instanceof SourceOutcome.Held(
+                    SourceOutcome.HeldBy.Construction _);
+            if (!departure && !built) {
+                return WhatToDo.TAKE_IT_OUT;
+            }
+            boolean buildingDead = false;
+            boolean everyDepartureDead = true;
+            for (Map.Entry<CoverageSites.AsWritten, SourceOutcome.Arm> arm : outcomes.entrySet()) {
+                if (!arm.getKey().origin().equals(each.arm().origin())) {
+                    continue;
+                }
+                boolean isDead = dead.contains(arm.getKey());
+                if (arm.getValue() instanceof SourceOutcome.Held _) {
+                    buildingDead = isDead;
+                } else {
+                    everyDepartureDead &= isDead;
+                }
+            }
+            if (buildingDead && everyDepartureDead) {
+                return WhatToDo.TAKE_IT_OUT;
+            }
+            if (built) {
+                return WhatToDo.ANSWER_THE_DEPARTURE;
+            }
+            return everyDepartureDead ? WhatToDo.BUILD_THE_VALUE : WhatToDo.ANSWER_WITH_UNREACHABLE;
         }
 
         /**
@@ -1984,15 +2047,22 @@ public final class Adequacy {
          * answers and never this.
          */
         private static Report warning(
-                Db db, String module, ControlPlace.Arm arm,
+                Db db, String module, ControlPlace.Arm arm, WhatToDo whatToDo,
                 Optional<souther.compiler.reach.Proof> proof) {
             souther.compiler.diag.Diagnostic.Builder said =
                     Warnings.pointedAt(Sites.placeOf(db, arm.anchor()))
                             .say(new DeadBranchMessage.NothingReachesThisBranch());
-            return Report.of(proof.map(new DeadBranchProofWords(db, module, said)::of)
-                    .orElse(said)
-                    .hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt())
-                    .build());
+            souther.compiler.diag.Diagnostic.Builder told =
+                    proof.map(new DeadBranchProofWords(db, module, said)::of).orElse(said);
+            return Report.of((switch (whatToDo) {
+                case TAKE_IT_OUT -> told.hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt());
+                case BUILD_THE_VALUE ->
+                        told.hint(new DeadBranchMessage.BuildTheValueRatherThanAttemptIt());
+                case ANSWER_WITH_UNREACHABLE ->
+                        told.hint(new DeadBranchMessage.AnswerTheDepartureWithUnreachable());
+                case ANSWER_THE_DEPARTURE ->
+                        told.hint(new DeadBranchMessage.AnswerTheDepartureRatherThanAttemptIt());
+            }).build());
         }
 
         /**
@@ -2207,12 +2277,14 @@ public final class Adequacy {
          * one every place was shown dead by, and empty where two places were shown dead for
          * different reasons: each of those is true where it was found and false of the arm.
          */
-        private record Dead(ControlPlace.Arm arm,
-                            Optional<souther.compiler.reach.Proof> proof) {
+        private record Dead(ControlPlace.Arm arm, SourceOutcome.Arm outcome,
+                            Optional<souther.compiler.reach.Proof> proof, boolean saidAbove) {
 
-            /** The same arm, also dead at another place. */
+            /** The same arm, also dead at another place: said above only where it is at both. */
             Dead alongside(Dead other) {
-                return proof.equals(other.proof) ? this : new Dead(arm, Optional.empty());
+                boolean above = saidAbove && other.saidAbove;
+                return proof.equals(other.proof) ? new Dead(arm, outcome, proof, above)
+                        : new Dead(arm, outcome, Optional.empty(), above);
             }
         }
 

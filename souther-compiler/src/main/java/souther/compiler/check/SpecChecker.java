@@ -473,7 +473,8 @@ public final class SpecChecker {
         }
         return new Checked(elaboratedBody,
                 dischargeBody == null ? null
-                        : new AnalysisBody(dischargeBody, allTheElements(discharge), templates),
+                        : new AnalysisBody(dischargeBody, allTheElements(discharge), templates,
+                                inv.departures()),
                 inv.warnings());
     }
 

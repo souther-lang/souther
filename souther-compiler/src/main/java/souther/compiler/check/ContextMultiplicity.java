@@ -49,7 +49,7 @@ package souther.compiler.check;
  * compounded. What the limit states is that no <em>depth</em> of nesting buys a further factor, not
  * that the analysis produces at most so many contexts.
  */
-record ContextMultiplicity(int factor, int compoundingLimit) {
+record ContextMultiplicity(int factor, int compoundingLimit, boolean opensSplits) {
 
     /**
      * How far the splits down one path may compound before a further copy per arm is refused.
@@ -87,11 +87,31 @@ record ContextMultiplicity(int factor, int compoundingLimit) {
         }
     }
 
+    /** A reading copied {@code factor} times that may be copied again. */
+    ContextMultiplicity(int factor, int compoundingLimit) {
+        this(factor, compoundingLimit, true);
+    }
+
     /** One reading, copied by nothing yet, under the limit the check holds itself to. Where every
      * reader begins, and the reason each begins here is that spending is not shared between
      * them. */
     static ContextMultiplicity ofOneReading() {
         return new ContextMultiplicity(1, CONTEXT_COMPOUNDING_LIMIT);
+    }
+
+    /**
+     * This reading, opening no split of its own: a value a relation drags into a reading is read
+     * where the reading stands, its arms spanned in place.
+     *
+     * <p>What is bounded above is the copying down one path, and a value only a relation names is
+     * not on the path: it is beside each value the path reads, and a chain of values each related
+     * to the one before is beside every one of them. Opened there, each split above reads the whole
+     * chain below again, once per value in it, and the copies grow with the length of the chain
+     * where nothing here counts them. What is refined is the value the question reads; what a
+     * relation drags in is what the reading starts from.
+     */
+    ContextMultiplicity inPlace() {
+        return opensSplits ? new ContextMultiplicity(factor, compoundingLimit, false) : this;
     }
 
     /**
@@ -113,9 +133,9 @@ record ContextMultiplicity(int factor, int compoundingLimit) {
         if (width == 1) {
             return this;
         }
-        if (factor != 1 && factor > compoundingLimit / width) {
+        if (!opensSplits || (factor != 1 && factor > compoundingLimit / width)) {
             return null;
         }
-        return new ContextMultiplicity(factor * width, compoundingLimit);
+        return new ContextMultiplicity(factor * width, compoundingLimit, true);
     }
 }

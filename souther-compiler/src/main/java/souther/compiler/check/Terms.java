@@ -16,6 +16,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -29,7 +30,6 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -170,14 +170,18 @@ final class Terms {
     private final ElementsReading elements = new ElementsReading();
 
     /**
-     * The expressions each size atom has had what it carries filed from, and the environments each
-     * was read in, both told apart by identity ({@link #sizeAtomFor}). A size is named wherever a
-     * clause reads it, and what it carries walks the elements written out and the laws of what
-     * built it; read from one expression in one environment it is the same answer every time.
-     * Read in another, it is read again and held to be the answer the first gave
-     * ({@link #carrying}), which is what says one atom is one value however it was reached.
+     * The values each atom read off how a container was built has had what it carries filed from,
+     * each with the environment it was read in, told apart by identity ({@link #sizeAtomFor},
+     * {@link #howManyAreInAtomFor}). Such an atom is named wherever a clause reads it, and what it
+     * carries walks how the containers were built, naming the atoms of what they were built from
+     * and filing theirs in turn; read off the same values it is the same answer every time, so it
+     * is worked out once. A walk that worked it out again at every naming would walk each atom
+     * below once for every way down to it, and two containers each built by adding are as many
+     * ways as there are orders to take the two sides' additions in. Read off other values, it is
+     * read again and held to be the answer the first gave ({@link #carrying}), which is what says
+     * one atom is one value however it was reached.
      */
-    private final Map<FactSubject, Map<Core, Set<Denotations>>> sizesFiledFrom = new HashMap<>();
+    private final Map<FactSubject, Set<ReadOff>> filedFrom = new HashMap<>();
 
     /**
      * What this reading knows about each atom it has named by knowing which value it is: how the
@@ -2323,19 +2327,197 @@ final class Terms {
             // that built it — and in the environment that expression's own names mean something in,
             // which is not the one the name was read in where a binding stands between them.
             Given built = sizedBy(container, at);
-            if (!sizesFiledFrom.computeIfAbsent(atom, _ -> new IdentityHashMap<>())
-                    .computeIfAbsent(built.value(),
-                            _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
-                    .add(built.at())) {
+            if (!firstFiledFrom(atom, new ReadOff(built, null))) {
                 return atom;
             }
             carrying(atom, IntrinsicNumericFacts.ofSize(size, built.value(), atom, built.at(),
                     this));
-            Derivation held = IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(),
+            Derivation held = IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(), atom,
                     built.at(), this);
             if (held != null) {
                 computedBy(atom, new AtomKnowledge.Computation.Derived(held));
             }
+        }
+        return atom;
+    }
+
+    /**
+     * The atom how many elements of {@code container} are {@code value} is, named and with what it
+     * carries filed — or null where either is no value this names.
+     *
+     * <p>The container as written and not peeled to the source of its size: a list reversed holds
+     * as many as the list, and which of its elements are a value is a different question whose
+     * answer the building does not keep for every way of building one.
+     */
+    FactSubject howManyAreAtomFor(Core container, Core value, AddsWhatItDoesNotHold.Of of,
+                                  Denotations at) {
+        return howManyAre(bodyKey(container, at), bodyKey(value, at), of);
+    }
+
+    /** The same, of a container and a value a proposition read off another tree says it of, named
+     *  the way {@link #howManyAreAtomFor} names them, so the two are one number. */
+    FactSubject howManyAreAtPlace(FactSubject container, FactSubject value,
+                                  AddsWhatItDoesNotHold.Of of) {
+        return container == null || value == null ? null
+                : howManyAre(container.identity(), value.identity(), of);
+    }
+
+    /**
+     * The atom how many elements of {@code counted} {@code holder} holds is — among its elements,
+     * or among its keys, as {@code of} says — named and with what it carries filed, or null where
+     * either is no value this names.
+     *
+     * <p>Named off the containers as written and carrying what the values they were given were
+     * built by, as a size is ({@link #sizeAtomFor}). Where one of them was built by an operation
+     * that adds to what a holder held ({@link AddsWhatItDoesNotHold}), what it holds is the
+     * holder's and what was added: so of the elements counted, the built container holds those the
+     * holder held and at most those of what was added, and a counted container built that way has
+     * those the holder had and at most those added among the ones held.
+     */
+    FactSubject howManyAreInAtomFor(Core counted, Core holder, AddsWhatItDoesNotHold.Of of,
+                                    Denotations at) {
+        return howManyAreIn(new Given(counted, at), new Given(holder, at), of);
+    }
+
+    private FactSubject howManyAreIn(Given counted, Given holder, AddsWhatItDoesNotHold.Of of) {
+        Term countedKey = bodyKey(counted.value(), counted.at());
+        Term holderKey = bodyKey(holder.value(), holder.at());
+        if (countedKey == null || holderKey == null) {
+            return null;
+        }
+        FactSubject atom = named(interned.howManyAreIn(countedKey, holderKey, of), Carrier.WHOLE);
+        if (atom == null) {
+            return null;
+        }
+        Given holderBuilt = given(holder.value(), holder.at());
+        Given countedBuilt = given(counted.value(), counted.at());
+        if (!firstFiledFrom(atom, new ReadOff(countedBuilt, holderBuilt))) {
+            return atom;
+        }
+        List<NumericConstraint> carried = new ArrayList<>();
+        // A count, and so never below nought.
+        carried.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
+        // One side at a time, and a side that took in another container's elements before a side
+        // that took in one value. Taking both sides at every step names a count for every pair of
+        // the values the two sides added, and what bounds a step that added one value is how many
+        // of the other side are that value: read only where a condition says it of the other side
+        // as it stands, so it says nothing while the other side is still built. A step that took
+        // in a container's elements is bounded by counts of two containers, each of which is
+        // read on in turn, so it is taken first and the values added are left until the other
+        // side is down to what a condition can speak of.
+        AddedTo onTheHolder = addedTo(holderBuilt, of);
+        AddedTo onTheCounted = addedTo(countedBuilt, of);
+        boolean holderFirst = onTheHolder != null
+                && (!onTheHolder.oneValue() || onTheCounted == null || onTheCounted.oneValue());
+        AddedTo added = holderFirst ? onTheHolder : null;
+        AddedTo grown = holderFirst ? null : onTheCounted;
+        if (added != null) {
+            between(atom, howManyAreIn(counted, added.before(), of), added.oneValue()
+                    ? howManyAre(countedKey, bodyKey(added.what().value(), added.what().at()), of)
+                    : howManyAreIn(counted, added.what(), of), carried);
+        }
+        if (grown != null) {
+            between(atom, howManyAreIn(grown.before(), holder, of), grown.oneValue()
+                    ? howManyAre(holderKey, bodyKey(grown.what().value(), grown.what().at()), of)
+                    : howManyAreIn(grown.what(), holder, of), carried);
+        }
+        carrying(atom, carried);
+        return atom;
+    }
+
+    /** Whether {@code atom} has had nothing filed from {@code from} yet, which it has from now
+     *  on ({@link #filedFrom}). */
+    private boolean firstFiledFrom(FactSubject atom, ReadOff from) {
+        return filedFrom.computeIfAbsent(atom, _ -> new HashSet<>()).add(from);
+    }
+
+    /**
+     * The values what an atom carries is read off, each where it was read: one container, or the
+     * one counted from and the one holding them. By identity, values and environments alike,
+     * which is what an answer read off them is the same answer for.
+     */
+    private static final class ReadOff {
+
+        private final Given one;
+        private final Given other;
+
+        ReadOff(Given one, Given other) {
+            this.one = one;
+            this.other = other;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof ReadOff that && same(one, that.one) && same(other, that.other);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * identity(one) + identity(other);
+        }
+
+        private static boolean same(Given a, Given b) {
+            return a == null ? b == null
+                    : b != null && a.value() == b.value() && a.at() == b.at();
+        }
+
+        private static int identity(Given g) {
+            return g == null ? 0
+                    : 31 * System.identityHashCode(g.value()) + System.identityHashCode(g.at());
+        }
+    }
+
+    /**
+     * What a container was built from by adding to what a holder held, where what it adds is held
+     * as {@code of} says: the holder, and the one value or the container whose elements were
+     * added, each where the building reads it — or null where it was built otherwise.
+     */
+    private static AddedTo addedTo(Given built, AddsWhatItDoesNotHold.Of of) {
+        AnOperationApplied applied = AnOperationApplied.of(built.value());
+        AddsWhatItDoesNotHold adds = applied == null ? null
+                : DefaultBoundOperationFacts.get().addsWhatItDoesNotHold(applied.operation());
+        DeclaredArgument what = switch (adds) {
+            case null -> null;
+            case AddsWhatItDoesNotHold.OneValue one -> one.of() == of ? one.value() : null;
+            case AddsWhatItDoesNotHold.TheElementsOf elements ->
+                    of == AddsWhatItDoesNotHold.Of.ELEMENTS ? elements.from() : null;
+        };
+        Core before = what == null ? null : applied.argument(adds.holder());
+        Core added = what == null ? null : applied.argument(what);
+        return before == null || added == null ? null
+                : new AddedTo(new Given(before, built.at()), new Given(added, built.at()),
+                        adds instanceof AddsWhatItDoesNotHold.OneValue);
+    }
+
+    /** A holder and what was added to it: one value, or the elements of a container. */
+    private record AddedTo(Given before, Given what, boolean oneValue) {}
+
+    /**
+     * {@code atom} at least {@code before} and at most {@code before} and {@code added} together,
+     * where both are named: a container that is a holder and what was added holds what the holder
+     * held of the elements counted, and those of what was added at most.
+     */
+    private static void between(FactSubject atom, FactSubject before, FactSubject added,
+                                List<NumericConstraint> out) {
+        if (before == null || added == null) {
+            return;
+        }
+        LinearForm<FactSubject> past = LinearForm.difference(atom, before);
+        out.add(new NumericConstraint(past, Rel.GE));
+        LinearForm<FactSubject> beyond = past.minus(LinearForm.atom(added)).orNull();
+        if (beyond != null) {
+            out.add(new NumericConstraint(beyond, Rel.LE));
+        }
+    }
+
+    private FactSubject howManyAre(Term within, Term counted, AddsWhatItDoesNotHold.Of of) {
+        if (within == null || counted == null) {
+            return null;
+        }
+        FactSubject atom = named(interned.howManyAre(within, counted, of), Carrier.WHOLE);
+        if (atom != null) {
+            // A count, and so never below nought.
+            carrying(atom, List.of(new NumericConstraint(LinearForm.atom(atom), Rel.GE)));
         }
         return atom;
     }

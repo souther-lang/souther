@@ -140,7 +140,24 @@ final class Term {
         /** A value opened, over the scrutinee and each arm's body. */
         MATCHED(Payload.listOf(Payload.listOf(Payload.of(TypeSymbol.class)))),
         /** An attempted construction, over what it builds and what each of its departures answers. */
-        ATTEMPTED(Payload.listOf(Payload.of(String.class)));
+        ATTEMPTED(Payload.listOf(Payload.of(String.class))),
+        /**
+         * How many elements of a container are one value, or how many of its keys, over the
+         * container and the value.
+         *
+         * <p>A number and not the truth of a membership, because it is what two laws of the library
+         * meet at: that a container holds a value is some element of it being the value, and how
+         * many an insert answers is one more where none is. Named by what it counts, so the guard
+         * asking whether a set holds a value and the insert of that value into it are about one
+         * number.
+         */
+        HOW_MANY_ARE(Payload.of(AddsWhatItDoesNotHold.Of.class)),
+        /**
+         * How many elements of one container another holds — among its elements, or among its
+         * keys — over the two: how many an intersection of them holds, and what adding to either
+         * moves by no more than what was added.
+         */
+        HOW_MANY_ARE_IN(Payload.of(AddsWhatItDoesNotHold.Of.class));
 
         private final Payload payload;
 
@@ -869,6 +886,12 @@ final class Term {
                     .append(')');
             case MATCHED -> joined(sb.append("match("), ", ").append(')');
             case ATTEMPTED -> joined(sb.append("attempt("), ", ").append(')');
+            case HOW_MANY_ARE -> sb.append("howManyAre(").append(parts.get(1).rendered())
+                    .append(", ").append(parts.get(0).rendered()).append(", ").append(of)
+                    .append(')');
+            case HOW_MANY_ARE_IN -> sb.append("howManyAreIn(").append(parts.get(0).rendered())
+                    .append(", ").append(parts.get(1).rendered()).append(", ").append(of)
+                    .append(')');
         }
         return sb.toString();
     }
@@ -1257,6 +1280,18 @@ final class Term {
             parts.add(built);
             parts.addAll(answers);
             return of(Shape.ATTEMPTED, List.copyOf(clauses), parts);
+        }
+
+        /** How many elements of {@code container}, or keys where {@code of} says, are
+         *  {@code value}. */
+        Term howManyAre(Term container, Term value, AddsWhatItDoesNotHold.Of of) {
+            return of(Shape.HOW_MANY_ARE, of, List.of(container, value));
+        }
+
+        /** How many elements of {@code counted} {@code holder} holds, among its elements or among
+         *  its keys as {@code of} says. */
+        Term howManyAreIn(Term counted, Term holder, AddsWhatItDoesNotHold.Of of) {
+            return of(Shape.HOW_MANY_ARE_IN, of, List.of(counted, holder));
         }
 
         /** How many distinct terms this has been asked for — what a test measuring the sharing

@@ -102,11 +102,10 @@ final class IntrinsicNumericFacts {
         // And exactly as many as the law of the operation that answered it says, where it says a
         // number of the arguments this names: `a ++ b` holds as many as both halves together, which
         // no number of bounds on it against either half says.
-        LinearForm<FactSubject> lawSays =
+        LawOverAtoms.Sized lawSays =
                 LawOverAtoms.sizeOf(AnOperationApplied.of(container), at, terms);
-        if (lawSays != null && LinearForm.atom(atom).minus(lawSays)
-                instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
-            out.add(new NumericConstraint(held.value(), Rel.EQ));
+        if (lawSays != null) {
+            out.addAll(lawSays.carriedBy(atom));
         }
         // And as many as it was written out with, where it was, which is what a size of it read
         // as a number is and so what the atom a law names it by is.
@@ -127,18 +126,33 @@ final class IntrinsicNumericFacts {
      * <p>Each law whole or not at all. One says when the answer holds something and, by the same
      * statement, when it holds nothing, so a part of it left out would answer the second wrong.
      */
-    static Derivation heldWhereItsLawsSay(Core container, Denotations at, Terms terms) {
+    static Derivation heldWhereItsLawsSay(Core container, FactSubject atom, Denotations at,
+                                          Terms terms) {
         AnOperationApplied applied = AnOperationApplied.of(container);
         Derivation.HoldsSomethingWhere.Holding holds =
                 LawOverAtoms.whereItHolds(applied, AnswerAspect.EMPTINESS, at, terms);
-        Derivation held = holds == null ? null : new Derivation.HoldsSomethingWhere(holds);
-        // And how many case by case, where the law says it so: a size in cases is no relation the
-        // atom carries whatever the path, since which case holds is the path's.
-        Derivation sized = LawOverAtoms.sizeInCases(applied, at, terms);
-        if (held == null || sized == null) {
-            return held != null ? held : sized;
+        List<Derivation> recipes = new ArrayList<>();
+        if (holds != null) {
+            recipes.add(new Derivation.HoldsSomethingWhere(holds));
         }
-        return new Derivation.Each(List.of(held, sized));
+        // And how many case by case, where the law says it so: a size in cases is no relation the
+        // atom carries whatever the path, since which case holds is the path's. Two cases of a
+        // value held once are the path's too, and are what the count settles where it is settled.
+        Derivation sized = LawOverAtoms.sizeInCases(applied, at, terms);
+        if (sized != null) {
+            recipes.add(sized);
+        }
+        LawOverAtoms.Sized byTheValue = LawOverAtoms.sizeOf(applied, at, terms);
+        List<ConditionalConstraint> settled =
+                byTheValue == null ? List.of() : byTheValue.guaranteedOf(atom);
+        if (!settled.isEmpty()) {
+            recipes.add(new Derivation.GuaranteedWhere(settled));
+        }
+        return switch (recipes.size()) {
+            case 0 -> null;
+            case 1 -> recipes.getFirst();
+            default -> new Derivation.Each(recipes);
+        };
     }
 
     /** States how {@code atom} stands to the size of {@code source}, where that size is one this can

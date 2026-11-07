@@ -8,7 +8,9 @@ import souther.compiler.numeric.Place;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -204,6 +206,26 @@ public sealed interface Realization {
                     : !notAllOf.isEmpty() || !unheld.isEmpty()
                             ? Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED : otherwise;
             return new Unknown(why, stoppedBy, notAllOf, unheld);
+        }
+
+        /**
+         * This, with what another look at the same item fell short of said beside it, in each of
+         * the three vocabularies, and the word decided again from them all as {@link #leftOpen}
+         * decides it.
+         */
+        public Unknown alsoShortOf(CompositionShortfall other) {
+            if (other.nothing()) {
+                return this;
+            }
+            Set<CompositionBudget> figures = EnumSet.noneOf(CompositionBudget.class);
+            figures.addAll(stoppedBy);
+            figures.addAll(other.figures());
+            Set<CompositionRepertoire> populations = EnumSet.noneOf(CompositionRepertoire.class);
+            populations.addAll(notAllOf);
+            populations.addAll(other.populations());
+            Set<CompositionCapacity> notHeld = new HashSet<>(unheld);
+            notHeld.addAll(other.unheld());
+            return leftOpen(why, figures, populations, notHeld);
         }
 
         public enum Reason {
