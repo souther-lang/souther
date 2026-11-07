@@ -220,6 +220,12 @@ public final class ContainerSizesUnderAWitness {
             }
             case Core.LetIn li -> most(li.body());
             case Core.If fork -> larger(most(fork.then()), most(fork.els()));
+            // A part of what a walk carries that is a walk of its own, at a step or of what the
+            // walk answers.
+            case Core.TupleGet _, Core.FieldAccess _, Core.FieldProjection _
+                    when aPartOfAWalk(SeededWalk.Part.taken(node)) instanceof PartOfAWalk(
+                            WalkAt walk, boolean handedToTheStep) ->
+                    carried(walk, handedToTheStep);
             // Of the value an attempt answers where it is built or where it is refused: how many
             // elements it holds if it answers, not that it does.
             case Core.IfConstructed attempt -> {
@@ -378,6 +384,38 @@ public final class ContainerSizesUnderAWitness {
     }
 
     /**
+     * The walk of a part of what a walk carries, and whether it is read where its step is handed
+     * that ({@link #carried}).
+     */
+    private record PartOfAWalk(WalkAt walk, boolean handedToTheStep) {}
+
+    /**
+     * The walk of the part {@code taken} takes, where it takes it of what a walk carries — read
+     * through the names given that on the way, {@code let (n, ys) = acc} among them — or of what
+     * a walk answers, and that part is a walk of its own ({@link WalkAt#ofThePart}). Null where it
+     * is none of these.
+     */
+    private PartOfAWalk aPartOfAWalk(SeededWalk.Taken taken) {
+        Core whole = Core.withoutStanding(taken.whole());
+        Set<BindingId> followed = new HashSet<>();
+        while (whole instanceof Core.Read name && carriedBy.get(name.binding()) == null
+                && boundTo.get(name.binding()) != null && followed.add(name.binding())) {
+            whole = Core.withoutStanding(boundTo.get(name.binding()));
+        }
+        Core walking = whole instanceof Core.Read name ? carriedBy.get(name.binding()) : null;
+        boolean handed = walking != null;
+        WalkAt walk = WalkAt.of(handed ? walking : whole);
+        // A part of a part is a part of the walk of the outer one.
+        if (walk == null && SeededWalk.Part.taken(whole) instanceof SeededWalk.Taken inner
+                && aPartOfAWalk(inner) instanceof PartOfAWalk outer) {
+            walk = outer.walk();
+            handed = outer.handedToTheStep();
+        }
+        WalkAt part = walk == null ? null : walk.ofThePart(taken);
+        return part == null ? null : new PartOfAWalk(part, handed);
+    }
+
+    /**
      * The most what {@code walk} carries holds, by induction on the elements it walks: the seed,
      * and for each element the most the step puts in beside what it carries. After every element
      * where {@code handedToTheStep} is false, which is what the walk answers; and before the step
@@ -483,7 +521,19 @@ public final class ContainerSizesUnderAWitness {
      * the name the step is handed what it carries under ({@link Reductions},
      * {@link Combinators}).
      */
-    private record WalkAt(Core seed, Core container, Core.Block step, BindingId carried) {
+    private record WalkAt(Core seed, Core container, Core.Block step, Core.Binder accumulator) {
+
+        BindingId carried() {
+            return accumulator.binding();
+        }
+
+        /** This walk read for the part {@code part} takes of what it carries alone
+         *  ({@link SeededWalk#ofThePart}), or null where that part is no walk of its own. */
+        WalkAt ofThePart(SeededWalk.Taken part) {
+            SeededWalk.OfThePart alone = SeededWalk.ofThePart(seed, step, accumulator, part);
+            return alone == null ? null
+                    : new WalkAt(alone.seed(), container, alone.step(), accumulator);
+        }
 
         /** {@code e} as a walk, or null where it applies none, or its step is no closure written
          *  at it. */
@@ -506,7 +556,7 @@ public final class ContainerSizesUnderAWitness {
                 return null;
             }
             return new WalkAt(args.get(walk.seedArg()), args.get(handing.containerArg()), step,
-                    step.params().get(walk.accumulatorParam()).binding());
+                    step.params().get(walk.accumulatorParam()));
         }
     }
 }

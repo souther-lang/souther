@@ -4088,11 +4088,28 @@ final class Pullback {
      * it is so for every size there is, whatever arithmetic the laws of what it calls do. What it
      * adds of the element is added up as an operation's law sums over the elements
      * ({@link #addedUpOver}).
+     *
+     * <p>A part of what a walk carries that is a walk of its own ({@link #aPartOfAWalk}) is read
+     * as that walk, so a list a fold carries beside a count holds what the same fold carrying the
+     * list alone does.
      */
     private Sized sizeOfAWalk(Core e, InputReads reads) {
+        WalkOfAPart part = aPartOfAWalk(e, reads);
+        if (part != null) {
+            return sizeOfAWalk(part.walk(), part.at(), null);
+        }
         SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
-        if (walk == null
-                || !(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(
+        return walk == null ? null : sizeOfAWalk(walk, reads, new Denotation(e, reads));
+    }
+
+    /**
+     * The same of {@code walk}, standing at {@code reads}.
+     *
+     * @param whole the call that is the walk, which a fold filing under a key is read off; null
+     *              where the walk is of a part of what another carries, which files nothing
+     */
+    private Sized sizeOfAWalk(SeededWalk walk, InputReads reads, Denotation whole) {
+        if (!(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(
                         LinearForm<Quantity> seed))) {
             return null;
         }
@@ -4111,8 +4128,8 @@ final class Pullback {
         }
         // A fold filing each element under the key its case chooses, from nothing held, ends with
         // one entry for each different key it was handed.
-        if (seed.equals(LinearForm.constant(ExactRatio.ZERO))
-                && keyChosenByCase(new Denotation(e, reads)) instanceof ChosenKey chosen) {
+        if (whole != null && seed.equals(LinearForm.constant(ExactRatio.ZERO))
+                && keyChosenByCase(whole) instanceof ChosenKey chosen) {
             Quantity different = chosen.keptBy().isEmpty()
                     ? new Quantity.HowManyDifferent(
                             new DecisionSubject.AnInput(chosen.container()), chosen.value())
@@ -10076,8 +10093,8 @@ final class Pullback {
      */
     private LinearForm<Quantity> seedPlusWhatEachElementAdds(Core node, InputReads at) {
         Core stands = Core.withoutStanding(node);
-        if (stands instanceof Core.FieldAccess || stands instanceof Core.FieldProjection) {
-            return unlessUnread(() -> aFieldOfAWalk(node, at));
+        if (SeededWalk.Part.taken(stands) != null) {
+            return unlessUnread(() -> addedUpInAPartOfAWalk(node, at));
         }
         if (!(stands instanceof Core.PreservedCall) && !(stands instanceof Core.Read)) {
             return null;
@@ -10110,25 +10127,45 @@ final class Pullback {
     }
 
     /**
-     * What a field of the record a walk from a seed ends with comes to, where {@code node} takes
-     * that field of such a walk — or of a call of a behavior whose body is one — and the field is a
-     * walk of its own ({@link SeededWalk#ofTheField}): the seed and the total of what its step adds,
-     * or how many elements take each arm of it. Null where it is none of these.
+     * What a part of what a walk from a seed ends with comes to, where {@code node} takes that part
+     * of such a walk ({@link #aPartOfAWalk}): the seed and the total of what its step adds, or how
+     * many elements take each arm of it. Null where it is none of these.
      *
-     * <p>A field that only adds is the total a fold over that field alone is, so a comparison of
-     * {@code state(xs).score} draws the line {@code List.sum} of the same numbers draws, whatever
-     * the other fields of the record do.
+     * <p>A part that only adds is the total a fold over that part alone is, so a comparison of
+     * {@code state(xs).score}, or of {@code s} out of {@code let (s, _) = state(xs)}, draws the line
+     * {@code List.sum} of the same numbers draws, whatever the other parts do.
      */
-    private LinearForm<Quantity> aFieldOfAWalk(Core node, InputReads at) {
-        Core.FieldAccess access = switch (Core.withoutStanding(node)) {
-            case Core.FieldAccess one -> one;
-            case Core.FieldProjection projection -> projection.lastAccess();
-            default -> null;
-        };
-        if (access == null) {
+    private LinearForm<Quantity> addedUpInAPartOfAWalk(Core node, InputReads at) {
+        WalkOfAPart part = aPartOfAWalk(node, at);
+        if (part == null) {
             return null;
         }
-        Denotation whole = at.standing(access.target(), read.rules().symbols(),
+        InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(part.walk(), read.domain(),
+                part.at(), read.rules());
+        return added != null ? ofTheInput(added)
+                : countedByTheArmsOfTheStep(part.walk(), part.at());
+    }
+
+    /**
+     * A part of what a walk carries read as a walk of its own, and where the walk stands.
+     *
+     * @param walk the walk of the part alone ({@link SeededWalk#ofThePart})
+     * @param at   where the walk it is a part of stands
+     */
+    private record WalkOfAPart(SeededWalk walk, InputReads at) {}
+
+    /**
+     * The walk of the part {@code node} takes of what a walk from a seed ends with — or of what a
+     * call of a behavior whose body is one answers — where that part is a walk of its own
+     * ({@link SeededWalk#ofThePart}), a field of a record and a component of a tuple alike. Null
+     * where {@code node} takes no such part.
+     */
+    private WalkOfAPart aPartOfAWalk(Core node, InputReads at) {
+        SeededWalk.Taken taken = SeededWalk.Part.taken(node);
+        if (taken == null) {
+            return null;
+        }
+        Denotation whole = at.standing(taken.whole(), read.rules().symbols(),
                 read.rules().newtypes());
         Inside.ACall called = intoACall(whole);
         if (called != null) {
@@ -10136,13 +10173,14 @@ final class Pullback {
                     read.rules().newtypes());
         }
         SeededWalk walk = SeededWalk.of(whole.value(), blocksAt(whole));
-        SeededWalk field = walk == null ? null : walk.ofTheField(access.field());
-        if (field == null) {
-            return null;
+        InputReads walkAt = whole.at();
+        // A part of a part is a part of the walk of the outer one.
+        if (walk == null && aPartOfAWalk(whole.value(), whole.at()) instanceof WalkOfAPart outer) {
+            walk = outer.walk();
+            walkAt = outer.at();
         }
-        InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(field, read.domain(),
-                whole.at(), read.rules());
-        return added != null ? ofTheInput(added) : countedByTheArmsOfTheStep(field, whole.at());
+        SeededWalk part = walk == null ? null : walk.ofThePart(taken);
+        return part == null ? null : new WalkOfAPart(part, walkAt);
     }
 
     /**
