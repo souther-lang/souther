@@ -276,10 +276,47 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return form == null ? null : new Holding.Stands(form, compared.states());
     }
 
-    /** Some element of a container no walk writes out, which no atom here names. */
+    /**
+     * Some element of a container no walk writes out being an argument, or some key of it, by how
+     * many of its elements or keys are that argument ({@link Terms#howManyAreAtomFor}). Nothing
+     * else an element of one meets is a number here.
+     */
     @Override
     public Holding someElement(LawProposition.SomeElement<DeclaredArgument> some) {
+        if (!(some.ofTheElement() instanceof LawProposition.Same<DeclaredArgument>(
+                var one, var other, boolean same)) || !same) {
+            return null;
+        }
+        for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+            LawSubject<DeclaredArgument> held = heldAs(some.container(), of);
+            DeclaredArgument value = held.equals(one) ? argumentIn(other)
+                    : held.equals(other) ? argumentIn(one) : null;
+            Core container = applied.argument(some.container());
+            Core given = value == null ? null : applied.argument(value);
+            FactSubject count = container == null || given == null ? null
+                    : terms.howManyAreAtomFor(container, given, of, at);
+            if (count != null) {
+                Holding something = new Holding.Something(LinearForm.atom(count));
+                return some.holds() ? something : new Holding.Not(something);
+            }
+        }
         return null;
+    }
+
+    /** What of {@code container} a value is held as, as {@code of} says: one of its elements, or
+     *  one of its keys. */
+    private static LawSubject<DeclaredArgument> heldAs(DeclaredArgument container,
+                                                       AddsWhatItDoesNotHold.Of of) {
+        return switch (of) {
+            case ELEMENTS -> new LawSubject.ElementOf<>(container);
+            case KEYS -> new LawSubject.KeyOf<>(container);
+        };
+    }
+
+    /** The argument {@code subject} is, or null where it is no argument. */
+    private static DeclaredArgument argumentIn(LawSubject<DeclaredArgument> subject) {
+        return subject instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at)
+                ? at : null;
     }
 
     @Override
@@ -300,8 +337,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return null;
     }
 
-    /** The size of an argument, by the count its type is counted by, and an argument that is a
-     *  number; nothing else. */
+    /** The size of an argument, by the count its type is counted by; an argument that is a
+     *  number; and how many elements of an argument another argument holds ({@link #heldOf}).
+     *  Nothing else. */
     @Override
     public LinearForm<FactSubject> counted(LawNumber<DeclaredArgument> number) {
         return switch (number) {
@@ -314,8 +352,8 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                 FactSubject count = countOf(applied.argument(which));
                 yield count == null ? null : LinearForm.atom(count);
             }
+            case LawNumber.HowManyMeet<DeclaredArgument> meet -> heldOf(meet);
             case LawNumber.SizeOf<DeclaredArgument> _,
-                 LawNumber.HowManyMeet<DeclaredArgument> _,
                  LawNumber.HowManyDifferent<DeclaredArgument> _,
                  LawNumber.SumOver<DeclaredArgument> _,
                  LawNumber.CodePointsOf<DeclaredArgument> _ -> null;
@@ -326,6 +364,34 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     public LinearForm<FactSubject> writtenOut(LawNumber.HowManyMeet<DeclaredArgument> number,
                                               long many) {
         return LinearForm.constant(ExactRatio.of(many));
+    }
+
+    /**
+     * How many elements of one argument another holds ({@link Terms#howManyAreInAtomFor}), where
+     * {@code meet} counts the elements some element of the other is, or those whose key some key
+     * of the other is. Null where it counts anything else.
+     */
+    private LinearForm<FactSubject> heldOf(LawNumber.HowManyMeet<DeclaredArgument> meet) {
+        if (!(meet.ofTheElement() instanceof LawProposition.SomeElement<DeclaredArgument>(
+                DeclaredArgument holder, LawProposition.Same<DeclaredArgument>(
+                        var one, var other, boolean same), boolean some))
+                || !same || !some) {
+            return null;
+        }
+        Core counted = applied.argument(meet.container());
+        Core holding = applied.argument(holder);
+        for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+            LawSubject<DeclaredArgument> ofCounted = heldAs(meet.container(), of);
+            LawSubject<DeclaredArgument> ofHolder = heldAs(holder, of);
+            boolean alike = (one.equals(ofCounted) && other.equals(ofHolder))
+                    || (one.equals(ofHolder) && other.equals(ofCounted));
+            FactSubject held = !alike || counted == null || holding == null ? null
+                    : terms.howManyAreInAtomFor(counted, holding, of, at);
+            if (held != null) {
+                return LinearForm.atom(held);
+            }
+        }
+        return null;
     }
 
     /** {@code form}, over numbers of the arguments, as a form over the atoms each is — or null

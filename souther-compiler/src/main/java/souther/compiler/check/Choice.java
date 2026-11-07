@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * A value that is one of several: which several, and what decides each one.
@@ -135,7 +136,23 @@ public record Choice(Kind kind, List<Arm> arms) {
 
         /** The attempt's invariant did not hold, so this departure was taken and nothing was
          * built. */
-        record ItDeparted(Core.IfConstructed attempt, Core.ElseArm on) implements Decides {}
+        record ItDeparted(Core.IfConstructed attempt, Core.ElseArm on) implements Decides {
+
+            /**
+             * Whether this departure is the one taken where {@code clause} is the first clause not
+             * to hold: a departure naming a clause answers that clause, and one naming none answers
+             * every clause no other departure of the attempt names.
+             */
+            public boolean answers(Clause.Ref clause) {
+                Optional<ClauseName> naming = on.clause().map(ClauseName::new);
+                if (naming.isPresent()) {
+                    return clause.name().equals(naming);
+                }
+                return clause.name().map(name -> attempt.els().stream().noneMatch(arm ->
+                        arm.clause().map(ClauseName::new).equals(Optional.of(name))))
+                        .orElse(true);
+            }
+        }
 
         /**
          * The arguments stand as one case of the library's definition names, so the operation

@@ -1654,7 +1654,43 @@ behavior joined : (a: Lines, b: List<Line>) -> Lines
 let joined (a, b) = Lines(a.value ++ b) // discharged: no shorter than `a`
 ----
 
-Nothing is said the other way. A union answers one of what both sides hold, and an insert of something already there adds none, so the result is not the sum of what was read; an upper bound on the sources does not bound it.
+Nothing is said the other way by the operation alone. A union answers one of what both sides hold, and an insert of something already there adds none, so the result is not the sum of what was read; an upper bound on the sources does not bound it.
+
+What a condition on the path says of the value inserted is read, though. A set holding a value is some element of it being the value, which is a count — how many of the set's elements are the value — and `+Set.insert+` holds one more than its set where that count is nought and as many where it is not. So under a guard that the value is not in the set the insert holds exactly one more, and under one that it is, exactly as many. A map holding a key is the same count over its keys, read the same way for `+Map.insert+`, and `+Set.remove+` and `+Map.remove+` hold one fewer where the value or the key is there.
+
+[,souther]
+----
+data Seats =
+    { taken: Set<Int>
+    , free: Int
+    , cap: Int
+    }
+    invariant Set.size(taken) + free == cap && free >= 0
+
+behavior take : (s: Seats, n: Int) -> Seats | Already | Full
+let take (s, n) = {
+    guard Bool.not(Set.contains(n, s.taken)) else Already
+    guard s.free > 0 else Full
+    Seats { ...s, taken = Set.insert(n, s.taken), free = s.free - 1 } // discharged
+}
+----
+
+The same count bounds what an intersection with an insert holds. `+Set.intersection(a, b)+` holds as many as the elements of `+a+` that `+b+` holds; of those, an insert into `+b+` holds the ones `+b+` held and perhaps the value, and an insert into `+a+` adds the value at most. A union adds the other set's elements in the same way, and `+Map.intersection+` counts keys as this counts elements. So two sets kept apart stay apart where what is added to one is apart from the other.
+
+[,souther]
+----
+data Outcomes =
+    { seated: Set<Int>
+    , refused: Set<Int>
+    }
+    invariant Set.isEmpty(Set.intersection(seated, refused))
+
+behavior refuse : (o: Outcomes, n: Int) -> Outcomes | Already
+let refuse (o, n) = {
+    guard Bool.not(Set.contains(n, o.seated)) else Already
+    Outcomes { ...o, refused = Set.insert(n, o.refused) } // discharged
+}
+----
 
 [#invariant-discharge-projection]
 ===== A projection the closure copied
@@ -3829,7 +3865,7 @@ One more the dial asks, needing the arms measured:
 * [[every-decision-rule-has-a-row]]some row SHOULD take each rule of the decision the body states, of the rules something has been seen standing in. A rule is one way through the body, carrying the distinctions that way consulted and what each came out as; a condition the way never reached is absent from it rather than written as a don't-care, so a short-circuit that settled before reaching a condition states nothing about it. Beside the arms and not among them: two rules can go through one arm, and a body whose arms answer alike states two rules that one row through each arm covers;
 * [[every-combination-of-decisions-has-a-row]]some row SHOULD make each combination of the decisions the body settles one value by. Where two values each settled by a decision are consumed into one — the operands of an operator, the arguments of a call answering one value — the answer is a function of both, and a row that leaves either at one outcome shows nothing about what was done with them. A combination is the way in to that meeting and one outcome of each decision at it; a choice the body has no path to is not one. Beside the rules and not among them: a rule is one way through the body, so a row through every way can still leave the combination where two decisions are both live unwritten. What settles one is a run seen making those decisions, and never the classes a row's values fall in — steering a row there is a reading of the rules, and a reading that is off would otherwise decide whether anything covers it;
 * [[every-combination-of-two-classes-has-a-row]]some row SHOULD be in each combination of two of the behavior's classes, where the pair space is the criterion it is held to. That is where its decisions meet nowhere and where it has no body to read: with no meeting to ask about, what is left to ask is that the rows reach the combinations the positions make between them. Of the combinations the model has — two classes no one value holds together make none. Over the positions the body draws a distinction about: the ones its decisions name and the ones a rule it wrote divides. A position it never tells apart keeps the rows its own classes are owed and is in no combination, since the answer cannot turn on it; a behavior with no body has no such reading and its space is over every position measured. A behavior whose decisions do meet is held to those instead and is owed nothing here, and the two are never both asked of one behavior;
-* [[every-arm-has-a-row]]some row that states what it expects SHOULD go through each arm of an `+if+`, a `+guard+` or an attempted construction. A row whose answer is owed (<<example-answer-owed>>) goes through an arm without saying what the behavior answers there, so it does not answer this; an arm whose only rows are those is reported as a row owing its answer (<<every-row-has-its-answer-written>>) rather than as an arm nothing reaches.
+* [[every-arm-has-a-row]]some row that states what it expects SHOULD go through each arm of an `+if+`, a `+guard+` or an attempted construction. A row whose answer is owed (<<example-answer-owed>>) goes through an arm without saying what the behavior answers there, so it does not answer this; an arm whose only rows are those is reported as a row owing its answer (<<every-row-has-its-answer-written>>) rather than as an arm nothing reaches. [[a-departure-whose-clauses-hold-is-reached-by-nothing]]A departure of an attempted construction is taken where a clause it answers fails (<<attempt-departures>>), so one each of whose clauses the conditions above the attempt establish, as the invariant check reads them (<<invariant-discharge>>), is an arm nothing reaches and is owed no row. A clause the check cannot read establishes nothing, and the departures answering it are owed rows as before.
 
 [[a-rule-through-an-arm-nothing-reaches-is-owed-no-row]]A rule whose way goes down an arm nothing reaches is owed no row, for the reason that arm is owed none: a case a position's own rules refuse is reached by no value anybody writes, and the same reading answers both. An arm the author wrote stands at a place per call site of whatever carries it (<<an-arm-for-a-case-the-rules-refuse-is-not-an-arm>>), so it is one nothing reaches only where nothing arrives at any of them — read off one copy, a helper reachable from one call site and not from another would be answered by the order the copies were written in.
 

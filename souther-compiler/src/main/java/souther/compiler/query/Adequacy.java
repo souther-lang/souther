@@ -78,6 +78,7 @@ import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BoundaryOutput;
+import souther.compiler.check.DeparturesNoRunTakes;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PathReachability;
 import souther.compiler.inputs.ValueDefinitions;
@@ -1444,7 +1445,9 @@ public final class Adequacy {
                                 ruleReading),
                         checked.value().elementBindings()
                                 .getOrDefault(spec.name(), ElementBindings.NONE),
-                        ValueDefinitions.of(both.analysis(), Shapes.declarationNewtypes(db))));
+                        ValueDefinitions.of(both.analysis(), Shapes.declarationNewtypes(db)),
+                        both.analysis() == null ? DeparturesNoRunTakes.NONE
+                                : both.analysis().departures()));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1954,8 +1957,8 @@ public final class Adequacy {
                             new CoverageSites.AsWritten(arm.origin(), arm.part());
                     if (asRun.answers().found().get(arm)
                             instanceof souther.compiler.reach.Reachability.Unreachable unreachable) {
-                        dead.merge(written, new Dead(arm, Optional.of(unreachable.proof())),
-                                Dead::alongside);
+                        dead.merge(written, new Dead(arm, site.outcome(),
+                                Optional.of(unreachable.proof())), Dead::alongside);
                     } else {
                         taken.add(written);
                     }
@@ -1970,7 +1973,7 @@ public final class Adequacy {
                     SourcePos.IN_WRITTEN_ORDER));
             List<Report> reports = new ArrayList<>();
             for (Dead each : found) {
-                reports.add(warning(db, name, each.arm(), each.proof()));
+                reports.add(warning(db, name, each.arm(), each.outcome(), each.proof()));
             }
             return Answer.of(true, reports);
         }
@@ -1984,14 +1987,19 @@ public final class Adequacy {
          * answers and never this.
          */
         private static Report warning(
-                Db db, String module, ControlPlace.Arm arm,
+                Db db, String module, ControlPlace.Arm arm, SourceOutcome.Arm outcome,
                 Optional<souther.compiler.reach.Proof> proof) {
             souther.compiler.diag.Diagnostic.Builder said =
                     Warnings.pointedAt(Sites.placeOf(db, arm.anchor()))
                             .say(new DeadBranchMessage.NothingReachesThisBranch());
-            return Report.of(proof.map(new DeadBranchProofWords(db, module, said)::of)
-                    .orElse(said)
-                    .hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt())
+            // A departure of an attempt is taken out by building the value outright: the clauses
+            // it answers hold wherever it is attempted, which is what lets the check discharge it.
+            souther.compiler.diag.Diagnostic.Builder told =
+                    proof.map(new DeadBranchProofWords(db, module, said)::of).orElse(said);
+            return Report.of((outcome instanceof SourceOutcome.Failed(
+                    SourceOutcome.FailedBy.Construction _)
+                    ? told.hint(new DeadBranchMessage.BuildTheValueRatherThanAttemptIt())
+                    : told.hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt()))
                     .build());
         }
 
@@ -2207,12 +2215,12 @@ public final class Adequacy {
          * one every place was shown dead by, and empty where two places were shown dead for
          * different reasons: each of those is true where it was found and false of the arm.
          */
-        private record Dead(ControlPlace.Arm arm,
+        private record Dead(ControlPlace.Arm arm, SourceOutcome.Arm outcome,
                             Optional<souther.compiler.reach.Proof> proof) {
 
             /** The same arm, also dead at another place. */
             Dead alongside(Dead other) {
-                return proof.equals(other.proof) ? this : new Dead(arm, Optional.empty());
+                return proof.equals(other.proof) ? this : new Dead(arm, outcome, Optional.empty());
             }
         }
 

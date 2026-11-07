@@ -92,4 +92,7 @@ public sealed interface DeadBranchMessage extends Message {
 
     /** What to do about it. */
     record TakeItOutOrLetSomethingReachIt() implements DeadBranchMessage, Supporting {}
+
+    /** What to do about a departure of an attempted construction: build the value outright. */
+    record BuildTheValueRatherThanAttemptIt() implements DeadBranchMessage, Supporting {}
 }

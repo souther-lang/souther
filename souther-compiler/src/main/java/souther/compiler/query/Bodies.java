@@ -85,6 +85,7 @@ import souther.compiler.meta.ModuleReadback;
 import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
+import souther.compiler.check.DeparturesNoRunTakes;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Expandable;
@@ -3492,7 +3493,9 @@ public final class Bodies {
                                     ruleReading),
                             elements.getOrDefault(spec.name(), ElementBindings.NONE),
                             ValueDefinitions.of(analysed.get(spec.name()),
-                                    Shapes.declarationNewtypes(db)))));
+                                    Shapes.declarationNewtypes(db)),
+                            analysed.get(spec.name()) == null ? DeparturesNoRunTakes.NONE
+                                    : analysed.get(spec.name()).departures())));
         }
         // In the order the module declares them, which is the order a reader meets the diagnostics
         // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a
