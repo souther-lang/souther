@@ -73,6 +73,17 @@ public enum CompositionRepertoire {
     VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
 
     /**
+     * The values of the numbers of a form weighed by what is not a whole number, at a remainder
+     * the form is asked to leave.
+     *
+     * <p>A remainder is walked for as a class of whole numbers the form's numbers come to, and a
+     * form weighed by a half comes to no whole number that the class can be read off. So no value
+     * of its numbers is walked for, and that none was found is not that none is there. Raising
+     * anything reaches none of them; what would is somebody writing a walk over such a form.
+     */
+    VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS,
+
+    /**
      * The places inside one run of an order that this compiler names a value at.
      *
      * <p>It names one. Where the order has a smallest step there are others to step to and nothing
@@ -278,7 +289,9 @@ public enum CompositionRepertoire {
         return switch (this) {
             case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR -> true;
             case WAYS_A_TOTAL_IS_SPREAD, PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
-                 VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS, PLACES_IN_A_RUN_THAT_ARE_NAMED,
+                 VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
+                 VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS,
+                 PLACES_IN_A_RUN_THAT_ARE_NAMED,
                  ELEMENTS_CHOSEN_FOR_A_COUNT, KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
                  KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
                  TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,

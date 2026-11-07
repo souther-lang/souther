@@ -413,6 +413,63 @@ final class NumericWitness {
                 within.projectionOf(term) instanceof NumericDomain.FormProjection.NothingIsLeft);
     }
 
+    /** A position held away from a place another stands at, as a way to try a question. */
+    record HeldApart(NumericTerm.FromOnePosition term, Place from) {
+
+        HeldApart {
+            Objects.requireNonNull(term, "a position is held apart");
+            Objects.requireNonNull(from, "from a place");
+        }
+    }
+
+    /**
+     * The same, tried first with each of {@code apart} held away from the place it names, and
+     * where nothing stands that way, asked of {@code within} as the rules leave it.
+     *
+     * <p>Holding a position apart is a way to try and not a rule: the rules may say the two are
+     * one value, and a row at which they are is as much a row. The narrower region is made here,
+     * out of {@code within}, so an assignment found in it is one {@code within} admits.
+     */
+    static Standing triedApartFirst(SearchRegion within, List<HeldApart> apart,
+                                    List<? extends NumericTerm> terms,
+                                    Function<NumericTerm, Carrier> on, WitnessSearch looking,
+                                    Composing composing) {
+        SearchRegion narrower = within;
+        for (HeldApart each : apart) {
+            narrower = narrower.apartFrom(each.term(), each.from());
+        }
+        if (narrower == within) {
+            return of(within, terms, on, looking, composing);
+        }
+        return askedOfTheWholeAfter(of(narrower, terms, on, looking, composing),
+                () -> of(within, terms, on, looking, composing));
+    }
+
+    /**
+     * What a question comes to that was asked first of a narrower region and, where that found
+     * nothing, of the whole region it is about.
+     *
+     * <p>A proof is the whole region's alone. That the narrower one leaves nothing is no answer
+     * about the rest of the question, and what the whole proves holds of the narrower part too.
+     * Where neither found an assignment, each walk fell short in its own way and both are said:
+     * raising what stopped the first may find one where the second stopped short.
+     *
+     * <p>Only for a narrower region made out of the whole ({@link #triedApartFirst}): an
+     * assignment found in a region the whole does not hold would be one its rules refuse.
+     */
+    private static Standing askedOfTheWholeAfter(Standing narrower, Supplier<Standing> theWhole) {
+        if (narrower instanceof Standing.Found) {
+            return narrower;
+        }
+        Standing whole = theWhole.get();
+        return switch (whole) {
+            case Standing.Found _, Standing.ProvedImpossible _ -> whole;
+            case Standing.NotFound(CompositionShortfall met) -> new Standing.NotFound(
+                    (narrower instanceof Standing.NotFound(CompositionShortfall first)
+                            ? first : CompositionShortfall.NONE).and(met));
+        };
+    }
+
     /**
      * Where the positions may stand together, or what this compiler knows about their standing
      * nowhere.
@@ -427,28 +484,6 @@ final class NumericWitness {
      * to know not to trust.
      */
     sealed interface Standing {
-
-        /**
-         * What a question comes to that was asked first of a narrower region, as a way to try it,
-         * and, where that found nothing, of the whole region it is about.
-         *
-         * <p>A proof is the whole region's alone. That the narrower one leaves nothing is no answer
-         * about the rest of the question, and what the whole proves holds of the narrower part
-         * too. Where neither found an assignment, each walk fell short in its own way and both are
-         * said: raising what stopped the first may find one where the second stopped short.
-         */
-        default Standing orAskedOfTheWhole(Supplier<Standing> theWhole) {
-            if (this instanceof Found) {
-                return this;
-            }
-            Standing whole = theWhole.get();
-            return switch (whole) {
-                case Found _, ProvedImpossible _ -> whole;
-                case NotFound(CompositionShortfall met) -> new NotFound(
-                        (this instanceof NotFound(CompositionShortfall first)
-                                ? first : CompositionShortfall.NONE).and(met));
-            };
-        }
 
         /**
          * Where each position stands, which is an assignment the region admits.

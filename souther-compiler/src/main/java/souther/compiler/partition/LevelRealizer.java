@@ -186,6 +186,23 @@ public final class LevelRealizer {
                 case null -> runs.put(term, NumericDomain.Bounds.OPEN);
             }
         }
+        // The values the rules name, where the item's quantity is one a value comes to, before any
+        // walk: they are all there is, and where they settle the item no walk is asked. Where
+        // they do not, what reading them fell short of is said beside what the walk comes to.
+        CompositionShortfall namedShortOf;
+        switch (amongTheValuesNamed(standing, within, tried)) {
+            case AmongTheNamed.Settled(Realization answer) -> {
+                return answer;
+            }
+            case AmongTheNamed.Open(CompositionShortfall shortOf) -> namedShortOf = shortOf;
+        }
+        return alsoShortOf(walked(standing, within, runs, looking, tried), namedShortOf);
+    }
+
+    /** The walk each kind of item is looked for by. */
+    private Realization walked(Standing standing, SearchRegion within,
+                               Map<NumericTerm, NumericDomain.Bounds> runs,
+                               WitnessSearch looking, ValuesTried tried) {
         return switch (standing) {
             case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
@@ -245,7 +262,7 @@ public final class LevelRealizer {
                             UnheldNumber.NO_REPRESENTATION_EXISTS));
                     continue;
                 }
-                if (steps.spent()) {
+                if (steps.spentSaying(stoppedBy)) {
                     continue;
                 }
                 // The count is the one being tried, and stands beside the form's numbers in the
@@ -490,15 +507,6 @@ public final class LevelRealizer {
                               SearchRegion within,
                               Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
-        // Two numbers of one position stand apart by what one value comes to of both, where the
-        // order counts and the distance is their difference.
-        if (two.of().counts()) {
-            Realization named = amongTheValuesNamed(
-                    LinearForm.difference(two.on(), two.against()), two.where(), within, tried);
-            if (named != null) {
-                return named;
-            }
-        }
         // What each reading left behind, in the three vocabularies there are for it. Kept apart
         // all the way here: how a walk ended says which of them it is, and a reader told the wrong
         // one is sent to raise a figure that reached its end or told that no number would have
@@ -778,10 +786,6 @@ public final class LevelRealizer {
     private Realization ofAForm(Standing.OfAForm over,
                                 SearchRegion within,
                                 Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
-        Realization named = amongTheValuesNamed(over.form(), over.where(), within, tried);
-        if (named != null) {
-            return named;
-        }
         LevelSpace levels = over.levels();
         // In the form's own order and not the map's. A form is a map, so the order its coefficients
         // were recorded in is a hash order — and which position is solved last decides whether the
@@ -826,8 +830,64 @@ public final class LevelRealizer {
     }
 
     /**
+     * What reading the values the rules name a position at came to: the item's answer, or that
+     * the item's own walk is to be asked, and what the reading fell short of on the way.
+     *
+     * <p>Two answers and not a null. That the item is no quantity of named values and that one of
+     * its values was a number this could not hold both leave the walk to be asked, and only the
+     * second is something of this compiler's that the walk's answer, where it settles nothing, is
+     * short of besides.
+     */
+    private sealed interface AmongTheNamed {
+
+        /** What the values named settle of the item. */
+        record Settled(Realization answer) implements AmongTheNamed {}
+
+        /** Nothing settled, and what of this compiler's the reading met, which is none where the
+         *  item is no quantity of the values named. */
+        record Open(CompositionShortfall shortOf) implements AmongTheNamed {}
+    }
+
+    /**
+     * The values the rules name the item's position at, read for what each comes to of the item's
+     * quantity, where its quantity is one a value comes to.
+     */
+    private AmongTheNamed amongTheValuesNamed(Standing standing, SearchRegion within,
+                                              ValuesTried tried) {
+        return switch (standing) {
+            // Two numbers of one position stand apart by what one value comes to of both, where
+            // the order counts and the distance is their difference.
+            case Standing.OfTwoOnOneCarrier two when two.of().counts() -> amongTheValuesNamed(
+                    LinearForm.difference(two.on(), two.against()), two.where(), within, tried);
+            case Standing.OfAForm over ->
+                    amongTheValuesNamed(over.form(), over.where(), within, tried);
+            // A remainder of a form over numbers of one position is what one value leaves, as a
+            // form over them is what one value comes to.
+            case Standing.OfARemainder over -> amongTheValuesNamed(
+                    over.dividend().coefs().keySet(),
+                    values -> OrderedAffineBoundary.remainderAt(over.dividend(), over.divisor(),
+                            values), over.where(), within, tried);
+            case Standing.OfAProduct over -> {
+                List<NumericTerm> both = List.of(over.one(), over.other());
+                yield amongTheValuesNamed(both,
+                        values -> OrderedAffineBoundary.productAt(both, values), over.where(),
+                        within, tried);
+            }
+            case Standing.OfARemainderByAnInput over -> {
+                List<NumericTerm> both = List.of(over.dividend(), over.divisor());
+                yield amongTheValuesNamed(both,
+                        values -> OrderedAffineBoundary.remainderByAnInputAt(over.dividend(),
+                                over.divisor(), values), over.where(), within, tried);
+            }
+            case Standing.OfOneCoordinate _, Standing.OfTwoOnOneCarrier _,
+                 Standing.OfARemainderAndAForm _, Standing.OfACount _,
+                 Standing.OfACountAndAForm _ -> new AmongTheNamed.Open(CompositionShortfall.NONE);
+        };
+    }
+
+    /**
      * A form over numbers of one position whose rules name finitely many values, at what one of
-     * those values comes to where {@code where} asks — or null where the form is not that.
+     * those values comes to where {@code where} asks.
      *
      * <p>Each value read through every term together and the form worked out of what that one
      * value reads as ({@link SearchRegion#readingsOfEach}), and never each term placed on its own:
@@ -840,8 +900,8 @@ public final class LevelRealizer {
      * is to look at. A value that comes to one and that no row was made of says nothing about the
      * others, and nothing about the item.
      */
-    private Realization amongTheValuesNamed(LinearForm<NumericTerm> form, Criterion where,
-                                            SearchRegion within, ValuesTried tried) {
+    private AmongTheNamed amongTheValuesNamed(LinearForm<NumericTerm> form, Criterion where,
+                                              SearchRegion within, ValuesTried tried) {
         return amongTheValuesNamed(form.coefs().keySet(),
                 values -> OrderedAffineBoundary.at(form, values).map(Optional::of), where, within,
                 tried);
@@ -851,27 +911,38 @@ public final class LevelRealizer {
      * The same, of a quantity over {@code terms} that is at the level {@code comesTo} says where
      * its terms read as given — or at none, as a remainder of a form that comes to no whole number
      * is.
+     *
+     * <p>A value whose level this could not hold is one that may be the row, so where no other
+     * value is one, nothing is settled: the item's walk is asked, which reaches the values another
+     * way, and the number not held is said beside whatever it comes back with.
      */
-    private Realization amongTheValuesNamed(
+    private AmongTheNamed amongTheValuesNamed(
             Collection<NumericTerm> over,
             Function<Map<NumericTerm, Place>, ExactAnswer<Optional<ExactRatio>>> comesTo,
             Criterion where, SearchRegion within, ValuesTried tried) {
         List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
         for (NumericTerm each : NumericTerms.inOrder(over)) {
             if (each.atOnePosition() == null) {
-                return null;
+                return new AmongTheNamed.Open(CompositionShortfall.NONE);
             }
             terms.add(each.atOnePosition());
         }
         ReadingsOfEachValue named = within.readingsOfEach(terms);
         if (named == null) {
-            return null;
+            return new AmongTheNamed.Open(CompositionShortfall.NONE);
         }
         boolean cameToOne = false;
+        Set<CompositionCapacity> unheld = new HashSet<>();
         for (ReadingsOfEachValue.Read each : named.each()) {
-            if (!(comesTo.apply(each.numbers())
-                    instanceof ExactAnswer.Held<Optional<ExactRatio>>(var level))) {
-                return null;
+            Optional<ExactRatio> level;
+            switch (comesTo.apply(each.numbers())) {
+                case ExactAnswer.Held<Optional<ExactRatio>>(Optional<ExactRatio> held) ->
+                        level = held;
+                case ExactAnswer.Unheld<Optional<ExactRatio>> notHeld -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.WHAT_A_VALUE_NAMED_COMES_TO, notHeld.why()));
+                    continue;
+                }
             }
             if (level.isEmpty() || !where.holds(new Level.OfTheQuantity(level.get()))) {
                 continue;
@@ -881,10 +952,14 @@ public final class LevelRealizer {
             each.numbers().forEach((term, number) -> fixing.put(RealizationTarget.of(term), number));
             Realization made = found(fixing, within, tried);
             if (made instanceof Realization.Found) {
-                return made;
+                return new AmongTheNamed.Settled(made);
             }
         }
-        return cameToOne ? Realization.Unknown.nothingComposedOne() : new Realization.Impossible();
+        if (!unheld.isEmpty()) {
+            return new AmongTheNamed.Open(CompositionShortfall.of(Set.of(), Set.of(), unheld));
+        }
+        return new AmongTheNamed.Settled(cameToOne ? Realization.Unknown.nothingComposedOne()
+                : new Realization.Impossible());
     }
 
     /**
@@ -948,9 +1023,7 @@ public final class LevelRealizer {
                                 Set<CompositionBudget> stoppedBy,
                                 Set<CompositionCapacity> unheld, Steps steps,
                                 Map<RealizationTarget, Place> alongside) {
-        // Nothing is walked once the item's steps are spent, and the walk that spent them said
-        // the figure. Not a proof either way: the search that spent them left the item open.
-        if (steps.spent()) {
+        if (steps.spentSaying(stoppedBy)) {
             return new LevelWalk(null, false);
         }
         AtTheLevel here = atTheLevel(form, target, within, runs);
@@ -995,14 +1068,6 @@ public final class LevelRealizer {
     private Realization ofARemainder(Standing.OfARemainder over, SearchRegion within,
                                      Map<NumericTerm, NumericDomain.Bounds> runs,
                                      WitnessSearch looking, ValuesTried tried) {
-        // A remainder of a form over numbers of one position is what one value leaves, as a form
-        // over them is what one value comes to.
-        Realization named = amongTheValuesNamed(over.dividend().coefs().keySet(),
-                values -> OrderedAffineBoundary.remainderAt(over.dividend(), over.divisor(),
-                        values), over.where(), within, tried);
-        if (named != null) {
-            return named;
-        }
         NumericWitness.Standing congruent = asACongruence(over, within, looking, tried);
         if (congruent instanceof NumericWitness.Standing.Found standing) {
             Map<NumericTerm, Place> placed = new LinkedHashMap<>();
@@ -1083,19 +1148,28 @@ public final class LevelRealizer {
         if (bounded && over.where() instanceof Criterion.AtTheLevel) {
             return new Realization.Impossible();
         }
-        stoppedBy.addAll(numbersShortOf.figures());
-        unheld.addAll(numbersShortOf.unheld());
-        return Realization.Unknown.leftOpen(
+        return alsoShortOf(Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
-                stoppedBy, numbersShortOf.populations(), unheld);
+                stoppedBy, Set.of(), unheld), numbersShortOf);
+    }
+
+    /**
+     * {@code made}, with what an earlier look at the same item fell short of said beside it where
+     * it settles nothing. A row or a proof is the item's answer whatever the earlier look met:
+     * what it fell short of is a reason a row may still be found, and there is one or there is
+     * none.
+     */
+    private static Realization alsoShortOf(Realization made, CompositionShortfall earlier) {
+        return made instanceof Realization.Unknown left ? left.alsoShortOf(earlier) : made;
     }
 
     /**
      * Where the numbers stand at a remainder the criterion offers, walked as the region leaves
      * them with the last held to the class the others leave it ({@link NumericWitness.Congruent}),
-     * a row composed with them — or null where the form is not of whole numbers. Where none was
-     * found, the class walk of the form's values is asked after, and what this walk fell short of
-     * is said beside what that one meets.
+     * a row composed with them — or null where the form is not of whole numbers, which a
+     * congruence is not held of and the class walk reads. Where none was found, the class walk of
+     * the form's values is asked after, and what this walk fell short of is said beside what that
+     * one meets.
      *
      * <p>Asked first because it puts no value of the form ahead of its numbers. A value chosen
      * from the run the region leaves the form is one its numbers may come to only at places no
@@ -1238,7 +1312,8 @@ public final class LevelRealizer {
                     bounded = false;
                     continue;
                 }
-                if (steps.spent()) {
+                if (steps.spentSaying(stoppedBy)) {
+                    bounded = false;
                     continue;
                 }
                 Congruences wanted = new Congruences(remainder.subtract(moved), over.divisor())
@@ -1412,12 +1487,6 @@ public final class LevelRealizer {
                                    Map<NumericTerm, NumericDomain.Bounds> runs,
                                    ValuesTried tried) {
         List<NumericTerm> both = List.of(over.one(), over.other());
-        Realization named = amongTheValuesNamed(both,
-                values -> OrderedAffineBoundary.productAt(both, values),
-                over.where(), within, tried);
-        if (named != null) {
-            return named;
-        }
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         boolean bounded = true;
         LevelCandidateSource.Offered offered =
@@ -1498,14 +1567,6 @@ public final class LevelRealizer {
                                               SearchRegion within,
                                               Map<NumericTerm, NumericDomain.Bounds> runs,
                                               ValuesTried tried) {
-        List<NumericTerm> both = List.of(over.dividend(), over.divisor());
-        Realization named = amongTheValuesNamed(both,
-                values -> OrderedAffineBoundary.remainderByAnInputAt(over.dividend(),
-                        over.divisor(), values),
-                over.where(), within, tried);
-        if (named != null) {
-            return named;
-        }
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         boolean bounded = true;
         LevelCandidateSource.Offered offered =
@@ -1785,13 +1846,19 @@ public final class LevelRealizer {
         private int taken;
 
         /**
-         * Whether the walks have taken every step there is between them. A walk asked after that
-         * stops at its first step having met the figure, which the item's search has already said,
-         * so it is not asked. What the item counts on the way to the walks it would have asked is
-         * counted still: a figure of its own that it reaches is a second thing it left untried.
+         * Whether the walks have taken every step there is between them, saying the figure into
+         * {@code stoppedBy} where they have. A walk asked after that would stop at its first step,
+         * say the figure and come back having walked nothing; this is that answer without the
+         * region narrowed or the search built for it. What the item counts on the way to the
+         * walks it would have asked is counted still: a figure of its own that it reaches is a
+         * second thing it left untried.
          */
-        boolean spent() {
-            return taken > STEPS_A_SEARCH_MAY_TAKE;
+        boolean spentSaying(Set<CompositionBudget> stoppedBy) {
+            if (taken <= STEPS_A_SEARCH_MAY_TAKE) {
+                return false;
+            }
+            stoppedBy.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE);
+            return true;
         }
     }
 

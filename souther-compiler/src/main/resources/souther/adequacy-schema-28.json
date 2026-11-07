@@ -7004,6 +7004,7 @@
                           "ways_a_total_is_spread",
                           "places_a_pair_is_tried_at_on_a_line",
                           "values_that_answer_several_of_their_numbers",
+                          "values_at_a_remainder_of_a_form_not_of_whole_numbers",
                           "places_in_a_run_that_are_named",
                           "elements_chosen_for_a_count",
                           "keys_placed_at_the_number_their_elements_come_to",
@@ -7044,7 +7045,8 @@
                               "values_a_total_is_spread_over",
                               "the_least_count_asked_for",
                               "counts_an_item_is_tried_at",
-                              "places_an_element_turns_at"
+                              "places_an_element_turns_at",
+                              "what_a_value_named_comes_to"
                             ]
                           },
                           "why": {

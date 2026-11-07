@@ -57,7 +57,11 @@ public record CompositionCapacity(Where where, UnheldNumber why) {
 
         /** A place a statement about an element turns over at, which the element's values are
          *  chosen either side of. */
-        PLACES_AN_ELEMENT_TURNS_AT
+        PLACES_AN_ELEMENT_TURNS_AT,
+
+        /** What a value the rules name a position at comes to, read through every number of the
+         *  item it is a value of. */
+        WHAT_A_VALUE_NAMED_COMES_TO
     }
 
     /**

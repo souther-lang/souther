@@ -7187,17 +7187,14 @@ public final class Generator {
             // Held away from the keys of the same fold placed already where that can be, which is
             // a way to try and not a rule: the rules and the way here may say the two are one value,
             // and a row at which they are is as much a row.
-            SearchRegion apart = here;
+            List<NumericWitness.HeldApart> apart = new ArrayList<>();
             for (Map.Entry<RealizationTarget, Place> earlier : keysPlaced.entrySet()) {
                 if (each.getKey().keyIsToldApartFrom(earlier.getKey())) {
-                    apart = apart.apartFrom(key, earlier.getValue());
+                    apart.add(new NumericWitness.HeldApart(key, earlier.getValue()));
                 }
             }
-            SearchRegion whole = here;
-            NumericWitness.Standing placing = apart == whole
-                    ? NumericWitness.of(whole, List.of(key), on, looking)
-                    : NumericWitness.of(apart, List.of(key), on, looking).orAskedOfTheWhole(
-                            () -> NumericWitness.of(whole, List.of(key), on, looking));
+            NumericWitness.Standing placing = NumericWitness.triedApartFirst(here, apart,
+                    List.of(key), on, looking, NumericWitness.Composing.ANY_ASSIGNMENT);
             switch (placing) {
                 case NumericWitness.Standing.Found beside -> {
                     for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
@@ -8082,13 +8079,23 @@ public final class Generator {
         LinearForm<NumericTerm> dividend = remainder.dividend();
         BigInteger moved = ((ExactAnswer.Held<BigInteger>) dividend.constant().floor()).value();
         BigInteger divisor = remainder.remainder().divisor();
+        // A form weighed by what is not whole comes to no whole number a class is read off, so no
+        // value of its numbers is walked for; and a whole coefficient too wide to hold as one is a
+        // number this could not hold on the way.
         BigInteger step = BigInteger.ZERO;
         for (ExactRatio each : dividend.coefs().values()) {
-            if (!(each.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
-                    || !each.isWhole()) {
-                return new NumericWitness.Standing.NotFound(CompositionShortfall.NONE);
+            if (!each.isWhole()) {
+                return new NumericWitness.Standing.NotFound(CompositionShortfall.writing(Set.of(
+                        CompositionRepertoire.VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS)));
             }
-            step = step.gcd(whole);
+            switch (each.floor()) {
+                case ExactAnswer.Held<BigInteger>(BigInteger whole) -> step = step.gcd(whole);
+                case ExactAnswer.Unheld<BigInteger> notHeld -> {
+                    return new NumericWitness.Standing.NotFound(CompositionShortfall.of(Set.of(),
+                            Set.of(), Set.of(new CompositionCapacity(CompositionCapacity.Where
+                                    .VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO, notHeld.why()))));
+                }
+            }
         }
         // What the form's coefficients reach, every multiple of the step they generate: a
         // remainder whose class holds none of those is one no value of the form leaves.
@@ -8528,7 +8535,6 @@ public final class Generator {
             // the one it took.
             List<ComposedAt> composedWith = new ArrayList<>();
             SearchRegion within = here.given(remaindersStanding(alreadyStanding));
-            SearchRegion apart = keysApart(within, owing.keySet());
             Function<NumericTerm, Carrier> on = term -> carrierOf(term, subject.quantities());
             NumericWitness.Composing composing = assignment -> {
                 composedWith.clear();
@@ -8537,10 +8543,8 @@ public final class Generator {
             };
             // The keys held apart are a way to try: where nothing stands that way, they are tried
             // as the rules leave them.
-            NumericWitness.Standing found = apart == within
-                    ? NumericWitness.of(within, numbers, on, looking, composing)
-                    : NumericWitness.of(apart, numbers, on, looking, composing).orAskedOfTheWhole(
-                            () -> NumericWitness.of(within, numbers, on, looking, composing));
+            NumericWitness.Standing found = NumericWitness.triedApartFirst(within,
+                    keysApart(owing.keySet()), numbers, on, looking, composing);
             // What the rules settle before what this compiler managed, because a reader may act on
             // the first and on none of the rest. A proof is the region's alone: an assignment no
             // row composed with is what this compiler built, and says nothing of the rules.
@@ -8570,12 +8574,12 @@ public final class Generator {
         }
 
         /**
-         * {@code region} with the key of each target owed held away from the keys of the same
-         * fold already standing: the key of a fold asked for twice is two keys, and held at one
-         * value they would be one, whose elements come to the one number asked of both.
+         * The key of each target owed, held away from the keys of the same fold already standing:
+         * the key of a fold asked for twice is two keys, and held at one value they would be one,
+         * whose elements come to the one number asked of both.
          */
-        private SearchRegion keysApart(SearchRegion region, Collection<RealizationTarget> owing) {
-            SearchRegion apart = region;
+        private List<NumericWitness.HeldApart> keysApart(Collection<RealizationTarget> owing) {
+            List<NumericWitness.HeldApart> apart = new ArrayList<>();
             for (RealizationTarget owed : owing) {
                 TermPath asked = owed.keyAskedFor();
                 if (asked == null) {
@@ -8586,7 +8590,8 @@ public final class Generator {
                     Place earlierAt = earlierAsked == null ? null : alreadyStanding.get(
                             RealizationTarget.of(new NumericTerm.ValueOf(earlierAsked)));
                     if (earlierAt != null && owed.keyIsToldApartFrom(earlier)) {
-                        apart = apart.apartFrom(new NumericTerm.ValueOf(asked), earlierAt);
+                        apart.add(new NumericWitness.HeldApart(new NumericTerm.ValueOf(asked),
+                                earlierAt));
                     }
                 }
             }

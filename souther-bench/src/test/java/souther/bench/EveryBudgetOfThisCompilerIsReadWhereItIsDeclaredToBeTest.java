@@ -462,6 +462,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " which travel nowhere because reaching that one gives nothing up:"
                             + " the walk carries on against the wider box, which offers every"
                             + " assignment the narrowing would have and skips none of them"),
+            Map.entry("souther.compiler.partition.LevelRealizer$Steps#spentSaying("
+                            + "Ljava/util/Set;)Z",
+                    "says the steps into what the item stopped at where they are spent, in place"
+                            + " of a walk that would stop at its first step and say them"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofTwo("
                             + "Lsouther/compiler/partition/Standing$OfTwoOnOneCarrier;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
