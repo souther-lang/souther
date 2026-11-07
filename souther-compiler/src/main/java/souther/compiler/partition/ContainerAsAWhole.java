@@ -66,12 +66,16 @@ final class ContainerAsAWhole {
      * A total the row asks of the container, and the numbers it is tried at.
      *
      * @param term  the total
+     * @param asked the numbers the demand on it leaves, on the order {@code on}: what a container
+     *              composed comes to is one of them, the container of none's nought among them
      * @param tried the numbers the demand on it leaves, as its builder hands them over
      */
-    record ATotal(NumericTerm term, TermRealizations.Tried tried) {
+    record ATotal(NumericTerm term, NumericSet asked, Carrier on, TermRealizations.Tried tried) {
 
         ATotal {
             Objects.requireNonNull(term, "a total is a number");
+            Objects.requireNonNull(asked, "asked to be some numbers");
+            Objects.requireNonNull(on, "on some order");
             Objects.requireNonNull(tried, "a total is tried at some numbers");
         }
     }
@@ -89,13 +93,18 @@ final class ContainerAsAWhole {
 
     private final TermPath container;
     private final List<OneNumber> numbers;
+    /** What the row asks the container to come to, which the container of none is held to as
+     *  every container is. */
+    private final List<ATotal> asked;
     /** Whether a statement reads how many the container holds, which then stands beside an
      *  element as the totals do. */
     private final boolean sizeIsRead;
 
-    private ContainerAsAWhole(TermPath container, List<OneNumber> numbers, boolean sizeIsRead) {
+    private ContainerAsAWhole(TermPath container, List<OneNumber> numbers, List<ATotal> asked,
+                              boolean sizeIsRead) {
         this.container = container;
         this.numbers = List.copyOf(numbers);
+        this.asked = List.copyOf(asked);
         this.sizeIsRead = sizeIsRead;
     }
 
@@ -142,7 +151,7 @@ final class ContainerAsAWhole {
                 continue;
             }
             for (NumericTerm term : meeting.perElement().numbers()) {
-                if (!container.equals(NumbersOfTheWhole.containerOf(term))) {
+                if (!NumbersOfTheWhole.ofTheWhole(term, container)) {
                     continue;
                 }
                 if (NumbersOfTheWhole.howManyItHolds(term, container)) {
@@ -168,29 +177,20 @@ final class ContainerAsAWhole {
         if (howManyIsRead || formed) {
             NumericTerm counted = many != null ? many
                     : new NumericTerm.ValueOf(container);
-            DeclaredBounds.CountRange held =
-                    ContainersAddingUp.howMany(view, container, within, reading, null);
-            if (held == null && DeclaredBounds.countsHeld(view, reading, null).least() == 0) {
-                // The region leaves the count nowhere, and so leaves no element a value: the
-                // container of none is the one it leaves, as whatNoneComeTo says of a total.
-                held = new DeclaredBounds.CountRange(0, 0);
-            }
-            out.put(counted, new OneNumber(counted, null, null, sizes(held, size)));
+            out.put(counted, new OneNumber(counted, null, null, sizes(
+                    ContainersAddingUp.howMany(view, container, within, reading, null), size)));
         }
-        return new ContainerAsAWhole(container, new ArrayList<>(out.values()), howManyIsRead);
+        return new ContainerAsAWhole(container, new ArrayList<>(out.values()), totals,
+                howManyIsRead);
     }
 
     /**
      * The numbers a total nothing asks of is tried at: where the statements turn over on it, with
      * the numbers beside the elements where {@code beside} fixes them, and values inside each run
      * between — all of them inside what the region leaves it. A statement whose turn reads an
-     * element as well turns nowhere the total alone says, and adds no place.
-     *
-     * <p>Where the region leaves the total nowhere, it leaves no element of the container a value —
-     * an element's number is what the total adds up — and a container holding none is still an
-     * input: the total is tried at what adding up nothing comes to, which is nought. Every
-     * container composed is read again whole, so one the rules refuse for another reason is
-     * refused there.
+     * element as well turns nowhere the total alone says, and adds no place. Nowhere where the
+     * region leaves the total nowhere: the container of none is no choice of these, and is looked
+     * at apart from them ({@link CardinalityComposer}).
      */
     private static TermRealizations.Tried turningOn(NumericTerm term,
                                                     List<CardinalityComposer.Asked> asked,
@@ -210,7 +210,7 @@ final class ContainerAsAWhole {
             case null -> NumericDomain.Bounds.OPEN;
         };
         if (run == null) {
-            return new TermRealizations.Tried(List.of(Count.of(0)),
+            return new TermRealizations.Tried(List.of(),
                     new TermRealizations.Remainder.Exhausted());
         }
         List<ExactRatio> turns = new ArrayList<>();
@@ -220,13 +220,18 @@ final class ContainerAsAWhole {
                 turns.addAll(where);
             }
         }
+        Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         List<Place> places = CardinalityComposer.valuesAlong(carrier, run, turns,
-                VALUES_OF_EACH_RUN, UsualPlaces.of(term, carrier, reading.today()),
-                new LinkedHashSet<>(), unnamed);
-        return new TermRealizations.Tried(places, unnamed.isEmpty()
+                VALUES_OF_EACH_RUN, UsualPlaces.of(term, carrier, reading.today()), unheld,
+                unnamed);
+        TermRealizations.Remainder rest = unnamed.isEmpty()
                 ? new TermRealizations.Remainder.StoppedAt(
                         CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT)
-                : new TermRealizations.Remainder.SomeOf(unnamed));
+                : new TermRealizations.Remainder.SomeOf(unnamed);
+        // A place a statement turns at that this could not write is a total not tried for want of
+        // a number, which is said as that and not as the figure.
+        return new TermRealizations.Tried(places, unheld.isEmpty() ? rest
+                : new TermRealizations.Remainder.NotHeld(unheld, rest));
     }
 
     /** The order the numbers at the place a total adds up are written on, where it counts in
@@ -242,8 +247,10 @@ final class ContainerAsAWhole {
 
     /**
      * How many the container may hold: what {@code left} leaves, of the counts the row asks for
-     * where it asks ({@code size}), up to the most a count composes it with. Nothing where the
-     * rules leave no count at all; stopped at that most where they leave more.
+     * where it asks ({@code size}), from one up to the most a count composes it with. Nothing where
+     * the rules leave no count at all; stopped at that most where they leave more. Not none: the
+     * container of none is looked at apart from every choice of the whole
+     * ({@link CardinalityComposer}).
      */
     private static TermRealizations.Tried sizes(DeclaredBounds.CountRange left, NumericSet size) {
         if (left == null || left.empty()) {
@@ -251,7 +258,8 @@ final class ContainerAsAWhole {
                     new TermRealizations.Remainder.Exhausted());
         }
         List<Place> out = new ArrayList<>();
-        for (int many = left.least(); many <= Math.min(left.most(), MOST_ELEMENTS); many++) {
+        for (int many = Math.max(1, left.least()); many <= Math.min(left.most(), MOST_ELEMENTS);
+                many++) {
             if (size == null || size.holds(Count.of(many), Carrier.WHOLE)) {
                 out.add(Count.of(many));
             }
@@ -260,6 +268,41 @@ final class ContainerAsAWhole {
                 ? new TermRealizations.Remainder.StoppedAt(
                         CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH)
                 : new TermRealizations.Remainder.Exhausted());
+    }
+
+    /**
+     * Whether the container of none is one the row and the region leave: every total the row asks
+     * holds nought, which is what adding up nothing comes to; and the region leaves how many it
+     * holds at nought and every total of the whole at nought.
+     *
+     * <p>Three answers of the region kept three. Where fixing those is what shows the region
+     * leaves nothing, the rules refuse the container of none and it is no container. Where the
+     * region was shown to leave nothing before anything was fixed, it says nothing of the
+     * container of none — an element held to a number no element can be leaves every row of an
+     * element nothing, and the container of none holds no element — so it is still one, and the
+     * row written of it is read against the rules where every row is. And where neither, it is
+     * one.
+     */
+    boolean admitsNone(TypeView view, SearchRegion within, RuleReadingContext reading) {
+        for (ATotal each : asked) {
+            if (!each.asked().holds(Count.of(0), each.on())) {
+                return false;
+            }
+        }
+        if (within.emptiness().isPresent()) {
+            return true;
+        }
+        Map<NumericTerm, Place> none = new LinkedHashMap<>();
+        NumericTerm.FromOnePosition many = ContainersAddingUp.countTaken(view, container, reading);
+        if (many != null) {
+            none.put(many, Count.of(0));
+        }
+        for (OneNumber one : numbers) {
+            if (one.added() != null) {
+                none.put(one.term(), Count.of(0));
+            }
+        }
+        return none.isEmpty() || within.given(none).emptiness().isEmpty();
     }
 
     /**
@@ -318,7 +361,12 @@ final class ContainerAsAWhole {
             return many;
         }
 
-        /** {@code beside} with every number of the whole standing where it is fixed. */
+        /**
+         * {@code beside} with every number of the whole standing where it is fixed: what a reading
+         * of some of the elements answers for them ({@link BorderQuantity.Observation#fixedAt}),
+         * so that what a group answers is what it answers in any container coming to them. Read
+         * off the group instead, they would be what the group alone comes to.
+         */
         Map<NumericTerm, Place> beside(Map<NumericTerm, Place> beside) {
             Map<NumericTerm, Place> out = new LinkedHashMap<>(beside);
             out.putAll(fixed);
@@ -326,62 +374,64 @@ final class ContainerAsAWhole {
         }
 
         /**
-         * {@code group}, as {@code holding} reads a container of it, read inside a container of as
-         * many elements as are fixed coming to every total fixed — or null where no container of so
-         * many holds the group.
+         * Whether {@code held} elements can come to every total fixed together: the totals adding
+         * up one place each say what the numbers there come to, and where two of them say
+         * different things no elements meet both.
          */
-        BorderQuantity.Observation readingOf(
-                List<ObservedValue> group,
-                Function<List<ObservedValue>, BorderQuantity.Observation> holding) {
-            List<ObservedValue> whole = aroundIt(group);
-            if (whole == null) {
-                return null;
-            }
-            return new InsideTheWhole(holding.apply(group), holding.apply(whole), container);
+        boolean comesTogetherIn(int held) {
+            return owedAtEachPlace(held) != null;
         }
 
         /**
-         * The group and, where the container holds more, one element holding what is left of
-         * every total and elements holding nought at every place a total adds up.
+         * What the numbers at each place a total adds up are to come to across {@code held}
+         * elements for every total to stand where it is fixed — one number for each place,
+         * whichever totals of it are fixed — or null where some total asks no whole number of
+         * them, or two totals of one place ask two.
          */
-        private List<ObservedValue> aroundIt(List<ObservedValue> group) {
-            int held = many != null ? many : group.size() + 1;
-            if (held < group.size() || group.isEmpty()) {
-                return held == group.size() ? group : null;
+        private Map<TermPath, Owed> owedAtEachPlace(int held) {
+            Map<TermPath, Owed> out = new LinkedHashMap<>();
+            for (OneNumber one : numbers) {
+                if (one.added() == null) {
+                    continue;
+                }
+                BigInteger target = owed(one, Count.number(fixed.get(one.term())), held);
+                if (target == null) {
+                    return null;
+                }
+                Owed had = out.putIfAbsent(one.added().place(),
+                        new Owed(one.added().place(), one.carrier(), target));
+                if (had != null && !had.target().equals(target)) {
+                    return null;
+                }
             }
-            if (held == group.size()) {
-                return group;
-            }
-            ObservedValue left = group.getFirst();
-            ObservedValue nought = group.getFirst();
+            return out;
+        }
+
+        /** Whether {@code elements} come to every total fixed, each worked out of them. */
+        private boolean comeToEvery(List<ObservedValue> elements) {
             for (OneNumber one : numbers) {
                 if (one.added() == null) {
                     continue;
                 }
                 List<TermPath.Step> steps = stepsInside(one.added().place());
-                BigInteger owed = owed(one, Count.number(fixed.get(one.term())), held);
-                if (steps == null || owed == null) {
-                    return null;
+                BigInteger target = owed(one, Count.number(fixed.get(one.term())),
+                        elements.size());
+                if (steps == null || target == null) {
+                    return false;
                 }
-                for (ObservedValue each : group) {
+                BigInteger sum = BigInteger.ZERO;
+                for (ObservedValue each : elements) {
                     BigInteger at = wholeAt(each, steps, one.carrier());
                     if (at == null) {
-                        return null;
+                        return false;
                     }
-                    owed = owed.subtract(at);
+                    sum = sum.add(at);
                 }
-                left = placedAt(left, steps, one.carrier().valueOf(Count.of(new BigDecimal(owed))));
-                nought = placedAt(nought, steps, one.carrier().valueOf(Count.of(0)));
-                if (left == null || nought == null) {
-                    return null;
+                if (!sum.equals(target)) {
+                    return false;
                 }
             }
-            List<ObservedValue> out = new ArrayList<>(group);
-            out.add(left);
-            while (out.size() < held) {
-                out.add(nought);
-            }
-            return out;
+            return true;
         }
 
         /**
@@ -389,12 +439,18 @@ final class ContainerAsAWhole {
          * that place it was listed in, so that the elements come to every total fixed — or null
          * where they do not.
          *
+         * <p>Once for each place, to the one number every total of it asks there
+         * ({@link #owedAtEachPlace}): moved once for each total, the second of two totals of one
+         * place would undo the first. And read back before it is handed over, so what comes back
+         * comes to every total fixed or is nothing.
+         *
          * <p>An element may start from any value it answers alike to, which {@code alike} lists
          * for it: the values of a group answer every statement the same, and the run one of them
          * stands in may reach where another's does not. Each starts from one whose run goes
-         * furthest the way the total is still owed — the {@code variant}-th of those that go as
-         * far, since the values of a group are alike to the statements and not to the type, which
-         * may tie a place no statement reads to the number moved.
+         * furthest up, and as many as the total needs from one whose run goes furthest down — the
+         * {@code variant}-th of those that go as far, since the values of a group are alike to the
+         * statements and not to the type, which may tie a place no statement reads to the number
+         * moved.
          *
          * @param alike   for each element drawn, the values it answers alike to, or null where it
          *                is to start from where it was drawn
@@ -402,71 +458,62 @@ final class ContainerAsAWhole {
          * @param turns  where each place a total adds up turns over, with every number of the
          *               whole standing where it is fixed; null at a place where that could not be
          *               worked out, which leaves the elements where they were listed
-         * @param region what the rules leave each such place
+         * @param region what the rules leave each such place, null where they leave it nothing
          */
         List<ObservedValue> spread(List<ObservedValue> drawn, List<List<ObservedValue>> alike,
                                    int variant, Function<TermPath, List<ExactRatio>> turns,
                                    Function<TermPath, NumericDomain.Bounds> region) {
             List<ObservedValue> out = new ArrayList<>(drawn);
-            for (OneNumber one : numbers) {
-                if (one.added() == null) {
-                    continue;
-                }
-                List<TermPath.Step> steps = stepsInside(one.added().place());
-                BigInteger target = owed(one, Count.number(fixed.get(one.term())), out.size());
-                if (steps == null || target == null) {
+            Map<TermPath, Owed> owed = owedAtEachPlace(out.size());
+            if (owed == null) {
+                return null;
+            }
+            for (Owed one : owed.values()) {
+                List<TermPath.Step> steps = stepsInside(one.place());
+                NumericDomain.Bounds leftByTheRegion = region.apply(one.place());
+                if (steps == null || leftByTheRegion == null) {
                     return null;
                 }
-                List<ExactRatio> where = turns.apply(one.added().place());
-                WholeNumbersLeft left = WholeNumbersLeft.of(region.apply(one.added().place()));
-                BigInteger sum = BigInteger.ZERO;
-                for (ObservedValue each : out) {
-                    BigInteger at = wholeAt(each, steps, one.carrier());
-                    if (at == null) {
-                        return null;
-                    }
-                    sum = sum.add(at);
-                }
-                int owing = target.compareTo(sum);
-                BigInteger[] at = new BigInteger[out.size()];
-                BigInteger[][] runs = new BigInteger[out.size()][];
-                sum = BigInteger.ZERO;
-                for (int each = 0; each < at.length; each++) {
-                    List<ObservedValue> starts = alike == null || alike.get(each) == null
-                            ? List.of(out.get(each)) : alike.get(each);
-                    // Every start whose run goes furthest, and then the variant-th of them.
-                    List<ObservedValue> furthest = new ArrayList<>();
-                    List<BigInteger> from = new ArrayList<>();
-                    for (ObservedValue start : starts) {
+                BigInteger target = one.target();
+                List<ExactRatio> where = turns.apply(one.place());
+                WholeNumbersLeft left = WholeNumbersLeft.of(leftByTheRegion);
+                List<List<Start>> startsOf = new ArrayList<>();
+                for (int each = 0; each < out.size(); each++) {
+                    List<Start> starts = new ArrayList<>();
+                    for (ObservedValue start : alike == null || alike.get(each) == null
+                            ? List.of(out.get(each)) : alike.get(each)) {
                         BigInteger value = wholeAt(start, steps, one.carrier());
-                        if (value == null) {
-                            continue;
-                        }
-                        BigInteger[] run = where == null ? new BigInteger[] {value, value}
-                                : runOf(value, where, left);
-                        if (runs[each] == null || further(run, runs[each], owing)) {
-                            runs[each] = run;
-                            furthest.clear();
-                            from.clear();
-                        }
-                        if (!further(runs[each], run, owing)) {
-                            furthest.add(start);
-                            from.add(value);
+                        if (value != null) {
+                            starts.add(new Start(start, value, where == null
+                                    ? new BigInteger[] {value, value}
+                                    : runOf(value, where, left)));
                         }
                     }
-                    if (runs[each] == null) {
+                    if (starts.isEmpty()) {
                         return null;
                     }
-                    int taken = variant % furthest.size();
-                    out.set(each, furthest.get(taken));
-                    at[each] = from.get(taken);
-                    runs[each] = where == null ? new BigInteger[] {at[each], at[each]}
-                            : runOf(at[each], where, left);
-                    sum = sum.add(at[each]);
+                    startsOf.add(starts);
                 }
-                BigInteger delta = target.subtract(sum);
+                // Each element from a start whose run reaches furthest up, and then, element by
+                // element while the least they can come to is still above the total, from one
+                // reaching furthest down. Which way the total is owed is asked of the starts
+                // taken: asked of the values drawn, it is a way a start taken after may reverse.
+                Start[] taken = new Start[out.size()];
+                for (int each = 0; each < taken.length; each++) {
+                    taken[each] = furthest(startsOf.get(each), 1, variant);
+                }
+                for (int each = 0; each < taken.length && aboveIt(least(taken), target); each++) {
+                    taken[each] = furthest(startsOf.get(each), -1, variant);
+                }
+                BigInteger[] at = new BigInteger[taken.length];
+                BigInteger delta = target;
+                for (int each = 0; each < taken.length; each++) {
+                    out.set(each, taken[each].value());
+                    at[each] = taken[each].at();
+                    delta = delta.subtract(at[each]);
+                }
                 for (int each = 0; each < at.length && delta.signum() != 0; each++) {
-                    BigInteger edge = runs[each][delta.signum() > 0 ? 1 : 0];
+                    BigInteger edge = taken[each].run()[delta.signum() > 0 ? 1 : 0];
                     BigInteger reach = edge == null ? delta : edge.subtract(at[each]);
                     BigInteger step = delta.signum() > 0 ? delta.min(reach) : delta.max(reach);
                     at[each] = at[each].add(step);
@@ -484,7 +531,7 @@ final class ContainerAsAWhole {
                     out.set(each, moved);
                 }
             }
-            return out;
+            return comeToEvery(out) ? out : null;
         }
 
         /**
@@ -517,6 +564,46 @@ final class ContainerAsAWhole {
             return false;
         }
         return end == null || (owing > 0 ? end.compareTo(other) > 0 : end.compareTo(other) < 0);
+    }
+
+    /** What the numbers at {@code place}, written on {@code carrier}, are to come to across the
+     *  elements. */
+    private record Owed(TermPath place, Carrier carrier, BigInteger target) {}
+
+    /** A value an element may start from, the whole number it holds where it is moved, and the
+     *  run it may be moved inside. */
+    private record Start(ObservedValue value, BigInteger at, BigInteger[] run) {}
+
+    /** The {@code variant}-th of the starts whose run reaches furthest {@code way}. */
+    private static Start furthest(List<Start> starts, int way, int variant) {
+        List<Start> out = new ArrayList<>();
+        for (Start each : starts) {
+            if (out.isEmpty() || further(each.run(), out.getFirst().run(), way)) {
+                out.clear();
+                out.add(each);
+            } else if (!further(out.getFirst().run(), each.run(), way)) {
+                out.add(each);
+            }
+        }
+        return out.get(variant % out.size());
+    }
+
+    /** The least the elements from {@code taken} can come to, or null where some run is open
+     *  below. */
+    private static BigInteger least(Start[] taken) {
+        BigInteger out = BigInteger.ZERO;
+        for (Start each : taken) {
+            if (each.run()[0] == null) {
+                return null;
+            }
+            out = out.add(each.run()[0]);
+        }
+        return out;
+    }
+
+    /** Whether {@code least} is above {@code target}; an open end is no end above it. */
+    private static boolean aboveIt(BigInteger least, BigInteger target) {
+        return least != null && least.compareTo(target) > 0;
     }
 
     /** The steps from an element of the container to {@code place}, or null where it is not
@@ -606,93 +693,4 @@ final class ContainerAsAWhole {
         return new ObservedValue.Constructed(type, moved);
     }
 
-    /**
-     * A group of elements read inside a container coming to the numbers fixed: its own places are
-     * the group's, and the container and what its elements come to are the whole's. Each element
-     * walked to is read the same way, so a statement about one of them that reads the container
-     * reads the whole.
-     */
-    private record InsideTheWhole(BorderQuantity.Observation group,
-                                  BorderQuantity.Observation whole, TermPath container)
-            implements BorderQuantity.Observation {
-
-        private boolean ofTheWhole(TermPath path) {
-            return path.isAtOrUnder(container) && !path.isAtOrUnder(container.element());
-        }
-
-        @Override
-        public WalkResult<ObservationAtPoint> at(TermPath path) {
-            return ofTheWhole(path) ? whole.at(path) : group.at(path);
-        }
-
-        /** What the group's reading holds fixed beside it; the whole is a row of this container
-         *  and holds nothing of another location. */
-        @Override
-        public Place fixedAt(NumericTerm term) {
-            return group.fixedAt(term);
-        }
-
-        @Override
-        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
-            return path.isAtOrUnder(container.element()) ? whole.everyValueAt(path)
-                    : group.everyValueAt(path);
-        }
-
-        @Override
-        public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
-            WalkResult<List<BorderQuantity.Observation>> elements = group.eachElementOf(of);
-            if (!of.equals(container)
-                    || !(elements instanceof WalkResult.Reached<List<BorderQuantity.Observation>>(
-                            var each))) {
-                return elements;
-            }
-            List<BorderQuantity.Observation> out = new ArrayList<>();
-            for (BorderQuantity.Observation one : each) {
-                out.add(new InsideTheWhole(one, whole, container));
-            }
-            return WalkResult.reached(out);
-        }
-
-        @Override
-        public BorderQuantity.Lastness lastToHold(TermPath of, TermPath position) {
-            return group.lastToHold(of, position);
-        }
-
-        @Override
-        public WalkResult<BorderQuantity.Among> among(TermPath of) {
-            return group.among(of);
-        }
-
-        @Override
-        public WalkResult<List<BorderQuantity.AnElement>> elementsOf(TermPath of) {
-            WalkResult<List<BorderQuantity.AnElement>> elements = group.elementsOf(of);
-            if (!of.equals(container)
-                    || !(elements instanceof WalkResult.Reached<List<BorderQuantity.AnElement>>(
-                            var each))) {
-                return elements;
-            }
-            List<BorderQuantity.AnElement> out = new ArrayList<>();
-            for (BorderQuantity.AnElement one : each) {
-                out.add(new BorderQuantity.AnElement(one.element(),
-                        new InsideTheWhole(one.reading(), whole, container)));
-            }
-            return WalkResult.reached(out);
-        }
-
-        @Override
-        public boolean choseAnElement() {
-            return group.choseAnElement();
-        }
-
-        /**
-         * A run over the container — what its elements come to at a place, or what is computed of
-         * each — is the whole's; anything else read once for the row is read of this reading.
-         */
-        @Override
-        public <T> T keptOf(BorderQuantity.ReadAlike<T> asked) {
-            return asked instanceof WhatATermRead.ARun
-                    || asked instanceof WhatATermRead.ARunOfEachElement
-                    ? whole.keptOf(asked) : asked.readAt(this);
-        }
-    }
 }

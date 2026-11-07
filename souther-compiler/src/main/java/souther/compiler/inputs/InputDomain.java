@@ -907,7 +907,10 @@ public final class InputDomain {
         // The same world, handed on whole. What a quantity reaches below is a declaration this
         // reading already reached, so it is read from the same rules under the same budget.
         return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, cases,
-                path -> typeAt(path, source), world);
+                path -> typeAt(path, source), world,
+                // A total a rule speaks of is the term a body reading it holds, made by the one
+                // maker of those terms, so the rule reaches whoever asks about it.
+                total -> source == null ? null : InputNumber.totalOf(total, this, source));
     }
 
     /**
@@ -972,7 +975,7 @@ public final class InputDomain {
         java.util.Set<RulesLeftUnread> left =
                 new java.util.LinkedHashSet<>(read.rulesLeftUnread());
         left.add(new RulesLeftUnread.HandoffNotAccepted());
-        return new ReadPosition(read.path(), read.view(), read.bounds(), read.totalsLeft(),
+        return new ReadPosition(read.path(), read.view(), read.bounds(),
                 read.nothingExists(), read.projection(),
                 read.declared(), read.reading(), read.obligations(), read.admitted(),
                 read.orderedRegion(), read.rulesWithoutALine(), read.endsLeftOpen(),
@@ -1734,7 +1737,7 @@ public final class InputDomain {
         ReadingResult reading = crossed(declared, view,
                 whatIsLeft(bounds, new NumericTerm.ValueOf(path)),
                 admitted, source, noLine, nothingExists, type);
-        return new ReadPosition(path, view, bounds, placed.totalsLeftAt(path), nothingExists,
+        return new ReadPosition(path, view, bounds, nothingExists,
                 placed.projection(path), declared, reading,
                 ObligationDomain.of(reading, declared), admitted, placed.orderedRegionAt(path),
                 withoutALine,

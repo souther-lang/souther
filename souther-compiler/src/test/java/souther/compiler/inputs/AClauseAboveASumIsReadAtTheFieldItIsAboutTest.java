@@ -15,6 +15,7 @@ import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -23,6 +24,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -99,23 +101,36 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
 
                 behavior read : (h: Holder) -> Ok
                 """;
-        ValueName sum = ValueName.Stdlib.operation("List", "sum");
         Endpoint aHundred = Endpoint.inclusive(Count.of(100));
 
-        TermPath underTheRecord = TermPath.of("h").then("q").then("lines");
-        assertEquals(aHundred, reading(model.replace("HELD", "A")).at(underTheRecord)
-                        .totalLeft(sum, underTheRecord.element().then("amount")).min(),
+        assertEquals(aHundred, totalOfTheAmounts(model.replace("HELD", "A"), null).min(),
                 "the clause holds the total with no sum in the way");
-
-        InputDomain held = reading(model.replace("HELD", "Q"));
         for (String each : List.of("A", "B")) {
-            TermPath lines = TermPath.of("h").then("q").refine(caseNamed(held, each))
-                    .then("lines");
-            NumericDomain.Bounds left =
-                    held.at(lines).totalLeft(sum, lines.element().then("amount"));
-            assertNotNull(left, () -> "the total is held under case " + each);
-            assertEquals(aHundred, left.min(), () -> "where the clause holds it, under " + each);
+            assertEquals(aHundred, totalOfTheAmounts(model.replace("HELD", "Q"), each).min(),
+                    () -> "where the clause holds it, under " + each);
         }
+    }
+
+    /**
+     * Where the region leaves what a body adding up the amounts of the lines of {@code source}
+     * reads — the lines under the case named {@code under}, or with no case where it is null.
+     */
+    private static NumericDomain.Bounds totalOfTheAmounts(String source, String under) {
+        Compilation compilation =
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        String module = compilation.modules().get(0);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        InputDomain input = reading(source);
+        TermPath q = TermPath.of("h").then("q");
+        TermPath lines = (under == null ? q : q.refine(caseNamed(input, under))).then("lines");
+        NumericTerm total = NumericTerm.TakenOver.of(ValueName.Stdlib.operation("List", "sum"),
+                new RunSource.ProjectedOccurrences(lines.element().then("amount")), Type.INT,
+                rules.inners(), rules.symbols());
+        NumericDomain.FormProjection.Within within = assertInstanceOf(
+                NumericDomain.FormProjection.Within.class,
+                input.quantities(rules).region().projectionOf(total));
+        assertNotNull(within.bounds(), "the total is held");
+        return within.bounds();
     }
 
     /**

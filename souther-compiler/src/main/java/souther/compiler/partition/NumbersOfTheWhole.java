@@ -97,5 +97,33 @@ final class NumbersOfTheWhole {
         return !(whole != null ? whole : term.subjectPath()).insideAContainer();
     }
 
+    /** Whether {@code term} is a number of the container at {@code container} as a whole. */
+    static boolean ofTheWhole(NumericTerm term, TermPath container) {
+        return container.equals(containerOf(term));
+    }
+
+    /**
+     * Whether {@code term} is a number of some container written at {@code at} as a whole: the
+     * value at {@code at}, or one inside it. A row composing that value fixes such a number with
+     * the container's elements, so it is no number standing beside them.
+     */
+    static boolean ofAWholeWrittenAt(NumericTerm term, TermPath at) {
+        TermPath whole = containerOf(term);
+        return whole != null && whole.isAtOrUnder(at);
+    }
+
+    /**
+     * Whether {@code term} stands beside every element of the container at {@code container}
+     * alike: one number of the row ({@link #oneNumberOfTheRow}) that is no number of that
+     * container as a whole, which is what the elements chosen make it ({@link ContainerAsAWhole}).
+     *
+     * <p>The one answer to which numbers a statement of the elements reads are placed before the
+     * elements are chosen, so the search placing them and every reader taking what it placed
+     * agree on it.
+     */
+    static boolean standsBeside(NumericTerm term, TermPath container) {
+        return oneNumberOfTheRow(term) && !ofTheWhole(term, container);
+    }
+
     private NumbersOfTheWhole() {}
 }

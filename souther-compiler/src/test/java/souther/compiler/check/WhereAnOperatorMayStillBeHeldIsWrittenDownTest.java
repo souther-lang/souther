@@ -325,6 +325,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "does the sum, the difference or the product of two written whole numbers, so"
                             + " that a divisor is read as the number it comes to and not as it was"
                             + " spelled"),
+            new Held("souther.compiler.check.Term.formOfWhatIsHanded",
+                    "keeps the sum, the difference and the product by a written number, the three"
+                            + " that leave what a closure makes of an element a form of its"
+                            + " fields, so that a rule's total of it is the term a body's is"),
             new Held("souther.compiler.check.Terms.asOperator",
                     "reads the operator an arithmetic meaning was keyed by"),
             new Held("souther.compiler.check.Terms.openedKey", "the same, for the term it keys"),

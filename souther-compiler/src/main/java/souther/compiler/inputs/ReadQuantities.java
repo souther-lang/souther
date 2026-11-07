@@ -29,13 +29,11 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
-import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.StringsHeldAsWritten;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.semantics.Arithmetic;
-import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -57,6 +55,7 @@ import java.util.RandomAccess;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
 /**
  * The one reading of a behavior's input, asked about a quantity over several of its positions.
@@ -94,6 +93,10 @@ final class ReadQuantities implements Quantities {
      *  its own term runs between, and the reading that relates positions has a name for some of
      *  those terms and not for others. */
     private final Map<TermPath, Position> byPath;
+    /** The term a body reading a total a rule speaks of holds, or null where none is made
+     *  ({@link InputNumber#totalOf}): what the rules' total is called here
+     *  ({@link #totalCalled}). */
+    private final Function<TotalOfTheElements, NumericTerm> totalTerms;
     /**
      * What stands where a path names, as the reading that made this has it.
      *
@@ -490,7 +493,9 @@ final class ReadQuantities implements Quantities {
     }
 
     private ReadQuantities(Map<TermPath, OpenedRules> byRoot, Roots roots,
-                           Map<TermPath, Position> byPath, List<CasesRead> cases,
+                           Map<TermPath, Position> byPath,
+                           Function<TotalOfTheElements, NumericTerm> totalTerms,
+                           List<CasesRead> cases,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
                            RuleReadingContext ruleReading, TakenIn assumed,
@@ -512,6 +517,7 @@ final class ReadQuantities implements Quantities {
         this.byRoot = Collections.unmodifiableMap(new LinkedHashMap<>(byRoot));
         this.roots = roots;
         this.byPath = Map.copyOf(byPath);
+        this.totalTerms = totalTerms;
         // Kept in the order the fixings arrived, so that the order they are answered in is chosen
         // here rather than inherited. An immutable copy iterates in an order salted once per JVM
         // run, which is a fine order and not one anybody chose — read off it, which of two
@@ -538,8 +544,10 @@ final class ReadQuantities implements Quantities {
     static ReadQuantities of(Map<TermPath, OpenedRules> byRoot, Set<TermPath> roots,
                              Map<TermPath, Position> byPath, List<CasesRead> cases,
                              java.util.function.Function<TermPath, Type> typeAt,
-                             RuleReadingContext ruleReading) {
-        return new ReadQuantities(byRoot, new Roots(roots), byPath, cases, typeAt, Map.of(),
+                             RuleReadingContext ruleReading,
+                             Function<TotalOfTheElements, NumericTerm> totalTerms) {
+        return new ReadQuantities(byRoot, new Roots(roots), byPath, totalTerms, cases, typeAt,
+                Map.of(),
                 ruleReading, TakenIn.NOTHING, List.of(), new Contexts(), null, null,
                 new ConcurrentHashMap<>());
     }
@@ -554,8 +562,9 @@ final class ReadQuantities implements Quantities {
      */
     private ReadQuantities unrefined() {
         return fixed.isEmpty() && assumed.isEmpty() ? this
-                : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
-                        TakenIn.NOTHING, List.of(), contexts, null, null, new ConcurrentHashMap<>());
+                : new ReadQuantities(byRoot, roots, byPath, totalTerms, cases, typeAt, Map.of(),
+                        ruleReading, TakenIn.NOTHING, List.of(), contexts, null, null,
+                        new ConcurrentHashMap<>());
     }
 
     /**
@@ -568,8 +577,8 @@ final class ReadQuantities implements Quantities {
      */
     private ReadQuantities unfixed() {
         return fixed.isEmpty() ? this
-                : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
-                        assumed, heldAgainst, contexts, null, oneMoreTaken, answered);
+                : new ReadQuantities(byRoot, roots, byPath, totalTerms, cases, typeAt, Map.of(),
+                        ruleReading, assumed, heldAgainst, contexts, null, oneMoreTaken, answered);
     }
 
     /**
@@ -596,8 +605,9 @@ final class ReadQuantities implements Quantities {
             rest.put(root, here == null ? opened : new OpenedRules(
                     PlacedRules.leavingOut(opened.rules(), here), opened.opening()));
         });
-        return new ReadQuantities(rest, roots, byPath, cases, typeAt, fixed, ruleReading, assumed,
-                heldAgainst, new Contexts(), null, null, new ConcurrentHashMap<>());
+        return new ReadQuantities(rest, roots, byPath, totalTerms, cases, typeAt, fixed,
+                ruleReading, assumed, heldAgainst, new Contexts(), null, null,
+                new ConcurrentHashMap<>());
     }
 
     /**
@@ -1066,6 +1076,7 @@ final class ReadQuantities implements Quantities {
             if (under.holds(opened.opening())) {
                 carried.put(root, opened.rules().bounds().constraintsOver(
                         at -> called(root, at, under),
+                        total -> totalCalled(root, total, under),
                         subject -> new InputAtom.Anonymous(root.toString(), subject),
                         InputAtom.inOneOrder()));
             }
@@ -1269,8 +1280,8 @@ final class ReadQuantities implements Quantities {
         // Carried on from only where this one had taken something in: otherwise the rules before it
         // are the declarations' own, and taking one condition in is all there is to do.
         OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(both.last(), answered);
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
-                both, pairs, contexts, null, oneMore, new ConcurrentHashMap<>());
+        return new ReadQuantities(byRoot, roots, byPath, totalTerms, cases, typeAt, fixed,
+                ruleReading, both, pairs, contexts, null, oneMore, new ConcurrentHashMap<>());
     }
 
     /**
@@ -1702,6 +1713,24 @@ final class ReadQuantities implements Quantities {
         }
         UnderARoot at = rootOf(subject);
         return atomAt(standingUnder(pathOf(at.root(), at.named()), under), which);
+    }
+
+    /**
+     * What a total the rules of the value at {@code root} speak of is called here: the name of the
+     * term a body reading the same total holds, so a rule bounding it or relating it to another
+     * number reaches a search asking about that term — or null where no term is made for it, and
+     * it stays a subject nothing here names.
+     */
+    private InputAtom totalCalled(TermPath root, FieldDomains.TotalSpokenOf total,
+                                  StructuralContext under) {
+        if (!(total.operation() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        TermPath container = standingUnder(pathOf(root, total.container()), under);
+        NumericTerm term = totalTerms.apply(new TotalOfTheElements(operation,
+                container.element(), new ElementValue.Affine(total.each().over(fields ->
+                        LinearForm.atom(ElementProjection.ofFields(fields))))));
+        return term == null ? null : called(term, under);
     }
 
     /** Whether any narrowing this context selects is one of the readings this input holds, which
@@ -2143,8 +2172,9 @@ final class ReadQuantities implements Quantities {
         if (both.equals(fixed)) {
             return this;
         }
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
-                assumed, heldAgainst, contexts, oneMoreThan(both), oneMoreTaken, answered);
+        return new ReadQuantities(byRoot, roots, byPath, totalTerms, cases, typeAt, both,
+                ruleReading, assumed, heldAgainst, contexts, oneMoreThan(both), oneMoreTaken,
+                answered);
     }
 
     /**
@@ -2937,8 +2967,8 @@ final class ReadQuantities implements Quantities {
      */
     private NumericDomain.Bounds whereItsValuesAre(NumericTerm term) {
         return switch (term) {
-            case NumericTerm.FromOnePosition one -> meeting(ownOf(one), totalLeftBy(one));
-            case NumericTerm.TakenOver over -> meeting(contexts.runOf(over, this), totalLeftBy(over));
+            case NumericTerm.FromOnePosition one -> ownOf(one);
+            case NumericTerm.TakenOver over -> contexts.runOf(over, this);
             // Nothing the rules of the elements say bounds how often one of them occurs besides
             // the term's own floor, which every term is read with.
             case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
@@ -2959,41 +2989,6 @@ final class ReadQuantities implements Quantities {
             // Made of the numbers of two forms, which bound it only together.
             case NumericTerm.ProductOf _ -> null;
         };
-    }
-
-    /**
-     * Where the rules of the value holding a container leave {@code term}, where it is a total of
-     * the elements of that container ({@link Position#totalLeft}); null where it is no such total or
-     * no rule says.
-     *
-     * <p>Beside what the values walked guarantee and never instead of it. Those are what every
-     * element holds; this is what the container as a whole is held to, which no element says — a
-     * record whose amounts are any whole numbers can still hold them to a total of at least a
-     * hundred, and a search choosing a total outside that chooses one no input has.
-     */
-    private NumericDomain.Bounds totalLeftBy(NumericTerm term) {
-        TermPath container;
-        TermPath place;
-        ValueName operation;
-        switch (term) {
-            case NumericTerm.TakenOver over
-                    when over.source() instanceof RunSource.ProjectedOccurrences run -> {
-                container = run.subjectPath().containersHoldingIt().getFirst();
-                place = run.subjectPath();
-                operation = over.operation();
-            }
-            case NumericTerm.TakenOf taken when taken.transformation().equals(ValueTransformation.NONE)
-                    && taken.arguments().equals(TakenArguments.NONE) -> {
-                container = taken.position();
-                place = container.element();
-                operation = taken.operation();
-            }
-            default -> {
-                return null;
-            }
-        }
-        Position at = byPath.get(container);
-        return at == null ? null : at.totalLeft(operation, place);
     }
 
     /** An end as a number the arithmetic can cut at, or null where it stops at a value there is no

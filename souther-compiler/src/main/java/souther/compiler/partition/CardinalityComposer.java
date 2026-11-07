@@ -547,14 +547,25 @@ final class CardinalityComposer {
         // The numbers the statements read beside an element, each at the one value the row was
         // fixed at, which the row an element is read in holds too ({@link #withNumbersBeside}).
         Map<NumericTerm, Place> outside = settledOutside(asked, container, within);
-        // And the numbers of the container as a whole the row asks or the statements read, each
-        // fixed at one number before an element is chosen: what an element answers reads them.
+        // The numbers of the container as a whole the row asks or the statements read, each fixed
+        // at one number before an element is chosen: what an element answers reads them.
         ContainerAsAWhole whole = ContainerAsAWhole.of(container, view, asked, totals, outside,
                 size, measuring, within, reading);
         if (whole == null) {
             return notChosen("a number of `" + container + "` as a whole is a total of a place"
                     + " whose numbers are not whole ones, and nothing here moves its elements to"
                     + " come to it");
+        }
+        // The container of none needs no element and no choice of those numbers — what it comes
+        // to is read off it — so it is looked at first and apart from both, where the row and the
+        // region leave it ({@link ContainerAsAWhole#admitsNone}): where the region leaves an
+        // element nothing, it is still a container.
+        if ((size == null || size.holds(Count.of(0), Carrier.WHOLE))
+                && whole.admitsNone(view, within, reading)) {
+            writtenIfAsked(List.of(), standing.read(withNumbersBeside(
+                            ElementValues.holding(container, reading, sourceType, List.of()),
+                            outside)),
+                    asked, container, false, together, standing, built, refused, unnamed, unheld);
         }
         TermRealizations.Together choices = whole.isEmpty()
                 ? new TermRealizations.Together(List.of(List.of()), CompositionShortfall.NONE)
@@ -579,7 +590,7 @@ final class CardinalityComposer {
                             apartAt, measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
                             reading.today()));
             if (byValue == null || (apartAt != null && byValue.values().isEmpty())) {
-                if (fixed == null) {
+                if (fixed == null && built.isEmpty()) {
                     return byValue == null
                             ? notChosen("an element of `" + container + "` has a part whose"
                                     + " values are neither one of so many nor numbers the"
@@ -600,13 +611,13 @@ final class CardinalityComposer {
             Function<List<ObservedValue>, BorderQuantity.Observation> holdingThem =
                     values -> standing.read(withNumbersBeside(
                             ofTheElement.holding(sourceType, values), outside));
-            // What a group of elements answers is read inside a container coming to the numbers
-            // of the whole fixed, where any are ({@link ContainerAsAWhole.Fixed#readingOf}).
+            // What a group of elements answers is read with the numbers of the whole standing
+            // where they are fixed ({@link ContainerAsAWhole.Fixed#beside}): what it answers in
+            // any container coming to them, and not what the group alone comes to.
             Function<List<ObservedValue>, BorderQuantity.Observation> readingOf = fixed == null
                     ? holdingThem
-                    : group -> fixed.readingOf(group, holdingThem)
-                            instanceof BorderQuantity.Observation inside ? inside
-                                    : holdingThem.apply(group);
+                    : group -> standing.read(withNumbersBeside(
+                            ofTheElement.holding(sourceType, group), beside));
             // Where the different values at a place are counted, what is shared out is the
             // elements holding one value there together, each group with a value of its own: how
             // many values a count has is how many such groups it has, whatever each holds.
@@ -624,8 +635,7 @@ final class CardinalityComposer {
                     BorderQuantity.Observation row = readingOf.apply(List.of(value));
                     every.add(value, i -> ofAnElement.get(i).apply(row), asked.size());
                 }
-                Groups<ObservedValue> kept = every.keptBy(asked);
-                groups = kept;
+                Groups<ObservedValue> kept = every.keptBy(asked);                groups = kept;
                 capacity = g -> keptApartByItsRules ? kept.values().get(g).size()
                         : Integer.MAX_VALUE;
                 drawing = share -> kept.drawn(share, keptApartByItsRules);
@@ -652,7 +662,8 @@ final class CardinalityComposer {
             Sharing sharing = new Sharing(groups, asked, statements, size, capacity, MOST_SHARES);
             Function<int[], List<List<ObservedValue>>> alike = alikeTo;
             boolean stopped = false;
-            for (int elements = 0; ; elements++) {
+            // From one: the container of none was looked at before any choice.
+            for (int elements = 1; ; elements++) {
                 // Past the most a container is composed with there are more sizes, which leave
                 // something untried only where an element can be at all.
                 if (elements > MOST_ELEMENTS) {
@@ -661,7 +672,10 @@ final class CardinalityComposer {
                     }
                     break;
                 }
-                if (fixed != null && fixed.many() != null && elements != fixed.many()) {
+                // Nor where the totals fixed ask two things of one place for so many elements:
+                // no elements come to both, which is said before any is drawn.
+                if (fixed != null && ((fixed.many() != null && elements != fixed.many())
+                        || !fixed.comesTogetherIn(elements))) {
                     continue;
                 }
                 boolean walkedThem = sharing.each(elements, share -> {
@@ -694,8 +708,9 @@ final class CardinalityComposer {
                                         place -> turnsOf(place, asked, beside),
                                         place -> runOf(place, within));
                         if (values != null) {
-                            writtenIfAsked(values, holdingThem, asked, container, sharing,
-                                    together, standing, built, refused, unnamed, unheld);
+                            writtenIfAsked(values, holdingThem.apply(values), asked, container,
+                                    sharing.holdsTogether(), together, standing, built, refused,
+                                    unnamed, unheld);
                         }
                     }
                     return true;
@@ -742,27 +757,29 @@ final class CardinalityComposer {
     }
 
     /**
-     * Writes a container of {@code values} where, read whole, it meets everything {@code asked}
-     * and every statement of its elements together; what the writing met is kept beside what the
-     * composing met.
+     * Writes a container of {@code values} where, read whole ({@code all}), it meets everything
+     * {@code asked} and every statement of its elements together; what the writing met is kept
+     * beside what the composing met.
+     *
+     * @param heldTogether whether the way the elements were shared out already shows the
+     *                     statements of the elements together hold, so they are not read again
      */
     private static void writtenIfAsked(List<ObservedValue> values,
-                                          Function<List<ObservedValue>,
-                                                  BorderQuantity.Observation> holdingThem,
-                                          List<Asked> asked, TermPath container, Sharing sharing,
+                                          BorderQuantity.Observation all,
+                                          List<Asked> asked, TermPath container,
+                                          boolean heldTogether,
                                           List<AStatementAtARow> together, Standing standing,
                                           List<FixtureTemplate> built,
                                           Set<CompositionBudget> refused,
                                           Set<CompositionRepertoire> unnamed,
                                           Set<CompositionCapacity> unheld) {
-        BorderQuantity.Observation all = holdingThem.apply(values);
         for (Asked each : asked) {
             // A count reads the container through the row and not the values handed it.
             if (!(each.over(container, List.of(), all) instanceof AStatementAtARow.Answer.Holds)) {
                 return;
             }
         }
-        if (!sharing.holdsTogether() && !heldTogether(together, container, all)) {
+        if (!heldTogether && !heldTogether(together, container, all)) {
             return;
         }
         TermRealizations.Realization rows = standing.written(values, MOST_OFFERED - built.size());
@@ -797,12 +814,16 @@ final class CardinalityComposer {
         return out;
     }
 
-    /** What the region leaves the number at {@code place}: every number where it says nothing. */
+    /**
+     * What the region leaves the number at {@code place}: every number where it says nothing, and
+     * null where it leaves nothing — which is no run to move an element inside, and not every
+     * number.
+     */
     private static NumericDomain.Bounds runOf(TermPath place, SearchRegion within) {
         return switch (within.projectionOf(new NumericTerm.ValueOf(place))) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
                     held == null ? NumericDomain.Bounds.OPEN : held;
-            case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
             case null -> NumericDomain.Bounds.OPEN;
         };
     }
@@ -2050,8 +2071,7 @@ final class CardinalityComposer {
                 continue;
             }
             for (NumericTerm term : perElement.numbers()) {
-                if (!NumbersOfTheWhole.oneNumberOfTheRow(term)
-                        || container.equals(NumbersOfTheWhole.containerOf(term))) {
+                if (!NumbersOfTheWhole.standsBeside(term, container)) {
                     continue;
                 }
                 Place at = settled(within, term);

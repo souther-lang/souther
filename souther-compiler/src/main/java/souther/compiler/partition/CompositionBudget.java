@@ -87,8 +87,12 @@ public enum CompositionBudget {
      *  the total of the container it is in and nothing asks the total to be any one number: the
      *  runs are those between where the statements turn over on the total, inside what the region
      *  leaves it, and the elements are moved to come to whichever is tried
-     *  ({@link ContainerAsAWhole}). A count no total tried meets is not shown to have none. */
-    TOTALS_A_COUNT_IS_TRIED_AT(2),
+     *  ({@link ContainerAsAWhole}). A count no total tried meets is not shown to have none.
+     *
+     *  <p>One. The places the statements turn at are tried besides, so one value of each run is
+     *  every way a statement reading the total alone can answer; a second value of a run answers
+     *  the same, and only asks again whether the elements can be moved to come to it. */
+    TOTALS_A_COUNT_IS_TRIED_AT(1),
 
     /** How many combinations of how often each of several keys occurs are tried for the lists of
      *  an outer list. They multiply with the keys, and each is a container composed whole, so a

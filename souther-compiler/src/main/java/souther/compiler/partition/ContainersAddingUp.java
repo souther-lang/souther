@@ -1520,8 +1520,8 @@ final class ContainersAddingUp {
     }
 
     /** The number the rules count this container by, or null where nothing counts it. */
-    private static NumericTerm.FromOnePosition countTaken(TypeView container, TermPath root,
-                                                          RuleReadingContext reading) {
+    static NumericTerm.FromOnePosition countTaken(TypeView container, TermPath root,
+                                                  RuleReadingContext reading) {
         ValueName.Stdlib counts =
                 NumericMeasures.takenOf(container.declared(), reading.source().inners());
         return counts == null ? null

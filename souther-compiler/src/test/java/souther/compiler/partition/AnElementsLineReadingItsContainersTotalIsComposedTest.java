@@ -343,6 +343,11 @@ class AnElementsLineReadingItsContainersTotalIsComposedTest {
         models.put("a list of numbers", "module probe\n\nbehavior f : (xs: List<Int>) -> Int\n"
                 + "let f (xs) = if List.length(List.filter(x -> x * 2 > List.sum(xs), xs)) == 1"
                 + " then 1 else 0\n");
+        models.put("a total its record holds to another field", "module probe\n\n" + DATA
+                + "data Box = { cap: Int, fs: List<Forecast> }"
+                + " invariant List.sum(List.map(.amount, fs)) >= cap\n\n"
+                + "behavior f : (b: Box) -> Int\nlet f (b) = if b.cap > 50 then ("
+                + counted(HALF).replaceAll("\\bfs\\b", "b.fs") + ") else 0\n");
         models.put("a total its record holds", inABox("List.sum(List.map(.amount, fs)) >= 100",
                 counted(HALF)));
         models.put("a length its record holds", inABox("List.length(fs) >= 10",

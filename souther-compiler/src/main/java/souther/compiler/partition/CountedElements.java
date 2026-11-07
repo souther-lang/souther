@@ -255,21 +255,10 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         record NotWorkedOut(UnheldNumber why) implements Least {}
     }
 
-    /** Whether {@code term} is a number of the counted container as a whole. */
-    private boolean ofTheWholeContainer(NumericTerm term) {
-        return container.equals(NumbersOfTheWhole.containerOf(term));
-    }
-
-    /**
-     * Whether {@code term} stands beside every element alike: one number of the row
-     * ({@link NumbersOfTheWhole#oneNumberOfTheRow}) that is no number of the counted container as a
-     * whole, which is what the elements chosen make it ({@link ContainerAsAWhole}).
-     *
-     * <p>The one answer to which of the numbers the statement reads are placed before the elements
-     * are chosen, so the search placing them and every reader taking what it placed agree on it.
-     */
+    /** Whether {@code term} stands beside every element of the counted container alike
+     *  ({@link NumbersOfTheWhole#standsBeside}). */
     boolean standsBeside(NumericTerm term) {
-        return NumbersOfTheWhole.oneNumberOfTheRow(term) && !ofTheWholeContainer(term);
+        return NumbersOfTheWhole.standsBeside(term, container);
     }
 
     /** The numbers the statement reads that stand beside every element alike ({@link
@@ -304,9 +293,12 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         if (oneMeets && anElementMeeting.isPresent()) {
             for (TakenConstraint each : anElementMeeting.get()) {
                 region = each.narrowing(region);
+                // The number of the element meeting it, and those beside it; none of the counted
+                // container as a whole.
                 for (NumericTerm term : each.terms()) {
-                    if ((term.atOnePosition() != null && !ofTheWholeContainer(term))
-                            || standsBeside(term)) {
+                    if (!NumbersOfTheWhole.ofTheWhole(term, container)
+                            && (term.atOnePosition() != null
+                                    || NumbersOfTheWhole.oneNumberOfTheRow(term))) {
                         beside.add(term);
                     }
                 }

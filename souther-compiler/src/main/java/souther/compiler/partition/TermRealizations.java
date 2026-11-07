@@ -62,6 +62,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.SequencedMap;
@@ -794,7 +795,7 @@ final class TermRealizations {
                 // The element itself, or a number inside it: some element standing there.
                 elements.add(each);
             } else if (NumbersOfTheWhole.addedUp(each.term()) != null
-                    && container.equals(NumbersOfTheWhole.containerOf(each.term()))) {
+                    && NumbersOfTheWhole.ofTheWhole(each.term(), container)) {
                 totals.add(each);
             } else {
                 return nothingSolvesAGroup();
@@ -1411,13 +1412,14 @@ final class TermRealizations {
                     TermOrders adds = measuring.ordersOf(each.term());
                     AskedAt comesToAt = demands.get(each);
                     NumericSet total = comesToAt == null ? null : comesToAt.walking();
-                    if (adds == null || total == null) {
+                    if (adds == null || adds.answered() == null || total == null) {
                         return new Realization.None(
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
                     }
-                    asked.add(new ContainerAsAWhole.ATotal(each.term(), onTheOrder(total, adds,
-                            comesToAt.named(), within,
-                            UsualPlaces.of(adds.term(), adds.answered(), reading.today()))));
+                    asked.add(new ContainerAsAWhole.ATotal(each.term(), total, adds.answered(),
+                            onTheOrder(total, adds, comesToAt.named(), within,
+                                    UsualPlaces.of(adds.term(), adds.answered(),
+                                            reading.today()))));
                 }
                 return CardinalityComposer.compose(sourceType, keptApart, container, counts,
                         together, demands, manyItHolds, standingAt, asked, measuring, within,
@@ -2946,7 +2948,24 @@ final class TermRealizations {
                 case StoppedAt(CompositionBudget figure) -> CompositionShortfall.of(Set.of(figure));
                 case SomeOf(Set<CompositionRepertoire> written) ->
                         CompositionShortfall.writing(written);
+                case NotHeld(Set<CompositionCapacity> unheld, Remainder besides) ->
+                        besides.shortfall().and(CompositionShortfall.of(Set.of(), Set.of(),
+                                unheld));
             };
+        }
+
+        /** This compiler could not hold some number the walk met — an end it had no room to
+         *  write — which leaves the numbers there unhanded whatever figure is raised; and
+         *  {@code besides}, why the walk handed over no more of the rest. */
+        record NotHeld(Set<CompositionCapacity> unheld, Remainder besides) implements Remainder {
+
+            public NotHeld {
+                unheld = Set.copyOf(unheld);
+                Objects.requireNonNull(besides, "and the rest of the walk ended somehow");
+                if (unheld.isEmpty()) {
+                    throw new IllegalArgumentException("a number not held is some number");
+                }
+            }
         }
 
         /** There are no more: the numbers handed over are every one the set has in the window its

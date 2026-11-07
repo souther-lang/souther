@@ -761,6 +761,36 @@ public final class InputNumber {
     }
 
     /**
+     * The term for the total {@code total} is of, or null where it is no one term: made where a
+     * body's total of the same computation over the same elements is made
+     * ({@link #overTheElements}), so the rule and the body reading one number hold one term.
+     */
+    static NumericTerm totalOf(TotalOfTheElements total, InputDomain inputs,
+                               RuleReadingSource source) {
+        TakenAs takenAs = DefaultBoundOperationFacts.get().takenAs(total.operation());
+        // What each computed value stands as: what the places it reads stand as, where that is
+        // one type with the names it is written under taken off. A form of places of two types —
+        // whole numbers and decimals — stands as neither, and no type of the rule says which.
+        Type each = null;
+        for (ElementProjection read : total.each().reads()) {
+            Type at = inputs.typeAt(read.from(total.elements()), source);
+            if (at == null || (each != null && !TypeOps.base(each, source.inners())
+                    .equals(TypeOps.base(at, source.inners())))) {
+                return null;
+            }
+            each = at;
+        }
+        LinearForm<NumericTerm> form = takenAs == null || each == null ? null
+                : overTheElements(total.operation(), takenAs, total.elements(), total.each(),
+                        each, null, inputs, source);
+        if (form == null || !form.constant().isZero() || form.coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
+        return only.getValue().equals(ExactRatio.ONE) ? only.getKey() : null;
+    }
+
+    /**
      * What {@code operation} takes over every occurrence of {@code under}: the taking of the
      * container whose elements those are, where they are one container's elements themselves, and
      * the run over them otherwise — or null where they are no one run.

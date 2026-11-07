@@ -29,7 +29,6 @@ import java.util.Set;
  *                 can be told from one the rules refused
  */
 record ReadPosition(TermPath path, TypeView view, List<PositionBounds> bounds,
-                    List<TotalLeft> totalsLeft,
                     boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
                     ObligationDomain obligations, AdmissibleSet admitted, OrderedRuns orderedRegion,
@@ -41,7 +40,6 @@ record ReadPosition(TermPath path, TypeView view, List<PositionBounds> bounds,
 
     ReadPosition {
         bounds = List.copyOf(bounds);
-        totalsLeft = List.copyOf(totalsLeft);
         // The numbers are what a reader looks these up by, so two of them under one name is one
         // silently standing for the other. And every one of them is a number of this position:
         // bounds of somewhere else held here would answer a question about this place with a range

@@ -9773,7 +9773,7 @@ public final class Generator {
                 standing.forEach((target, place) -> {
                     if (target instanceof RealizationTarget.OfANumber number
                             && NumbersOfTheWhole.oneNumberOfTheRow(number.term())
-                            && !ofWhatIsComposedHere(number.term(), at)) {
+                            && !NumbersOfTheWhole.ofAWholeWrittenAt(number.term(), at)) {
                         fixed.put(number.term(), place);
                     }
                 });
@@ -9781,16 +9781,6 @@ public final class Generator {
             }
         }
         return new RegionToCompose(region, null, here);
-    }
-
-    /**
-     * Whether {@code term} is a number of a container composed at {@code at} as a whole, which the
-     * composing fixes with its elements ({@link ContainerAsAWhole}) and is no number of another
-     * location standing beside them.
-     */
-    private static boolean ofWhatIsComposedHere(NumericTerm term, TermPath at) {
-        TermPath whole = NumbersOfTheWhole.containerOf(term);
-        return whole != null && whole.isAtOrUnder(at);
     }
 
     /**
