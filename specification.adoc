@@ -6194,9 +6194,10 @@ Read from the body as it is emitted, so a claim written in a `+let+` this body c
 
 [,text]
 ----
-Nothing the model admits arrives at this branch, so no row can be written through it.
-Hint: The conditions on the way here cannot all hold: line 11 holding, line 12 failing.
-Hint: Take the branch out, or widen what reaches it.
+No input the model allows reaches this branch, so no example row can go through it.
+Hint: The conditions that lead here cannot all be true at once: line 11 true, line 12 false.
+Hint: Remove the branch, or change the model's rules so that some input reaches it. The
+branch itself is not what rules it out.
 ----
 
 Reported at the branch, as a warning (<<a-branch-the-rules-make-dead-is-said-so>>). What makes it dead is said with it: the conditions on the way and which way each went, the position whose values stop short of what the branch is written for, or the cases the rules refuse where the arm matches on them.
@@ -6476,10 +6477,9 @@ E1625 is retired. It refused a case named twice under one arrow, on the reading 
 
 [,text]
 ----
-`floor` is declared in an attached `examples for` file, which holds the rows, the fakes
-they run against and the values those rows name. A declaration of the model cannot name
-one: the module would not compile without that file, and a clause carrying the name
-travels to an importer that has no source for it.
+`floor` is declared in an attached `examples for` file, so a declaration of the model
+cannot use it. The module would not compile without that file, and a module importing
+this one would get a clause that uses a name it has no source for.
 ----
 
 Emitted where a declaration of the model reaches a value an attached file declares (<<an-attached-files-values-are-for-its-rows>>). Two things follow from naming one and either is enough: the module no longer compiles from its own source, because the name it writes is declared in a file of fixtures; and a `+data+`'s `+invariant+` or a `+behavior+`'s `+ensures+` is published as the text that was written (<<a-published-module-carries-what-it-says-it-declares>>), so an importer reads a clause spelling a name it has no source for.
@@ -6906,9 +6906,8 @@ Emitted when a row's evaluated result does not match the expected arm or value, 
 
 [,text]
 ----
-An `examples for` file holds examples, the fakes they run against and the values they
-name. A data, a behavior, an import, and a `let` with parameters belong in the module
-itself.
+An `examples for` file holds examples, the fakes they run against, and the values they
+use. Put data, behaviors, imports and `let`s with parameters in the module itself.
 ----
 
 Emitted when a file that begins with `+examples for+` holds something other than an example, a `+fake+` table, or a value its rows name — and when a value it declares carries a name the target module already declares (<<example-placement>>). The second is reported on the attached file, where the declaration is written.
@@ -6954,10 +6953,11 @@ Emitted when a `+fake+` table is asked for an input it does not list and has no 
 [,text]
 ----
 The evaluation of this row did not finish within its budget of 100000000 steps.
-Hint: What the counting shows is that the evaluation did not finish, not that the model
-does not: a `partial` recursion that never stops reaches this, and so does one that would
-have stopped shortly after. If the model does finish and needs more, raise
-`souther.example.step.limit`; otherwise bound the loop or make the recursion structural.
+Hint: This shows only that the evaluation did not finish within the budget, not that the
+model never finishes: a `partial` recursion that never stops ends up here, and so does one
+that would have stopped a little later. If the model does finish and needs more steps,
+raise `souther.example.step.limit`; otherwise bound the loop or make the recursion work on
+a part of its argument.
 ----
 
 Emitted when a row's evaluation exceeds the budget the example runner holds it to: the number of counted points the evaluation may pass, or the depth a recursion it reaches may go to. A counted point is passed each time round a loop of the generated code, and inside each operation of the language that code calls, once for each character of a text, element of a collection or state of a pattern's walk it goes over; a computation with long numbers that the host does in one step is counted before it starts, in the words of the numbers it is given. Both are counted as the evaluation runs, so the reading is a property of what the row does and answers the same on every machine.
@@ -6973,10 +6973,10 @@ Two other things end an evaluation, and neither is decided by what the model say
 
 [,text]
 ----
-This row reached a point the model declares cannot arise: twenty insured years cannot
+This row reached a point the model declares cannot happen: twenty insured years cannot
 precede the age of thirty (42:17)
 Hint: Either the row states a combination the model rules out, or the reason written at
-that `unreachable` does not hold.
+that `unreachable` is wrong.
 ----
 
 Emitted when a row's evaluation reaches an `+unreachable+` (<<unreachable>>). The reason the model wrote is shown with the line and column it was written at, because the row and the declaration are usually in different rules; the diagnostic's own place is the row's. It is not a failed comparison: the row produced no answer to compare, and what it found is a premise that does not hold.
@@ -6986,8 +6986,8 @@ Emitted when a row's evaluation reaches an `+unreachable+` (<<unreachable>>). Th
 
 [,text]
 ----
-No row expects `Waiting`, so nothing says `submit` owes that answer.
-Hint: Write a row whose expected value is a `Waiting`, or drop the case from the
+No row expects `Waiting`, so nothing shows that `submit` ever returns it.
+Hint: Write a row whose expected value is a `Waiting`, or remove the case from the
 signature.
 ----
 
@@ -6998,7 +6998,7 @@ A warning, off unless the build asks for it (<<example-adequacy>>). Emitted at t
 
 [,text]
 ----
-No row applies `submit` to a `Overseas`, so input #1 has a case nothing was tried with.
+No row passes `Overseas` to `submit` as input #1, so that case is never tried.
 ----
 
 The same warning for an input position that is a sum. Covering every case an input can be is the mechanised half of asking whether the behavior is total (<<match>>).
@@ -7010,9 +7010,9 @@ Not warned about for a case the model's own rules refuse (<<a-case-the-rules-ref
 
 [,text]
 ----
-No row is at the ON point of the line the `guard` draws.
-Hint: A row at the nearest value the border keeps in is what shows the border does not fall a step further in.
-Hint: Read at submit/cost, a row there is = 100.
+No row is at the ON point of the boundary the `guard` sets.
+Hint: A row at the last value inside the boundary is what catches the boundary being one step too far in (for example, `<=` written as `<`).
+Hint: For submit/cost: = 100.
 ----
 
 A warning, and one that needs the arms measured where the line was drawn by a fork of the body (<<example-branch-coverage>>): meeting such a line takes reaching the comparison, not writing the value. A line an invariant drew is decided without that. The rule that drew it is named, because the same value can be a border of several and reaching it through one leaves the others unmet.
@@ -7028,10 +7028,10 @@ The fork is named by the construct it was written as — an `+if+`, a `+guard+`,
 
 [,text]
 ----
-No row is at an IN point away from the line the `guard` draws.
-Hint: A row well inside is what shows the border, and not something else about the value, is
-what divides the two.
-Hint: Read at submit/cost, a row there is in submit/cost < 100.
+No row is at an IN point away from the boundary the `guard` sets.
+Hint: A row well inside the boundary shows that the boundary, and not some other property of
+the value, is what decides the result.
+Hint: For submit/cost: in submit/cost < 100.
 ----
 
 [[every-obligation-away-from-its-line-has-a-row]]A warning. The same assessment of the same line answers this and <<e1916>>; what differs is which of the four points it is about (<<a-border-has-four-point-roles>>). Which of them a build was held to was a word it wrote, and a caller selecting part of its own account is selecting a budget (<<what-a-build-refuses-over-is-the-account>>).
@@ -7044,8 +7044,8 @@ Told apart from <<e1916>> by a code of its own rather than by the role in the se
 [,text]
 ----
 No row goes through the `else` arm in `submit`.
-Hint: Either a row is missing for what this arm answers, or nothing reaches it — which an
-`unreachable` states.
+Hint: Either a row for this arm is missing, or no input reaches it. If no input reaches it,
+write `unreachable` there.
 ----
 
 A warning, needing the arms measured (<<example-branch-coverage>>). Quoted at the `+if+`, `+match+` or attempted construction the arm belongs to rather than at the arm's own body: the fork is what the author wrote, and a body is what lowering rewrites.
@@ -7113,11 +7113,11 @@ A warning, at the entry on the list rather than at the import as a whole (<<impo
 
 [,text]
 ----
-The evaluation of this row did not answer within 60000ms and was given up on.
-Hint: This is the compiler failing to decide, not the model failing to terminate: what did
-not come back was not counted, so nothing here says the row would not have held. The wait is
-over the compiler's own work — a class it loaded, a value it decoded, a module read from a
-jar — and not over what an implementation supplied from Java spends answering.
+The evaluation of this row did not finish within 60000ms and was stopped.
+Hint: This does not mean the model fails to terminate or that the row is wrong; the compiler
+could not decide it in time. The time limit covers the compiler's own work — loading
+classes, decoding values, reading modules from jars — and not the time an implementation
+supplied from Java takes.
 ----
 
 Emitted when an evaluation stops answering and the wait the policy allows runs out. Not <<e1910>>: what did not come back was not held to a counted budget, so nothing was shown about whether the model terminates. Counted points are placed in the code this compile generates and in the classes it loads from the module path, so what this reaches is the work the compiler does around them — loading a class, decoding a value, comparing two of them — or the compiler itself.
@@ -7143,8 +7143,8 @@ Emitted when the JVM stack runs out before the counted recursion-depth limit is 
 
 [,text]
 ----
-`over the ceiling` names more than one row of `submit`, so nothing outside this file can
-say which row it means.
+`over the ceiling` is the name of more than one row of `submit`, so it cannot be used to
+refer to one of them from outside this file.
 ----
 
 Emitted at every row of one behavior carrying a name another of its rows carries, in the file that row is written in (<<a-row-name-is-unique-within-its-behavior>>). Read over the module's own source and the `+examples for+` files attached to it together, since a behavior's rows may be written across them (<<example-placement>>).
@@ -7158,8 +7158,8 @@ Rows written with no name are not compared with each other: a row without a name
 
 [,text]
 ----
-An earlier row of `fake findMember` states these arguments, so that is what the table
-answers with and this row answers nothing.
+An earlier row of `fake findMember` has the same arguments, so that row is used and this
+one never is.
 ----
 
 Emitted at a row of a `+fake+` table that the table's dispatch can never return, naming the row it returns instead (<<every-row-of-a-fake-table-can-answer>>). Two rows are written and never reached: one stating what an earlier row states, since the first match is what answers; and a `+_+` row with another `+_+` after it, since the last of them is what a table falls through to. The two point in opposite directions — the earlier explicit row answers, the later `+_+` does — so the row that answers is quoted rather than left to be read off the order.
@@ -7173,8 +7173,8 @@ A `+_+` row and an explicit row do not shadow each other, whichever order they a
 
 [,text]
 ----
-What answers `findTodo` was built against another revision of `todo`: `Title` is
-declared differently there.
+The implementation of `findTodo` was built against a different revision of `todo`, in
+which `Title` is declared differently.
 ----
 
 Emitted at an `+example+` whose behavior is answered by an implementation supplied from outside the compile, where nothing can establish that what answers it was built against this model (<<an-answer-is-of-the-module-being-evaluated>>). The rows are not run against it: what a row's values are is decided by this model and what reads them is decided by whatever that implementation was compiled against, so a row handed over would be decided by the two disagreeing rather than by the model — and that lands on a comparison, which is read as a statement about the model.
@@ -7188,7 +7188,7 @@ Two things are reported under this code, and they are not the same finding. Wher
 
 [,text]
 ----
-The values this row states do not keep what `findTodo` declares of what it answers:
+The values this row states break the `ensures` of `findTodo`:
 ensures not held on todo.findTodo: asked, answering Todo
 ----
 
@@ -7203,8 +7203,8 @@ Said before anything applies the behavior, so a row waiting for an implementatio
 
 [,text]
 ----
-The values this row stands in with do not keep what `lookup` declares of what it
-answers: ensures not held on order.lookup: asked, answering Found
+The result this fake row gives breaks the `ensures` of `lookup`: ensures not held on
+order.lookup: asked, answering Found
 ----
 
 Emitted at a row of a `+fake+` table whose input and output do not keep an `+ensures+` of the behavior the table stands in for (<<a-fake-row-keeps-what-the-dependency-states>>). The same rule as <<e1928>> at the other place a model writes both sides of a relation down, and told apart from it because what an author does about the two is not the same: one is what a behavior owes, the other what stands in for it while some other behavior's row runs.
@@ -7220,8 +7220,8 @@ Neither is it compared with the rows recorded for the behavior (<<e1919>>). That
 
 [,text]
 ----
-The implementation supplied for `findTodo` answered this row's input with a value that
-does not keep what `findTodo` declares of what it answers:
+For this row's input, the implementation supplied for `findTodo` returned a value that
+breaks the `ensures` of `findTodo`:
 ensures not held on todo.findTodo: asked, answering Todo
 ----
 
@@ -7238,7 +7238,7 @@ Said before the row's own comparison. What the answer disagrees with here is the
 
 [,text]
 ----
-No row is in the class `C` at grade in `ship`.
+No row of `ship` has a value at grade in the equivalence class `C`.
 Hint: Write a row whose grade is a value the model puts in `C`.
 ----
 
@@ -7268,7 +7268,7 @@ What the named behavior is implemented by is not asked. A stand-in is a statemen
 
 [,text]
 ----
-More than one `fake` block stands in for `findManager`, so none of them does.
+More than one `fake` block stands in for `findManager`, so none of them is used.
 Hint: write the rows of every `fake findManager` block as one block
 ----
 
@@ -7283,8 +7283,8 @@ Told apart from <<e1908>>, where a dependency has no stand-in at all. A row requ
 
 [,text]
 ----
-Row `over the ceiling` of `submit` is written with its answer still to be written.
-Hint: Replace the row's `<?>` with what the system answers for those inputs.
+Row `over the ceiling` of `submit` has no expected result written yet.
+Hint: Replace the row's `<?>` with what the system returns for those inputs.
 ----
 
 Emitted at every row written `+<?>+` (<<example-answer-owed>>), and at every arm whose only rows are those. A warning, at an obligation the account derives from the source itself: the row is written down and its answer is not, so nothing about how much of the model could be measured bears on it.
@@ -7298,7 +7298,8 @@ Told apart from <<e1918>>, which is an arm no row goes through. A row does go th
 
 [,text]
 ----
-No row takes a decision rule of `judgeHours`.
+No row of `judgeHours` meets one of its decision rules. The conditions of the rule are
+marked in the source.
 ----
 
 A warning (<<what-a-build-refuses-over-is-the-account>>). The forks of a body state a decision, whatever each fork is decided by; its rules are the ways through it, each carrying the distinctions that way consulted and what each came out as, with a condition the way never reached left out rather than written as a don't-care. An attempted construction is one of them: whether its invariant held and which departure it took are distinctions a way consults, and a run is placed at the rule whose arm it went through even though this compiler does not read which values of the input each arm is reached by.
@@ -7318,7 +7319,8 @@ Told apart from <<e1918>>, which is an arm the author wrote that no row goes thr
 
 [,text]
 ----
-No row makes a combination of the decisions `shippingFee` settles a value by.
+No row of `shippingFee` makes one of the combinations of decisions that decide its value.
+The combination is marked in the source.
 ----
 
 A warning (<<what-a-build-refuses-over-is-the-account>>). Where two values each settled by a decision are consumed into one — the operands of an operator, the arguments of a call that answers one value — the answer is a function of both. A row that leaves either decision at one outcome exercises the two apart, and an implementation that takes the larger of two charges where the model sums them holds against every such row.
@@ -7336,7 +7338,7 @@ A row is offered for one (<<a-block-offers-every-obligation-nothing-covers>>), a
 
 [,text]
 ----
-No row of `入場する` is in the combination `入場中` at カード.乗車状態 with `140 <= x` at カード.残高.
+No row of `入場する` has the combination of equivalence classes `入場中` at カード.乗車状態 with `140 <= x` at カード.残高.
 ----
 
 A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a behavior whose decisions meet nowhere, which is the criterion such a behavior is held to (<<every-combination-of-decisions-has-a-row>>): with no meeting to read, what is asked for is that the rows reach the combinations its positions make between them.
@@ -7354,8 +7356,8 @@ Told apart from <<e1931>>, which is a class of one position no row is in. A row 
 
 [,text]
 ----
-No row of `f` tells `-2 * x + y = 0` from `-3 * x + y = 0`.
-  hint: Write a row at x = 1, y = 3, which the two answer differently at.
+No row of `f` would give a different result if `-2 * x + y = 0` were written as `-3 * x + y = 0`.
+  hint: Write a row with the input x = 1, y = 3. The two give different results there.
 ----
 
 A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a border every point of which a row is at (<<every-border-is-told-from-the-lines-beside-it>>), and of no other: a border still short of a row at one of its points is already reported under <<e1916>> or <<e1917>>, and the row that answers one of those may well answer this.
@@ -7383,16 +7385,16 @@ A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a border every
 
 [,text]
 ----
-No row of `refund` would come out differently if the `case OutOfPocket` arm of this fork answered as the `case Advance` arm.
-  hint: Write a row at (Item { amount = Amount(1), payer = OutOfPocket }), which the two answer differently at.
+No row of `refund` would give a different result if the `case OutOfPocket` arm here were replaced by the `case Advance` arm.
+  hint: Write a row with the input (Item { amount = Amount(1), payer = OutOfPocket }). The two give different results there.
 ----
 
 A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a behavior with a body, at the fork of the arm a rewrite replaces, at the fold a rewrite of a walk replaces, or at the body when the rewrite is one answer (<<every-rewrite-of-a-body-is-told-apart>>). A rewrite of an arm names the arm and the arm it answers as, in the words <<e1918>> names an arm in: a fork has more than one arm where it is written, and which answered as which is what tells two rewrites at one fork apart. A rewrite of a walk says which of the two it is. A rewrite of the body as one answer names the row that came to that value, which is what tells it from the rewrite as another. A fork or a fold written in code this build holds no source of is said at the body, by the definition that wrote it.
 
 [,text]
 ----
-No row of `total` would come out differently if this fold stopped after its first element.
-  hint: Write a row at ([1, 1]), which the two answer differently at.
+No row of `total` would give a different result if this fold stopped after its first element.
+  hint: Write a row with the input ([1, 1]). The two give different results there.
 ----
 
 *Reaching is not deciding.* <<e1918>> asks that a row go through every arm, and a row that does has shown the arm ran. Whether what the arm answers is looked at by any row is a separate question. A row at `+OutOfPocket+` holding `+Amount(0)+` goes through the arm answering `+item.amount+` and passes just as well when that arm answers `+Amount(0)+` the way its siblings do, so nothing written tells the model from one that never refunds anything.
@@ -7414,7 +7416,7 @@ Told apart from <<e1918>>, which is an arm no row goes through, and from <<e1938
 
 [,text]
 ----
-No rows of `grade` fix how `w.first.rem.base` weighs into `w.first.rem.base + w.first.rem.extra`.
+The rows of `grade` do not pin down how much `w.first.rem.base` contributes to `w.first.rem.base + w.first.rem.extra`.
 ----
 
 A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a position of a value a computation derives from several positions and cuts at several places, as a table of thresholds cuts the value it is looked up by, where the rows on the borders of the computation do not fix the weight of the position (<<every-position-of-a-derived-value-has-its-weight-fixed>>). The sentence names the position and the widest weighing of the positions it is in.
@@ -7536,8 +7538,8 @@ E2013 is the form reading and having nothing to decide, since a type declaring n
 
 [,text]
 ----
-`Amount` declares no invariant, so an attempted construction of it always succeeds and the
-`else` value is never reached.
+`Amount` declares no invariant, so constructing it with `guard ... as` always succeeds and
+the `else` value is never used.
 Hint: Construct `Amount` directly, or give it the invariant that decides the branch.
 ----
 
@@ -7546,8 +7548,8 @@ Hint: Construct `Amount` directly, or give it the invariant that decides the bra
 
 [,text]
 ----
-`Rank` declares no invariant, so an attempted construction of it always succeeds and the `else`
-value is never reached.
+`Rank` declares no invariant, so constructing it with `guard ... as` always succeeds and the
+`else` value is never used.
 Hint: Construct `Rank` directly, or give it the invariant that decides the branch.
 ----
 
@@ -7561,24 +7563,26 @@ Six codes, for the ways a departure answering one invariant clause at a time doe
 [,text]
 ----
 `Amount` has no invariant clause named `nonNegative`.
-Hint: The clauses that can be answered by name are: inYen. A clause is named where it is
-declared (`invariant <name> = ...`); one declared without a name is answered by `| _ -> ...`.
+Hint: The clauses that can be written by name are: inYen. A clause gets its name where it
+is declared (`invariant <name> = ...`); clauses declared without a name are handled by
+`| _ -> ...`.
 ----
 
 E2015 leaves a clause that can fail with no arm to reach. A failure reaches one arm, so a clause with none is a failure with nowhere to go:
 
 [,text]
 ----
-These clauses of `Amount` have no arm: inYen. A failure reaches one arm, so every clause
-that can fail needs one.
-Hint: Answer each of them, or give the `else` one value, which answers any failure.
+These clauses of `Amount` have no arm: inYen. When the construction fails, the arm for the
+clause that failed is taken, so every clause that can fail needs an arm.
+Hint: Add an arm for each of them, or give the `else` a single value, which is used
+whichever clause fails.
 ----
 
 E2016 is the same for the clauses that have no name to be answered by:
 
 [,text]
 ----
-`Amount` has invariant clauses declared without a name, and nothing here answers them.
+`Amount` has invariant clauses declared without a name, and no arm here handles them.
 Hint: Add `| _ -> ...` for them, or name them where they are declared.
 ----
 
@@ -7586,25 +7590,25 @@ E2017 is the other direction — the arm that answers the unnamed clauses where 
 
 [,text]
 ----
-Every invariant clause of `Amount` is named and answered, so `| _ -> ...` answers nothing.
-Hint: Drop it. It would come back the moment `Amount` declares a clause without a name.
+Every invariant clause of `Amount` has a name and its own arm, so `| _ -> ...` is never taken.
+Hint: Remove it. You will need it again if `Amount` declares a clause without a name.
 ----
 
 E2018 is arms with nothing to answer for, the departure having no attempted construction above it:
 
 [,text]
 ----
-These arms answer one invariant clause each, and there is no attempted construction here
-for them to answer for.
-Hint: Attempt the construction (`guard T(v) as x else ...`), or give the `else` one value.
+Each of these arms handles the failure of one invariant clause, but the `guard` does not
+attempt a construction (`guard T(v) as x`), so there is no failure for them to handle.
+Hint: Write the `guard` as `guard T(v) as x else ...`, or give the `else` a single value.
 ----
 
 E2019 is one clause answered twice:
 
 [,text]
 ----
-The clause `inYen` is answered twice. An arm is chosen by the clause that failed, so a
-second arm for it could never be reached.
+The clause `inYen` has two arms. The arm is chosen by the clause that failed, so the
+second one is never taken.
 ----
 
 [#e2015]
@@ -7612,9 +7616,10 @@ second arm for it could never be reached.
 
 [,text]
 ----
-These clauses of `Amount` have no arm: inYen. A failure reaches one arm, so every clause that can
-fail needs one.
-Hint: Answer each of them, or give the `else` one value, which answers any failure.
+These clauses of `Amount` have no arm: inYen. When the construction fails, the arm for the clause
+that failed is taken, so every clause that can fail needs an arm.
+Hint: Add an arm for each of them, or give the `else` a single value, which is used whichever clause
+fails.
 ----
 
 Emitted when a named clause of the attempted type has no arm answering it (<<attempt-answers-every-failing-clause>>). All the unanswered clauses are named in one report: which of them a build meets first is not a property of the text, and telling an author about one at a time would make adding a clause a sequence of compiles.
@@ -7624,7 +7629,7 @@ Emitted when a named clause of the attempted type has no arm answering it (<<att
 
 [,text]
 ----
-`Amount` has invariant clauses declared without a name, and nothing here answers them.
+`Amount` has invariant clauses declared without a name, and no arm here handles them.
 Hint: Add `| _ -> ...` for them, or name them where they are declared.
 ----
 
@@ -7635,8 +7640,8 @@ Emitted when the attempted type has a clause carrying no name and the arms do no
 
 [,text]
 ----
-Every invariant clause of `Amount` is named and answered, so `| _ -> ...` answers nothing.
-Hint: Drop it. It would come back the moment `Amount` declares a clause without a name.
+Every invariant clause of `Amount` has a name and its own arm, so `| _ -> ...` is never taken.
+Hint: Remove it. You will need it again if `Amount` declares a clause without a name.
 ----
 
 Emitted when `+| _ -> …+` is written and the type has no clause carrying a name (<<attempt-catch-all-has-clauses-to-answer>>). It is worth saying rather than allowing as harmless: an arm that answers nothing reads as cover the mapping does not have, and the day a clause is added without a name it would silently start carrying it.
@@ -7646,9 +7651,9 @@ Emitted when `+| _ -> …+` is written and the type has no clause carrying a nam
 
 [,text]
 ----
-These arms answer one invariant clause each, and there is no attempted construction here for them to
-answer for.
-Hint: Attempt the construction (`guard T(v) as x else ...`), or give the `else` one value.
+Each of these arms handles the failure of one invariant clause, but the `guard` does not attempt a
+construction (`guard T(v) as x`), so there is no failure for them to handle.
+Hint: Write the `guard` as `guard T(v) as x else ...`, or give the `else` a single value.
 ----
 
 Emitted when per-clause arms are written on a condition that is not an attempted construction (<<attempt-arms-answer-an-attempt>>). What an arm names is a clause of the type being built, and where nothing is being built there are no clauses for them to name.
@@ -7658,8 +7663,8 @@ Emitted when per-clause arms are written on a condition that is not an attempted
 
 [,text]
 ----
-The clause `inYen` is answered twice. An arm is chosen by the clause that failed, so a second arm for
-it could never be reached.
+The clause `inYen` has two arms. The arm is chosen by the clause that failed, so the second one is
+never taken.
 ----
 
 Emitted when two arms name the same clause (<<attempt-answers-each-clause-once>>). Which arm is taken is decided by the clause that failed and not by the order the arms are written in (<<attempt-departures>>), so the second one is unreachable rather than a fallback.

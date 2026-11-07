@@ -3,9 +3,21 @@ package souther.cli;
 import org.junit.jupiter.api.Test;
 
 import souther.cli.CliProcess.Ran;
+import souther.compiler.diag.LabeledRegion;
+import souther.compiler.diag.Located;
+import souther.compiler.diag.Note;
+import souther.compiler.diag.msg.DeadBranchMessage.EveryWayInIsRuledOut;
+import souther.compiler.diag.msg.DeadBranchMessage.ItsDeclarationHoldsNoneOfTheCases;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -269,12 +281,14 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
         assertEquals(0, output.exit(), () -> output.report());
         // Said by what the type declares, which is the reason it holds whatever the rules are: each
         // arm after the first is for a case a `Draft` is not.
-        assertTrue(output.warnings().contains("declared as Draft"),
-                () -> "the author is told what the position is declared as:\n"
-                        + output.warnings());
-        assertTrue(output.warnings().contains("the arm is for Live")
-                        && output.warnings().contains("the arm is for Done"),
-                () -> "and which case each arm is for:\n" + output.warnings());
+        List<Message> proofs = deadBranchProofs(ONE_CASE);
+        assertEquals(Set.of("Live", "Done"), proofs.stream()
+                        .filter(each -> each instanceof ItsDeclarationHoldsNoneOfTheCases it
+                                && it.declared().equals("Draft"))
+                        .map(each -> ((ItsDeclarationHoldsNoneOfTheCases) each).cases())
+                        .collect(Collectors.toSet()),
+                () -> "the author is told what the position is declared as, and which case each"
+                        + " arm is for: " + proofs);
     }
 
     @Test
@@ -303,9 +317,10 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
     void anArmOverWhatAHelperAnswersIsRuledOutByEveryHelperArmThatAnswersIt() throws Exception {
         Output output = run(ANSWERED, true);
 
-        assertTrue(output.warnings().contains("Every way a value could arrive here is ruled out"),
+        List<Message> proofs = deadBranchProofs(ANSWERED);
+        assertTrue(proofs.stream().anyMatch(each -> each instanceof EveryWayInIsRuledOut),
                 () -> "the arm for `Settled` is entered by `Done` and `Lost`, and neither is an "
-                        + "`OpenStage`:\n" + output.warnings());
+                        + "`OpenStage`: " + proofs);
         assertTrue(output.report().contains("adequacy: satisfied"),
                 () -> "so it is owed no row:\n" + output.report());
         assertEquals(0, output.exit(), () -> output.report());
@@ -316,12 +331,13 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
         Output output = run(AN_OPTIONAL, false);
 
         assertEquals(0, output.exit(), () -> output.report() + output.warnings());
-        assertTrue(output.warnings().contains("E1327")
-                        && output.warnings().contains("`b.stage@Some` is declared as Draft, Live")
-                        && output.warnings().contains("the arm is for Done"),
+        assertTrue(output.warnings().contains("E1327"), output::warnings);
+        List<Message> proofs = deadBranchProofs(AN_OPTIONAL);
+        assertTrue(proofs.contains(
+                        new ItsDeclarationHoldsNoneOfTheCases("b.stage@Some", "Draft, Live", "Done")),
                 () -> "the value an optional holds is an `OpenStage` through the helper over the"
-                        + " wider optional, and the arm no value arrives at is the one for `Done`:\n"
-                        + output.warnings());
+                        + " wider optional, and the arm no value arrives at is the one for `Done`: "
+                        + proofs);
     }
 
     @Test
@@ -331,6 +347,19 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
         assertTrue(output.report().contains("branch      2/2"),
                 () -> "no element of a list of `OpenStage` is a `Done`:\n" + output.report());
         assertEquals(0, output.exit(), () -> output.report());
+    }
+
+    /** What each warning about a dead branch gives as its proof, as the messages it is said by. */
+    private static List<Message> deadBranchProofs(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation.warnings().stream()
+                .map(Located::diagnostic)
+                .filter(d -> "E1327".equals(d.code()))
+                .flatMap(d -> Stream.concat(d.notes().stream().map(Note::said),
+                        d.secondary().stream().map(LabeledRegion::said)))
+                .toList();
     }
 
     private static int count(String text, String of) {
