@@ -456,13 +456,9 @@ final class AdmissibleReading {
      * copy of one part are told to be one.
      */
     static ConstructOccurrence wroteIt(ClauseExpr.Part part) {
-        // An emptiness check read as the size it means is spelled last as the comparison this
-        // reading composed ({@link ClauseExpr#withTheSizeMeant}), and what the author wrote there
-        // is the check.
-        List<Core> spelled = part.spelled();
-        Core before = spelled.size() > 1 ? spelled.get(spelled.size() - 2) : null;
-        return before != null && Conditions.asSizeComparison(before) != before
-                ? wroteIt(before) : wroteIt(part.of());
+        // The innermost of what the part is spelled as, which is what its author wrote there even
+        // where a reading takes it as something it composed ({@link ClauseExpr.Leaf#meant}).
+        return wroteIt(part.spelled().getLast());
     }
 
     /** {@link #wroteIt(ClauseExpr.Part)} of one node. */

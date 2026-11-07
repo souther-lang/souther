@@ -3,6 +3,7 @@ package souther.compiler;
 import souther.compiler.core.BoundaryConstraint;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.DecoderKind;
+import souther.runtime.ConstraintViolation;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Path;
 import net.unit8.raoh.Err;
@@ -459,9 +460,9 @@ class CompileInvariantConstraintTest {
                         + " == List.length(value)")) {
             String data = "data V = List<Int>\n    invariant " + rule + "\n";
             for (List<Long> stops : List.of(List.of(0L, 1L), List.of(1L, 1L))) {
-                Throwable thrown = assertThrows(Throwable.class,
+                ConstraintViolation thrown = assertThrows(ConstraintViolation.class,
                         () -> decoded(data, stops), rule + " " + stops);
-                assertTrue(String.valueOf(thrown.getMessage()).contains("overflow"),
+                assertTrue(thrown.getMessage().startsWith("Int overflow"),
                         () -> rule + " " + stops + ": " + thrown);
             }
         }

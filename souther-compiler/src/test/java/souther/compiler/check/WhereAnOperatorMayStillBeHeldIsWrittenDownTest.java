@@ -250,9 +250,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.SidesBalanced.caseOf",
                     "asks whether a condition on an element compares a field of it for equality"
                             + " with a case"),
-            new Held("souther.compiler.check.SidesBalanced.totals",
-                    "asks which operations add and subtract, by the operator the library says"
-                            + " each computes, to read a sum of totals as a form over them"),
             new Held("souther.compiler.check.SidesBalanced.side",
                     "asks the operations that add, by the operator the library says each"
                             + " computes, for the number a walk adds to its total"),

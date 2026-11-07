@@ -62,8 +62,8 @@ class TwoTotalsHeldEqualBalanceTheSidesHoweverTheyAreWrittenTest {
                 """.formatted(rule), "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString())
-                .filter(code -> !code.equals("E1922")).toList(), "the model under test compiles");
+                .map(each -> each.diagnostic().code().toString()).toList(),
+                "the model under test compiles");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "N"));
         FieldDomains domains = FieldDomains.of(named,

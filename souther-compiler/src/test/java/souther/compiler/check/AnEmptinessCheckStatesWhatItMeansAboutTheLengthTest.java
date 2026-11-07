@@ -7,6 +7,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -18,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -118,6 +121,26 @@ class AnEmptinessCheckStatesWhatItMeansAboutTheLengthTest {
         });
         assertTrue(accounted(record("List.isEmpty(ns) && List.length(ns) <= 9")),
                 "a check held true is a size held at nought, which is read");
+    }
+
+    /**
+     * What a reading could not take in of a check is filed at what its author wrote, which is the
+     * check: the size it is read as is this compiler's, and a shortfall filed there would send the
+     * author nowhere.
+     */
+    @Test
+    void whatWasNotTakenInOfACheckIsFiledAtTheCheck() {
+        List<RuleShortfall> shortfalls = record("Bool.not(List.isEmpty(ns))").accounting().values()
+                .stream().flatMap(each -> each.answers().values().stream())
+                .filter(RuleAccounting.Outcome.Unaccounted.class::isInstance)
+                .map(each -> ((RuleAccounting.Outcome.Unaccounted) each).why())
+                .filter(RuleAccounting.Why.TheValueReadingSays.class::isInstance)
+                .flatMap(each -> ((RuleAccounting.Why.TheValueReadingSays) each).shortfalls()
+                        .stream())
+                .toList();
+        assertFalse(shortfalls.isEmpty(), "a size held unequal to nought is no set of values");
+        shortfalls.forEach(each -> assertNotEquals(ConstructOccurrence.unwritten(),
+                each.occurrence(), each::toString));
     }
 
     private static FieldDomains record(String clause) {

@@ -1,8 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BinOp;
@@ -60,10 +58,7 @@ public final class SidesBalanced {
         }
     }
 
-    /**
-     * One side: the list, and what it adds of an element at which case. A value, so that two totals
-     * written twice over one list are one side and cancel.
-     */
+    /** One side: the list, and what it adds of an element at which case. */
     private record Side(BindingId list, String field, List<String> number, TypeSymbol at) {
 
         Side {
@@ -87,17 +82,16 @@ public final class SidesBalanced {
     /**
      * What {@code stated} says of two totals, or null where it states nothing of the kind.
      *
-     * <p>As the comparison it is, with its denial spent, and its sides read as the library says
-     * they come to: an answer whose sign is the order of two arguments, held at nought, is their
-     * equality ({@link BoundOperationFacts#statesTheOrderOfItsArguments}), and a sum or difference
-     * of totals is a form over them — so {@code Decimal.compare(d, c) == 0} says {@code d == c}.
-     * What is left has to be one total less another of the same list, at two cases, and nothing
-     * beside: a constant or a third total is another rule.
+     * <p>As the comparison it is, with its denial spent: an answer whose sign is the order of two
+     * arguments, held at nought, is their equality
+     * ({@link BoundOperationFacts#statesTheOrderOfItsArguments}) — so
+     * {@code Decimal.compare(d, c) == 0} says {@code d == c}. Each side has to be one total of the
+     * same list, at two cases, and nothing beside.
      *
-     * <p>And it adds nothing that ends a run to what the totals work out: an operation the library
-     * says may stop is a rule over the totals that the rule written as their equality is not, where
-     * it stops. {@code Decimal.subtract(d, c) == 0.0m} is one, since a decimal's difference may have
-     * no place ({@link WhatARunMayEndFor}).
+     * <p>Nothing that ends a run is read between the totals and the equality. An operation the
+     * library says may stop is a rule over the totals that their equality is not, where it stops:
+     * {@code Decimal.subtract(d, c) == 0.0m} is one, since a decimal's difference may have no place
+     * ({@link WhatARunMayEndFor}), and so is every sum of decimals.
      */
     static Stated read(StatedComparison stated) {
         if (stated.relationUnder(true) != Rel.EQ) {
@@ -114,28 +108,13 @@ public final class SidesBalanced {
             right = ordered.get(1);
         }
         Map<BindingId, Core> lists = new HashMap<>();
-        LinearForm<Side> one = totals(left, lists);
-        LinearForm<Side> other = one == null ? null : totals(right, lists);
-        LinearForm<Side> form = other == null ? null : one.minus(other).orNull();
-        if (form == null || !form.constant().isZero() || form.coefs().size() != 2) {
+        Side one = side(Core.withoutStanding(left), lists);
+        Side other = one == null ? null : side(Core.withoutStanding(right), lists);
+        if (other == null || one.at().equals(other.at()) || !one.field().equals(other.field())
+                || !one.number().equals(other.number()) || !one.list().equals(other.list())) {
             return null;
         }
-        Side more = null;
-        Side less = null;
-        ExactRatio by = null;
-        for (var term : form.coefs().entrySet()) {
-            if (by == null) {
-                more = term.getKey();
-                by = term.getValue();
-            } else if (term.getValue().equals(by.negated())) {
-                less = term.getKey();
-            }
-        }
-        if (less == null || more.at().equals(less.at()) || !more.field().equals(less.field())
-                || !more.number().equals(less.number()) || !more.list().equals(less.list())) {
-            return null;
-        }
-        return new Stated(lists.get(more.list()), more.field(), more.number(), more.at(), less.at());
+        return new Stated(lists.get(one.list()), one.field(), one.number(), one.at(), other.at());
     }
 
     /**
@@ -154,36 +133,6 @@ public final class SidesBalanced {
         Core greater = applied.argument(order.greater());
         Core lesser = applied.argument(order.lesser());
         return greater == null || lesser == null ? null : List.of(greater, lesser);
-    }
-
-    /** {@code e} as a sum of totals and constants, or null where it is anything else. */
-    private static LinearForm<Side> totals(Core e, Map<BindingId, Core> lists) {
-        Core bare = Core.withoutStanding(e);
-        if (bare instanceof Core.Decimal number) {
-            return LinearForm.constant(ExactRatio.of(number.value()));
-        }
-        if (bare instanceof Core.Int number) {
-            return LinearForm.constant(ExactRatio.of(number.value()));
-        }
-        AnOperationApplied applied = AnOperationApplied.of(bare);
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        // Only an addition the library says ends no run: one that stops where its answer has no
-        // place stops on totals the rule written as their order does not, and is another rule
-        // there. A decimal's sum is one of those.
-        if (applied != null && applied.args().size() == 2
-                && WhatARunMayEndFor.itself(bare).endsNone()
-                && (facts.computing(BinOp.ADD).contains(applied.operation())
-                        || facts.computing(BinOp.SUB).contains(applied.operation()))) {
-            LinearForm<Side> first = totals(applied.args().get(0), lists);
-            LinearForm<Side> second = first == null ? null : totals(applied.args().get(1), lists);
-            if (second == null) {
-                return null;
-            }
-            return (facts.computing(BinOp.ADD).contains(applied.operation())
-                    ? first.plus(second) : first.minus(second)).orNull();
-        }
-        Side side = side(bare, lists);
-        return side == null ? null : LinearForm.atom(side);
     }
 
     /**

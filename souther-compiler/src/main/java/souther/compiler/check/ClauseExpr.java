@@ -119,22 +119,34 @@ sealed interface ClauseExpr {
         Part denied();
     }
 
-    /** One part of no connective, stated where {@code positive} and denied where it is not. */
-    record Leaf(List<Core> spelled, boolean positive, ClauseOccurrence at) implements Part {
+    /**
+     * One part of no connective, stated where {@code positive} and denied where it is not.
+     *
+     * @param meant what a reading of what the part states takes it as, where that is not what it is
+     *              spelled as ({@link #withTheSizeMeant}); null where it is
+     */
+    record Leaf(List<Core> spelled, boolean positive, ClauseOccurrence at, Core meant)
+            implements Part {
 
         public Leaf {
             spelled = named(spelled);
         }
 
-        /** The part itself, which is the innermost of what it is spelled as. */
+        /** A part that means what it is spelled as. */
+        public Leaf(List<Core> spelled, boolean positive, ClauseOccurrence at) {
+            this(spelled, positive, at, null);
+        }
+
+        /** The part itself: what it is taken as, which is the innermost of what it is spelled as
+         *  where nothing else is said. */
         @Override
         public Core of() {
-            return spelled.get(spelled.size() - 1);
+            return meant != null ? meant : spelled.get(spelled.size() - 1);
         }
 
         @Override
         public Leaf denied() {
-            return new Leaf(spelled, !positive, at);
+            return new Leaf(spelled, !positive, at, meant);
         }
     }
 
@@ -221,20 +233,17 @@ sealed interface ClauseExpr {
      * {@code List.length(xs) == 0} states, and a reading that has words for the second and not the
      * first would read one rule two ways by its spelling. Not a restatement of the shape: the call
      * is not written in terms of the comparison, so a reader asking what stands under a denial
-     * ({@link BooleanMeaning#underADenial}) is not told of one. The occurrence is the part's, and
-     * what its author wrote is the call, which stays among what it is spelled as.
+     * ({@link BooleanMeaning#underADenial}) is not told of one. What it is spelled as is what its
+     * author wrote, the call included, and the comparison is what it is taken as
+     * ({@link Leaf#meant}).
      */
     static Part withTheSizeMeant(Part part) {
         if (!(part instanceof Leaf leaf)) {
             return part;
         }
         Core meant = Conditions.asSizeComparison(leaf.of());
-        if (meant == leaf.of()) {
-            return part;
-        }
-        List<Core> spelled = new ArrayList<>(leaf.spelled());
-        spelled.add(meant);
-        return new Leaf(spelled, leaf.positive(), leaf.at());
+        return meant == leaf.of() ? part
+                : new Leaf(leaf.spelled(), leaf.positive(), leaf.at(), meant);
     }
 
     private static List<Core> named(List<Core> spelled) {

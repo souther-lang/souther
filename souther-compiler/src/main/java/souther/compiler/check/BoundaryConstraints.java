@@ -28,6 +28,7 @@ import souther.compiler.core.Kernel;
 import souther.compiler.core.MessageForm;
 import souther.compiler.core.ValueShape;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
@@ -338,12 +339,9 @@ public final class BoundaryConstraints {
         if (n == null) {
             return Optional.empty();
         }
-        return switch (placed) {
-            // A size is no lower than nought, so one that is not nought is at least one: the
-            // emptiness check denied, which is how `Bool.not(List.isEmpty(value))` arrives.
-            case ComparisonClaim.Singled singled -> singled.holdsAtTheValue()
-                    ? Optional.of(new FixedSize(n))
-                    : n == 0 ? Optional.of(new NonEmpty()) : Optional.empty();
+        return switch (ofASize(placed, n)) {
+            case ComparisonClaim.Singled singled ->
+                    singled.holdsAtTheValue() ? Optional.of(new FixedSize(n)) : Optional.empty();
             case ComparisonClaim.Cut cut -> {
                 EndSide end = endOf(cut);
                 Long at = inclusiveAt(end, cut.holdsAtTheValue(), n, 0, Integer.MAX_VALUE);
@@ -362,12 +360,7 @@ public final class BoundaryConstraints {
      */
     private static Optional<BoundaryConstraint> ofMapSize(ComparisonClaim placed, Core against) {
         Integer n = sizeBound(against);
-        // Not nought, as a list's size is read.
-        if (n != null && n == 0 && placed instanceof ComparisonClaim.Singled singled
-                && !singled.holdsAtTheValue()) {
-            return Optional.of(new MapNonEmpty());
-        }
-        if (n == null || !(placed instanceof ComparisonClaim.Cut cut)) {
+        if (n == null || !(ofASize(placed, n) instanceof ComparisonClaim.Cut cut)) {
             return Optional.empty();
         }
         EndSide end = endOf(cut);
@@ -376,6 +369,17 @@ public final class BoundaryConstraints {
                 : Optional.of(end == EndSide.LOWER
                         ? at == 1 ? new MapNonEmpty() : new MapMinSize(at.intValue())
                         : new MapMaxSize(at.intValue()));
+    }
+
+    /**
+     * {@code placed}, of a size held against {@code n}, as the cut it is where it holds the size
+     * unequal to nought: no size is lower than nought, so a size that is not nought is above it —
+     * which is how {@code Bool.not(List.isEmpty(value))} arrives, and is a non-emptiness. Anywhere
+     * else a disequality parts the sizes in two and is the disequality it is.
+     */
+    private static ComparisonClaim ofASize(ComparisonClaim placed, int n) {
+        return placed instanceof ComparisonClaim.Singled singled && !singled.holdsAtTheValue()
+                && n == 0 ? ComparisonClaim.stating(Rel.GT) : placed;
     }
 
     /** The literal bound a size is held against, or null when it is held against something else. */
