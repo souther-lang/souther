@@ -1,6 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -17,9 +21,10 @@ import java.util.Map;
  * A rule saying the elements of a list that stand at one case of a field add up to what those at
  * another case of it do.
  *
- * <p>Read where two totals are compared for equality and each is a walk over the same list adding
- * one number of an element when a field of the element is one case, and leaving the total as it was
- * otherwise. Two such totals over the same list and the same number, at two cases, are the sides of
+ * <p>Read where two totals are held equal and each is a walk over the same list adding one number of
+ * an element when a field of the element is one case, and leaving the total as it was otherwise —
+ * or a walk adding it of every element a filter kept by that case. Two such totals over the same
+ * list and the same number, at two cases, are the sides of
  * the rule; what else they might be made of is left unread, since a builder told only that the
  * sides balance would build lists the rule refuses.
  *
@@ -29,12 +34,8 @@ import java.util.Map;
  */
 public final class SidesBalanced {
 
-    private static final ValueName.Stdlib.Operation COMPARE =
-            ValueName.Stdlib.operation("Decimal", "compare");
     private static final ValueName.Stdlib.Operation FOLD =
             ValueName.Stdlib.operation("List", "foldFrom");
-    private static final ValueName.Stdlib.Operation ADD =
-            ValueName.Stdlib.operation("Decimal", "add");
 
     private SidesBalanced() {}
 
@@ -59,83 +60,187 @@ public final class SidesBalanced {
         }
     }
 
-    /** One side: the list, and what it adds of an element at which case. */
-    private record Side(Core list, String field, List<String> number, TypeSymbol at) {}
+    /**
+     * One side: the list, and what it adds of an element at which case. A value, so that two totals
+     * written twice over one list are one side and cancel.
+     */
+    private record Side(BindingId list, String field, List<String> number, TypeSymbol at) {
+
+        Side {
+            number = List.copyOf(number);
+        }
+    }
+
+    /** A field of an element and the case it is held equal to. */
+    private record AtACase(String field, TypeSymbol at) {}
 
     /**
-     * {@code clause} read as two totals of one list being equal, or null where it states nothing of
-     * the kind.
+     * {@code leaf}, a part of a clause standing under {@code positive}, read as two totals of one
+     * list being equal, or null where it states nothing of the kind.
      */
-    public static Stated read(Core clause) {
-        Core here = Core.withoutStanding(clause);
-        if (!(here instanceof Core.Binary same) || same.op() != BinOp.EQ) {
+    public static Stated read(Core leaf, boolean positive) {
+        StatedComparison stated = Core.withoutStanding(leaf) instanceof Core.Binary bin
+                ? StatedComparison.of(bin, positive) : null;
+        return stated == null ? null : read(stated);
+    }
+
+    /**
+     * What {@code stated} says of two totals, or null where it states nothing of the kind.
+     *
+     * <p>As the comparison it is, with its denial spent, and its sides read as the library says
+     * they come to: an answer whose sign is the order of two arguments, held at nought, is their
+     * equality ({@link BoundOperationFacts#statesTheOrderOfItsArguments}), and a sum or difference
+     * of totals is a form over them — so {@code Decimal.compare(d, c) == 0} and
+     * {@code Decimal.subtract(d, c) == 0.0m} both say {@code d == c}. What is left has to be one
+     * total less another of the same list, at two cases, and nothing beside: a constant or a
+     * third total is another rule.
+     */
+    static Stated read(StatedComparison stated) {
+        if (stated.relationUnder(true) != Rel.EQ) {
             return null;
         }
-        Core left = Core.withoutStanding(same.left());
-        Core right = Core.withoutStanding(same.right());
-        // The totals compared as decimals are compared by their order, and an answer of nought is
-        // their equality.
-        if (AnOperationApplied.of(left) instanceof AnOperationApplied(var operation, var args)
-                && operation.equals(COMPARE) && args.size() == 2
-                && right instanceof Core.Int nought && nought.value() == 0) {
-            return sides(args.get(0), args.get(1));
+        Core left = stated.left();
+        Core right = stated.right();
+        List<Core> ordered = orderAtNought(left, right);
+        if (ordered == null) {
+            ordered = orderAtNought(right, left);
         }
-        return sides(left, right);
-    }
-
-    private static Stated sides(Core first, Core second) {
-        Side one = side(first, new HashMap<>());
-        Side other = side(second, new HashMap<>());
-        if (one == null || other == null || one.at().equals(other.at())
-                || !one.field().equals(other.field()) || !one.number().equals(other.number())
-                || !sameList(one.list(), other.list())) {
+        if (ordered != null) {
+            left = ordered.get(0);
+            right = ordered.get(1);
+        }
+        Map<BindingId, Core> lists = new HashMap<>();
+        LinearForm<Side> one = totals(left, lists);
+        LinearForm<Side> other = one == null ? null : totals(right, lists);
+        LinearForm<Side> form = other == null ? null : one.minus(other).orNull();
+        if (form == null || !form.constant().isZero() || form.coefs().size() != 2) {
             return null;
         }
-        return new Stated(one.list(), one.field(), one.number(), one.at(), other.at());
+        Side more = null;
+        Side less = null;
+        ExactRatio by = null;
+        for (var term : form.coefs().entrySet()) {
+            if (by == null) {
+                more = term.getKey();
+                by = term.getValue();
+            } else if (term.getValue().equals(by.negated())) {
+                less = term.getKey();
+            }
+        }
+        if (less == null || more.at().equals(less.at()) || !more.field().equals(less.field())
+                || !more.number().equals(less.number()) || !more.list().equals(less.list())) {
+            return null;
+        }
+        return new Stated(lists.get(more.list()), more.field(), more.number(), more.at(), less.at());
     }
 
-    private static boolean sameList(Core one, Core other) {
-        return Core.withoutStanding(one) instanceof Core.Read first
-                && Core.withoutStanding(other) instanceof Core.Read second
-                && first.binding().equals(second.binding());
+    /**
+     * The two arguments of {@code sign}, the greater first, where it answers the order of the two
+     * and {@code nought} is nought — or null where it is no such comparison.
+     */
+    private static List<Core> orderAtNought(Core sign, Core nought) {
+        AnOperationApplied applied = AnOperationApplied.of(sign);
+        BoundOperationFact.StatesTheOrderOfItsArguments order = applied == null ? null
+                : DefaultBoundOperationFacts.get().statesTheOrderOfItsArguments(
+                        applied.operation());
+        if (order == null || !(Core.withoutStanding(nought) instanceof Core.Int zero)
+                || zero.value() != 0) {
+            return null;
+        }
+        Core greater = applied.argument(order.greater());
+        Core lesser = applied.argument(order.lesser());
+        return greater == null || lesser == null ? null : List.of(greater, lesser);
     }
 
-    /** A total of a list, adding one number of an element where a field of it is a case. */
-    private static Side side(Core e, Map<BindingId, Core> given) {
+    /** {@code e} as a sum of totals and constants, or null where it is anything else. */
+    private static LinearForm<Side> totals(Core e, Map<BindingId, Core> lists) {
+        Core bare = Core.withoutStanding(e);
+        if (bare instanceof Core.Decimal number) {
+            return LinearForm.constant(ExactRatio.of(number.value()));
+        }
+        if (bare instanceof Core.Int number) {
+            return LinearForm.constant(ExactRatio.of(number.value()));
+        }
+        AnOperationApplied applied = AnOperationApplied.of(bare);
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        if (applied != null && applied.args().size() == 2
+                && (facts.computing(BinOp.ADD).contains(applied.operation())
+                        || facts.computing(BinOp.SUB).contains(applied.operation()))) {
+            LinearForm<Side> first = totals(applied.args().get(0), lists);
+            LinearForm<Side> second = first == null ? null : totals(applied.args().get(1), lists);
+            if (second == null) {
+                return null;
+            }
+            return (facts.computing(BinOp.ADD).contains(applied.operation())
+                    ? first.plus(second) : first.minus(second)).orNull();
+        }
+        Side side = side(bare, lists);
+        return side == null ? null : LinearForm.atom(side);
+    }
+
+    /**
+     * A total of a list, adding one number of an element where a field of it is a case: the walk
+     * adds it under that condition, or walks only the elements a filter kept by it.
+     *
+     * <p>The filter as the library says it puts its answer together — each element where the
+     * closure holds of it, and nothing where it does not
+     * ({@link PieceOfAnElement#THE_ELEMENT_WHERE_IT_HOLDS}) — so a total of what it kept is the
+     * total of the elements meeting its condition. One condition and not two: a walk both filtered
+     * and conditioned adds under both, which is no case of one field.
+     */
+    private static Side side(Core e, Map<BindingId, Core> lists) {
+        Map<BindingId, Core> given = new HashMap<>();
         Core walk = LetBound.resolved(e, given);
         if (!(AnOperationApplied.of(walk) instanceof AnOperationApplied(var operation, var args))
                 || !operation.equals(FOLD) || args.size() != 4
                 || !(LetBound.resolved(args.get(0), given) instanceof Core.Block step)
                 || step.params().size() != 2
                 || !(LetBound.resolved(args.get(1), given) instanceof Core.Decimal seed)
-                || seed.value().signum() != 0
-                || !(LetBound.resolved(args.get(2), given) instanceof Core.Read list)) {
+                || seed.value().signum() != 0) {
+            return null;
+        }
+        Core walked = LetBound.resolved(args.get(2), given);
+        AtACase kept = null;
+        if (AnOperationApplied.of(walked) instanceof AnOperationApplied filter
+                && DefaultBoundOperationFacts.get().assembles(filter.operation())
+                        instanceof BoundOperationFacts.Assembled assembled
+                && assembled.piece() == PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS
+                && filter.argument(assembled.closure()) != null
+                && LetBound.resolved(filter.argument(assembled.closure()), given)
+                        instanceof Core.Block keep
+                && keep.params().size() == 1) {
+            kept = caseOf(keep.body(), keep.params().getFirst().binding(), given);
+            if (kept == null || filter.argument(assembled.source()) == null) {
+                return null;
+            }
+            walked = LetBound.resolved(filter.argument(assembled.source()), given);
+        }
+        if (!(walked instanceof Core.Read list)) {
             return null;
         }
         BindingId total = step.params().get(0).binding();
         BindingId element = step.params().get(1).binding();
-        if (!(Core.withoutStanding(step.body()) instanceof Core.If choice)
-                || !(Core.withoutStanding(choice.els()) instanceof Core.Read kept)
-                || !kept.binding().equals(total)
-                || !(Core.withoutStanding(choice.cond()) instanceof Core.Binary at)
-                || at.op() != BinOp.EQ) {
+        Core adds = Core.withoutStanding(step.body());
+        AtACase where = null;
+        if (adds instanceof Core.If choice) {
+            if (!(Core.withoutStanding(choice.els()) instanceof Core.Read same)
+                    || !same.binding().equals(total)) {
+                return null;
+            }
+            where = caseOf(choice.cond(), element, given);
+            adds = Core.withoutStanding(choice.then());
+            if (where == null) {
+                return null;
+            }
+        }
+        if ((where == null) == (kept == null)) {
             return null;
         }
-        // Which field of the element the condition reads, and which case it is compared with.
-        List<String> field = stepsFrom(at.left(), element);
-        Core named = at.right();
-        if (field == null) {
-            field = stepsFrom(at.right(), element);
-            named = at.left();
-        }
-        if (field == null || field.size() != 1
-                || !(LetBound.resolved(named, given) instanceof Core.UnitValue unit)) {
-            return null;
-        }
+        AtACase at = where != null ? where : kept;
         // The number added to the total, in either order.
-        if (!(AnOperationApplied.of(Core.withoutStanding(choice.then()))
-                instanceof AnOperationApplied(var added, var parts))
-                || !added.equals(ADD) || parts.size() != 2) {
+        if (!(AnOperationApplied.of(adds) instanceof AnOperationApplied(var added, var parts))
+                || !DefaultBoundOperationFacts.get().computing(BinOp.ADD).contains(added)
+                || parts.size() != 2) {
             return null;
         }
         List<String> number = isTheTotal(parts.get(0), total) ? stepsFrom(parts.get(1), element)
@@ -143,7 +248,25 @@ public final class SidesBalanced {
         if (number == null || number.isEmpty()) {
             return null;
         }
-        return new Side(list, field.getFirst(), number, unit.data());
+        lists.putIfAbsent(list.binding(), list);
+        return new Side(list.binding(), at.field(), number, at.at());
+    }
+
+    /** The field of the element bound at {@code element} that {@code condition} holds equal to a
+     *  case, and the case — or null where it says anything else. */
+    private static AtACase caseOf(Core condition, BindingId element, Map<BindingId, Core> given) {
+        if (!(Core.withoutStanding(condition) instanceof Core.Binary at) || at.op() != BinOp.EQ) {
+            return null;
+        }
+        List<String> field = stepsFrom(at.left(), element);
+        Core named = at.right();
+        if (field == null) {
+            field = stepsFrom(at.right(), element);
+            named = at.left();
+        }
+        return field == null || field.size() != 1
+                || !(LetBound.resolved(named, given) instanceof Core.UnitValue unit) ? null
+                : new AtACase(field.getFirst(), unit.data());
     }
 
     private static boolean isTheTotal(Core e, BindingId total) {

@@ -781,7 +781,11 @@ sealed interface StatedByClauses {
          * than one.
          */
         @Override
-        public StatedByClauses whole(ClauseExpr.Part part, Denotations at) {
+        public StatedByClauses whole(ClauseExpr.Part written, Denotations at) {
+            // Every language reads what the part states, and an emptiness check states a size
+            // held against nought: handed the call, one that reads sizes would read it as a form
+            // it has no word for, while the same rule spelled as the size is read.
+            ClauseExpr.Part part = ClauseExpr.withTheSizeMeant(written);
             Core e = part.of();
             boolean positive = part.positive();
             PlannedValues<FactSubject> said = values.leaf(part, at);

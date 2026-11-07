@@ -585,6 +585,15 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
      * is not.
      */
     private static String byCount(String model) {
+        return byCount(model, false);
+    }
+
+    /**
+     * The same, with {@code mapped} counting the different values of the list the closure maps
+     * the elements to — {@code List.distinct(List.map(k, xs))} — where the closure is not the
+     * element itself.
+     */
+    private static String byCount(String model, boolean mapped) {
         Matcher call = Pattern.compile("List\\.allDistinctBy\\(([^,]+), ([\\w.]+)\\)")
                 .matcher(model);
         StringBuilder out = new StringBuilder();
@@ -593,6 +602,7 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
             String container = call.group(2);
             String different = closure.matches("(\\w+) -> \\1")
                     ? "List.distinct(" + container + ")"
+                    : mapped ? "List.distinct(List.map(" + closure + ", " + container + "))"
                     : "List.distinctBy(" + closure + ", " + container + ")";
             call.appendReplacement(out, Matcher.quoteReplacement("List.length(" + different
                     + ") == List.length(" + container + ")"));
@@ -609,29 +619,39 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
      */
     @Test
     void theRuleWrittenByCountComposesWhatTheCallComposes() {
-        for (String model : List.of(SOME, SOME_BY_FIELD, SOME_IN_A_RECORD, COUNTED)) {
-            String counted = byCount(model);
-            assertEquals(composedForTheRules(measured(model)),
-                    composedForTheRules(measured(counted)), counted);
-            int lists = 0;
-            for (GenerationOutcome outcome : outcomes(measured(counted))) {
-                if (!(outcome instanceof GenerationOutcome.Generated made)) {
-                    continue;
-                }
-                for (var row : made.candidates()) {
-                    List<Hir.Expr> elements = elementsOf(row.inputs().getFirst().value());
-                    lists++;
-                    for (List<String> run : APART_AT.get(model)) {
-                        Set<Hir.Expr> seen = new HashSet<>();
-                        for (Hir.Expr each : elements) {
-                            assertTrue(seen.add(at(each, run)), () -> counted + " composed "
-                                    + row.inputs().getFirst().text() + ", repeated at " + run);
-                        }
+        // A run of fields twice: counted by a closure, and through the list it maps to.
+        Map<String, List<Boolean>> spellings = new LinkedHashMap<>();
+        spellings.put(SOME, List.of(false));
+        spellings.put(SOME_BY_FIELD, List.of(false, true));
+        spellings.put(SOME_IN_A_RECORD, List.of(false));
+        spellings.put(COUNTED, List.of(false));
+        spellings.forEach((model, mappedOrNot) -> mappedOrNot.forEach(mapped ->
+                composesWhatTheCallComposes(model, byCount(model, mapped))));
+    }
+
+    /** {@code counted} composes the rows {@code model} composes, every list apart as the call in
+     *  {@code model} keeps it. */
+    private static void composesWhatTheCallComposes(String model, String counted) {
+        assertEquals(composedForTheRules(measured(model)),
+                composedForTheRules(measured(counted)), counted);
+        int lists = 0;
+        for (GenerationOutcome outcome : outcomes(measured(counted))) {
+            if (!(outcome instanceof GenerationOutcome.Generated made)) {
+                continue;
+            }
+            for (var row : made.candidates()) {
+                List<Hir.Expr> elements = elementsOf(row.inputs().getFirst().value());
+                lists++;
+                for (List<String> run : APART_AT.get(model)) {
+                    Set<Hir.Expr> seen = new HashSet<>();
+                    for (Hir.Expr each : elements) {
+                        assertTrue(seen.add(at(each, run)), () -> counted + " composed "
+                                + row.inputs().getFirst().text() + ", repeated at " + run);
                     }
                 }
             }
-            assertTrue(lists > 0, counted);
         }
+        assertTrue(lists > 0, counted);
     }
 
     /**

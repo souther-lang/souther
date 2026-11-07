@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.semantics.MapPart;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
@@ -27,7 +28,8 @@ import java.util.function.Function;
  * A rule saying the map at one place holds an entry under the key standing at another place, and
  * where it says so the value under the key.
  *
- * <p>Two forms are read: the membership test {@code Map.containsKey(key, map)}, and the lookup
+ * <p>Two forms are read: a membership test of the map's keys, as the library's laws say one is
+ * ({@code Map.containsKey(key, map)}, {@code List.contains(key, Map.keys(map))}), and the lookup
  * {@code Map.get(key, map)} followed through {@code Option.map} and {@code Option.withDefault} to a
  * comparison of the value found with a written number, absent counting as false. Anything else
  * about the value found leaves the rule unread, since a builder told only that an entry exists
@@ -40,8 +42,6 @@ import java.util.function.Function;
 public final class EntryHeld {
 
     private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
-    private static final ValueName.Stdlib.Operation CONTAINS_KEY =
-            ValueName.Stdlib.operation("Map", "containsKey");
     private static final ValueName.Stdlib.Operation MAP =
             ValueName.Stdlib.operation("Option", "map");
     private static final ValueName.Stdlib.Operation COMPARE =
@@ -73,11 +73,47 @@ public final class EntryHeld {
      */
     public static Stated read(Core clause, Function<Core, Core> followed) {
         Core here = Core.withoutStanding(followed.apply(Core.withoutStanding(clause)));
-        if (AnOperationApplied.of(here) instanceof AnOperationApplied(var operation, var args)
-                && operation.equals(CONTAINS_KEY) && args.size() == 2) {
-            return new Stated(args.get(1), args.get(0), null);
+        Stated asked = membership(here, followed);
+        if (asked != null) {
+            return asked;
         }
         return here instanceof Core.Match match ? readMatch(match, followed) : null;
+    }
+
+    /**
+     * {@code e} read as asking whether a map holds a key, or null where it asks nothing of the kind.
+     *
+     * <p>As the library's laws say it and not by name: an operation true exactly where some key of
+     * the map it is handed is the value beside ({@code Map.containsKey}), and one true exactly where
+     * some element of a list is the value ({@code List.contains}) asked of a list of a map's keys
+     * ({@code Map.keys}). The two are one question about the map.
+     */
+    private static Stated membership(Core e, Function<Core, Core> followed) {
+        if (!(AnOperationApplied.of(e) instanceof AnOperationApplied applied)
+                || !(applied.operation() instanceof ValueName.Stdlib.Operation operation)) {
+            return null;
+        }
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        AddsWhatItDoesNotHold.Asked byKey =
+                facts.askedWhetherItHolds(operation, AddsWhatItDoesNotHold.Of.KEYS);
+        if (byKey != null) {
+            Core map = applied.argument(byKey.container());
+            Core key = applied.argument(byKey.value());
+            return map == null || key == null ? null : new Stated(map, key, null);
+        }
+        AddsWhatItDoesNotHold.Asked byElement =
+                facts.askedWhetherItHolds(operation, AddsWhatItDoesNotHold.Of.ELEMENTS);
+        Core list = byElement == null ? null : applied.argument(byElement.container());
+        AnOperationApplied listed = list == null ? null
+                : AnOperationApplied.of(followed.apply(Core.withoutStanding(list)));
+        BoundOperationFacts.Listed part = listed == null ? null
+                : facts.listsAPartOf(listed.operation());
+        if (part == null || part.part() != MapPart.KEYS) {
+            return null;
+        }
+        Core map = listed.argument(part.map());
+        Core key = applied.argument(byElement.value());
+        return map == null || key == null ? null : new Stated(map, key, null);
     }
 
     /** A match on what a lookup found, taking the absent arm as false. */

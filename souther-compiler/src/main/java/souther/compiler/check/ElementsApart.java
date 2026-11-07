@@ -1,10 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
-import souther.compiler.semantics.LawNumber;
-import souther.compiler.semantics.LawSubject;
-import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -23,8 +21,8 @@ import java.util.function.Function;
  *
  * <p>A property of the container and not of any one element. A set holds no value twice, which is
  * what a set is; a list may, until a rule says no two of its elements come to one answer of a
- * closure ({@link BoundOperationFacts#statesNoTwoAlike}), or that they come to as many different
- * values as there are elements ({@link #stated(StatedComparison, DeclarationNewtypes)}). What
+ * closure, or that they come to as many different values as there are elements — which is what
+ * the first says by the library's law, and is how both are read ({@link ContainerCounts}). What
  * building one has to know is the same in
  * both cases — which part of an element two elements may not share — so the two arrive here as one
  * answer and a builder never asks which kind of container it holds.
@@ -96,9 +94,11 @@ public final class ElementsApart {
                     continue;
                 }
                 for (InvariantStatement one : states) {
-                    Stated stated = stated(one, null);
+                    // The run as a place of a value names its fields, as every reader of what the
+                    // builders keep names it: apart at a newtype's own value is apart as wholes.
+                    Stated stated = stated(one, source.newtypes());
                     RuleKey where = stated == null ? null
-                            : placeOf(stated.container(), fields, record);
+                            : placeOf(stated.container(), fields, record, source.newtypes());
                     if (where != null) {
                         out.computeIfAbsent(where, _ -> new ArrayList<>()).add(stated.run());
                     }
@@ -209,7 +209,14 @@ public final class ElementsApart {
      * record's fields are each a place of their own.
      */
     static RuleKey placeOf(Core container, Map<BindingId, String> fields, boolean record) {
-        List<String> read = readOffABinding(container);
+        return placeOf(container, fields, record, null);
+    }
+
+    /** {@link #placeOf(Core, Map, boolean)}, with a newtype's own {@code value} no step where
+     *  {@code newtypes} is given, as a place of a value names its fields. */
+    static RuleKey placeOf(Core container, Map<BindingId, String> fields, boolean record,
+                           DeclarationNewtypes newtypes) {
+        List<String> read = readOffABinding(container, newtypes);
         if (read == null) {
             return null;
         }
@@ -340,66 +347,74 @@ public final class ElementsApart {
      * the value itself and no step of it ({@link Location#isStep}). Where {@code newtypes} is null
      * the run is as the closure wrote it.
      *
-     * <p>With the comparison below ({@link #stated(StatedComparison, DeclarationNewtypes)}), the
-     * one place a rule is recognised as keeping elements apart. A reader that asks it of a value it
-     * is building, a reader that asks what a position may hold, a reader of which places a clause
-     * reads and the boundary ask the same question of the same rule, and each makes of the answer
-     * what its own reading can hold.
+     * <p>Read as its law states it ({@link ContainerCounts#ofTheTruth}), which is how a comparison
+     * is read as well ({@link #stated(StatedComparison, DeclarationNewtypes)}): the one place a rule
+     * is recognised as keeping elements apart is {@link #apart}. A reader that asks it of a value
+     * it is building, a reader that asks what a position may hold, a reader of which places a
+     * clause reads and the boundary ask the same question of the same rule, and each makes of the
+     * answer what its own reading can hold.
      */
     public static Stated stated(Core.PreservedCall call, DeclarationNewtypes newtypes) {
-        return apartBy(AnOperationApplied.of(call),
-                DefaultBoundOperationFacts.get().statesNoTwoAlike(call.operation()), newtypes);
+        return apart(ContainerCounts.ofTheTruth(call, true, newtypes));
+    }
+
+    /** What a comparison keeps apart, or null where it says nothing of the kind ({@link
+     *  #apart}). */
+    static Stated stated(StatedComparison compares, DeclarationNewtypes newtypes) {
+        return apart(ContainerCounts.of(compares, newtypes));
     }
 
     /**
-     * What a comparison keeps apart, or null where it says nothing of the kind.
+     * What a statement of counts keeps apart, or null where it says nothing of the kind.
      *
-     * <p>It does where one side counts the different values the elements of a container come to,
-     * the other counts the elements of that same container, and the comparison holds only where
-     * the first is no smaller. There are never more different values than elements, so that is
-     * where the two are equal, and they are equal exactly where no two elements come to one value
-     * — the law {@code List.allDistinctBy} is proved to come to ({@link
-     * BoundOperationFacts#statesNoTwoAlike}). Which operation counts the different values is what
-     * its law of how many it holds says ({@link BoundOperationFacts#holdsOneOfEachDifferent}), so
-     * {@code List.distinct}, {@code List.distinctBy} and {@code Set.fromList} are read alike.
-     *
-     * <p>One container, as a place: two values read off one binding by one run of fields. Two
-     * containers written as two values this cannot say are one, so the comparison relates two
-     * containers and keeps nothing apart.
+     * <p>It does where it is the different values the elements of one place come to at a run, held
+     * against how many elements the place holds, and holds only where the first is no smaller.
+     * There are never more different values than elements, so that is where the two are equal, and
+     * they are equal exactly where no two elements come to one value there. Anything else beside
+     * those two counts — another place, a constant, another run — states something else.
      */
-    static Stated stated(StatedComparison compares, DeclarationNewtypes newtypes) {
-        Rel rel = compares.relationUnder(true);
-        Stated left = different(compares.left(), newtypes);
-        Stated right = different(compares.right(), newtypes);
-        Stated fewer;
-        Core all;
-        if (left != null && right == null) {
-            fewer = left;
-            all = counted(compares.right());
-        } else if (right != null && left == null) {
-            fewer = right;
-            all = counted(compares.left());
-            rel = rel.turned();
-        } else {
+    private static Stated apart(ContainerCounts.Stated stated) {
+        if (stated == null || !stated.form().constant().isZero()
+                || stated.form().coefs().size() != 2) {
             return null;
         }
-        return (rel == Rel.EQ || rel == Rel.GE) && all != null
-                && samePlace(fewer.container(), all) ? fewer : null;
+        ContainerCounts.Count.Different different = null;
+        ContainerCounts.Count.Size size = null;
+        ExactRatio byDifferent = null;
+        ExactRatio bySize = null;
+        for (var term : stated.form().coefs().entrySet()) {
+            switch (term.getKey()) {
+                case ContainerCounts.Count.Different each -> {
+                    different = each;
+                    byDifferent = term.getValue();
+                }
+                case ContainerCounts.Count.Size each -> {
+                    size = each;
+                    bySize = term.getValue();
+                }
+            }
+        }
+        if (different == null || size == null || !different.at().equals(size.at())
+                || !byDifferent.negated().equals(bySize)) {
+            return null;
+        }
+        // The form is the different values less the elements, weighed by one number; weighed
+        // below nought it stands the other way round to them.
+        Rel rel = byDifferent.signum() > 0 ? stated.rel() : stated.rel().turned();
+        return rel == Rel.EQ || rel == Rel.GE
+                ? new Stated(stated.written().get(different.at()), different.run()) : null;
     }
 
     /**
      * What {@code leaf}, a part of a clause standing under {@code positive}, keeps apart, or null
-     * where it says nothing of the kind: a call stated ({@link #stated(Core.PreservedCall,
-     * DeclarationNewtypes)}), or a comparison under either polarity ({@link #stated(StatedComparison,
-     * DeclarationNewtypes)}).
-     *
-     * <p>A call denied says some two elements are alike, which is not a comparison's denial: the
-     * comparison's is a comparison again, and is read as one.
+     * where it says nothing of the kind: a call or a comparison, under either polarity, each as
+     * what it states of counts ({@link #apart}). Denied, {@code List.allDistinctBy} says some two
+     * elements are alike, which keeps nothing apart.
      */
     public static Stated stated(Core leaf, boolean positive, DeclarationNewtypes newtypes) {
         Core e = Core.withoutStanding(leaf);
         if (e instanceof Core.PreservedCall call) {
-            return positive ? stated(call, newtypes) : null;
+            return apart(ContainerCounts.ofTheTruth(call, positive, newtypes));
         }
         StatedComparison compares =
                 e instanceof Core.Binary bin ? StatedComparison.of(bin, positive) : null;
@@ -414,60 +429,6 @@ public final class ElementsApart {
             case InvariantStatement.Unread _, InvariantStatement.HoldsAnEntry _,
                  InvariantStatement.BalancesSides _ -> null;
         };
-    }
-
-    /**
-     * The container and the run whose different values {@code side} counts, or null where it
-     * counts no such thing: a count of what an operation answers one of each different value of.
-     */
-    private static Stated different(Core side, DeclarationNewtypes newtypes) {
-        Core of = counted(side);
-        AnOperationApplied made = of == null ? null : AnOperationApplied.of(of);
-        return made == null ? null : apartBy(made,
-                DefaultBoundOperationFacts.get().holdsOneOfEachDifferent(made.operation()),
-                newtypes);
-    }
-
-    /** What {@code side} counts the elements of, or null where it is no such count. */
-    private static Core counted(Core side) {
-        AnOperationApplied applied = AnOperationApplied.of(side);
-        BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven taken = applied == null ? null
-                : DefaultBoundOperationFacts.get().numberTakenOf(applied.operation());
-        return taken != null && taken.how() instanceof TakenAs.HowManyItHolds
-                ? applied.argument(taken.of()) : null;
-    }
-
-    /**
-     * The container {@code different} is over, in {@code applied}, and the run its values are read
-     * at — the element itself, or what a closure this reads takes of it — or null where either is
-     * none this reads.
-     */
-    private static Stated apartBy(AnOperationApplied applied,
-                                  LawNumber.HowManyDifferent<DeclaredArgument> different,
-                                  DeclarationNewtypes newtypes) {
-        if (applied == null || different == null) {
-            return null;
-        }
-        Core container = applied.argument(different.container());
-        List<String> run = switch (different.ofTheElement()) {
-            case LawSubject.ElementOf<DeclaredArgument>(var of)
-                    when of.equals(different.container()) -> List.of();
-            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(var closure) -> {
-                Core given = applied.argument(closure);
-                yield given == null ? null : runTaken(given, newtypes);
-            }
-            default -> null;
-        };
-        return container == null || run == null ? null : new Stated(container, run);
-    }
-
-    /** Whether {@code one} and {@code other} are one value read off one binding by one run of
-     *  fields. */
-    private static boolean samePlace(Core one, Core other) {
-        BindingId binding = bindingUnder(one);
-        List<String> run = readOffABinding(one);
-        return binding != null && run != null && binding.equals(bindingUnder(other))
-                && run.equals(readOffABinding(other));
     }
 
     /**

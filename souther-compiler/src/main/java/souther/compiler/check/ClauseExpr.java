@@ -212,6 +212,31 @@ sealed interface ClauseExpr {
         }
     }
 
+    /**
+     * {@code part} with an emptiness check read as the size it means held against nought
+     * ({@link Conditions#asSizeComparison}), spelled as both — or {@code part} itself where it is
+     * no emptiness check.
+     *
+     * <p>For a reading of what a part states. {@code List.isEmpty(xs)} states what
+     * {@code List.length(xs) == 0} states, and a reading that has words for the second and not the
+     * first would read one rule two ways by its spelling. Not a restatement of the shape: the call
+     * is not written in terms of the comparison, so a reader asking what stands under a denial
+     * ({@link BooleanMeaning#underADenial}) is not told of one. The occurrence is the part's, and
+     * what its author wrote is the call, which stays among what it is spelled as.
+     */
+    static Part withTheSizeMeant(Part part) {
+        if (!(part instanceof Leaf leaf)) {
+            return part;
+        }
+        Core meant = Conditions.asSizeComparison(leaf.of());
+        if (meant == leaf.of()) {
+            return part;
+        }
+        List<Core> spelled = new ArrayList<>(leaf.spelled());
+        spelled.add(meant);
+        return new Leaf(spelled, leaf.positive(), leaf.at());
+    }
+
     private static List<Core> named(List<Core> spelled) {
         if (spelled == null || spelled.isEmpty()) {
             throw new IllegalArgumentException("a shape is what some part of the tree was written as");

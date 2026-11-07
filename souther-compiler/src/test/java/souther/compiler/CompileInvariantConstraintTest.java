@@ -406,6 +406,22 @@ class CompileInvariantConstraintTest {
         assertEquals(List.of(1L), issue.meta().get("duplicates"));
     }
 
+    /** An emptiness check denied, and a size held unequal to nought, are the non-emptiness a size
+     *  of at least one is: the same constraint, reported the same way. */
+    @Test
+    void aDeniedEmptinessCheckIsANonEmptiness() throws Exception {
+        String least = """
+                data V = List<Int>
+                    invariant List.length(value) >= 1
+                """;
+        for (String rule : List.of("Bool.not(List.isEmpty(value))", "List.isEmpty(value) == false",
+                "List.length(value) /= 0")) {
+            String denied = least.replace("List.length(value) >= 1", rule);
+            assertEquals(soleIssue(least, List.of()), soleIssue(denied, List.of()), rule);
+            assertTrue(decoded(denied, List.of(1L)) instanceof Ok, rule);
+        }
+    }
+
     /** The same rule written as the law the call comes to — as many different elements as
      *  elements — is the same constraint, reported the same way. */
     @Test

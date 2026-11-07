@@ -13,10 +13,13 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A clause written with a library predicate states of the numbers what the predicate means.
@@ -88,6 +91,60 @@ class AnEmptinessCheckStatesWhatItMeansAboutTheLengthTest {
     void anEmptinessCheckAssertedHoldsTheLengthAtNought() {
         assertLength(lengthLeft("String", "String.length",
                 "String.isEmpty(value) && String.length(value) <= 9"), 0, 0);
+    }
+
+    /**
+     * The family over a list and a map: each spelling of the check, asserted and denied, is
+     * accounted for exactly as the size held against nought it means is, and leaves the size where
+     * that one does. The size written as a number is the oracle. Asserted, it is accounted for: the
+     * check was a form the reading of values had no word for while its size was one it had.
+     */
+    @Test
+    void aContainersEmptinessCheckIsReadAsTheSizeItMeans() {
+        Map<String, String> meant = new LinkedHashMap<>();
+        meant.put("List.isEmpty(ns)", "List.length(ns) == 0");
+        meant.put("Bool.not(List.isEmpty(ns))", "List.length(ns) /= 0");
+        meant.put("List.isEmpty(ns) == false", "List.length(ns) /= 0");
+        meant.put("Map.isEmpty(table)", "Map.size(table) == 0");
+        meant.put("Bool.not(Map.isEmpty(table))", "Map.size(table) /= 0");
+        meant.forEach((check, size) -> {
+            FieldDomains oracle = record(size + " && List.length(ns) <= 9");
+            FieldDomains read = record(check + " && List.length(ns) <= 9");
+            assertEquals(accounted(oracle), accounted(read), check);
+            String field = check.contains("table") ? "table" : "ns";
+            String measure = check.contains("table") ? "Map.size" : "List.length";
+            assertEquals(String.valueOf(sizeLeft(oracle, field, measure)),
+                    String.valueOf(sizeLeft(read, field, measure)), check);
+        });
+        assertTrue(accounted(record("List.isEmpty(ns) && List.length(ns) <= 9")),
+                "a check held true is a size held at nought, which is read");
+    }
+
+    private static FieldDomains record(String clause) {
+        String source = """
+                module example.rooms
+
+                data Name = { ns: List<Int>, table: Map<String, Int> }
+                    invariant %s
+                """.formatted(clause);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+        String module = compilation.modules().get(0);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return FieldDomains.of(TypeSymbols.declared(new TypeKey(module, "Name")),
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
+    }
+
+    private static boolean accounted(FieldDomains read) {
+        return read.accounting().values().stream().allMatch(each -> each.unaccounted().isEmpty());
+    }
+
+    private static NumericDomain.Bounds sizeLeft(FieldDomains read, String field, String measure) {
+        String[] taken = measure.split("\\.");
+        return read.leftAt(RuleKey.of(field), new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(
+                ValueName.Stdlib.operation(taken[0], taken[1]), TakenArguments.NONE,
+                ValueTransformation.NONE));
     }
 
     /**

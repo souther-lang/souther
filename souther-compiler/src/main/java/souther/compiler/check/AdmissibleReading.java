@@ -328,7 +328,9 @@ final class AdmissibleReading {
      * against what the builders of the position keep ({@link ReadingLanguage.Elements}).
      */
     KeptApart keptApartAt(ClauseExpr.Part part, Denotations at) {
-        ElementsApart.Stated stated = ElementsApart.stated(part.of(), part.positive(), null);
+        // The run named as the builders name it, which is as a place of a value names its fields.
+        ElementsApart.Stated stated =
+                ElementsApart.stated(part.of(), part.positive(), terms.newtypes());
         FactSubject container = stated != null && ElementsApart.readsAPlace(stated.container())
                 ? positionIn(stated.container(), at) : null;
         return container == null ? null : new KeptApart(container, stated.run());
@@ -362,10 +364,7 @@ final class AdmissibleReading {
      * kind ({@link SidesBalanced}) or names a list that is no position of this value.
      */
     FactSubject sidesBalancedAt(ClauseExpr.Part part, Denotations at) {
-        if (!part.positive()) {
-            return null;
-        }
-        SidesBalanced.Stated stated = SidesBalanced.read(part.of());
+        SidesBalanced.Stated stated = SidesBalanced.read(part.of(), part.positive());
         return stated == null ? null : positionIn(stated.list(), at);
     }
 
@@ -413,7 +412,7 @@ final class AdmissibleReading {
             // nothing — the split is at the conjunctions — so an author with two of them to rewrite
             // was shown one. Where a reader goes about it is another question and is the whole rule
             // either way ({@code RuleAccounting.Why}); this is what tells two of them apart.
-            ReadingShortfall one = new ReadingShortfall(part.at(), wroteIt(part.of()),
+            ReadingShortfall one = new ReadingShortfall(part.at(), wroteIt(part),
                     RuleShortfall.Kind.LEAF, StoppedReading.of(why), each);
             if (!mine.contains(one)) {
                 mine.add(one);
@@ -433,12 +432,12 @@ final class AdmissibleReading {
     private PlannedValues<FactSubject> asking(ClauseExpr.Part part, FactSubject position,
                                               AdmittedPlan.Pattern plan) {
         asked.computeIfAbsent(part.of(), _ -> new LinkedHashSet<>())
-                .add(new AskedAt(position, plan.plan(), part.at(), wroteIt(part.of())));
+                .add(new AskedAt(position, plan.plan(), part.at(), wroteIt(part)));
         return PlannedValues.at(position, plan);
     }
 
     /**
-     * What the author wrote at {@code e}, where they wrote anything.
+     * What the author wrote at {@code part}, where they wrote anything.
      *
      * <p>The construct and the copy an expansion made of it. What an author rewrites is the one they
      * wrote ({@link ConstructOccurrence#origin}), and rewriting it answers every copy; which copy
@@ -448,6 +447,17 @@ final class AdmissibleReading {
      * <p>Asked by every reader that files something about a part, so that two facts about one
      * copy of one part are told to be one.
      */
+    static ConstructOccurrence wroteIt(ClauseExpr.Part part) {
+        // An emptiness check read as the size it means is spelled last as the comparison this
+        // reading composed ({@link ClauseExpr#withTheSizeMeant}), and what the author wrote there
+        // is the check.
+        List<Core> spelled = part.spelled();
+        Core before = spelled.size() > 1 ? spelled.get(spelled.size() - 2) : null;
+        return before != null && Conditions.asSizeComparison(before) != before
+                ? wroteIt(before) : wroteIt(part.of());
+    }
+
+    /** {@link #wroteIt(ClauseExpr.Part)} of one node. */
     static ConstructOccurrence wroteIt(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Binary it -> it.occurrence();

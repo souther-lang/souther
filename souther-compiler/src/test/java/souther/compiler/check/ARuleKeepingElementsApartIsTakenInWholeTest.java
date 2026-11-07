@@ -193,10 +193,19 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
                 "List.length(List.distinctBy(x -> x, items)) == List.length(items)",
                 "Set.size(Set.fromList(items)) == List.length(items)",
                 "{\n        let xs = items\n        List.length(List.distinct(xs)) == List.length(xs)"
-                        + "\n    }");
+                        + "\n    }",
+                "List.length(List.distinct(items)) - List.length(items) == 0",
+                "List.length(List.distinct(items)) + 0 == List.length(items)",
+                "2 * List.length(List.distinct(items)) == 2 * List.length(items)");
         List<String> byId = List.of(
                 "List.length(List.distinctBy(.id, items)) == List.length(items)",
-                "List.length(List.distinctBy(x -> x.id, items)) == List.length(items)");
+                "List.length(List.distinctBy(x -> x.id, items)) == List.length(items)",
+                "List.length(List.distinct(List.map(.id, items))) == List.length(items)",
+                "List.length(List.distinct(List.map(.id, items)))"
+                        + " == List.length(List.map(.id, items))",
+                "Set.size(Set.fromList(List.map(.id, items))) == List.length(items)",
+                "List.allDistinctBy(x -> x, List.map(.id, items))",
+                "Map.size(Map.fromList(List.map(x -> (x.id, x), items))) == List.length(items)");
         List<String> none = List.of(
                 "List.length(List.distinct(items)) <= List.length(items)",
                 "List.length(List.distinct(items)) /= List.length(items)",
@@ -205,7 +214,13 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
                 "List.length(List.distinct(items)) == List.length(List.distinct(items))",
                 "List.length(items) == List.length(items)",
                 "List.length(List.distinctBy(x -> x.id + 1, items)) == List.length(items)",
-                "List.length(List.distinct(items)) == List.length(items) || n < 0");
+                "List.length(List.distinct(items)) == List.length(items) || n < 0",
+                "List.length(List.distinct(List.filter(x -> x.id > 0, items)))"
+                        + " == List.length(items)",
+                "List.length(List.distinct(List.map(.id, items))) >= 1",
+                "List.length(List.distinct(items)) + 1 == List.length(items)",
+                "Map.size(Map.fromList(List.map(x -> (x.id + 1, x), items)))"
+                        + " == List.length(items)");
         Map<String, List<List<String>>> expected = new LinkedHashMap<>();
         identity.forEach(rule -> expected.put(rule, toldBy("List.allDistinctBy(x -> x, items)")));
         byId.forEach(rule -> expected.put(rule, toldBy("List.allDistinctBy(.id, items)")));
@@ -223,6 +238,38 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
                 assertFalse(anyUnaccounted(read), rule);
             }
         });
+    }
+
+    /**
+     * A newtype's own {@code value} is the value itself and no step of it, so a closure reading it
+     * keeps the elements apart where the closure reading the element does: apart as wholes for a
+     * list of names, apart at the field for a field wearing one. The closure without the
+     * {@code value} is the oracle.
+     */
+    @Test
+    void aClosureReadingANewtypesValueKeepsApartWhatTheClosureWithoutItKeeps() {
+        Map<String, String> without = Map.of(
+                "List.allDistinctBy(x -> x.value, ids)", "List.allDistinctBy(x -> x, ids)",
+                "List.allDistinctBy(x -> x.key.value, keyed)", "List.allDistinctBy(.key, keyed)");
+        without.forEach((rule, oracle) -> {
+            String field = rule.contains("keyed") ? "keyed" : "ids";
+            FieldDomains.Held expected = read(withNames(oracle)).heldAt(RuleKey.of(field));
+            FieldDomains read = read(withNames(rule));
+            FieldDomains.Held held = read.heldAt(RuleKey.of(field));
+            assertFalse(expected.keptApart().isEmpty(), oracle);
+            assertEquals(expected.keptApart(), held.keptApart(), rule);
+            // And the reading of what may stand there names the run as the builders do.
+            assertFalse(anyUnaccounted(read), rule);
+        });
+    }
+
+    private static String withNames(String rule) {
+        return """
+                data Id = Int
+                data Keyed = { key: Id }
+                data N = { ids: List<Id>, keyed: List<Keyed> }
+                    invariant %s
+                """.formatted(rule);
     }
 
     /** What a record holding two lists of items is told of {@code items} under {@code rule}. */

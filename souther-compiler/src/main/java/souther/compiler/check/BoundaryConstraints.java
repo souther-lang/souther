@@ -339,8 +339,11 @@ public final class BoundaryConstraints {
             return Optional.empty();
         }
         return switch (placed) {
-            case ComparisonClaim.Singled singled ->
-                    singled.holdsAtTheValue() ? Optional.of(new FixedSize(n)) : Optional.empty();
+            // A size is no lower than nought, so one that is not nought is at least one: the
+            // emptiness check denied, which is how `Bool.not(List.isEmpty(value))` arrives.
+            case ComparisonClaim.Singled singled -> singled.holdsAtTheValue()
+                    ? Optional.of(new FixedSize(n))
+                    : n == 0 ? Optional.of(new NonEmpty()) : Optional.empty();
             case ComparisonClaim.Cut cut -> {
                 EndSide end = endOf(cut);
                 Long at = inclusiveAt(end, cut.holdsAtTheValue(), n, 0, Integer.MAX_VALUE);
@@ -359,6 +362,11 @@ public final class BoundaryConstraints {
      */
     private static Optional<BoundaryConstraint> ofMapSize(ComparisonClaim placed, Core against) {
         Integer n = sizeBound(against);
+        // Not nought, as a list's size is read.
+        if (n != null && n == 0 && placed instanceof ComparisonClaim.Singled singled
+                && !singled.holdsAtTheValue()) {
+            return Optional.of(new MapNonEmpty());
+        }
         if (n == null || !(placed instanceof ComparisonClaim.Cut cut)) {
             return Optional.empty();
         }
