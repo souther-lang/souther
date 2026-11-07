@@ -645,9 +645,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "Ljava/util/Map;)V", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/ComparisonReadings", "boundTo",
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE, BINDINGS);
-        row(out, c + "check/ContainerSizesUnderAWitness", "names", "(" + core + ")V",
-                Reading.STRUCTURE, BINDINGS);
-        row(out, c + "check/ContainerSizesUnderAWitness", "mentions",
+        row(out, c + "check/ContainerSizesUnderAWitness", "names",
+                "(" + core + "Ljava/util/List;)V", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "check/ContainerSizesUnderAWitness", "reads",
                 "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/ComparisonReadings", "buildsAValue", "(" + core + ")Z",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);

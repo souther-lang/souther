@@ -103,12 +103,19 @@ class ContainerSizesUnderAWitnessTest {
                 holding(BigInteger.ONE, BigInteger.ONE)));
     }
 
-    /** Where how many the list holds is not handed in, nothing is said. */
+    /**
+     * Where how many the list holds is not handed in, it holds no more than any list does: sets of
+     * one element each come together to no more than a set holds, and sets of two may come past
+     * it.
+     */
     @Test
-    void aListOfNoKnownSizeIsNotRead() {
+    void aListOfNoKnownSizeHoldsNoMoreThanAnyListDoes() {
         Core body = bodyOf(WALK);
+        Function<Integer, Function<Core, Optional<BigInteger>>> eachHolding = each -> node ->
+                node instanceof Core.FieldAccess ? Optional.of(BigInteger.valueOf(each))
+                        : Optional.empty();
 
-        assertFalse(answers(body, unions(body).getFirst(), node ->
-                node instanceof Core.FieldAccess ? Optional.of(BigInteger.ONE) : Optional.empty()));
+        assertTrue(answers(body, unions(body).getFirst(), eachHolding.apply(1)));
+        assertFalse(answers(body, unions(body).getFirst(), eachHolding.apply(2)));
     }
 }

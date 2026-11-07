@@ -9,6 +9,7 @@ import souther.compiler.semantics.OperationLaw;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -80,16 +81,25 @@ final class Reductions {
      * something other than the denotations a check builds.
      */
     static Reducing reducing(Core.PreservedCall call, Function<Core, Core.Block> blockOf) {
-        Reduction rule = of(call.operation());
-        if (rule == null) {
+        return reducing(call.operation(), call.args(), blockOf);
+    }
+
+    /**
+     * The same, of an application named by the operation it applies and the arguments it passes,
+     * for the reason {@link Combinators#handedTo(ValueName, List, Function)} takes them.
+     */
+    static Reducing reducing(ValueName operation, List<Core> args,
+                             Function<Core, Core.Block> blockOf) {
+        Reduction rule = of(operation);
+        if (rule == null || rule.seedArg() >= args.size()) {
             return null;
         }
-        Combinators.Handed handed = Combinators.handedTo(call, blockOf);
+        Combinators.Handed handed = Combinators.handedTo(operation, args, blockOf);
         if (handed == null
                 || rule.accumulatorParam() >= handed.step().params().size()) {
             return null;
         }
-        return new Reducing(call.args().get(rule.seedArg()), handed.step(),
+        return new Reducing(args.get(rule.seedArg()), handed.step(),
                 handed.step().params().get(rule.accumulatorParam()), handed.element(),
                 handed.container(), handed.applied(), rule.inTheContainersOrder());
     }
