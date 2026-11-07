@@ -38,6 +38,14 @@ import java.util.function.Predicate;
  * <p>Everything a caller asks is answered as the view over a {@code LinkedHashMap} answers it: in
  * the order given, a null value held, a null key held and asked about, equal to any map or set of
  * the same entries and hashed as one, and every change refused.
+ *
+ * <p><b>Of values, whose hashes do not change.</b> A copy is made of what is not changed after
+ * it: each key's hash is worked out once where the copy is made, which is what finds it again, and
+ * so is the hash of the whole, which is what a value holding the copy is hashed by. A key or a
+ * value changed after the copy is made — an element added to a list held as a value — leaves the
+ * copy unable to find that key, or hashed as it was, and so told apart from a copy of what it now
+ * holds. Every copy this compiler makes holds values: exact numbers, paths, the immutable copies
+ * of the language and of this class, and the answers a store holds.
  */
 public final class InTheOrderGiven {
 

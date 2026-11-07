@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.collect.InTheOrderGiven;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -68,8 +70,10 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
         return List.copyOf(out);
     }
 
+    /** The containers held as a copy that says its hash without walking it, since a context is
+     *  what every table of readings under one is keyed by. */
     StructuralContext {
-        nonEmptyContainers = Set.copyOf(nonEmptyContainers);
+        nonEmptyContainers = InTheOrderGiven.set(nonEmptyContainers);
     }
 
     /**

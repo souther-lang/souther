@@ -108,6 +108,44 @@ class ACopyInTheOrderGivenAnswersAsTheViewItReplacesTest {
         assertEquals(nulls, InTheOrderGiven.map(nulls));
     }
 
+    /**
+     * Two copies of one map, made in two orders, are equal and hash alike; two that differ in one
+     * value are told apart, by the hash each worked out where it was made and by what they hold.
+     * Of every size a copy is held at, one entry and several.
+     */
+    @Test
+    void copiesAreEqualWhereTheyHoldTheSameAndApartWhereTheyDoNot() {
+        for (int size : SIZES) {
+            if (size == 0) {
+                continue;
+            }
+            Map<Object, Object> given = given(size);
+            Map<Object, Object> reversed = new LinkedHashMap<>();
+            new ArrayList<>(given.keySet()).reversed()
+                    .forEach(key -> reversed.put(key, given.get(key)));
+            Map<Object, Object> one = InTheOrderGiven.map(given);
+            Map<Object, Object> other = InTheOrderGiven.map(reversed);
+            assertEquals(one, other, "size " + size);
+            assertEquals(one.hashCode(), other.hashCode(), "size " + size);
+
+            Map<Object, Object> changed = new LinkedHashMap<>(given);
+            changed.put(given.keySet().iterator().next(), "another value");
+            Map<Object, Object> apart = InTheOrderGiven.map(changed);
+            assertEquals(false, one.equals(apart), "size " + size);
+            assertEquals(false, apart.equals(one), "size " + size);
+            assertEquals(changed.hashCode(), apart.hashCode(), "hashed as the map it copies");
+
+            Set<Object> keys = InTheOrderGiven.set(given.keySet());
+            Set<Object> keysReversed = InTheOrderGiven.set(reversed.keySet());
+            assertEquals(keys, keysReversed, "size " + size);
+            assertEquals(keys.hashCode(), keysReversed.hashCode(), "size " + size);
+            Set<Object> fewer = new LinkedHashSet<>(given.keySet());
+            fewer.remove(given.keySet().iterator().next());
+            fewer.add("another element");
+            assertEquals(false, keys.equals(InTheOrderGiven.set(fewer)), "size " + size);
+        }
+    }
+
     @Test
     void aSetAnswersAsTheViewOverALinkedHashSet() {
         for (int size : SIZES) {

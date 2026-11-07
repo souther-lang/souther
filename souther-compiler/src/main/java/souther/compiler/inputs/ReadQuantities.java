@@ -321,11 +321,11 @@ final class ReadQuantities implements Quantities {
         }
 
         /**
-         * One thing taken in, with its terms in the one order ({@link NumericTerms}): put in order
-         * once where it is taken in, and not again each time the rules under a context are made
-         * by taking everything in again ({@link #constraints}).
+         * One thing taken in, with its terms in the one order ({@link NumericTerms.InOrder}): put
+         * in order once where it is taken in, and not again each time the rules under a context
+         * are made by taking everything in again ({@link #constraints}).
          */
-        private record Taken(Assumed taken, List<NumericTerm> terms) {}
+        private record Taken(Assumed taken, NumericTerms.InOrder terms) {}
 
         /** An entry that says its hash, which is worked out once where it is taken in and never
          *  again as the set that holds it is copied for the next one. */
@@ -347,7 +347,7 @@ final class ReadQuantities implements Quantities {
         TakenIn and(Assumed taking) {
             List<Taken> longer = new ArrayList<>(inOrder.size() + 1);
             longer.addAll(inOrder);
-            longer.add(new Taken(taking, NumericTerms.inOrder(taking.terms())));
+            longer.add(new Taken(taking, NumericTerms.ordered(taking.terms())));
             Set<Member> more = new HashSet<>(members);
             more.add(new Member(taking, taking.hashCode()));
             return new TakenIn(Collections.unmodifiableList(longer),
@@ -1128,17 +1128,19 @@ final class ReadQuantities implements Quantities {
         }
         // Which term is named in a refusal is the answer here, and a form holds its terms without
         // holding an order they were written in: the first in the one order of those with no
-        // spacing. Put in order only where there is a refusal to name, since most forms taken in
-        // have none.
-        List<NumericTerm> unspaced = new ArrayList<>();
+        // spacing. The terms are put in order only where there is a refusal to name, since most
+        // forms taken in have none, and then all of them, so that two of them written alike are
+        // found here as they are where a form taken in is put in order (`TakenIn.and`).
+        Set<NumericTerm> unspaced = new HashSet<>();
         for (NumericTerm term : form.coefs().keySet()) {
             if (spaceOf(constraints(under).numbers(), term, called(term, under)) == null) {
                 unspaced.add(term);
             }
         }
         if (!unspaced.isEmpty()) {
-            return new Taking.Refused(new SearchRegion.Refusal.NoOrderUnderATerm(
-                    NumericTerms.inOrder(unspaced).getFirst()));
+            NumericTerm named = NumericTerms.inOrder(form.coefs().keySet()).stream()
+                    .filter(unspaced::contains).findFirst().orElseThrow();
+            return new Taking.Refused(new SearchRegion.Refusal.NoOrderUnderATerm(named));
         }
         return new Taking.Taken(alsoAssuming(new Assumed.OverAForm(form, rel)));
     }
@@ -1357,8 +1359,8 @@ final class ReadQuantities implements Quantities {
             return made;
         }
         Map<InputAtom, NumberSpace> spaces = new LinkedHashMap<>();
-        List<NumericTerm> inOrder = taken.terms();
-        for (NumericTerm term : inOrder) {
+        NumericTerms.InOrder inOrder = taken.terms();
+        for (NumericTerm term : inOrder.terms()) {
             NumberSpace space = spaceOf(made.numbers(), term, called(term, under));
             if (space == null) {
                 return made;
@@ -1789,7 +1791,7 @@ final class ReadQuantities implements Quantities {
             return rules;
         }
         return insideItsOrder(rules.taking(atom, numbersOf(runs), Map.of(atom, space)),
-                List.of(term), under);
+                NumericTerms.ordered(List.of(term)), under);
     }
 
     /** A range with only the ends the arithmetic has a number for. */
@@ -1969,7 +1971,8 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         ConstraintState<InputAtom> rules = insideItsOrder(
-                holding(effectiveConstraints(under), term, under), List.of(term), under);
+                holding(effectiveConstraints(under), term, under),
+                NumericTerms.ordered(List.of(term)), under);
         return rules.numbers().wholeRunOf(called(term, under));
     }
 
@@ -1983,14 +1986,13 @@ final class ReadQuantities implements Quantities {
      * term whose order is not known has none recorded, and a system it is in is not shown to leave
      * a row.
      *
-     * @param terms in the one order ({@link NumericTerms}), which is the order they are recorded
-     *              in: handed so by the caller, which has them in that order already
+     * @param terms in the one order, which is the order they are recorded in
      */
     private ConstraintState<InputAtom> insideItsOrder(ConstraintState<InputAtom> rules,
-                                                      List<NumericTerm> terms,
+                                                      NumericTerms.InOrder terms,
                                                       StructuralContext under) {
         Map<InputAtom, NumberSpace> told = new LinkedHashMap<>();
-        for (NumericTerm each : terms) {
+        for (NumericTerm each : terms.terms()) {
             TermOrders orders = ordersOf(each);
             Carrier order = orders == null ? null : orders.answered();
             if (order != null) {

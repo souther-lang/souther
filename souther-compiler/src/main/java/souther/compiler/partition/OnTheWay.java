@@ -103,6 +103,12 @@ public sealed interface OnTheWay {
      * entries alike but for the names are two conditions until the way is put together
      * ({@link ElementsOnTheWay}).
      *
+     * <p><b>A record holding its hash, where {@link OneOf} is a class for its.</b> An entry is taken
+     * apart by what it holds at far more places than a choice is, by patterns that name the demand
+     * inside it, and a class would leave each of those to ask for the parts one at a time. So the
+     * hash is a component the rest decides, and nothing that reads an entry for what it is reads
+     * it: it is no part of what an entry is written as, and a pattern passes over it.
+     *
      * @param hash worked out from the rest when it is made, whatever is handed in: an entry is a
      *             member of the sets a way is compared by and is asked for its hash at every
      *             lookup in them, and what it is made of is a tree of records down to where the
@@ -126,6 +132,12 @@ public sealed interface OnTheWay {
         @Override
         public int hashCode() {
             return hash;
+        }
+
+        /** Written as the three things it is, and not the hash beside them. */
+        @Override
+        public String toString() {
+            return "TakenIn[anchor=" + anchor + ", demand=" + demand + ", named=" + named + "]";
         }
 
         /** The rest compared, the hash first: two entries that differ almost always differ in
