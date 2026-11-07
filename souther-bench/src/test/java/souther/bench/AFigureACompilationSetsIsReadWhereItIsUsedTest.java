@@ -6,11 +6,13 @@ import souther.compiler.partition.Allowances;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A budget a compilation may hold to another figure ({@link Allowances#SETTABLE}) is asked for its
@@ -51,5 +53,65 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
         assertEquals(List.of(), List.copyOf(reachesASettableOneWhenLoaded),
                 "these copy a figure a compilation may set when they are loaded, and would hold"
                         + " the declared one whatever a compilation said");
+    }
+
+    /**
+     * What a budget is asked where it is read off at once and not handed on: a figure, or its
+     * place among the budgets, which is what a switch over them compiles to.
+     */
+    private static final Set<String> READ_OFF = Set.of("reached", "maximum", "declared",
+            "ordinal");
+
+    /**
+     * The places that name a budget a compilation may set and hand on the budget itself, and why
+     * none of them is a stop that would be told by the budget: each names it as one of the
+     * budgets, not as something stopped at it.
+     */
+    private static final Map<String, String> NAMED_AS_A_BUDGET = Map.of(
+            "souther.compiler.partition.Allowances#<clinit>()V",
+            "the budgets a compilation may set, which this rule is about",
+            "souther.compiler.publish.PublicationOrders#<clinit>()V",
+            "the order the budgets are written out in");
+
+    /**
+     * A budget a compilation may set is read off where it is named: the figure it stopped at
+     * ({@link CompositionBudget#reached}) or the figure it is held to, never the budget handed on
+     * by itself. A stop that holds a budget by its kind and makes the figure when it is told says
+     * the one in force then, which outside a compilation is the one declared; so a budget that may
+     * be set reaches no such holder, whichever of them it is, because nothing hands it on.
+     *
+     * <p>Asked of the compiled code, where naming a budget is reading its constant, and what is
+     * done with it is the next instruction. A place that hands it on as one of the budgets — an
+     * order, the list of the settable ones — says so here, and is no stop.
+     */
+    @Test
+    void aBudgetACompilationMaySetIsReadOffWhereItIsNamed() {
+        Set<String> settable = new TreeSet<>();
+        Allowances.SETTABLE.forEach(each -> settable.add(each.name()));
+        Set<String> handedOn = new TreeSet<>();
+        int readOff = 0;
+        for (Compiled.StaticRead each : Compiled.staticReads()) {
+            Compiled.Site read = each.read();
+            if (!read.owner().equals(BUDGET) || !settable.contains(read.member())
+                    || read.from().equals(BUDGET)) {
+                continue;
+            }
+            Compiled.Site taken = each.takenBy();
+            if (taken != null && taken.owner().equals(BUDGET)
+                    && READ_OFF.contains(taken.member())) {
+                readOff++;
+            } else {
+                handedOn.add(read.at());
+            }
+        }
+        assertTrue(readOff > 0, "some place reads a settable budget's figure, or nothing is read");
+        Set<String> unsaid = new TreeSet<>(handedOn);
+        unsaid.removeAll(NAMED_AS_A_BUDGET.keySet());
+        assertEquals(List.of(), List.copyOf(unsaid),
+                "these hand on a budget a compilation may set by itself, where a holder of the"
+                        + " budget would tell the figure in force when it is read");
+        Set<String> gone = new TreeSet<>(NAMED_AS_A_BUDGET.keySet());
+        gone.removeAll(handedOn);
+        assertEquals(List.of(), List.copyOf(gone), "these no longer name one");
     }
 }
