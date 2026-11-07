@@ -1601,7 +1601,9 @@ final class Pullback {
      *
      * <p>Nothing in a closure no run applies ({@link Operators#neverApplied}): it ends no run. Nor
      * does a construction that no clause of its type refuses a run of
-     * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}).
+     * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}), nor an operation of the step of a walk
+     * that files under each key which that walk shows to stop none of its runs
+     * ({@link #whatAWalkThatFilesStopsNoRunAt}), while the walk here is under it.
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
@@ -1609,8 +1611,9 @@ final class Pullback {
             return;
         }
         operated.readsAt.putIfAbsent(e, reads);
-        GetsPast completion = e instanceof Core.Construct made
-                && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads)
+        GetsPast completion = (e instanceof Core.Construct made
+                && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads))
+                || operated.stopNoRunUnderTheWalk.contains(e)
                 ? new GetsPast.Always()
                 : WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
@@ -1647,17 +1650,66 @@ final class Pullback {
                 operated.unsaidElsewhere = elsewhereBefore;
             }
         }
-        if (e instanceof Core.LetIn li) {
-            leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
-            leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
-        } else if (e instanceof Core.IfConstructed attempt) {
-            WhatARunMayEndFor.forEachWorkedOut(attempt,
-                    part -> leaveUnsaidWhatMayEndARunUnder(part, reads, bound));
-        } else {
-            Core.forEachChild(e, child -> leaveUnsaidWhatMayEndARunUnder(child, reads,
-                    Core.withoutStanding(child) instanceof Core.Block block
-                            ? boundInside(e, block, reads, bound) : bound));
+        List<Core> shown = new ArrayList<>();
+        if (e instanceof Core.PreservedCall call) {
+            for (Core each : whatAWalkThatFilesStopsNoRunAt(call, reads)) {
+                if (operated.stopNoRunUnderTheWalk.add(each)) {
+                    shown.add(each);
+                }
+            }
         }
+        try {
+            if (e instanceof Core.LetIn li) {
+                leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
+                leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
+            } else if (e instanceof Core.IfConstructed attempt) {
+                WhatARunMayEndFor.forEachWorkedOut(attempt,
+                        part -> leaveUnsaidWhatMayEndARunUnder(part, reads, bound));
+            } else {
+                Core.forEachChild(e, child -> leaveUnsaidWhatMayEndARunUnder(child, reads,
+                        Core.withoutStanding(child) instanceof Core.Block block
+                                ? boundInside(e, block, reads, bound) : bound));
+            }
+        } finally {
+            operated.stopNoRunUnderTheWalk.removeAll(shown);
+        }
+    }
+
+    /**
+     * The operations of {@code call}'s step shown to stop no run, where {@code call} is a walk
+     * that files under the key of each element ({@link KeyedAccumulation}): each operation that
+     * files, where it ends a run only on an answer that holds more than a collection does
+     * ({@link GetsPast.WhereTheAnswerFits}), which what it files into never comes to; and of a
+     * count ({@link KeyedAccumulation.Filed.Counted}), the move of what a key holds, where every
+     * value it works out is one its operator answers ({@link WhereAnOperatorAnswers}).
+     *
+     * <p>Shown of this walk alone, whose runs are what make what is filed into and what is found
+     * under a key what the walk says: a walk reaches the step's body under it only where the step
+     * is written at it. A step handed by name is walked where it is written, which may be a
+     * closure handed to another fold, and what it works out there is left as anything else is.
+     */
+    private List<Core> whatAWalkThatFilesStopsNoRunAt(Core.PreservedCall call, InputReads reads) {
+        KeyedAccumulation filed = KeyedAccumulation.of(call, reads, sides(),
+                blocksAt(new Denotation(call, reads)));
+        if (filed == null) {
+            return List.of();
+        }
+        List<Core> shown = new ArrayList<>();
+        for (Core files : filed.files()) {
+            if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(files)
+                    instanceof GetsPast.WhereTheAnswerFits) {
+                shown.add(files);
+            }
+        }
+        if (filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
+                && counted.moves() != null
+                && Core.withoutStanding(counted.moves()) instanceof Core.Binary move
+                && AffineForms.whereItAnswers(move)
+                instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest)
+                && counted.everyValueMovedLiesWithin(least, greatest)) {
+            shown.add(move);
+        }
+        return shown;
     }
 
     /**
@@ -7616,6 +7668,11 @@ final class Pullback {
         /** The closures no run applies ({@link InputReads.Applications.NoneMade}), whose bodies
          *  stop no run. */
         private final Set<Core> neverApplied = Collections.newSetFromMap(new IdentityHashMap<>());
+        /** The operations of a step a walk that files shows to stop no run, while the walk of
+         *  what may end a run is under that walk
+         *  ({@link Pullback#whatAWalkThatFilesStopsNoRunAt}). */
+        private final Set<Core> stopNoRunUnderTheWalk =
+                Collections.newSetFromMap(new IdentityHashMap<>());
         private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
         private Set<TermPath> unsaidAt = new LinkedHashSet<>();
         private boolean unsaidElsewhere;

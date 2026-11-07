@@ -4711,6 +4711,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 asked = asked.max(least.get());
             }
             boolean aTotal = false;
+            boolean asManyAsItCounts = false;
             for (Side side : sides) {
                 Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(side);
                 boolean ofTheCollection = placesOfTheSide.isEmpty() || placesOfTheSide.get()
@@ -4718,6 +4719,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 switch (keptCutDown(side)) {
                     case AT_ANY_SIZE -> { }
                     case AT_ONE -> aTotal |= ofTheCollection;
+                    case BY_ITS_COUNT -> {
+                        if (ofTheCollection) {
+                            List<TermPath> holding =
+                                    side.number().subjectPath().containersHoldingIt();
+                            if (!holding.contains(collection)) {
+                                return Optional.empty();
+                            }
+                            asManyAsItCounts |= holding.getFirst().equals(collection);
+                        }
+                    }
                     case NOT -> {
                         if (ofTheCollection) {
                             return Optional.empty();
@@ -4759,6 +4770,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if ((aTotal || ofOne) && !witness.equals(BigInteger.ONE)) {
                 return Optional.empty();
             }
+            // Not one row but one for each value the count takes, each holding as many elements
+            // as it counts: what is asked of them is how many they hold at most.
+            if (asManyAsItCounts) {
+                return aTotal || ofOne ? Optional.empty()
+                        : Optional.of(GetsPast.MOST_ELEMENTS.min(
+                                BigInteger.valueOf(CountDomain.mostFrom(held.max()))));
+            }
             return Optional.of(witness);
         }
     }
@@ -4794,6 +4812,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         AT_ANY_SIZE,
         /** Only at one element: a total, which the relation reads on one element's run. */
         AT_ONE,
+        /**
+         * By how many it counts: how often the value at a place occurs among the values of a run,
+         * which takes each value it does on a row whose outermost container holds that many
+         * elements, each holding the value once and otherwise as few as it may. So a container
+         * inside is cut as one the side does not read is, and the outermost is held at as many as
+         * it holds at most.
+         */
+        BY_ITS_COUNT,
         /** Not shown to keep it. */
         NOT
     }
@@ -4822,6 +4848,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return switch (side.number()) {
             case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _ -> CutDown.AT_ANY_SIZE;
+            // Among every occurrence: one a selection keeps may need others beside it.
+            case NumericTerm.OccurrencesOfItsValue occurrences ->
+                    occurrences.selection() == null ? CutDown.BY_ITS_COUNT : CutDown.NOT;
             case NumericTerm.TakenOver over ->
                     over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds ? CutDown.AT_ONE
                             : CutDown.NOT;
@@ -4836,7 +4865,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case null -> CutDown.NOT;
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _, NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
-                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.GatheredUnderAKey _, NumericTerm.ProductOf _ -> CutDown.NOT;
         };
     }
