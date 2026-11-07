@@ -6,7 +6,6 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.BuiltFrom;
-import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
@@ -17,8 +16,10 @@ import souther.compiler.types.Type;
 import souther.compiler.values.TextExtents;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -57,13 +58,24 @@ public final class ContainerSizesUnderAWitness {
 
     private final Function<Core, Optional<BigInteger>> ofTheInput;
     private final Map<BindingId, Core> boundTo = new HashMap<>();
-    private final Map<BindingId, Core> carriedBy = new HashMap<>();
+    private final Map<Core, WalkAt> walks = new IdentityHashMap<>();
+    private final Map<BindingId, WalkAt> carriedBy = new HashMap<>();
+    /** For each name asked of, whether what each bound name stands for reads it. */
+    private final Map<BindingId, Map<BindingId, Boolean>> readsAsked = new HashMap<>();
     private final Set<Core> asking = new HashSet<>();
 
     private ContainerSizesUnderAWitness(Core within,
                                         Function<Core, Optional<BigInteger>> ofTheInput) {
         this.ofTheInput = ofTheInput;
-        names(within);
+        List<Core> calls = new ArrayList<>();
+        names(within, calls);
+        for (Core each : calls) {
+            WalkAt walk = WalkAt.of(each, ContainerSizesUnderAWitness::blockOf);
+            if (walk != null) {
+                walks.put(each, walk);
+                carriedBy.put(walk.carried(), walk);
+            }
+        }
     }
 
     /**
@@ -87,11 +99,16 @@ public final class ContainerSizesUnderAWitness {
      */
     public static boolean answersOn(Core within, Core operator, GetsPast completion,
                                     Function<Core, Optional<BigInteger>> ofTheInput) {
-        ContainerSizesUnderAWitness reading = new ContainerSizesUnderAWitness(within, ofTheInput);
+        return new ContainerSizesUnderAWitness(within, ofTheInput).answers(operator, completion);
+    }
+
+    /** Whether {@code operator}, standing in what this reads and answering where
+     *  {@code completion} says, answers on every run this reads. */
+    private boolean answers(Core operator, GetsPast completion) {
         return switch (completion) {
             case GetsPast.Always _ -> true;
             case GetsPast.WhereTheAnswerFits(GetsPast.AnswerSize answer) ->
-                    reading.answer(operator, answer)
+                    answer(operator, answer)
                             .map(most -> most.compareTo(GetsPast.MOST_ELEMENTS) <= 0)
                             .orElse(false);
             // A total of no {@code Int} or of one is nought or that one, which is an {@code Int};
@@ -105,7 +122,7 @@ public final class ContainerSizesUnderAWitness {
                 Optional<BigInteger> written = writtenTotal(operands.get(at));
                 yield written.isPresent()
                         ? anIntSumAnswersAt(written.get())
-                        : reading.most(operands.get(at))
+                        : most(operands.get(at))
                                 .map(most -> most.compareTo(BigInteger.ONE) <= 0).orElse(false);
             }
             // How long a text a conversion makes turns on the text, and what a run holds of
@@ -159,18 +176,27 @@ public final class ContainerSizesUnderAWitness {
                         ? List.of(binary.left(), binary.right()) : null;
     }
 
-    /** Every name {@code e} binds to a value, and every name a walk in it carries its value
-     *  under, with the walk. */
-    private void names(Core e) {
+    /** Every name {@code e} binds to a value, and every operation applied in it, into
+     *  {@code calls}: the walks among them. */
+    private void names(Core e, List<Core> calls) {
         Core node = Core.withoutStanding(e);
         if (node instanceof Core.LetIn li && li.binder() != null) {
             boundTo.put(li.binder().binding(), li.value());
+        } else if (AnOperationApplied.of(node) != null) {
+            calls.add(node);
         }
-        WalkAt walk = WalkAt.of(node);
-        if (walk != null) {
-            carriedBy.put(walk.carried(), node);
-        }
-        Core.forEachChild(node, this::names);
+        Core.forEachChild(node, child -> names(child, calls));
+    }
+
+    /**
+     * The block {@code closure} handed to a walk is, where the walk alone applies it: written at
+     * the walk. A step applied anywhere besides is handed there what that application hands it,
+     * and what it carries is no longer what the walk carries. A step the source hands by name
+     * reaches the tree read here written at the walk, as a closure applying it. Null where it is
+     * no block written there.
+     */
+    private static Core.Block blockOf(Core closure) {
+        return Core.withoutStanding(closure) instanceof Core.Block written ? written : null;
     }
 
     /** The most the answer of {@code node} holds, as {@code size} says of what it is handed. */
@@ -228,9 +254,9 @@ public final class ContainerSizesUnderAWitness {
         return switch (Core.withoutStanding(node)) {
             case Core.ListLit written -> Optional.of(BigInteger.valueOf(written.elements().size()));
             case Core.Read name -> {
-                Core walk = carriedBy.get(name.binding());
+                WalkAt walk = carriedBy.get(name.binding());
                 if (walk != null) {
-                    yield carried(WalkAt.of(walk), true);
+                    yield carried(walk, true);
                 }
                 Core value = boundTo.get(name.binding());
                 yield value == null ? Optional.empty() : most(value);
@@ -254,7 +280,7 @@ public final class ContainerSizesUnderAWitness {
                 yield out;
             }
             default -> {
-                WalkAt walk = WalkAt.of(node);
+                WalkAt walk = walks.get(node);
                 if (walk != null) {
                     yield carried(walk, false);
                 }
@@ -350,14 +376,26 @@ public final class ContainerSizesUnderAWitness {
      */
     private Optional<BigInteger> carried(WalkAt walk, boolean handedToTheStep) {
         Optional<BigInteger> seed = most(walk.seed());
-        Optional<BigInteger> elements = most(walk.container());
+        BigInteger elements = walked(walk.container());
         Optional<BigInteger> each = putIn(walk.step().body(), walk.carried());
-        if (seed.isEmpty() || elements.isEmpty() || each.isEmpty()) {
+        if (seed.isEmpty() || each.isEmpty()) {
             return Optional.empty();
         }
         BigInteger steps = handedToTheStep
-                ? elements.get().subtract(BigInteger.ONE).max(BigInteger.ZERO) : elements.get();
+                ? elements.subtract(BigInteger.ONE).max(BigInteger.ZERO) : elements;
         return Optional.of(seed.get().add(steps.multiply(each.get())));
+    }
+
+    /**
+     * How many elements {@code container}, what a walk walks, hands the step at most: what is read
+     * of it, and no more than a collection holds ({@link GetsPast#MOST_ELEMENTS}) whatever is
+     * read, since a string holds fewer code points than that. It is there before the walk begins,
+     * and a run that would make one holding more stops where it makes it, which that operator's
+     * own completion says. Of what is walked alone: what a walk builds is read by what it carries.
+     */
+    private BigInteger walked(Core container) {
+        return most(container).map(most -> most.min(GetsPast.MOST_ELEMENTS))
+                .orElse(GetsPast.MOST_ELEMENTS);
     }
 
     /**
@@ -365,15 +403,26 @@ public final class ContainerSizesUnderAWitness {
      * that with elements put in: nought where it answers it as it is, and the most what an operator
      * answering where the collection fits puts beside it, of what else it is handed. Nothing where
      * it answers anything else.
+     *
+     * <p>A choice reading what is carried chooses by it, and what each arm puts in is then not
+     * what the choice puts in on every run — but for a lookup of a key in it, which reads a value
+     * filed under that key and puts in nothing: each arm puts in what it puts beside the same
+     * collection, whichever is taken.
+     *
+     * <p>What is carried is read under any name given it ({@link #isCarried}): a step handed by
+     * name is applied as a closure that gives its parameters the names the step was written with.
      */
     private Optional<BigInteger> putIn(Core body, BindingId carried) {
-        return switch (Core.withoutStanding(body)) {
-            case Core.Read name when name.binding().equals(carried) ->
-                    Optional.of(BigInteger.ZERO);
-            case Core.If fork -> mentions(fork.cond(), carried) ? Optional.empty()
+        Core node = Core.withoutStanding(body);
+        if (isCarried(node, carried)) {
+            return Optional.of(BigInteger.ZERO);
+        }
+        return switch (node) {
+            case Core.If fork -> reads(fork.cond(), carried) ? Optional.empty()
                     : larger(putIn(fork.then(), carried), putIn(fork.els(), carried));
             case Core.Match match -> {
-                if (mentions(match.scrutinee(), carried)) {
+                if (reads(match.scrutinee(), carried)
+                        && !isALookupIn(match.scrutinee(), carried)) {
                     yield Optional.empty();
                 }
                 Optional<BigInteger> out = Optional.of(BigInteger.ZERO);
@@ -382,9 +431,9 @@ public final class ContainerSizesUnderAWitness {
                 }
                 yield out;
             }
-            case Core.LetIn li -> mentions(li.value(), carried) ? Optional.empty()
-                    : putIn(li.body(), carried);
-            case Core node -> putInByAnOperator(node, carried);
+            case Core.LetIn li -> reads(li.value(), carried) && !isCarried(li.value(), carried)
+                    ? Optional.empty() : putIn(li.body(), carried);
+            default -> putInByAnOperator(node, carried);
         };
     }
 
@@ -411,12 +460,11 @@ public final class ContainerSizesUnderAWitness {
                 return Optional.empty();
             }
             Core operand = Core.withoutStanding(operands.get(each));
-            if (operand instanceof Core.Read name && name.binding().equals(carried)
-                    && carriedAt < 0) {
+            if (isCarried(operand, carried) && carriedAt < 0) {
                 carriedAt = each;
                 continue;
             }
-            if (mentions(operand, carried)) {
+            if (reads(operand, carried)) {
                 return Optional.empty();
             }
             Optional<BigInteger> one = most(operand);
@@ -426,21 +474,60 @@ public final class ContainerSizesUnderAWitness {
             total = total.add(one.get());
         }
         for (int other = 0; other < operands.size(); other++) {
-            if (!at.contains(other) && mentions(operands.get(other), carried)) {
+            if (!at.contains(other) && reads(operands.get(other), carried)) {
                 return Optional.empty();
             }
         }
         return carriedAt < 0 ? Optional.empty() : Optional.of(total);
     }
 
-    /** Whether {@code e} reads {@code name} anywhere. */
-    private static boolean mentions(Core e, BindingId name) {
+    /** Whether {@code e} looks a key up in what is carried under {@code carried}, with a key
+     *  that does not read it ({@link KeyedAccumulation#mapLookedUpIn}). */
+    private boolean isALookupIn(Core e, BindingId carried) {
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        Core map = applied == null ? null : KeyedAccumulation.mapLookedUpIn(applied);
+        if (map == null || !isCarried(map, carried)) {
+            return false;
+        }
+        for (Core each : applied.args()) {
+            if (each != map && reads(each, carried)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code e} is what is carried under {@code carried}: that name, or a name bound
+     *  to it. */
+    private boolean isCarried(Core e, BindingId carried) {
+        return Core.withoutStanding(e) instanceof Core.Read name
+                && (name.binding().equals(carried)
+                        || (boundTo.get(name.binding()) instanceof Core value
+                                && isCarried(value, carried)));
+    }
+
+    /** Whether {@code e} reads {@code name} anywhere, under that name or a name bound to what
+     *  reads it: of each name bound, asked once, since a name is read wherever it is in scope. */
+    private boolean reads(Core e, BindingId name) {
         Core node = Core.withoutStanding(e);
-        if (node instanceof Core.Read read && read.binding().equals(name)) {
-            return true;
+        if (node instanceof Core.Read read) {
+            if (read.binding().equals(name)) {
+                return true;
+            }
+            Core value = boundTo.get(read.binding());
+            if (value == null) {
+                return false;
+            }
+            Map<BindingId, Boolean> asked = readsAsked.computeIfAbsent(name, k -> new HashMap<>());
+            Boolean known = asked.get(read.binding());
+            if (known == null) {
+                known = reads(value, name);
+                asked.put(read.binding(), known);
+            }
+            return known;
         }
         boolean[] found = {false};
-        Core.forEachChild(node, child -> found[0] |= mentions(child, name));
+        Core.forEachChild(node, child -> found[0] |= reads(child, name));
         return found[0];
     }
 
@@ -457,28 +544,15 @@ public final class ContainerSizesUnderAWitness {
      */
     private record WalkAt(Core seed, Core container, Core.Block step, BindingId carried) {
 
-        /** {@code e} as a walk, or null where it applies none, or its step is no closure written
-         *  at it. */
-        static WalkAt of(Core e) {
+        /** {@code e} as a walk, or null where it applies none, or its step is no block
+         *  {@code blockOf} reaches. */
+        static WalkAt of(Core e, Function<Core, Core.Block> blockOf) {
             AnOperationApplied applied = AnOperationApplied.of(e);
-            if (applied == null) {
-                return null;
-            }
-            Reductions.Reduction walk = Reductions.of(applied.operation());
-            Combinator handing = Combinators.of(applied.operation());
-            if (walk == null || handing == null) {
-                return null;
-            }
-            List<Core> args = applied.args();
-            if (walk.seedArg() >= args.size() || handing.containerArg() >= args.size()
-                    || handing.closureArg() >= args.size()
-                    || !(Core.withoutStanding(args.get(handing.closureArg()))
-                            instanceof Core.Block step)
-                    || walk.accumulatorParam() >= step.params().size()) {
-                return null;
-            }
-            return new WalkAt(args.get(walk.seedArg()), args.get(handing.containerArg()), step,
-                    step.params().get(walk.accumulatorParam()).binding());
+            Reductions.Reducing walk = applied == null ? null
+                    : Reductions.reducing(applied.operation(), applied.args(), blockOf);
+            return walk == null || walk.accumulator().binding() == null ? null
+                    : new WalkAt(walk.seed(), walk.container(), walk.step(),
+                            walk.accumulator().binding());
         }
     }
 }
