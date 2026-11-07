@@ -2,6 +2,7 @@ package souther.compiler.flow;
 
 import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.check.TruthRestatement;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -679,15 +680,61 @@ public final class ValueArrivals<P> {
             // A call kept standing where the operations are expanded is one this compiler failed to
             // expand, and is refused. Where they stand, it is the model naming an operation: its
             // arguments are evaluated and what it answers is a value with no truth this reading
-            // says, which is what a value made of several already comes to.
+            // says, which is what a value made of several already comes to — unless the operation
+            // answers its argument's truth denied.
             case Core.PreservedCall preserved -> {
                 if (operations == WhereTheOperationsAre.ARE_EXPANDED_IN_IT) {
                     throw preserved.unexpectedIn("value-flow analysis");
                 }
-                yield built(e, naming, comparisons, bound);
+                yield madeOf(e, naming, comparisons, bound);
             }
-            default -> built(e, naming, comparisons, bound);
+            default -> madeOf(e, naming, comparisons, bound);
         };
+    }
+
+    /** A value made out of its parts: as the truth it restates where it restates one, and as a
+     *  value {@link #built} out of several otherwise. */
+    private Paths<P> madeOf(Core e, Naming<P> naming, ComparisonWays comparisons,
+                            Map<BindingId, Bound<P>> bound) {
+        TruthRestatement restated = TruthRestatement.of(e);
+        return restated == null ? built(e, naming, comparisons, bound)
+                : restating(e, restated, naming, comparisons, bound);
+    }
+
+    /**
+     * The ways to a value that is another value's truth, kept or swapped: the other value's ways,
+     * each arriving with its truth carried through.
+     *
+     * <p>Not a decision of its own. {@code Bool.not(a || b)} is settled wherever {@code a || b} is,
+     * by the same ways and nothing more, so a rule over it turns on {@code a} and {@code b}. A value
+     * made of a part arrives with no truth along any of its ways, and a fork on such a value has
+     * only its two arms to tell the ways apart by. Everything a way holds is kept as it was — what
+     * the naming could not write of it, and whether it was read whole — and a value the operand
+     * never arrives at is not arrived at by denying it.
+     *
+     * <p>Where the operand arrives one way whose truth nobody read, carrying it through says nothing
+     * the value made of it does not, and the value is read as one built out of its part, which is
+     * where a truth it comes out either way is asked for.
+     */
+    private Paths<P> restating(Core e, TruthRestatement restated, Naming<P> naming,
+                               ComparisonWays comparisons, Map<BindingId, Bound<P>> bound) {
+        Paths<P> operand = settle(restated.operand(), naming, comparisons, bound);
+        if (!arrivesAt(restated.operand())) {
+            return new Paths.Held<>(List.of());
+        }
+        if (!(operand instanceof Paths.Held<P> held)) {
+            return operand;
+        }
+        List<Arrival<P>> ways = held.arrivals();
+        if (ways.size() == 1 && ways.getFirst().value() == Truth.UNREAD) {
+            return built(e, naming, comparisons, bound);
+        }
+        if (!restated.denies()) {
+            return operand;
+        }
+        return new Paths.Held<>(ways.stream()
+                .map(way -> new Arrival<>(way.value().denied(), way.provenance()))
+                .toList());
     }
 
     /**

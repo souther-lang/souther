@@ -595,7 +595,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " until somebody says what it means here"),
             new Held("souther.compiler.check.Conditions.asSizeComparison",
                     "writes the equality an emptiness check means: a size stood against nought"),
-            new Held("souther.compiler.check.ClauseExpr.againstATruthValue",
+            new Held("souther.compiler.check.TruthRestatement.of",
                     "asks whether the operator is the equality or the disequality, for a comparison"
                             + " one side of which is a written truth value: which of the two it is"
                             + " and which value was written are together what says whether such a"
