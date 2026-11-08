@@ -192,16 +192,24 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
         String mixed = "List.sum({1·price + 1·price·qty + 0 | free[*]})";
         for (String total : List.of(
                 "List.fold((acc, l) -> acc + (l.price * l.qty + l.price), 0.0m, free)",
-                "List.sum(List.map(l -> l.price * l.qty + l.price, free))")) {
+                "List.sum(List.map(l -> l.price * l.qty + l.price, free))",
+                "List.sum(List.map(l -> l.price * l.qty * 2.0m + l.price * 2.0m, free))")) {
             String report = report("free: List<Free>, c: Decimal",
                     "Decimal.compare(%s, c) <= 0".formatted(total));
             assertEquals(Set.of(mixed, "c"), related(report), () -> total + report);
         }
-        // A number written out beside the field moves what one element comes to by it.
-        String moved = report("free: List<Free>, c: Decimal", """
-                Decimal.compare(List.sum(List.map(l -> Decimal.add(l.price, 2.0m), free)),
-                                c) <= 0""");
-        assertEquals(Set.of("List.sum({1·price + 2 | free[*]})", "c"), related(moved), moved);
+        // A number written out beside the field moves what one element comes to by it, whether it
+        // is a whole number or not; the total is the one of the field at the weight one, however
+        // the field's weight and the number were written beside each other.
+        for (String part : List.of("Decimal.add(l.price, 2.0m)", "Decimal.add(l.price, 1.5m)",
+                "Decimal.add(Decimal.multiply(l.price, 2.0m), 3.0m)")) {
+            String moved = report("free: List<Free>, c: Decimal", """
+                    Decimal.compare(List.sum(List.map(l -> %s, free)), c) <= 0"""
+                    .formatted(part));
+            String named = part.endsWith("2.0m)") ? "List.sum({1·price + 2 | free[*]})"
+                    : "List.sum({1·price + 1.5 | free[*]})";
+            assertEquals(Set.of(named, "c"), related(moved), () -> part + moved);
+        }
         // At nought or more, price + 1.0 is one or more, and what lies between it and nought is
         // reached by no list.
         String pastOne = report(inputs, """

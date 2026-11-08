@@ -8261,15 +8261,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!values.isEmpty()) {
             return values.getFirst();
         }
-        // Fields of the element added or taken away are counted on the order the fields are: a
-        // weight of one or minus one moves no value off it.
-        if (over.source() instanceof RunSource.ComputedOccurrences computed
-                && computed.computation() instanceof ElementValue.Affine weighed
-                && weighed.form().constant().isZero() && !weighed.form().coefs().isEmpty()
-                && weighed.form().coefs().values().stream().allMatch(weight ->
-                        ExactRatio.ONE.equals(weight.abs()))) {
-            return new NumericTerm.ValueOf(weighed.form().coefs().keySet().iterator().next()
-                    .from(computed.elements()));
+        // Fields of the element added, taken away and multiplied at weights, with a number beside
+        // them, are counted on the order the fields are: arithmetic of one type answers that type.
+        // A rounding in a product is a number this does not read.
+        if (over.source() instanceof RunSource.ComputedOccurrences computed) {
+            ElementProjection field = switch (computed.computation()) {
+                case ElementValue.Affine weighed -> weighed.form().coefs().keySet().stream()
+                        .findFirst().orElse(null);
+                case ElementValue.Multilinear products -> products.form().coefs().keySet()
+                        .stream().anyMatch(each -> each.rounding() != null) ? null
+                        : products.form().coefs().keySet().stream()
+                                .flatMap(each -> each.fields().stream()).findFirst().orElse(null);
+                default -> null;
+            };
+            return field == null ? null : new NumericTerm.ValueOf(field.from(computed.elements()));
         }
         return null;
     }
