@@ -50,23 +50,32 @@ public final class CountWitnesses {
 
     /**
      * What a search for a witness came to: the witness, where one was found, and where none was,
-     * the figures the search stopped at before it had tried everything it would have.
+     * the figures the search stopped at before it had tried everything it would have, and where
+     * the runs of the rows it tried stopped without answering.
      *
-     * <p>Two misses apart. A search that tried all it had and found nothing, and one that stopped
-     * at a figure, both leave the count not shown; a run allowed more may find a witness in the
-     * second and never in the first, and the figure is what says which a reader has.
+     * <p>Three misses apart, and each leaves the count not shown. A search that tried all it had
+     * and found nothing is met again by a run allowed more. One that stopped at a figure may find a
+     * witness in such a run, and the figure is what says so. And one whose rows met the statement
+     * both ways and whose runs on them stopped — at an invariant a construction did not keep, an
+     * {@code ensures} the answer did not keep, an operation the runtime would not finish, an
+     * {@code unreachable} — is met again by a run allowed more too, and where the runs stopped is
+     * what an author goes to: each is an input the model has not decided about.
      *
-     * @param found     the witness, or empty
-     * @param stoppedAt the figures the search stopped at, none where one was found: its own, and
-     *                  any a value it would have tried was cut short at before it got it
+     * @param found       the witness, or empty
+     * @param stoppedAt   the figures the search stopped at, none where one was found: its own, and
+     *                    any a value it would have tried was cut short at before it got it
+     * @param runsStopped where the runs of the rows tried stopped, each once, none where a witness
+     *                    was found
      */
-    public record Sought(Optional<Witness> found, Set<Figure> stoppedAt) {
+    public record Sought(Optional<Witness> found, Set<Figure> stoppedAt,
+                         Set<WhereARunStopped> runsStopped) {
 
         /** Nothing tried and nothing stopped at. */
-        public static final Sought NOTHING = new Sought(Optional.empty(), Set.of());
+        public static final Sought NOTHING = new Sought(Optional.empty(), Set.of(), Set.of());
 
         public Sought {
             stoppedAt = found.isPresent() ? Set.of() : Set.copyOf(stoppedAt);
+            runsStopped = found.isPresent() ? Set.of() : Set.copyOf(runsStopped);
         }
     }
 
@@ -89,7 +98,8 @@ public final class CountWitnesses {
 
     /**
      * A row at which {@code count}'s statement holds of one element and fails of another, the
-     * behavior answering — or, where none was found, the figures the search stopped at first.
+     * behavior answering — or, where none was found, the figures the search stopped at first and
+     * where the runs of the rows it tried stopped.
      *
      * <p>Only of a count of a parameter's own elements, of a container that may hold an element
      * over again: the rows a count is read over hold the witness's elements so many times each.
@@ -119,13 +129,14 @@ public final class CountWitnesses {
         AStatementAtARow statement = AStatementAtARow.of(count.ofTheElement(), behavior,
                 read.quantities());
         Set<Figure> stopped = new LinkedHashSet<>();
+        Set<WhereARunStopped> runs = new LinkedHashSet<>();
         // What each parameter may hold, as far as the boundary builds it: the container as what
         // stands for a list of its element, which the elements tried below take the place of.
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
                 i -> i == at ? Type.list(element) : inputs.types().get(i), _ -> null, reading,
                 building, stopped);
         if (each == null) {
-            return new Sought(Optional.empty(), stopped);
+            return new Sought(Optional.empty(), stopped, runs);
         }
         // And the elements the model writes in the container, each written back as a fixture of
         // the element's type, tried before what stands for that type.
@@ -139,12 +150,12 @@ public final class CountWitnesses {
         // none does, so the next is tried.
         for (List<RowSearch.Built> row : RowSearch.rowsOf(each, stopped)) {
             Optional<Witness> found = beside(row, at, element, container, count, inputs,
-                    statement, reading, building, running, written, stopped);
+                    statement, reading, building, running, written, stopped, runs);
             if (found.isPresent()) {
-                return new Sought(found, Set.of());
+                return new Sought(found, Set.of(), Set.of());
             }
         }
-        return new Sought(Optional.empty(), stopped);
+        return new Sought(Optional.empty(), stopped, runs);
     }
 
     /** Adds to {@code into} each element of {@code list}, a container the boundary built, written
@@ -168,7 +179,9 @@ public final class CountWitnesses {
         }
     }
 
-    /** A witness whose other inputs are {@code beside}'s, or empty where none was found there. */
+    /** A witness whose other inputs are {@code beside}'s, or empty where none was found there —
+     *  and, where the run of the row that met the statement both ways stopped, where it did,
+     *  added to {@code runs}. */
     private static Optional<Witness> beside(List<RowSearch.Built> beside, int at, Type element,
                                             TermPath container, Quantity.HowManyMeet count,
                                             BehaviorInputs inputs, AStatementAtARow statement,
@@ -176,7 +189,7 @@ public final class CountWitnesses {
                                             RowSearch.Building building,
                                             RowSearch.Running running,
                                             List<FixtureTemplate> written,
-                                            Set<Figure> stopped) {
+                                            Set<Figure> stopped, Set<WhereARunStopped> runs) {
         List<FixtureTemplate> row = beside.stream().map(RowSearch.Built::fixture).toList();
         List<ObservedValue> built = beside.stream().map(RowSearch.Built::value).toList();
         FixtureTemplate kept = null;
@@ -204,7 +217,12 @@ public final class CountWitnesses {
         Integer meet = metIn(both, at, built, inputs, statement, container, building);
         List<FixtureTemplate> shown = new ArrayList<>(row);
         shown.set(at, FixtureTemplate.collection(both));
-        if (meet == null || meet != 1 || !running.getsThere(shown)) {
+        if (meet == null || meet != 1) {
+            return Optional.empty();
+        }
+        RowSearch.Run ran = running.run(shown);
+        if (!ran.getsThere()) {
+            ran.stopped().ifPresent(runs::add);
             return Optional.empty();
         }
         return Optional.of(new Witness(shown, at, kept, dropped));

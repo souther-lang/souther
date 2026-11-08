@@ -666,7 +666,8 @@ public final class Sites {
     private static Answer<Citation> metIn(Db db, String module, ConditionOccurrence condition) {
         Answer<Map<ConditionOccurrence, Citation>> met = db.ask(switch (condition.reading()) {
             case DIVIDING -> new Adequacy.ConditionsMet(module, condition.behavior());
-            case DECIDING -> new Adequacy.ConditionsDecidedMet(module, condition.behavior());
+            case DECIDING, GETTING_PAST ->
+                    new Adequacy.ConditionsDecidedMet(module, condition.behavior());
         });
         if (!met.present()) {
             return Answer.absent();

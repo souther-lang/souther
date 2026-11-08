@@ -338,6 +338,9 @@ sealed interface ComparisonAssessment {
      * @param stoppedAt for each of {@code filedAt} some relation about it was stopped at a figure
      *                  searching for what would have shown more, those figures: a place is told
      *                  only what was stopped for it
+     * @param rowsStopped for each of {@code filedAt} some relation about it tried rows for whose
+     *                  runs stopped without answering, where they stopped: a place is told only
+     *                  what was stopped for it
      * @param mayStopBefore those of {@code undivided} a run may stop on the way to some relation
      *                  about on what nothing here says, so that every value there getting to the
      *                  comparison is not shown ({@link UndividedByARelation.WhatItLeaves#mayStopBefore})
@@ -347,20 +350,22 @@ sealed interface ComparisonAssessment {
      *                  for the place, and it is said so
      * @param partnered each string position the relation is shown to part by the strings its
      *                  partner can hold, where the partner is a piece of a string
-     * @param shownReachedAt for some of {@code mayStopBefore}, the values a row built and run was
-     *                  shown to get to some relation about it at
-     *                  ({@link UndividedByARelation.WhatItLeaves#shownReachedAt})
+     * @param gettingThere for some of {@code mayStopBefore}, what a search for a row getting to
+     *                  some relation about it showed: the values a row built and run got there
+     *                  at, and where the runs of the rows tried stopped
+     *                  ({@link UndividedByARelation.WhatItLeaves#gettingThere})
      */
     record AgainstAnotherValue(List<FilingCoordinate> filedAt,
                                List<UndividedByARelation> relations,
                                Set<FilingCoordinate> undivided, List<AtAPosition> settling,
                                Optional<DrawnBeside> beside,
                                Map<FilingCoordinate, Set<Figure>> stoppedAt,
+                               Map<FilingCoordinate, Set<WhereARunStopped>> rowsStopped,
                                Set<FilingCoordinate> mayStopBefore,
                                Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
                                Map<NumericTerm.FromOnePosition,
                                        UndividedByARelation.StringsAPartnerCanHold> partnered,
-                               Map<FilingCoordinate, List<String>> shownReachedAt)
+                               Map<FilingCoordinate, UndividedByARelation.GettingThere> gettingThere)
             implements ComparisonAssessment {
 
         public AgainstAnotherValue {
@@ -368,10 +373,13 @@ sealed interface ComparisonAssessment {
             relations = List.copyOf(relations);
             undivided = Set.copyOf(undivided);
             mayStopBefore = Set.copyOf(mayStopBefore);
-            shownReachedAt = Collections.unmodifiableMap(new LinkedHashMap<>(shownReachedAt));
+            gettingThere = Collections.unmodifiableMap(new LinkedHashMap<>(gettingThere));
             Map<FilingCoordinate, Set<Figure>> held = new LinkedHashMap<>();
             stoppedAt.forEach((at, figures) -> held.put(at, Set.copyOf(figures)));
             stoppedAt = Collections.unmodifiableMap(held);
+            Map<FilingCoordinate, Set<WhereARunStopped>> runs = new LinkedHashMap<>();
+            rowsStopped.forEach((at, stops) -> runs.put(at, Set.copyOf(stops)));
+            rowsStopped = Collections.unmodifiableMap(runs);
             settling = List.copyOf(settling);
             Map<FilingCoordinate, Set<NumberRegion>> regions = new LinkedHashMap<>();
             noRowShownComputed.forEach((at, numbers) -> regions.put(at, Set.copyOf(numbers)));
@@ -388,12 +396,13 @@ sealed interface ComparisonAssessment {
                             Set<FilingCoordinate> undivided, List<AtAPosition> settling,
                             Optional<DrawnBeside> beside,
                             Map<FilingCoordinate, Set<Figure>> stoppedAt,
+                            Map<FilingCoordinate, Set<WhereARunStopped>> rowsStopped,
                             Set<FilingCoordinate> mayStopBefore,
                             Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
                             Map<NumericTerm.FromOnePosition,
                                     UndividedByARelation.StringsAPartnerCanHold> partnered) {
-            this(filedAt, relations, undivided, settling, beside, stoppedAt, mayStopBefore,
-                    noRowShownComputed, partnered, Map.of());
+            this(filedAt, relations, undivided, settling, beside, stoppedAt, rowsStopped,
+                    mayStopBefore, noRowShownComputed, partnered, Map.of());
         }
 
         /** {@code read}, with what it leaves undivided over what the declarations leave, and the
@@ -402,7 +411,7 @@ sealed interface ComparisonAssessment {
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       ComparisonWitnesses.AtAComparison witnesses) {
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Map.of(), Set.of(), Map.of(), Map.of(), Map.of())
+                    beside, Map.of(), Map.of(), Set.of(), Map.of(), Map.of(), Map.of())
                     .whereRowsArrive(reading, List.of(), witnesses);
         }
 
@@ -436,30 +445,40 @@ sealed interface ComparisonAssessment {
             // no other: a place every relation about it showed nothing of for a reason of its own
             // is not one a run allowed more would show anything of.
             Map<FilingCoordinate, Set<Figure>> stopped = new LinkedHashMap<>();
+            // And where the runs of the rows such a search tried stopped, at the same places and
+            // for the same reason.
+            Map<FilingCoordinate, Set<WhereARunStopped>> runs = new LinkedHashMap<>();
             // And where a run may stop on the way to a relation about it, at the places shown
             // undivided: what is shown of them stands, and that every value gets there does not.
             Set<FilingCoordinate> stops = new LinkedHashSet<>();
-            // And the values a row got to a relation about it at, which are reached whichever
-            // relation of the comparison it was.
-            Map<FilingCoordinate, List<String>> reached = new LinkedHashMap<>();
+            // And what a search for a row getting to a relation about it showed: the values a row
+            // got there at, which are reached whichever relation of the comparison it was, and
+            // where the runs of the rows tried stopped.
+            Map<FilingCoordinate, UndividedByARelation.GettingThere> reached =
+                    new LinkedHashMap<>();
             for (FilingCoordinate at : filedAt) {
                 for (int i = 0; i < relations.size(); i++) {
                     if (about.get(i).contains(at) && !leaves.get(i).stoppedAt().isEmpty()) {
                         stopped.computeIfAbsent(at, _ -> new LinkedHashSet<>())
                                 .addAll(leaves.get(i).stoppedAt());
                     }
+                    if (about.get(i).contains(at) && !leaves.get(i).rowsStopped().isEmpty()) {
+                        runs.computeIfAbsent(at, _ -> new LinkedHashSet<>())
+                                .addAll(leaves.get(i).rowsStopped());
+                    }
                     if (shown.contains(at) && about.get(i).contains(at)
                             && leaves.get(i).mayStopBefore().contains(at)) {
                         stops.add(at);
-                        List<String> values = leaves.get(i).shownReachedAt().get(at);
-                        if (values != null) {
-                            reached.computeIfAbsent(at, _ -> new ArrayList<>()).addAll(values);
+                        UndividedByARelation.GettingThere there =
+                                leaves.get(i).gettingThere().get(at);
+                        if (there != null) {
+                            reached.merge(at, there, UndividedByARelation.GettingThere::and);
                         }
                     }
                 }
             }
             return new AgainstAnotherValue(filedAt, relations, shown, lines, beside, stopped,
-                    stops, noRowShownComputedAt(leaves.stream()
+                    runs, stops, noRowShownComputedAt(leaves.stream()
                             .flatMap(each -> each.settled().entrySet().stream()).toList()),
                     partedByTheirPartners(about, leaves), reached);
         }
@@ -545,7 +564,8 @@ sealed interface ComparisonAssessment {
         /** The same relation with only {@code lines} parting what settles it. */
         AgainstAnotherValue partedBy(List<AtAPosition> lines) {
             return new AgainstAnotherValue(filedAt, relations, undivided, lines, beside,
-                    stoppedAt, mayStopBefore, noRowShownComputed, partnered, shownReachedAt);
+                    stoppedAt, rowsStopped, mayStopBefore, noRowShownComputed, partnered,
+                    gettingThere);
         }
     }
 
@@ -2522,7 +2542,8 @@ sealed interface ComparisonAssessment {
                 Set<FilingCoordinate> parted = new LinkedHashSet<>();
                 several.partnered().keySet().forEach(term -> parted.add(FilingCoordinate.of(term)));
                 // A place the arms of a choice show between them, at every value, is not one
-                // whose values an arm alone leaves unshown ({@link Several#shownByItsArms}).
+                // whose values an arm alone leaves unshown ({@link Several#shownByItsArms}) —
+                // whether that arm says so bare or with where the runs of its rows stopped.
                 Set<FilingCoordinate> shownByTheArms = several.shownByItsArms();
                 yield several.parts().stream()
                         .flatMap(part -> switch (part.line()) {
@@ -2533,8 +2554,10 @@ sealed interface ComparisonAssessment {
                         })
                         .filter(left -> left.why() instanceof BlockReason.RuleReadingStopped
                                 || !divided.contains(left.at()))
-                        .filter(left -> !(left.why()
+                        .filter(left -> !((left.why()
                                 instanceof BlockReason.RelationNotShownToReachEveryValue
+                                || left.why()
+                                        instanceof BlockReason.RelationNotShownWhereItsRowsStopped)
                                 && shownByTheArms.contains(left.at())))
                         .distinct()
                         .toList();
@@ -2576,11 +2599,17 @@ sealed interface ComparisonAssessment {
             across.relation().places().forEach(at ->
                     stopped.put(at, across.left().stoppedAt()));
         }
+        // And where the runs of the rows it tried stopped, likewise.
+        Map<FilingCoordinate, Set<WhereARunStopped>> runs = new LinkedHashMap<>();
+        if (!across.left().rowsStopped().isEmpty()) {
+            across.relation().places().forEach(at ->
+                    runs.put(at, across.left().rowsStopped()));
+        }
         return relatingAt(across.filedAt().stream()
                 .filter(place -> !divided.contains(place)).toList(), across.undivided(),
-                stopped, across.left().mayStopBefore(),
+                stopped, runs, across.left().mayStopBefore(),
                 noRowShownComputedAt(across.left().settled().entrySet()),
-                across.left().shownReachedAt());
+                across.left().gettingThere());
     }
 
     /** The same, of a relation to another value. */
@@ -2589,8 +2618,8 @@ sealed interface ComparisonAssessment {
         Set<FilingCoordinate> divided = against.dividedBySettling(partneredKept);
         return relatingAt(against.filedAt().stream()
                 .filter(place -> !divided.contains(place)).toList(), against.undivided(),
-                against.stoppedAt(), against.mayStopBefore(), against.noRowShownComputed(),
-                against.shownReachedAt());
+                against.stoppedAt(), against.rowsStopped(), against.mayStopBefore(),
+                against.noRowShownComputed(), against.gettingThere());
     }
 
     /**
@@ -2653,10 +2682,16 @@ sealed interface ComparisonAssessment {
      * ({@code stoppedAt}, by place), the place says so, with those figures; a place no search
      * stopped for is not shown as ever.
      *
+     * <p>Where the runs of the rows such a search tried stopped without answering
+     * ({@code rowsStopped}, by place), the place says where, beside the figures where there are
+     * some and in place of the bare word where there are none: those runs stop there in a run
+     * allowed more too, and each is an input the model has not decided about.
+     *
      * <p>A place shown undivided that a run may stop on the way to the relation for
      * ({@code mayStopBefore}) says that instead: undivided over every value is a claim that every
-     * value gets there, which is what is not shown. The values a row was shown to get there at
-     * ({@code shownReachedAt}) go with it, and change no word.
+     * value gets there, which is what is not shown. What a search for a row getting there showed
+     * ({@code gettingThere}) goes with it and changes no word: the values a row got there at, and
+     * where the runs of the rows it tried stopped.
      *
      * <p>A place with numbers no row is shown computed in ({@code noRowShownComputed}) is told
      * each region, after the word above where it is shown undivided and before the words below
@@ -2665,16 +2700,18 @@ sealed interface ComparisonAssessment {
     static List<LeftAt> relatingAt(List<FilingCoordinate> places,
                                    Set<FilingCoordinate> undivided,
                                    Map<FilingCoordinate, Set<Figure>> stoppedAt,
+                                   Map<FilingCoordinate, Set<WhereARunStopped>> rowsStopped,
                                    Set<FilingCoordinate> mayStopBefore,
                                    Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
-                                   Map<FilingCoordinate, List<String>> shownReachedAt) {
+                                   Map<FilingCoordinate, UndividedByARelation.GettingThere>
+                                           gettingThere) {
         return places.stream().distinct().flatMap(at -> {
             List<LeftAt> why = new ArrayList<>();
             boolean shownUndivided = undivided.contains(at);
             if (shownUndivided) {
                 why.add(new LeftAt(at, mayStopBefore.contains(at)
-                        ? new BlockReason.RelationNotShownReachedAtEveryValue(
-                                shownReachedAt.getOrDefault(at, List.of()))
+                        ? gettingThere.getOrDefault(at, UndividedByARelation.GettingThere.NOTHING)
+                                .reason()
                         : new BlockReason.ComparisonRelatingTwoValues()));
             }
             // Numbers no row is shown computed in are told whether or not the place is shown
@@ -2690,9 +2727,16 @@ sealed interface ComparisonAssessment {
             // Two reasons a place is shown nothing of are two things to be told, and neither
             // says the other: a figure a search stopped at is one a run allowed more may get
             // past, and numbers in which no row is shown computed are not.
+            // A run that stopped is a third, and says neither of those: it is a row that was
+            // tried, and no run allowed more gets past where it stopped.
             Set<Figure> figures = stoppedAt.getOrDefault(at, Set.of());
-            if (!figures.isEmpty() || why.isEmpty()) {
+            Set<WhereARunStopped> runs = rowsStopped.getOrDefault(at, Set.of());
+            if (!figures.isEmpty() || (why.isEmpty() && runs.isEmpty())) {
                 why.add(new LeftAt(at, notShownAt(figures)));
+            }
+            if (!runs.isEmpty()) {
+                why.add(new LeftAt(at, new BlockReason.RelationNotShownWhereItsRowsStopped(
+                        WhereARunStopped.inOrder(runs))));
             }
             return why.stream();
         }).toList();

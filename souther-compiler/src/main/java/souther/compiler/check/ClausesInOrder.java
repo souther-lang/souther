@@ -57,17 +57,23 @@ public record ClausesInOrder(List<OneClause> inOrder, boolean everyRuleReached) 
          * {@link #substituted}; one that reads them in their own trees hands each value to the
          * field it is for.
          *
-         * @param term  what the clause states, over the declaration's fields
-         * @param given what the construction hands each field, in the order it writes them
-         * @param parts the rules its author wrote it as
+         * @param term     what the clause states, over the declaration's fields
+         * @param given    what the construction hands each field, in the order it writes them
+         * @param parts    the rules its author wrote it as
+         * @param elements what the term binds to the elements of what — the parameter of a
+         *                 closure an operation hands the elements of a field to. The term is a
+         *                 tree of its own, so these are none of the bindings of the body reading
+         *                 it, and a reader enters them as it enters a called body's
          */
         record Stated(Clause.Ref clause, Core term, Map<BindingId, Core> given,
-                      ClauseMeaning.Parts parts) implements OneClause {
+                      ClauseMeaning.Parts parts, ElementBindings elements) implements OneClause {
 
             public Stated {
                 Objects.requireNonNull(clause, "a clause read is some clause");
                 Objects.requireNonNull(term, "a clause read states something");
                 Objects.requireNonNull(parts, "a clause is written as some rules");
+                Objects.requireNonNull(elements, "a clause binds the elements of something or"
+                        + " nothing");
                 given = Collections.unmodifiableMap(new LinkedHashMap<>(given));
             }
 

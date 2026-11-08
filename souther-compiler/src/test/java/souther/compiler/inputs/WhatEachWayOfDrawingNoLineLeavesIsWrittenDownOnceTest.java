@@ -20,11 +20,13 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
+import souther.compiler.execute.RunStop;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.values.StoppedReading;
@@ -189,6 +191,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // row searched for and the search stopped at a figure: a run allowed more may find it.
         table.put("RelationNotShownWhereTheSearchStopped",
                 "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/MAY_CHANGE");
+        // The same relation, where the rows searched for met what they were asked to and the
+        // runs on them stopped without answering: no figure was reached, and a run allowed more
+        // stops where they stopped.
+        table.put("RelationNotShownWhereItsRowsStopped",
+                "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
         // Read to the end, and a relation a run may stop on the way to on what nothing says: not
         // every value here is shown to get to it, and a run allowed more stops where it stopped.
         table.put("RelationNotShownReachedAtEveryValue",
@@ -591,6 +598,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.WhereALineDecidesNotWorkedOut(AT_A_FIGURE),
                 new BlockReason.RelationNotShownToReachEveryValue(),
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
+                new BlockReason.RelationNotShownWhereItsRowsStopped(List.of(new WhereARunStopped(
+                        new RunStop.AtAnEnsures("m", "b", Optional.empty()), Optional.empty()))),
                 new BlockReason.RelationNotShownReachedAtEveryValue(),
                 new BlockReason.RelationShownOverARegion(false, 1L, List.of()),
                 new BlockReason.RelationRowsNotShownComputed(SOME_NUMBERS),

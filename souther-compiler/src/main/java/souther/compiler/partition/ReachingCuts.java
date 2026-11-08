@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.carrier.Lookup;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnteredArm;
@@ -851,6 +852,41 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                 numbering.anchorOfArm(attempt.origin(), part, at, met), read,
                 copyOf(attempt.occurrence()), Optional.empty(),
                 NamedElements.of(met, reads.elementsNamedIn(attempt, read.rules().newtypes())));
+    }
+
+    /**
+     * What getting past {@code construction} establishes about this input, a clause at a time: each
+     * clause of the invariant of the type it builds, read over the values it is handed
+     * ({@link Pullback#ofAConstruction}) — what the arm of an attempt of it that built the value
+     * states of that clause — asked of a row as any condition is.
+     *
+     * <p>Placed where the construction is written, which is where a report says what of it was not
+     * composed against: a construction is no fork and has no arm of its own to be placed at.
+     *
+     * <p>A clause that states nothing of the input is left out, and nothing at all where the type
+     * it builds has no clause to hold, asked of the clauses the construction is held to
+     * ({@link ClausesInOrder#at}): a run gets past it whatever it hands it, and no condition is
+     * named for it.
+     */
+    static List<PassedConstruction> constructing(Core.Construct construction, InputReading read,
+                                                 InputReads reads, ConditionNumbering numbering) {
+        if (ClausesInOrder.at(construction, read.rules()).governsNothing()) {
+            return List.of();
+        }
+        ConditionOccurrence met = numbering.metGettingPast(construction);
+        ConditionReportAnchor at = numbering.anchorOf(null, construction.pos(), met);
+        NamedElements named = NamedElements.of(met, reads.elementsNamedIn(construction,
+                read.rules().newtypes()));
+        List<PassedConstruction> out = new ArrayList<>();
+        for (Pullback.OfAClause each : WhatConditionsState.of(read).constructed(construction,
+                reads)) {
+            List<OnTheWay> states = armStated(each.stated(), met, at, read, ModelOccurrences.NONE,
+                    Optional.empty(), named).entries();
+            if (!states.isEmpty()) {
+                out.add(new PassedConstruction(states, construction.pos(), each.clause()));
+            }
+        }
+        return out;
     }
 
     /**

@@ -15,7 +15,10 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
 
+import souther.compiler.execute.RunStop;
+
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -231,7 +234,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
             return new Generator.ObservedRun(new Generator.Watched.NoAccount(),
                     answered.test(handed.size())
                             ? new AnswerObservation.Answered(new ObservedValue.Integer(0))
-                            : new AnswerObservation.NotAnswered());
+                            : new AnswerObservation.NotAnswered(), Optional.empty());
         };
     }
 
@@ -240,10 +243,42 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
     void rowsThatNoneAnsweredAreNoWitnessAndNotAPointNoRowReaches() {
         Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
                 Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
-                        SearchShortfall.NONE, false, CompositionAccount.NOTHING));
+                        SearchShortfall.NONE, false, Set.of(), CompositionAccount.NOTHING));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 no.why().reason());
+    }
+
+    /**
+     * The constructions the runs stopped at are kept beside the rows whichever word the point
+     * comes to, and change none of them: a figure, a population written in part, or neither.
+     */
+    @Test
+    void theConstructionsTheRunsStoppedAtAreKeptBesideTheRowsWhicheverTheWord() {
+        WhereARunStopped stop = new WhereARunStopped(new RunStop.AtAConstruction("m", "T",
+                Optional.empty(), 0, Optional.of(new RunStop.Site("m", 8, 23))),
+                Optional.empty());
+        Set<WhereARunStopped> stops = Set.of(stop);
+
+        Generator.BoundaryAttempt.Unresolved none = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
+                        SearchShortfall.NONE, false, stops, CompositionAccount.NOTHING));
+        Generator.BoundaryAttempt.Stopped figure = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.of(List.of(
+                                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW))),
+                        false, stops, CompositionAccount.NOTHING));
+        Generator.BoundaryAttempt.Unexhausted population = assertInstanceOf(
+                Generator.BoundaryAttempt.Unexhausted.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.writing(
+                                List.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED))),
+                        false, stops, CompositionAccount.NOTHING));
+
+        assertEquals(List.of(stop), none.why().beside().stopped());
+        assertEquals(List.of(stop), figure.why().beside().stopped());
+        assertEquals(List.of(stop), population.why().beside().stopped());
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                none.why().reason());
     }
 
     /** A figure that stopped the search is said as the figure beside the rows that did not answer,
@@ -254,7 +289,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
                         SearchShortfall.of(CompositionShortfall.of(List.of(
                                 CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW))),
-                        false, CompositionAccount.NOTHING));
+                        false, Set.of(), CompositionAccount.NOTHING));
 
         assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
                 stopped.met().figures());
@@ -269,12 +304,12 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
 
         Generator.BoundaryAttempt.Stopped stopped = assertInstanceOf(
                 Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
-                        SearchShortfall.of(both), false, CompositionAccount.NOTHING));
+                        SearchShortfall.of(both), false, Set.of(), CompositionAccount.NOTHING));
         Generator.BoundaryAttempt.Unexhausted unexhausted = assertInstanceOf(
                 Generator.BoundaryAttempt.Unexhausted.class, Generator.noRowAnswered("p",
                         SearchShortfall.of(CompositionShortfall.writing(
                                 List.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED))),
-                        false, CompositionAccount.NOTHING));
+                        false, Set.of(), CompositionAccount.NOTHING));
 
         assertEquals(both, stopped.met());
         assertEquals(Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED),
@@ -290,9 +325,9 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
         Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
                 Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
                         SearchShortfall.of(CompositionShortfall.NONE, offered),
-                        false, CompositionAccount.NOTHING));
+                        false, Set.of(), CompositionAccount.NOTHING));
 
-        assertEquals(offered, no.why().alsoShort());
+        assertEquals(offered, no.why().beside().shortOf());
     }
 
     /** A row whose run aborts is passed over for the next one composed, which answers. */

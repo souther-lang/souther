@@ -520,6 +520,17 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
     }
 
     /**
+     * What getting past {@code construction} asks of a row, a clause at a time: each clause of the
+     * invariant of the type it builds, read over what it is handed — what the arm of an attempt of
+     * it that built the value states. No column: a construction is no distinction the body draws.
+     * Nothing where the type it builds holds its values to no clause.
+     */
+    List<PassedConstruction> constructing(Core.Construct construction, InputReads reads,
+                                ConditionNumbering numbering) {
+        return states.constructing(construction, reads, numbering);
+    }
+
+    /**
      * The condition that met an arm, as the way into it names it: which a column the arm's
      * statement could not be read as is named by. Every arm whose statement stops somewhere puts
      * that on the way as declined, so one is there to name it.

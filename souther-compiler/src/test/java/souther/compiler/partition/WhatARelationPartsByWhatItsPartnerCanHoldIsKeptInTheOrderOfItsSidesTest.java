@@ -43,7 +43,7 @@ class WhatARelationPartsByWhatItsPartnerCanHoldIsKeptInTheOrderOfItsSidesTest {
         for (int pair = 0; pair < MANY; pair++) {
             Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> said = said(pair);
             WhatItLeaves leaves = new WhatItLeaves(Set.of(), Map.of(), true, Set.of(), Set.of(),
-                    said);
+                    Set.of(), said);
 
             assertEquals(List.copyOf(said.keySet()), List.copyOf(leaves.partnered().keySet()),
                     "pair " + pair);
@@ -54,7 +54,8 @@ class WhatARelationPartsByWhatItsPartnerCanHoldIsKeptInTheOrderOfItsSidesTest {
     void whatIsKeptAlongBothWaysIsInTheSameOrder() {
         for (int pair = 0; pair < MANY; pair++) {
             Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> said = said(pair);
-            WhatItLeaves one = new WhatItLeaves(Set.of(), Map.of(), true, Set.of(), Set.of(), said);
+            WhatItLeaves one = new WhatItLeaves(Set.of(), Map.of(), true, Set.of(), Set.of(),
+                    Set.of(), said);
 
             assertEquals(List.copyOf(said.keySet()),
                     List.copyOf(one.alongBoth(one).partnered().keySet()), "pair " + pair);

@@ -1,7 +1,6 @@
 package souther.compiler.codegen;
 
 import souther.compiler.diag.QuotedFrom;
-import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -208,7 +207,7 @@ class AnEmitterWritesWhatItWasHandedTest {
         }
         return new CodecGen(new CodegenContext("m", symbols, said, forms,
                 NewtypeInners.asWritten(symbols), symbols.library().kernelSignatures(),
-                caseToSums, Map.of(), module.published(), Map.of(), SourceLayouts.NONE,
+                caseToSums, Map.of(), module.published(), Map.of(), TextsOfModules.NONE,
                 new QuotedFrom.TextItCannotName(), new LinkageReader("m", Map.of(), _ -> null, Map.of())));
     }
 

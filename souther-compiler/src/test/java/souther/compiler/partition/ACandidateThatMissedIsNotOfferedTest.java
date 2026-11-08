@@ -23,6 +23,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +85,7 @@ class ACandidateThatMissedIsNotOfferedTest {
      *  any place at all and answer. */
     private static Generator.ObservedRun missed(Model model) {
         return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(model.numbering())),
-                ANSWERED);
+                ANSWERED, Optional.empty());
     }
 
     /**
@@ -116,7 +117,7 @@ class ACandidateThatMissedIsNotOfferedTest {
 
         FillResult filled =
                 fill(model, _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everything),
-                        ANSWERED));
+                        ANSWERED, Optional.empty()));
 
         assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),

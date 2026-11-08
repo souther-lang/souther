@@ -1,7 +1,6 @@
 package souther.compiler.codegen;
 
 import souther.compiler.diag.QuotedFrom;
-import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DerivedSymbols;
@@ -74,7 +73,7 @@ class APlannedArmNothingEmittedIsNamedTest {
                 Shapes.declarationKinds(compilation.db()), NewtypeInners.asWritten(symbols),
                 symbols.library().kernelSignatures(), Map.of(), Map.of(),
                 compilation.db().ask(new Front.PublishedNames(MODULE)).value(), Map.of(),
-                SourceLayouts.NONE, new QuotedFrom.TextItCannotName(),
+                TextsOfModules.NONE, new QuotedFrom.TextItCannotName(),
                 new LinkageReader(MODULE, Map.of(), _ -> null, Map.of()));
         ctx.setCoveragePlan(plan);
         return ctx;

@@ -7,6 +7,7 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.IntFunction;
@@ -34,10 +35,34 @@ public final class RowSearch {
         Optional<ObservedValue> build(int parameter, FixtureTemplate fixture);
     }
 
-    /** Whether the behavior answers on a row of these inputs, a run of it going through the
-     *  comparison a witness is asked for. */
+    /** What a run of the behavior on a row of these inputs came to: whether it answered going
+     *  through the comparison a witness is asked for, and where it stopped where it did. */
     public interface Running {
-        boolean getsThere(List<FixtureTemplate> inputs);
+        Run run(List<FixtureTemplate> inputs);
+    }
+
+    /**
+     * What one run came to.
+     *
+     * <p>Two facts and not one, since a run that answered somewhere else and a run that stopped are
+     * both no witness, and only the second is an input the model has not decided about.
+     *
+     * @param getsThere whether it answered, going through the comparison
+     * @param stopped   where it stopped without answering, where it did; none where it answered
+     */
+    public record Run(boolean getsThere, Optional<WhereARunStopped> stopped) {
+
+        /** A run that answered, or one nothing ran, which stopped nowhere. */
+        public static Run stoppedNowhere(boolean getsThere) {
+            return new Run(getsThere, Optional.empty());
+        }
+
+        public Run {
+            Objects.requireNonNull(stopped, "a run stopped somewhere or nowhere");
+            if (getsThere && stopped.isPresent()) {
+                throw new IllegalArgumentException("a run that answered did not stop: " + stopped);
+            }
+        }
     }
 
     /** One input the boundary built, and the fixture it was built of. */
