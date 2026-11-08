@@ -1,9 +1,14 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.SearchMessage;
+
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.SequencedSet;
 
 /**
@@ -104,9 +109,7 @@ public sealed interface GenerationOutcome {
         public enum Reason {
 
             /** The measure could not be made, so what it did not find is not a set of gaps. */
-            NOTHING_WAS_MEASURED(
-                    "this is a measure this compiler could not make, and a row would answer a"
-                            + " question that was never asked"),
+            NOTHING_WAS_MEASURED(new SearchMessage.NothingWasMeasured()),
 
             /**
              * The measure was made and does not establish that anything is missing here.
@@ -117,25 +120,17 @@ public sealed interface GenerationOutcome {
              * found may already be answered by a row in the file. A row offered against this is
              * work handed to somebody who may have done it.
              */
-            THE_MEASURE_DOES_NOT_ESTABLISH_THIS(
-                    "something this measure reads could not be read, so a row may already answer"
-                            + " this and offering one would hand over work that may be done"),
+            THE_MEASURE_DOES_NOT_ESTABLISH_THIS(new SearchMessage.TheMeasureDoesNotEstablishThis()),
 
             /** The model was read to the end and says this, which is not a shortfall in the rows. */
-            A_FACT_ABOUT_THE_MODEL(
-                    "this is what the model says rather than what its rows do not cover, and no row"
-                            + " changes it"),
+            A_FACT_ABOUT_THE_MODEL(new SearchMessage.AFactAboutTheModel()),
 
             /** What the rows were seen doing, which is an account and not an obligation. */
-            AN_ACCOUNT_OF_WHAT_THE_ROWS_DID(
-                    "this is what the rows were observed doing rather than something owed, so"
-                            + " there is nothing here to compose a row for"),
+            AN_ACCOUNT_OF_WHAT_THE_ROWS_DID(new SearchMessage.AnAccountOfWhatTheRowsDid()),
 
             /** A row is written here and is waiting for its answer, which nobody but its author
              *  can supply. */
-            A_ROW_HERE_IS_WAITING_FOR_ITS_ANSWER(
-                    "a row already stands here with its answer owed, and composing a second one"
-                            + " would offer a question that is already written down"),
+            A_ROW_HERE_IS_WAITING_FOR_ITS_ANSWER(new SearchMessage.ARowHereIsWaitingForItsAnswer()),
 
             /**
              * Every row here reaches an {@code unreachable} the body states, so a row composed here
@@ -145,19 +140,22 @@ public sealed interface GenerationOutcome {
              * stays open until something does or the body answers. What is not applicable is a
              * row, because the one thing a row here would do is fail to compile.
              */
-            EVERY_ROW_HERE_REACHES_AN_UNREACHABLE(
-                    "the body answers nothing here and a row would reach its `unreachable`, which"
-                            + " the compiler refuses; what is open is whether that premise holds");
+            EVERY_ROW_HERE_REACHES_AN_UNREACHABLE(new SearchMessage.EveryRowHereReachesAnUnreachable());
 
-            private final String said;
+            private final Message told;
 
-            Reason(String said) {
-                this.said = said;
+            Reason(Message told) {
+                this.told = told;
             }
 
-            /** The reason as a report writes it. */
+            /** The reason as a report writes it, in whichever language the report is written. */
+            public Message told() {
+                return told;
+            }
+
+            // BRIDGE-1464: callers move to told
             public String said() {
-                return said;
+                return Messages.render(told, Locale.ENGLISH);
             }
         }
     }
@@ -232,66 +230,52 @@ public sealed interface GenerationOutcome {
         public enum Reason {
 
             /** The fork this arm belongs to is one no position of the inputs could be named for. */
-            NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED(
-                    "a row is steered into an arm by the decisions that hold on the way there, and"
-                            + " the fork this arm is of is one nothing could name a position for"),
+            NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED(new SearchMessage.NoWayIntoThisArmCanBeNamed()),
 
             /** The ways to the value that leads to this arm could not all be written down. */
             THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE(
-                    "a row is steered into an arm by the decisions that hold on the way there, and"
-                            + " the ways to this one could not all be written down — some of them"
-                            + " would say a row arrives where it may not"),
+                    new SearchMessage.TheWaysIntoThisArmAreNotEnumerable()),
 
             /** The ways into this arm were written down, and no run is seen taking one rather than
              *  another. */
             THE_WAYS_INTO_THIS_ARM_ARE_NOT_TOLD_APART(
-                    "a row is steered into an arm by the decisions that hold on the way there, and"
-                            + " what a run is seen doing does not tell the ways into this one"
-                            + " apart — a row through it would be credited with ways it did not"
-                            + " take"),
+                    new SearchMessage.TheWaysIntoThisArmAreNotToldApart()),
 
             /** More ways into this arm than the reading of the body holds at once. */
-            MORE_WAYS_IN_THAN_THE_READING_HOLDS(
-                    "the ways into this arm run past what one reading of the body holds at once, so"
-                            + " the reading stopped short of it rather than saying what steers a row"
-                            + " there"),
+            MORE_WAYS_IN_THAN_THE_READING_HOLDS(new SearchMessage.MoreWaysInThanTheReadingHolds()),
 
             /** The arm stands in a function value, whose body runs where something calls it. */
             THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT(
-                    "this arm is inside a block, which runs under whatever the thing that applies it"
-                            + " is applied to — and that is not a class of this behavior's inputs"),
+                    new SearchMessage.TheArmRunsWhereSomethingCallsIt()),
 
             /** Which arm of an attempted construction is taken is whether the value's rules held. */
-            A_CONSTRUCTION_DECIDES_THIS_ARM(
-                    "which arm of an attempted construction is taken is whether making the value"
-                            + " held its own rules, and no class of an input names that"),
+            A_CONSTRUCTION_DECIDES_THIS_ARM(new SearchMessage.AConstructionDecidesThisArm()),
 
 
             /** Nothing searches for an input by the output it produces. */
-            NO_STRATEGY_FOR_AN_OUTPUT_CASE(
-                    "rows here are composed for what the input positions divide into and not for"
-                            + " the case they answer with, so which of them answers with it is what"
-                            + " their runs say"),
+            NO_STRATEGY_FOR_AN_OUTPUT_CASE(new SearchMessage.NoStrategyForAnOutputCase()),
 
             /** What fixes a weight is rows on the borders of a computation taken together, and
              *  nothing composes them. */
-            NO_STRATEGY_FOR_A_WEIGHT(
-                    "rows here are composed at the points of a line and beside it, and nothing aims"
-                            + " them at the weight of a position of the value the line cuts"),
+            NO_STRATEGY_FOR_A_WEIGHT(new SearchMessage.NoStrategyForAWeight()),
 
             /** The position the case belongs to is not one any axis was derived at. */
-            NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"
-                    + " no classes were derived there to compose a row from");
+            NO_AXIS_AT_THIS_POSITION(new SearchMessage.NoAxisAtThisPosition());
 
-            private final String said;
+            private final Message told;
 
-            Reason(String said) {
-                this.said = said;
+            Reason(Message told) {
+                this.told = told;
             }
 
-            /** The reason as a report writes it. */
+            /** The reason as a report writes it, in whichever language the report is written. */
+            public Message told() {
+                return told;
+            }
+
+            // BRIDGE-1464: callers move to told
             public String said() {
-                return said;
+                return Messages.render(told, Locale.ENGLISH);
             }
         }
     }

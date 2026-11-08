@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
@@ -716,8 +717,7 @@ final class Classing {
                 stands == null ? null : writing.apply(stands);
         return written == null
                 ? PartitionClass.ungeneratable(id, label, is,
-                        "nothing here composed a string of this position that the rules leave in"
-                                + " this class")
+                        new SearchMessage.NothingComposedAStringInThisClass())
                 : PartitionClass.of(id, label, is,
                         RepresentativeSource.of(written));
     }

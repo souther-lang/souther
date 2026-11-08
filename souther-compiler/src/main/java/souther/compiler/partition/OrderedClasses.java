@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
@@ -191,8 +192,10 @@ final class OrderedClasses {
     private static PartitionClass classAt(String id, String label, TermOrders orders,
                                           NumericSet is, Place at, Type type, Quantities reading,
                                           RuleReadingContext ruleReading) {
-        String what = "a value whose " + Intervals.measureOf(orders.term().atOnePosition()) + " is "
-                + (is instanceof NumericSet.At ? "the one" : "none of the ones") + " singled out";
+        SearchMessage measure = Intervals.measureOf(orders.term().atOnePosition());
+        SearchMessage what = is instanceof NumericSet.At
+                ? new SearchMessage.AValueWhoseMeasureIsTheOneSingledOut(measure)
+                : new SearchMessage.AValueWhoseMeasureIsNoneSingledOut(measure);
         Recognition holding = new Recognition.OfACount(orders.term().atOnePosition(), orders, is);
         if (at == null) {
             // No number was named beside the ones singled out, which is this compiler naming one
@@ -200,8 +203,7 @@ final class OrderedClasses {
             return PartitionClass.of(id, label, holding,
                     new RepresentativeSource.NotArrivedAt(CompositionShortfall.writing(
                             Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)),
-                            "nothing here composed " + what
-                                    + ", which does not make one unwritable"));
+                            new SearchMessage.NothingHereComposedIt(what)));
         }
         // The number this reader named, and what stands at it asked of what writes a value for a
         // number. Written here out of the carrier instead, a number taken of the position went into

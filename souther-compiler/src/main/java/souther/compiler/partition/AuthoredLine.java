@@ -2,11 +2,14 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
@@ -160,11 +163,20 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
      * sentence with no place in it should read; a fold over both that lived on the rule would be one
      * word for a question only a caller writing a sentence has.
      */
-    public String saidWithoutAPlace() {
-        return said(switch (which.rule()) {
-            case RuleRef.Named it -> it.citedName();
-            case RuleRef.Written it -> "the " + it.whatItIs();
+    public SearchMessage toldWithoutAPlace() {
+        return told(switch (which.rule()) {
+            case RuleRef.Named it -> new SearchMessage.TheRuleCited(it.citedName());
+            case RuleRef.Written it -> switch (it) {
+                case RuleRef.Comparison _ -> new SearchMessage.TheComparison();
+                case RuleRef.Fork _ -> new SearchMessage.TheFork();
+                case RuleRef.Predicate _ -> new SearchMessage.ThePredicate();
+            };
         });
+    }
+
+    // BRIDGE-1464: callers move to toldWithoutAPlace
+    public String saidWithoutAPlace() {
+        return Messages.render(toldWithoutAPlace(), Locale.ENGLISH);
     }
 
     /**
@@ -174,8 +186,14 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
      * ({@link LineOrigin#describe}) — and what the narrowing adds is the same words either way. Said
      * in both places, the two spellings of one narrowing read as two.
      */
+    public SearchMessage told(SearchMessage rule) {
+        return narrowedWithin.isEmpty() ? rule
+                : new SearchMessage.RuleWithin(rule, named(narrowedWithin));
+    }
+
+    // BRIDGE-1464: callers move to told
     public String said(String rule) {
-        return rule + narrowing();
+        return Messages.render(told(new SearchMessage.TheRuleCited(rule)), Locale.ENGLISH);
     }
 
     /**
@@ -185,6 +203,7 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
      * has one spelling and it is not this one's to write, so what is offered here is the rest of the
      * sentence rather than the whole of it.
      */
+    // BRIDGE-1464: callers move to told
     public String narrowing() {
         return narrowedWithin.isEmpty() ? "" : " within " + naming(narrowedWithin);
     }
@@ -201,9 +220,25 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
      * <p>{@code or} rather than {@code and}, because that is what the list means: any one of them
      * is as much the answer as the others, and the reading does not know which.
      */
+    public static SearchMessage named(List<TypeSymbol.AtModule> declarations) {
+        return eitherOf(declarations.stream().map(TypeSymbol::name).toList());
+    }
+
+    /** Pieces of code any one of which is the answer, said as such; nothing where there is none. */
+    static SearchMessage eitherOf(List<String> written) {
+        if (written.isEmpty()) {
+            return new SearchMessage.NothingSaid();
+        }
+        SearchMessage rest = new SearchMessage.Code(written.getLast());
+        for (int i = written.size() - 2; i >= 0; i--) {
+            rest = new SearchMessage.OrElse(written.get(i), rest);
+        }
+        return rest;
+    }
+
+    // BRIDGE-1464: callers move to named
     public static String naming(List<TypeSymbol.AtModule> declarations) {
-        return declarations.stream().map(TypeSymbol::name)
-                .collect(java.util.stream.Collectors.joining(" or "));
+        return Messages.render(named(declarations), Locale.ENGLISH);
     }
 
     /**

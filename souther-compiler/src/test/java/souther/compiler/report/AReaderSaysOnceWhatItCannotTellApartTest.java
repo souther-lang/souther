@@ -3,6 +3,7 @@ package souther.compiler.report;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
@@ -121,7 +122,7 @@ class AReaderSaysOnceWhatItCannotTellApartTest {
         return new RuleSearch.Came(new Generator.UnresolvedCombination(
                 List.of("a rule of the decision"),
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, about,
-                Optional.of(said)),
+                Optional.of(new SearchMessage.Code(said))),
                 PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of(figure)), NO_POPULATIONS,
                 NO_CAPACITIES, NO_FIGURES);
     }

@@ -1160,7 +1160,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // it counts and what it stands at, read off the budget and handed on with it.
             Map.entry("souther.compiler.observe.Figure$Budget#name()Ljava/lang/String;",
                     "what a budget reached is called where a reader is told it stopped something"),
-            Map.entry("souther.compiler.observe.Figure$Budget#counts()Ljava/lang/String;",
+            Map.entry("souther.compiler.observe.Figure$Budget#countsSaid()"
+                            + "Lsouther/compiler/diag/msg/Message;",
                     "what a budget reached counts, in a reader's words"),
             Map.entry("souther.compiler.partition.NearbyValues#shapesOf("
                             + "Ljava/lang/String;Lsouther/compiler/meaning/PieceDemand;"
