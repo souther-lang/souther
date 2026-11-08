@@ -8512,41 +8512,62 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * shown to take — or null where none is shown: the total of one element whose fields are
      * multiplied, one field at the value and every other at one.
      *
-     * <p>Only a total of the one product of at least two fields, each weighed one, over a
-     * container of one container deep. The element is then written with the fields at one but the
-     * field the value is asked at, and the product is that field's number. A field is the one the
-     * value is asked at only where every other field may stand at one, so each run taken is
-     * the run one field is shown to take with nothing but that field asked of the element; and the
-     * runs are one run only where they are alike. No rule of the declarations ties two of the
-     * fields to one another ({@link #tiedByARule}): the fields are then written apart, each at
-     * the number it is asked at.
+     * <p>Only a total over a container of one container deep of products of fields, and of fields
+     * beside them, added up at weights. The element is then written as the builder of the row
+     * writes it ({@code ContainersAddingUp}): every field at one but the one the value is asked
+     * at, which the total is solved through ({@link ElementValue#solvedThrough}). With the rest
+     * at one the total is that field's number times a weight, and a number beside it. A field is
+     * the one the value is asked at only where every other field may stand at one, and where the
+     * weight is one or minus one: a field weighed two takes every other number of the run it is
+     * moved to. So each run taken is the run one field is shown to take with nothing but that
+     * field asked of the element, moved by the number beside it; and the runs are one run only
+     * where they are alike. No rule of the declarations ties two of the fields to one another
+     * ({@link #tiedByARule}): the fields are then written apart, each at the number it is asked
+     * at.
      */
     private static NumericDomain.Bounds summedOverProductsOfOneElement(
             NumericTerm.TakenOver over, InputReading read, SearchRegion region,
             List<OnAWay> conditions, Carrier carrier) {
         List<NumericTerm.FromOnePosition> factors = new ArrayList<>();
         List<TermPath> containers = new ArrayList<>();
+        // What the total comes to with every factor at one but the one at a place: that factor
+        // times the weight, and the number beside it. Null where it is asked at no value.
+        List<LinearForm<NumericTerm.FromOnePosition>> heldAtOne = new ArrayList<>();
         if (over.source() instanceof RunSource.JoinedOccurrences joined) {
-            // The entry of one map and the entry of the other under the key both hold.
+            // The entry of one map and the entry of the other under the key both hold. The
+            // products of two maps' values are written with the entry of the map walked at one
+            // and the number at the entry of the map looked into: no other way is written.
             factors.add(new NumericTerm.ValueOf(joined.elements()));
             factors.add(new NumericTerm.ValueOf(joined.alongside()));
             containers.addAll(joined.elements().containersHoldingIt());
             containers.addAll(joined.alongside().containersHoldingIt());
+            heldAtOne.add(null);
+            heldAtOne.add(LinearForm.atom(factors.get(1)));
         } else {
             if (!(over.source() instanceof RunSource.ComputedOccurrences computed)
                     || !(computed.computation() instanceof ElementValue.Multilinear product)
-                    || !product.form().constant().isZero() || product.form().coefs().size() != 1) {
+                    || !product.form().constant().isZero()
+                    || product.form().coefs().keySet().stream()
+                    .anyMatch(each -> each.rounding() != null)) {
                 return null;
             }
-            Map.Entry<ElementValue.Monomial, ExactRatio> only =
-                    product.form().coefs().entrySet().iterator().next();
             containers.addAll(over.subjectPath().containersHoldingIt());
-            if (!ExactRatio.ONE.equals(only.getValue()) || only.getKey().rounding() != null
-                    || only.getKey().fields().size() < 2 || containers.size() != 1) {
+            if (containers.size() != 1) {
                 return null;
             }
-            for (ElementProjection field : only.getKey().fields()) {
-                factors.add(new NumericTerm.ValueOf(field.from(computed.elements())));
+            Set<ElementProjection> fields = new LinkedHashSet<>();
+            product.form().coefs().keySet().forEach(each -> fields.addAll(each.fields()));
+            for (ElementProjection free : fields) {
+                NumericTerm.ValueOf factor = new NumericTerm.ValueOf(free.from(computed.elements()));
+                factors.add(factor);
+                Map<ElementProjection, ExactRatio> rest = new LinkedHashMap<>();
+                fields.stream().filter(other -> !other.equals(free))
+                        .forEach(other -> rest.put(other, ExactRatio.ONE));
+                LinearForm<ElementProjection> solved =
+                        ElementValue.solvedThrough(product.form(), free, rest);
+                heldAtOne.add(solved == null || !solved.coefs().keySet().equals(Set.of(free))
+                        ? null : new LinearForm<>(solved.constant(),
+                                Map.of(factor, solved.coefs().get(free))));
             }
         }
         for (int i = 0; i < factors.size(); i++) {
@@ -8571,22 +8592,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         NumericDomain.Bounds asked = null;
         for (int at = 0; at < runs.size(); at++) {
-            // The products of two maps' values are written with the entry of the map walked at
-            // one and the number at the entry of the map looked into: no other way is written.
-            if (over.source() instanceof RunSource.JoinedOccurrences && at != 1) {
+            LinearForm<NumericTerm.FromOnePosition> held = heldAtOne.get(at);
+            ExactRatio weight = held == null ? null : held.coefs().get(factors.get(at));
+            if (weight == null || !ExactRatio.ONE.equals(weight.abs())) {
                 continue;
             }
             boolean restAtOne = true;
             for (int other = 0; other < runs.size(); other++) {
                 restAtOne &= other == at || runs.get(other).admits(Count.of(1));
             }
-            if (!restAtOne) {
+            NumericDomain.Bounds moved = !restAtOne ? null
+                    : movedBy(runs.get(at).timesEach(weight), held.constant());
+            if (moved == null) {
                 continue;
             }
-            if (asked != null && !asked.equals(runs.get(at))) {
+            if (asked != null && !asked.equals(moved)) {
                 return null;
             }
-            asked = runs.get(at);
+            asked = moved;
         }
         // Each container may hold the one entry; the total is nought where some container holds
         // none, which a join of it is empty.
@@ -9249,6 +9272,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case LT -> new NumericDomain.Bounds(null, Endpoint.exclusive(count.get()));
             case EQ, NE -> null;
         };
+    }
+
+    /** Every value of {@code run} with the whole number {@code by} added, or null where
+     *  {@code run} is null or {@code by} is no whole number: a run of whole numbers moved by any
+     *  other lands between them. */
+    private static NumericDomain.Bounds movedBy(NumericDomain.Bounds run, ExactRatio by) {
+        if (run == null || by.isZero()) {
+            return run;
+        }
+        if (!by.isWhole() || !(Count.written(by)
+                instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> written))
+                || written.isEmpty()) {
+            return null;
+        }
+        Endpoint at = Endpoint.inclusive(written.get());
+        return run.plus(new NumericDomain.Bounds(at, at));
     }
 
     /** {@code run} with nought, the total of a container holding none, where the two are one run

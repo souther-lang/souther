@@ -29,6 +29,7 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
             data Note = { gross: Amount }
             data Line = { price: Amount, qty: Amount }
             data Totals = { gross: Decimal, count: Int }
+            data Free = { price: Decimal, qty: Decimal }
             """;
 
     private static final String INPUTS =
@@ -148,8 +149,10 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
      * What each element adds may be fields of it added or taken one from another, by the
      * operator or the library's operation, in a closure or a step, either way round the answer so
      * far is added to. Each such operation is at the greater of its operands' scales, so the walk
-     * is the same walk as one adding a field. A closure that reads a name for its part is not
-     * read.
+     * is the same walk as one adding a field, and a product beside a field is at the scale of a
+     * product. A total of {@code price * qty + price} takes what one element with {@code price} at
+     * one comes to, {@code qty + 1}, as the builder of the row writes it. A closure that reads a
+     * name for its part is not read.
      */
     @Test
     void anElementsPartOfSeveralFieldsIsTheSameWalk() {
@@ -167,10 +170,30 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
                         "List.fold((acc, l) -> acc + l.price.value - l.qty.value, 0.0m, lines)"},
                 new String[] {"List.sum({1·price + 1·qty + 0 | lines[*]})",
                         "List.fold((acc, l) -> Decimal.add(Decimal.add(acc, l.price.value),"
+                                + " l.qty.value), 0.0m, lines)"},
+                new String[] {"List.sum({1·price + 1·qty + 0 | lines[*]})",
+                        "List.fold((acc, l) -> Decimal.add(Decimal.add(acc, l.price.value),"
                                 + " l.qty.value), 0.0m, lines)"})) {
             String report = report(inputs, "Decimal.compare(%s, c.value) <= 0".formatted(each[1]));
             assertEquals(Set.of(each[0], "c"), related(report), () -> each[1] + report);
         }
+        // Over decimals of either sign, one element with price at one comes to qty + 1, which
+        // takes every value qty is moved by one.
+        String mixed = "List.sum({1·price + 1·price·qty + 0 | free[*]})";
+        for (String total : List.of(
+                "List.fold((acc, l) -> acc + (l.price * l.qty + l.price), 0.0m, free)",
+                "List.sum(List.map(l -> l.price * l.qty + l.price, free))")) {
+            String report = report("free: List<Free>, c: Decimal",
+                    "Decimal.compare(%s, c) <= 0".formatted(total));
+            assertEquals(Set.of(mixed, "c"), related(report), () -> total + report);
+        }
+        // At nought or more it comes to one or more, and nought where the list holds none: what
+        // lies between is reached only through price, at half the total, which a row may not be
+        // written at.
+        String fromOne = report(inputs, """
+                Decimal.compare(List.sum(List.map(l -> l.price.value * l.qty.value
+                                                       + l.price.value, lines)), c.value) <= 0""");
+        assertEquals(Set.of(), related(fromOne), fromOne);
         String named = report(inputs, """
                 Decimal.compare(List.sum(List.map(l -> {
                         let d = Decimal.subtract(l.price.value, l.qty.value)
