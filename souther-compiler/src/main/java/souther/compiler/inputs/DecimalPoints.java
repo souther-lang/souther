@@ -26,7 +26,7 @@ import java.util.Optional;
  * it from its width, which is a row not built and not a row there is none of; the end of the run
  * far from the line is then the row, where it is a decimal.
  */
-final class DecimalPoints {
+public final class DecimalPoints {
 
     /** The digits one binary digit is worth, to start the count of places below the answer. */
     private static final double DIGITS_PER_BIT = 0.30102999566398;
@@ -67,7 +67,7 @@ final class DecimalPoints {
      * @param nearIsLower whether {@code near} is the lower end of the run, and so {@code far} the
      *                    upper; {@code far} is null where the run has no end that way
      */
-    static ExactRatio within(ExactCut near, ExactCut far, boolean nearIsLower) {
+    public static ExactRatio within(ExactCut near, ExactCut far, boolean nearIsLower) {
         ExactRatio at = near.at();
         if (near.inclusive() && at.fitsWrittenDecimal() && lies(at, far, nearIsLower)) {
             return at;

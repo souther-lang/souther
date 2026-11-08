@@ -960,13 +960,27 @@ final class AStatementAtARow {
     /** Whether {@code path} may stand at or under one of {@code taken}: false only where it is
      *  shown not to, as the value is reached ({@link TermPath#standsAtOrUnder}). */
     private static boolean under(TermPath path, Set<TermPath> taken) {
-        return taken.stream().anyMatch(path::standsAtOrUnder);
+        for (TermPath each : taken) {
+            if (path.standsAtOrUnder(each)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether some place {@code term} is read off ({@link NumericTerm#placesReadOff}) may stand
-     *  at or under one of {@code taken}: a total of a join read under it by either map is. */
+     *  at or under one of {@code taken}: a total of a join read under it by either map is. With
+     *  nothing taken there is nothing to stand under, and the places are not worked out. */
     private static boolean readUnder(NumericTerm term, Set<TermPath> taken) {
-        return term.placesReadOff().stream().anyMatch(place -> under(place, taken));
+        if (taken.isEmpty()) {
+            return false;
+        }
+        for (TermPath place : term.placesReadOff()) {
+            if (under(place, taken)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
