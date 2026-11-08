@@ -11318,7 +11318,7 @@ final class Pullback {
         if (seed == null) {
             return null;
         }
-        ValueName.Stdlib summing = ValueName.Stdlib.operation("List", "sum");
+        ValueName.Stdlib summing = InputNumber.SUM;
         LinearForm<Quantity> added = list == null ? null
                 : addedOverTheElementsOfAnAnswer(walk, list, over, call.at(), summing);
         if (added == null) {

@@ -7,7 +7,7 @@ import java.util.Objects;
 
 /**
  * How much the collections a library operation's body builds on the way hold, and where the whole
- * numbers it works out on the way lie, proved against the body ({@link LibraryProver#heldOnTheWay}).
+ * numbers it works out on the way lie, proved against the body ({@link LibraryProver#onTheWay}).
  *
  * <p>About the sites asked of and nothing else: what a site ends a run for besides holding too
  * much, and every site not asked of, is the asker's.

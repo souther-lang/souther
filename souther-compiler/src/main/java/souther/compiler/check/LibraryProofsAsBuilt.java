@@ -2,11 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.proof.AskedOnTheWay;
-import souther.compiler.proof.AskedWhereReached;
-import souther.compiler.proof.HeldOnTheWay;
 import souther.compiler.proof.LibraryProver;
 import souther.compiler.proof.LibraryTerm;
-import souther.compiler.proof.WhereReached;
+import souther.compiler.proof.OnTheWay;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
@@ -115,13 +113,8 @@ public final class LibraryProofsAsBuilt {
             }
 
             @Override
-            public HeldOnTheWay heldOnTheWay(AskedOnTheWay asked) {
-                return settled.get().heldOnTheWay(asked);
-            }
-
-            @Override
-            public WhereReached whereReached(AskedWhereReached asked) {
-                return settled.get().whereReached(asked);
+            public OnTheWay onTheWay(AskedOnTheWay asked) {
+                return settled.get().onTheWay(asked);
             }
 
             @Override
@@ -185,13 +178,8 @@ public final class LibraryProofsAsBuilt {
                 }
 
                 @Override
-                public HeldOnTheWay heldOnTheWay(AskedOnTheWay asked) {
-                    return proving.heldOnTheWay(asked);
-                }
-
-                @Override
-                public WhereReached whereReached(AskedWhereReached asked) {
-                    return proving.whereReached(asked);
+                public OnTheWay onTheWay(AskedOnTheWay asked) {
+                    return proving.onTheWay(asked);
                 }
             };
         };

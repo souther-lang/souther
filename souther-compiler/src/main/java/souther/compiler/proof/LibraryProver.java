@@ -19,8 +19,8 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -322,8 +322,10 @@ public final class LibraryProver {
      * carries as where it started. An operator handed values of no type said here, or answering
      * values of more than one type where it is met, is not among them.
      *
-     * <p>Only where a reading meets it: an operator in a closure the body never applies is met
-     * nowhere, and nor is one in a body this reading stops in.
+     * <p>Only where a reading meets it on every run ({@link #readOnEveryRun}): an operator in a
+     * closure the body never applies is met nowhere, one in a closure handed elsewhere is met on
+     * some of the values it is handed at most, and nothing is met in a body this reading stops
+     * in.
      */
     public Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation, LibraryTerm body) {
         Reading reading = new Reading(library, readThrough);
@@ -347,7 +349,11 @@ public final class LibraryProver {
                 reading.applied(walk.args().get(shape.step()), handed);
             }
             Map<LibraryTerm, Type> out = new IdentityHashMap<>();
+            Set<LibraryTerm> readWhole = readOnEveryRun(body);
             reading.met().forEach((term, met) -> {
+                if (!readWhole.contains(term)) {
+                    return;
+                }
                 Set<Type> types = new LinkedHashSet<>();
                 for (Reading.Case each : met) {
                     types.add(typeOf(ofTheSameType(term, each.is()), takes, startedAs));
@@ -361,6 +367,29 @@ public final class LibraryProver {
         } catch (Reading.Stopped stopped) {
             return Map.of();
         }
+    }
+
+    /**
+     * Whether {@code one} says more of what a join is than {@code other}, the other side's type:
+     * where the other says nothing, where one says a list or a string and the other neither, and
+     * where both say a list and only one says of what.
+     */
+    private static boolean saysMoreOfAJoin(Type one, Type other) {
+        if (one == null) {
+            return false;
+        }
+        if (other == null) {
+            return true;
+        }
+        boolean oneSaysOfWhat = one instanceof Type.ListOf(Type element)
+                && element != null && !(element instanceof Type.Nothing);
+        boolean otherSaysOfWhat = other instanceof Type.ListOf(Type element)
+                && element != null && !(element instanceof Type.Nothing);
+        if (one instanceof Type.ListOf && other instanceof Type.ListOf) {
+            return oneSaysOfWhat && !otherSaysOfWhat;
+        }
+        return (one instanceof Type.ListOf || one == Type.STRING)
+                && !(other instanceof Type.ListOf || other == Type.STRING);
     }
 
     /** A value of the type what {@code term} came to, {@code value}, is of: a negation is read as
@@ -401,12 +430,13 @@ public final class LibraryProver {
                         ? Type.RATIONAL : one != null && one.equals(other) ? one : null;
             }
             // Both sides of a join are of one type, so whichever side says more says what the
-            // join is: a list written out says list where the other is only a type variable.
+            // join is: a list written out says list where the other is only a type variable, and
+            // a list whose elements are said says more than the empty one or one whose elements
+            // are not.
             case Value.Joined(Value left, Value right) -> {
                 Type one = typeOf(left, takes, startedAs);
                 Type other = typeOf(right, takes, startedAs);
-                yield one instanceof Type.ListOf || one == Type.STRING || other == null ? one
-                        : other;
+                yield saysMoreOfAJoin(other, one) ? other : one;
             }
             case Value.PayloadOf(Value option) ->
                     typeOf(option, takes, startedAs) instanceof Type.OptionOf(Type element)
@@ -422,12 +452,18 @@ public final class LibraryProver {
     }
 
     /**
-     * How much the collections an operation's body builds at the sites {@code asked} names hold on
-     * the way to its answer, and whether the whole numbers it works out at the others lie where
-     * {@code asked} says, where no collection holds more than it says ({@link AskedOnTheWay}).
+     * What is proved of the way to the sites {@code asked} names in an operation's body
+     * ({@link AskedOnTheWay}): which of them the body reaches on no way at all, at which divisions
+     * the divisor is never nought where they are reached, and how much the collections it builds
+     * hold on the way to its answer and whether the whole numbers it works out lie where
+     * {@code asked} says, where no collection holds more than it says. All of it off one reading of
+     * the ways through the body ({@link Ways}).
      *
      * <p>Each site is asked of every case a reading of the body meets it in, under the way the body
-     * went to reach it. A walk in the body is read by induction, over what it carries part by part:
+     * went to reach it, and only where those are every run of it there is: a site under a closure
+     * runs wherever the closure is applied, and the reading sees only the applications it makes
+     * itself ({@link #readOnEveryRun}). A site is reached on no way where the way to each case is
+     * never taken. A walk in the body is read by induction, over what it carries part by part:
      * a collection holding no more than it started with and one element, or the elements of one
      * element, for each element walked, and a whole number no further from where it started than
      * what one step adds to it for each. The first such statement proved of the walk is what a site
@@ -440,19 +476,57 @@ public final class LibraryProver {
      * that whatever it is handed, or one of {@code alsoNoMoreThan}, what the asker's owners say a
      * site holds over the arguments.
      *
-     * <p>A site met nowhere — under a closure the body never applies — and a body this reading
-     * stops in, or one walking more than once, are not shown.
+     * <p>A site whose every run is not read is not shown, and nor is anything of a body this
+     * reading stops in, or of one walking more than once.
      */
-    public HeldOnTheWay heldOnTheWay(AskedOnTheWay asked) {
+    public OnTheWay onTheWay(AskedOnTheWay asked) {
+        Ways ways;
+        try {
+            ways = ways(asked.operation(), asked.body(), asked.mostElements());
+        } catch (Reading.Stopped stopped) {
+            return OnTheWay.NOTHING_SHOWN;
+        }
+        return ways == null ? OnTheWay.NOTHING_SHOWN
+                : new OnTheWay(reached(asked, ways), held(asked, ways));
+    }
+
+    /** Which sites {@code asked} names the body reaches on no way, and at which divisions the
+     *  divisor is never nought where they are reached. */
+    private static WhereReached reached(AskedOnTheWay asked, Ways ways) {
+        try {
+            Set<LibraryTerm> onNoWay = LibraryTerm.places();
+            Set<LibraryTerm> neverByNought = LibraryTerm.places();
+            LinearForm<LawNumber<Value>> nought =
+                    LinearForm.constant(ExactRatio.of(BigInteger.ZERO));
+            for (LibraryTerm site : asked.reaching()) {
+                List<Ways.Met> met = ways.met(site);
+                if (met == null) {
+                    continue;
+                }
+                if (met.stream().allMatch(each -> ways.follows(each, Props.always(false)))) {
+                    onNoWay.add(site);
+                } else if (asked.divisions().contains(site) && met.stream().allMatch(each -> {
+                    Value divisor = divisorOf(each.met().is());
+                    return divisor != null && ways.follows(each,
+                            Props.compared(ways.reading.number(divisor), Rel.NE, nought));
+                })) {
+                    neverByNought.add(site);
+                }
+            }
+            return new WhereReached(onNoWay, neverByNought);
+        } catch (Reading.Stopped stopped) {
+            return WhereReached.NOTHING_SHOWN;
+        }
+    }
+
+    /** How much the collections {@code asked} names hold, and whether its whole numbers lie where
+     *  it says. */
+    private HeldOnTheWay held(AskedOnTheWay asked, Ways ways) {
         ValueName.Stdlib.Operation operation = asked.operation();
         Set<LibraryTerm> collections = asked.collections();
         BigInteger least = asked.least();
         BigInteger greatest = asked.greatest();
         try {
-            Ways ways = ways(operation, asked.body(), asked.mostElements());
-            if (ways == null) {
-                return new HeldOnTheWay.NotShown();
-            }
             Reading reading = ways.reading;
             List<Value> params = ways.params;
             Walked walked = ways.walked;
@@ -462,18 +536,18 @@ public final class LibraryProver {
             Function<Value, Granularity> spaced = ways.spaced;
             // Every number in range, wherever it is met.
             for (LibraryTerm site : asked.numbers()) {
-                List<Reading.Case> met = ways.met(site);
+                List<Ways.Met> met = ways.met(site);
                 if (met == null) {
                     return new HeldOnTheWay.NotShown();
                 }
-                for (Reading.Case each : met) {
-                    LinearForm<LawNumber<Value>> number = reading.number(each.is());
+                for (Ways.Met each : met) {
+                    LinearForm<LawNumber<Value>> number = reading.number(each.met().is());
                     LawProposition<Value> goal = Props.both(
                             Props.compared(number, Rel.GE,
                                     LinearForm.constant(ExactRatio.of(least))),
                             Props.compared(number, Rel.LE,
                                     LinearForm.constant(ExactRatio.of(greatest))));
-                    if (!ways.follows(site, each, goal)) {
+                    if (!ways.follows(each, goal)) {
                         return new HeldOnTheWay.NotShown();
                     }
                 }
@@ -485,15 +559,15 @@ public final class LibraryProver {
             List<List<LinearForm<LawNumber<Value>>>> owed = new ArrayList<>();
             boolean withinWhatItIsHanded = true;
             for (LibraryTerm site : collections) {
-                boolean atAStep = ways.atAStep(site);
-                List<Reading.Case> met = ways.met(site);
+                List<Ways.Met> met = ways.met(site);
                 if (met == null) {
                     return new HeldOnTheWay.NotShown();
                 }
-                for (Reading.Case each : met) {
+                for (Ways.Met at : met) {
+                    Reading.Case each = at.met();
                     LinearForm<LawNumber<Value>> size = reading.size(each.is());
                     List<LinearForm<LawNumber<Value>>> noMoreThan = new ArrayList<>();
-                    if (atAStep) {
+                    if (at.atAStep()) {
                         for (Walked.Part part : walked.parts()) {
                             if (walked.follows(each, fitting, Props.compared(size, Rel.LE,
                                     part.most(walked.induction().walkedOneFurther())))) {
@@ -532,47 +606,6 @@ public final class LibraryProver {
         }
     }
 
-    /**
-     * Which of the sites {@code asked} names an operation's body reaches on no way at all, and at
-     * which of its divisions the divisor is never nought where it is reached
-     * ({@link AskedWhereReached}).
-     *
-     * <p>Each site is asked of every case the reading of the body meets it in, under the way the
-     * body went to reach it, as {@link #heldOnTheWay} asks: one is reached on no way where the
-     * way to each of them is never taken. A site met nowhere — under a closure the body never
-     * applies — is reached as far as this says, and a body this reading stops in, or one walking
-     * more than once, is said of nothing.
-     */
-    public WhereReached whereReached(AskedWhereReached asked) {
-        try {
-            Ways ways = ways(asked.operation(), asked.body(), asked.mostElements());
-            if (ways == null) {
-                return WhereReached.NOTHING_SHOWN;
-            }
-            Set<LibraryTerm> onNoWay = Collections.newSetFromMap(new IdentityHashMap<>());
-            Set<LibraryTerm> neverByNought = Collections.newSetFromMap(new IdentityHashMap<>());
-            LinearForm<LawNumber<Value>> nought = LinearForm.constant(ExactRatio.of(BigInteger.ZERO));
-            for (LibraryTerm site : asked.sites()) {
-                List<Reading.Case> met = ways.met(site);
-                if (met == null) {
-                    continue;
-                }
-                if (met.stream().allMatch(each -> ways.follows(site, each, Props.always(false)))) {
-                    onNoWay.add(site);
-                } else if (asked.divisions().contains(site) && met.stream().allMatch(each -> {
-                    Value divisor = divisorOf(each.is());
-                    return divisor != null && ways.follows(site, each,
-                            Props.compared(ways.reading.number(divisor), Rel.NE, nought));
-                })) {
-                    neverByNought.add(site);
-                }
-            }
-            return new WhereReached(onNoWay, neverByNought);
-        } catch (Reading.Stopped stopped) {
-            return WhereReached.NOTHING_SHOWN;
-        }
-    }
-
     /** What {@code quotient} is divided by, where it is a quotient, or null. */
     private static Value divisorOf(Value quotient) {
         return quotient instanceof Value.Arithmetic(BinOp op, var _, Value divisor)
@@ -583,11 +616,13 @@ public final class LibraryProver {
      * An operation's body read for what holds on the way to each part of it: the cases a reading
      * of it meets each part in outside the walk it makes, and, where it makes one, at a step of
      * it, read by induction ({@link Induction}) — where every collection it is handed holds no
-     * more than the elements asked.
+     * more than the elements asked. Of a part whose every run the reading reads
+     * ({@link #readOnEveryRun}), and of no other.
      */
     private final class Ways {
         private final Reading reading;
         private final List<Value> params;
+        private final Set<LibraryTerm> readWhole;
         private final Map<LibraryTerm, List<Reading.Case>> outside;
         private final Walked walked;
         private final Map<LibraryTerm, List<Reading.Case>> inside;
@@ -597,12 +632,16 @@ public final class LibraryProver {
         private final List<Integer> handed;
         private final List<LawProposition<Value>> fitting;
 
-        private Ways(Reading reading, List<Value> params,
+        /** A case a part is met in, and whether at a step of the walk or outside it. */
+        record Met(Reading.Case met, boolean atAStep) {}
+
+        private Ways(Reading reading, List<Value> params, Set<LibraryTerm> readWhole,
                      Map<LibraryTerm, List<Reading.Case>> outside, Walked walked,
                      Function<Value, Granularity> spaced, List<Integer> handed,
                      List<LawProposition<Value>> fitting) {
             this.reading = reading;
             this.params = params;
+            this.readWhole = readWhole;
             this.outside = outside;
             this.walked = walked;
             this.inside = walked == null ? Map.of() : walked.met();
@@ -612,22 +651,121 @@ public final class LibraryProver {
             this.fitting = fitting;
         }
 
-        /** Whether {@code site} is met at a step of the walk and not outside it. */
-        boolean atAStep(LibraryTerm site) {
-            return !outside.containsKey(site);
+        /**
+         * Every case {@code site} is met in, outside the walk and at a step of it, or null where
+         * that is not every run of it or it is met nowhere.
+         */
+        List<Met> met(LibraryTerm site) {
+            if (!readWhole.contains(site)) {
+                return null;
+            }
+            List<Met> out = new ArrayList<>();
+            outside.getOrDefault(site, List.of()).forEach(each -> out.add(new Met(each, false)));
+            inside.getOrDefault(site, List.of()).forEach(each -> out.add(new Met(each, true)));
+            return out.isEmpty() ? null : out;
         }
 
-        /** Every case {@code site} is met in, or null where it is met nowhere. */
-        List<Reading.Case> met(LibraryTerm site) {
-            return atAStep(site) ? inside.get(site) : outside.get(site);
-        }
-
-        /** Whether {@code goal} follows where {@code site} is met as {@code each}. */
-        boolean follows(LibraryTerm site, Reading.Case each, LawProposition<Value> goal) {
-            return atAStep(site) ? walked.follows(each, fitting, goal)
-                    : LibraryProver.this.follows(reading, given(each, fitting), ended, goal,
+        /** Whether {@code goal} follows where a site is met as {@code each}. */
+        boolean follows(Met each, LawProposition<Value> goal) {
+            return each.atAStep() ? walked.follows(each.met(), fitting, goal)
+                    : LibraryProver.this.follows(reading, given(each.met(), fitting), ended, goal,
                             spaced);
         }
+    }
+
+    /**
+     * The parts of {@code body} a reading of it meets on every run that works them out: those
+     * under no closure, and those under a closure written where it is handed to an operation
+     * that applies it only where a reading reads every run of the application
+     * ({@link #appliedOnlyWhereRead}). A closure written anywhere else may run where no reading
+     * of this body sees it — inside an operation it is handed to, which is read by its law, or
+     * wherever the body hands it on — so what is under it is met on some of its runs at most.
+     */
+    private Set<LibraryTerm> readOnEveryRun(LibraryTerm body) {
+        Set<LibraryTerm> out = LibraryTerm.places();
+        readOnEveryRun(body, out, Set.of());
+        return out;
+    }
+
+    private void readOnEveryRun(LibraryTerm term, Set<LibraryTerm> out,
+                                Set<HandedAt> asking) {
+        out.add(term);
+        switch (term) {
+            case LibraryTerm.Call(ValueName.Stdlib.Operation operation, List<LibraryTerm> args) -> {
+                for (int at = 0; at < args.size(); at++) {
+                    if (args.get(at) instanceof LibraryTerm.Closure(var _, var inside)
+                            && appliedOnlyWhereRead(new HandedAt(operation, at), asking)) {
+                        out.add(args.get(at));
+                        readOnEveryRun(inside, out, asking);
+                    } else {
+                        readOnEveryRun(args.get(at), out, asking);
+                    }
+                }
+            }
+            case LibraryTerm.Closure _ -> { }
+            default -> LibraryTerm.forEachPart(term, part -> readOnEveryRun(part, out, asking));
+        }
+    }
+
+    /** An operation, and the place among its arguments something is handed to it at. */
+    private record HandedAt(ValueName.Stdlib.Operation operation, int position) {}
+
+    /**
+     * Whether {@code handed}'s operation applies what it is handed there only where a reading of
+     * a body calling it reads every run of the application: the walk, which a reading reads by
+     * induction, applies its step so; an operation read through where it is called does where
+     * its own body uses that argument only so — applied where that body reads every run, or
+     * handed on to another place that is one of these. Anything else, an operation read by its
+     * law above all, applies it where no reading looks. {@code asking} are the places already
+     * being asked about, and one met again is not shown to be one.
+     */
+    private boolean appliedOnlyWhereRead(HandedAt handed, Set<HandedAt> asking) {
+        TheWalk walk = library.stdlib().walk();
+        if (handed.operation().equals(walk.operation())) {
+            return handed.position() == walk.step();
+        }
+        if (!readThrough.contains(handed.operation()) || asking.contains(handed)) {
+            return false;
+        }
+        Set<HandedAt> further = new HashSet<>(asking);
+        further.add(handed);
+        LibraryTerm body = LibraryTerms.of(library.stdlib(),
+                library.stdlib().helpers().get(handed.operation()));
+        Set<LibraryTerm> read = LibraryTerm.places();
+        readOnEveryRun(body, read, further);
+        return usedOnlyWhereRead(body, null, handed.position(), read, further);
+    }
+
+    /** Whether every use of the argument at {@code position} under {@code term}, whose part it
+     *  is of {@code around}, is an application {@code read} holds or a handing on to a place that
+     *  applies it only so. */
+    private boolean usedOnlyWhereRead(LibraryTerm term, LibraryTerm around, int position,
+                                      Set<LibraryTerm> read, Set<HandedAt> asking) {
+        if (term instanceof LibraryTerm.Parameter(int at) && at == position) {
+            return switch (around) {
+                case LibraryTerm.Applied(LibraryTerm function, var _) when function == term ->
+                        read.contains(around);
+                case LibraryTerm.Call(ValueName.Stdlib.Operation operation,
+                                      List<LibraryTerm> args) -> read.contains(around)
+                        && appliedOnlyWhereRead(new HandedAt(operation, placeOf(term, args)),
+                                asking);
+                case null, default -> false;
+            };
+        }
+        boolean[] only = {true};
+        LibraryTerm.forEachPart(term, part ->
+                only[0] &= usedOnlyWhereRead(part, term, position, read, asking));
+        return only[0];
+    }
+
+    /** Where {@code term} itself stands among {@code args}. */
+    private static int placeOf(LibraryTerm term, List<LibraryTerm> args) {
+        for (int at = 0; at < args.size(); at++) {
+            if (args.get(at) == term) {
+                return at;
+            }
+        }
+        throw new IllegalArgumentException("a term asked where it stands among what it is not in");
     }
 
     /** {@code body}, {@code operation}'s, read for what holds on the way to each part of it, or
@@ -657,8 +795,8 @@ public final class LibraryProver {
         }
         Walked walked = walks.isEmpty() ? null
                 : walked(operation, reading, params, walks.iterator().next(), mostElements);
-        return new Ways(reading, params, outside, walked, spacing(operation, Map.of()), handed,
-                fitting);
+        return new Ways(reading, params, readOnEveryRun(body), outside, walked,
+                spacing(operation, Map.of()), handed, fitting);
     }
 
     /** {@code also}, and that the way to {@code met} was taken. */

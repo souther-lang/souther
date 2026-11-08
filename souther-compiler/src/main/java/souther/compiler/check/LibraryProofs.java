@@ -1,11 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.proof.AskedOnTheWay;
-import souther.compiler.proof.AskedWhereReached;
-import souther.compiler.proof.HeldOnTheWay;
 import souther.compiler.proof.LibraryProver;
 import souther.compiler.proof.LibraryTerm;
-import souther.compiler.proof.WhereReached;
+import souther.compiler.proof.OnTheWay;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
@@ -38,13 +36,9 @@ interface LibraryProofs {
      *  answer, once every law of the library is settled ({@link LibraryProver#typesOf}). */
     Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation, LibraryTerm body);
 
-    /** How much the sites of a body {@code asked} names hold on the way, once every law of the
-     *  library is settled ({@link LibraryProver#heldOnTheWay}). */
-    HeldOnTheWay heldOnTheWay(AskedOnTheWay asked);
-
-    /** Where a body reaches the sites {@code asked} names, once every law of the library is
-     *  settled ({@link LibraryProver#whereReached}). */
-    WhereReached whereReached(AskedWhereReached asked);
+    /** What is proved of the way to the sites of a body {@code asked} names, once every law of
+     *  the library is settled ({@link LibraryProver#onTheWay}). */
+    OnTheWay onTheWay(AskedOnTheWay asked);
 
     /** How the proofs of one set of facts are come by. */
     interface Source {
@@ -90,13 +84,8 @@ interface LibraryProofs {
         }
 
         @Override
-        public HeldOnTheWay heldOnTheWay(AskedOnTheWay asked) {
-            return new HeldOnTheWay.NotShown();
-        }
-
-        @Override
-        public WhereReached whereReached(AskedWhereReached asked) {
-            return WhereReached.NOTHING_SHOWN;
+        public OnTheWay onTheWay(AskedOnTheWay asked) {
+            return OnTheWay.NOTHING_SHOWN;
         }
     };
 }

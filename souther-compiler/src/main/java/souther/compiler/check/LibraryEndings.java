@@ -11,12 +11,12 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.proof.AskedOnTheWay;
-import souther.compiler.proof.AskedWhereReached;
 import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.HeldOnTheWay;
 import souther.compiler.proof.LibraryProver;
 import souther.compiler.proof.LibraryTerm;
 import souther.compiler.proof.LibraryTerms;
+import souther.compiler.proof.OnTheWay;
 import souther.compiler.proof.WhereReached;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawSubject;
@@ -29,7 +29,6 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,15 +49,16 @@ import java.util.function.Supplier;
  * reading of the tree of its own: what it applies, binds and chooses between is that term's to say.
  * What an operator in it ends a run for is {@link AbortSites}', at the type the proofs read it to
  * answer ({@link LibraryProver#typesOf}), or over every typing where they read none; what another
- * operation it calls ends one for is this table's own. A site that ends a run only where what it
- * builds holds too much, or where the whole number it works out passes an {@code Int}, ends none
- * where the proofs show it holds no more than something the operation is handed, or lies inside
- * the type, wherever it is reached ({@link LibraryProver#heldOnTheWay}); and the operation answers
+ * operation it calls ends one for is this table's own. A site that may hold too much — what it
+ * builds holding more than a collection does, or the whole number it works out passing an
+ * {@code Int} — ends no run for that where the proofs show it holds no more than something the
+ * operation is handed, or lies inside the type, wherever it is reached; and the operation answers
  * where what those sites hold fits where that is all they are shown to hold. A site is asked
  * where the body reaches it, as the proofs read the way there — a fork's condition, an option
  * present or not, the left of {@code &&} and {@code ||}: one reached on no way ends none, and a
- * division whose divisor is never nought where it is reached ends none for that
- * ({@link LibraryProver#whereReached}).
+ * division whose divisor is never nought where it is reached ends none for that. Each is said
+ * only of a site whose every run the proofs read, and all of it off one reading of the ways
+ * ({@link LibraryProver#onTheWay}).
  *
  * <p>Apart from the functions handed: a function the body applies that is no operation of the
  * library is the caller's to read where it is handed, and one the body builds is read where it is
@@ -258,21 +258,27 @@ final class LibraryEndings {
             LibraryTerm body = LibraryTerms.of(library, library.helpers().get(operation));
             OfTheBody read = new OfTheBody(prover.typesOf(operation, body));
             read.visit(body);
-            read.whereReached(operation, body);
+            if (read.ending.isEmpty()) {
+                return new Read(NONE, new GetsPast.Always());
+            }
+            if (!(WhereAnOperatorAnswers.ofAnOperator(BinOp.ADD, Type.INT,
+                    List.of(Type.INT, Type.INT))
+                    instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
+                            BigInteger least, BigInteger greatest))) {
+                throw new IllegalStateException("a sum of two whole numbers is read where its"
+                        + " exact value is held, between the least and the greatest an Int holds");
+            }
+            OnTheWay proved = prover.onTheWay(new AskedOnTheWay(operation, body,
+                    read.ending.keySet(), read.divisions, read.collections, read.numbers,
+                    read.bounds, least, greatest, GetsPast.MOST_ELEMENTS));
+            read.reached(proved.reached());
             if (read.all.endsNone()) {
                 return new Read(NONE, new GetsPast.Always());
             }
             if (read.collections.isEmpty() && read.numbers.isEmpty()) {
                 return new Read(read.all, otherwise(operation, read.apart));
             }
-            if (!(WhereAnOperatorAnswers.ofAnOperator(BinOp.ADD, Type.INT,
-                    List.of(Type.INT, Type.INT))
-                    instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
-                            BigInteger least, BigInteger greatest))) {
-                return new Read(read.all, otherwise(operation, read.apart));
-            }
-            return switch (prover.heldOnTheWay(new AskedOnTheWay(operation, body, read.collections,
-                    read.numbers, read.bounds, least, greatest, GetsPast.MOST_ELEMENTS))) {
+            return switch (proved.held()) {
                 case HeldOnTheWay.WithinWhatItIsHanded _ -> new Read(read.apart,
                         read.apart.endsNone() ? new GetsPast.Always()
                                 : otherwise(operation, read.apart));
@@ -282,6 +288,17 @@ final class LibraryEndings {
                                 : otherwise(operation, read.apart));
                 case HeldOnTheWay.NotShown _ -> new Read(read.all, otherwise(operation, read.apart));
             };
+        }
+
+        /** {@code ends} but for {@code kind}, where what they are is known. */
+        private static Endings without(Endings ends, AbortKind kind) {
+            if (!(ends instanceof Endings.Known(AbortSet kinds))) {
+                return ends;
+            }
+            Set<AbortKind> rest = EnumSet.noneOf(AbortKind.class);
+            rest.addAll(kinds.kinds());
+            rest.remove(kind);
+            return new Endings.Known(AbortSet.copyOf(rest));
         }
 
         /**
@@ -302,22 +319,25 @@ final class LibraryEndings {
             return new GetsPast.NotKnown();
         }
 
-        /** One reading of a body: what its sites end a run for, all of them and apart from those
-         *  that end one only where they hold too much, and which those are. */
+        /**
+         * One reading of a body: what its sites end a run for, all of them and apart from what
+         * those that may hold too much end one for by holding too much, and which those are.
+         *
+         * <p>Apart from that kind alone, and not from the whole of what such a site ends a run
+         * for: a site is one of them by what it builds or works out, and a call among them ends a
+         * run for whatever its operation does.
+         */
         private final class OfTheBody {
             private final Map<LibraryTerm, Type> typed;
-            private final Set<LibraryTerm> collections =
-                    Collections.newSetFromMap(new IdentityHashMap<>());
-            private final Set<LibraryTerm> numbers =
-                    Collections.newSetFromMap(new IdentityHashMap<>());
+            private final Set<LibraryTerm> collections = LibraryTerm.places();
+            private final Set<LibraryTerm> numbers = LibraryTerm.places();
             /** What a site holds at most by its own owner's word, over the operation's
              *  parameters, where that is a number of them. */
             private final List<LinearForm<LawNumber<Integer>>> bounds = new ArrayList<>();
             /** Every site that may end a run, with what it ends one for of itself. */
             private final Map<LibraryTerm, Endings> ending = new IdentityHashMap<>();
             /** The sites that divide, which end a run for a divisor of nought. */
-            private final Set<LibraryTerm> divisions =
-                    Collections.newSetFromMap(new IdentityHashMap<>());
+            private final Set<LibraryTerm> divisions = LibraryTerm.places();
             private Endings all = NONE;
             private Endings apart = NONE;
 
@@ -335,31 +355,21 @@ final class LibraryEndings {
 
             /**
              * What the sites end a run for where the body reaches them
-             * ({@link LibraryProver#whereReached}): one it reaches on no way ends none, and a
-             * division whose divisor is never nought where it is reached ends none for that.
+             * ({@link LibraryProver#onTheWay}): one it reaches on no way ends none, and a division
+             * whose divisor is never nought where it is reached ends none for that.
              */
-            void whereReached(ValueName.Stdlib.Operation operation, LibraryTerm body) {
-                WhereReached reached = ending.isEmpty() ? WhereReached.NOTHING_SHOWN
-                        : prover.whereReached(new AskedWhereReached(operation, body,
-                                ending.keySet(), divisions, GetsPast.MOST_ELEMENTS));
+            void reached(WhereReached reached) {
                 collections.removeAll(reached.onNoWay());
                 numbers.removeAll(reached.onNoWay());
                 ending.forEach((site, ends) -> {
                     if (reached.onNoWay().contains(site)) {
                         return;
                     }
-                    Endings left = ends;
-                    if (reached.neverByNought().contains(site)
-                            && ends instanceof Endings.Known(AbortSet kinds)) {
-                        Set<AbortKind> rest = EnumSet.noneOf(AbortKind.class);
-                        rest.addAll(kinds.kinds());
-                        rest.remove(AbortKind.DIVISION_BY_ZERO);
-                        left = new Endings.Known(AbortSet.copyOf(rest));
-                    }
+                    Endings left = reached.neverByNought().contains(site)
+                            ? without(ends, AbortKind.DIVISION_BY_ZERO) : ends;
                     all = all.and(left);
-                    if (!collections.contains(site) && !numbers.contains(site)) {
-                        apart = apart.and(left);
-                    }
+                    apart = apart.and(collections.contains(site) || numbers.contains(site)
+                            ? without(left, AbortKind.REQUIRED_FORM_HAS_NO_PLACE) : left);
                 });
             }
 

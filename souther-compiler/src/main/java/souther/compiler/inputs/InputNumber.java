@@ -1642,7 +1642,13 @@ public final class InputNumber {
                         TakenArguments.NONE, held, source.inners(), source.symbols());
     }
 
-    private static final ValueName.Stdlib.Operation SUM =
+    /**
+     * What a total of numbers over the elements of a list is filed as, however it is written:
+     * the sum of those numbers. A walk from a seed adding a number of each element, and that
+     * number of each taken and then summed, come to one total, and filed under one name a reader
+     * is told it once.
+     */
+    public static final ValueName.Stdlib.Operation SUM =
             ValueName.Stdlib.operation("List", "sum");
 
     /**

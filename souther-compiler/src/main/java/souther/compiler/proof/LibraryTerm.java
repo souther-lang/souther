@@ -6,8 +6,12 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -103,6 +107,22 @@ public sealed interface LibraryTerm {
 
     /** Something this reading has no word for, and which kind of thing it was. */
     record Unread(Unwritten what) implements LibraryTerm {}
+
+    /**
+     * A set of the places of a body, each the term written there: two places writing the same
+     * thing are two places a run works it out, so a term is kept as itself and never as one
+     * equal to it.
+     */
+    static Set<LibraryTerm> places() {
+        return Collections.newSetFromMap(new IdentityHashMap<>());
+    }
+
+    /** {@code these}, each kept as the term it is ({@link #places}), and changed by no one. */
+    static Set<LibraryTerm> placesOf(Collection<LibraryTerm> these) {
+        Set<LibraryTerm> out = places();
+        out.addAll(these);
+        return Collections.unmodifiableSet(out);
+    }
 
     /**
      * Each term {@code term} is made of, in the order it is written, handed to {@code each}.

@@ -102,6 +102,39 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
                 "List.length(xs) > 10 && List.length(xs) + 9223372036854775790 > 0"));
     }
 
+    /**
+     * A site under a closure runs wherever the closure is applied, and the proofs see only the
+     * applications they make: a closure handed to an operation read by its law, or let-bound and
+     * handed to the walk, runs on values no reading of the body meets. Applied once more where no
+     * run goes, its site is not read as reached on no way, nor its quotient as never by nought.
+     */
+    @Test
+    void aSiteUnderAClosureRunOnValuesTheProofsDoNotSeeEndsWhatItMay() {
+        String f = "{\n    let f = n -> 100 / n\n    ";
+        for (String body : new String[] {
+                f + "if false then f(1) >= 0 else List.length(List.map(f, [List.length(xs)])) == 0\n}",
+                f + "if List.length(xs) > 0 then f(List.length(xs)) >= 0"
+                        + " else List.length(List.map(f, [List.length(xs)])) == 0\n}",
+                f + "if false then f(1) >= 0"
+                        + " else List.fold((acc, n) -> acc && f(n) > 0, true, [List.length(xs)])\n}",
+                "{\n    let step = (acc, n) -> acc && 100 / n > 0\n    if false then step(true, 1)"
+                        + " else List.fold(step, true, [List.length(xs)])\n}"}) {
+            assertTrue(((Endings.Known) endingsOfIsEmptyAs(body)).kinds()
+                    .contains(AbortKind.DIVISION_BY_ZERO), body);
+        }
+    }
+
+    /** A join is of the type of its two sides, so the empty list on one side says nothing of what
+     *  the other holds: what is worked out of its elements is read at their type all the same. */
+    @Test
+    void aJoinWithTheEmptyListIsOfWhatTheOtherSideHolds() {
+        String walk = "List.fold((acc, n) -> acc && n + 9223372036854775800 > 0, true, %s)";
+        assertEquals(endingsOfIsEmptyAs(walk.formatted("[List.length(xs)]")),
+                endingsOfIsEmptyAs(walk.formatted("[] ++ [List.length(xs)]")));
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+                endingsOfIsEmptyAs(walk.formatted("[List.length(xs)]")));
+    }
+
     private static Endings endingsOfIsEmptyAs(String body) {
         return LibraryEndings.of(rewritten(IS_EMPTY_BODY, body)).of(IS_EMPTY);
     }
