@@ -126,7 +126,7 @@ final class Reasons {
     }
 
     /** What the budgets of this compiler's that stopped something are called where a reader meets
-     *  them: each in its own words ({@link CompositionBudget#counts}). */
+     *  them: each in its own words ({@link CompositionBudget#countsSaid}). */
     static String said(CanonicalSelection<CompositionBudget> budgets, Page page) {
         return page.say(budgets(budgets));
     }
