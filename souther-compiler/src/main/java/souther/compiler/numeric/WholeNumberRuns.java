@@ -211,6 +211,33 @@ public record WholeNumberRuns(List<Run> runs) {
         return runs.isEmpty();
     }
 
+    /**
+     * Whether this comes before {@code other} in the one order of these, which is by where the runs
+     * begin, then where they end, then how many there are. Of a set and the numbers it leaves
+     * exactly one does, so a reader that must name one of the two names that one.
+     */
+    public boolean precedes(WholeNumberRuns other) {
+        for (int i = 0; i < Math.min(runs.size(), other.runs.size()); i++) {
+            int byStart = comparedAt(runs.get(i).from(), other.runs.get(i).from(), -1);
+            if (byStart != 0) {
+                return byStart < 0;
+            }
+            int byEnd = comparedAt(runs.get(i).to(), other.runs.get(i).to(), 1);
+            if (byEnd != 0) {
+                return byEnd < 0;
+            }
+        }
+        return runs.size() < other.runs.size();
+    }
+
+    /** Two ends in order, an end that is null being past every number on the side {@code nullIs}. */
+    private static int comparedAt(BigInteger one, BigInteger other, int nullIs) {
+        if (one == null || other == null) {
+            return one == other ? 0 : (one == null ? nullIs : -nullIs);
+        }
+        return one.compareTo(other);
+    }
+
     /** Whether this holds every number. */
     public boolean isEvery() {
         return runs.size() == 1 && runs.getFirst().from() == null && runs.getFirst().to() == null;

@@ -2440,7 +2440,7 @@ final class Terms {
         boolean denies = false;
         if (runs != null) {
             WholeNumberRuns left = runs.others();
-            boolean leftFirst = firstOf(left, runs);
+            boolean leftFirst = left.precedes(runs);
             Term written = interned.closureAnswering(statement.subject(), leftFirst ? left : runs);
             if (written == null) {
                 runs = null;
@@ -2511,35 +2511,6 @@ final class Terms {
                 ? applied : null;
     }
 
-    /**
-     * Whether {@code one} comes before {@code other} in the one order of sets of whole numbers,
-     * which is by where the runs begin, then where they end, then how many there are. Of a set
-     * and the numbers it leaves exactly one does, and a count is named by that one.
-     */
-    private static boolean firstOf(WholeNumberRuns one, WholeNumberRuns other) {
-        List<WholeNumberRuns.Run> mine = one.runs();
-        List<WholeNumberRuns.Run> theirs = other.runs();
-        for (int i = 0; i < Math.min(mine.size(), theirs.size()); i++) {
-            int byStart = compareEnds(mine.get(i).from(), theirs.get(i).from(), -1);
-            if (byStart != 0) {
-                return byStart < 0;
-            }
-            int byEnd = compareEnds(mine.get(i).to(), theirs.get(i).to(), 1);
-            if (byEnd != 0) {
-                return byEnd < 0;
-            }
-        }
-        return mine.size() < theirs.size();
-    }
-
-    /** Two ends in order, an end that is null being past every number on the side {@code nullIs}. */
-    private static int compareEnds(BigInteger one, BigInteger other, int nullIs) {
-        if (one == null || other == null) {
-            return one == other ? 0 : (one == null ? nullIs : -nullIs);
-        }
-        return one.compareTo(other);
-    }
-
     /** What a count of the elements that fall in a set of whole numbers is a count of: the
      *  container as named, the set, and how many the container holds. */
     private record CountOfWholeNumbers(Term container, Term subject, WholeNumberRuns runs,
@@ -2548,9 +2519,12 @@ final class Terms {
     /** The counts named so far that are of a set of whole numbers, by the atom that counts. */
     private final Map<FactSubject, CountOfWholeNumbers> wholeNumberCounts = new HashMap<>();
 
-    /** The sums named so far of how many each element holds, by the atom: of which container, and
-     *  how many each holds as a term. */
-    private final Map<FactSubject, Term[]> sumsOfWhatEachHolds = new HashMap<>();
+    /** What a sum of how many each element holds is a sum of: the container as named, and how
+     *  many each element holds as a term of the closure's parameter. */
+    private record SumOfWhatEachHolds(Term container, Term held) {}
+
+    /** The sums named so far of how many each element holds, by the atom. */
+    private final Map<FactSubject, SumOfWhatEachHolds> sumsOfWhatEachHolds = new HashMap<>();
 
     /**
      * How the counts among {@code atoms} of the elements of one container that fall in sets of
@@ -2590,9 +2564,9 @@ final class Terms {
      * less than three for each.
      */
     private void sumNoLessThan(FactSubject sum, FactSubject count, List<NumericConstraint> out) {
-        Term[] of = sumsOfWhatEachHolds.get(sum);
+        SumOfWhatEachHolds of = sumsOfWhatEachHolds.get(sum);
         CountOfWholeNumbers counted = wholeNumberCounts.get(count);
-        if (!counted.container().equals(of[0]) || !counted.subject().equals(of[1])) {
+        if (!counted.container().equals(of.container()) || !counted.subject().equals(of.held())) {
             return;
         }
         for (boolean leave : new boolean[] {false, true}) {
@@ -2715,7 +2689,7 @@ final class Terms {
             Term held = closure == null ? sizeOfEach(container, null, null, at) : null;
             Term among = held == null ? null : bodyKey(container, at);
             if (among != null) {
-                sumsOfWhatEachHolds.putIfAbsent(atom, new Term[] {among, held});
+                sumsOfWhatEachHolds.putIfAbsent(atom, new SumOfWhatEachHolds(among, held));
             }
         });
     }
