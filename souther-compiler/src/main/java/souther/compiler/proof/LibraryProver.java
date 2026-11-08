@@ -301,21 +301,11 @@ public final class LibraryProver {
      * kernels answer, each proved of the body.
      */
     public Outcome noSmallerThan(ValueName.Stdlib.Operation operation, int container) {
-        return sizeAgainst(operation, container, Rel.GE);
-    }
-
-    /** Whether {@code operation}'s answer holds no more than its argument at {@code container},
-     *  as {@link #noSmallerThan} asks the other way. */
-    public Outcome noLargerThan(ValueName.Stdlib.Operation operation, int container) {
-        return sizeAgainst(operation, container, Rel.LE);
-    }
-
-    private Outcome sizeAgainst(ValueName.Stdlib.Operation operation, int container, Rel rel) {
         Reading reading = new Reading(library, readThrough);
         try {
             List<Value> params = arguments(operation);
             LawProposition<Value> goal = Props.compared(
-                    reading.size(new Value.Made(operation, params)), rel,
+                    reading.size(new Value.Made(operation, params)), Rel.GE,
                     reading.size(params.get(container)));
             return follows(reading, List.of(), goal, spacing(operation, Map.of()))
                     ? new Outcome.Proved(new Proof.ByTheBody(operation, reading.used()))

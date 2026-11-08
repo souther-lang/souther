@@ -92,10 +92,6 @@ final class IntrinsicNumericFacts {
         for (Core added : DischargeRules.noSmallerThan(container)) {
             standing(atom, added, Rel.GE, at, terms, out);
         }
-        // And no larger than each it is the intersection of.
-        for (Core over : DischargeRules.noLargerThan(container)) {
-            standing(atom, over, Rel.LE, at, terms, out);
-        }
         if (Core.withoutStanding(container) instanceof Core.PreservedCall call) {
             DischargeRules.Source built = DischargeRules.builtFrom(call);
             Rel rel = built == null ? null : relationOf(built.size());

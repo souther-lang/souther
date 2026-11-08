@@ -163,6 +163,28 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             // A fold written out is not the library's sum: the sum gets through where the fold
             // stops at a step, so what is known of one is not known of the other.
             new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n, 0, xs))", true),
+            // A statement about how many an element holds is a statement over whole numbers like
+            // any other: the elements that hold at least one are the elements that hold something,
+            // and a sum of how many each holds is no less than the least each holds for as many
+            // as hold at least that.
+            new Row("Digit(List.length(List.filter(ys -> List.length(ys) >= 1, xss)) "
+                    + "- List.length(List.filter(ys -> List.length(ys) > 0, xss)))", false),
+            new Row("Digit(List.length(List.filter(ys -> List.length(ys) > 0, xss)) "
+                    + "- List.length(List.filter(ys -> List.length(ys) >= 1, xss)))", false),
+            new Row("Digit(List.length(List.filter(ys -> List.length(ys) >= 1, xss)) "
+                    + "- List.length(List.filter(ys -> List.length(ys) >= 2, xss)))", false),
+            new Row("Digit(List.length(List.filter(ys -> List.length(ys) >= 2, xss)) "
+                    + "- List.length(List.filter(ys -> List.length(ys) >= 1, xss)))", true),
+            new Row("if List.all(ys -> List.length(ys) >= 1, xss) && List.length(xss) >= 1 then "
+                    + "Digit(List.length(List.concat(xss)) - 1) else Digit(0)", false),
+            new Row("if List.all(ys -> List.length(ys) >= 1, xss) && List.length(xss) >= 1 then "
+                    + "Digit(List.length(List.concat(xss)) - 2) else Digit(0)", true),
+            new Row("if List.all(ys -> List.length(ys) >= 2, xss) && List.length(xss) >= 1 then "
+                    + "Digit(List.length(List.concat(xss)) - 2) else Digit(0)", false),
+            new Row("if List.any(ys -> List.length(ys) >= 2, xss) then "
+                    + "Digit(List.length(List.concat(xss)) - 2) else Digit(0)", false),
+            new Row("if List.any(ys -> List.length(ys) >= 2, xss) then "
+                    + "Digit(List.length(List.concat(xss)) - 3) else Digit(0)", true),
             // What a statement holds of among the elements a filter kept is what both hold of
             // among the elements it was handed.
             new Row("Digit(List.length(List.filter(n -> n > 2, List.filter(n -> n > 1, xs))) "
@@ -237,7 +259,24 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             new Row("if Set.size(Set.intersection(a, b)) >= 1 then Digit(Set.size(b) - 2) "
                     + "else Digit(0)", true),
             new Row("if Set.size(Set.difference(a, b)) >= 1 then Digit(Set.size(b) - 1) "
-                    + "else Digit(0)", true));
+                    + "else Digit(0)", true),
+            // Of two sets, how many of one the other holds is how many of the other the one holds,
+            // so what is in both is counted once whichever way round it is asked, and the union
+            // and the intersection together hold what the two do.
+            new Row("Digit(Set.size(Set.union(a, b)) + Set.size(Set.intersection(a, b)) "
+                    + "- Set.size(a) - Set.size(b))", false),
+            new Row("Digit(Set.size(a) + Set.size(b) - Set.size(Set.union(a, b)) "
+                    + "- Set.size(Set.intersection(a, b)))", false),
+            new Row("Digit(Set.size(Set.intersection(a, b)) - Set.size(Set.intersection(b, a)))",
+                    false),
+            new Row("Digit(Set.size(Set.union(a, b)) + Set.size(Set.difference(a, b)) "
+                    + "- Set.size(a) - Set.size(b))", true),
+            new Row("Digit(Set.size(Set.union(a, b)) + Set.size(Set.intersection(a, b)) "
+                    + "- Set.size(a) - Set.size(b) - 1)", true),
+            // The same of the keys of two maps.
+            new Row("Digit(Map.size(mb) - Map.size(Map.intersection(ma, mb)))", false),
+            new Row("Digit(Map.size(ma) - Map.size(Map.intersection(ma, mb)))", false),
+            new Row("Digit(Map.size(Map.intersection(ma, mb)) - Map.size(mb))", true));
 
     @Test
     void eachRowIsOwedWhatItsLawLeavesOpen() {
@@ -250,10 +289,11 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                         invariant atLeastNought = value >= 0
 
                     behavior f : (xs: List<Int>, ys: List<Int>, xss: List<List<Int>>,
-                                  a: Set<Int>, b: Set<Int>, s: String, t: String, x: Int)
+                                  a: Set<Int>, b: Set<Int>, ma: Map<String, Int>, mb: Map<String, Int>,
+                                  s: String, t: String, x: Int)
                         -> Digit
                         constructs Digit
-                    let f (xs, ys, xss, a, b, s, t, x) =
+                    let f (xs, ys, xss, a, b, ma, mb, s, t, x) =
                         %s
                     """.formatted(row.body()), "Main");
             compilation.answerEverything();

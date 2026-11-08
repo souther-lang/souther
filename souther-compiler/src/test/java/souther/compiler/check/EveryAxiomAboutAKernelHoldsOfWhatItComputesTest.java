@@ -75,11 +75,6 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                         "no smaller than " + container.position(), compared(Rel.GE, 0,
                                 size(ANSWER), size(at(container.position())).negate())));
             }
-            for (DeclaredArgument container : facts.resultIsNoLargerThan(operation)) {
-                statements.add(new WhatTheLibraryComputes.Statement(operation,
-                        "no larger than " + container.position(), compared(Rel.LE, 0,
-                                size(ANSWER), size(at(container.position())).negate())));
-            }
             if (facts.putsAValueIn(operation) instanceof BoundOperationFact.PutsAValueIn puts) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation, "puts a value in",
                         putsIn(puts.value().position(), puts.into().position())));

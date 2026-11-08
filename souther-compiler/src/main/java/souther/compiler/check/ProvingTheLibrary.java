@@ -188,9 +188,6 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.ResultIsNoSmallerThan bounded ->
                     prover.noSmallerThan(operation, bounded.container().position())
                             instanceof LibraryProver.Outcome.Proved;
-            case BoundOperationFact.ResultIsNoLargerThan bounded ->
-                    prover.noLargerThan(operation, bounded.container().position())
-                            instanceof LibraryProver.Outcome.Proved;
             case BoundOperationFact.AccumulatesItsContainer accumulates ->
                     accumulated.prove(operation, accumulates.container().position(),
                             accumulates.how()) instanceof LibraryProver.Outcome.Proved;

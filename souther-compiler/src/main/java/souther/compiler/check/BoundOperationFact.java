@@ -454,11 +454,6 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record ResultIsNoSmallerThan(DeclaredOperation operation, DeclaredArgument container)
             implements SeveralAboutAnOperation {}
 
-    /** The operation's result is never larger than what {@code container} holds. One per
-     *  container: an intersection holds no more than either of its two. */
-    record ResultIsNoLargerThan(DeclaredOperation operation, DeclaredArgument container)
-            implements SeveralAboutAnOperation {}
-
     /** One case of the definition the operation is written in. The cases of one operation are
      *  exhaustive between them, in the order they are declared. */
     record IsDefinedByCases(DeclaredOperation operation, DefinitionCase<DeclaredArgument> one)

@@ -403,21 +403,10 @@ final class DischargeRules {
      */
     static List<Core> noSmallerThan(Core standing) {
         AnOperationApplied applied = AnOperationApplied.of(standing);
-        return applied == null ? List.of()
-                : argumentsAmong(applied, facts().resultIsNoSmallerThan(applied.operation()));
-    }
-
-    /** The containers {@code e}'s result is no larger than, in the order the rule names them, read
-     *  as {@link #noSmallerThan} reads. */
-    static List<Core> noLargerThan(Core standing) {
-        AnOperationApplied applied = AnOperationApplied.of(standing);
-        return applied == null ? List.of()
-                : argumentsAmong(applied, facts().resultIsNoLargerThan(applied.operation()));
-    }
-
-    /** What {@code applied} was handed at each of {@code reads}, where it was handed one. */
-    private static List<Core> argumentsAmong(AnOperationApplied applied,
-                                             List<DeclaredArgument> reads) {
+        if (applied == null) {
+            return List.of();
+        }
+        List<DeclaredArgument> reads = facts().resultIsNoSmallerThan(applied.operation());
         List<Core> containers = new ArrayList<>(reads.size());
         for (DeclaredArgument one : reads) {
             Core argument = applied.argument(one);

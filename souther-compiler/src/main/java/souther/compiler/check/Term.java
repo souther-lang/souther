@@ -742,13 +742,32 @@ final class Term {
     }
 
     /**
-     * The whole numbers a closure of one parameter answers true of, where it compares its parameter
-     * to whole numbers written out, joined and denied as it likes — or null where it is anything
-     * else.
+     * What a statement over whole numbers is about, and the numbers it holds of: {@code subject}
+     * is the value the statement compares, which is the parameter of the closure or how many it
+     * holds.
      */
-    WholeNumberRuns wholeNumbersItAnswersTrueOf() {
-        return shape == Shape.CLOSURE && Integer.valueOf(1).equals(of)
-                ? parts.getFirst().runsOfAStatement() : null;
+    record StatementOverWholeNumbers(Term subject, WholeNumberRuns runs) {}
+
+    /**
+     * What a closure of one parameter answers true of, where it compares one thing about its
+     * parameter to whole numbers written out, joined and denied as it likes — or null where it is
+     * anything else.
+     */
+    StatementOverWholeNumbers statementOverWholeNumbers() {
+        if (shape != Shape.CLOSURE || !Integer.valueOf(1).equals(of)) {
+            return null;
+        }
+        Term[] subject = new Term[1];
+        WholeNumberRuns runs = parts.getFirst().runsOfAStatement(subject);
+        return runs == null || subject[0] == null ? null
+                : new StatementOverWholeNumbers(subject[0], runs);
+    }
+
+    /** The parameter of a closure, or how many it holds. */
+    private boolean canBeComparedToWholeNumbers() {
+        return (shape == Shape.BOUND && new At(0, 0).equals(of))
+                || (shape == Shape.CALLED && parts.size() == 1 && parts.getFirst().isTheParameter()
+                && NumericMeasures.counts(calledOperation()));
     }
 
     private boolean isTheParameter() {
@@ -759,23 +778,37 @@ final class Term {
         return shape == Shape.INT ? (Long) of : null;
     }
 
-    private WholeNumberRuns runsOfAStatement() {
+    /** Whether {@code side} is what a statement compares, the first comparison deciding it: every
+     *  comparison after is of that one, or the statement is about two things. */
+    private static boolean isTheSubject(Term[] subject, Term side) {
+        if (subject[0] == null && side.canBeComparedToWholeNumbers()) {
+            subject[0] = side;
+        }
+        return side.equals(subject[0]);
+    }
+
+    /**
+     * The whole numbers this statement holds of, reading only through what joins and denies
+     * statements — a closure inside one has a parameter of its own, which is not the parameter of
+     * this one — and recording in {@code subject} the one thing it compares.
+     */
+    private WholeNumberRuns runsOfAStatement(Term[] subject) {
         return switch (shape) {
             case BOOL -> (Boolean) of ? WholeNumberRuns.EVERY : WholeNumberRuns.NONE;
             case NOT -> {
-                WholeNumberRuns denied = parts.getFirst().runsOfAStatement();
+                WholeNumberRuns denied = parts.getFirst().runsOfAStatement(subject);
                 yield denied == null ? null : denied.others();
             }
             case EQ -> {
-                Long number = parts.get(0).isTheParameter() ? parts.get(1).writtenWholeNumber()
-                        : parts.get(1).isTheParameter() ? parts.get(0).writtenWholeNumber() : null;
-                yield number == null ? null
-                        : WholeNumberRuns.standing(Rel.EQ, ExactRatio.of(number));
+                boolean numberFirst = parts.get(0).writtenWholeNumber() != null;
+                Long number = parts.get(numberFirst ? 0 : 1).writtenWholeNumber();
+                yield number == null || !isTheSubject(subject, parts.get(numberFirst ? 1 : 0))
+                        ? null : WholeNumberRuns.standing(Rel.EQ, ExactRatio.of(number));
             }
             case CHOICE -> {
-                WholeNumberRuns when = parts.get(0).runsOfAStatement();
-                WholeNumberRuns then = parts.get(1).runsOfAStatement();
-                WholeNumberRuns otherwise = parts.get(2).runsOfAStatement();
+                WholeNumberRuns when = parts.get(0).runsOfAStatement(subject);
+                WholeNumberRuns then = parts.get(1).runsOfAStatement(subject);
+                WholeNumberRuns otherwise = parts.get(2).runsOfAStatement(subject);
                 yield when == null || then == null || otherwise == null ? null
                         : when.and(then).or(when.others().and(otherwise));
             }
@@ -783,17 +816,17 @@ final class Term {
                 if (of == BinOp.LT) {
                     Term left = parts.get(0);
                     Term right = parts.get(1);
-                    if (left.isTheParameter() && right.writtenWholeNumber() != null) {
+                    if (right.writtenWholeNumber() != null && isTheSubject(subject, left)) {
                         yield WholeNumberRuns.standing(Rel.LT,
                                 ExactRatio.of(right.writtenWholeNumber()));
                     }
-                    yield right.isTheParameter() && left.writtenWholeNumber() != null
+                    yield left.writtenWholeNumber() != null && isTheSubject(subject, right)
                             ? WholeNumberRuns.standing(Rel.GT,
                                     ExactRatio.of(left.writtenWholeNumber())) : null;
                 }
                 ConditionJoin join = ConditionJoin.of((BinOp) of).orElse(null);
-                WholeNumberRuns left = join == null ? null : parts.get(0).runsOfAStatement();
-                WholeNumberRuns right = join == null ? null : parts.get(1).runsOfAStatement();
+                WholeNumberRuns left = join == null ? null : parts.get(0).runsOfAStatement(subject);
+                WholeNumberRuns right = join == null ? null : parts.get(1).runsOfAStatement(subject);
                 yield left == null || right == null ? null
                         : join == ConditionJoin.BOTH ? left.and(right) : left.or(right);
             }
@@ -1503,8 +1536,8 @@ final class Term {
          * {@code n >= 3} and {@code n > 2 && n > 1} are one term. Null where a number of the runs
          * is past what a number written in a program is.
          */
-        Term closureAnswering(WholeNumberRuns runs) {
-            Term parameter = bound(0, 0);
+        Term closureAnswering(Term subject, WholeNumberRuns runs) {
+            Term parameter = subject;
             Term body = null;
             for (WholeNumberRuns.Run run : runs.runs()) {
                 Term in = written(true);
