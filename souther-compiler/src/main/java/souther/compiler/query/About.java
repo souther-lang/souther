@@ -703,7 +703,7 @@ public sealed interface About {
      * @param behavior whose body the way is through, which the way itself does not say
      * @param way      the way, the clauses every run along it stops at one of, and the proof
      * @param stops    where every run along it stops, as a run stopped there says it
-     *                 ({@link Adequacy#whereEveryRunStops}), in the order the way meets them
+     *                 ({@link Adequacy#whereRunsStopAt}), in the order the way meets them
      */
     record AWayEveryRunOfWhichStops(String behavior, DecisionReading.EveryRunStops way,
                                     List<WhereARunStopped> stops) implements OfAnObligation {

@@ -15,6 +15,7 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.diag.PhysicalPos;
+import souther.compiler.partition.ClauseOfAConstruction;
 import souther.compiler.partition.PassedConstruction;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.partition.CountWitnesses;
@@ -7710,35 +7711,47 @@ public final class Adequacy {
     }
 
     /**
-     * Where every run along {@code way} stops, said as a run that stopped there says it: one place
-     * for each clause the proof keeps, the construction by the module whose text it is written in
-     * and its line and column there, the clause by the declaration that wrote it.
+     * Where every run along a way stops at one of {@code stoppedAt}, said as a run that stopped
+     * there says it: one place for each clause the proof keeps, the construction by the module
+     * whose text it is written in and its line and column there where this compilation holds that
+     * text laid out, and by no place where it does not; the clause by the declaration that wrote
+     * it.
      *
      * <p>The clauses the proof needs, and none of the others the construction is held to: each
      * clause is gone through by the way on its own, and the least proof keeps only the ones the
-     * inputs of the way break. A clause standing for an invariant that was not read is never one a
-     * proof needs, since it states nothing of the input.
+     * inputs of the way break. An invariant that was not reached names no clause and no place a
+     * run stops at: it states nothing of the input, so no proof needs it, and a proof cut short at
+     * a figure that keeps it says no clause it was held to.
      */
-    public static List<WhereARunStopped> whereEveryRunStops(Db db,
-                                                            DecisionReading.EveryRunStops way) {
+    public static List<WhereARunStopped> whereRunsStopAt(Db db,
+                                                         List<PassedConstruction> stoppedAt) {
         TheTextsThisCompileHolds texts = new TheTextsThisCompileHolds(db);
         List<WhereARunStopped> out = new ArrayList<>();
-        for (PassedConstruction each : way.stoppedAt()) {
-            if (each.clause() == null) {
-                continue;
+        for (PassedConstruction each : stoppedAt) {
+            switch (each.clause()) {
+                case ClauseOfAConstruction.NotReached _ -> { }
+                case ClauseOfAConstruction.Held(Clause.Ref clause) -> {
+                    TypeSymbol.AtModule declared = clause.id().declaredOn();
+                    RunStop stop = new RunStop.AtAConstruction(declared.module(), declared.name(),
+                            clause.name().map(ClauseName::value), clause.id().ordinal(),
+                            siteOf(texts, each.at()));
+                    out.add(whereItStopped(db, stop));
+                }
             }
-            String site = each.at() == null ? null
-                    : texts.moduleOf(each.at().quotedFrom()).orElse(null);
-            PhysicalPos sits = site == null ? null : texts.resolve(each.at());
-            Clause.Ref clause = each.clause();
-            TypeSymbol.AtModule declared = clause.id().declaredOn();
-            RunStop stop = new RunStop.AtAConstruction(declared.module(), declared.name(),
-                    clause.name().map(ClauseName::value), clause.id().ordinal(),
-                    site == null ? declared.module() : site,
-                    sits == null ? 0 : sits.line(), sits == null ? 0 : sits.column());
-            out.add(whereItStopped(db, stop));
         }
         return List.copyOf(out);
+    }
+
+    /** Where {@code place} is written, where this compilation holds its text laid out and knows
+     *  the module it is: none otherwise, and never another module in its stead. */
+    private static Optional<RunStop.Site> siteOf(TheTextsThisCompileHolds texts, SourcePos place) {
+        if (place == null) {
+            return Optional.empty();
+        }
+        Optional<String> module = texts.moduleOf(place.quotedFrom());
+        PhysicalPos sits = module.isEmpty() ? null : texts.resolve(place);
+        return sits == null ? Optional.empty()
+                : Optional.of(new RunStop.Site(module.get(), sits.line(), sits.column()));
     }
 
     /**
@@ -9567,9 +9580,18 @@ public final class Adequacy {
             // A way every run of which stops is a finding whatever the rows did: it is read off the
             // body and the rules, and proved there. It is no rule a row is owed for, and no search
             // is asked about it.
-            for (DecisionReading.EveryRunStops each : decision.read().everyRunStops()) {
-                out.add(Finding.noticed(behavior, new About.AWayEveryRunOfWhichStops(behavior,
-                        each, whereEveryRunStops(db, each))));
+            for (DecisionReading.Excluded each : decision.read().excluded()) {
+                switch (each) {
+                    case DecisionReading.EveryRunStops stops -> out.add(Finding.noticed(behavior,
+                            new About.AWayEveryRunOfWhichStops(behavior, stops,
+                                    whereRunsStopAt(db, stops.stoppedAt()))));
+                    // No run goes down it, so nothing is owed there and nothing is wrong.
+                    case DecisionReading.ImpossiblePath _ -> { }
+                    // Whether runs go down it was not decided, so no gap was shown: what holds the
+                    // verdict open is the figure, which the measure of the decision carries
+                    // ({@link DecisionEvidence}).
+                    case DecisionReading.UndecidedAtAFigure _ -> { }
+                }
             }
             // Only where a reading of the runs was made. A measure with no value has not found a
             // rule nothing takes — it has found nothing — and the arms measure answers the same way

@@ -1240,16 +1240,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .map(each -> reported(compilation, module, each, offered)).toList();
     }
 
-    /** Where every run along each way of {@code decision} every run of which stops stops
-     *  ({@link Adequacy#whereEveryRunStops}). */
+    /** Where every run along each way of {@code decision} through a construction no input gets
+     *  past stops, or would stop were some input to take it ({@link Adequacy#whereRunsStopAt}). */
     private static Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops(
             Compilation compilation, DecisionEvidence decision) {
         if (decision == null) {
             return Map.of();
         }
         Map<DecisionReading.Ruled, List<WhereARunStopped>> out = new LinkedHashMap<>();
-        for (DecisionReading.EveryRunStops each : decision.read().everyRunStops()) {
-            out.put(each.way(), Adequacy.whereEveryRunStops(compilation.db(), each));
+        for (DecisionReading.Excluded each : decision.read().excluded()) {
+            switch (each) {
+                case DecisionReading.EveryRunStops it -> out.put(it.way(),
+                        Adequacy.whereRunsStopAt(compilation.db(), it.stoppedAt()));
+                case DecisionReading.UndecidedAtAFigure it -> out.put(it.way(),
+                        Adequacy.whereRunsStopAt(compilation.db(), it.stoppedAt()));
+                // No run goes down it, so none stops anywhere along it.
+                case DecisionReading.ImpossiblePath _ -> { }
+            }
         }
         return out;
     }
@@ -4892,8 +4899,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             return;
         }
         // And a body every way of which stops states no rule and is told all the same: each such
-        // way is a gap, and this section is where it is said.
-        if (!rulesAreTold(decision) && decision.read().everyRunStops().isEmpty()) {
+        // way is a gap, and this section is where it is said. So is a way nothing decided about,
+        // which may be one.
+        if (!rulesAreTold(decision) && decision.read().everyRunStops().isEmpty()
+                && decision.read().undecided().isEmpty()) {
             return;
         }
         // Absent where nothing was read, which is not a count of none: a build that ran no row did
@@ -4960,6 +4969,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         excluded(out, behavior, decision, rendering, behavior.rulePlace(), declaredIn);
         noInputTakes(out, behavior, decision, rendering, declaredIn);
         everyRunStops(out, behavior, rendering, declaredIn);
+        undecided(out, behavior, decision, rendering, declaredIn);
+    }
+
+    /**
+     * The ways through the body no input gets past where whether any input takes them was not
+     * decided, each with the figure the proof stopped at, where the runs along it would stop and
+     * the conditions the way came to.
+     *
+     * <p>A {@code ?} and not a {@code !}: the way may be one every run of which stops, which is a
+     * gap, or one no input takes, which is nothing, and nothing here says which. What holds it open
+     * is the figure, said as every figure stop is said ({@link #next}); the measure of the decision
+     * carries it ({@link Weakening.AWayLeftUndecided}), so a verdict it keeps open counts it under
+     * what stopped at a figure.
+     */
+    private static void undecided(StringBuilder out, BehaviorReport behavior,
+                                  DecisionEvidence decision, SourceRendering rendering,
+                                  SourceId declaredIn) {
+        for (DecisionReading.UndecidedAtAFigure each : decision.read().undecided()) {
+            List<WhereARunStopped> stops = behavior.wayStops().getOrDefault(each.way(), List.of());
+            out.append(String.format("      ? whether any input takes a way through this body was"
+                            + " not decided — stopped at %s, which no option sets%s%n",
+                    figuresSaid(List.of(each.figure())), stops.isEmpty() ? ""
+                            : "; every run along it would stop at "
+                                    + GeneratedRows.placesStoppedAt(stops, rendering)));
+            for (ShownCondition read : behavior.readingsOf(each.way())) {
+                out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
+            }
+        }
     }
 
     /**
@@ -9566,6 +9603,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList(), sources);
             }
         }
+        // And the ways no input gets past where the proof stopped at a figure before it could say
+        // whether any input takes them: either of the two above, and neither is said. Each with
+        // the figure, and where every run along it would stop were some input to take it.
+        List<DecisionReading.UndecidedAtAFigure> undecided = decision.read().undecided();
+        if (!undecided.isEmpty()) {
+            ArrayNode ways = out.putArray("waysUndecided");
+            for (DecisionReading.UndecidedAtAFigure each : undecided) {
+                ObjectNode one = ways.addObject();
+                ruleId(one.putObject("way"), behavior.name(), each.way().rule());
+                figuresMet(one, List.of(each.figure()));
+                runsStopped(one, behavior.wayStops().get(each.way()).stream()
+                        .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList(), sources);
+            }
+        }
     }
 
     /**
@@ -9910,45 +9961,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             // Where it stopped and where the rule that refused it is declared, as modules: a
             // handle names a type or a behavior and not the module declaring it, and a body run
-            // in one module can stop at a construction written in another.
+            // in one module can stop at a construction written in another. A construction or an
+            // unreachable the run said no place for is written with none.
             switch (each.stop()) {
                 case RunStop.AtAConstruction it -> {
-                    said.put("module", it.siteModule());
+                    it.site().ifPresent(site -> said.put("module", site.module()));
                     said.put("declaredIn", it.clauseModule());
+                    it.site().ifPresent(site -> sitsAt(said, each, site, sources));
                 }
                 case RunStop.AtAnEnsures it -> {
                     said.put("module", it.module());
                     said.put("declaredIn", it.module());
                 }
-                // An unreachable is written somewhere and names no rule, so it has a module and
-                // nothing declared.
-                case RunStop.AtAnUnreachable it -> said.put("module", it.module());
-                case RunStop.AtAnEnd _ -> { }
-            }
-            switch (each.stop()) {
-                case RunStop.AtAConstruction it when it.placed() ->
-                        sitsAt(said, each, it.line(), it.column(), sources);
-                case RunStop.AtAConstruction _, RunStop.AtAnEnsures _ -> { }
-                case RunStop.AtAnEnd it -> said.put("said", it.said());
+                // An unreachable names no rule, so it has nothing declared.
                 case RunStop.AtAnUnreachable it -> {
+                    it.site().ifPresent(site -> said.put("module", site.module()));
                     said.put("said", it.said());
-                    if (it.placed()) {
-                        sitsAt(said, each, it.line(), it.column(), sources);
-                    }
+                    it.site().ifPresent(site -> sitsAt(said, each, site, sources));
                 }
+                case RunStop.AtAnEnd it -> said.put("said", it.said());
             }
         }
     }
 
     /** Where a place a run stopped at sits in the text of its module: the source declaring that
      *  module where this compilation holds one, and the line and column. */
-    private static void sitsAt(ObjectNode said, WhereARunStopped where, int line, int column,
+    private static void sitsAt(ObjectNode said, WhereARunStopped where, RunStop.Site site,
                                DocumentSources sources) {
         if (where.source().isPresent()) {
             said.put("sourceId", sources.written(where.source().get()));
         }
-        said.put("line", line);
-        said.put("column", column);
+        said.put("line", site.line());
+        said.put("column", site.column());
     }
 
     /** How this document says what a search settled about one rule. */
@@ -11586,6 +11630,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // policy and travels as the reason.
             case Weakening.DecisionReadingIncomplete _ -> WeakeningWord.DECISION_NOT_FULLY_READ;
             case Weakening.DecisionRuleReadShort _ -> WeakeningWord.DECISION_RULE_READ_SHORT;
+            case Weakening.AWayLeftUndecided _ -> WeakeningWord.DECISION_WAY_UNDECIDED;
             case Weakening.KeyedOverwriteCasesUnmeasured _ ->
                     WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED;
             case Weakening.ReachableNodeCasesUnmeasured _ ->

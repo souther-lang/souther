@@ -1,10 +1,13 @@
 package souther.compiler.partition;
 
+import souther.compiler.observe.Figure;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -35,60 +38,92 @@ final class WaysNoInputTakes {
      * statement turned on where it was consulted would have to be a condition of its own, or this
      * would answer one way with another's proof.
      */
-    private final Map<DecisionPath.Way, Optional<NoInputTakesIt>> asked = new HashMap<>();
+    private final Map<DecisionPath.Way, Asked> asked = new HashMap<>();
 
-    /** How many more conditions this reading takes in, in all
-     *  ({@link CompositionBudget#CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE}). */
-    private int takenInLeft = CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE.maximum();
+    /** The figure this reading takes conditions in up to, in all, as it stands for the compilation
+     *  reading the body ({@link CompositionBudget#CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE}). */
+    private final Figure.Budget figure =
+            CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE.reached();
+
+    /** How many more conditions this reading takes in, in all. */
+    private int takenInLeft = figure.at();
+
+    /** How many times a walk asked to take a condition in and was told no. */
+    private int refused;
 
     /**
-     * Why no input takes {@code path}, where that is proved, asked once for what it consulted —
-     * and nothing once this reading has taken in as many conditions as it does in all, which is no
-     * proof and keeps the way.
+     * What asking whether some input takes a way came to: three answers, because a walk that was
+     * told no to a condition it asked to take in proves nothing and has not shown that some input
+     * takes the way either.
      */
-    Optional<NoInputTakesIt> whyNoInputTakes(DecisionPath.Way consulted,
-                                             Supplier<Optional<NoInputTakesIt>> proving) {
-        Optional<NoInputTakesIt> known = asked.get(consulted);
+    sealed interface Asked {
+
+        /** No input takes the way, for {@code why}. */
+        record Proved(NoInputTakesIt why) implements Asked {
+
+            public Proved {
+                Objects.requireNonNull(why, "a proof says what it was had from");
+            }
+        }
+
+        /** The walk was had in full and proved nothing: the way is kept. */
+        record NotProved() implements Asked {}
+
+        /** The figure was spent before or during the walk, so what the way comes to is not known:
+         *  the way is kept, and a reader told why. */
+        record StoppedAt(Figure figure) implements Asked {
+
+            public StoppedAt {
+                Objects.requireNonNull(figure, "a walk stopped at some figure");
+            }
+        }
+
+        /** The proof, where there is one. */
+        default Optional<NoInputTakesIt> proof() {
+            return this instanceof Proved(NoInputTakesIt why) ? Optional.of(why) : Optional.empty();
+        }
+    }
+
+    /**
+     * What asking whether some input takes {@code consulted} comes to, asked once for what it
+     * consulted, where {@code proving} is the walk that answers it: nothing taken in once this
+     * reading has taken in as many conditions as it does in all, which is no proof and keeps the
+     * way.
+     */
+    Asked whyNoInputTakes(DecisionPath.Way consulted, Supplier<Optional<NoInputTakesIt>> proving) {
+        Asked known = asked.get(consulted);
         if (known != null) {
             return known;
         }
         if (takenInLeft == 0) {
-            return Optional.empty();
+            return new Asked.StoppedAt(figure);
         }
+        int refusedBefore = refused;
         Optional<NoInputTakesIt> answered = proving.get();
-        asked.put(consulted, answered);
-        return answered;
+        Asked out = answered.<Asked>map(Asked.Proved::new).orElseGet(() ->
+                refused > refusedBefore ? new Asked.StoppedAt(figure) : new Asked.NotProved());
+        asked.put(consulted, out);
+        return out;
     }
 
     /**
      * Whether a proof may take one more condition in, counting it if so. A walk told no takes the
-     * condition in as nothing, which narrows nothing and so proves nothing past it.
+     * condition in as nothing, which narrows nothing and so proves nothing past it, and what it
+     * comes to is said to have stopped at the figure.
      */
     boolean takesIn() {
         if (takenInLeft == 0) {
+            refused++;
             return false;
         }
         takenInLeft--;
         return true;
     }
 
-    /** Whether this reading has taken in as many conditions as it does in all, so that a way not
-     *  proved closed now may be one a proof would have closed. */
-    boolean spent() {
-        return takenInLeft == 0;
-    }
-
-    /**
-     * That no input takes {@code path} getting past every construction on it, for {@code why} —
-     * and, where {@code everyRunStops}, that the conditions on it do not give that alone, so every
-     * run along it is refused at one of its constructions.
-     */
-    void add(DecisionPath path, NoInputTakesIt why, boolean everyRunStops) {
-        DecisionReading.Ruled way = new DecisionReading.Ruled(path.rule(), path.steps(), true,
-                path.passed());
-        proved.putIfAbsent(path.way(), everyRunStops
-                ? new DecisionReading.EveryRunStops(way, why)
-                : new DecisionReading.ImpossiblePath(way, why));
+    /** That no input takes the way {@code excluded} is, getting past every construction on it,
+     *  and what the proof says the way is. */
+    void add(DecisionPath path, DecisionReading.Excluded excluded) {
+        proved.putIfAbsent(path.way(), excluded);
     }
 
     /**

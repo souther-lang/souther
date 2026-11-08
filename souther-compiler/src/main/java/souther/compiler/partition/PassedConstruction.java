@@ -1,9 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Clause;
 import souther.compiler.diag.SourcePos;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * One clause of a construction a way goes through, and what a run getting past that clause states
@@ -24,13 +24,16 @@ import java.util.List;
  * @param states what getting past the clause states, in the words a composer of a row works from
  * @param at     where the construction is written, or null where the code it stands in was made
  *               with no place
- * @param clause the clause of the invariant it is held to, or null where a declaration whose
- *               clauses govern the value was not reached, and what it states is that the invariant
- *               was not read
+ * @param clause the clause of the invariant it is held to, or that a declaration whose clauses
+ *               govern the value was not reached and what it states is that the invariant was not
+ *               read ({@link ClauseOfAConstruction})
  */
-public record PassedConstruction(List<OnTheWay> states, SourcePos at, Clause.Ref clause) {
+public record PassedConstruction(List<OnTheWay> states, SourcePos at,
+                                 ClauseOfAConstruction clause) {
 
     public PassedConstruction {
         states = List.copyOf(states);
+        Objects.requireNonNull(clause, "a construction is held to a clause, or to an invariant"
+                + " not reached");
     }
 }

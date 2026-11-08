@@ -91,7 +91,7 @@ class WhoWorksOutWhatASumCanBeIsWrittenDownTest {
                     "(Ljava/lang/String;L" + CHECK + "DerivedSymbols;" + PUBLISHED + KINDS + "L"
                             + CHECK + "NewtypeInners;Lsouther/compiler/core/KernelSignatures;"
                             + "Ljava/util/Map;Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;"
-                            + "Lsouther/compiler/diag/SourceLayouts;"
+                            + "Lsouther/compiler/codegen/TextsOfModules;"
                             + "Lsouther/compiler/diag/QuotedFrom;L" + CODEGEN + "LinkageReader;)V",
                     THE_WALK_ONCE_EACH),
             row(QUERY + "Linkages$Provided", "compute",

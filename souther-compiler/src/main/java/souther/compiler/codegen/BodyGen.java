@@ -5,6 +5,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.PhysicalPos;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorAnswers;
@@ -1004,18 +1005,32 @@ final class BodyGen {
         }
 
         /**
-         * Pushes where {@code u} is written, for the abort to carry beside its message: the module
-         * whose text it is written in and the line and column there, or a line of nought where
-         * this compilation holds that text not laid out.
+         * Pushes where {@code u} is written, for the abort to carry beside its message
+         * ({@link #writtenAt}).
          *
          * <p>Where it is written, and not where this class's line table could put it, for the
          * reason a refused construction's site is ({@link #refusedAt}).
          */
         private void reachedAt(Core.Unreachable u) {
-            CodegenContext.WrittenAt at = ctx.writtenAt(u.pos());
-            code.loadConstant(at.module());
-            code.loadConstant(at.sits() == null ? 0 : at.sits().line());
-            code.loadConstant(at.sits() == null ? 0 : at.sits().column());
+            writtenAt(u.pos());
+        }
+
+        /**
+         * Pushes where {@code place} is written: the module whose text it is in and the line and
+         * column there, or no module and a line of nought where this compilation holds no such
+         * place ({@link CodegenContext#writtenAt}), which the runtime reads as no place.
+         */
+        private void writtenAt(SourcePos place) {
+            Optional<CodegenContext.WrittenAt> at = ctx.writtenAt(place);
+            if (at.isPresent()) {
+                code.loadConstant(at.get().module());
+                code.loadConstant(at.get().sits().line());
+                code.loadConstant(at.get().sits().column());
+            } else {
+                code.aconst_null();
+                code.loadConstant(0);
+                code.loadConstant(0);
+            }
         }
 
         /**
@@ -1360,10 +1375,7 @@ final class BodyGen {
          * CodegenContext#writtenAt}).
          */
         private void refusedAt(Core.Construct nd) {
-            CodegenContext.WrittenAt at = ctx.writtenAt(nd.pos());
-            code.loadConstant(at.module());
-            code.loadConstant(at.sits() == null ? 0 : at.sits().line());
-            code.loadConstant(at.sits() == null ? 0 : at.sits().column());
+            writtenAt(nd.pos());
             code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrowAt);
         }
 

@@ -117,6 +117,7 @@ public sealed interface Weakening {
                 case DecisionReading.Enumeration.StoppedAtAFigure(CompositionBudget figure) ->
                         List.of(figure.figure());
             };
+            case AWayLeftUndecided it -> List.of(it.way().figure());
             case RewriteUndecided it -> it.why().figures();
         };
     }
@@ -859,6 +860,37 @@ public sealed interface Weakening {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A way through the body no input gets past, where whether any input takes it was not decided
+     * for the figure of conditions taken in ({@link DecisionReading.UndecidedAtAFigure}).
+     *
+     * <p>What it takes away is the claim that the body has no way every run of which stops. Some
+     * input may take the way, and then every run of it stops at a construction on it, which is a
+     * gap; or none does, and nothing is owed. No rule past the way is owed a row either way, so
+     * the rules counted are not short of it.
+     *
+     * <p>Of the way and not of the behavior: two ways left undecided are two things a body may be
+     * wrong about.
+     *
+     * @param behavior whose body the way is through
+     * @param way      the way, the constructions still in the proof and the figure it stopped at
+     */
+    record AWayLeftUndecided(String behavior, DecisionReading.UndecidedAtAFigure way)
+            implements Weakening {
+
+        public AWayLeftUndecided {
+            Objects.requireNonNull(behavior, "a way through a body is some behavior's");
+            Objects.requireNonNull(way, "a way left undecided is some way");
+        }
+
+        /** What stopped the proof is a figure this reading was held to, so a reading held to a
+         *  larger one gets further. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
         }
     }
 

@@ -52,14 +52,14 @@ public sealed interface RunStop {
     private static int byWhatItHolds(RunStop one, RunStop other) {
         Comparator<Optional<String>> named = Comparator.comparing(
                 each -> each.orElse(null), Comparator.nullsFirst(Comparator.naturalOrder()));
+        Comparator<Optional<Site>> placed = Comparator.comparing(
+                each -> each.orElse(null), Comparator.nullsFirst(Site.IN_A_STEADY_ORDER));
         return switch (one) {
             case AtAConstruction it -> Comparator.comparing(AtAConstruction::clauseModule)
                     .thenComparing(AtAConstruction::clauseType)
                     .thenComparing(AtAConstruction::clauseName, named)
                     .thenComparingInt(AtAConstruction::ordinal)
-                    .thenComparing(AtAConstruction::siteModule)
-                    .thenComparingInt(AtAConstruction::line)
-                    .thenComparingInt(AtAConstruction::column)
+                    .thenComparing(AtAConstruction::site, placed)
                     .compare(it, (AtAConstruction) other);
             case AtAnEnsures it -> Comparator.comparing(AtAnEnsures::module)
                     .thenComparing(AtAnEnsures::behavior)
@@ -67,48 +67,66 @@ public sealed interface RunStop {
                     .compare(it, (AtAnEnsures) other);
             case AtAnEnd it -> it.said().compareTo(((AtAnEnd) other).said());
             case AtAnUnreachable it -> Comparator.comparing(AtAnUnreachable::said)
-                    .thenComparing(AtAnUnreachable::module)
-                    .thenComparingInt(AtAnUnreachable::line)
-                    .thenComparingInt(AtAnUnreachable::column)
+                    .thenComparing(AtAnUnreachable::site, placed)
                     .compare(it, (AtAnUnreachable) other);
         };
+    }
+
+    /**
+     * Where a construction or an {@code unreachable} is written, as the code that stopped the run
+     * said it: the module whose text it is in, which for one inlined from another module's helper
+     * is that module, and the line and column it starts at there.
+     *
+     * <p>All three or none. The code generator says a place only where this compilation held the
+     * text laid out, and a stop it said none for has no place here rather than another module's
+     * name in its stead.
+     *
+     * @param module the module whose text it is written in
+     * @param line   the line it starts at, from one
+     * @param column the column it starts at, from one
+     */
+    record Site(String module, int line, int column) {
+
+        /** These in a steady order: the module, then the line, then the column. */
+        static final Comparator<Site> IN_A_STEADY_ORDER = Comparator.comparing(Site::module)
+                .thenComparingInt(Site::line).thenComparingInt(Site::column);
+
+        public Site {
+            Objects.requireNonNull(module, "a place is written in some module's text");
+            if (line < 1) {
+                throw new IllegalArgumentException("a place is at a line, from one: " + line);
+            }
+        }
     }
 
     /**
      * A construction one of its type's invariant clauses refused.
      *
      * <p>Which clause by the declaration that wrote it and its place among that declaration's
-     * clauses, which a clause has whether or not it was named. Where the construction is by the
-     * module whose code wrote it and the line and column it starts at; a construction the generated
-     * code had no place for has none ({@code line} of nought).
+     * clauses, which a clause has whether or not it was named. Where the construction is written,
+     * where the code that refused it said ({@link Site}).
      *
      * @param clauseModule the module of the declaration that wrote the clause
      * @param clauseType   that declaration
      * @param clauseName   the clause's name, where it was declared with one
      * @param ordinal      the clause's place among that declaration's clauses, from nought
-     * @param siteModule   the module whose code wrote the construction
-     * @param line         the line it starts at, from one; nought where it has no place
-     * @param column       the column it starts at, from one
+     * @param site         where the construction is written, or none where the code that refused
+     *                     it said no place
      */
     record AtAConstruction(String clauseModule, String clauseType, Optional<String> clauseName,
-                           int ordinal, String siteModule, int line, int column)
+                           int ordinal, Optional<Site> site)
             implements RunStop {
 
         public AtAConstruction {
             Objects.requireNonNull(clauseModule, "a clause is written in some module");
             Objects.requireNonNull(clauseType, "a clause is written on some declaration");
             Objects.requireNonNull(clauseName, "a clause was declared with a name or without one");
-            Objects.requireNonNull(siteModule, "a construction is written in some module");
-        }
-
-        /** Whether the code that refused it said where the construction is. */
-        public boolean placed() {
-            return line > 0;
+            Objects.requireNonNull(site, "a construction was said to be somewhere or nowhere");
         }
 
         @Override
         public Optional<String> writtenIn() {
-            return Optional.of(siteModule);
+            return site.map(Site::module);
         }
     }
 
@@ -154,30 +172,21 @@ public sealed interface RunStop {
 
     /**
      * An {@code unreachable} the run reached, with what the code said there and where it is
-     * written: the module whose text it is in, which for one inlined from another module's helper
-     * is that module, and the line and column there. One the generated code had no place for has
-     * none ({@code line} of nought).
+     * written, where the code that reached it said ({@link Site}).
      *
-     * @param said   what the reached {@code unreachable} said
-     * @param module the module whose text it is written in
-     * @param line   the line it is written at, from one; nought where it has no place
-     * @param column the column it is written at, from one
+     * @param said what the reached {@code unreachable} said
+     * @param site where it is written, or none where the code that reached it said no place
      */
-    record AtAnUnreachable(String said, String module, int line, int column) implements RunStop {
+    record AtAnUnreachable(String said, Optional<Site> site) implements RunStop {
 
         public AtAnUnreachable {
             Objects.requireNonNull(said, "an unreachable says something when it is reached");
-            Objects.requireNonNull(module, "an unreachable is written in some module");
-        }
-
-        /** Whether the code that reached it said where it is written. */
-        public boolean placed() {
-            return line > 0;
+            Objects.requireNonNull(site, "an unreachable was said to be somewhere or nowhere");
         }
 
         @Override
         public Optional<String> writtenIn() {
-            return Optional.of(module);
+            return site.map(Site::module);
         }
     }
 }

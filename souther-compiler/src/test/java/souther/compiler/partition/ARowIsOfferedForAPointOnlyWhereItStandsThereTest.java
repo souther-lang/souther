@@ -256,7 +256,8 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
     @Test
     void theConstructionsTheRunsStoppedAtAreKeptBesideTheRowsWhicheverTheWord() {
         WhereARunStopped stop = new WhereARunStopped(new RunStop.AtAConstruction("m", "T",
-                Optional.empty(), 0, "m", 8, 23), Optional.empty());
+                Optional.empty(), 0, Optional.of(new RunStop.Site("m", 8, 23))),
+                Optional.empty());
         Set<WhereARunStopped> stops = Set.of(stop);
 
         Generator.BoundaryAttempt.Unresolved none = assertInstanceOf(

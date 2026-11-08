@@ -1436,18 +1436,26 @@ public final class GeneratedRows {
      * where runs stopped, so a place reads alike wherever a reader meets it.
      */
     static String stoppedAt(List<WhereARunStopped> stops, SourceRendering rendering) {
+        return "the runs stopped at " + placesStoppedAt(stops, rendering);
+    }
+
+    /** The same places, each once and with nothing before them, for a line that says what the
+     *  runs did in words of its own. */
+    static String placesStoppedAt(List<WhereARunStopped> stops, SourceRendering rendering) {
         List<String> each = new ArrayList<>();
         for (WhereARunStopped stop : stops) {
             each.add(onePlaceStoppedAt(stop, rendering));
         }
-        return "the runs stopped at " + String.join(" and at ", each);
+        return String.join(" and at ", each);
     }
 
-    /** One place a run stopped, in the handle a report names the rule there by. */
+    /** One place a run stopped, in the handle a report names the rule there by, and where it is
+     *  written only where the run said. */
     private static String onePlaceStoppedAt(WhereARunStopped where, SourceRendering rendering) {
         return switch (where.stop()) {
-            case RunStop.AtAConstruction it -> "the construction "
-                    + constructionAt(it, where, rendering) + ", where "
+            case RunStop.AtAConstruction it -> "the construction"
+                    + it.site().map(site -> " " + writtenAt(site, where, rendering)).orElse("")
+                    + ", where "
                     + RuleHandleProse.said(ruleRefusing(it).orElseThrow(), rendering, null)
                     + " did not hold";
             case RunStop.AtAnEnsures it -> "the answer, where "
@@ -1455,8 +1463,8 @@ public final class GeneratedRows {
                     + " did not hold";
             case RunStop.AtAnEnd it -> "an operation the runtime would not finish (" + it.said()
                     + ")";
-            case RunStop.AtAnUnreachable it -> "an `unreachable` "
-                    + writtenAt(it.module(), it.line(), it.column(), where, rendering)
+            case RunStop.AtAnUnreachable it -> "an `unreachable`"
+                    + it.site().map(site -> " " + writtenAt(site, where, rendering)).orElse("")
                     + " (" + it.said() + ")";
         };
     }
@@ -1482,27 +1490,17 @@ public final class GeneratedRows {
         };
     }
 
-    /** Where a construction a run stopped at is written, as far as its run said. */
-    private static String constructionAt(RunStop.AtAConstruction refused, WhereARunStopped where,
-                                         SourceRendering rendering) {
-        return writtenAt(refused.siteModule(), refused.line(), refused.column(), where,
-                rendering);
-    }
-
     /**
-     * Where a place a run stopped at is written, as far as its run said: the source and the line
-     * and column in it, or the module where this compilation holds no source declaring it, or the
-     * module alone where the run said no line.
+     * Where a place a run stopped at is written, as its run said: the source and the line and
+     * column in it, or the line and column of the module where this compilation holds no source
+     * declaring it.
      */
-    private static String writtenAt(String module, int line, int column, WhereARunStopped where,
+    private static String writtenAt(RunStop.Site site, WhereARunStopped where,
                                     SourceRendering rendering) {
-        if (line <= 0) {
-            return "in `" + module + "`";
-        }
-        String numbers = line + ":" + column;
+        String numbers = site.line() + ":" + site.column();
         return where.source()
                 .map(source -> "at " + rendering.names().nameOf(source) + ":" + numbers)
-                .orElseGet(() -> "at " + numbers + " of `" + module + "`");
+                .orElseGet(() -> "at " + numbers + " of `" + site.module() + "`");
     }
 
     /**

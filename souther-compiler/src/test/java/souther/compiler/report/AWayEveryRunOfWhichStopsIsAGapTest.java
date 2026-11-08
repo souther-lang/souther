@@ -129,7 +129,7 @@ class AWayEveryRunOfWhichStopsIsAGapTest {
         DecisionReading.EveryRunStops way = read.everyRunStops().getFirst();
         Adequacy.Finding finding = Adequacy.Finding.noticed("one",
                 new About.AWayEveryRunOfWhichStops("one", way,
-                        Adequacy.whereEveryRunStops(bodies.db(), way)));
+                        Adequacy.whereRunsStopAt(bodies.db(), way.stoppedAt())));
         List<AdequacyReport.ModuleReport> modules = new ArrayList<>();
         for (AdequacyReport.ModuleReport module : own.modules()) {
             List<AdequacyReport.BehaviorReport> behaviors = new ArrayList<>();

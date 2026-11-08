@@ -425,9 +425,11 @@ public final class RowTrial {
     private static Optional<RunStop> stopOf(InvocationFailure stopped) {
         for (Throwable cause = stopped.getCause(); cause != null; cause = cause.getCause()) {
             if (cause instanceof UnreachableReached reached) {
+                UnreachableReached.Site site = reached.site();
                 return Optional.of(new RunStop.AtAnUnreachable(String.valueOf(
-                        reached.getMessage()), reached.module(), reached.line(),
-                        reached.line() > 0 ? reached.column() : 0));
+                        reached.getMessage()), site == null ? Optional.empty()
+                                : Optional.of(new RunStop.Site(site.module(), site.line(),
+                                        site.column()))));
             }
             if (cause instanceof ConstraintViolation violation) {
                 return Optional.of(switch (violation.failure()) {
@@ -435,9 +437,9 @@ public final class RowTrial {
                         ConstraintViolation.ConstructionSite site = violation.site();
                         yield new RunStop.AtAConstruction(failed.declared().module(),
                                 failed.declared().type(), Optional.ofNullable(failed.clause()),
-                                failed.declared().ordinal(),
-                                site == null ? failed.module() : site.module(),
-                                site == null ? 0 : site.line(), site == null ? 0 : site.column());
+                                failed.declared().ordinal(), site == null ? Optional.empty()
+                                        : Optional.of(new RunStop.Site(site.module(), site.line(),
+                                                site.column())));
                     }
                     case EnsuresFailure failed -> new RunStop.AtAnEnsures(failed.module(),
                             failed.behavior(), Optional.ofNullable(failed.clause()));

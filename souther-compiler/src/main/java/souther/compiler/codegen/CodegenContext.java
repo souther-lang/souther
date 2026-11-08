@@ -151,28 +151,32 @@ final class CodegenContext {
      * <p>Beside {@link #sits} and not a looser {@code sits}. A line table can only name the class's
      * own text, so that one refuses every other; a construction's site is said to whoever reads a
      * run, which can be told a module and a place in its text, so this answers for any text this
-     * compilation holds. A place in a text no module is known for is said as this module's, with no
-     * line.
+     * compilation holds.
+     *
+     * <p>None where the place has no text, its text is no module's this compilation knows, or the
+     * text is not laid out: a place said as another module's, or as a module with no line, would
+     * be a place the reader of the run is told and the construction is not at.
      */
-    WrittenAt writtenAt(SourcePos place) {
+    Optional<WrittenAt> writtenAt(SourcePos place) {
         if (place == null) {
-            return new WrittenAt(pkg, null);
+            return Optional.empty();
         }
         Optional<String> module = layouts.moduleOf(place.quotedFrom());
-        return module.isEmpty() ? new WrittenAt(pkg, null)
-                : new WrittenAt(module.get(), layouts.resolve(place));
+        PhysicalPos sits = module.isEmpty() ? null : layouts.resolve(place);
+        return sits == null ? Optional.empty() : Optional.of(new WrittenAt(module.get(), sits));
     }
 
     /**
      * A place as {@link #writtenAt} says it.
      *
      * @param module the module whose text the place is in
-     * @param sits   where it sits in that text, or null where this compilation holds it not laid out
+     * @param sits   where it sits in that text
      */
     record WrittenAt(String module, PhysicalPos sits) {
 
         WrittenAt {
             Objects.requireNonNull(module, "a place is in some module's text");
+            Objects.requireNonNull(sits, "a place sits somewhere in its text");
         }
     }
 

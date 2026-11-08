@@ -317,10 +317,16 @@ public final class RulesTaken {
         // The ways no input takes are recognised as the rules are, condition by condition: a run
         // that brought out each of them as the way did is the proof shown wrong. Not a way every
         // run of which stops: runs bring its conditions out as it does, which is what was proved,
-        // and a run seen doing so is the proof shown right rather than wrong.
+        // and a run seen doing so is the proof shown right rather than wrong. Nor a way the proof
+        // did not tell between the two: a run bringing its conditions out answers which, and
+        // shows nothing that was proved wrong.
         List<Recognised> proofs = new ArrayList<>();
-        for (DecisionReading.ImpossiblePath each : read.impossible()) {
-            recognised(each.way(), comparisons, answers, arms, plan).ifPresent(proofs::add);
+        for (DecisionReading.Excluded each : read.excluded()) {
+            switch (each) {
+                case DecisionReading.ImpossiblePath it -> recognised(it.way(), comparisons,
+                        answers, arms, plan).ifPresent(proofs::add);
+                case DecisionReading.EveryRunStops _, DecisionReading.UndecidedAtAFigure _ -> { }
+            }
         }
         Map<ColumnWitness, ColumnWitness> one = new HashMap<>();
         return new RulesTaken(shared(recognisable, one), shared(proofs, one));

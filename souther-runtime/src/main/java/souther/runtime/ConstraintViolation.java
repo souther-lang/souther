@@ -95,11 +95,13 @@ public final class ConstraintViolation extends RuntimeException {
 
     /**
      * The same, for a construction written at {@code line} and {@code column} of {@code module}'s
-     * source: what a generated body calls, so the abort says which construction it was. A line of
-     * nought is a construction the code generator had no place for, and the abort names none.
+     * source: what a generated body calls, so the abort says which construction it was. A
+     * {@code module} of none, or a line of nought, is a construction the code generator had no
+     * place for, and the abort names none.
      */
-    public static Object orThrow(Result<?, ?> r, String module, int line, int column) {
-        return refused(r, line > 0 ? new ConstructionSite(module, line, column) : null);
+    public static Object orThrow(Result<?, ?> r, @Nullable String module, int line, int column) {
+        return refused(r, module != null && line > 0
+                ? new ConstructionSite(module, line, column) : null);
     }
 
     private static Object refused(Result<?, ?> r, @Nullable ConstructionSite site) {

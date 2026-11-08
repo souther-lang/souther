@@ -416,6 +416,7 @@
           "arms_unsettled",
           "decision_not_fully_read",
           "decision_rule_read_short",
+          "decision_way_undecided",
           "keyed_overwrite_cases_unmeasured",
           "reachable_node_cases_unmeasured",
           "decision_of_row_unreadable",
@@ -2333,7 +2334,8 @@
         "additionalProperties": false,
         "dependentRequired": {
           "line": [
-            "column"
+            "column",
+            "module"
           ],
           "column": [
             "line"
@@ -2342,7 +2344,6 @@
             "line"
           ],
           "rule": [
-            "module",
             "declaredIn"
           ],
           "declaredIn": [
@@ -2364,7 +2365,7 @@
           },
           "module": {
             "type": "string",
-            "description": "Where the run stopped, as a module: for a construction or an `unreachable`, the module whose text it is written in, which for a body that calls another module's helper is that module and not the one whose behavior ran; for an ensures, the behavior's module. Present wherever `rule` is, and for an `unreachable`; absent for an end, which the runtime says no place for."
+            "description": "Where the run stopped, as a module: for a construction or an `unreachable`, the module whose text it is written in, which for a body that calls another module's helper is that module and not the one whose behavior ran; for an ensures, the behavior's module. For a construction or an `unreachable`, present exactly where the code that stopped the run said where it is written, with `line` and `column`, and absent with them where it said no place — never another module in its stead. Present for an ensures; absent for an end, which the runtime says no place for."
           },
           "declaredIn": {
             "type": "string",
@@ -2377,7 +2378,7 @@
           "line": {
             "type": "integer",
             "minimum": 1,
-            "description": "The line the construction or the `unreachable` starts at in the text of `module`, counted from one. Absent where the code that stopped the run had no place for it: where this compilation holds that text not laid out."
+            "description": "The line the construction or the `unreachable` starts at in the text of `module`, counted from one. Absent, with `module` and `sourceId`, where the code that stopped the run had no place for it: where the place has no text, or this compilation holds its text not laid out or as no module's."
           },
           "column": {
             "type": "integer",
@@ -2391,7 +2392,7 @@
         },
         "allOf": [
           {
-            "description": "A construction is refused by a rule and is written somewhere: the rule is named, and nothing the runtime said is.",
+            "description": "A construction is refused by a rule: the rule is named, and nothing the runtime said is. Where it is written is said whole — `module`, `line` and `column` — or not at all.",
             "if": {
               "properties": {
                 "at": {
@@ -2403,6 +2404,11 @@
               "required": [
                 "rule"
               ],
+              "dependentRequired": {
+                "module": [
+                  "line"
+                ]
+              },
               "not": {
                 "required": [
                   "said"
@@ -2411,7 +2417,7 @@
             }
           },
           {
-            "description": "An ensures is a rule of the answer and stands at no construction.",
+            "description": "An ensures is a rule of the answer and stands at no construction: it is in the behavior's module, and at no line.",
             "if": {
               "properties": {
                 "at": {
@@ -2421,7 +2427,8 @@
             },
             "then": {
               "required": [
-                "rule"
+                "rule",
+                "module"
               ],
               "not": {
                 "anyOf": [
@@ -2474,7 +2481,7 @@
             }
           },
           {
-            "description": "An unreachable names no rule: what it said is the reason the model wrote, and it is written somewhere, in the text of `module` and, where the code that reached it had a place for it, at `line` and `column` there.",
+            "description": "An unreachable names no rule: what it said is the reason the model wrote. Where it is written — the text of `module`, at `line` and `column` there — is said whole where the code that reached it had a place for it, and not at all where it had none.",
             "if": {
               "properties": {
                 "at": {
@@ -2484,9 +2491,13 @@
             },
             "then": {
               "required": [
-                "said",
-                "module"
+                "said"
               ],
+              "dependentRequired": {
+                "module": [
+                  "line"
+                ]
+              },
               "not": {
                 "required": [
                   "rule"
@@ -7092,6 +7103,37 @@
               "runsStopped": {
                 "$ref": "#/$defs/runsStopped",
                 "description": "Where every run along the way stops: one entry for each clause of a construction the proof keeps, which is a clause the inputs of the way break. A clause of the same construction those inputs keep is not named."
+              }
+            }
+          }
+        },
+        "waysUndecided": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The ways through the body no input gets past where the reading stopped at a figure before it could say whether any input takes them, apart from `waysNoInputTakes` and `waysEveryRunStops` and from the rules: the proof that no input gets past the constructions on the way was had, and the proof without one of them was not answered for the figure. So the way is one of the two and neither is said: some input may bring its conditions out, and then every such run stops at a construction kept, which is a gap; or none does, and nothing is owed. Each stands for every rule that goes on from it, as the ways of the other two lists do; none of those rules is in `obligations` or counted in `coverage`. Each is a `decision_way_undecided` weakening of the decision's measure as well, which keeps the verdict open under the figure. Absent where no proof stopped short of saying which.",
+          "items": {
+            "type": "object",
+            "required": [
+              "way",
+              "figures"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "way": {
+                "$ref": "#/$defs/ruleObligationId"
+              },
+              "figures": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "The figure the proof stopped at, by the name it is declared as: what a wider run would have to allow to say which the way is.",
+                "items": {
+                  "$ref": "#/$defs/figure"
+                }
+              },
+              "runsStopped": {
+                "$ref": "#/$defs/runsStopped",
+                "description": "Where every run along the way would stop were some input to take it: one entry for each clause of a construction still in the proof. A construction whose invariant was not reached names no clause and is not here. Absent where no construction still in the proof names a clause."
               }
             }
           }

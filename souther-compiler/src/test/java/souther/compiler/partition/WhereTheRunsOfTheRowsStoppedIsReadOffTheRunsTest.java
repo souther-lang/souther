@@ -21,7 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhereTheRunsOfTheRowsStoppedIsReadOffTheRunsTest {
 
     private static final WhereARunStopped STOP = new WhereARunStopped(new RunStop.AtAConstruction(
-            "m", "T", Optional.empty(), 0, "m", 8, 23), Optional.empty());
+            "m", "T", Optional.empty(), 0, Optional.of(new RunStop.Site("m", 8, 23))),
+            Optional.empty());
 
     /** A trial whose every run stops at {@link #STOP}, run once per row. */
     private static Generator.Trial stopping() {

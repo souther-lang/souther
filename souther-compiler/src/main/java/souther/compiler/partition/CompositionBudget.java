@@ -400,10 +400,12 @@ public enum CompositionBudget {
      *
      * <p>Over the whole reading and not each way, since what multiplies is how many ways are asked.
      *
-     * <p><b>Reaching it proves nothing and stops nothing.</b> Past it no condition is taken in and
-     * no way is asked, and a way not proved is a way kept: the rules past it are read as rules, and
-     * a rule no run takes among them is what the reading of reach says of it, as it would be with
-     * no proof at all.
+     * <p><b>Reaching it proves nothing.</b> Past it no condition is taken in and no way is asked,
+     * and a way not proved is a way kept: the rules past it are read as rules, and a rule no run
+     * takes among them is what the reading of reach says of it, as it would be with no proof at
+     * all. What it does stop is a proof being said of fewer constructions: a way no input gets past
+     * whose proof without a construction was left unanswered is said as a way the proof did not
+     * tell, with this figure ({@link DecisionReading.UndecidedAtAFigure}).
      */
     CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE(4096),
 

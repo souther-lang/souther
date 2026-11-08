@@ -19,7 +19,6 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.ConstantComparison;
 import souther.compiler.check.CallArguments;
-import souther.compiler.check.Clause;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DateMonthMoves;
@@ -2860,13 +2859,15 @@ final class Pullback {
      * What a run getting past a construction states of one clause it is held to: that clause
      * holding of what the construction hands it.
      *
-     * @param clause the clause, or null where a declaration whose clauses govern the value was not
-     *               reached, and what is stated is that the invariant could not be read
+     * @param clause the clause, or that a declaration whose clauses govern the value was not
+     *               reached and what is stated is that the invariant could not be read
      * @param stated what the clause holding states of the input
      */
-    record OfAClause(Clause.Ref clause, Pulled stated) {
+    record OfAClause(ClauseOfAConstruction clause, Pulled stated) {
 
         OfAClause {
+            Objects.requireNonNull(clause, "a statement is of a clause, or of an invariant not"
+                    + " reached");
             Objects.requireNonNull(stated, "a clause holding states something, if only that it"
                     + " was not read");
         }
@@ -2891,13 +2892,15 @@ final class Pullback {
                 namesIn(construction, reads, read));
         ClausesInOrder clauses = ClausesInOrder.at(construction, read.rules());
         if (!clauses.everyRuleReached()) {
-            return List.of(new OfAClause(null, reading.pulled(new Derivation.Stopped(
-                    new WhyUnread.AnInvariantNotReached(), false))));
+            return List.of(new OfAClause(new ClauseOfAConstruction.NotReached(),
+                    reading.pulled(new Derivation.Stopped(
+                            new WhyUnread.AnInvariantNotReached(), false))));
         }
         List<Derivation> holds = reading.holding(clauses, reads);
         List<OfAClause> out = new ArrayList<>(holds.size());
         for (int each = 0; each < holds.size(); each++) {
-            out.add(new OfAClause(clauses.inOrder().get(each).clause(),
+            out.add(new OfAClause(
+                    new ClauseOfAConstruction.Held(clauses.inOrder().get(each).clause()),
                     reading.pulled(new Derivation.ItWasBuilt(List.of(holds.get(each))))));
         }
         return out;

@@ -68,10 +68,14 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         // And every rule read short, because the measure is of all the rules: a count of the rules
         // the rows took is short of whatever rule a run could not be placed at. Which rule that
         // was is each rule's own answer (readShortOf), and not this list's.
+        //
+        // And every way a proof cut short at a figure did not decide about: the rules are whole,
+        // and whether the body has a way every run of which stops is what the measure is short of.
         WeakeningSet unread = derivationOf(read);
         for (DecisionReading.Ruled ruled : read.found()) {
             unread = unread.union(readShortOf(read, ruled));
         }
+        unread = unread.union(undecidedOf(read));
         if (!unread.isEmpty() && took.made().isPresent()) {
             took = new Measurement.Partial<>(took.made().orElseThrow(),
                     took.weakening().union(unread));
@@ -303,6 +307,17 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         return out;
     }
 
+    /** The ways of {@code read} a proof cut short at a figure did not decide about, each a
+     *  shortfall of its own. */
+    private static WeakeningSet undecidedOf(DecisionReading read) {
+        WeakeningSet out = WeakeningSet.none();
+        for (DecisionReading.UndecidedAtAFigure way : read.undecided()) {
+            out = out.union(WeakeningSet.of(
+                    new Weakening.AWayLeftUndecided(read.behavior(), way)));
+        }
+        return out;
+    }
+
     private static WeakeningSet readShortOf(DecisionReading read, DecisionReading.Ruled ruled) {
         return ruled.whole() ? WeakeningSet.none()
                 : WeakeningSet.of(new Weakening.DecisionRuleReadShort(read.behavior()));
@@ -320,13 +335,14 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      *
      * <p>So every rule's own shortfall is taken out of the measure and this rule's is put back,
      * which is the measure's weakening read as one rule's rather than filtered by a guess at which
-     * words are about a rule.
+     * words are about a rule. A way left undecided is taken out too and put back for no rule: no
+     * rule a run gets to the end of goes down it, for the same reason.
      *
      * <p>Its own value rather than a set handed to whoever raises the finding, for the reason
      * {@link InteractionEvidence#at} is.
      */
     public OfOneRule at(DecisionReading.Stated stated) {
-        Set<Weakening> ofSomeRule = new LinkedHashSet<>();
+        Set<Weakening> ofSomeRule = new LinkedHashSet<>(undecidedOf(read).causes());
         for (DecisionReading.Ruled each : read.found()) {
             ofSomeRule.addAll(readShortOf(each).causes());
         }

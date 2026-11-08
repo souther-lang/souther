@@ -105,6 +105,6 @@ class AWayEveryRunOfWhichStopsIsAGapABuildIsWarnedOfTest {
                 + read.everyRunStops());
         DecisionReading.EveryRunStops way = read.everyRunStops().getFirst();
         return Adequacy.Finding.noticed("one", new About.AWayEveryRunOfWhichStops("one", way,
-                Adequacy.whereEveryRunStops(bodies.db(), way)));
+                Adequacy.whereRunsStopAt(bodies.db(), way.stoppedAt())));
     }
 }
