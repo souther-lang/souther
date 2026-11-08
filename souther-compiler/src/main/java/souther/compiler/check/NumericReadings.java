@@ -189,6 +189,7 @@ final class NumericReadings {
                      BoundOperationFact.ResultIsNoSmallerThan _,
                      BoundOperationFact.PutsAValueIn _,
                      BoundOperationFact.AssemblesPieces _,
+                     BoundOperationFact.KeepsTheElementsWhereItHolds _,
                      BoundOperationFact.HoldsTheElementsByIndex _,
                      BoundOperationFact.ReadsItsContainer _,
                      BoundOperationFact.IsStatedOverAProjection _,

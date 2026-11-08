@@ -9,7 +9,6 @@ import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
@@ -475,10 +474,9 @@ final class DischargeRules {
      * the call was handed them.
      */
     static KeptWhereItHolds keptElements(Core.PreservedCall call) {
-        BoundOperationFacts.Assembled assembled = facts().assembles(call.operation());
-        return assembled == null || assembled.piece() != PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS
-                ? null : new KeptWhereItHolds(CallArguments.of(assembled.source(), call),
-                        CallArguments.of(assembled.closure(), call));
+        BoundOperationFacts.Kept kept = facts().keepsWhereItHolds(call.operation());
+        return kept == null ? null : new KeptWhereItHolds(CallArguments.of(kept.source(), call),
+                CallArguments.of(kept.closure(), call));
     }
 
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the

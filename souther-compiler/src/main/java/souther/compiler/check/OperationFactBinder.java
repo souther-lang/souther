@@ -575,6 +575,21 @@ final class OperationFactBinder {
                 yield new BoundOperationFact.AssemblesPieces(operation, source, closure,
                         assembles.piece());
             }
+            // What is kept of a container's elements is a container, and what keeps them a closure.
+            case OperationFact.KeepsTheElementsWhereItHolds keeps -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "what holds the elements of a container where a closure holds of them");
+                DeclaredArgument source = holdToTheDeclaration(declaration, keeps.source(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "what the elements are kept of");
+                DeclaredArgument closure = holdToTheDeclaration(declaration,
+                        new ArgumentRef.TheClosure(), new ArgumentRef.TheClosure(),
+                        TypeRequirement.CLOSURE, "what decides which are kept");
+                holdThePieceTo(declaration, source, closure,
+                        PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS);
+                yield new BoundOperationFact.KeepsTheElementsWhereItHolds(operation, source,
+                        closure);
+            }
             // The elements of a list kept by an index are a list's, and the index is a number.
             case OperationFact.HoldsTheElementsByIndex byIndex -> {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,

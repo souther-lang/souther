@@ -767,7 +767,7 @@ final class Term {
     private boolean canBeComparedToWholeNumbers() {
         return (shape == Shape.BOUND && new At(0, 0).equals(of))
                 || (shape == Shape.CALLED && parts.size() == 1 && parts.getFirst().isTheParameter()
-                && NumericMeasures.counts(calledOperation()));
+                && DefaultBoundOperationFacts.get().answersHowManyItHolds(calledOperation()));
     }
 
     private boolean isTheParameter() {

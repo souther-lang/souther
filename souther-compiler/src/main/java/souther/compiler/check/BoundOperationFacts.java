@@ -604,6 +604,18 @@ public final class BoundOperationFacts {
     public record Assembled(DeclaredArgument source, DeclaredArgument closure,
                             PieceOfAnElement piece) {}
 
+    /** The argument whose elements {@code operation} keeps where a closure holds of them, and the
+     *  closure — or null where nothing says it does
+     *  ({@link BoundOperationFact.KeepsTheElementsWhereItHolds}). */
+    public Kept keepsWhereItHolds(ValueName operation) {
+        BoundOperationFact.KeepsTheElementsWhereItHolds held =
+                one(BoundOperationFact.KeepsTheElementsWhereItHolds.class, operation);
+        return held == null ? null : new Kept(held.source(), held.closure());
+    }
+
+    /** The argument whose elements are kept, and the closure that decides which. */
+    public record Kept(DeclaredArgument source, DeclaredArgument closure) {}
+
     /** The count and the list {@code operation} answers the elements of that list kept by that
      *  index of, and which side of it it keeps — or null where nothing says it does. */
     public KeptByIndex holdsTheElementsByIndex(ValueName operation) {

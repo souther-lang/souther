@@ -139,6 +139,13 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "- List.length(List.filter(n -> n > 2 && n > 1, xs)))", false),
             new Row("Digit(List.length(List.filter(n -> n > 1, xs)) "
                     + "- List.length(List.filter(n -> n > 2, xs)))", false),
+            // A filter of a filter keeps the elements both keep, whichever container it is of.
+            new Row("Digit(List.length(List.filter(n -> n > 2, List.filter(n -> n > 1, xs))) "
+                    + "- List.length(List.filter(n -> n > 2, xs)))", false),
+            new Row("Digit(Set.size(Set.filter(n -> n > 2, Set.filter(n -> n > 1, a))) "
+                    + "- Set.size(Set.filter(n -> n > 2, a)))", false),
+            new Row("Digit(Set.size(Set.filter(n -> n > 2, a)) "
+                    + "- Set.size(Set.filter(n -> n > 2, Set.filter(n -> n > 1, a))) - 1)", true),
             new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
                     + "- List.length(List.filter(n -> n > 1, xs)))", true),
             new Row("Digit(List.length(List.filter(n -> n > 2 || n > 1, xs)) "

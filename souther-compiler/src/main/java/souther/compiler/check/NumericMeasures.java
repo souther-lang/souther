@@ -195,30 +195,18 @@ public final class NumericMeasures {
     public static ValueName.Stdlib takenOf(Type type, NewtypeInners inners) {
         Type carried = TypeOps.base(type, inners);
         if (carried == Type.STRING) {
-            return STRING_LENGTH;
+            return ValueName.Stdlib.operation("String", "length");
         }
         if (carried instanceof Type.ListOf) {
-            return LIST_LENGTH;
+            return ValueName.Stdlib.operation("List", "length");
         }
         if (carried instanceof Type.SetOf) {
-            return SET_SIZE;
+            return ValueName.Stdlib.operation("Set", "size");
         }
         if (carried instanceof Type.MapOf) {
-            return MAP_SIZE;
+            return ValueName.Stdlib.operation("Map", "size");
         }
         return null;
-    }
-
-    private static final ValueName.Stdlib STRING_LENGTH = ValueName.Stdlib.operation("String", "length");
-    private static final ValueName.Stdlib LIST_LENGTH = ValueName.Stdlib.operation("List", "length");
-    private static final ValueName.Stdlib SET_SIZE = ValueName.Stdlib.operation("Set", "size");
-    private static final ValueName.Stdlib MAP_SIZE = ValueName.Stdlib.operation("Map", "size");
-
-    /** Whether {@code operation} is what counts what a value holds, for some type
-     *  ({@link #takenOf}). */
-    public static boolean counts(ValueName operation) {
-        return STRING_LENGTH.equals(operation) || LIST_LENGTH.equals(operation)
-                || SET_SIZE.equals(operation) || MAP_SIZE.equals(operation);
     }
 
     private NumericMeasures() {}

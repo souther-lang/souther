@@ -173,6 +173,10 @@ final class ProvingTheLibrary implements LibraryProofs {
                     elements.assemblesPieces(operation, assembles.source().position(),
                             assembles.closure().position(), assembles.piece())
                             instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.KeepsTheElementsWhereItHolds keeps ->
+                    elements.keepsWhereItHolds(operation, keeps.source().position(),
+                            keeps.closure().position())
+                            instanceof LibraryProver.Outcome.Proved;
             case BoundOperationFact.HoldsTheElementsByIndex byIndex ->
                     elements.byAnIndex(operation, byIndex.count().position(),
                             byIndex.list().position(), byIndex.kept())

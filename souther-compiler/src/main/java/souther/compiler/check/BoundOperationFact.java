@@ -274,6 +274,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                            DeclaredArgument closure, PieceOfAnElement piece)
             implements OneAboutAnOperation {}
 
+    /** The operation's answer holds the elements of {@code source} where {@code closure} holds of
+     *  them, and no other. */
+    record KeepsTheElementsWhereItHolds(DeclaredOperation operation, DeclaredArgument source,
+                                        DeclaredArgument closure)
+            implements OneAboutAnOperation {}
+
     /** The operation answers the elements of {@code list} whose index stands to the number
      *  {@code count} names as {@code kept} says, before it or from it on, in their order, each once
      *  and nothing else. */

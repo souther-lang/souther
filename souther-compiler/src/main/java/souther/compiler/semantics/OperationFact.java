@@ -387,6 +387,23 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation's answer holds the elements of {@code source} where its closure holds of them,
+     * and no other: of each element of the source, it is in the answer where the closure answers
+     * true of it and is not where it answers false.
+     *
+     * <p>Said of the elements as a collection and not of their order, so a list kept in the order
+     * of its source and a set or a map kept by what it holds both state it. What a reader asks of
+     * the elements that were kept — how many of them meet another statement, whether any does — is
+     * asked of the source's elements where both statements hold.
+     */
+    record KeepsTheElementsWhereItHolds(ArgumentRef source) implements OperationFact {
+
+        public KeepsTheElementsWhereItHolds {
+            Objects.requireNonNull(source, "what is kept is kept of the elements of something");
+        }
+    }
+
+    /**
      * What the operation answers holds a value exactly where {@code option} does, and the value it
      * holds is what the closure answers on the one {@code option} holds: {@code Some(f(x))} of
      * {@code Some(x)}, and nothing of nothing.

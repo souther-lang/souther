@@ -194,6 +194,39 @@ public final class WhereTheElementsCameFrom {
     }
 
     /**
+     * Whether {@code operation}'s answer holds the elements of its argument at {@code source} where
+     * the closure at {@code closure} holds of them, and no other: its body is a walk over those
+     * elements from nothing that, at each, puts it in where the closure holds of it and carries
+     * what it has where it does not.
+     *
+     * <p>The order the walk is handed them in is not part of the statement, so a body that walks a
+     * list as it stands and one that walks the elements a set lists are both read.
+     */
+    public LibraryProver.Outcome keepsWhereItHolds(ValueName.Stdlib.Operation operation,
+                                                   int source, int closure) {
+        Reading reading = new Reading(library, readThrough);
+        try {
+            List<Value> params = new ArrayList<>();
+            for (int at = 0; at < library.takes(operation).size(); at++) {
+                params.add(new Value.Argument(at));
+            }
+            Building building = new Building(operation, new ElementLineage.Source<>(source, 1),
+                    reading);
+            for (Reading.Case each : reading.cases(reading.bodyOf(operation),
+                    new Reading.Frame(params, Map.of()))) {
+                if (!building.keptWhereItHolds(each.is(), closure)) {
+                    return new LibraryProver.Outcome.Open(new Unproved.DoesNotFollow(
+                            Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
+                }
+            }
+            return new LibraryProver.Outcome.Proved(
+                    new Proof.ByWhatItsBodyBuilds(operation, reading.used()));
+        } catch (Reading.Stopped stopped) {
+            return LibraryProver.stoppedAt(stopped);
+        }
+    }
+
+    /**
      * Whether every way of {@code step} puts, after what is carried at {@code path}, the piece
      * {@code piece} says the closure at {@code closure} makes of the element it is handed.
      *
@@ -397,6 +430,42 @@ public final class WhereTheElementsCameFrom {
                 return through;
             }
             return putOutsideAWalk(called, args, wanted);
+        }
+
+        /**
+         * Whether {@code run} is a walk over the source's elements from the first, started from
+         * nothing, every way of every step of which puts the element it is handed in where the
+         * closure at {@code closure} holds of it, and carries what it has where it does not.
+         *
+         * <p>What is put in and how is read as a walk's step reads it ({@link #putIn}), so a list
+         * put end to end and a set or a map put by what it holds are one statement.
+         */
+        boolean keptWhereItHolds(Value run, int closure) {
+            if (!(run instanceof Value.Made made) || !made.operation().equals(walk.operation())) {
+                return false;
+            }
+            List<Value> args = made.args();
+            if (!(args.get(walk.index()) instanceof Value.Whole(long from)) || from != 0
+                    || !empty(args.get(walk.seed()))
+                    || elementsOf(args.get(walk.container())) == null) {
+                return false;
+            }
+            Value carried = new Value.Fresh(1, "what the walk carries");
+            Value next = new Value.Fresh(3, "the element the walk is handed next");
+            List<Value> handed = new ArrayList<>(List.of(next, next));
+            handed.set(walk.accumulator(), carried);
+            handed.set(walk.element(), next);
+            LawProposition<Value> holds = reading.side(
+                    new Value.AppliedTo(new Value.Argument(closure), List.of(next)),
+                    AnswerAspect.TRUTH);
+            for (Reading.Case each : reading.applied(args.get(walk.step()), handed)) {
+                boolean kept = each.when().equals(holds) ? next.equals(putIn(each.is(), carried))
+                        : each.when().equals(holds.denied()) && each.is().equals(carried);
+                if (!kept) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /** Whether some case the body was read in may answer without an element of the source. */
