@@ -3061,9 +3061,10 @@ public final class Analyzer {
      */
     private String ruleContents(List<RuleDischarge> rules) {
         StringBuilder out = new StringBuilder(
-                "**What code that calls this behavior can rely on**\n\nEvery rule is checked when"
-                        + " the behavior returns. This shows how much of each rule the compiler"
-                        + " can use when it checks the code that calls the behavior.\n");
+                "**What the compiler can use where this behavior is called**\n\nEvery rule is"
+                        + " checked when the behavior returns, whatever this says of it. This shows"
+                        + " how much of each rule the compiler can use to prove things about the"
+                        + " code that calls the behavior.\n");
         for (RuleDischarge rule : rules) {
             String about = rule.rule().selector() == null ? ""
                     : "`" + rule.rule().selector().name() + "`: ";
@@ -3078,10 +3079,10 @@ public final class Analyzer {
         return switch (capability.capability()) {
             case CapabilityResult.AnalysisStopped _ -> "**not determined** — the compiler stopped"
                     + " before it finished analyzing this rule, so it is not known how much of it"
-                    + " a caller can rely on";
+                    + " the compiler can use where the behavior is called";
             case CapabilityResult.Decided it -> it.holds()
-                    ? "**always holds** — it is true whatever the behavior returns, so it tells a"
-                            + " caller nothing"
+                    ? "**always holds** — it is true whatever the behavior returns, so it gives"
+                            + " the compiler nothing to use about the result"
                     : "**never holds** — it is false whatever the behavior returns, so no result"
                             + " can satisfy it";
             // Joined by "and", which is what the parts are: every one of them has to be established
@@ -3097,8 +3098,8 @@ public final class Analyzer {
         return switch (part) {
             case RequiredPart.Routed it -> ruleRoute(weakest(it));
             case RequiredPart.OutsideTheFragment it -> "**runtime only** — it is checked when the"
-                    + " behavior returns, but a caller cannot rely on it, because "
-                    + saidOf(it.why());
+                    + " behavior returns, but the compiler cannot use it to prove anything about"
+                    + " the code that calls the behavior, because " + saidOf(it.why());
         };
     }
 
@@ -3106,11 +3107,11 @@ public final class Analyzer {
     private String ruleRoute(StaticRoute route) {
         return switch (route) {
             case StaticRoute.AsABound _ -> "**derivable** — it is a comparison the compiler"
-                    + " can reason about, so a caller can rely on it and on anything that"
+                    + " can reason about, so at a call it can use the rule and anything that"
                     + " follows from it";
             case StaticRoute.AsATerm _ -> "**exact match** — the compiler can compare it only as"
-                    + " written, so a caller can rely on it only where the same condition over the"
-                    + " same values is required";
+                    + " written, so at a call it can use the rule only where the same condition"
+                    + " over the same values is required";
         };
     }
 
@@ -3185,7 +3186,8 @@ public final class Analyzer {
             // whether a guard discharges it is exactly what was not established.
             case CapabilityResult.AnalysisStopped _ -> "**Static discharge: not determined**\n\n"
                     + "The compiler stopped before it finished analyzing this clause, so it is "
-                    + "not known whether a `guard` can satisfy it. The clause is still checked "
+                    + "not known whether a `guard` lets the compiler prove it. The clause is still "
+                    + "checked "
                     + "whenever a value of this type is constructed.";
             case CapabilityResult.Decided it -> it.holds()
                     ? "**Static discharge: always holds**\n\nThis clause is true for every value, "
@@ -3211,9 +3213,9 @@ public final class Analyzer {
             case RequiredPart.Routed it -> "**Static discharge: " + routeName(weakest(it))
                     + "**\n\n" + clauseRoute(weakest(it));
             case RequiredPart.OutsideTheFragment it -> "**Static discharge: runtime only**\n\n"
-                    + "No `guard` can satisfy this part of the clause, so it is checked only at "
-                    + "run time, when a value of this type is constructed. The compiler cannot "
-                    + "analyze it because " + saidOf(it.why()) + ".";
+                    + "No `guard` lets the compiler prove this part of the clause. It is still "
+                    + "checked at run time, whenever a value of this type is constructed. The "
+                    + "compiler cannot analyze it because " + saidOf(it.why()) + ".";
         };
     }
 
@@ -3247,11 +3249,11 @@ public final class Analyzer {
             case StaticRoute.AsABound _ -> "This is a comparison the compiler can reason about. "
                     + "Where a value of this type is constructed from something the compiler can "
                     + "name, such as a parameter or one of its fields, any `guard` whose condition "
-                    + "implies this clause satisfies it.";
+                    + "implies this clause lets the compiler prove it.";
             case StaticRoute.AsATerm _ -> "The compiler can compare this clause only as written. "
-                    + "Only a `guard` stating the same condition over the same values satisfies "
-                    + "it. A related condition, such as the same check over a different field, "
-                    + "does not.";
+                    + "Only a `guard` stating the same condition over the same values lets it "
+                    + "prove the clause. A related condition, such as the same check over a "
+                    + "different field, does not.";
         };
     }
 

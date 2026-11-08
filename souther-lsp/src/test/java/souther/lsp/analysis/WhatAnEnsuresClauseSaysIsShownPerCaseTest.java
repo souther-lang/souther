@@ -146,7 +146,7 @@ class WhatAnEnsuresClauseSaysIsShownPerCaseTest {
         Optional<Hover> hover = hover(source, 9, 20);
 
         assertTrue(hover.isPresent());
-        assertTrue(hover.get().contents().contains("can rely on"), hover.get().contents());
+        assertTrue(hover.get().contents().contains("**derivable**"), hover.get().contents());
     }
 
     /**
