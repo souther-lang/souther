@@ -232,8 +232,12 @@ public final class ReportedReason {
      * them from where the runs were read.
      */
     public static List<WhereARunStopped> runsStopped(BlockReason reason) {
-        return reason instanceof BlockReason.RelationNotShownWhereItsRowsStopped(var stopped)
-                ? stopped : List.of();
+        return switch (reason) {
+            case BlockReason.RelationNotShownWhereItsRowsStopped(var stopped) -> stopped;
+            // The rows a search for one getting to the relation tried, where none got there.
+            case BlockReason.RelationNotShownReachedAtEveryValue(var _, var stopped) -> stopped;
+            default -> List.of();
+        };
     }
 
     /**

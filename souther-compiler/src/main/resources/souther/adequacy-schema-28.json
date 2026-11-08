@@ -4037,8 +4037,7 @@
                     "domain_point_uncovered",
                     "boundary_not_told_from_another",
                     "tilt_of_a_derived_value_not_shown",
-                    "rewrite_unnoticed",
-                    "way_every_run_stops"
+                    "rewrite_unnoticed"
                   ]
                 }
               },
@@ -4532,33 +4531,10 @@
                                     }
                                   },
                                   "else": {
-                                    "if": {
-                                      "properties": {
-                                        "kind": {
-                                          "const": "way_every_run_stops"
-                                        }
-                                      },
-                                      "required": [
-                                        "kind"
-                                      ]
-                                    },
-                                    "then": {
-                                      "description": "A way through the body and where every run along it stops, which is what the way's entry under `decision.waysEveryRunStops` carries: what discharges it is a body that gets past the construction, and no row.",
+                                    "not": {
                                       "required": [
                                         "obligationId"
-                                      ],
-                                      "properties": {
-                                        "obligationId": {
-                                          "$ref": "#/$defs/stoppingWayObligationId"
-                                        }
-                                      }
-                                    },
-                                    "else": {
-                                      "not": {
-                                        "required": [
-                                          "obligationId"
-                                        ]
-                                      }
+                                      ]
                                     }
                                   }
                                 }
@@ -4576,7 +4552,7 @@
         ],
         "properties": {
           "kind": {
-            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `boundary_not_told_from_another` is a line every point of which a row does sit on, and which the rows still do not tell from a line weighing one of its positions one more or one less: rows at a border's points show a line that has not moved, and showing one of the lines beside it wrong takes a row that line answers differently at. The lines it is held against are the ones one step away, so a border nothing is said about has no one-step fault left in it, which is a fault domain stated rather than the geometry of the line pinned down. Its `subject` names both lines, the one the rule drew and the one the rows leave standing beside it. `tilt_of_a_derived_value_not_shown` is a position of a value a computation derives from several positions and cuts at several places, as a table of thresholds cuts the value it is looked up by, whose weight no rows fix: no row beside the borders of the computation fails a computation weighing the position one more, or none fails one weighing it one less. It is owed once for the computation and once for each position, and never once for each threshold, and it stands where the positions' own classes would otherwise have been divided by the value's thresholds. Its `subject` names the value and the position. `unanswered_row` is a row written with its answer still owed, and an arm whose only rows are those — told apart from `arm_unreached` because a row does go through such an arm, and read off the source rather than measured, so nothing about how much of the model could be read takes it away. `partition_not_derivable`, `partition_not_read` and `partition_rules_not_reached` are positions the model divides no way, what a reading did not read, and positions the axes did measure whose rules the walk never reached. `partition_values_not_separated` is none of those: every rule about the position arrived and every one was read, and what the reading holds is one set per position standing for a relation two of them cannot state — so the values it reports may be wider than the declarations leave the position, and a class made out of them may be one no value can be in. It carries no `reason` and no `ruleId`, because no rule is answerable for it and what would lift it is a reading that keeps the alternatives apart. A `partition_not_read` is one of two things and `ruleId` says which: with it, a rule this read and could not turn into a line, named because the reader that stopped knows which rule; without it, a position whose rules the reading never arrived at, where no rule is named because none was seen. `reason` is on both, and says which limit is in the way. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks. `rewrite_unnoticed` is a rewrite of the body — an arm rows go through answering as a sibling of it, a fold rows enter stopping after its first element or handing every step the seed, or the body answering one value the rows observed — that some input is shown to be answered differently by and under which no row comes out differently. Reaching an arm shows it ran and not that anything a row states depends on it, so this is said of what the rows do reach. `rule_may_stop_a_run` is a rule a run reaching it may stop in — an operation it is read through ends the run on one of the ways it is worked out, such as a division by nought — where the ways before it are not shown to leave no row for the stop. A possibility and not a run shown to exist: a stop is dropped only where the conditions on the way are shown to rule it out. It is said of the rule whatever line it draws, or none, names the rule by `ruleId`, and carries no `reason`, because nothing was left unread. A rule every run stops in draws no line and is a `partition_not_read` entry with the reason `rule_answers_nowhere`. `way_every_run_stops` is a way through the body that inputs take — no proof is had of its conditions alone — and every one of those inputs hands a construction on it a value that breaks a clause of its invariant: every run along it stops there, and the rules past it are owed nothing. A row does not discharge it, since every row down the way stops too; a body that gets past the construction does, so a build refuses over it as over any other gap.",
+            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `boundary_not_told_from_another` is a line every point of which a row does sit on, and which the rows still do not tell from a line weighing one of its positions one more or one less: rows at a border's points show a line that has not moved, and showing one of the lines beside it wrong takes a row that line answers differently at. The lines it is held against are the ones one step away, so a border nothing is said about has no one-step fault left in it, which is a fault domain stated rather than the geometry of the line pinned down. Its `subject` names both lines, the one the rule drew and the one the rows leave standing beside it. `tilt_of_a_derived_value_not_shown` is a position of a value a computation derives from several positions and cuts at several places, as a table of thresholds cuts the value it is looked up by, whose weight no rows fix: no row beside the borders of the computation fails a computation weighing the position one more, or none fails one weighing it one less. It is owed once for the computation and once for each position, and never once for each threshold, and it stands where the positions' own classes would otherwise have been divided by the value's thresholds. Its `subject` names the value and the position. `unanswered_row` is a row written with its answer still owed, and an arm whose only rows are those — told apart from `arm_unreached` because a row does go through such an arm, and read off the source rather than measured, so nothing about how much of the model could be read takes it away. `partition_not_derivable`, `partition_not_read` and `partition_rules_not_reached` are positions the model divides no way, what a reading did not read, and positions the axes did measure whose rules the walk never reached. `partition_values_not_separated` is none of those: every rule about the position arrived and every one was read, and what the reading holds is one set per position standing for a relation two of them cannot state — so the values it reports may be wider than the declarations leave the position, and a class made out of them may be one no value can be in. It carries no `reason` and no `ruleId`, because no rule is answerable for it and what would lift it is a reading that keeps the alternatives apart. A `partition_not_read` is one of two things and `ruleId` says which: with it, a rule this read and could not turn into a line, named because the reader that stopped knows which rule; without it, a position whose rules the reading never arrived at, where no rule is named because none was seen. `reason` is on both, and says which limit is in the way. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks. `rewrite_unnoticed` is a rewrite of the body — an arm rows go through answering as a sibling of it, a fold rows enter stopping after its first element or handing every step the seed, or the body answering one value the rows observed — that some input is shown to be answered differently by and under which no row comes out differently. Reaching an arm shows it ran and not that anything a row states depends on it, so this is said of what the rows do reach. `rule_may_stop_a_run` is a rule a run reaching it may stop in — an operation it is read through ends the run on one of the ways it is worked out, such as a division by nought — where the ways before it are not shown to leave no row for the stop. A possibility and not a run shown to exist: a stop is dropped only where the conditions on the way are shown to rule it out. It is said of the rule whatever line it draws, or none, names the rule by `ruleId`, and carries no `reason`, because nothing was left unread. A rule every run stops in draws no line and is a `partition_not_read` entry with the reason `rule_answers_nowhere`.",
             "enum": [
               "output_case_unspecified",
               "input_case_unspecified",
@@ -4597,8 +4573,7 @@
               "partition_rules_not_reached",
               "partition_values_not_separated",
               "rewrite_unnoticed",
-              "rule_may_stop_a_run",
-              "way_every_run_stops"
+              "rule_may_stop_a_run"
             ]
           },
           "disposition": {
@@ -4647,9 +4622,6 @@
               },
               {
                 "$ref": "#/$defs/tiltObligationId"
-              },
-              {
-                "$ref": "#/$defs/stoppingWayObligationId"
               }
             ]
           },
@@ -6651,24 +6623,6 @@
         }
       }
     },
-    "stoppingWayObligationId": {
-      "type": "object",
-      "description": "What tells one way through a body every run of which stops at a construction from every other thing a build refuses over. The way, written as a rule of the decision is, and where every run along it stops, written as every entry saying where runs stopped writes it — the two fields the way's entry under `decision.waysEveryRunStops` carries, so a consumer joins on them. The rule alone is not the way: two ways consulting the same conditions through different constructions are two, and a body fixed at one of them still stops every run along the other.",
-      "required": [
-        "way",
-        "runsStopped"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "way": {
-          "$ref": "#/$defs/ruleObligationId"
-        },
-        "runsStopped": {
-          "$ref": "#/$defs/runsStopped",
-          "description": "Where every run along the way stops: one entry for each clause of a construction the proof keeps, which is a clause the inputs of the way break."
-        }
-      }
-    },
     "outputCaseObligationId": {
       "type": "object",
       "description": "What tells one case of a behavior's output from every other. The behavior and which case, and nothing about a position: an output has none, an axis is of an input, so there is no other account this could have an entry in and the array under `signature.output` is the one place it is kept. The behavior is part of it because two behaviors answering with the same sum owe that case separately.",
@@ -7157,7 +7111,7 @@
         "waysEveryRunStops": {
           "type": "array",
           "minItems": 1,
-          "description": "The ways through the body every run of which the reading proved stops at a construction, apart from `waysNoInputTakes` and from the rules: inputs bring the conditions out as the way does — no proof is had of them alone — and none of those inputs gets past the constructions the proof keeps, each of which is refused by a clause of the invariant of the type it builds. Each stands for every rule that goes on from it, as a way no input takes does; none of those rules is in `obligations` or counted in `coverage`, and the model has a body that aborts along the way, which `waysNoInputTakes` would not say. Each is a `way_every_run_stops` finding as well, which a build refuses over and which joins this entry by `way` and `runsStopped`. Absent where no way was proved one every run of stops.",
+          "description": "The ways through the body every run of which the reading proved stops at a construction, apart from `waysNoInputTakes` and from the rules: inputs bring the conditions out as the way does — no proof is had of them alone — and none of those inputs gets past the constructions the proof keeps, each of which is refused by a clause of the invariant of the type it builds. Each stands for every rule that goes on from it, as a way no input takes does; none of those rules is in `obligations` or counted in `coverage`, and the model has a body that aborts along the way, which `waysNoInputTakes` would not say. Each is a fact about the model and no finding, as a rule every run reaching which stops in an operation is (`rule_answers_nowhere`): no row can answer it, since every row down the way stops too, and the verdict is what it would be without it. What is wrong is the body, which the check reports at the construction (E2010). Absent where no way was proved one every run of stops.",
           "items": {
             "type": "object",
             "required": [
@@ -7179,7 +7133,7 @@
         "waysUndecided": {
           "type": "array",
           "minItems": 1,
-          "description": "The ways through the body no input gets past where the reading stopped at a figure before it could say whether any input takes them, apart from `waysNoInputTakes` and `waysEveryRunStops` and from the rules: the proof that no input gets past the constructions on the way was had, and the proof without one of them was not answered for the figure. So the way is one of the two and neither is said: some input may bring its conditions out, and then every such run stops at a construction kept, which is a gap; or none does, and nothing is owed. Each stands for every rule that goes on from it, as the ways of the other two lists do; none of those rules is in `obligations` or counted in `coverage`. Each is a `decision_way_undecided` weakening of the decision's measure as well, which keeps the verdict open under the figure. Absent where no proof stopped short of saying which.",
+          "description": "The ways through the body no input gets past where the reading stopped at a figure before it could say whether any input takes them, apart from `waysNoInputTakes` and `waysEveryRunStops` and from the rules: the proof that no input gets past the constructions on the way was had, and the proof without one of them was not answered for the figure. So the way is one of the two and neither is said: some input may bring its conditions out, and then every such run stops at a construction kept; or none does, and the way is unreachable. Each stands for every rule that goes on from it, as the ways of the other two lists do; none of those rules is in `obligations` or counted in `coverage`. Each is a `decision_way_undecided` weakening of the decision's measure as well, which keeps the verdict open under the figure. Absent where no proof stopped short of saying which.",
           "items": {
             "type": "object",
             "required": [

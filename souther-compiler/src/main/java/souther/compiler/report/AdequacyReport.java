@@ -4900,8 +4900,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " be written down)\n");
             return;
         }
-        // And a body every way of which stops states no rule and is told all the same: each such
-        // way is a gap, and this section is where it is said. So is a way nothing decided about,
+        // And a body every way of which stops states no rule and is told all the same: where its
+        // runs stop is what this section says of each such way. So is a way nothing decided about,
         // which may be one.
         if (!rulesAreTold(decision) && decision.read().everyRunStops().isEmpty()
                 && decision.read().undecided().isEmpty()) {
@@ -4970,7 +4970,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // themselves are in the document.
         excluded(out, behavior, decision, rendering, behavior.rulePlace(), declaredIn);
         noInputTakes(out, behavior, decision, rendering, declaredIn);
-        everyRunStops(out, behavior, rendering, declaredIn);
+        everyRunStops(out, behavior, decision, rendering, declaredIn);
         undecided(out, behavior, decision, rendering, declaredIn);
     }
 
@@ -4979,8 +4979,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * decided, each with the figure the proof stopped at, where the runs along it would stop and
      * the conditions the way came to.
      *
-     * <p>A {@code ?} and not a {@code !}: the way may be one every run of which stops, which is a
-     * gap, or one no input takes, which is nothing, and nothing here says which. What holds it open
+     * <p>A {@code ?} and not a {@code ·}: the way may be one every run of which stops or one no
+     * input takes, and the two are said apart, and nothing here says which. What holds it open
      * is the figure, said as every figure stop is said ({@link #next}); the measure of the decision
      * carries it ({@link Weakening.AWayLeftUndecided}), so a verdict it keeps open counts it under
      * what stopped at a figure.
@@ -5006,21 +5006,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * construction, the clause the way's inputs break there and the conditions the way came to.
      *
      * <p>Apart from the ways no input takes, which they are not: inputs bring the conditions out as
-     * the way does, and every run with one of them is refused where it builds a value. No row is
-     * owed past one, and the model has a body that aborts there, which is a gap and is marked as
-     * one by its finding ({@link About.AWayEveryRunOfWhichStops}). Each construction and clause
-     * said as a run stopped there says it ({@link GeneratedRows#stoppedAt}).
+     * the way does, and every run with one of them is refused where it builds a value. A {@code ·}
+     * and not a {@code !}, for the reason a comparison every run reaching which stops in an
+     * operation is one ({@link BlockReason.ComparisonAnswersNowhere}): no run gets past, so the
+     * rules past the way state nothing on either side and nothing is owed at them, and no row could
+     * answer the way, since every row down it stops too. What is wrong is the body, and that is the
+     * check's to report where it reads the construction (E2010); the verdict here is not changed.
+     * Each construction and clause said as a run stopped there says it
+     * ({@link GeneratedRows#stoppedAt}).
      */
-    private void everyRunStops(StringBuilder out, BehaviorReport behavior,
-                               SourceRendering rendering, SourceId declaredIn) {
-        for (ReportedFinding f : behavior.reported()) {
-            if (!(f.finding().about() instanceof About.AWayEveryRunOfWhichStops(
-                    var _, var way, var stops))) {
-                continue;
-            }
-            out.append(String.format("      %s every run along a way through this body stops:"
-                            + " %s%n", mark(f.finding()), GeneratedRows.stoppedAt(stops, rendering)));
-            for (ShownCondition read : behavior.readingsOf(way.way())) {
+    private static void everyRunStops(StringBuilder out, BehaviorReport behavior,
+                                      DecisionEvidence decision, SourceRendering rendering,
+                                      SourceId declaredIn) {
+        for (DecisionReading.EveryRunStops each : decision.read().everyRunStops()) {
+            out.append(String.format("      · every run along a way through this body stops: %s%n",
+                    GeneratedRows.stoppedAt(behavior.wayStops().getOrDefault(each.way(),
+                            List.of()), rendering)));
+            for (ShownCondition read : behavior.readingsOf(each.way())) {
                 out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
             }
         }
@@ -6940,15 +6942,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             case ObligationIdentity.OfADecisionRule(var behavior, var rule) ->
                     ruleId(into, behavior, rule);
-            // The way as a rule is written, and where its runs stop as every entry saying where
-            // runs stopped writes it: the same two fields the way's entry under
-            // `decision.waysEveryRunStops` carries, so a finding joins to it on them.
-            case ObligationIdentity.OfAWayEveryRunOfWhichStops(var behavior, var rule,
-                    var stoppedAt) -> {
-                ruleId(into.putObject("way"), behavior, rule);
-                runsStopped(into, stoppedAt.stream().sorted(WhereARunStopped.IN_A_STEADY_ORDER)
-                        .toList(), sources);
-            }
             // The behavior and the case, spelled whole: no finding of a document is about one, and
             // a key written here is what tells two cases of one statement apart if one ever is.
             case ObligationIdentity.OfACaseOfAStatement(var behavior, var which) -> {
@@ -10596,11 +10589,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // which are as many places as it has decisions.
             //
             // And a combination of two classes stands at neither of the positions it is of.
-            //
-            // And a way every run of which stops is a way, for the reason a rule is: where its
-            // runs stop is said under the finding, one place per clause.
-            case About.ARuleNoRowTakes _, About.AWayEveryRunOfWhichStops _,
-                    About.ACombinationNoRowMakes _,
+            case About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
                     About.ACombinationOfTwoClassesNoRowIsIn _ -> false;
             // A rewrite of an arm shown at its fork stands there, which is what tells two of a
             // body's rewrites apart where their siblings are, and one of a walk shown at its fold
@@ -10677,9 +10666,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // show an author a comparison they did not write. Two rules of one behavior are shown
             // alike here and are told apart by `obligationId`, which is what that field is for.
             case About.ARuleNoRowTakes(var behavior, var _) -> words(behavior);
-            // The behavior whose body the way is through, for the reason above. Which way, and
-            // where its runs stop, is `obligationId`.
-            case About.AWayEveryRunOfWhichStops(var behavior, var _, var _) -> words(behavior);
             // The behavior whose body it is a rewrite of. A subject names something the document
             // holds, and no entry of it is called by a rewrite's words; which rewrite it is, is
             // `obligationId`, and where an arm's is shown at its fork, the place beside it.

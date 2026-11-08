@@ -158,8 +158,6 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
             // failing somewhere else.
             case ObligationIdentity.OfACombinationOfDecisions _ -> "combination";
             case ObligationIdentity.OfAFallbackPairCell _ -> "pair";
-            // A way every run of which stops is discharged by the body and by no row.
-            case ObligationIdentity.OfAWayEveryRunOfWhichStops _ -> "way every run of which stops";
         };
     }
 

@@ -6,6 +6,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Paths;
 import souther.compiler.flow.ValueArrivals;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.observe.Figure;
@@ -248,6 +249,14 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Excluded>
      * it is owed a row, since no run gets past; and it is not unreachable, since every one of those
      * runs got as far as the construction.
      *
+     * <p>A fact about the model, and nothing a row is owed for: the same kind of fact as a
+     * comparison every run reaching which stops in an operation it is read through
+     * ({@link BlockReason.ComparisonAnswersNowhere}), which states nothing
+     * on either side because no run gets past it. No row can answer the way, since every row down
+     * it stops too. What is wrong is the body, building a value nothing it is handed there can be,
+     * and that defect is the check's to report at the construction (E2010); the account says the
+     * way and where its runs stop, and leaves the verdict where the rules put it.
+     *
      * <p>Some construction the proof keeps names the clause it is held to. One whose invariant was
      * not reached states only that it was not read, which proves no contradiction, so a proof had
      * with it is had without it and a least proof answered in full never keeps it
@@ -282,8 +291,8 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Excluded>
      * the constructions on it was answered.
      *
      * <p>Either of the other two. Some input may bring out the conditions on the way, and then every
-     * such run stops at one of the constructions kept — a gap a body that gets past them answers —
-     * or none does, and then nothing is owed. No rule past it is owed a row either way, since no run
+     * such run stops at one of the constructions kept, which is the body building a value nothing
+     * it is handed there can be — or none does, and then the way is unreachable. No rule past it is owed a row either way, since no run
      * gets past the constructions; what is open is which, and what keeps it open is the figure.
      *
      * @param way    what the way consulted and the constructions still in the proof, never none

@@ -14,7 +14,6 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.PassedConstruction;
 import souther.compiler.partition.WhereARunStopped;
-import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.Bodies;
@@ -40,8 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>No compiled model puts a construction at no place, so the stop is made at its owner
  * ({@link Adequacy#whereRunsStopAt}) from the constructions of a real way with their place taken
- * off, and the page and the document are driven from it as {@link AWayEveryRunOfWhichStopsIsAGapTest}
- * drives them.
+ * off, and the page and the document are driven from it as
+ * {@link AWayEveryRunOfWhichStopsIsSaidAndOwedNothingTest} drives them.
  */
 class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
 
@@ -113,7 +112,8 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
                           "declaredIn": "demo"}]"""),
                 entry.path("runsStopped"));
 
-        String human = stopping.human(rendering);        assertTrue(human.lines().anyMatch(line -> line.equals("      ! every run along a way"
+        String human = stopping.human(rendering);
+        assertTrue(human.lines().anyMatch(line -> line.equals("      · every run along a way"
                         + " through this body stops: the runs stopped at the construction, where"
                         + " invariant Positive #1 did not hold")),
                 () -> "the page names no place: " + human);
@@ -141,20 +141,18 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
                 .map(each -> new PassedConstruction(each.states(), null, each.clause())).toList();
     }
 
-    /** {@code own}, with the reading of `one` made under {@link #RULES}, the finding the account
-     *  makes of the way, and {@code stops} as where its runs stop. */
+    /** {@code own}, with the reading of `one` made under {@link #RULES} and {@code stops} as where
+     *  the runs along {@code way} stop. */
     private static AdequacyReport withTheWay(Compilation bodies, AdequacyReport own,
                                              DecisionReading read,
                                              DecisionReading.EveryRunStops way,
                                              List<WhereARunStopped> stops) {
-        Adequacy.Finding finding = Adequacy.Finding.noticed("one",
-                new About.AWayEveryRunOfWhichStops("one", way, stops));
         List<AdequacyReport.ModuleReport> modules = new ArrayList<>();
         for (AdequacyReport.ModuleReport module : own.modules()) {
             List<AdequacyReport.BehaviorReport> behaviors = new ArrayList<>();
             for (AdequacyReport.BehaviorReport each : module.behaviors()) {
                 behaviors.add(each.name().equals("one")
-                        ? stopping(bodies, each, read, way, finding, stops) : each);
+                        ? stopping(bodies, each, read, way, stops) : each);
             }
             modules.add(new AdequacyReport.ModuleReport(module.module(), module.declaredIn(),
                     behaviors, module.declarations(), module.owedByDeclarations(),
@@ -168,7 +166,6 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
                                                           AdequacyReport.BehaviorReport b,
                                                           DecisionReading read,
                                                           DecisionReading.EveryRunStops way,
-                                                          Adequacy.Finding finding,
                                                           List<WhereARunStopped> stops) {
         DecisionEvidence decision = b.evidence().decision();
         BehaviorEvidence e = b.evidence();
@@ -176,9 +173,6 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
                 e.partition(), e.boundaryReadings(), e.account(), e.branch(),
                 new DecisionEvidence(read, decision.took(), decision.unanswered()),
                 e.interaction(), e.replacement());
-        List<AdequacyReport.ReportedFinding> reported = new ArrayList<>(b.reported());
-        reported.add(new AdequacyReport.ReportedFinding(finding,
-                Adequacy.placeOf(bodies.db(), "demo", finding), null));
         Map<DecisionReading.Ruled, List<AdequacyReport.ShownCondition>> readings =
                 new HashMap<>(b.ruleReadings());
         readings.put(way.way(), AdequacyReport.conditionsOf(bodies.db(), "demo",
@@ -186,7 +180,7 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
         Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops = new HashMap<>(b.wayStops());
         wayStops.put(way.way(), stops);
         return new AdequacyReport.BehaviorReport(b.name(), b.implementation(), evidence,
-                b.rowsOwed(), b.claimed(), reported, b.armPlaces(), b.conditionPlaces(),
+                b.rowsOwed(), b.claimed(), b.reported(), b.armPlaces(), b.conditionPlaces(),
                 b.rulePlaces(), b.partPlaces(), readings, b.ruleSettlements(),
                 b.reachShownWrong(), b.combinationReadings(), b.unobserved(), b.rowPlaces(),
                 b.weights(), b.rewritePlaces(), wayStops);

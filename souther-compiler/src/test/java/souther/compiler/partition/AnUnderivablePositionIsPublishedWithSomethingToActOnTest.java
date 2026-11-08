@@ -221,9 +221,6 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
             // And a rewrite of the body no row tells apart, which is about what the rows state.
                  About.ARewriteNoRowTellsApart _,
                  About.ACombinationOfTwoClassesNoRowIsIn _,
-            // And a way every run of which stops, which is about the body: its conditions were
-            // read, and every run along it stops where the body builds a value.
-                 About.AWayEveryRunOfWhichStops _,
                  About.AnUnansweredRow _ -> null;
         };
     }

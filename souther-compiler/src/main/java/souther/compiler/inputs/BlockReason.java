@@ -103,7 +103,7 @@ public sealed interface BlockReason {
          * way, and the word says so whatever is here.
          */
         default List<String> shownReachedAt() {
-            return this instanceof RelationNotShownReachedAtEveryValue(var shown) ? shown
+            return this instanceof RelationNotShownReachedAtEveryValue(var shown, var _) ? shown
                     : List.of();
         }
     }
@@ -386,17 +386,23 @@ public sealed interface BlockReason {
                 case RelationNotShownWhereItsRowsStopped(List<WhereARunStopped> stopped) ->
                         WhereARunStopped.compare(stopped,
                                 ((RelationNotShownWhereItsRowsStopped) other).stopped());
-                // By the values shown reached, one after another, and then by how many.
-                case RelationNotShownReachedAtEveryValue(List<String> shown) -> {
-                    List<String> theirs =
-                            ((RelationNotShownReachedAtEveryValue) other).shownReachedAt();
+                // By the values shown reached, one after another, and then by how many; and then
+                // by where the runs stopped.
+                case RelationNotShownReachedAtEveryValue(List<String> shown,
+                                                         List<WhereARunStopped> stopped) -> {
+                    RelationNotShownReachedAtEveryValue them =
+                            (RelationNotShownReachedAtEveryValue) other;
+                    List<String> theirs = them.shownReachedAt();
                     for (int i = 0; i < Math.min(shown.size(), theirs.size()); i++) {
                         int byValue = shown.get(i).compareTo(theirs.get(i));
                         if (byValue != 0) {
                             yield byValue;
                         }
                     }
-                    yield Integer.compare(shown.size(), theirs.size());
+                    if (shown.size() != theirs.size()) {
+                        yield Integer.compare(shown.size(), theirs.size());
+                    }
+                    yield WhereARunStopped.compare(stopped, them.runsStopped());
                 }
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
@@ -690,9 +696,13 @@ public sealed interface BlockReason {
             case RelationNotShownWhereTheSearchStopped it ->
                     new RelationNotShownWhereTheSearchStopped(both(it, (MetAtFigures) other));
             case RelationNotShownReachedAtEveryValue it -> {
+                RelationNotShownReachedAtEveryValue them =
+                        (RelationNotShownReachedAtEveryValue) other;
                 List<String> shown = new ArrayList<>(it.shownReachedAt());
-                shown.addAll(((RelationNotShownReachedAtEveryValue) other).shownReachedAt());
-                yield new RelationNotShownReachedAtEveryValue(shown);
+                shown.addAll(them.shownReachedAt());
+                List<WhereARunStopped> stopped = new ArrayList<>(it.runsStopped());
+                stopped.addAll(them.runsStopped());
+                yield new RelationNotShownReachedAtEveryValue(shown, stopped);
             }
             default -> one;
         };
@@ -1398,8 +1408,7 @@ public sealed interface BlockReason {
             implements RuleReadingStopped {
 
         public RelationNotShownWhereItsRowsStopped {
-            stopped = stopped.stream().distinct().sorted(WhereARunStopped.IN_A_STEADY_ORDER)
-                    .toList();
+            stopped = WhereARunStopped.inOrder(stopped);
             if (stopped.isEmpty()) {
                 throw new IllegalArgumentException("rows whose runs stopped stopped somewhere");
             }
@@ -1419,17 +1428,28 @@ public sealed interface BlockReason {
      * <p>Apart from {@link RelationNotShownToReachEveryValue}: there every value here gets to the
      * relation and the other side is what is not shown to reach it. A comparison that comes out one
      * way wherever a row gets to it is not this, since that is said whichever values get there.
+     *
+     * <p>What a search for a row getting to the relation showed goes beside the word and changes
+     * it in nothing: the values a row got there at, and, where none did, where the runs of the
+     * rows it tried stopped — each an input the model has not decided about, said as
+     * {@link RelationNotShownWhereItsRowsStopped} says the stops of a count's search.
+     *
+     * @param shownReachedAt the values a row built and run got to the relation at, each once
+     * @param runsStopped    where the runs of the rows tried stopped without answering, each once
+     *                       and in {@link WhereARunStopped#IN_A_STEADY_ORDER}
      */
-    record RelationNotShownReachedAtEveryValue(List<String> shownReachedAt)
+    record RelationNotShownReachedAtEveryValue(List<String> shownReachedAt,
+                                               List<WhereARunStopped> runsStopped)
             implements RuleReadingStopped {
 
         public RelationNotShownReachedAtEveryValue {
             shownReachedAt = List.copyOf(new LinkedHashSet<>(shownReachedAt));
+            runsStopped = WhereARunStopped.inOrder(runsStopped);
         }
 
-        /** No value shown reached by a row. */
+        /** No value shown reached by a row, and no run of one stopped. */
         public RelationNotShownReachedAtEveryValue() {
-            this(List.of());
+            this(List.of(), List.of());
         }
     }
 

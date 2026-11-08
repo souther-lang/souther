@@ -42,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * what stopped at a figure.
  *
  * <p>Driven from a reading made at its owner, for the reason
- * {@link AWayEveryRunOfWhichStopsIsAGapTest} is: the body of a model the check accepts, read under
+ * {@link AWayEveryRunOfWhichStopsIsSaidAndOwedNothingTest} is: the body of a model the check accepts, read under
  * the rules of declarations of the same names whose invariant the way's conditions contradict, and
  * held to a figure of conditions taken in small enough to be spent before the proof without the
  * second construction is answered.
@@ -123,7 +123,8 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
                         + " construction at " + demo + ":" + positive
                         + ", where invariant Positive #1 did not hold")),
                 () -> "the way is marked undecided, with its figure: " + human);
-        assertFalse(human.contains("! every run along a way"), "and is no gap");
+        assertFalse(human.contains("every run along a way through this body stops"),
+                "and is not said to be a way every run of which stops");
 
         assertTrue(undecided.whatKeepsTheVerdictOpen().stream().anyMatch(each ->
                         each instanceof AdequacyUncertainty.ByWeakening(

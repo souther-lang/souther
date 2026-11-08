@@ -47,9 +47,7 @@ public final class ComparisonWitnesses {
 
                 @Override
                 public ReachWitnesses.Sought reached() {
-                    ReachWitnesses.Sought sought = found.reached();
-                    return new ReachWitnesses.Sought(sought.found()
-                            .map(row -> row.madeOnEveryElementOf(elements)), sought.stoppedAt());
+                    return found.reached().madeOnEveryElementOf(elements);
                 }
             };
         }

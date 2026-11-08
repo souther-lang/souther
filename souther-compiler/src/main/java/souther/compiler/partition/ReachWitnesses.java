@@ -107,22 +107,39 @@ public final class ReachWitnesses {
     /**
      * What a search for a witness came to: the row, where one was found, and where none was, the
      * figures the search stopped at before it had tried everything it would have — a run allowed
-     * more may find one in the second case and never in the first.
+     * more may find one in the second case and never in the first — and where the runs of the
+     * rows it tried stopped without answering, as a count's search says them
+     * ({@link CountWitnesses.Sought#runsStopped}): each is an input the model has not decided
+     * about, and no run allowed more gets past it.
+     *
+     * @param found       the row, or empty
+     * @param stoppedAt   the figures the search stopped at, none where a row was found
+     * @param runsStopped where the runs of the rows tried stopped, each once, none where a row was
+     *                    found
      */
-    public record Sought(Optional<Witness> found, Set<Figure> stoppedAt) {
+    public record Sought(Optional<Witness> found, Set<Figure> stoppedAt,
+                         Set<WhereARunStopped> runsStopped) {
 
         /** Nothing tried and nothing stopped at. */
-        public static final Sought NOTHING = new Sought(Optional.empty(), Set.of());
+        public static final Sought NOTHING = new Sought(Optional.empty(), Set.of(), Set.of());
 
         public Sought {
             stoppedAt = found.isPresent() ? Set.of() : Set.copyOf(stoppedAt);
+            runsStopped = found.isPresent() ? Set.of() : Set.copyOf(runsStopped);
+        }
+
+        /** The same search, its row shown to make the comparison on every element of each of
+         *  {@code elements} ({@link Witness#madeOnEveryElementOf}). */
+        public Sought madeOnEveryElementOf(List<TermPath> elements) {
+            return new Sought(found.map(row -> row.madeOnEveryElementOf(elements)), stoppedAt,
+                    runsStopped);
         }
     }
 
     /**
      * The first row the search tries ({@link RowSearch}) that the boundary builds and a run of
      * which goes through the comparison {@code running} watches — or, where none is, the figures
-     * the search stopped at.
+     * the search stopped at and where the runs of the rows it tried stopped.
      *
      * @param named the values the model names at each parameter's type
      * @param taken what each row written for the behavior took, one value per parameter
@@ -134,20 +151,23 @@ public final class ReachWitnesses {
         RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
                 read.domain().machines(), read.domain().today());
         Set<Figure> stopped = new LinkedHashSet<>();
+        Set<WhereARunStopped> runs = new LinkedHashSet<>();
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
                 i -> inputs.types().get(i), i -> elementOfAList(inputs.parameters().get(i), read),
                 reading, building, stopped);
         if (each == null) {
-            return new Sought(Optional.empty(), stopped);
+            return new Sought(Optional.empty(), stopped, runs);
         }
         for (List<RowSearch.Built> row : RowSearch.rowsOf(each, stopped)) {
             List<FixtureTemplate> fixtures = row.stream().map(RowSearch.Built::fixture).toList();
-            if (running.run(fixtures).getsThere()) {
+            RowSearch.Run ran = running.run(fixtures);
+            if (ran.getsThere()) {
                 return new Sought(Optional.of(new Witness(fixtures,
-                        row.stream().map(RowSearch.Built::value).toList())), Set.of());
+                        row.stream().map(RowSearch.Built::value).toList())), Set.of(), Set.of());
             }
+            ran.stopped().ifPresent(runs::add);
         }
-        return new Sought(Optional.empty(), stopped);
+        return new Sought(Optional.empty(), stopped, runs);
     }
 
     /** The element of the list the parameter {@code parameter} is, as the reading of the input

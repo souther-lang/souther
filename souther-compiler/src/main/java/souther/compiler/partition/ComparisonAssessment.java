@@ -350,9 +350,10 @@ sealed interface ComparisonAssessment {
      *                  for the place, and it is said so
      * @param partnered each string position the relation is shown to part by the strings its
      *                  partner can hold, where the partner is a piece of a string
-     * @param shownReachedAt for some of {@code mayStopBefore}, the values a row built and run was
-     *                  shown to get to some relation about it at
-     *                  ({@link UndividedByARelation.WhatItLeaves#shownReachedAt})
+     * @param gettingThere for some of {@code mayStopBefore}, what a search for a row getting to
+     *                  some relation about it showed: the values a row built and run got there
+     *                  at, and where the runs of the rows tried stopped
+     *                  ({@link UndividedByARelation.WhatItLeaves#gettingThere})
      */
     record AgainstAnotherValue(List<FilingCoordinate> filedAt,
                                List<UndividedByARelation> relations,
@@ -364,7 +365,7 @@ sealed interface ComparisonAssessment {
                                Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
                                Map<NumericTerm.FromOnePosition,
                                        UndividedByARelation.StringsAPartnerCanHold> partnered,
-                               Map<FilingCoordinate, List<String>> shownReachedAt)
+                               Map<FilingCoordinate, UndividedByARelation.GettingThere> gettingThere)
             implements ComparisonAssessment {
 
         public AgainstAnotherValue {
@@ -372,7 +373,7 @@ sealed interface ComparisonAssessment {
             relations = List.copyOf(relations);
             undivided = Set.copyOf(undivided);
             mayStopBefore = Set.copyOf(mayStopBefore);
-            shownReachedAt = Collections.unmodifiableMap(new LinkedHashMap<>(shownReachedAt));
+            gettingThere = Collections.unmodifiableMap(new LinkedHashMap<>(gettingThere));
             Map<FilingCoordinate, Set<Figure>> held = new LinkedHashMap<>();
             stoppedAt.forEach((at, figures) -> held.put(at, Set.copyOf(figures)));
             stoppedAt = Collections.unmodifiableMap(held);
@@ -450,9 +451,11 @@ sealed interface ComparisonAssessment {
             // And where a run may stop on the way to a relation about it, at the places shown
             // undivided: what is shown of them stands, and that every value gets there does not.
             Set<FilingCoordinate> stops = new LinkedHashSet<>();
-            // And the values a row got to a relation about it at, which are reached whichever
-            // relation of the comparison it was.
-            Map<FilingCoordinate, List<String>> reached = new LinkedHashMap<>();
+            // And what a search for a row getting to a relation about it showed: the values a row
+            // got there at, which are reached whichever relation of the comparison it was, and
+            // where the runs of the rows tried stopped.
+            Map<FilingCoordinate, UndividedByARelation.GettingThere> reached =
+                    new LinkedHashMap<>();
             for (FilingCoordinate at : filedAt) {
                 for (int i = 0; i < relations.size(); i++) {
                     if (about.get(i).contains(at) && !leaves.get(i).stoppedAt().isEmpty()) {
@@ -466,9 +469,10 @@ sealed interface ComparisonAssessment {
                     if (shown.contains(at) && about.get(i).contains(at)
                             && leaves.get(i).mayStopBefore().contains(at)) {
                         stops.add(at);
-                        List<String> values = leaves.get(i).shownReachedAt().get(at);
-                        if (values != null) {
-                            reached.computeIfAbsent(at, _ -> new ArrayList<>()).addAll(values);
+                        UndividedByARelation.GettingThere there =
+                                leaves.get(i).gettingThere().get(at);
+                        if (there != null) {
+                            reached.merge(at, there, UndividedByARelation.GettingThere::and);
                         }
                     }
                 }
@@ -561,7 +565,7 @@ sealed interface ComparisonAssessment {
         AgainstAnotherValue partedBy(List<AtAPosition> lines) {
             return new AgainstAnotherValue(filedAt, relations, undivided, lines, beside,
                     stoppedAt, rowsStopped, mayStopBefore, noRowShownComputed, partnered,
-                    shownReachedAt);
+                    gettingThere);
         }
     }
 
@@ -2605,7 +2609,7 @@ sealed interface ComparisonAssessment {
                 .filter(place -> !divided.contains(place)).toList(), across.undivided(),
                 stopped, runs, across.left().mayStopBefore(),
                 noRowShownComputedAt(across.left().settled().entrySet()),
-                across.left().shownReachedAt());
+                across.left().gettingThere());
     }
 
     /** The same, of a relation to another value. */
@@ -2615,7 +2619,7 @@ sealed interface ComparisonAssessment {
         return relatingAt(against.filedAt().stream()
                 .filter(place -> !divided.contains(place)).toList(), against.undivided(),
                 against.stoppedAt(), against.rowsStopped(), against.mayStopBefore(),
-                against.noRowShownComputed(), against.shownReachedAt());
+                against.noRowShownComputed(), against.gettingThere());
     }
 
     /**
@@ -2685,8 +2689,9 @@ sealed interface ComparisonAssessment {
      *
      * <p>A place shown undivided that a run may stop on the way to the relation for
      * ({@code mayStopBefore}) says that instead: undivided over every value is a claim that every
-     * value gets there, which is what is not shown. The values a row was shown to get there at
-     * ({@code shownReachedAt}) go with it, and change no word.
+     * value gets there, which is what is not shown. What a search for a row getting there showed
+     * ({@code gettingThere}) goes with it and changes no word: the values a row got there at, and
+     * where the runs of the rows it tried stopped.
      *
      * <p>A place with numbers no row is shown computed in ({@code noRowShownComputed}) is told
      * each region, after the word above where it is shown undivided and before the words below
@@ -2698,14 +2703,15 @@ sealed interface ComparisonAssessment {
                                    Map<FilingCoordinate, Set<WhereARunStopped>> rowsStopped,
                                    Set<FilingCoordinate> mayStopBefore,
                                    Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
-                                   Map<FilingCoordinate, List<String>> shownReachedAt) {
+                                   Map<FilingCoordinate, UndividedByARelation.GettingThere>
+                                           gettingThere) {
         return places.stream().distinct().flatMap(at -> {
             List<LeftAt> why = new ArrayList<>();
             boolean shownUndivided = undivided.contains(at);
             if (shownUndivided) {
                 why.add(new LeftAt(at, mayStopBefore.contains(at)
-                        ? new BlockReason.RelationNotShownReachedAtEveryValue(
-                                shownReachedAt.getOrDefault(at, List.of()))
+                        ? gettingThere.getOrDefault(at, UndividedByARelation.GettingThere.NOTHING)
+                                .reason()
                         : new BlockReason.ComparisonRelatingTwoValues()));
             }
             // Numbers no row is shown computed in are told whether or not the place is shown
@@ -2730,7 +2736,7 @@ sealed interface ComparisonAssessment {
             }
             if (!runs.isEmpty()) {
                 why.add(new LeftAt(at, new BlockReason.RelationNotShownWhereItsRowsStopped(
-                        List.copyOf(runs))));
+                        WhereARunStopped.inOrder(runs))));
             }
             return why.stream();
         }).toList();

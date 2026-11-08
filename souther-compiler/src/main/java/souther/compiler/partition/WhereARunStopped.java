@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.execute.RunStop;
 import souther.compiler.source.SourceId;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -34,6 +35,18 @@ public record WhereARunStopped(RunStop stop, Optional<SourceId> source) {
     public WhereARunStopped {
         Objects.requireNonNull(stop, "a run stopped somewhere");
         Objects.requireNonNull(source, "a place is in one of these sources or in none");
+    }
+
+    /** {@link #IN_A_STEADY_ORDER}, asked for by a call: the form a sort over a plurality the
+     *  partition copied names its order by, which ties no two of these that are not equal. */
+    public static Comparator<WhereARunStopped> steadyOrder() {
+        return IN_A_STEADY_ORDER;
+    }
+
+    /** Each of {@code places} once, in {@link #steadyOrder}: the order any reader of a plurality
+     *  of these hands on, whatever order it was gathered in. */
+    public static List<WhereARunStopped> inOrder(Collection<WhereARunStopped> places) {
+        return places.stream().distinct().sorted(steadyOrder()).toList();
     }
 
     /** Two lists of these, one place at a time and then by how many: a steady order over lists

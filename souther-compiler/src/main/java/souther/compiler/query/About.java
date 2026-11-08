@@ -17,7 +17,6 @@ import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
-import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashSet;
@@ -687,37 +686,6 @@ public sealed interface About {
         @Override
         public ObligationIdentity obligationIdentity() {
             return new ObligationIdentity.OfADecisionRule(behavior, ruled.rule());
-        }
-    }
-
-    /**
-     * A way through the body every run of which stops at a construction.
-     *
-     * <p>Inputs take the way — no proof is had of its conditions alone — and every one of them
-     * hands a construction on it a value that breaks a clause of the invariant the construction is
-     * held to. No rule past it is owed a row, since no run gets past; what is wrong is the body,
-     * which builds a value nothing it is handed there can be. A row does not answer it, and a body
-     * that gets past the construction does, which is why it is an obligation a build refuses over
-     * and not one of the decision rules a row is owed for.
-     *
-     * @param behavior whose body the way is through, which the way itself does not say
-     * @param way      the way, the clauses every run along it stops at one of, and the proof
-     * @param stops    where every run along it stops, as a run stopped there says it
-     *                 ({@link Adequacy#whereRunsStopAt}), in the order the way meets them
-     */
-    record AWayEveryRunOfWhichStops(String behavior, DecisionReading.EveryRunStops way,
-                                    List<WhereARunStopped> stops) implements OfAnObligation {
-
-        public AWayEveryRunOfWhichStops {
-            Objects.requireNonNull(behavior, "a way through a body is some behavior's");
-            Objects.requireNonNull(way, "a finding is about something");
-            stops = List.copyOf(stops);
-        }
-
-        @Override
-        public ObligationIdentity obligationIdentity() {
-            return new ObligationIdentity.OfAWayEveryRunOfWhichStops(behavior, way.way().rule(),
-                    new LinkedHashSet<>(stops));
         }
     }
 

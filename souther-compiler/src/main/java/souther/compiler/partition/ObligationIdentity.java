@@ -37,36 +37,7 @@ public sealed interface ObligationIdentity
                 ObligationIdentity.OfADecisionRule, ObligationIdentity.OfACaseOfAStatement,
                 ObligationIdentity.OfACombinationOfDecisions,
                 ObligationIdentity.OfAFallbackPairCell, ObligationIdentity.OfAReplacement,
-                ObligationIdentity.OfAWayEveryRunOfWhichStops, WhereACaseOfAnInputIsOwed {
-
-    /**
-     * A way through a behavior's body every run of which stops at a construction, which is owed a
-     * body that gets past it rather than a row: inputs take the way, and none of them gets past
-     * the clauses of the constructions the proof keeps.
-     *
-     * <p>The rule the way is and where its runs stop, beside the behavior. The rule alone is not
-     * the way: two ways consulting the same conditions through different constructions are two,
-     * and a body fixed at one of them still stops every run along the other. Where the runs stop
-     * is said as a run stopped there says it — the construction by the module and the place it
-     * is written at, the clause by the declaration that wrote it — which is what a body is fixed
-     * at.
-     *
-     * @param stoppedAt where every run along the way stops, one place per clause the proof keeps,
-     *                  in no order
-     */
-    record OfAWayEveryRunOfWhichStops(String behavior, DecisionRule rule,
-                                      Set<WhereARunStopped> stoppedAt)
-            implements ObligationIdentity {
-
-        public OfAWayEveryRunOfWhichStops {
-            Objects.requireNonNull(behavior, "a way through a body is some behavior's");
-            Objects.requireNonNull(rule, "an obligation is told apart by something");
-            stoppedAt = Set.copyOf(stoppedAt);
-            if (stoppedAt.isEmpty()) {
-                throw new IllegalArgumentException("a way every run of which stops stops somewhere");
-            }
-        }
-    }
+                WhereACaseOfAnInputIsOwed {
 
     /**
      * A rewrite of a behavior's body, which is what the replacement account is owed at: a row

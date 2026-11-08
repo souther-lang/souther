@@ -868,8 +868,8 @@ public sealed interface Weakening {
      * for the figure of conditions taken in ({@link DecisionReading.UndecidedAtAFigure}).
      *
      * <p>What it takes away is the claim that the body has no way every run of which stops. Some
-     * input may take the way, and then every run of it stops at a construction on it, which is a
-     * gap; or none does, and nothing is owed. No rule past the way is owed a row either way, so
+     * input may take the way, and then every run of it stops at a construction on it, which the
+     * account says beside the rules; or none does, and the way is unreachable. No rule past the way is owed a row either way, so
      * the rules counted are not short of it.
      *
      * <p>Of the way and not of the behavior: two ways left undecided are two things a body may be

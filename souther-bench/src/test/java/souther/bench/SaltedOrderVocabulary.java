@@ -7,6 +7,7 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Figure;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.publish.CanonicalArrangement;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.query.WeakeningSet;
@@ -232,6 +233,7 @@ final class SaltedOrderVocabulary {
         out.add(Signature.of(method(TermPath.class, "structuralOrder")));
         out.add(Signature.of(method(ClassOfAPosition.class, "steadyOrder")));
         out.add(Signature.of(method(ClassOfAPosition.class, "byClassIdOrder")));
+        out.add(Signature.of(method(WhereARunStopped.class, "steadyOrder")));
         return out;
     }
 
