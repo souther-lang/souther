@@ -233,9 +233,10 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                         -> Refused { why = "" }
                 """;
 
-        assertTrue(diagnosticsOf(reachable).stream().anyMatch(d -> "E1908".equals(d.code())),
+        List<Diagnostic> saidWhereReached = diagnosticsOf(reachable);
+        assertTrue(saidWhereReached.stream().anyMatch(d -> "E1908".equals(d.code())),
                 "and the same output in a row the table can reach is the error it is: "
-                        + diagnosticsOf(reachable));
+                        + saidWhereReached);
     }
 
     /**

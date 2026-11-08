@@ -256,7 +256,8 @@ class OneBoundaryAnswerReachesTheReaderTest {
 
                 behavior run = bad >-> two
                 """;
-        assertTrue(err(source).getMessage().contains("E1313"), err(source).getMessage());
+        String refusal = err(source).getMessage();
+        assertTrue(refusal.contains("E1313"), refusal);
 
         Compilation compilation = Compilation.ofDocuments(
                 java.util.Map.of("demo.sou", source), java.util.Set.of(), ModulePath.EMPTY);

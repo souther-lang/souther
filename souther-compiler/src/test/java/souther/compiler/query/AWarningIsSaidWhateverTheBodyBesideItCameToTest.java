@@ -75,8 +75,9 @@ class AWarningIsSaidWhateverTheBodyBesideItCameToTest {
     @Test
     void andTheWorkspaceWithBothReallyIsRefused() {
         assertEquals(List.of(), errorCodesOf(ONE_BODY), "one body, and nothing wrong with it");
-        assertEquals(1, errorCodesOf(TWO_BODIES).size(),
-                "two bodies, one of which names nothing: " + errorCodesOf(TWO_BODIES));
+        List<String> refusedWithTwo = errorCodesOf(TWO_BODIES);
+        assertEquals(1, refusedWithTwo.size(),
+                "two bodies, one of which names nothing: " + refusedWithTwo);
     }
 
     private static List<String> codesWarnedAbout(String importing) {

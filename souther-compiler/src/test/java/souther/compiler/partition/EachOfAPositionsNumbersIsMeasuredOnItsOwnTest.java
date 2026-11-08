@@ -165,7 +165,8 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
     void neitherRuleIsLeftUnread() {
         assertEquals(List.of(), notRead(TWO_LINES), "both rules drew their own line");
         assertEquals(List.of(), notRead(VALUES_AND_A_LENGTH));
-        assertTrue(!human(TWO_LINES).contains("not read: invariant R"), human(TWO_LINES));
+        String report = human(TWO_LINES);
+        assertTrue(!report.contains("not read: invariant R"), report);
     }
 
     /** How the reading measures every position of {@code model}: the number, and the classes on
