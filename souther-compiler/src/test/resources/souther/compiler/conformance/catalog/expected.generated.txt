@@ -145,12 +145,11 @@ example everyDealPriced
     | (
         [
             Deal { currency = CurrencyCode("AAA"), amount = 0m },
-            Deal { currency = CurrencyCode("AAB"), amount = 0m },
-            Deal { currency = CurrencyCode("AAC"), amount = 0m }
+            Deal { currency = CurrencyCode("AAA"), amount = 0m }
         ],
         RateTable {
-            base = CurrencyCode("AAA"),
-            rates = [(CurrencyCode("AAA"), ConversionRate(1m))]
+            base = CurrencyCode("AAB"),
+            rates = [(CurrencyCode("AAB"), ConversionRate(1m))]
         }
     )
         -> <?>

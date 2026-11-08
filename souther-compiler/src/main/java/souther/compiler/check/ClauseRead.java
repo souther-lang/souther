@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * A place a clause reads in the value it is written about, and what it reads there.
@@ -20,16 +21,42 @@ import java.util.Objects;
  * @param run  for {@link Kind#EACH_ELEMENTS_RUN} and {@link Kind#ELEMENTS_THE_CLAUSE_NEEDS_APART},
  *             what it reads of an element, as the rules of the element call a place in it; the
  *             element itself for every other kind
+ * @param member for {@link Kind#A_MEMBER_THE_CLAUSE_NEEDS}, the member it needs where what the
+ *             lookup looks for is a place of the value; empty where it is anything else, and for
+ *             every other kind
  */
-public record ClauseRead(RuleKey at, Kind kind, RuleKey run) {
+public record ClauseRead(RuleKey at, Kind kind, RuleKey run, Optional<Member> member) {
 
     public ClauseRead {
         Objects.requireNonNull(at, "a clause reads somewhere");
         Objects.requireNonNull(kind, "a clause reads something of where it reads");
         Objects.requireNonNull(run, "a clause reads a place of an element, or the element");
+        Objects.requireNonNull(member, "a member a clause needs, or none");
         if (kind != Kind.EACH_ELEMENTS_RUN && kind != Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART
                 && !run.isTheValueItself()) {
             throw new IllegalArgumentException("only a read of elements goes down a run: " + kind);
+        }
+        if (member.isPresent() && kind != Kind.A_MEMBER_THE_CLAUSE_NEEDS) {
+            throw new IllegalArgumentException("only a member the clause needs is named: " + kind);
+        }
+    }
+
+    /** A read naming no member. */
+    public ClauseRead(RuleKey at, Kind kind, RuleKey run) {
+        this(at, kind, run, Optional.empty());
+    }
+
+    /**
+     * The member a clause cannot be true without its container holding.
+     *
+     * @param lookedFor the place of the value whose value the container is to hold
+     * @param asAKey    whether it is to hold it as a key, as a map holds what {@code Map.get} and
+     *                  {@code Map.containsKey} look up, rather than as an element
+     */
+    public record Member(RuleKey lookedFor, boolean asAKey) {
+
+        public Member {
+            Objects.requireNonNull(lookedFor, "a member is looked for at some place");
         }
     }
 
