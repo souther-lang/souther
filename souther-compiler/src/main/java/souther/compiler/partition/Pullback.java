@@ -19,6 +19,7 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.ConstantComparison;
 import souther.compiler.check.CallArguments;
+import souther.compiler.check.Clause;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DateMonthMoves;
@@ -2856,14 +2857,50 @@ final class Pullback {
     }
 
     /**
-     * What a run getting past {@code construction} states of this input ({@link #built}), read as
-     * an arm of a fork is read: off the values the construction is handed.
+     * What a run getting past a construction states of one clause it is held to: that clause
+     * holding of what the construction hands it.
+     *
+     * @param clause the clause, or null where a declaration whose clauses govern the value was not
+     *               reached, and what is stated is that the invariant could not be read
+     * @param stated what the clause holding states of the input
      */
-    static Pulled ofAConstruction(Core.Construct construction, InputReads reads,
-                                  InputReading read) {
+    record OfAClause(Clause.Ref clause, Pulled stated) {
+
+        OfAClause {
+            Objects.requireNonNull(stated, "a clause holding states something, if only that it"
+                    + " was not read");
+        }
+    }
+
+    /**
+     * What a run getting past {@code construction} states of this input, one clause at a time:
+     * each clause of the invariant of the type it builds holding of what it is handed, in the order
+     * the construction checks them, which is what the arm of an attempt of the same construction
+     * that built the value states of them together. Read as an arm of a fork is read: off the
+     * values the construction is handed.
+     *
+     * <p>A clause apiece, because a run along a way stops at the first clause the way's inputs
+     * break, and which of them that is is a question of each clause and not of their conjunction.
+     * One reading of the values for every clause: the clauses differ only in what is concluded.
+     *
+     * <p>One entry and no clause where a declaration governing the value was not reached.
+     */
+    static List<OfAClause> ofAConstruction(Core.Construct construction, InputReads reads,
+                                           InputReading read) {
         Pullback reading = new Pullback(read, Optional.empty(),
                 namesIn(construction, reads, read));
-        return reading.pulled(reading.built(construction, reads));
+        ClausesInOrder clauses = ClausesInOrder.at(construction, read.rules());
+        if (!clauses.everyRuleReached()) {
+            return List.of(new OfAClause(null, reading.pulled(new Derivation.Stopped(
+                    new WhyUnread.AnInvariantNotReached(), false))));
+        }
+        List<Derivation> holds = reading.holding(clauses, reads);
+        List<OfAClause> out = new ArrayList<>(holds.size());
+        for (int each = 0; each < holds.size(); each++) {
+            out.add(new OfAClause(clauses.inOrder().get(each).clause(),
+                    reading.pulled(new Derivation.ItWasBuilt(List.of(holds.get(each))))));
+        }
+        return out;
     }
 
     /**
@@ -3058,19 +3095,6 @@ final class Pullback {
             out.add(new Derivation.ItDeparted(holds, answers));
         }
         return out;
-    }
-
-    /**
-     * What a run getting past {@code construction} states: every clause of the invariant of the
-     * type it builds holds of what it is handed, which is what the arm of an attempt of the same
-     * construction that built the value states. A run that does not get past it stops there.
-     */
-    private Derivation built(Core.Construct construction, InputReads reads) {
-        ClausesInOrder clauses = ClausesInOrder.at(construction, read.rules());
-        if (!clauses.everyRuleReached()) {
-            return new Derivation.Stopped(new WhyUnread.AnInvariantNotReached(), false);
-        }
-        return new Derivation.ItWasBuilt(holding(clauses, reads));
     }
 
     /** Each of {@code clauses} holding, read over what the construction hands it, in order. */

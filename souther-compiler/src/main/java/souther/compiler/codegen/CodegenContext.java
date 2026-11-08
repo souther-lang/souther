@@ -23,7 +23,6 @@ import souther.compiler.check.SumCases;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.PhysicalPos;
 import souther.compiler.diag.QuotedFrom;
-import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -124,7 +123,7 @@ final class CodegenContext {
      * backend that reads the workspace; what it has business knowing is the texts the compilation
      * it is emitting for was given.
      */
-    private final SourceLayouts layouts;
+    private final TextsOfModules layouts;
 
     /**
      * Which text the classes generated here are of.
@@ -143,6 +142,38 @@ final class CodegenContext {
             return null;
         }
         return layouts.resolve(place);
+    }
+
+    /**
+     * Where a place is written, as data rather than as a line of a class: the module of the text
+     * it is quoted from, and where it sits in that text where this compilation holds it laid out.
+     *
+     * <p>Beside {@link #sits} and not a looser {@code sits}. A line table can only name the class's
+     * own text, so that one refuses every other; a construction's site is said to whoever reads a
+     * run, which can be told a module and a place in its text, so this answers for any text this
+     * compilation holds. A place in a text no module is known for is said as this module's, with no
+     * line.
+     */
+    WrittenAt writtenAt(SourcePos place) {
+        if (place == null) {
+            return new WrittenAt(pkg, null);
+        }
+        Optional<String> module = layouts.moduleOf(place.quotedFrom());
+        return module.isEmpty() ? new WrittenAt(pkg, null)
+                : new WrittenAt(module.get(), layouts.resolve(place));
+    }
+
+    /**
+     * A place as {@link #writtenAt} says it.
+     *
+     * @param module the module whose text the place is in
+     * @param sits   where it sits in that text, or null where this compilation holds it not laid out
+     */
+    record WrittenAt(String module, PhysicalPos sits) {
+
+        WrittenAt {
+            Objects.requireNonNull(module, "a place is in some module's text");
+        }
     }
 
     /** Synthetic {@code Fn} classes generated for escaping lambdas (spec §blocks), merged into the
@@ -575,7 +606,7 @@ final class CodegenContext {
                    KernelSignatures kernels,
                    Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, Set<String> exposed,
-                   Map<String, StandingSignature> standingCalls, SourceLayouts layouts,
+                   Map<String, StandingSignature> standingCalls, TextsOfModules layouts,
                    QuotedFrom home,
                    LinkageReader linkage) {
         this.linkage = Objects.requireNonNull(linkage,

@@ -8,6 +8,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.values.TextExtents;
 import net.unit8.notation199x.pattern.Meter;
@@ -304,6 +305,7 @@ public sealed interface BlockReason {
                 case OrderedExtentEndIsNoValue _ -> 27;
                 case RelationShownOverARegion _ -> 29;
                 case RelationRowsNotShownComputed _ -> 30;
+                case RelationNotShownWhereItsRowsStopped _ -> 31;
             };
         }
 
@@ -367,6 +369,9 @@ public sealed interface BlockReason {
                 }
                 case RelationRowsNotShownComputed(NumberRegion numbers) -> numbers.compareTo(
                         ((RelationRowsNotShownComputed) other).numbers());
+                case RelationNotShownWhereItsRowsStopped(List<WhereARunStopped> stopped) ->
+                        WhereARunStopped.compare(stopped,
+                                ((RelationNotShownWhereItsRowsStopped) other).stopped());
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -432,6 +437,7 @@ public sealed interface BlockReason {
                      SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
                      RelationNotShownToReachEveryValue _,
                      RelationNotShownWhereTheSearchStopped _,
+                     RelationNotShownWhereItsRowsStopped _,
                      RelationNotShownReachedAtEveryValue _,
                      RelationRowsNotShownComputed _ -> true;
             };
@@ -454,6 +460,11 @@ public sealed interface BlockReason {
                 // And the search for a row showing the other value of a relation reaching every
                 // value, which tries as many values as a figure lets it.
                 case RelationNotShownWhereTheSearchStopped _ -> RunSensitivity.MAY_CHANGE;
+                // Not the same search where the rows it found had runs that stopped: a run stops
+                // at an invariant, an ensures, an operation the runtime would not finish or an
+                // unreachable in a run allowed more of everything, and nothing was compared
+                // against a figure there.
+                case RelationNotShownWhereItsRowsStopped _ -> RunSensitivity.UNAFFECTED;
                 // And the readings of what a statement means, which stop at a figure only where
                 // the part they declined stopped at one.
                 case WhatItStatesIsNoLine(var why) -> why.figure().isPresent()
@@ -497,6 +508,9 @@ public sealed interface BlockReason {
                 case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
                 case WhereALineDecidesNotWorkedOut it -> it.stoppedAt();
                 case RelationNotShownWhereTheSearchStopped it -> it.stoppedAt();
+                // A run that stopped stopped at none: where it stopped is beside the reason, as
+                // places and not as figures.
+                case RelationNotShownWhereItsRowsStopped _ -> List.of();
                 // The figure the part it declined stopped at, which that part's reason says.
                 case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -1331,6 +1345,32 @@ public sealed interface BlockReason {
 
         public RelationNotShownWhereTheSearchStopped {
             stoppedAt = metAtSome(stoppedAt, "a search that stopped stopped at some figure");
+        }
+    }
+
+    /**
+     * The same, where the row this compiler searched for was found to meet what it was asked to,
+     * and the runs of the behavior on the rows tried stopped without answering.
+     *
+     * <p>Apart from {@link RelationNotShownWhereTheSearchStopped} for what a reader can do about
+     * it. A figure is something a run allowed more may get past; a run that stopped at an
+     * invariant, an {@code ensures}, an operation the runtime would not finish or an
+     * {@code unreachable} stops there in any run, and each place is an input the model has not
+     * decided about. And apart from {@link RelationNotShownToReachEveryValue}, which says nothing
+     * of any run having been tried.
+     *
+     * @param stopped where the runs stopped, each once and in
+     *                {@link WhereARunStopped#IN_A_STEADY_ORDER}
+     */
+    record RelationNotShownWhereItsRowsStopped(List<WhereARunStopped> stopped)
+            implements RuleReadingStopped {
+
+        public RelationNotShownWhereItsRowsStopped {
+            stopped = stopped.stream().distinct().sorted(WhereARunStopped.IN_A_STEADY_ORDER)
+                    .toList();
+            if (stopped.isEmpty()) {
+                throw new IllegalArgumentException("rows whose runs stopped stopped somewhere");
+            }
         }
     }
 

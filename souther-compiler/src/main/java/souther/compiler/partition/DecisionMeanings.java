@@ -520,12 +520,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
     }
 
     /**
-     * What getting past {@code construction} asks of a row: the clauses of the invariant of the
-     * type it builds, read over what it is handed — what the arm of an attempt of it that built the
-     * value states. No column: a construction is no distinction the body draws. Nothing where the
-     * type it builds holds its values to no clause.
+     * What getting past {@code construction} asks of a row, a clause at a time: each clause of the
+     * invariant of the type it builds, read over what it is handed — what the arm of an attempt of
+     * it that built the value states. No column: a construction is no distinction the body draws.
+     * Nothing where the type it builds holds its values to no clause.
      */
-    List<OnTheWay> constructing(Core.Construct construction, InputReads reads,
+    List<PassedConstruction> constructing(Core.Construct construction, InputReads reads,
                                 ConditionNumbering numbering) {
         return states.constructing(construction, reads, numbering);
     }

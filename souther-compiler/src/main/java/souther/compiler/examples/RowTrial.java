@@ -426,7 +426,8 @@ public final class RowTrial {
         for (Throwable cause = stopped.getCause(); cause != null; cause = cause.getCause()) {
             if (cause instanceof UnreachableReached reached) {
                 return Optional.of(new RunStop.AtAnUnreachable(String.valueOf(
-                        reached.getMessage())));
+                        reached.getMessage()), reached.module(), reached.line(),
+                        reached.line() > 0 ? reached.column() : 0));
             }
             if (cause instanceof ConstraintViolation violation) {
                 return Optional.of(switch (violation.failure()) {

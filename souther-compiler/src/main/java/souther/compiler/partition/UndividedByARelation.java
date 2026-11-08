@@ -612,6 +612,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   nothing of any row, and a way put beside it is what the two come to
      * @param stoppedAt  the figures a search for what would have shown more stopped at: a place
      *                   nothing is shown of here may be one a run allowed more shows undivided
+     * @param rowsStopped where the runs of the rows a search for what would have shown more tried
+     *                   stopped without answering: no figure, and each an input the model has not
+     *                   decided about
      * @param mayStopBefore those of {@code undivided} some way to which a run may stop on before
      *                   the relation, on what nothing here says: what the relation leaves them is
      *                   shown, and that every value there gets to it is not, which a reader
@@ -624,6 +627,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                         boolean rowsArrive, Set<Figure> stoppedAt,
+                        Set<WhereARunStopped> rowsStopped,
                         Set<FilingCoordinate> mayStopBefore,
                         Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
 
@@ -631,6 +635,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
+            rowsStopped = Set.copyOf(rowsStopped);
             mayStopBefore = Set.copyOf(mayStopBefore);
             // In the order the sides were said in: whoever files a reading for each numbers them
             // as it goes, and an order the keys' hashes decide numbers them differently each run.
@@ -644,8 +649,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatItLeaves(Set<FilingCoordinate> undivided,
                      Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                      boolean rowsArrive, Set<Figure> stoppedAt,
-                     Set<FilingCoordinate> mayStopBefore) {
-            this(undivided, settled, rowsArrive, stoppedAt, mayStopBefore, Map.of());
+                     Set<WhereARunStopped> rowsStopped) {
+            this(undivided, settled, rowsArrive, stoppedAt, rowsStopped, Set.of(), Map.of());
         }
 
         WhatItLeaves(Set<FilingCoordinate> undivided,
@@ -672,8 +677,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             stillUndivided.removeAll(parted);
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             stops.removeAll(parted);
-            return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, stops,
-                    strings);
+            return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, rowsStopped,
+                    stops, strings);
         }
 
         /** What a way that no row comes along shows of {@code places}: every one of them, of the
@@ -692,7 +697,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatItLeaves mayStopBefore(Set<FilingCoordinate> places) {
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             places.stream().filter(undivided::contains).forEach(stops::add);
-            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops, partnered);
+            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, rowsStopped, stops,
+                    partnered);
         }
 
         /** What both this and {@code other} show, for rows that may come along either: a place
@@ -716,6 +722,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             });
             Set<Figure> stopped = new LinkedHashSet<>(stoppedAt);
             stopped.addAll(other.stoppedAt);
+            Set<WhereARunStopped> runs = new LinkedHashSet<>(rowsStopped);
+            runs.addAll(other.rowsStopped);
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             stops.addAll(other.mayStopBefore);
             stops.retainAll(both);
@@ -729,7 +737,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     alikeStrings.put(term, strings.orAnother(theirs));
                 }
             });
-            return new WhatItLeaves(both, alike, true, stopped, stops, alikeStrings);
+            return new WhatItLeaves(both, alike, true, stopped, runs, stops, alikeStrings);
         }
     }
 
@@ -2790,6 +2798,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<OnAWay> conditions = left.conditions();
         List<List<OnAWay>> stating = entire.stating();
         Set<Figure> stopped = new LinkedHashSet<>();
+        Set<WhereARunStopped> runsStopped = new LinkedHashSet<>();
         Set<FilingCoordinate> byTheFormat = heldWhole ? leftByTheFormat(read, conditions, stopped)
                 : null;
         // The rules of the declarations a row at this line needs nothing of leave the numbers they
@@ -2868,7 +2877,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // how many the container holds, and the two are asked together and not each apart.
         Within lying = offItsLine || !heldWhole || remainder != null ? null
                 : Optional.ofNullable(positionWithinItsWalk(conditions))
-                        .orElseGet(() -> countWithinItsContainer(conditions, witnesses, stopped));
+                        .orElseGet(() -> countWithinItsContainer(conditions, witnesses, stopped,
+                                runsStopped));
         if (lying != null) {
             WhatARelationLeavesUndivided.WithinTheWhole within = lying.within();
             // How many the container holds takes each of its values in some row where the region
@@ -2957,7 +2967,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 putDown(at, leaves.get(at), out, settled);
             }
         }
-        WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
+        WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped, runsStopped);
         Set<TermPath> accountedFor = Set.of();
         if (sides.size() == 2 && heldWhole && standApart(0, 1, independent)) {
             Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
@@ -5106,11 +5116,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>Where the search for a witness stopped short of everything it would have tried, the
      * figures it stopped at go into {@code stopped}: nothing is shown, and a run allowed more may
-     * show it.
+     * show it. Where the runs of the rows it tried stopped without answering, where they stopped
+     * goes into {@code runsStopped}: nothing is shown either, and a run allowed more stops there
+     * too.
      */
     private Within countWithinItsContainer(List<OnAWay> conditions,
                                            CountWitnesses.Lookup witnesses,
-                                           Set<Figure> stopped) {
+                                           Set<Figure> stopped,
+                                           Set<WhereARunStopped> runsStopped) {
         if (sides.size() != 2) {
             return null;
         }
@@ -5148,6 +5161,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             CountWitnesses.Sought sought = witnesses.of(counted);
             if (sought.found().isEmpty()) {
                 stopped.addAll(sought.stoppedAt());
+                runsStopped.addAll(sought.runsStopped());
                 return null;
             }
             return new Within(new WhatARelationLeavesUndivided.WithinTheWhole(part, 1 - part,

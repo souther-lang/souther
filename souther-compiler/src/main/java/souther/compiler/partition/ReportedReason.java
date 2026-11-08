@@ -54,16 +54,21 @@ public final class ReportedReason {
      * @param notShownComputed where the relation settles the numbers of a term by its terms' ends
      *                 and no row is shown computed in them: no figure of this compiler's either,
      *                 and a reader told only the word cannot tell which numbers they are
+     * @param runsStopped where the runs of the rows tried for it stopped without answering, each
+     *                 once and in {@link WhereARunStopped#IN_A_STEADY_ORDER} ({@link #runsStopped}):
+     *                 no figure either, and a reader told only the word cannot tell which input
+     *                 the model has not decided about. Empty where no run of a row tried stopped
      */
     public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo,
                        List<Figure> figures,
                        Optional<BlockReason.RelationShownOverARegion> leftOpen,
-                       Optional<NumberRegion> notShownComputed) {
+                       Optional<NumberRegion> notShownComputed,
+                       List<WhereARunStopped> runsStopped) {
 
         /**
          * These in a steady order, which two of them are equal in only where they are equal: the
          * word in the vocabulary's own order, then what it is about, then where it sends a reader,
-         * then the figures it stopped at, then what it leaves open.
+         * then the figures it stopped at, then what it leaves open, then where runs stopped.
          *
          * <p>The vocabulary's order is a set of words and says nothing about a model. What an author
          * wrote is asked of the places.
@@ -77,15 +82,18 @@ public final class ReportedReason {
                                 Comparator.nullsFirst(BlockReason.RuleReadingStopped
                                         .IN_A_STEADY_ORDER))
                         .thenComparing(each -> each.notShownComputed().orElse(null),
-                                Comparator.nullsFirst(Comparator.naturalOrder()));
+                                Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(Stop::runsStopped, WhereARunStopped::compare);
 
         public Stop {
             if (reason == null || about == null || sentTo == null || figures == null
-                    || leftOpen == null || notShownComputed == null) {
+                    || leftOpen == null || notShownComputed == null || runsStopped == null) {
                 throw new IllegalArgumentException(
                         "a question stands on some reason, about something, somewhere in its rule");
             }
             figures = Figure.inOrder(figures);
+            runsStopped = runsStopped.stream().distinct()
+                    .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList();
         }
     }
 
@@ -94,7 +102,8 @@ public final class ReportedReason {
                 said.reason() instanceof BlockReason.RelationShownOverARegion open
                         ? Optional.of(open) : Optional.empty(),
                 said.reason() instanceof BlockReason.RelationRowsNotShownComputed unshown
-                        ? Optional.of(unshown.numbers()) : Optional.empty());
+                        ? Optional.of(unshown.numbers()) : Optional.empty(),
+                runsStopped(said.reason()));
     }
 
     /**
@@ -215,6 +224,19 @@ public final class ReportedReason {
     }
 
     /**
+     * Where the runs of the rows tried for {@code reason} stopped without answering, which the word
+     * does not say, each once and in {@link WhereARunStopped#IN_A_STEADY_ORDER}; none for a reason
+     * no run was tried for.
+     *
+     * <p>Beside the word as the figures are, and carried rather than worked out: the reason holds
+     * them from where the runs were read.
+     */
+    public static List<WhereARunStopped> runsStopped(BlockReason reason) {
+        return reason instanceof BlockReason.RelationNotShownWhereItsRowsStopped(var stopped)
+                ? stopped : List.of();
+    }
+
+    /**
      * Deliberately coarser than what it is given. What a reader of a document is promised is which
      * kind of thing stopped the derivation, not which capability this compiler is missing this
      * month: three missing traversals are one word, because the model reads the same whichever of
@@ -328,10 +350,12 @@ public final class ReportedReason {
                  BlockReason.WhereALineDecidesNotWorkedOut _ ->
                     UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE;
             // One word whether or not a search stopped short of the row that would have shown
-            // more: which of the two it was is told apart by the sensitivity and the figure
-            // beside the word.
+            // more, and whether or not the runs of the rows it tried stopped: which of the three
+            // it was is told apart by what is beside the word — the sensitivity and the figure
+            // for the second, where the runs stopped for the third ({@link #runsStopped}).
             case BlockReason.RelationNotShownToReachEveryValue _,
-                 BlockReason.RelationNotShownWhereTheSearchStopped _ ->
+                 BlockReason.RelationNotShownWhereTheSearchStopped _,
+                 BlockReason.RelationNotShownWhereItsRowsStopped _ ->
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
             // Its own word and not the one above: what falls short is the values here getting to
             // the rule, and a reader looks at what the run works out before it.

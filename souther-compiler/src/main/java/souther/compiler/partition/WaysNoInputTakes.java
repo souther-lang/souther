@@ -17,9 +17,9 @@ import java.util.function.Supplier;
  */
 final class WaysNoInputTakes {
 
-    /** Each way once, by what it consulted and went through, with the first proof had of it. */
-    private final Map<DecisionPath.Way, DecisionReading.ImpossiblePath> proved =
-            new LinkedHashMap<>();
+    /** Each way once, by what it consulted and went through, with the first proof had of it and
+     *  what the proof says the way is. */
+    private final Map<DecisionPath.Way, DecisionReading.Excluded> proved = new LinkedHashMap<>();
 
     /**
      * What each way asked of comes to, by what it consulted: the ways a body is joined into, and
@@ -72,11 +72,23 @@ final class WaysNoInputTakes {
         return true;
     }
 
-    /** That no input takes {@code path}, for {@code why}. */
-    void add(DecisionPath path, NoInputTakesIt why) {
-        proved.putIfAbsent(path.way(),
-                new DecisionReading.ImpossiblePath(new DecisionReading.Ruled(path.rule(),
-                        path.steps(), true, path.passed()), why));
+    /** Whether this reading has taken in as many conditions as it does in all, so that a way not
+     *  proved closed now may be one a proof would have closed. */
+    boolean spent() {
+        return takenInLeft == 0;
+    }
+
+    /**
+     * That no input takes {@code path} getting past every construction on it, for {@code why} —
+     * and, where {@code everyRunStops}, that the conditions on it do not give that alone, so every
+     * run along it is refused at one of its constructions.
+     */
+    void add(DecisionPath path, NoInputTakesIt why, boolean everyRunStops) {
+        DecisionReading.Ruled way = new DecisionReading.Ruled(path.rule(), path.steps(), true,
+                path.passed());
+        proved.putIfAbsent(path.way(), everyRunStops
+                ? new DecisionReading.EveryRunStops(way, why)
+                : new DecisionReading.ImpossiblePath(way, why));
     }
 
     /**
@@ -85,9 +97,9 @@ final class WaysNoInputTakes {
      * of which stands for the other may still both stand for some rule — two proofs had of
      * different conditions — and each is a proof of its own, so both are said.
      */
-    List<DecisionReading.ImpossiblePath> leastOfThem() {
-        List<DecisionReading.ImpossiblePath> out = new ArrayList<>();
-        for (DecisionReading.ImpossiblePath each : proved.values()) {
+    List<DecisionReading.Excluded> leastOfThem() {
+        List<DecisionReading.Excluded> out = new ArrayList<>();
+        for (DecisionReading.Excluded each : proved.values()) {
             boolean pastAnother = proved.values().stream().anyMatch(other -> other != each
                     && other.standsFor(each.way()));
             if (!pastAnother) {

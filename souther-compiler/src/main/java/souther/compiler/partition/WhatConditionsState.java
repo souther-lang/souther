@@ -70,7 +70,7 @@ final class WhatConditionsState {
     private final Map<ANode, Pullback.Pulled> presences = new HashMap<>();
     private final Map<ANode, Pullback.Pulled> holdings = new HashMap<>();
     private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
-    private final Map<ANode, Pullback.Pulled> constructions = new HashMap<>();
+    private final Map<ANode, List<Pullback.OfAClause>> constructions = new HashMap<>();
     private final Map<ANode, Optional<DividedInput>> dividedInputs = new HashMap<>();
     private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswer = new HashMap<>();
     private final Map<ANodeLeavingOut, Pullback.OperatorsAnswer> operatorsAnswerLeavingOut =
@@ -189,9 +189,9 @@ final class WhatConditionsState {
                 () -> Pullback.ofHoldingSomething(container, reads, read, Optional.empty()));
     }
 
-    /** What a run getting past {@code construction} states with its names as {@code reads} has
-     *  them ({@link Pullback#ofAConstruction}). */
-    Pullback.Pulled constructed(Core.Construct construction, InputReads reads) {
+    /** What a run getting past {@code construction} states of each clause it is held to, with its
+     *  names as {@code reads} has them ({@link Pullback#ofAConstruction}). */
+    List<Pullback.OfAClause> constructed(Core.Construct construction, InputReads reads) {
         return kept(constructions, new ANode(construction, reads),
                 () -> Pullback.ofAConstruction(construction, reads, read));
     }

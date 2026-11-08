@@ -46,9 +46,12 @@ public enum DocumentPart {
             "/$defs/decision/properties/obligations/items/properties/synthesisShortfalls/items"
                     + "/properties/causes"),
 
-    SYNTHESIS_SHORTFALL_RUNS_STOPPED("runsStopped",
-            "/$defs/decision/properties/obligations/items/properties/synthesisShortfalls/items"
-                    + "/properties/runsStopped");
+    /**
+     * Where the runs of rows stopped without answering, published by two parts through one
+     * definition: a search of a rule of a decision that composed nothing, and an entry of
+     * {@link #NOT_READ} whose search for a row tried rows whose runs stopped.
+     */
+    RUNS_STOPPED("runsStopped", "/$defs/runsStopped");
 
     private final String key;
     private final String schemaPath;

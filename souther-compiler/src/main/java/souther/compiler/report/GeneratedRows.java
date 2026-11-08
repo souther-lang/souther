@@ -1248,7 +1248,7 @@ public final class GeneratedRows {
                     About.ARowAtAnArmAwaitsItsAnswer _, About.AnUnansweredRow _,
                     About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
-                    About.ARuleThatMayStopARun _,
+                    About.ARuleThatMayStopARun _, About.AWayEveryRunOfWhichStops _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionReadWiderThanItsRules _ ->
@@ -1432,9 +1432,10 @@ public final class GeneratedRows {
      * Where the runs of the rows composed stopped, each place once.
      *
      * <p>Each of them and not the first. Rows of different values may stop at different places,
-     * and every one is an input the model has not decided about.
+     * and every one is an input the model has not decided about. Read by every line that says
+     * where runs stopped, so a place reads alike wherever a reader meets it.
      */
-    private static String stoppedAt(List<WhereARunStopped> stops, SourceRendering rendering) {
+    static String stoppedAt(List<WhereARunStopped> stops, SourceRendering rendering) {
         List<String> each = new ArrayList<>();
         for (WhereARunStopped stop : stops) {
             each.add(onePlaceStoppedAt(stop, rendering));
@@ -1454,7 +1455,9 @@ public final class GeneratedRows {
                     + " did not hold";
             case RunStop.AtAnEnd it -> "an operation the runtime would not finish (" + it.said()
                     + ")";
-            case RunStop.AtAnUnreachable it -> "an `unreachable` (" + it.said() + ")";
+            case RunStop.AtAnUnreachable it -> "an `unreachable` "
+                    + writtenAt(it.module(), it.line(), it.column(), where, rendering)
+                    + " (" + it.said() + ")";
         };
     }
 
@@ -1482,13 +1485,24 @@ public final class GeneratedRows {
     /** Where a construction a run stopped at is written, as far as its run said. */
     private static String constructionAt(RunStop.AtAConstruction refused, WhereARunStopped where,
                                          SourceRendering rendering) {
-        if (!refused.placed()) {
-            return "in `" + refused.siteModule() + "`";
+        return writtenAt(refused.siteModule(), refused.line(), refused.column(), where,
+                rendering);
+    }
+
+    /**
+     * Where a place a run stopped at is written, as far as its run said: the source and the line
+     * and column in it, or the module where this compilation holds no source declaring it, or the
+     * module alone where the run said no line.
+     */
+    private static String writtenAt(String module, int line, int column, WhereARunStopped where,
+                                    SourceRendering rendering) {
+        if (line <= 0) {
+            return "in `" + module + "`";
         }
-        String numbers = refused.line() + ":" + refused.column();
+        String numbers = line + ":" + column;
         return where.source()
                 .map(source -> "at " + rendering.names().nameOf(source) + ":" + numbers)
-                .orElseGet(() -> "at " + numbers + " of `" + refused.siteModule() + "`");
+                .orElseGet(() -> "at " + numbers + " of `" + module + "`");
     }
 
     /**

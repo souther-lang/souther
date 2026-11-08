@@ -913,8 +913,12 @@ public record Settlements(List<ObligationIdentity> requested,
                 // And a row waiting for its answer is discharged by nothing composed at all: what
                 // it is owed is what the system does, written where that row is by somebody who
                 // knows it, and a row composed here would be a second row rather than that answer.
+                //
+                // And a way every run of which stops is discharged by a body that gets past the
+                // construction, and by no row: every row down it stops there.
                 case ObligationIdentity.OfAnInputCase _, ObligationIdentity.OfAnOutputCase _,
-                     ObligationIdentity.OfARow _ -> throw new IllegalStateException(
+                     ObligationIdentity.OfARow _, ObligationIdentity.OfAWayEveryRunOfWhichStops _ ->
+                        throw new IllegalStateException(
                         "no row is offered for " + item + ", so none is weighed against it");
                 case ObligationIdentity.OfABorder at -> tellingTheLinesApart(asRead, at).said();
                 // Nothing composes a row to show the weight of a position, so no row is weighed

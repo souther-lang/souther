@@ -232,7 +232,7 @@ class JvmAbortMappingTest {
     @Test
     void unreachableAbortsAsTheClassJvmAbortMappingNames() {
         assertThrows(JvmAbortMapping.representationOf(AbortKind.UNREACHABLE_REACHED),
-                () -> UnreachableReached.reached("never"));
+                () -> UnreachableReached.reached("never", "m", 1, 1));
     }
 
     /**

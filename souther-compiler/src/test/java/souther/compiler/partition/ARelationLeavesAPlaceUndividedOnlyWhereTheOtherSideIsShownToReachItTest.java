@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.execute.RunStop;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
@@ -22,6 +23,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.Figure;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -38,6 +40,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -1604,7 +1607,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 read.rules().inners(), read.rules().symbols());
         CountWitnesses.Lookup everyCount = _ -> new CountWitnesses.Sought(Optional.of(
                 new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
-                        FixtureTemplate.integer(1))), Set.of());
+                        FixtureTemplate.integer(1))), Set.of(), Set.of());
         DecisionSubject.AnInput currency =
                 new DecisionSubject.AnInput(deals.element().then("currency"));
         Map<Proposition, Boolean> undividedBy = new LinkedHashMap<>();
@@ -1645,7 +1648,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         new DecisionSubject.AnInput(TermPath.of("rates").then("base")), true));
         Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
         CountWitnesses.Lookup stoppedShort =
-                _ -> new CountWitnesses.Sought(Optional.empty(), Set.of(stopped));
+                _ -> new CountWitnesses.Sought(Optional.empty(), Set.of(stopped), Set.of());
         UndividedByARelation counted = UndividedByARelation.ofAForm(
                 new LinearForm<>(ExactRatio.ZERO, Map.of(count, ExactRatio.ONE,
                         new DecisionAtom.OfTheInput(deals), ExactRatio.ONE.negated())),
@@ -1657,7 +1660,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 new ComparisonAssessment.AgainstAnotherValue(
                         List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)),
                         List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of(),
-                        Set.of(), Map.of(), Map.of())
+                        Map.of(), Set.of(), Map.of(), Map.of())
                         .whereRowsArrive(read, List.of(), stoppedShort);
         Map<FilingCoordinate, BlockReason> left = new LinkedHashMap<>();
         both.whatEachPlaceIsLeftWith().forEach(each -> left.put(each.at(), each.why()));
@@ -1720,7 +1723,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aCountIsLetThroughOnlyForTheCallTheReadingSaysItWasReadOff() {
         CountWitnesses.Sought found = new CountWitnesses.Sought(Optional.of(
                 new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
-                        FixtureTemplate.integer(1))), Set.of());
+                        FixtureTemplate.integer(1))), Set.of(), Set.of());
         CountWitnesses.AtComparisons always = _ -> _ -> found;
         String filtered = countedInline("x.value > 2");
         ReadComparisons read = ReadComparisons.ofTheAnalysis(filtered, "m", always);
@@ -4008,7 +4011,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
         FilingCoordinate rest = new FilingCoordinate.AtPosition(TermPath.of("s"));
         List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
-                List.of(hours, rest), Set.of(rest), Map.of(), Set.of(),
+                List.of(hours, rest), Set.of(rest), Map.of(), Map.of(), Set.of(),
                 Map.of(hours, Set.of(FROM_FIVE)));
         assertEquals(new BlockReason.RelationRowsNotShownComputed(FROM_FIVE), left.get(0).why());
         assertEquals(new BlockReason.ComparisonRelatingTwoValues(), left.get(1).why());
@@ -4029,7 +4032,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aPlaceShownUndividedIsStillToldTheNumbersNoRowIsShownComputedIn() {
         FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
         List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
-                List.of(hours), Set.of(hours), Map.of(), Set.of(),
+                List.of(hours), Set.of(hours), Map.of(), Map.of(), Set.of(),
                 Map.of(hours, Set.of(FROM_FIVE)));
         assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.RelationRowsNotShownComputed(FROM_FIVE)),
@@ -4060,7 +4063,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 FilingCoordinate.of(rates), Set.of(BELOW_ONE)), unshown);
         List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
                 List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)), Set.of(),
-                Map.of(), Set.of(), unshown);
+                Map.of(), Map.of(), Set.of(), unshown);
         assertEquals(List.of(
                 new ComparisonAssessment.LeftAt(FilingCoordinate.of(deals),
                         new BlockReason.RelationRowsNotShownComputed(BELOW_ONE)),
@@ -4088,7 +4091,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
         Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
         List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
-                List.of(hours), Set.of(), Map.of(hours, Set.of(stopped)), Set.of(),
+                List.of(hours), Set.of(), Map.of(hours, Set.of(stopped)), Map.of(), Set.of(),
                 Map.of(hours, Set.of(FROM_FIVE)));
         assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(FROM_FIVE),
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped))),
@@ -4096,6 +4099,42 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
                 UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
                 left.stream().map(each -> ReportedReason.of(each.why())).toList());
+    }
+
+    /**
+     * A place a search tried rows for whose runs stopped is told where they stopped, in place of
+     * the bare word, and beside the figures where the search stopped at some as well: a run that
+     * stopped is no figure, and a figure is no run that stopped. A place none of whose rows was
+     * run is told the bare word, as before.
+     */
+    @Test
+    void wherePlacesRowsStoppedIsToldBesideTheFiguresAndInPlaceOfTheBareWord() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        FilingCoordinate rest = new FilingCoordinate.AtPosition(TermPath.of("s"));
+        FilingCoordinate none = new FilingCoordinate.AtPosition(TermPath.of("n"));
+        Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
+        WhereARunStopped ensures = new WhereARunStopped(
+                new RunStop.AtAnEnsures("m", "f", Optional.of("small")), Optional.empty());
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours, rest, none), Set.of(), Map.of(rest, Set.of(stopped)),
+                Map.of(hours, Set.of(ensures), rest, Set.of(ensures)), Set.of(), Map.of());
+
+        BlockReason.RelationNotShownWhereItsRowsStopped rowsStopped =
+                new BlockReason.RelationNotShownWhereItsRowsStopped(List.of(ensures));
+        assertEquals(List.of(
+                new ComparisonAssessment.LeftAt(hours, rowsStopped),
+                new ComparisonAssessment.LeftAt(rest,
+                        new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped))),
+                new ComparisonAssessment.LeftAt(rest, rowsStopped),
+                new ComparisonAssessment.LeftAt(none,
+                        new BlockReason.RelationNotShownToReachEveryValue())), left);
+        // One word for all three, told apart by what is beside it.
+        assertEquals(Set.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+                left.stream().map(each -> ReportedReason.of(each.why()))
+                        .collect(Collectors.toSet()));
+        assertEquals(RunSensitivity.UNAFFECTED, rowsStopped.runSensitivity());
+        assertEquals(List.of(), rowsStopped.figures());
+        assertEquals(List.of(ensures), ReportedReason.runsStopped(rowsStopped));
     }
 
     @Test

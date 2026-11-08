@@ -6,11 +6,16 @@ import souther.compiler.carrier.Membership;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
+import souther.compiler.execute.RunStop;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.check.Prepared;
+import souther.compiler.check.Clause;
+import souther.compiler.check.ClauseName;
+import souther.compiler.diag.PhysicalPos;
+import souther.compiler.partition.PassedConstruction;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.partition.CountWitnesses;
 import souther.compiler.observe.ArmObservation;
@@ -1225,10 +1230,15 @@ public final class Adequacy {
                     inputs -> applying.prepare(inputs.stream().map(FixtureTemplate::value)
                                     .toList(), List.of())
                             .flatMap(RowTrials.Prepared::run)
-                            .filter(ran -> ran.answer() instanceof AnswerObservation.Answered)
-                            .map(ran -> ran.recorded() instanceof RunRecord.Recorded(var seen)
-                                    && wentThrough(numbering.align(seen)))
-                            .orElse(false)));
+                            .map(ran -> ran.answer() instanceof AnswerObservation.Answered
+                                    ? CountWitnesses.Run.stoppedNowhere(
+                                            ran.recorded() instanceof RunRecord.Recorded(var seen)
+                                                    && wentThrough(numbering.align(seen)))
+                                    // A run that answered nothing is no witness, and where it
+                                    // stopped is said beside the count it was tried for.
+                                    : new CountWitnesses.Run(false,
+                                            ran.stopped().map(stop -> whereItStopped(db, stop))))
+                            .orElseGet(() -> CountWitnesses.Run.stoppedNowhere(false))));
         }
 
         /** Whether the run {@code seen} is had some place of {@link #reaching} come out either
@@ -4448,8 +4458,11 @@ public final class Adequacy {
             case About.ACaseNothingWasSeenToProduce _ ->
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.AN_ACCOUNT_OF_WHAT_THE_ROWS_DID);
-            // What the model says, read to the end. A row does not change it.
-            case About.APositionNoLineDivides _, About.ARuleThatMayStopARun _ ->
+            // What the model says, read to the end. A row does not change it. A way every run of
+            // which stops is that too: every row down it stops where the body builds a value, and
+            // what discharges it is the body.
+            case About.APositionNoLineDivides _, About.ARuleThatMayStopARun _,
+                 About.AWayEveryRunOfWhichStops _ ->
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.A_FACT_ABOUT_THE_MODEL);
             // <b>Asked of the finding and not read off which kind it is.</b> The two reasons here
@@ -6094,6 +6107,9 @@ public final class Adequacy {
                     case About.ALineTheRowsDoNotTellFromAnother _ -> { }
                     // And a position of a total, whose weight nothing composes a row to show.
                     case About.ATiltOfADerivedValueNoRowShows _ -> { }
+                    // And a way every run of which stops, which every row composed down it stops
+                    // at too: what discharges it is the body.
+                    case About.AWayEveryRunOfWhichStops _ -> { }
                     // A row is written here and what is left is its answer, which is the author's
                     // to write and nothing a search composes.
                     case About.AnUnansweredRow _, About.ARowAtAnArmAwaitsItsAnswer _ -> { }
@@ -6594,6 +6610,7 @@ public final class Adequacy {
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
                                     About.ARuleThatMayStopARun _,
+                                    About.AWayEveryRunOfWhichStops _,
                                     About.APositionWhoseRulesWereNotReached _,
                                     About.APositionReadWiderThanItsRules _,
                                     About.AQuestionNothingAnswered _ ->
@@ -7683,6 +7700,48 @@ public final class Adequacy {
     }
 
     /**
+     * Where a run of a row stopped, with the source of this compilation the module it names is
+     * written in: the one way every reader of a run builds it, so a stop a witness search met and
+     * one a row search met name one place alike.
+     */
+    static WhereARunStopped whereItStopped(Db db, RunStop stop) {
+        return new WhereARunStopped(stop,
+                stop.writtenIn().map(module -> Compilation.sourceIdOf(db, module)));
+    }
+
+    /**
+     * Where every run along {@code way} stops, said as a run that stopped there says it: one place
+     * for each clause the proof keeps, the construction by the module whose text it is written in
+     * and its line and column there, the clause by the declaration that wrote it.
+     *
+     * <p>The clauses the proof needs, and none of the others the construction is held to: each
+     * clause is gone through by the way on its own, and the least proof keeps only the ones the
+     * inputs of the way break. A clause standing for an invariant that was not read is never one a
+     * proof needs, since it states nothing of the input.
+     */
+    public static List<WhereARunStopped> whereEveryRunStops(Db db,
+                                                            DecisionReading.EveryRunStops way) {
+        TheTextsThisCompileHolds texts = new TheTextsThisCompileHolds(db);
+        List<WhereARunStopped> out = new ArrayList<>();
+        for (PassedConstruction each : way.stoppedAt()) {
+            if (each.clause() == null) {
+                continue;
+            }
+            String site = each.at() == null ? null
+                    : texts.moduleOf(each.at().quotedFrom()).orElse(null);
+            PhysicalPos sits = site == null ? null : texts.resolve(each.at());
+            Clause.Ref clause = each.clause();
+            TypeSymbol.AtModule declared = clause.id().declaredOn();
+            RunStop stop = new RunStop.AtAConstruction(declared.module(), declared.name(),
+                    clause.name().map(ClauseName::value), clause.id().ordinal(),
+                    site == null ? declared.module() : site,
+                    sits == null ? 0 : sits.line(), sits == null ? 0 : sits.column());
+            out.add(whereItStopped(db, stop));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * A way to run one behavior's composed rows, said in the generator's words.
      *
      * <p>Two seams and one adaptation, the way the check that a value can be built already is. What
@@ -7743,8 +7802,7 @@ public final class Adequacy {
                             case RunRecord.Recorded(var seen) ->
                                     new Generator.Watched.Ran(numbering.align(seen));
                             case RunRecord.NoAccount _ -> new Generator.Watched.NoAccount();
-                        }, ran.answer(), ran.stopped().map(stop -> new WhereARunStopped(stop,
-                                stop.writtenIn().map(module -> Compilation.sourceIdOf(db, module))))))
+                        }, ran.answer(), ran.stopped().map(stop -> whereItStopped(db, stop))))
                         .orElseGet(Generator.ObservedRun::nothingRan);
             }
 
@@ -7863,6 +7921,16 @@ public final class Adequacy {
          * another way.
          */
         DECISION_RULE_UNCOVERED(DiagnosticCode.E1935),
+        /**
+         * A way through the body every run of which stops at a construction whose invariant what
+         * it is handed there breaks.
+         *
+         * <p>Beside {@link #DECISION_RULE_UNCOVERED} and not among it. A rule is owed a row, and no
+         * row gets past this way: every input taking it is refused where a value is built, so what
+         * would discharge it is a body that builds a value it can be, and the rules past it are
+         * owed nothing.
+         */
+        WAY_EVERY_RUN_STOPS(DiagnosticCode.E1941),
         /**
          * A combination of the decisions a body settles one value by that no row was seen making.
          *
@@ -8067,7 +8135,8 @@ public final class Adequacy {
             // its rules do not divide, what nothing here could read of them. Shown at the behavior.
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
-                    About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
+                    About.ARuleNoRowTakes _, About.AWayEveryRunOfWhichStops _,
+                    About.ACombinationNoRowMakes _,
                     About.ACombinationOfTwoClassesNoRowIsIn _,
                     About.APointOfABorder _, About.ALineTheRowsDoNotTellFromAnother _,
                     About.ATiltOfADerivedValueNoRowShows _, About.APositionNoLineDivides _,
@@ -8385,6 +8454,7 @@ public final class Adequacy {
                 case About.AQuestionNothingAnswered _ -> Kind.RULE_UNACCOUNTED;
                 case About.AnArmNoRowGoesThrough _ -> Kind.ARM_UNREACHED;
                 case About.ARuleNoRowTakes _ -> Kind.DECISION_RULE_UNCOVERED;
+                case About.AWayEveryRunOfWhichStops _ -> Kind.WAY_EVERY_RUN_STOPS;
                 case About.ACombinationNoRowMakes _ -> Kind.INTERACTION_UNCOVERED;
                 case About.ACombinationOfTwoClassesNoRowIsIn _ -> Kind.PAIR_UNCOVERED;
                 case About.ARewriteNoRowTellsApart _ -> Kind.REWRITE_UNNOTICED;
@@ -9491,6 +9561,16 @@ public final class Adequacy {
          */
         private static void decisionFindings(Db db, String module, String behavior,
                                              DecisionEvidence decision, List<Finding> out) {
+            if (decision == null) {
+                return;
+            }
+            // A way every run of which stops is a finding whatever the rows did: it is read off the
+            // body and the rules, and proved there. It is no rule a row is owed for, and no search
+            // is asked about it.
+            for (DecisionReading.EveryRunStops each : decision.read().everyRunStops()) {
+                out.add(Finding.noticed(behavior, new About.AWayEveryRunOfWhichStops(behavior,
+                        each, whereEveryRunStops(db, each))));
+            }
             // Only where a reading of the runs was made. A measure with no value has not found a
             // rule nothing takes — it has found nothing — and the arms measure answers the same way
             // for the same reason: what is missing where nothing was read is not a set of gaps, and
@@ -10086,8 +10166,8 @@ public final class Adequacy {
          * @param places the sites each behavior's rules are read against, filled as they are first
          *               asked for and shared by every warning this build makes
          */
-        private static Report warning(Db db, String module, Finding finding,
-                                      Map<String, DecisionRuleReading.Places> places) {
+        static Report warning(Db db, String module, Finding finding,
+                              Map<String, DecisionRuleReading.Places> places) {
             About said = finding.about();
             souther.compiler.diag.Diagnostic.Builder built = pointedAt(placeOf(db, module, finding))
                     .say(switch (said) {
@@ -10193,6 +10273,11 @@ public final class Adequacy {
                         // said underneath, one note per condition.
                         case About.ARuleNoRowTakes(var behavior, var _) ->
                                 new ExampleMessage.NoRowTakesADecisionRule(behavior);
+                        // The behavior, for the reason above. Where the runs stop is pointed at
+                        // underneath, one mark per construction, and which clause breaks there is
+                        // the report's to say: a clause is a rule, and this sentence names none.
+                        case About.AWayEveryRunOfWhichStops(var behavior, var _, var _) ->
+                                new ExampleMessage.EveryRunAlongAWayStopsAtAConstruction(behavior);
                         // The behavior, for the reason above: what the combination is of is held
                         // in the account's own terms, and an author reading a sentence spelling
                         // them would be shown decisions they did not write.
@@ -10479,8 +10564,32 @@ public final class Adequacy {
                         About.APositionWhoseRulesWereNotReached _,
                         About.APositionReadWiderThanItsRules _,
                         About.AQuestionNothingAnswered _ -> { }
+                // One mark per construction the runs stop at, where it is written: what tells this
+                // way from another is said in the report, and a reader is sent to what to fix.
+                // A construction with no place, or one in a text nothing here holds, is no place a
+                // marker can go, and the report names it.
+                case About.AWayEveryRunOfWhichStops(var _, var way, var _) -> {
+                    Set<SourcePos> marked = new LinkedHashSet<>();
+                    for (PassedConstruction each : way.stoppedAt()) {
+                        if (each.at() != null && marked.add(each.at())) {
+                            everyRunStopsAt(built, Citation.of(each.at()));
+                        }
+                    }
+                }
             }
             return Report.of(built.build());
+        }
+
+        /** A mark at {@code at} saying every run along the way stops there, where one can go. */
+        private static void everyRunStopsAt(Diagnostic.Builder built, Citation at) {
+            ExampleMessage.EveryRunAlongTheWayStopsHere said =
+                    new ExampleMessage.EveryRunAlongTheWayStopsHere();
+            switch (at) {
+                case Citation.Written w -> built.secondary(Region.point(w.at()), said);
+                case Citation.Reached r -> built.secondary(Region.point(r.at()), said);
+                case Citation.OutOfSight out -> built.secondaryOutOfSight(out.provenance(), said);
+                case Citation.Unplaced _, Citation.UnplacedElsewhere _ -> { }
+            }
         }
 
         /**

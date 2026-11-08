@@ -26,7 +26,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.KernelSignatures;
-import souther.compiler.diag.SourceLayouts;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.core.Composition;
@@ -191,7 +190,7 @@ public final class Backend {
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, StandingSignature> standingCalls,
-                                               SourceLayouts layouts,
+                                               TextsOfModules layouts,
                                                LinkageReader linkage) {
         return generate(module, symbols, published, kinds, kernels, typePackage, sigs,
                 requirements, checked, compositions, shapes, checks, standingCalls, layouts,
@@ -223,7 +222,7 @@ public final class Backend {
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, StandingSignature> standingCalls,
-                                               SourceLayouts layouts,
+                                               TextsOfModules layouts,
                                                LinkageReader linkage,
                                                Instrumentation instrumentation) {
         // The forks whose siblings a method could not hold, found by writing it and gathered across
@@ -297,7 +296,7 @@ public final class Backend {
                                                   Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, StandingSignature> standingCalls,
-                                                  SourceLayouts layouts,
+                                                  TextsOfModules layouts,
                                                   LinkageReader linkage,
                                                   Instrumentation instrumentation,
                                                   Set<Core> notCarrying) {

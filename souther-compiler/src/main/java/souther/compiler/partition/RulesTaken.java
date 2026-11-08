@@ -315,7 +315,9 @@ public final class RulesTaken {
             recognised(ruled, comparisons, answers, arms, plan).ifPresent(recognisable::add);
         }
         // The ways no input takes are recognised as the rules are, condition by condition: a run
-        // that brought out each of them as the way did is the proof shown wrong.
+        // that brought out each of them as the way did is the proof shown wrong. Not a way every
+        // run of which stops: runs bring its conditions out as it does, which is what was proved,
+        // and a run seen doing so is the proof shown right rather than wrong.
         List<Recognised> proofs = new ArrayList<>();
         for (DecisionReading.ImpossiblePath each : read.impossible()) {
             recognised(each.way(), comparisons, answers, arms, plan).ifPresent(proofs::add);

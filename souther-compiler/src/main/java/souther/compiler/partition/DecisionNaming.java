@@ -127,10 +127,41 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * first way two clashing conditions are on is one with every condition after them on it too.
      * Each condition the proof is had without is taken off, one at a time: what is left is the way
      * that stands for every rule past it, and two rules past one clash come to one way.
+     *
+     * <p>The constructions first, a clause at a time ({@link PassedConstruction}), and then the
+     * conditions. A proof had without every construction
+     * is one the conditions give alone, and taking a condition off first can leave a construction
+     * the proof then needs only because a condition went: two clashing conditions and a
+     * construction one of them contradicts come to that condition and the construction, which is a
+     * way every run of stops, when what the body states is a way no input takes. Taken off first,
+     * a construction is kept exactly where the conditions on the way do not give the proof alone.
+     *
+     * <p>A construction still in the least proof is one every input bringing the conditions out as
+     * the way does is refused at — or at one before it — so the way is reached and every run along
+     * it stops: said as that ({@link DecisionReading.EveryRunStops}) and not as a way no input
+     * takes. Only where every construction taken off was answered: one the figure of conditions
+     * taken in left unanswered is no proof the conditions do not give it alone, and the way is said
+     * as one no input takes getting past it, which is what was proved.
      */
     private void proveWithLess(DecisionPath path, NoInputTakesIt why) {
         DecisionPath least = path;
         NoInputTakesIt leastWhy = why;
+        boolean answered = true;
+        for (PassedConstruction each : path.passed()) {
+            List<PassedConstruction> without = new ArrayList<>(least.passed());
+            without.remove(each);
+            if (without.isEmpty() && least.consulted().isEmpty()) {
+                continue;
+            }
+            DecisionPath less = new DecisionPath(least.consulted(), without);
+            Optional<NoInputTakesIt> still = noInputTakes(less);
+            if (still.isPresent()) {
+                least = less;
+                leastWhy = still.get();
+            } else if (proved.spent()) {
+                answered = false;
+            }
+        }
         for (DecisionPath.Consulted each : path.consulted()) {
             List<DecisionPath.Consulted> without = new ArrayList<>(least.consulted());
             without.remove(each);
@@ -144,22 +175,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
                 leastWhy = still.get();
             }
         }
-        // And each construction gone through the proof is had without, the same way: a proof
-        // through fewer of them stands for every way through more.
-        for (PassedConstruction each : path.passed()) {
-            List<PassedConstruction> without = new ArrayList<>(least.passed());
-            without.remove(each);
-            if (without.isEmpty() && least.consulted().isEmpty()) {
-                continue;
-            }
-            DecisionPath less = new DecisionPath(least.consulted(), without);
-            Optional<NoInputTakesIt> still = noInputTakes(less);
-            if (still.isPresent()) {
-                least = less;
-                leastWhy = still.get();
-            }
-        }
-        proved.add(least, leastWhy);
+        proved.add(least, leastWhy, answered && !least.passed().isEmpty());
     }
 
     /**
@@ -236,16 +252,18 @@ final class DecisionNaming implements Naming<DecisionPath> {
     }
 
     /**
-     * That a run got past {@code construction}: what every clause of the invariant of the type it
-     * builds states holding of what it is handed, gone through by the way and asked of a row
-     * composed for it. Nothing where the type holds its values to no invariant, which a run gets
-     * past whatever it hands it.
+     * That a run got past {@code construction}: each clause of the invariant of the type it builds
+     * holding of what it is handed, gone through by the way a clause apiece and asked of a row
+     * composed for it. A clause apiece, so that a proof that no input takes the way is had without
+     * each clause it does not need, one at a time ({@link #proveWithLess}). One way through every
+     * clause, made at once. Nothing where the type holds its values to no invariant, which a run
+     * gets past whatever it hands it.
      */
     @Override
-    public DecisionPath passing(Core.Construct construction) {
-        List<OnTheWay> states = meanings.constructing(construction, reads, numbering);
-        return states.isEmpty() ? DecisionPath.NOWHERE
-                : DecisionPath.NOWHERE.passing(new PassedConstruction(states));
+    public Optional<DecisionPath> passing(Core.Construct construction) {
+        List<PassedConstruction> clauses = meanings.constructing(construction, reads, numbering);
+        return clauses.isEmpty() ? Optional.empty()
+                : Optional.of(new DecisionPath(List.of(), clauses));
     }
 
     /**

@@ -207,11 +207,13 @@ class ARowIsComposedToGetPastTheConstructionsOnItsWayTest {
         assertEquals(List.of(
                 JSON.readTree("""
                         [{"at": "a_construction", "rule": "invariant Pos #1",
+                          "module": "stops", "declaredIn": "stops",
                           "sourceId": "%s", "line": %d, "column": %d}]""".formatted(source,
                         (int) before.chars().filter(c -> c == '\n').count() + 1,
                         at - before.lastIndexOf('\n'))),
                 JSON.readTree("""
-                        [{"at": "an_ensures", "rule": "ensures grow (grows)"}]"""),
+                        [{"at": "an_ensures", "rule": "ensures grow (grows)",
+                          "module": "stops", "declaredIn": "stops"}]"""),
                 JSON.readTree("""
                         [{"at": "an_end",
                           "said": "Int overflow: 9223372036854775807 + 1"}]""")),

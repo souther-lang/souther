@@ -157,8 +157,10 @@ final class Descriptors {
      *  name and type of the runtime's own: what {@link CodegenContext#boundRuntime} binds there. */
     static final ClassDesc CD_BoundUnderEvaluation =
             ClassDesc.of("souther.compiler.evaluate.BoundUnderEvaluation");
-    /** {@code UnreachableReached.reached(String)}: aborts, typed as answering the position's value. */
-    static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String);
+    /** {@code UnreachableReached.reached(String, String, int, int)}: aborts with what it says and
+     *  where it is written, typed as answering the position's value. */
+    static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String, CD_String,
+            ConstantDescs.CD_int, ConstantDescs.CD_int);
     /** The failure side of {@code __construct}: which clause of which type did not hold. */
     static final ClassDesc CD_InvariantFailure = ClassDesc.of("souther.runtime.InvariantFailure");
     static final ClassDesc CD_InvariantFailureDeclared =

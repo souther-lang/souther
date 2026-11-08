@@ -26,6 +26,7 @@ import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.RuleEvidenceOrigin;
 import souther.compiler.partition.UndividedPosition;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WhyKept;
 
 import java.util.ArrayList;
@@ -397,6 +398,16 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         List<Figure> figures();
 
         /**
+         * Where the runs of the rows tried for it stopped without answering, which is none where no
+         * run was tried and for a rule read to the end.
+         *
+         * <p>Beside the word for the reason the figures are: a run that stopped is no figure, and a
+         * reader told the word alone cannot tell which input the model has not decided about.
+         * Handed on from what stopped it ({@link ReportedReason#runsStopped}).
+         */
+        List<WhereARunStopped> runsStopped();
+
+        /**
          * Every handle a reader was offered for what this is about, which is nothing for an entry
          * about no rule.
          *
@@ -429,6 +440,11 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             public List<Figure> figures() {
                 return finding.why() instanceof BlockReason.ReadingStopReason stopped
                         ? stopped.figures() : List.of();
+            }
+
+            @Override
+            public List<WhereARunStopped> runsStopped() {
+                return ReportedReason.runsStopped(finding.why());
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */
@@ -477,6 +493,11 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 return finding.why().figures();
             }
 
+            @Override
+            public List<WhereARunStopped> runsStopped() {
+                return ReportedReason.runsStopped(finding.why());
+            }
+
             /** Which rule, which is what tells this finding from the one beside it. */
             public RuleRef rule() {
                 return finding.rule();
@@ -519,6 +540,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public List<Figure> figures() {
                 return finding.why().figures();
+            }
+
+            /** None: a walk that never arrived at a position's rules tried no row there. */
+            @Override
+            public List<WhereARunStopped> runsStopped() {
+                return List.of();
             }
 
             /** None: this entry is about the position and names no rule of the model. */

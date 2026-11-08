@@ -5,6 +5,7 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * How a reading writes down what got a run to a value.
@@ -84,11 +85,11 @@ public interface Naming<P> {
      *
      * <p>No arm. A construction is no fork — a run either gets past it or stops there, and a run
      * that stops arrives nowhere — so this splits no way and is no condition a way is told apart by.
-     * A naming with nothing to say about what a construction asks of a run answers {@link #nowhere},
-     * which joins onto a way as nothing.
+     * A naming with nothing to say about what a construction asks of a run answers nothing, and
+     * the ways to the value are left as they are, with no join made onto any of them.
      */
-    default P passing(Core.Construct construction) {
-        return nowhere();
+    default Optional<P> passing(Core.Construct construction) {
+        return Optional.empty();
     }
 
     /**

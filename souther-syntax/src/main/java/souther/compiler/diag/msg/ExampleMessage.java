@@ -376,6 +376,22 @@ public sealed interface ExampleMessage extends Message {
     record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
 
     /**
+     * Every run along one way through the body stops at a construction: inputs take the way, and
+     * each of them hands the construction a value that breaks a clause of its invariant.
+     *
+     * <p>The behavior and nothing else, for the reason a decision rule carries nothing: which way
+     * it is, is the conditions an account keys on. The construction is pointed at underneath, where
+     * it is written, and the report says which clause breaks there and what the way's conditions
+     * are.
+     */
+    @Code(DiagnosticCode.E1941)
+    record EveryRunAlongAWayStopsAtAConstruction(String behavior)
+            implements ExampleMessage, Reported {}
+
+    /** The construction every run along the way stops at, pointed at where it is written. */
+    record EveryRunAlongTheWayStopsHere() implements ExampleMessage, Supporting {}
+
+    /**
      * No row of the behavior would come out differently if one arm of the fork pointed at answered
      * as another.
      *

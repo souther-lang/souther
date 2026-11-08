@@ -112,9 +112,9 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
         return ReachingCuts.attempting(attempt, part, at, read, reads, numbering);
     }
 
-    /** What getting past {@code construction} says of the input, nothing where it is held to no
-     *  clause. */
-    List<OnTheWay> constructing(Core.Construct construction, InputReads reads,
+    /** What getting past {@code construction} says of the input, a clause at a time, nothing
+     *  where it is held to no clause. */
+    List<PassedConstruction> constructing(Core.Construct construction, InputReads reads,
                                 ConditionNumbering numbering) {
         return ReachingCuts.constructing(construction, read, reads, numbering);
     }

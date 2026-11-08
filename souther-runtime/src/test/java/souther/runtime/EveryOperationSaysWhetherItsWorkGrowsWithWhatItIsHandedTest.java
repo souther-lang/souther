@@ -116,7 +116,7 @@ class EveryOperationSaysWhetherItsWorkGrowsWithWhatItIsHandedTest {
         FIXED.put("ConstraintViolation.orThrow(Result, String, int, int)", abort);
         FIXED.put("InvariantFailure.of(String, String, String, String, String, int)", abort);
         FIXED.put("InvariantFailure.unnamed(String, String, String, String, int)", abort);
-        FIXED.put("UnreachableReached.reached(String)", abort);
+        FIXED.put("UnreachableReached.reached(String, String, int, int)", abort);
         FIXED.put("Patterns.read(Lookup, String, Class, String[])",
                 "a pattern's machine made once for a class, from the image the compiler wrote into it");
 
