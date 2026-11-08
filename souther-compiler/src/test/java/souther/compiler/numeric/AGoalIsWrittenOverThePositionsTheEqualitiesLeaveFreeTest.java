@@ -126,6 +126,18 @@ class AGoalIsWrittenOverThePositionsTheEqualitiesLeaveFreeTest {
     }
 
     @Test
+    void twoSumsOfTwoPositionsAreSolvedTogether() {
+        // a + b = 10 and a + c = 10 say b = c, and neither is a difference of two positions.
+        EqualityElimination.Goal<String> freed = through(
+                List.of(equality(weighing("a", 1, "b", 1), 10), equality(weighing("a", 1, "c", 1), 10)),
+                goal(weighing("b", 1, "c", -1), 0));
+
+        assertNotNull(freed);
+        assertEquals(Map.of(), freed.coefs());
+        assertEquals(num(0), freed.constant());
+    }
+
+    @Test
     void anEqualityGivenTwiceIsGivenOnce() {
         EqualityElimination.Goal<String> freed = through(
                 List.of(X_IS_A_AND_B, Y_IS_B_AND_A, X_IS_A_AND_B),

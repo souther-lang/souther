@@ -39,6 +39,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -2559,20 +2560,31 @@ final class Terms {
      * have been named by the time one is, is the order the program was read in.
      */
     List<NumericConstraint> relationsAmongCounts(Collection<FactSubject> atoms) {
-        List<FactSubject> counts = new ArrayList<>();
+        Map<Map.Entry<Term, Term>, List<FactSubject>> counting = new LinkedHashMap<>();
         for (FactSubject atom : atoms) {
-            if (wholeNumberCounts.containsKey(atom)) {
-                counts.add(atom);
+            CountOfWholeNumbers counted = wholeNumberCounts.get(atom);
+            if (counted != null) {
+                counting.computeIfAbsent(Map.entry(counted.container(), counted.subject()),
+                        key -> new ArrayList<>()).add(atom);
             }
         }
         List<NumericConstraint> out = new ArrayList<>();
-        for (int i = 0; i < counts.size(); i++) {
-            for (int j = i + 1; j < counts.size(); j++) {
-                relationBetween(counts.get(i), counts.get(j), out);
+        if (counting.isEmpty()) {
+            return out;
+        }
+        for (List<FactSubject> counts : counting.values()) {
+            for (int i = 0; i < counts.size(); i++) {
+                for (int j = i + 1; j < counts.size(); j++) {
+                    relationBetween(counts.get(i), counts.get(j), out);
+                }
             }
-            for (FactSubject sum : atoms) {
-                if (sumsOfWhatEachHolds.containsKey(sum)) {
-                    sumNoLessThan(sum, counts.get(i), out);
+        }
+        for (FactSubject sum : atoms) {
+            SumOfWhatEachHolds of = sumsOfWhatEachHolds.get(sum);
+            if (of != null) {
+                for (FactSubject count : counting.getOrDefault(
+                        Map.entry(of.container(), of.held()), List.of())) {
+                    sumNoLessThan(sum, count, out);
                 }
             }
         }

@@ -78,6 +78,19 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
             // A size read from one expression in two environments is two sizes.
             new Row("c + 5 - grown([c]) - grown([c, c])", 0, Set.of("4", "5"), true),
             new Row("c + 4 - grown([c]) - grown([c, c])", 0, Set.of("5", "6"), false),
+            // Some element of a list written out meeting a closure: the element written out meets
+            // it on every run, and the one that is c meets it only above 100, where the step's
+            // comparison draws its line.
+            new Row("if List.any(n -> n > 100, [c, 200]) then c else 0 - 1", 0,
+                    Set.of("100", "101", "4", "5"), true),
+            new Row("if List.any(n -> n > 100, [c]) then c else 0 - 1", 0,
+                    Set.of("100", "101"), false),
+            // How many a closure's answers hold added up, where each answers the same number of
+            // them: two for each of two elements is four.
+            new Row("c + 4 - List.length(List.flatMap(n -> [n, n], [c, c]))", 0,
+                    Set.of("4", "5"), true),
+            new Row("c + 3 - List.length(List.flatMap(n -> [n, n], [c, c]))", 0,
+                    Set.of("5", "6"), false),
             // A comparison answers one of three numbers by how the two stand.
             new Row("c + 1 + Int.compare(c, 0)", 0, Set.of("2", "3"), true),
             new Row("Int.compare(c, 0) + 4", 0, Set.of("0", "1"), true),

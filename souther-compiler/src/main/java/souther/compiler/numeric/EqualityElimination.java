@@ -53,7 +53,7 @@ final class EqualityElimination<A> {
                 joinedTo(goal.coefs().keySet(), equalities, order);
         // What the domain holds exactly already is a difference of two positions: a goal joined
         // to nothing else is asked of it as it stands.
-        if (joined.stream().noneMatch(EqualityElimination::beyondADifference)) {
+        if (joined.stream().allMatch(each -> DifferenceBounds.holdsExactly(each, order))) {
             return null;
         }
         EqualityElimination<A> elimination =
@@ -70,14 +70,6 @@ final class EqualityElimination<A> {
         boolean asItWas = out != null && out.coefs().equals(goal.coefs())
                 && out.constant().equals(goal.constant());
         return out == null || asItWas ? null : out;
-    }
-
-    /** Whether {@code equality} is over more than two positions, or weighs one of them by other
-     *  than one: the shape of equality the difference bounds do not hold exactly. */
-    private static <A> boolean beyondADifference(AffineConstraint.Equality<A> equality) {
-        Map<A, ExactRatio> weights = equality.form().coefs();
-        return weights.size() > 2 || weights.values().stream()
-                .anyMatch(weight -> !weight.abs().equals(ExactRatio.ONE));
     }
 
     /**

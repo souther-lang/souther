@@ -220,6 +220,15 @@ public final class DifferenceBounds<A> {
     }
 
     /**
+     * Whether {@code equality} is of the shape these hold exactly, as the two bounds it is: a
+     * difference of two positions, or a bound on one. Asked of the same reading that makes the
+     * edges, so what is held exactly and what is said to be held exactly cannot differ.
+     */
+    static <A> boolean holdsExactly(AffineConstraint.Equality<A> equality, CanonicalOrder<A> order) {
+        return edgeOf(equality.form(), ExactCut.inclusive(equality.at()), order) != null;
+    }
+
+    /**
      * The edge one half-space is, or null where it is not of this shape.
      *
      * <p>Which two positions the difference is between is read off the weight at each and not off
