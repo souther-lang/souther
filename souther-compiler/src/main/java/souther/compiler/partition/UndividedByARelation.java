@@ -5908,8 +5908,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!(rule.worn() instanceof TypeSymbol.AtModule name)) {
             return null;
         }
-        PublishedRules rules = RulesRead.of(read).byName().computeIfAbsent(name,
-                each -> PublishedRules.governing(each, read.rules().published()));
+        PublishedRules rules = rulesOf(name, read);
         List<ClauseMeaning> reached = rules.reached();
         if (!rules.everyRuleReached() || rule.clause() >= reached.size()
                 || !(reached.get(rule.clause()) instanceof ClauseMeaning.Stated stated)
@@ -10109,14 +10108,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
                 return Named.UNSEEN;
             }
-            List<TypeSymbol> worn = new ArrayList<>(around.view().wrappers());
-            switch (around.view().shape()) {
-                case Shape.Product product -> worn.add(product.name());
-                case Shape.Sum sum -> worn.add(sum.name());
-                default -> { }
-            }
             List<TermPath.Step> rest = steps.subList(length, steps.size());
-            for (TypeSymbol each : worn) {
+            for (TypeSymbol each : wornAt(around)) {
                 out = out.and(namedBy(each, here, path, rest, read, nodes, apart));
                 if (out == Named.UNSEEN && nodes == null) {
                     return out;
@@ -10136,8 +10129,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!(worn instanceof TypeSymbol.AtModule name)) {
             return Named.NOT;
         }
-        PublishedRules rules = RulesRead.of(read).byName().computeIfAbsent(name,
-                each -> PublishedRules.governing(each, read.rules().published()));
+        PublishedRules rules = rulesOf(name, read);
         if (!rules.everyRuleReached()) {
             if (nodes != null) {
                 nodes.unread(new TiedOnTheWay.Rule(here, worn, -1, null));
@@ -10261,18 +10253,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (around == null || around.nothingExists()) {
                 return false;
             }
-            List<TypeSymbol> worn = new ArrayList<>(around.view().wrappers());
-            switch (around.view().shape()) {
-                case Shape.Product product -> worn.add(product.name());
-                case Shape.Sum sum -> worn.add(sum.name());
-                default -> { }
-            }
-            for (TypeSymbol each : worn) {
+            for (TypeSymbol each : wornAt(around)) {
                 if (!(each instanceof TypeSymbol.AtModule name)) {
                     continue;
                 }
-                PublishedRules rules = RulesRead.of(read).byName().computeIfAbsent(name,
-                        named -> PublishedRules.governing(named, read.rules().published()));
+                PublishedRules rules = rulesOf(name, read);
                 if (!rules.everyRuleReached()) {
                     return false;
                 }
@@ -10291,6 +10276,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return true;
+    }
+
+    /** The names the value at {@code around} wears, each a declaration whose rules are of it: the
+     *  names it is written under, and the record or the sum it is. */
+    private static List<TypeSymbol> wornAt(Position around) {
+        List<TypeSymbol> worn = new ArrayList<>(around.view().wrappers());
+        switch (around.view().shape()) {
+            case Shape.Product product -> worn.add(product.name());
+            case Shape.Sum sum -> worn.add(sum.name());
+            default -> { }
+        }
+        return worn;
+    }
+
+    /** The rules published under {@code name}, read once for the reading {@code read}. */
+    private static PublishedRules rulesOf(TypeSymbol.AtModule name, InputReading read) {
+        return RulesRead.of(read).byName().computeIfAbsent(name,
+                each -> PublishedRules.governing(each, read.rules().published()));
     }
 
     /** Whether {@code reading}, written in the rules of the value at {@code here}, is met by
