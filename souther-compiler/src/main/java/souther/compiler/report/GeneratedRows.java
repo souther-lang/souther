@@ -31,6 +31,9 @@ import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.StoodInAnswer;
+import souther.compiler.partition.BesideTheWord;
+import souther.compiler.partition.WhereARunStopped;
+import souther.compiler.execute.RunStop;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -1340,12 +1343,12 @@ public final class GeneratedRows {
      * ({@link #beside}). Changed with those and never apart from them.
      */
     static List<Object> shownForWhatItIsAbout(Generator.UnresolvedCombination why) {
-        return List.of(why.subject(), sentenceOrWord(why), why.alsoShort());
+        return List.of(why.subject(), sentenceOrWord(why), why.beside());
     }
 
     /** The same, of a line named for its finding, which does not say what the search was about. */
     static List<Object> shownUnderItsFinding(Generator.UnresolvedCombination why) {
-        return List.of(sentenceOrWord(why), why.alsoShort());
+        return List.of(sentenceOrWord(why), why.beside());
     }
 
     private static Object sentenceOrWord(Generator.UnresolvedCombination why) {
@@ -1475,9 +1478,96 @@ public final class GeneratedRows {
      */
     static Message beside(Message category, Generator.UnresolvedCombination left, Page page,
                           PublishedRuleHandle.WhereARuleIs places) {
-        Message also = alsoShort(left.alsoShort(), page, places);
-        return also instanceof ReportMessage.Nothing ? category
-                : new ReportMessage.Also(category, also);
+        List<Message> said = new ArrayList<>();
+        said.add(category);
+        BesideTheWord beside = left.beside();
+        Message also = alsoShort(beside.shortOf(), page, places);
+        if (!(also instanceof ReportMessage.Nothing)) {
+            said.add(also);
+        }
+        if (!beside.stopped().isEmpty()) {
+            said.add(stoppedAt(beside.stopped(), page));
+        }
+        return Joined.also(said);
+    }
+
+    /**
+     * Where the runs of the rows composed stopped, each place once.
+     *
+     * <p>Each of them and not the first. Rows of different values may stop at different places,
+     * and every one is an input the model has not decided about. Read by every line that says
+     * where runs stopped, so a place reads alike wherever a reader meets it.
+     */
+    static Message stoppedAt(List<WhereARunStopped> stops, Page page) {
+        return new ReportMessage.TheRunsStoppedAt(placesStoppedAt(stops, page));
+    }
+
+    /** The same places, each once and with nothing before them, for a line that says what the
+     *  runs did in words of its own. */
+    static Message placesStoppedAt(List<WhereARunStopped> stops, Page page) {
+        return Joined.andAt(stops.stream().map(stop -> onePlaceStoppedAt(stop, page)).toList());
+    }
+
+    /** One place a run stopped, in the handle a report names the rule there by, and where it is
+     *  written only where the run said. */
+    private static Message onePlaceStoppedAt(WhereARunStopped where, Page page) {
+        return switch (where.stop()) {
+            case RunStop.AtAConstruction it -> {
+                String rule = ruleHandleSaid(it, page);
+                yield it.site().<Message>map(site ->
+                                new ReportMessage.TheConstructionAtAPlaceWhereTheRuleDidNotHold(
+                                        writtenAt(site, where, page), rule))
+                        .orElseGet(() -> new ReportMessage.TheConstructionWhereTheRuleDidNotHold(
+                                rule));
+            }
+            case RunStop.AtAnEnsures it ->
+                    new ReportMessage.TheAnswerWhereTheRuleDidNotHold(ruleHandleSaid(it, page));
+            case RunStop.AtAnEnd it ->
+                    new ReportMessage.AnOperationTheRuntimeWouldNotFinish(it.said());
+            case RunStop.AtAnUnreachable it -> it.site().<Message>map(site ->
+                            new ReportMessage.AnUnreachableAtAPlace(
+                                    writtenAt(site, where, page), it.said()))
+                    .orElseGet(() -> new ReportMessage.AnUnreachable(it.said()));
+        };
+    }
+
+    /** The rule that refused a run, in the handle a page names it by. */
+    private static String ruleHandleSaid(RunStop stop, Page page) {
+        return RuleHandleProse.said(ruleRefusing(stop).orElseThrow(), page.rendering(),
+                page.language(), null);
+    }
+
+    /**
+     * The rule that refused a run where a rule did: the invariant clause of the type a
+     * construction built, or the {@code ensures} the answer did not keep. Named the way every
+     * rule of the model is named — a clause by its name, and one with none by its place among its
+     * declaration's clauses, counted from one. Read by the page and by the document alike.
+     */
+    static Optional<PublishedRuleHandle> ruleRefusing(RunStop stop) {
+        return switch (stop) {
+            case RunStop.AtAConstruction it -> Optional.of(it.clauseName()
+                    .<PublishedRuleHandle>map(name -> new PublishedRuleHandle.NamedInvariant(
+                            it.clauseType(), name))
+                    .orElseGet(() -> new PublishedRuleHandle.NumberedInvariant(
+                            it.clauseType(), it.ordinal() + 1)));
+            case RunStop.AtAnEnsures it -> Optional.of(it.clause()
+                    .<PublishedRuleHandle>map(name -> new PublishedRuleHandle.NamedEnsures(
+                            it.behavior(), name))
+                    .orElseGet(() -> new PublishedRuleHandle.WholeEnsures(it.behavior())));
+            case RunStop.AtAnEnd _, RunStop.AtAnUnreachable _ -> Optional.empty();
+        };
+    }
+
+    /**
+     * Where a place a run stopped at is written, as its run said: the source and the line and
+     * column in it, or the line and column of the module where this compilation holds no source
+     * declaring it.
+     */
+    private static Message writtenAt(RunStop.Site site, WhereARunStopped where, Page page) {
+        String numbers = site.line() + ":" + site.column();
+        return where.source().<Message>map(source -> new ReportMessage.AtAPositionOfASource(
+                        page.rendering().names().nameOf(source), numbers))
+                .orElseGet(() -> new ReportMessage.AtAPositionOfAModule(numbers, site.module()));
     }
 
     /**

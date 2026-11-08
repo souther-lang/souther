@@ -821,8 +821,11 @@ final class ValueClassGen {
                             code.ifne(ok);
                             code.loadConstant(ctx.module());
                             code.loadConstant(data.name());
+                            clause.name().ifPresent(code::loadConstant);
+                            code.loadConstant(clause.declaredOn().module());
+                            code.loadConstant(clause.declaredOn().name());
+                            code.loadConstant(clause.ordinal());
                             if (clause.name().isPresent()) {
-                                code.loadConstant(clause.name().get());
                                 code.invokestatic(CD_InvariantFailure, "of", MTD_failureOf, false);
                             } else {
                                 code.invokestatic(CD_InvariantFailure, "unnamed",

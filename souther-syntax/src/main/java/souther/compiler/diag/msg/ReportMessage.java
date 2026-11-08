@@ -461,15 +461,45 @@ public sealed interface ReportMessage extends Message {
 
     record AndAt(Message first, Message rest) implements ReportMessage, Prose {}
 
+    // --- where the runs of the rows tried stopped ---
+
+    record TheRunsStoppedAt(Message places) implements ReportMessage, Prose {}
+
+    record AndTheRunsStoppedAt(Message places) implements ReportMessage, Prose {}
+
+    record EveryRunAlongAWayStops(Message stopped) implements ReportMessage, Prose {}
+
+    record WhetherAnyInputTakesAWayWasNotDecided(Message why) implements ReportMessage, Prose {}
+
+    record EveryRunAlongItWouldStopAt(Message places) implements ReportMessage, Prose {}
+
+    record TheConstructionWhereTheRuleDidNotHold(String rule) implements ReportMessage, Prose {}
+
+    record TheConstructionAtAPlaceWhereTheRuleDidNotHold(Message place, String rule)
+            implements ReportMessage, Prose {}
+
+    record TheAnswerWhereTheRuleDidNotHold(String rule) implements ReportMessage, Prose {}
+
+    record AnOperationTheRuntimeWouldNotFinish(String said) implements ReportMessage, Prose {}
+
+    record AnUnreachable(String said) implements ReportMessage, Prose {}
+
+    record AnUnreachableAtAPlace(Message place, String said) implements ReportMessage, Prose {}
+
+    record AtAPositionOfASource(String source, String numbers) implements ReportMessage, Prose {}
+
+    record AtAPositionOfAModule(String numbers, String module) implements ReportMessage, Prose {}
+
     // --- a rule nothing read, a position nothing divided ---
 
     record DividedNoWay(String position) implements ReportMessage, Prose {}
 
-    record RuleNotRead(String rule, Message why, Message stopped, Message shown, String at,
-                       String calls, Message sentTo) implements ReportMessage, Prose {}
+    record RuleNotRead(String rule, Message why, Message stopped, Message runs, Message shown,
+                       String at, String calls, Message sentTo) implements ReportMessage, Prose {}
 
-    record RuleDrawsNoLine(String rule, Message why, Message stopped, Message shown, String at,
-                           String calls, Message sentTo) implements ReportMessage, Prose {}
+    record RuleDrawsNoLine(String rule, Message why, Message stopped, Message runs, Message shown,
+                           String at, String calls, Message sentTo)
+            implements ReportMessage, Prose {}
 
     /** The values a row built and run got to a rule at, beside a word saying not every value is
      *  shown to: what is shown, and that nothing else is. */

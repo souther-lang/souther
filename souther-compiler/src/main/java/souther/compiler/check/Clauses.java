@@ -184,8 +184,11 @@ final class Clauses {
             case ClauseMeaning.Stated it when !everyFieldRead(given, named, it.fieldsRead()) ->
                     new ClausesInOrder.OneClause.Unread(it.ref(),
                             ClausesInOrder.WhyAClauseIsUnread.A_FIELD_LEFT_OUT);
-            case ClauseMeaning.Stated it -> new ClausesInOrder.OneClause.Stated(it.ref(),
-                    it.states().termForClauseReading(), given, it.parts());
+            case ClauseMeaning.Stated it -> {
+                Core term = it.states().termForClauseReading();
+                yield new ClausesInOrder.OneClause.Stated(it.ref(), term, given, it.parts(),
+                        ElementBindings.of(term, ElementProvenance.NONE, source.newtypes()));
+            }
         };
     }
 

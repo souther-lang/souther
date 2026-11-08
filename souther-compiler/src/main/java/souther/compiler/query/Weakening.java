@@ -14,6 +14,7 @@ import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.DerivedValue;
 import souther.compiler.partition.Replacement;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.Collections;
@@ -118,6 +119,18 @@ public sealed interface Weakening {
             };
             case RewriteUndecided it -> it.why().figures();
         };
+    }
+
+    /**
+     * Where the runs of rows tried for what stopped it stopped without answering, carried as
+     * {@link #figures} is and from the same place; none where no row was tried.
+     *
+     * <p>Only the model's reading holds the reasons a row is tried for — a relation whose other
+     * value a searched row was to show — so it asks its gap and every other arm has none.
+     */
+    default List<WhereARunStopped> runsStopped() {
+        return this instanceof ModelReadingIncomplete(ClosureGap gap) ? gap.runsStopped()
+                : List.of();
     }
 
     /**

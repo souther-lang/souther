@@ -281,7 +281,7 @@ class WhatTheAlternativesCameToTest {
         CameToNothing offeredShort = SearchShortfall.of(ASSIGNMENTS, SHORT_AT_THE_CODE)
                 .published(List.of(), Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                         null, Optional.empty());
-        assertEquals(SHORT_AT_THE_CODE, offeredShort.why().alsoShort());
+        assertEquals(SHORT_AT_THE_CODE, offeredShort.why().beside().shortOf());
         assertEquals(ASSIGNMENTS, offeredShort.met());
     }
 

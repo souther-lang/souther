@@ -791,6 +791,16 @@ public final class ValueArrivals<P> {
                 return out;
             }
         }
+        // And a construction the model wrote is got past or stopped at, once its fields are in
+        // hand: what getting past it states is put on every way to the value, which splits none of
+        // them. Not of a copy's code, whose constructions are the walk an operation of the language
+        // does and no part of the body.
+        if (e instanceof Core.Construct construction && !inACopy(e)) {
+            Optional<P> passed = naming.passing(construction);
+            if (passed.isPresent()) {
+                out = product(out, one(Truth.UNREAD, whole(passed.get())), naming);
+            }
+        }
         return out;
     }
 

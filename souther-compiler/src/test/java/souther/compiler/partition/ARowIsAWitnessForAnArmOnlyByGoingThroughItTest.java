@@ -27,6 +27,7 @@ import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WayIn;
 
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -104,7 +105,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
                 _ -> new Generator.ObservedRun(new Generator.Watched.Ran(waysWithoutTheArms(model)),
-                        ANSWERED),
+                        ANSWERED, Optional.empty()),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         for (ArmProbe probe : everyArm) {
@@ -125,7 +126,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everywhere(model, everyArm)),
-                        ANSWERED),
+                        ANSWERED, Optional.empty()),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertTrue(GenerationFixtures.arms(filled.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),

@@ -4,6 +4,8 @@ import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.PhysicalPos;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorAnswers;
@@ -487,7 +489,7 @@ final class BodyGen {
                     emitFieldValues(flds, nd.values());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     invoke(ctx.construction(nd.typeName()));
-                    code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
+                    refusedAt(nd);
                     returnValue();
                 }
                 // None of these answers with one of its parts, so what it answers is computed as a
@@ -823,7 +825,7 @@ final class BodyGen {
          * binds a line of its own costs nothing: two lines at one offset are one entry, the last.
          */
         private void emitLine(Core e) {
-            souther.compiler.diag.PhysicalPos sits = ctx.sits(e.pos());
+            PhysicalPos sits = ctx.sits(e.pos());
             int line = sits == null ? 0 : sits.line();
             if (line > 0 && line != lastEmittedLine) {
                 code.lineNumber(line);
@@ -997,8 +999,38 @@ final class BodyGen {
                                 .hint(new NameMessage.WriteItWhereTheTypeIsStated()).say(new NameMessage.NothingSaysWhatThisPositionHolds()).build());
             }
             code.loadConstant(abortMessage(u));
+            reachedAt(u);
             code.invokestatic(CD_UnreachableReached, "reached", MTD_reached);
             castFromObject(code, shape);
+        }
+
+        /**
+         * Pushes where {@code u} is written, for the abort to carry beside its message
+         * ({@link #writtenAt}).
+         *
+         * <p>Where it is written, and not where this class's line table could put it, for the
+         * reason a refused construction's site is ({@link #refusedAt}).
+         */
+        private void reachedAt(Core.Unreachable u) {
+            writtenAt(u.pos());
+        }
+
+        /**
+         * Pushes where {@code place} is written: the module whose text it is in and the line and
+         * column there, or no module and a line of nought where this compilation holds no such
+         * place ({@link CodegenContext#writtenAt}), which the runtime reads as no place.
+         */
+        private void writtenAt(SourcePos place) {
+            Optional<CodegenContext.WrittenAt> at = ctx.writtenAt(place);
+            if (at.isPresent()) {
+                code.loadConstant(at.get().module());
+                code.loadConstant(at.get().sits().line());
+                code.loadConstant(at.get().sits().column());
+            } else {
+                code.aconst_null();
+                code.loadConstant(0);
+                code.loadConstant(0);
+            }
         }
 
         /**
@@ -1012,10 +1044,12 @@ final class BodyGen {
          * <p>Which is why an {@code unreachable} that came in with an inlined helper of another file
          * says its reason and no numbers. A place with no file beside it is read against the frame's,
          * and the frame's file is this class's — so a line of the helper's file put here would be
-         * read as a line of this one. The reason is what the model wrote and stands on its own.
+         * read as a line of this one. The reason is what the model wrote and stands on its own; the
+         * helper's module and its line there travel beside the message as data ({@link #reachedAt}),
+         * where nothing reads them against the frame.
          */
         private String abortMessage(Core.Unreachable u) {
-            souther.compiler.diag.PhysicalPos sits = ctx.sits(u.pos());
+            PhysicalPos sits = ctx.sits(u.pos());
             return sits == null ? u.reason() : u.reason() + " (" + sits + ")";
         }
 
@@ -1184,7 +1218,9 @@ final class BodyGen {
                 // ConstraintViolation. orThrow returns Object, so narrow it back to the value type.
                 emitFieldValues(flds, nd.values());
                 emitLine(nd);   // re-pin: a field init may have moved the line off the construction
-                finishInvariantConstruct(built, cdType);
+                invoke(ctx.construction(built));
+                refusedAt(nd);
+                code.checkcast(cdType);
                 return;
             }
             MethodTypeDesc ctor = MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds));
@@ -1327,13 +1363,20 @@ final class BodyGen {
             }
         }
 
-        /** Emits the checked-construction tail — the entry the type offers ({@code __construct(fields)
-         * -> Result}), {@code orThrow} (yield, or abort on invariant violation), and a narrowing cast
-         * — with the field values already on the stack. */
-        private void finishInvariantConstruct(TypeSymbol.AtModule built, ClassDesc cdType) {
-            invoke(ctx.construction(built));
-            code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
-            code.checkcast(cdType);
+        /**
+         * Emits {@code orThrow} over the {@code Result} a checked construction left on the stack:
+         * the value, or an abort naming {@code nd} by the module whose text it is written in and the
+         * line and column it is written at there. A construction this compilation holds no laid-out
+         * text for names none.
+         *
+         * <p>Where it is written, and not where this class's line table could put it: a body inlined
+         * from another module's helper writes its constructions in that module's text, and the site
+         * is data a reader of the run is handed, not a line of this class ({@link
+         * CodegenContext#writtenAt}).
+         */
+        private void refusedAt(Core.Construct nd) {
+            writtenAt(nd.pos());
+            code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrowAt);
         }
 
         // --- the surface Intrinsics drives to emit a shipped primitive (ADR-0028) ---

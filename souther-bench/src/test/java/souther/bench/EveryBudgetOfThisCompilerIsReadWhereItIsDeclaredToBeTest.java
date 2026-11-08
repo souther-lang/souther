@@ -1017,9 +1017,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.WaysNoInputTakes#<init>()V",
-                    "omits no work a reader is owed: a condition not taken in narrows nothing, a"
-                            + " way not proved is a way kept, and the rules past it are read and"
-                            + " said as rules, as with no proof at all"),
+                    "holds the figure, which every asking it stops answers with: a way not proved"
+                            + " is a way kept and its rules are read as rules, and a way no input"
+                            + " gets past whose smaller proof it stopped is said with the figure"),
             Map.entry("souther.compiler.partition.DecisionReading#of("
                             + "Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
                             + "Lsouther/compiler/inputs/InputReading;"

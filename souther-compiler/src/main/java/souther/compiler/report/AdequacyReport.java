@@ -73,6 +73,8 @@ import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LeftOutPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.WhereARunStopped;
+import souther.compiler.execute.RunStop;
 import souther.compiler.partition.InputUse;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.NotOwedReason;
@@ -685,9 +687,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  List<UnobservedGroup> unobserved,
                                  Map<RowRef, WhereARowIs.Shown> rowPlaces,
                                  List<TiltOfADerivedValue> weights,
-                                 Map<Replacement, Citation> rewritePlaces) {
+                                 Map<Replacement, Citation> rewritePlaces,
+                                 Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops) {
         public BehaviorReport {
             weights = List.copyOf(weights);
+            wayStops = Map.copyOf(wayStops);
             rewritePlaces = Map.copyOf(rewritePlaces);
             Objects.requireNonNull(reachShownWrong,
                     "what the rows showed of the reading of reach, or that they showed nothing");
@@ -1176,7 +1180,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     Optional.ofNullable(compilation.db()
                             .ask(new Adequacy.Weights(name, behavior.name())).value())
                             .orElse(List.of()),
-                    rewritePlaces(compilation, name, behavior.name(), evidence.replacement())));
+                    rewritePlaces(compilation, name, behavior.name(), evidence.replacement()),
+                    // Where every run along each way of the decision that stops stops, as the
+                    // places a run is said to stop at: resolved here, where the texts are held.
+                    wayStops(compilation, decisions == null ? null
+                            : decisions.get(behavior.name()))));
         }
         Adequacy.DeclaredBoundaries declared =
                 compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
@@ -1244,6 +1252,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .map(each -> reported(compilation, module, each, offered)).toList();
     }
 
+    /** Where every run along each way of {@code decision} through a construction no input gets
+     *  past stops, or would stop were some input to take it ({@link Adequacy#whereRunsStopAt}). */
+    private static Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops(
+            Compilation compilation, DecisionEvidence decision) {
+        if (decision == null) {
+            return Map.of();
+        }
+        Map<DecisionReading.Ruled, List<WhereARunStopped>> out = new LinkedHashMap<>();
+        for (DecisionReading.Excluded each : decision.read().excluded()) {
+            switch (each) {
+                case DecisionReading.EveryRunStops it -> out.put(it.way(),
+                        Adequacy.whereRunsStopAt(compilation.db(), it.stoppedAt()));
+                case DecisionReading.UndecidedAtAFigure it -> out.put(it.way(),
+                        Adequacy.whereRunsStopAt(compilation.db(), it.stoppedAt()));
+                // No run goes down it, so none stops anywhere along it.
+                case DecisionReading.ImpossiblePath _ -> { }
+            }
+        }
+        return out;
+    }
+
     /**
      * How each rule a line of this behavior's page is about is told to a reader.
      *
@@ -1288,9 +1317,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 : CoveredOnlyByRowsThatDoNotHold.rulesOf(decision)) {
             about.add(taken.obligation().display());
         }
-        // And every way no input takes, each of which the page writes out as a rule's conditions.
-        List<DecisionReading.Ruled> ways = decision.read().impossible().stream()
-                .map(DecisionReading.ImpossiblePath::way).toList();
+        // And every way no rule past which is owed a row — no input takes it, or every run of it
+        // stops — each of which the page writes out as a rule's conditions.
+        List<DecisionReading.Ruled> ways = decision.read().excluded().stream()
+                .map(DecisionReading.Excluded::way).toList();
         if (about.isEmpty() && ways.isEmpty()) {
             return Map.of();
         }
@@ -2343,7 +2373,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             readings(out, module.apart(), each.debt(),_ -> true, at -> whatWasTried(
                     each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
-                    page, null),
+                    page, null, places),
                     Map.of(), page, null);
         }
         for (Adequacy.DeclaredDebt each : account.undecided()) {
@@ -2355,7 +2385,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             readings(out, module.apart(), each.debt(),_ -> true, at -> whatWasTried(
                     each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
-                    page, null),
+                    page, null, places),
                     Map.of(), page, null);
         }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<Adequacy.DeclaredDebt> covered
@@ -3970,7 +4000,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             page.language(), declaredIn))));
             readings(out, apart, point,_ -> true, at -> whatWasTried(
                     point.owedAt(at).searches(),
-                    behavior.conditionPlaces().along(at.saidOnTheWay()), page, declaredIn),
+                    behavior.conditionPlaces().along(at.saidOnTheWay()), page, declaredIn,
+                    places),
                     behavior.conditionPlaces().copies(), page, declaredIn);
         }
         for (BorderObligationPointAssessment point : owed.undecided()) {
@@ -3983,7 +4014,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             readings(out, apart, point,_ -> true, at -> whatWasTried(
                     point.owedAt(at).searches(),
-                    behavior.conditionPlaces().along(at.saidOnTheWay()), page, declaredIn),
+                    behavior.conditionPlaces().along(at.saidOnTheWay()), page, declaredIn,
+                    places),
                     behavior.conditionPlaces().copies(), page, declaredIn);
         }
         // A border the model drew that nothing here answered for, said whether or not one came of
@@ -4227,22 +4259,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 String rule = cited(it.cited(), page, declaredIn, places);
                 Message why = whyUnread(it.reason());
                 Message stopped = stoppedAt(it.figures());
+                Message runs = runsStoppedSaid(it.runsStopped(), page);
                 Message shown = shownReached(it.shownReachedAt());
                 String copies = inCopies(it.finding().readAt(),
                         behavior.conditionPlaces().copies(), page, declaredIn);
                 Message sentTo = sentTo(it.finding().sentTo(), parts, rendering, declaredIn);
                 marked(out, f, page, it.readingStopped()
-                        ? new ReportMessage.RuleNotRead(rule, why, stopped, shown, it.at(),
+                        ? new ReportMessage.RuleNotRead(rule, why, stopped, runs, shown, it.at(),
                                 copies, sentTo)
-                        : new ReportMessage.RuleDrawsNoLine(rule, why, stopped, shown, it.at(),
-                                copies, sentTo));
+                        : new ReportMessage.RuleDrawsNoLine(rule, why, stopped, runs, shown,
+                                it.at(), copies, sentTo));
                 decisionWentWithout(out, it.finding().readAt(), wentWithout, behavior, page,
                         declaredIn);
             }
             if (f.about() instanceof About.ARuleNothingClassified(var it)) {
                 marked(out, f, page, new ReportMessage.RuleNotRead(
                         cited(it.cited(), page, declaredIn, places), whyUnread(it.reason()),
-                        stoppedAt(it.figures()), shownReached(it.shownReachedAt()), it.at(),
+                        stoppedAt(it.figures()), runsStoppedSaid(it.runsStopped(), page),
+                        shownReached(it.shownReachedAt()), it.at(),
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 page, declaredIn),
                         sentTo(it.sentTo(), parts, rendering, declaredIn)));
@@ -4982,7 +5016,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     page.say(new ReportMessage.DecisionNotFullyRead()));
             return;
         }
-        if (!rulesAreTold(decision)) {
+        // And a body every way of which stops states no rule and is told all the same: where its
+        // runs stop is what this section says of each such way. So is a way nothing decided about,
+        // which may be one.
+        if (!rulesAreTold(decision) && decision.read().everyRunStops().isEmpty()
+                && decision.read().undecided().isEmpty()) {
             return;
         }
         // Absent where nothing was read, which is not a count of none: a build that ran no row did
@@ -5053,6 +5091,64 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // themselves are in the document.
         excluded(out, behavior, decision, page, behavior.rulePlace(), declaredIn);
         noInputTakes(out, behavior, decision, page, declaredIn);
+        everyRunStops(out, behavior, decision, page, declaredIn);
+        undecided(out, behavior, decision, page, declaredIn);
+    }
+
+    /**
+     * The ways through the body no input gets past where whether any input takes them was not
+     * decided, each with the figure the proof stopped at, where the runs along it would stop and
+     * the conditions the way came to.
+     *
+     * <p>A {@code ?} and not a {@code ·}: the way may be one every run of which stops or one no
+     * input takes, and the two are said apart, and nothing here says which. What left it open is
+     * the figure, said as every figure stop is said ({@link #next}). It holds no verdict open:
+     * the proof that no input both takes the conditions and gets past the constructions was had,
+     * so no rule past the way is owed a row whichever of the two it is.
+     */
+    private static void undecided(StringBuilder out, BehaviorReport behavior,
+                                  DecisionEvidence decision, Page page, SourceId declaredIn) {
+        for (DecisionReading.UndecidedAtAFigure each : decision.read().undecided()) {
+            List<WhereARunStopped> stops = behavior.wayStops().getOrDefault(each.way(), List.of());
+            Message why = new ReportMessage.StoppedAtWhichNoOptionSets(
+                    figuresSaid(List.of(each.figure()), page));
+            out.append("      ? ").append(page.say(
+                    new ReportMessage.WhetherAnyInputTakesAWayWasNotDecided(stops.isEmpty() ? why
+                            : new ReportMessage.Reasons(why,
+                                    new ReportMessage.EveryRunAlongItWouldStopAt(
+                                            GeneratedRows.placesStoppedAt(stops, page))))))
+                    .append(NEW_LINE);
+            for (ShownCondition read : behavior.readingsOf(each.way())) {
+                out.append("          · ").append(said(read, declaredIn, page)).append(NEW_LINE);
+            }
+        }
+    }
+
+    /**
+     * The ways through the body every run of which stops at a construction, each with the
+     * construction, the clause the way's inputs break there and the conditions the way came to.
+     *
+     * <p>Apart from the ways no input takes, which they are not: inputs bring the conditions out as
+     * the way does, and every run with one of them is refused where it builds a value. A {@code ·}
+     * and not a {@code !}, for the reason a comparison every run reaching which stops in an
+     * operation is one ({@link BlockReason.ComparisonAnswersNowhere}): no run gets past, so the
+     * rules past the way state nothing on either side and nothing is owed at them, and no row could
+     * answer the way, since every row down it stops too. What is wrong is the body. This is a fact
+     * about the model that stands by itself: the check of the model's invariants may or may not
+     * report the same construction as well. The verdict here is not changed.
+     * Each construction and clause said as a run stopped there says it
+     * ({@link GeneratedRows#stoppedAt}).
+     */
+    private static void everyRunStops(StringBuilder out, BehaviorReport behavior,
+                                      DecisionEvidence decision, Page page, SourceId declaredIn) {
+        for (DecisionReading.EveryRunStops each : decision.read().everyRunStops()) {
+            out.append("      · ").append(page.say(new ReportMessage.EveryRunAlongAWayStops(
+                    GeneratedRows.stoppedAt(behavior.wayStops().getOrDefault(each.way(),
+                            List.of()), page)))).append(NEW_LINE);
+            for (ShownCondition read : behavior.readingsOf(each.way())) {
+                out.append("          · ").append(said(read, declaredIn, page)).append(NEW_LINE);
+            }
+        }
     }
 
     /**
@@ -5385,8 +5481,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * short of ({@link GeneratedRows#beside}). Changed with those two and never apart from them.
      */
     static List<Object> shownOnThePage(Generator.UnresolvedCombination why) {
-        return why.told().isPresent() ? List.of(why.told().get(), why.alsoShort())
-                : List.of(why.reason(), why.subject(), why.alsoShort());
+        return why.told().isPresent() ? List.of(why.told().get(), why.beside())
+                : List.of(why.reason(), why.subject(), why.beside());
     }
 
     /**
@@ -5394,7 +5490,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * ({@link #synthesisShortfalls}). Not the sentence beside the word, and not what it is about.
      */
     static List<Object> shownInTheDocument(Generator.UnresolvedCombination why) {
-        return List.of(why.reason(), why.alsoShort());
+        return List.of(why.reason(), why.beside());
     }
 
     /**
@@ -5794,13 +5890,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** What the search for a value at an edge came to, where it ran and found none. */
     private static String whatWasTried(SearchOutcomes outcomes,
                                        ConditionsShown shown,
-                                       Page page, SourceId declaredIn) {
+                                       Page page, SourceId declaredIn,
+                                       PublishedRuleHandle.WhereARuleIs places) {
         // Which searches are worth a sentence is the outcomes' answer, not this one's. Told apart
         // here, two of them would be one piece of news whenever the words for them happened to
         // match — a report deciding what happened from what it was about to write.
         List<String> said = new ArrayList<>();
         for (ItemAssessment.Attempt each : outcomes.worthSaying()) {
-            said.add(whatWasTried(each, shown, page, declaredIn));
+            said.add(whatWasTried(each, shown, page, declaredIn, places));
         }
         // One sentence per search, with the readings' own separator between them. Run together,
         // two searches of one reading read as one clause that says two things.
@@ -5810,7 +5907,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** The same, of one search of the point. */
     private static String whatWasTried(ItemAssessment.Attempt attempt,
                                        ConditionsShown shown,
-                                       Page page, SourceId declaredIn) {
+                                       Page page, SourceId declaredIn,
+                                       PublishedRuleHandle.WhereARuleIs places) {
         // One opening per outcome, and not one for everything that came back without a row. A
         // search this compiler stopped and a search that had everything and reached nothing are
         // different news, and a proof is not a failure at all — read under one opening, an author
@@ -5827,7 +5925,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // than folded into the figures or left out because a figure was there to name.
             case ItemAssessment.Attempt.Stopped it -> page.say(new ReportMessage.ThisCompilerStoppedAt(
                     Reasons.said(it.stoppedBy(), page), andWritesSomeOf(it.notAllOf(), page),
-                    andCouldNotHold(it.unheld(), page), page.say(saidOrWhy(it.why())),
+                    andCouldNotHold(it.unheld(), page),
+                    page.say(GeneratedRows.beside(saidOrWhy(it.why()), it.why(), page, places)),
                     alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // Said as what this compiler writes rather than as a number it stopped at, because
             // there is no number: an author told to raise one would raise it and get the same
@@ -5837,7 +5936,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ItemAssessment.Attempt.Unexhausted it -> page.say(
                     new ReportMessage.ThisCompilerLeftUntried(
                             leftUntried(it.notAllOf(), it.unheld(), page),
-                            page.say(saidOrWhy(it.why())),
+                            page.say(GeneratedRows.beside(saidOrWhy(it.why()), it.why(), page,
+                                    places)),
                             alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // Both halves, because neither says what the other does. The word is what the search
             // itself came to; the figure is why that word is not about the whole of the point. Said
@@ -5846,7 +5946,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ItemAssessment.Attempt.Limited it -> page.say(
                     new ReportMessage.OverLessThanThePointHad(Reasons.said(it.limitedBy(), page),
                             andWritesSomeOf(it.notAllOf(), page),
-                            andCouldNotHold(it.unheld(), page), page.say(saidOrWhy(it.why())),
+                            andCouldNotHold(it.unheld(), page),
+                            page.say(GeneratedRows.beside(saidOrWhy(it.why()), it.why(), page,
+                                    places)),
                             alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
@@ -5869,8 +5971,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what a search with them in would have found is not something to say — and the word
             // that follows keeps saying an empty search does not make the point unreachable.
             case ItemAssessment.Attempt.Unresolved it -> {
-                String word = it.why().reason().provesInfeasible() ? page.say(saidOrWhy(it.why()))
-                        : page.say(new ReportMessage.NothingComposedOne(page.say(saidOrWhy(it.why()))));
+                String said = page.say(GeneratedRows.beside(saidOrWhy(it.why()), it.why(), page,
+                        places));
+                String word = it.why().reason().provesInfeasible() ? said
+                        : page.say(new ReportMessage.NothingComposedOne(said));
                 String leftOut =
                         whatTheRegionLeftOut(it.unaccountedFor(), shown, page, declaredIn);
                 yield " — " + (leftOut.isEmpty() ? word : reasons(page, List.of(leftOut, word)));
@@ -6515,6 +6619,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                         + imagesNotShownSaid(stop.leftOpen(), page)
                                         + numbersNotShownComputedSaid(stop.notShownComputed(),
                                                 page)
+                                        + page.say(runsStoppedSaid(stop.runsStopped(), page))
                                         + page.say(sentTo(stop.sentTo(), rendering, declaredIn)))
                                 .toList()),
                         whatItsPositionWasShortOf(asked).<Message>map(each ->
@@ -6637,11 +6742,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                 tells two entries apart: two of them leave two sets of values open
      * @param notShownComputed which numbers a relation settles by the terms' ends with no row
      *                 shown computed in them, which tells two entries apart likewise
+     * @param runsStopped where the runs of the rows tried for the stops of this entry stopped,
+     *                 each once and in {@link WhereARunStopped#IN_A_STEADY_ORDER}: said beside the
+     *                 entry as the figures are, and for their reason — they are what lifting it
+     *                 takes, and not what tells it from another
      */
     private record PublishedStop(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo,
                                  List<Figure> figures,
                                  Optional<BlockReason.RelationShownOverARegion> leftOpen,
-                                 Optional<NumberRegion> notShownComputed) {
+                                 Optional<NumberRegion> notShownComputed,
+                                 List<WhereARunStopped> runsStopped) {
     }
 
     /** Where every run getting to a rule stops, as the human report says it after the rule. */
@@ -6715,7 +6825,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>Two stops one entry writes are met at every figure either was. An entry is one thing to
      * lift, and the figures are what lifting it would take, so two stops under one word at one
-     * place stopped at two figures are one entry naming both.
+     * place stopped at two figures are one entry naming both. So are the places their runs
+     * stopped at, for the same reason: what lifting the entry takes, and not what it is.
      */
     private static List<PublishedStop> publishedStops(PartitionEvidence.Unanswered asked,
                                                       WhereAPartIs parts) {
@@ -6723,16 +6834,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             Optional<BlockReason.RelationShownOverARegion> leftOpen,
                             Optional<NumberRegion> notShownComputed) {}
         Map<WordAtAPlace, List<Figure>> out = new LinkedHashMap<>();
+        Map<WordAtAPlace, Set<WhereARunStopped>> runs = new LinkedHashMap<>();
         for (ReportedReason.Stop each : whyStanding(asked, parts).written()) {
-            out.computeIfAbsent(
-                    new WordAtAPlace(each.reason(), placeInTheRule(each.sentTo(), parts),
-                            each.leftOpen(), each.notShownComputed()),
-                    _ -> new ArrayList<>()).addAll(each.figures());
+            WordAtAPlace entry = new WordAtAPlace(each.reason(),
+                    placeInTheRule(each.sentTo(), parts), each.leftOpen(),
+                    each.notShownComputed());
+            out.computeIfAbsent(entry, _ -> new ArrayList<>()).addAll(each.figures());
+            runs.computeIfAbsent(entry, _ -> new LinkedHashSet<>()).addAll(each.runsStopped());
         }
         List<PublishedStop> written = new ArrayList<>();
         out.forEach((entry, figures) -> written.add(new PublishedStop(entry.reason(),
                 entry.sentTo(), Figure.inOrder(figures), entry.leftOpen(),
-                entry.notShownComputed())));
+                entry.notShownComputed(), runs.get(entry).stream()
+                        .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList())));
         return List.copyOf(written);
     }
 
@@ -8859,6 +8973,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         stop.leftOpen().ifPresent(open -> leftOpen(standsOn, open));
                         stop.notShownComputed().ifPresent(
                                 numbers -> numbersNotShownComputed(standsOn, numbers));
+                        runsStopped(standsOn, stop.runsStopped(), sources);
                         stop.sentTo().ifPresent(
                                 at -> place(standsOn.putObject("sentTo"), at, sources));
                     });
@@ -9084,6 +9199,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // And the figures it stopped at, which the word is coarser than: a consumer told a
             // part of a rule was not read is told which figure a wider run would have to allow.
             figuresMet(said, each.figures());
+            // And where the runs of the rows tried for it stopped, which is no figure: each is an
+            // input the model has not decided about, and the word does not say which.
+            runsStopped(said, each.runsStopped(), sources);
             // And the values a row built and run got to the rule at, as the model writes them,
             // where what stopped it is that not every value is shown to: absent where none was,
             // and never a claim about any value it does not list.
@@ -9641,6 +9759,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 });
             }
         }
+        // And the ways every run of which stops at a construction, apart from the ways no input
+        // takes: inputs take them, and every run is refused where it builds a value. Each with
+        // where the runs stop, written as every entry saying where runs stopped writes it.
+        List<DecisionReading.EveryRunStops> stopping = decision.read().everyRunStops();
+        if (!stopping.isEmpty()) {
+            ArrayNode ways = out.putArray("waysEveryRunStops");
+            for (DecisionReading.EveryRunStops each : stopping) {
+                ObjectNode one = ways.addObject();
+                ruleId(one.putObject("way"), behavior.name(), each.way().rule());
+                runsStopped(one, behavior.wayStops().get(each.way()).stream()
+                        .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList(), sources);
+            }
+        }
+        // And the ways no input gets past where the proof stopped at a figure before it could say
+        // whether any input takes them: either of the two above, and neither is said. Each with
+        // the figure, and where every run along it would stop were some input to take it.
+        List<DecisionReading.UndecidedAtAFigure> undecided = decision.read().undecided();
+        if (!undecided.isEmpty()) {
+            ArrayNode ways = out.putArray("waysUndecided");
+            for (DecisionReading.UndecidedAtAFigure each : undecided) {
+                ObjectNode one = ways.addObject();
+                ruleId(one.putObject("way"), behavior.name(), each.way().rule());
+                figuresMet(one, List.of(each.figure()));
+                runsStopped(one, behavior.wayStops().get(each.way()).stream()
+                        .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList(), sources);
+            }
+        }
     }
 
     /**
@@ -9901,6 +10046,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
             causes(one, each.why(), sources, places);
+            runsStopped(one, each.why().beside().stopped(), sources);
         }
     }
 
@@ -9924,11 +10070,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void causes(ObjectNode into, Generator.UnresolvedCombination why,
                                DocumentSources sources,
                                PublishedRuleHandle.WhereARuleIs places) {
-        if (why.alsoShort().isEmpty()) {
+        if (why.beside().shortOf().isEmpty()) {
             return;
         }
         DocumentArray causes = DocumentPart.SYNTHESIS_SHORTFALL_CAUSES.putArray(into);
-        for (Map.Entry<TermPath, StringOfferShortfall> at : why.alsoShort().entrySet()) {
+        for (Map.Entry<TermPath, StringOfferShortfall> at : why.beside().shortOf().entrySet()) {
             for (StringOfferShortfall.NotOffered each : at.getValue().these()) {
                 DocumentItem row = causes.addObject();
                 ObjectNode said = row.node();
@@ -9955,6 +10101,67 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         }
+    }
+
+    /**
+     * Where the runs of rows stopped, one entry per place, in the document's own words: which of
+     * the language's ends it was, the rule that refused the run where one did, the place of the
+     * construction where it was one, and what the runtime said where nothing names a rule.
+     *
+     * <p>One writer for every entry that says where runs stopped — the rows a search composed and
+     * the rows a search for a witness tried — so a place reads alike wherever a consumer meets
+     * it.
+     * Nothing where no run stopped, so the absence says no run stopped at any of them.
+     */
+    private static void runsStopped(ObjectNode into, List<WhereARunStopped> stops,
+                                    DocumentSources sources) {
+        if (stops.isEmpty()) {
+            return;
+        }
+        DocumentArray out = DocumentPart.RUNS_STOPPED.putArray(into);
+        for (WhereARunStopped each : stops) {
+            DocumentItem row = out.addObject();
+            ObjectNode said = row.node();
+            said.put("at", word(each.stop().kind()));
+            Optional<PublishedRuleHandle> refusing = GeneratedRows.ruleRefusing(each.stop());
+            if (refusing.isPresent()) {
+                RuleHandleSurface.RUN_STOPPED_RULE.put(row, refusing.get(),
+                        sources.rendering(), null);
+            }
+            // Where it stopped and where the rule that refused it is declared, as modules: a
+            // handle names a type or a behavior and not the module declaring it, and a body run
+            // in one module can stop at a construction written in another. A construction or an
+            // unreachable the run said no place for is written with none.
+            switch (each.stop()) {
+                case RunStop.AtAConstruction it -> {
+                    it.site().ifPresent(site -> said.put("module", site.module()));
+                    said.put("declaredIn", it.clauseModule());
+                    it.site().ifPresent(site -> sitsAt(said, each, site, sources));
+                }
+                case RunStop.AtAnEnsures it -> {
+                    said.put("module", it.module());
+                    said.put("declaredIn", it.module());
+                }
+                // An unreachable names no rule, so it has nothing declared.
+                case RunStop.AtAnUnreachable it -> {
+                    it.site().ifPresent(site -> said.put("module", site.module()));
+                    said.put("said", it.said());
+                    it.site().ifPresent(site -> sitsAt(said, each, site, sources));
+                }
+                case RunStop.AtAnEnd it -> said.put("said", it.said());
+            }
+        }
+    }
+
+    /** Where a place a run stopped at sits in the text of its module: the source declaring that
+     *  module where this compilation holds one, and the line and column. */
+    private static void sitsAt(ObjectNode said, WhereARunStopped where, RunStop.Site site,
+                               DocumentSources sources) {
+        if (where.source().isPresent()) {
+            said.put("sourceId", sources.written(where.source().get()));
+        }
+        said.put("line", site.line());
+        said.put("column", site.column());
     }
 
     /** How this document says what a search settled about one rule. */
@@ -11187,10 +11394,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static String next(AdequacyUncertainty unanswered, Page page) {
         ReaderDisposition disposition = ReaderDisposition.of(unanswered);
         Message next = next(disposition, page);
-        return page.say(disposition instanceof ReaderDisposition.StoppedAtAFigure
-                || unanswered.figures().isEmpty() ? next
-                : new ReportMessage.ItStoppedAtAsWell(next, figuresSaid(unanswered.figures(),
-                        page)));
+        if (!(disposition instanceof ReaderDisposition.StoppedAtAFigure)
+                && !unanswered.figures().isEmpty()) {
+            next = new ReportMessage.ItStoppedAtAsWell(next,
+                    figuresSaid(unanswered.figures(), page));
+        }
+        // And where the runs of the rows tried for it stopped, which is what stopped it where a
+        // reader is sent to read the rule and what stopped it.
+        if (!unanswered.runsStopped().isEmpty()) {
+            next = new ReportMessage.Reasons(next,
+                    GeneratedRows.stoppedAt(unanswered.runsStopped(), page));
+        }
+        return page.say(next);
     }
 
     /** What a reader does next, as the disposition says. */
@@ -11334,6 +11549,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static Message shownReached(List<String> values) {
         return values.isEmpty() ? new ReportMessage.Nothing()
                 : new ReportMessage.ShownReachedAt(Joined.listed(Joined.asWritten(values)));
+    }
+
+    /**
+     * Where the runs of the rows tried for a reason stopped, as a clause after the word and the
+     * figures, and nothing where no run stopped. Each place said as the line of a search that
+     * composed no row says it ({@link GeneratedRows#stoppedAt}), so a place reads alike wherever
+     * a reader meets it.
+     */
+    private static Message runsStoppedSaid(List<WhereARunStopped> stops, Page page) {
+        return stops.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.AndTheRunsStoppedAt(GeneratedRows.placesStoppedAt(stops, page));
     }
 
     /**

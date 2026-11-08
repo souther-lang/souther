@@ -29,12 +29,11 @@ class AStopAtAFigureACompilationMaySetIsToldAtThatFigureTest {
     /** A model whose compilation stops at a budget, held to {@code figure}, not the one declared. */
     private record Stopping(String model, int figure) {}
 
-    /**
-     * The first of seven thresholds two numbers and their sum are all above, compared: each line
-     * decides where every threshold before the one found was missed, more ways of choosing than
-     * none, so with none taken apart every line is cut off.
-     */
+    /** For each budget a compilation may set, a model whose compilation stops at it. */
     private static final Map<CompositionBudget, Stopping> STOPPING = Map.of(
+            // The first of seven thresholds two numbers and their sum are all above, compared:
+            // each line decides where every threshold before the one found was missed, more ways
+            // of choosing than none, so with none taken apart every line is cut off.
             CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO, new Stopping("""
                     module demo exposing (g)
 
@@ -42,7 +41,23 @@ class AStopAtAFigureACompilationMaySetIsToldAtThatFigureTest {
                     let g (x, y) =
                         Option.withDefault(0, List.find(t -> x > t && y > t && x + y > t,
                             [1, 2, 3, 4, 5, 6, 7])) > 3
-                    """, 0));
+                    """, 0),
+            // A way whose conditions clash past a construction: the proof through the construction
+            // fits in the figure, and the proof of the conditions alone does not, so the way is
+            // said as one the proof did not tell.
+            CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, new Stopping("""
+                    module demo exposing (g)
+
+                    data Positive = { n: Int }
+                        invariant n >= 1
+
+                    behavior g : (n: Int) -> Int
+                        constructs Positive
+                    let g (n) = if n > 5 then {
+                        let p = Positive { n = n }
+                        if n < 3 then p.n else 0
+                    } else 1
+                    """, 9));
 
     @Test
     void everyBudgetACompilationMaySetIsHeldByAModelStoppingAtIt() {

@@ -164,6 +164,17 @@ class WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest {
         out.put("souther.compiler.query.About$AnUnansweredRow.at",
                 new Standing(new Because.NothingReachesOne(),
                         new AcrossTheCut.BlocksIt(lookAtIt)));
+        // A construction a way goes through, held by the way a rule of the decision is: under a
+        // finding where no row takes that rule. The place is where the construction is written,
+        // which is what a stop along the way is said at, as a module, a line and a column.
+        // Nothing a compile of the models answers holds one, so nothing has been seen of it; it
+        // reaches whoever reads the finding all the same, so the cut waits on it.
+        out.put("souther.compiler.partition.PassedConstruction.at",
+                new Standing(new Because.NothingReachesOne(),
+                        new AcrossTheCut.BlocksIt("say where the construction is written as the"
+                                + " module, line and column a run stopped there says, made"
+                                + " where the way is read, or show that nothing carrying a way"
+                                + " through a body crosses a module boundary")));
         return out;
     }
 

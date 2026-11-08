@@ -48,7 +48,8 @@ public final class Allowances {
      * code ({@code AFigureACompilationSetsIsReadWhereItIsUsedTest}).
      */
     public static final Set<CompositionBudget> SETTABLE = Collections.unmodifiableSet(
-            EnumSet.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO));
+            EnumSet.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                    CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE));
 
     private static final ScopedValue<Allowances> IN_FORCE = ScopedValue.newInstance();
 

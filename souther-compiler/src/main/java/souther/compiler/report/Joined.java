@@ -43,6 +43,11 @@ final class Joined {
         return joined(each, (first, rest) -> new ReportMessage.Either(first, rest));
     }
 
+    /** {@code a and at b and at c}: places something stopped at. */
+    static Message andAt(List<? extends Message> each) {
+        return joined(each, (first, rest) -> new ReportMessage.AndAt(first, rest));
+    }
+
     /** The same of text that is already words or code, each said as it stands. */
     static List<Message> asWritten(List<String> each) {
         return each.stream().<Message>map(ReportMessage.Verbatim::new).toList();
