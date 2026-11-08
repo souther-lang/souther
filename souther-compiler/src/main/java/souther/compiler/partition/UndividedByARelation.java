@@ -6460,8 +6460,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             // Where it lies is asked of the number whatever it is a number of: a total over a run
             // lies where what the values it walks guarantee leave it. What it is shown to take is
-            // asked of a position's, and of a total only as the totals of one element
-            // (summedOverOneElement): a total of evens lies at nought or more and is never odd.
+            // asked of a position's, and of a total only as the totals of its elements, each shown
+            // to take its run (summedOverTheElements): a total of evens lies at nought or more and
+            // is never odd.
             NumericDomain.Bounds holds = asARelationReadsIt(each.number() != null
                     && region.projectionOf(each.number())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
@@ -6488,10 +6489,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             read, conditions, heldWhole, carriers.get(i)), carriers.get(i))
                     : each.number() instanceof NumericTerm.ProductOf product
                     ? asARelationReadsIt(realizedProduct(product, read, region, declared,
-                            conditions, narrowedByTheRun, heldWhole), carriers.get(i))
+                            conditions, narrowedByTheRun, heldWhole, working.partials()),
+                            carriers.get(i))
                     : each.number() instanceof NumericTerm.TakenOver over
-                    ? asARelationReadsIt(summedOverOneElement(over, read, region, conditions,
-                            heldWhole, carriers.get(i)), carriers.get(i))
+                    ? asARelationReadsIt(summedOverTheElements(over, read, region, conditions,
+                            heldWhole, carriers.get(i), working.partials()), carriers.get(i))
                     : each.number() instanceof NumericTerm.OccurrencesOfItsValue counted
                     ? asARelationReadsIt(occurrencesOfOneValue(counted, read, region, conditions,
                             heldWhole), carriers.get(i))
@@ -8312,27 +8314,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * A run every value of which the total {@code over} is shown to take — or null where none is
-     * shown: what the element's number is shown to take, and nought beside it where the container
-     * may hold nothing and no value lies between.
+     * shown: the totals of as many elements as the container is shown to hold, each element at a
+     * value its number is shown to take, and nought where it may hold none.
      *
      * <p>Read off the accumulation the operation declares, and not off its name: starting from
-     * nought and adding, a container of one element comes to that element's number, and one of
-     * none comes to nought. So every value the number at the element is shown to take is a total,
-     * where the container may hold one element and that element may stand at the value alone.
-     * What the element is shown to take is a run some row holds it at with every rule read
-     * ({@link #realized}), and a rule over the elements together or around the container leaves
-     * it nothing shown; so the one element is a row's, and nothing the way states may touch it.
-     * Which totals a container of two reaches is not asked, so this is a run only where one
-     * element is.
+     * nought and adding, a container of one element comes to that element's number, one of none
+     * comes to nought, and one of {@code n} to the sum of theirs. What one element is shown to
+     * take is a run some row holds it at with every rule read ({@link #realized}), and a rule over
+     * the elements together or around the container leaves it nothing shown; so the one element
+     * is a row's, and nothing the way states may touch it. How many the container holds is asked
+     * of its own reading ({@link #howManyAreHeld}), which shows a count past one only of a list no
+     * rule reads inside the elements of: each of so many elements then stands anywhere in that
+     * run apart from the rest, and the totals are composed of them ({@link #ofTheElements}).
      *
-     * <p>That nought is a total is one value, and joins the run only where the run starts just
-     * past it; between the two, nothing is shown.
+     * <p>Not where {@code atOneElement} names the total: a walk whose running totals are left
+     * untold is shown to get through only where one element is all it adds
+     * ({@link Working#partials}), and a total of more is no row such a reading claims.
      */
-    private static NumericDomain.Bounds summedOverOneElement(NumericTerm.TakenOver over,
-                                                             InputReading read,
-                                                             SearchRegion region,
-                                                             List<OnAWay> conditions,
-                                                             boolean heldWhole, Carrier carrier) {
+    private static NumericDomain.Bounds summedOverTheElements(NumericTerm.TakenOver over,
+                                                              InputReading read,
+                                                              SearchRegion region,
+                                                              List<OnAWay> conditions,
+                                                              boolean heldWhole, Carrier carrier,
+                                                              Collection<NumericTerm> atOneElement) {
         List<NumericTerm.ValueOf> elements = valuesOfOneElement(over);
         if (!heldWhole || carrier == null
                 || !SUMMED.equals(DefaultBoundOperationFacts.get().accumulation(over.operation()))) {
@@ -8342,7 +8346,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (stated == null) {
             return null;
         }
-        NumericDomain.Bounds alone;
+        OneElementsRun alone;
         if (elements.isEmpty() && over.source() instanceof RunSource.ComputedOccurrences computed
                 && computed.computation() instanceof ElementValue.Affine weighed) {
             alone = summedOverWeighedFieldsOfOneElement(computed.elements(), weighed, read,
@@ -8351,11 +8355,210 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
         } else {
             List<TermPath> containers = over.subjectPath().containersHoldingIt();
-            alone = containers.size() != 1 ? null
+            NumericDomain.Bounds each = containers.size() != 1 ? null
                     : shownOfAnElementAlone(elements, containers.getFirst(), read, region,
-                            stated.rest(), carrier);
+                            stated.rest(), null);
+            alone = each == null ? null : new OneElementsRun(each, containers);
         }
-        return alone == null ? null : alone.meet(stated.run());
+        NumericDomain.Bounds totals = alone == null ? null
+                : ofTheElements(alone, read, region, carrier, !atOneElement.contains(over));
+        return totals == null ? null : totals.meet(stated.run());
+    }
+
+    /**
+     * What one element of a total comes to, as a run every value of which it is shown to take, and
+     * the containers it is an element of: one, or for a walk joining two maps, an entry of each.
+     */
+    private record OneElementsRun(NumericDomain.Bounds run, List<TermPath> containers) {
+
+        OneElementsRun {
+            containers = List.copyOf(containers);
+        }
+    }
+
+    /**
+     * The totals {@code one}'s containers come to, on {@code carrier}: where one container holds
+     * the elements and {@code overMany}, every total of as many as it is shown to hold
+     * ({@link #overTheCounts}); otherwise what one element comes to, where each container may
+     * hold one. Nought joins where a container may hold none, since a container of none comes to
+     * it.
+     */
+    private static NumericDomain.Bounds ofTheElements(OneElementsRun one, InputReading read,
+                                                      SearchRegion region, Carrier carrier,
+                                                      boolean overMany) {
+        boolean composed = overMany && one.containers().size() == 1;
+        NumericDomain.Bounds counts = null;
+        boolean noughtIsATotal = false;
+        for (TermPath container : one.containers()) {
+            NumericDomain.Bounds held = howManyAreHeld(container, read, region);
+            if (held == null || (!composed && !held.admits(Count.of(1)))) {
+                return null;
+            }
+            noughtIsATotal |= held.admits(Count.ZERO);
+            counts = held;
+        }
+        NumericDomain.Bounds run = composed ? overTheCounts(one.run(), counts, carrier)
+                : one.run();
+        return run == null ? null : noughtIsATotal ? withNought(run, carrier) : run;
+    }
+
+    /**
+     * The totals of {@code n} elements, for every {@code n} of one or more {@code counts} leaves,
+     * where each element takes every value of {@code each} apart from the rest — or null where
+     * none is shown, or a count or an end is no number this reads.
+     *
+     * <p>A run of {@code n} elements is {@code n·each}: on an order that steps, every whole
+     * number from {@code n·a} to {@code n·b}, the ends taken first as the whole numbers the run
+     * holds. Where {@code each} holds nought, the run of {@code n} holds that of every fewer, and
+     * the totals are the run of the most. Where it lies past nought on one side, the run of
+     * {@code n} and that of {@code n + 1} meet where {@code (n + 1)·a} is no further than one
+     * step past {@code n·b} — no step on an order with none between its values — and from the
+     * first {@code n} they do, every run after meets the next. Before that, each stands apart,
+     * and nothing between two is a total. So the totals are the runs of the fewest elements on,
+     * where those meet, or otherwise whichever is wider of the run of the fewest and the runs
+     * from the first that meet on, taken together; a gap between two is never taken.
+     */
+    static NumericDomain.Bounds overTheCounts(NumericDomain.Bounds each,
+                                              NumericDomain.Bounds counts, Carrier carrier) {
+        boolean whole = carrier.spacing() == Granularity.DISCRETE;
+        NumericDomain.Bounds run = whole ? onWholeNumbers(each) : each;
+        ExactRatio fewest = counts.min() == null ? ExactRatio.ONE
+                : countAt(counts.min(), true);
+        ExactRatio most = counts.max() == null ? null : countAt(counts.max(), false);
+        if (run == null || fewest == null || (counts.max() != null && most == null)) {
+            return null;
+        }
+        if (fewest.compareTo(ExactRatio.ONE) < 0) {
+            fewest = ExactRatio.ONE;
+        }
+        if (most != null && most.compareTo(fewest) < 0) {
+            return null;
+        }
+        ExactRatio least = endOf(run.min());
+        ExactRatio greatest = endOf(run.max());
+        if (least != null && least.signum() > 0) {
+            return pastNought(run, least, greatest, fewest, most, whole);
+        }
+        if (greatest != null && greatest.signum() < 0) {
+            NumericDomain.Bounds mirrored = pastNought(run.timesEach(ExactRatio.ONE.negated()),
+                    greatest.negated(), least == null ? null : least.negated(), fewest, most,
+                    whole);
+            return mirrored == null ? null : mirrored.timesEach(ExactRatio.ONE.negated());
+        }
+        // Holding nought, the run of n elements holds that of every fewer, and the totals are the
+        // run of the most: past every end other than nought where there is no most.
+        if (most == null) {
+            return new NumericDomain.Bounds(least != null && least.signum() == 0 ? run.min()
+                    : null, greatest != null && greatest.signum() == 0 ? run.max() : null);
+        }
+        return run.timesEach(most);
+    }
+
+    /**
+     * The totals of {@code fewest} to {@code most} elements of {@code each}, whose least value
+     * {@code least} is past nought and whose greatest is {@code greatest} — none where there is
+     * no greatest, or no most ({@link #overTheCounts}).
+     */
+    private static NumericDomain.Bounds pastNought(NumericDomain.Bounds each, ExactRatio least,
+                                                   ExactRatio greatest, ExactRatio fewest,
+                                                   ExactRatio most, boolean whole) {
+        NumericDomain.Bounds ofTheFewest = each.timesEach(fewest);
+        if (ofTheFewest == null) {
+            return null;
+        }
+        if (greatest == null) {
+            // A run with no greatest meets the next: the totals are from the fewest's least on.
+            return ofTheFewest;
+        }
+        ExactRatio width = greatest.minus(least).orNull();
+        // The run of n meets the next from the first n where n·(b − a) is at least a, less one
+        // step where the order steps.
+        ExactRatio toMeet = whole ? least.minus(ExactRatio.ONE).orNull() : least;
+        if (width == null || toMeet == null) {
+            return null;
+        }
+        ExactRatio first;
+        if (toMeet.signum() <= 0) {
+            first = ExactRatio.ONE;
+        } else if (width.signum() == 0) {
+            return ofTheFewest;
+        } else {
+            ExactAnswer<BigInteger> ceiling = toMeet.dividedBy(width)
+                    .flatMap(ExactRatio::ceiling);
+            if (!(ceiling instanceof ExactAnswer.Held<BigInteger>(BigInteger at))) {
+                return null;
+            }
+            first = ExactRatio.of(at);
+            // Over values with none between them, two runs meeting at one value that neither
+            // holds — the greatest of the one and the least of the next both left out — do not
+            // meet.
+            if (!whole && first.times(width).orNull() instanceof ExactRatio reached
+                    && reached.compareTo(toMeet) == 0
+                    && !each.min().inclusive() && !each.max().inclusive()) {
+                first = first.plus(ExactRatio.ONE).orNull();
+            }
+        }
+        if (first == null) {
+            return null;
+        }
+        if (first.compareTo(fewest) < 0) {
+            first = fewest;
+        }
+        if (most != null && first.compareTo(most) > 0) {
+            return ofTheFewest;
+        }
+        NumericDomain.Bounds from = each.timesEach(first);
+        NumericDomain.Bounds toTheMost = most == null ? null : each.timesEach(most);
+        if (from == null || (most != null && toTheMost == null)) {
+            return null;
+        }
+        NumericDomain.Bounds onwards = new NumericDomain.Bounds(from.min(),
+                toTheMost == null ? null : toTheMost.max());
+        if (first.equals(fewest)) {
+            return onwards;
+        }
+        // The run of the fewest stands apart from the rest; the wider of the two is taken.
+        ExactRatio onwardsTo = endOf(onwards.max());
+        ExactRatio onwardsWidth = onwardsTo == null ? null
+                : onwardsTo.minus(endOf(onwards.min())).orNull();
+        ExactRatio fewestWidth = width.times(fewest).orNull();
+        return onwardsTo != null && onwardsWidth != null && fewestWidth != null
+                && onwardsWidth.compareTo(fewestWidth) < 0 ? ofTheFewest : onwards;
+    }
+
+    /** {@code run} with its ends at the whole numbers it holds, each one held — or null where an
+     *  end is at no number, or the run holds no whole number. */
+    private static NumericDomain.Bounds onWholeNumbers(NumericDomain.Bounds run) {
+        Endpoint min = null;
+        Endpoint max = null;
+        if (run.min() != null) {
+            BigInteger at = run.min().wholeAdmitted(true);
+            if (at == null) {
+                return null;
+            }
+            min = Endpoint.inclusive(Count.of(new BigDecimal(at)));
+        }
+        if (run.max() != null) {
+            BigInteger at = run.max().wholeAdmitted(false);
+            if (at == null) {
+                return null;
+            }
+            max = Endpoint.inclusive(Count.of(new BigDecimal(at)));
+        }
+        NumericDomain.Bounds whole = new NumericDomain.Bounds(min, max);
+        return whole.holdsAValue() ? whole : null;
+    }
+
+    /** The number {@code end} is at, or null where there is no end, or it is at no number. */
+    private static ExactRatio endOf(Endpoint end) {
+        return end != null && end.at() instanceof Count count ? count.exactly() : null;
+    }
+
+    /** The whole count an end of a run of counts holds, from below where {@code lower}; null
+     *  where it is at no count. */
+    private static ExactRatio countAt(Endpoint end, boolean lower) {
+        BigInteger at = end.wholeAdmitted(lower);
+        return at == null ? null : ExactRatio.of(at);
     }
 
     /**
@@ -8366,10 +8569,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * run
      * with nothing but that field asked of the element, and no rule of the declarations ties two
      * of the fields to one another ({@link #tiedByARule}), so the fields are written apart and
-     * every sum of a value of each is one element's. Nought, the total of a container holding
-     * none, is the whole's and no field's, so it joins the sum once.
+     * every sum of a value of each is one element's. What a container of none, or of more, comes
+     * to is the totals' to say ({@link #ofTheElements}).
      */
-    private static NumericDomain.Bounds summedOverWeighedFieldsOfOneElement(
+    private static OneElementsRun summedOverWeighedFieldsOfOneElement(
             TermPath elements, ElementValue.Affine weighed, InputReading read, SearchRegion region,
             List<OnAWay> conditions, Carrier carrier) {
         List<TermPath> places = new ArrayList<>();
@@ -8410,10 +8613,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // The number added to each element's fields is the element's, and moves the sum by it.
         sum = movedBy(sum, weighed.form().constant(), carrier);
-        NumericDomain.Bounds held = container == null ? null
-                : howManyAreHeld(container, read, region);
-        return sum == null || held == null ? null
-                : held.admits(Count.ZERO) ? withNought(sum, carrier) : sum;
+        return sum == null || container == null ? null
+                : new OneElementsRun(sum, List.of(container));
     }
 
     /**
@@ -8436,7 +8637,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                         SearchRegion declared,
                                                         List<OnAWay> conditions,
                                                         List<TakenConstraint> narrowedByTheRun,
-                                                        boolean heldWhole) {
+                                                        boolean heldWhole,
+                                                        Collection<NumericTerm> atOneElement) {
         NumericTerm.ProductOf.AtAValue way = product.atAValue();
         if (way == null) {
             return null;
@@ -8460,9 +8662,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         NumericDomain.Bounds carried = realizedFactor(way.carrier(), read, region, declared,
-                beside, narrowedByTheRun, heldWhole, statedOfIt);
+                beside, narrowedByTheRun, heldWhole, statedOfIt, atOneElement);
         NumericDomain.Bounds fixed = realizedFactor(way.fixed(), read, region, declared,
-                beside, narrowedByTheRun, heldWhole, statedOfIt);
+                beside, narrowedByTheRun, heldWhole, statedOfIt, atOneElement);
         if (carried == null || fixed == null || !fixed.admits(way.at())) {
             return null;
         }
@@ -8479,7 +8681,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                        SearchRegion region, SearchRegion declared,
                                                        List<OnAWay> conditions,
                                                        List<TakenConstraint> narrowedByTheRun,
-                                                       boolean heldWhole, boolean statedOfTheProduct) {
+                                                       boolean heldWhole, boolean statedOfTheProduct,
+                                                       Collection<NumericTerm> atOneElement) {
         TermOrders orders = read.quantities().ordersOf(term);
         Carrier carrier = orders == null ? null : orders.answered();
         if (carrier == null) {
@@ -8509,7 +8712,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? declared : region;
             run = realizedAlong(one, source, answering, way, read, conditions, heldWhole, carrier);
         } else if (term instanceof NumericTerm.TakenOver over) {
-            run = summedOverOneElement(over, read, region, conditions, heldWhole, carrier);
+            run = summedOverTheElements(over, read, region, conditions, heldWhole, carrier,
+                    atOneElement);
         }
         return asARelationReadsIt(run, carrier);
     }
@@ -8530,11 +8734,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * field asked of the element, moved by the number beside it. The builder tries each field
      * until one writes the value, so the runs are taken together where they overlap, and the
      * first alone where they do not. No rule of the declarations ties two of the fields to one
-     * another
-     * ({@link #tiedByARule}): the fields are then written apart, each at the number it is asked
-     * at.
+     * another ({@link #tiedByARule}): the fields are then written apart, each at the number it is
+     * asked at. What a container of none, or of more, comes to is the totals' to say
+     * ({@link #ofTheElements}).
      */
-    private static NumericDomain.Bounds summedOverProductsOfOneElement(
+    private static OneElementsRun summedOverProductsOfOneElement(
             NumericTerm.TakenOver over, InputReading read, SearchRegion region,
             List<OnAWay> conditions, Carrier carrier) {
         List<NumericTerm.FromOnePosition> factors = new ArrayList<>();
@@ -8621,17 +8825,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : asked.meet(moved).holdsAValue() ? NumericDomain.Bounds.spanning(asked, moved)
                     : asked;
         }
-        // Each container may hold the one entry; the total is nought where some container holds
-        // none, which a join of it is empty.
-        boolean noughtIsATotal = false;
-        for (TermPath container : containers) {
-            NumericDomain.Bounds held = howManyAreHeld(container, read, region);
-            if (asked == null || held == null || !held.admits(Count.of(1))) {
-                return null;
-            }
-            noughtIsATotal |= held.admits(Count.ZERO);
-        }
-        return noughtIsATotal ? withNought(asked, carrier) : asked;
+        // The fields held still are held at one value in every element, so a container of several
+        // comes to as many of that number; a join of two maps is the entry of each.
+        return asked == null ? null : new OneElementsRun(asked, containers);
     }
 
     /**

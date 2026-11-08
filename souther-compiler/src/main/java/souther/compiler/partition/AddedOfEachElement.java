@@ -246,7 +246,9 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
      * a name that is the whole of such a part. Where an operation is held within the ends only on
      * a row of one element, or only in coming to the total, a row of more elements is not claimed.
      * The answer so far on such a row is a running total, and the operations worked out of it are
-     * the running totals' to answer for.
+     * the running totals' to answer for — save where the step moves the answer so far one way
+     * only ({@link #movesOneWay}), when every running total lies between the seed and the answer
+     * and every row is claimed.
      */
     Through overWholeNumbers(BigInteger seed, Function<Core, FormRange> rangeOf,
                              BigInteger least, BigInteger greatest) {
@@ -261,10 +263,38 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
             onOneElement |= value.onOneElement();
         }
         Checked whole = checker.checked(answer, true);
-        notShown |= whole.notShown();
-        onOneElement |= whole.onOneElement();
-        return notShown ? Through.NOT_SHOWN
-                : onOneElement ? Through.A_ROW_OF_ONE_ELEMENT : Through.EVERY_ROW;
+        if (notShown || whole.notShown()) {
+            return Through.NOT_SHOWN;
+        }
+        if (!onOneElement && movesOneWay(checker)) {
+            return Through.EVERY_ROW;
+        }
+        return onOneElement || whole.onOneElement() ? Through.A_ROW_OF_ONE_ELEMENT
+                : Through.EVERY_ROW;
+    }
+
+    /**
+     * Whether a walk's step moves the answer so far one way only, by what gets through on every
+     * row: the answer so far with a part of the element added or taken away, each operation of
+     * the part within the ends on every row, and the part never past nought on one side. Every
+     * answer so far then lies between the seed and the answer, and where those are within the
+     * ends, so is every one, on a row of any number of elements. A step that works the answer so
+     * far out twice ({@code acc + p - q}) is not one: what it works out on the way lies past both.
+     */
+    private boolean movesOneWay(Checker checker) {
+        if (!(answer instanceof Worked(BinOp op, Part left, Part right))
+                || (op != BinOp.ADD && op != BinOp.SUB)) {
+            return false;
+        }
+        Part moved = left instanceof SoFar ? right
+                : op == BinOp.ADD && right instanceof SoFar ? left : null;
+        if (moved == null || readsTheAnswerSoFar(moved)) {
+            return false;
+        }
+        Checked part = checker.checked(moved, false);
+        FormRange range = part.range();
+        return !part.notShown() && !part.onOneElement() && range != null
+                && (range.least().signum() >= 0 || range.greatest().signum() <= 0);
     }
 
     /** The name whose value comes to the total on a row of one element, where the answer is that

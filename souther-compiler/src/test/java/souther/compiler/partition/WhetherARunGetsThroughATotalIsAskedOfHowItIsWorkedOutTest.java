@@ -604,8 +604,9 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
      * {@code n.value + 1 - 1} totals what {@code n.value} does, and stops at the greatest
      * {@code Int} where that total does not. Nor is a function handed by its name, whose body is
      * in no tree read here. {@code n.value - 1} over numbers at nought or more is never past the
-     * type, so the total is told; one element comes to minus one at the least, so the total does
-     * not reach every value of {@code gross}.
+     * type, so the total is told; one element comes to minus one at the least, and as many
+     * elements as a list holds to as many below nought, so the total reaches every value of
+     * {@code gross}.
      */
     @Test
     void aTotalOfWhatIsNeverBelowNoughtGetsThroughWhereverTheTotalIsAnInt() {
@@ -614,9 +615,9 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
                 "gross >= List.sum(List.map(n -> 2 * n.value, ns))"))
                 .contains("List.sum({2·the element itself + 0 | ns[*]})"));
         String lessOne = report(inputs, NAT, "gross >= List.sum(List.map(n -> n.value - 1, ns))");
-        assertEquals(Set.of("gross"), notShown(lessOne), lessOne);
-        assertEquals(Set.of("List.sum({1·the element itself + -1 | ns[*]})"), related(lessOne),
-                lessOne);
+        assertEquals(Set.of(), notShown(lessOne), lessOne);
+        assertEquals(Set.of("List.sum({1·the element itself + -1 | ns[*]})", "gross"),
+                related(lessOne), lessOne);
         String byAName = report(inputs, NAT + "\nlet lessOne (n: Nat) : Int = n.value + 1 - 1",
                 "gross >= List.sum(List.map(lessOne, ns))");
         assertEquals(Set.of(), related(byAName), byAName);

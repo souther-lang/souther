@@ -1682,7 +1682,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * total. Where each step adds the same written number, every answer so far lies
              * between the seed and the answer, and the answer is all that is told. Where it adds or
              * takes away a part of the element and works out nothing else
-             * ({@link AddedOfEachElement}), the running totals are told as such.
+             * ({@link AddedOfEachElement}), the answer is told, and so are the running totals
+             * where the step moves the answer one way only: every one then lies between the seed
+             * and the answer too. Otherwise they are left to a row of one element.
              */
             private boolean toldTheWalk(Core node, InputReads at, Core call, Core.Block step,
                                         SeededWalk seeded, InputNumber.SeedAndAdded walk,
@@ -1710,14 +1712,21 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     tellAnIntTotal(node, answer, List.of());
                     return true;
                 }
-                if (each != null && throughOverWholeNumbers(each, BigInteger.valueOf(seed.value()),
-                        seeded.element().binding(), total)
-                        != AddedOfEachElement.Through.NOT_SHOWN) {
-                    tellAnIntTotal(node, answer, List.of());
-                    told.partials.add(total);
-                    return true;
+                AddedOfEachElement.Through through = each == null
+                        ? AddedOfEachElement.Through.NOT_SHOWN
+                        : throughOverWholeNumbers(each, BigInteger.valueOf(seed.value()),
+                                seeded.element().binding(), total);
+                switch (through) {
+                    case EVERY_ROW -> tellAnIntTotal(node, answer, List.of());
+                    case A_ROW_OF_ONE_ELEMENT -> {
+                        tellAnIntTotal(node, answer, List.of());
+                        told.partials.add(total);
+                    }
+                    case NOT_SHOWN -> {
+                        return false;
+                    }
                 }
-                return false;
+                return true;
             }
 
             /**

@@ -514,6 +514,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "reads what a step or a closure works out of each element as the tree of"
                             + " operations it is written as: an operation not written is one no"
                             + " run can stop at, and one written is one a run works out"),
+            new Held("souther.compiler.partition.AddedOfEachElement.movesOneWay",
+                    "asks whether a step is the answer so far with one part of the element added or"
+                            + " taken away, so that every answer on the way lies between the seed"
+                            + " and the answer"),
             new Held("souther.compiler.partition.AddedOfEachElement.nameThatIsTheTotal",
                     "asks whether the answer is a name added to the answer so far from nought,"
                             + " whose value is then the total on a row of one element"),

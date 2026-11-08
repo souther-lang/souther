@@ -32,7 +32,8 @@ import static org.junit.jupiter.api.Assertions.fail;
  * over small ends of a type, worked out on every row of one element by the rule the run time
  * works it out by — every name's value first, read or not, then the answer. A row of one element
  * stops at an operation of the step only where the total it comes to is past the ends, wherever
- * more than nothing is claimed; and where every row is claimed, no operation stops on any.
+ * more than nothing is claimed. Where every row is claimed, no operation of a closure stops on
+ * any, and a walk stops on a row of two elements only where its answer is past the ends.
  */
 class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
 
@@ -68,11 +69,10 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
                             continue;
                         }
                         claimed++;
-                        if (step) {
-                            assertNotEquals(AddedOfEachElement.Through.EVERY_ROW, through,
-                                    "a walk has running totals: " + each);
-                        }
                         heldOfEveryRow(each, seed, p, q, through);
+                        if (step && through == AddedOfEachElement.Through.EVERY_ROW) {
+                            heldOfEveryRowOfTwo(each, seed, p, q);
+                        }
                     }
                 }
             }
@@ -175,8 +175,8 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
     /**
      * That {@code through} holds of every row of one element where the paths take a value of
      * {@code p} and of {@code q}: an operation of the step stops the run only where the total is
-     * past the ends; and where every row is claimed, no operation stops, on a row of one element
-     * or of any number, since none of them reads the answer so far.
+     * past the ends; and where every row is claimed of a closure, no operation stops, on a row of
+     * one element or of any number, since none of them reads the answer so far.
      */
     private static void heldOfEveryRow(AddedOfEachElement each, long seed, long[] p, long[] q,
                                        AddedOfEachElement.Through through) {
@@ -194,12 +194,50 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
                     fail(through + " for " + each + " from " + seed + " at p=" + pv + " q=" + qv
                             + ": an operation stops where the total " + total + " does not");
                 }
-                if (through == AddedOfEachElement.Through.EVERY_ROW && stops[0]) {
+                if (through == AddedOfEachElement.Through.EVERY_ROW && stops[0]
+                        && !readsTheAnswerSoFar(each.answer())) {
                     fail("every row is claimed for " + each + ", and it stops at p=" + pv
                             + " q=" + qv);
                 }
             }
         }
+    }
+
+    /**
+     * That a walk claimed on every row gets through on every row of two elements whose answer is
+     * within the ends: the answer so far after the first element is the seed for the second, and
+     * no operation of either step stops where the answer does not.
+     */
+    private static void heldOfEveryRowOfTwo(AddedOfEachElement each, long seed, long[] p,
+                                            long[] q) {
+        for (long p1 = p[0]; p1 <= p[1]; p1++) {
+            for (long q1 = q[0]; q1 <= q[1]; q1++) {
+                boolean[] stops = {false};
+                long between = stepOf(each, seed, Map.of(P, p1, Q, q1), stops);
+                for (long p2 = p[0]; p2 <= p[1]; p2++) {
+                    for (long q2 = q[0]; q2 <= q[1]; q2++) {
+                        boolean[] after = {stops[0]};
+                        long total = stepOf(each, between, Map.of(P, p2, Q, q2), after);
+                        if (after[0] && total >= LEAST.longValue()
+                                && total <= GREATEST.longValue()) {
+                            fail("every row is claimed for " + each + " from " + seed
+                                    + ", and a row of (" + p1 + ", " + q1 + "), (" + p2 + ", "
+                                    + q2 + ") stops where its answer " + total + " does not");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** One step of {@code each} from {@code soFar} over an element with {@code values}. */
+    private static long stepOf(AddedOfEachElement each, long soFar, Map<Core, Long> values,
+                               boolean[] stops) {
+        Map<BindingId, Long> named = new HashMap<>();
+        for (AddedOfEachElement.Bound bound : each.bound()) {
+            named.put(bound.name(), workedOut(bound.value(), soFar, values, named, stops));
+        }
+        return workedOut(each.answer(), soFar, values, named, stops);
     }
 
     /**
