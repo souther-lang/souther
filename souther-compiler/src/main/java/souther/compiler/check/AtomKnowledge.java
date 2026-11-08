@@ -130,8 +130,18 @@ record AtomKnowledge(Computation computation, List<NumericConstraint> intrinsic)
             }
         }
 
-        /** What a library operation reached by applying a closure over and over. */
-        record Reduction(InductiveBounds.Walk walk) implements Computation {
+        /**
+         * What a library operation reached by applying a closure over and over, and how many the
+         * container it walked holds — null where that is no number this names.
+         *
+         * <p>A walk over none answers where it started, so a path that puts the answer away from
+         * the seed has put at least one into the container ({@code walked}), whatever the step is.
+         *
+         * <p>Not part of which walk this is. One walk over values written out twice is the same
+         * walk at two places, and each place counts its container as its own, so two readings of
+         * it differ in {@code walked} and not in what the walk computes.
+         */
+        record Reduction(InductiveBounds.Walk walk, FactSubject walked) implements Computation {
 
             @Override
             public List<LinearForm<FactSubject>> formsRead() {

@@ -1492,7 +1492,8 @@ final class Terms {
         // recipes alone ({@link #reached}).
         InductiveBounds.Walk made = new InductiveBounds.Walk(seed, accumulator, step,
                 StepInputFacts.of(walk, inside, this, reached(step)));
-        computedBy(atom, new AtomKnowledge.Computation.Reduction(made));
+        computedBy(atom, new AtomKnowledge.Computation.Reduction(made,
+                sizeOfWhatItHolds(walk.container(), at)));
     }
 
     /**
@@ -1531,7 +1532,8 @@ final class Terms {
                 UniversalElementFacts.of(accumulating.container(), at, this);
         computedBy(atom, new AtomKnowledge.Computation.Reduction(new InductiveBounds.Walk(
                 seed, accumulator, step,
-                StepInputFacts.ofTheElement(elements, element, this, reached(step)))));
+                StepInputFacts.ofTheElement(elements, element, this, reached(step))),
+                sizeOfWhatItHolds(accumulating.container(), at)));
     }
 
     /** The value an accumulation starts from, as a number — or null where the domain carries no such
@@ -2208,7 +2210,7 @@ final class Terms {
             case AtomKnowledge.Computation.Derived(Derivation recipe) ->
                     b instanceof AtomKnowledge.Computation.Derived it
                             && sameDerivation(recipe, it.recipe());
-            case AtomKnowledge.Computation.Reduction(InductiveBounds.Walk walk) ->
+            case AtomKnowledge.Computation.Reduction(InductiveBounds.Walk walk, FactSubject _) ->
                     b instanceof AtomKnowledge.Computation.Reduction it && walk.equals(it.walk());
         };
     }
@@ -2391,20 +2393,31 @@ final class Terms {
      * no value this names.
      *
      * <p>A count of the container's elements, so never below nought and never above how many it
-     * holds.
+     * holds. Where the closure answers the denial of another's, it is how many there are less how
+     * many the other holds of, so that asking of either is asking of one number.
      */
-    FactSubject howManyMeetAtomFor(Core container, Core closure, AnswerAspect aspect,
-                                   Denotations at) {
+    LinearForm<FactSubject> howManyMeetFor(Core container, Core closure, AnswerAspect aspect,
+                                           Denotations at) {
         Term counted = bodyKey(container, at);
         Term by = closure == null ? null : bodyKey(closure, at);
         if (counted == null || (closure != null && by == null)) {
             return null;
         }
-        FactSubject atom = named(interned.howManyMeet(counted, by, aspect), Carrier.WHOLE);
-        if (atom != null && firstFiledFrom(atom, readOff(container, closure, at))) {
+        Term denied = by == null || aspect != AnswerAspect.TRUTH ? null
+                : interned.closureWhoseAnswerThisDenies(by);
+        FactSubject atom = named(interned.howManyMeet(counted, denied == null ? by : denied,
+                aspect), Carrier.WHOLE);
+        if (atom == null) {
+            return null;
+        }
+        if (firstFiledFrom(atom, readOff(container, closure, at))) {
             carrying(atom, amongTheElements(atom, container, at));
         }
-        return atom;
+        if (denied == null) {
+            return LinearForm.atom(atom);
+        }
+        FactSubject all = sizeOfWhatItHolds(container, at);
+        return all == null ? null : LinearForm.atom(all).minus(LinearForm.atom(atom)).orNull();
     }
 
     /**
@@ -2456,16 +2469,17 @@ final class Terms {
         }
         FactSubject atom = named(interned.sumOfSizes(counted, by), Carrier.WHOLE);
         if (atom != null && firstFiledFrom(atom, readOff(container, closure, at))) {
-            FactSubject nonEmpty = howManyMeetAtomFor(container, closure, AnswerAspect.EMPTINESS,
-                    at);
-            if (nonEmpty == null) {
+            LinearForm<FactSubject> nonEmpty = howManyMeetFor(container, closure,
+                    AnswerAspect.EMPTINESS, at);
+            LinearForm<FactSubject> over = nonEmpty == null ? null
+                    : LinearForm.atom(atom).minus(nonEmpty).orNull();
+            if (over == null) {
                 carrying(atom, List.of(new NumericConstraint(LinearForm.atom(atom), Rel.GE)));
             } else {
-                carrying(atom, List.of(new NumericConstraint(
-                        LinearForm.difference(atom, nonEmpty), Rel.GE)));
+                carrying(atom, List.of(new NumericConstraint(over, Rel.GE)));
                 computedBy(atom, new AtomKnowledge.Computation.Derived(
                         new Derivation.GuaranteedWhere(List.of(new ConditionalConstraint(
-                                new NumericConstraint(LinearForm.atom(nonEmpty), Rel.LE),
+                                new NumericConstraint(nonEmpty, Rel.LE),
                                 new NumericConstraint(LinearForm.atom(atom), Rel.LE))))));
             }
         }
@@ -3658,8 +3672,13 @@ final class Terms {
     }
 
     /** The term a binary that placed no comparison is: the operator it was written with, over the
-     * terms its two operands are. */
+     * terms its two operands are — except a join, which is the call of the operation it is
+     * ({@link AnOperationApplied}), so that {@code a ++ b} and {@code List.append(a, b)} are one
+     * term and what either is, is said of both. */
     private Term operatorTerm(Core.Binary b, List<Term> sides) {
+        if (b.op() == BinOp.CONCAT && AnOperationApplied.of(b) instanceof AnOperationApplied joined) {
+            return interned.called(joined.operation(), sides);
+        }
         return interned.operator(b.op(), sides.get(0), sides.get(1));
     }
 

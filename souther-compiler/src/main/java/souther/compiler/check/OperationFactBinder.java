@@ -561,6 +561,15 @@ final class OperationFactBinder {
                                 new ArgumentRef.TheContainer(), TypeRequirement.SIZED,
                                 "what the result is no smaller than"));
             }
+            // And what is no larger than one is the same comparison, the other way.
+            case OperationFact.ResultIsNoLargerThan bounded -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.SIZED,
+                        "what is no larger than what it was made of");
+                yield new BoundOperationFact.ResultIsNoLargerThan(operation,
+                        holdToTheDeclaration(declaration, bounded.container(),
+                                new ArgumentRef.TheContainer(), TypeRequirement.SIZED,
+                                "what the result is no larger than"));
+            }
             // Pieces put end to end are a list, made of the elements the closure is handed.
             case OperationFact.AssemblesPieces assembles -> {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,

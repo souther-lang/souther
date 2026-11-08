@@ -728,6 +728,17 @@ final class Term {
     }
 
     /**
+     * Whether this is a closure of one parameter that answers what it is handed as it is. Counting
+     * what such a closure answers of each element is counting the elements, so a count that names
+     * it names the same number as one that names none.
+     */
+    boolean answersWhatItIsHanded() {
+        return shape == Shape.CLOSURE && Integer.valueOf(1).equals(of)
+                && parts.getFirst().shape == Shape.BOUND
+                && new At(0, 0).equals(parts.getFirst().of);
+    }
+
+    /**
      * What a closure of one parameter answers of what it is handed, as a form of the fields it
      * reads off it — the value itself where the fields are none — or null where this is no such
      * closure, or what it answers is no such form.
@@ -1405,8 +1416,25 @@ final class Term {
             return of(Shape.CODE_POINTS, counted, List.of(string));
         }
 
+        /** What a count over each element is over: the container, and the closure whose answer is
+         *  counted unless that answer is the element itself, which the count of no closure is. */
         private static List<Term> ofEach(Term container, Term closure) {
-            return closure == null ? List.of(container) : List.of(container, closure);
+            return closure == null || closure.answersWhatItIsHanded()
+                    ? List.of(container) : List.of(container, closure);
+        }
+
+        /**
+         * The closure whose answer {@code closure} denies, or null where it denies none.
+         *
+         * <p>A comparison is held as the statement it makes or the denial of one
+         * ({@link #comparison}), so {@code n -> n <= 2} is the denial of {@code n -> n > 2} by how
+         * it is built, and how many elements it holds of is how many there are less how many the
+         * other holds of.
+         */
+        Term closureWhoseAnswerThisDenies(Term closure) {
+            return closure.shape == Shape.CLOSURE && Integer.valueOf(1).equals(closure.of)
+                    && closure.parts.getFirst().shape == Shape.NOT
+                    ? closure(1, closure.parts.getFirst().parts.getFirst()) : null;
         }
 
         /** How many distinct terms this has been asked for — what a test measuring the sharing

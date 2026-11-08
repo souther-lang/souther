@@ -367,6 +367,21 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation's result is never larger than what {@code container} holds.
+     *
+     * <p>One fact per container it is no larger than, as {@link ResultIsNoSmallerThan} is one per
+     * container it is no smaller than: an intersection holds no more than either of the two it is
+     * the intersection of. Of the count and nothing else, for the reason that one is — which
+     * elements the answer holds is another statement.
+     */
+    record ResultIsNoLargerThan(ArgumentRef container) implements OperationFact {
+
+        public ResultIsNoLargerThan {
+            Objects.requireNonNull(container, "this one names a container");
+        }
+    }
+
+    /**
      * The operation's answer is a piece for each element of {@code source}, put end to end in the
      * order of those elements, and nothing else: the answer to {@code [x₁, …, xₙ]} is
      * {@code piece(x₁) ++ … ++ piece(xₙ)}, with {@code piece} what {@code piece} says the closure

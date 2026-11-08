@@ -30,7 +30,7 @@ import java.util.function.Function;
  *
  * <p>Some element meeting a statement is how many meet it being above nought, and how many fail it
  * is how many there are less how many meet it; so every quantifier is a count, and a count is named
- * by what it counts ({@link Terms#howManyMeetAtomFor}) wherever a law or a condition asks it. A
+ * by what it counts ({@link Terms#howManyMeetFor}) wherever a law or a condition asks it. A
  * string inside another is no number. Which strings a string may be where it holds one is what the
  * reading of a call as a set of strings answers ({@link StringPredicates}); here it is a part
  * unnamed, together with what it makes certain of the numbers: the one inside is no longer than the
@@ -565,7 +565,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
      * hold of. Otherwise how many are an argument, or have a key that is one
      * ({@link Terms#howManyAreAtomFor}); how many some element of another argument is, or whose key
      * some key of it is ({@link #heldOf}); and how many come out on a side, themselves or what a
-     * closure answers of each ({@link Terms#howManyMeetAtomFor}). Null where it states anything
+     * closure answers of each ({@link Terms#howManyMeetFor}). Null where it states anything
      * else.
      */
     private LinearForm<FactSubject> howManyMeet(LawNumber.HowManyMeet<DeclaredArgument> meet) {
@@ -585,7 +585,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                     atom(areAnArgument(meet.container(), container, one, other));
             case LawProposition.SomeElement<DeclaredArgument> _ -> heldOf(meet);
             case LawProposition.Observed<DeclaredArgument>(var of, var side) ->
-                    atom(comingOut(meet.container(), container, of, side.aspect()));
+                    comingOut(meet.container(), container, of, side.aspect());
             default -> null;
         };
     }
@@ -593,16 +593,16 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     /** How many elements of {@code container}, the argument {@code named}, come out on the holding
      *  side of {@code aspect} — each itself, or what a closure answers of each, as {@code of}
      *  says — or null where {@code of} is anything else. */
-    private FactSubject comingOut(DeclaredArgument named, Core container,
-                                  LawSubject<DeclaredArgument> of, AnswerAspect aspect) {
+    private LinearForm<FactSubject> comingOut(DeclaredArgument named, Core container,
+                                              LawSubject<DeclaredArgument> of,
+                                              AnswerAspect aspect) {
         return switch (of) {
             case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument element)
                     when element.equals(named) ->
-                    terms.howManyMeetAtomFor(container, null, aspect, at);
+                    terms.howManyMeetFor(container, null, aspect, at);
             case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument closure) -> {
                 Core given = applied.argument(closure);
-                yield given == null ? null
-                        : terms.howManyMeetAtomFor(container, given, aspect, at);
+                yield given == null ? null : terms.howManyMeetFor(container, given, aspect, at);
             }
             default -> null;
         };

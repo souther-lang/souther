@@ -618,7 +618,7 @@ final class DerivedNumericFacts {
             // this one, so putting it through here would count a value nothing computes as a recipe
             // evaluated and would say a second time what the reading was made with.
             case AtomKnowledge.Computation.None _ -> Says.NOTHING;
-            case AtomKnowledge.Computation.Reduction(InductiveBounds.Walk walk) ->
+            case AtomKnowledge.Computation.Reduction(InductiveBounds.Walk walk, FactSubject _) ->
                     reduced(atom, walk, base, terms, done.asked, deriving, copies);
             case AtomKnowledge.Computation.Derived(Derivation recipe) ->
                     recipeFacts(atom, recipe, base, terms, done, deriving, copies);

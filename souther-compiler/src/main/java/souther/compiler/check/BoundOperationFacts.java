@@ -94,6 +94,7 @@ public final class BoundOperationFacts {
     private final Map<ValueName, List<ResultBound<DeclaredArgument>>> linesOfTheOperation;
     private final Map<ValueName, List<ResultBound<DeclaredArgument>>> eachElementBounds;
     private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
+    private final Map<ValueName, List<DeclaredArgument>> noLargerThan;
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
     private final Map<BinOp, List<ValueName>> writtenAs;
     private final Map<ValueName, List<LawProposition<Slot>>> relations;
@@ -158,6 +159,8 @@ public final class BoundOperationFacts {
         // What each query over a family answers with, projected once from what was filed.
         noSmallerThan = projected(BoundOperationFact.ResultIsNoSmallerThan.class,
                 BoundOperationFact.ResultIsNoSmallerThan::container);
+        noLargerThan = projected(BoundOperationFact.ResultIsNoLargerThan.class,
+                BoundOperationFact.ResultIsNoLargerThan::container);
         bounds = projected(BoundOperationFact.BoundsItsResult.class,
                 BoundOperationFact.BoundsItsResult::bound);
         linesOfTheOperation = ofTheOperation(bounds);
@@ -874,6 +877,11 @@ public final class BoundOperationFacts {
     /** The containers {@code operation}'s result is never smaller than, in the order declared. */
     public List<DeclaredArgument> resultIsNoSmallerThan(ValueName operation) {
         return operation == null ? List.of() : noSmallerThan.getOrDefault(operation, List.of());
+    }
+
+    /** The containers {@code operation}'s result is never larger than, in the order declared. */
+    public List<DeclaredArgument> resultIsNoLargerThan(ValueName operation) {
+        return operation == null ? List.of() : noLargerThan.getOrDefault(operation, List.of());
     }
 
     /** Where {@code operation} reads the container its predicate is about, or null where it is no

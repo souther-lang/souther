@@ -358,6 +358,10 @@ public final class OperationFacts {
             about("Map", "difference", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             about("Set", "intersection", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             about("Set", "difference", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
+            // And no more than the other one holds: what is in both is counted once, and a set
+            // holds each of its elements once. Said of the set's kernel only: the map's is written
+            // in the library, and its body does not prove it.
+            about("Set", "intersection", noLargerThan(at(1))),
             // And the two that put one value in what they are handed: a set holds it once, and a
             // map holds it under the key, in place of what was there.
             about("Set", "insert", putsIn(at(0), at(1))),
@@ -1123,6 +1127,10 @@ public final class OperationFacts {
 
     private static OperationFact noSmallerThan(ArgumentRef container) {
         return new OperationFact.ResultIsNoSmallerThan(container);
+    }
+
+    private static OperationFact noLargerThan(ArgumentRef container) {
+        return new OperationFact.ResultIsNoLargerThan(container);
     }
 
     /** The answer is {@code into} with {@code value} put in. */

@@ -104,7 +104,62 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "else Digit(String.length(s) - String.length(t))", true),
             // How many some element of another set is not, as how many there are less those.
             new Row("Digit(Set.size(Set.union(a, b)) - Set.size(a))", false),
-            new Row("Digit(Set.size(a) - Set.size(Set.union(a, b)))", true));
+            new Row("Digit(Set.size(a) - Set.size(Set.union(a, b)))", true),
+            // A closure that answers the element is no closure to count by: how many different
+            // values the elements come to is one number whichever way it is asked for.
+            new Row("Digit(List.length(List.distinct(xs)) - Map.size(List.groupBy(n -> n, xs)))",
+                    false),
+            new Row("Digit(Map.size(List.groupBy(n -> n, xs)) - Set.size(Set.fromList(xs)))",
+                    false),
+            new Row("Digit(List.length(List.distinctBy(n -> n, xs)) - List.length(List.distinct(xs)))",
+                    false),
+            new Row("Digit(List.length(List.distinctBy(n -> n + 1, xs)) "
+                    + "- List.length(List.distinct(xs)))", true),
+            // A join is the append it is, however it is written.
+            new Row("Digit(List.length(xs ++ xs) - List.length(List.append(xs, xs)))", false),
+            new Row("Digit(List.length(List.append(xs, xs)) - List.length(xs ++ xs))", false),
+            new Row("Digit(List.length(xs ++ xs) - List.length(List.append(xs, xs)) - 1)", true),
+            new Row("Digit(String.length(s ++ t) - String.length(String.append(s, t)))", false),
+            new Row("Digit(String.length(s ++ t) - String.length(String.append(t, s)))", true),
+            // A closure that answers the denial of another's is how many there are less how many
+            // the other holds of.
+            new Row("if List.all(n -> n > 2, xs) then Digit(0) "
+                    + "else Digit(List.length(List.filter(n -> n <= 2, xs)) - 1)", false),
+            new Row("if List.all(n -> n > 2, xs) then Digit(0) "
+                    + "else Digit(List.length(List.filter(n -> n < 2, xs)) - 1)", true),
+            new Row("if List.any(n -> n <= 2, xs) then "
+                    + "Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) - 1) "
+                    + "else Digit(0)", false),
+            new Row("if List.any(n -> n <= 2, xs) then "
+                    + "Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) - 2) "
+                    + "else Digit(0)", true),
+            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
+                    + "+ List.length(List.filter(n -> n <= 2, xs)) - List.length(xs))", false),
+            new Row("Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n <= 2, xs)))", false),
+            new Row("Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n <= 1, xs)))", true),
+            // A walk over none answers where it started, so an answer away from there is one over
+            // something, whatever the step.
+            new Row("if List.sum(xs) >= 3 then Digit(List.length(xs) - 1) else Digit(0)", false),
+            new Row("if List.sum(xs) >= 0 then Digit(List.length(xs) - 1) else Digit(0)", true),
+            new Row("if List.sum(xs) > 0 then Digit(List.length(xs) - 2) else Digit(0)", true),
+            new Row("if List.sum(xs) > 0 then Digit(0) else Digit(List.length(xs) - 1)", true),
+            new Row("if List.fold((acc, n) -> acc + n, 5, xs) > 5 then "
+                    + "Digit(List.length(xs) - 1) else Digit(0)", false),
+            new Row("if List.fold((acc, n) -> acc + n, 5, xs) > 4 then "
+                    + "Digit(List.length(xs) - 1) else Digit(0)", true),
+            new Row("if List.sum(List.map(n -> n + 1, xs)) > 0 then "
+                    + "Digit(List.length(xs) - 1) else Digit(0)", false),
+            // An intersection holds no more than either set, and something only where both do.
+            new Row("Digit(Set.size(b) - Set.size(Set.intersection(a, b)))", false),
+            new Row("Digit(Set.size(Set.intersection(a, b)) - Set.size(b))", true),
+            new Row("if Set.size(Set.intersection(a, b)) >= 1 then Digit(Set.size(b) - 1) "
+                    + "else Digit(0)", false),
+            new Row("if Set.size(Set.intersection(a, b)) >= 1 then Digit(Set.size(b) - 2) "
+                    + "else Digit(0)", true),
+            new Row("if Set.size(Set.difference(a, b)) >= 1 then Digit(Set.size(b) - 1) "
+                    + "else Digit(0)", true));
 
     @Test
     void eachRowIsOwedWhatItsLawLeavesOpen() {
