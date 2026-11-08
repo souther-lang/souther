@@ -4,11 +4,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import souther.cli.CliProcess.Ran;
+import souther.compiler.diag.Messages;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -346,8 +348,9 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
                 "--format", "json", "--color", "always", "--lang", "ja");
 
         assertEquals(2, said.code(), said.err());
-        assertTrue(said.err().contains("`--color`"), said.err());
-        assertFalse(said.err().contains("is not read with"), said.err());
+        assertTrue(said.err().contains(
+                        Messages.get("cli.option.unread", Locale.JAPANESE, "--color", "--format json")),
+                said.err());
     }
 
     // --- the value the option does not have --------------------------------------------------------
@@ -478,7 +481,9 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
 
         assertEquals(2, said.code(), said.err());
         assertTrue(said.err().contains("`--format`"), said.err());
-        assertFalse(said.err().contains("is not read with"), said.err());
+        assertFalse(said.err().contains(
+                        Messages.get("cli.option.unread", Locale.ENGLISH, "--color", "--format json")),
+                said.err());
     }
 
     // --- the two that may not be written together -------------------------------------------------
