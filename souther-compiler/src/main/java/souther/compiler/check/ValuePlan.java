@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.types.BinOp;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -114,6 +113,6 @@ record ValuePlan(SequencedMap<String, Hir.Var.Denoting> rootDemands) {
     /** Whether what stands on the right of this is reached only for some of what reaches the
      *  left. */
     static boolean isShortCircuit(Hir.Binary b) {
-        return b.op() == BinOp.AND || b.op() == BinOp.OR;
+        return b.op().stopsWhenItsAnswerIsSettled();
     }
 }

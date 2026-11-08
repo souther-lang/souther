@@ -19,7 +19,6 @@ import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -962,24 +961,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // Inside a closure whose applications are said, what the left came to is a statement
             // about each application, so it goes onto what each is reached under and not onto the
             // way every application shares.
-            case Core.Binary both when both.op() == BinOp.AND -> {
+            case Core.Binary both when both.op().stopsWhenItsAnswerIsSettled() -> {
+                boolean runsWhenLeftIs = both.op().rightRunsWhenLeftIs();
                 walk(both.left(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
-                walk(both.right(), in, reads, applying.taking(both.left(), true, in.read()), flow,
+                walk(both.right(), in, reads,
+                        applying.taking(both.left(), runsWhenLeftIs, in.read()), flow,
                         applying.saysWhatStandsInIt() ? assumed
                                 : taking(Condition.of(both.left(), reads, symbols, in.newtypes(),
-                                        numbering), true, in.read(), assumed, in.conditions(),
-                                        numbering),
-                        live, out, forks, numbering);
-            }
-            case Core.Binary either when either.op() == BinOp.OR -> {
-                walk(either.left(), in, reads, applying, flow, assumed, live, out, forks,
-                        numbering);
-                walk(either.right(), in, reads, applying.taking(either.left(), false, in.read()),
-                        flow,
-                        applying.saysWhatStandsInIt() ? assumed
-                                : taking(Condition.of(either.left(), reads, symbols,
-                                        in.newtypes(), numbering), false, in.read(), assumed,
+                                        numbering), runsWhenLeftIs, in.read(), assumed,
                                         in.conditions(), numbering),
                         live, out, forks, numbering);
             }
@@ -1346,8 +1336,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (e == target) {
             return new Way(WhereAnApplicationIsMade.nothingAsked());
         }
-        if (e instanceof Core.Binary both
-                && (both.op() == BinOp.AND || both.op() == BinOp.OR)) {
+        if (e instanceof Core.Binary both && both.op().stopsWhenItsAnswerIsSettled()) {
             Way left = wayTo(both.left(), target, reads, in);
             if (left != null) {
                 return left;
@@ -1358,7 +1347,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
             Proposition leftAnswered =
                     in.conditions().truth(both.left(), reads, in.read()).proposition();
-            return right.past(both.op() == BinOp.AND ? leftAnswered : leftAnswered.denied());
+            return right.past(both.op().rightRunsWhenLeftIs() ? leftAnswered
+                    : leftAnswered.denied());
         }
         if (e instanceof Core.Block) {
             return holds(e, target) ? Way.NOT_READ : null;

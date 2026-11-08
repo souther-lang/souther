@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
-import souther.compiler.types.BinOp;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,7 +62,7 @@ final class ConditionSkeleton {
         switch (e) {
             // Both sides decide the fork: one of them coming out the wrong way is the whole answer,
             // and a rule about either is a rule the fork tests.
-            case Core.Binary both when both.op() == BinOp.AND || both.op() == BinOp.OR -> {
+            case Core.Binary both when both.op().joinsTwoConditions() -> {
                 cut(both.left(), names, out);
                 cut(both.right(), names, out);
             }

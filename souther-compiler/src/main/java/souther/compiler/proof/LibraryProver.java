@@ -19,6 +19,7 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
@@ -444,45 +445,24 @@ public final class LibraryProver {
      */
     public HeldOnTheWay heldOnTheWay(AskedOnTheWay asked) {
         ValueName.Stdlib.Operation operation = asked.operation();
-        LibraryTerm body = asked.body();
         Set<LibraryTerm> collections = asked.collections();
-        Set<LibraryTerm> numbers = asked.numbers();
         BigInteger least = asked.least();
         BigInteger greatest = asked.greatest();
-        BigInteger mostElements = asked.mostElements();
-        Reading reading = new Reading(library, readThrough);
         try {
-            List<Value> params = arguments(operation);
-            List<Reading.Case> cases = reading.cases(body, new Reading.Frame(params, Map.of()));
-            Map<LibraryTerm, List<Reading.Case>> outside = new IdentityHashMap<>(reading.met());
-            Set<Value.Made> walks = new LinkedHashSet<>();
-            cases.forEach(each -> walksIn(each.is(), walks));
-            if (walks.size() > 1) {
+            Ways ways = ways(operation, asked.body(), asked.mostElements());
+            if (ways == null) {
                 return new HeldOnTheWay.NotShown();
             }
-            List<Integer> handed = new ArrayList<>();
-            List<Type> takes = library.takes(operation);
-            for (int at = 0; at < takes.size(); at++) {
-                if (aCollection(takes.get(at))) {
-                    handed.add(at);
-                }
-            }
-            List<LawProposition<Value>> fitting = new ArrayList<>();
-            for (int at : handed) {
-                fitting.add(Props.compared(reading.size(params.get(at)), Rel.LE,
-                        LinearForm.constant(ExactRatio.of(mostElements))));
-            }
-            Walked walked = walks.isEmpty() ? null
-                    : walked(operation, reading, params, walks.iterator().next(), mostElements);
-            Map<LibraryTerm, List<Reading.Case>> inside =
-                    walked == null ? Map.of() : walked.met();
-            List<Universal> ended = walked == null ? List.of()
-                    : walked.induction().whereItEnds();
-            Function<Value, Granularity> spaced = spacing(operation, Map.of());
+            Reading reading = ways.reading;
+            List<Value> params = ways.params;
+            Walked walked = ways.walked;
+            List<Integer> handed = ways.handed;
+            List<LawProposition<Value>> fitting = ways.fitting;
+            List<Universal> ended = ways.ended;
+            Function<Value, Granularity> spaced = ways.spaced;
             // Every number in range, wherever it is met.
-            for (LibraryTerm site : numbers) {
-                boolean atAStep = !outside.containsKey(site);
-                List<Reading.Case> met = atAStep ? inside.get(site) : outside.get(site);
+            for (LibraryTerm site : asked.numbers()) {
+                List<Reading.Case> met = ways.met(site);
                 if (met == null) {
                     return new HeldOnTheWay.NotShown();
                 }
@@ -493,8 +473,7 @@ public final class LibraryProver {
                                     LinearForm.constant(ExactRatio.of(least))),
                             Props.compared(number, Rel.LE,
                                     LinearForm.constant(ExactRatio.of(greatest))));
-                    if (!(atAStep ? walked.follows(each, fitting, goal)
-                            : follows(reading, given(each, fitting), ended, goal, spaced))) {
+                    if (!ways.follows(site, each, goal)) {
                         return new HeldOnTheWay.NotShown();
                     }
                 }
@@ -506,8 +485,8 @@ public final class LibraryProver {
             List<List<LinearForm<LawNumber<Value>>>> owed = new ArrayList<>();
             boolean withinWhatItIsHanded = true;
             for (LibraryTerm site : collections) {
-                boolean atAStep = !outside.containsKey(site);
-                List<Reading.Case> met = atAStep ? inside.get(site) : outside.get(site);
+                boolean atAStep = ways.atAStep(site);
+                List<Reading.Case> met = ways.met(site);
                 if (met == null) {
                     return new HeldOnTheWay.NotShown();
                 }
@@ -551,6 +530,135 @@ public final class LibraryProver {
         } catch (Reading.Stopped stopped) {
             return new HeldOnTheWay.NotShown();
         }
+    }
+
+    /**
+     * Which of the sites {@code asked} names an operation's body reaches on no way at all, and at
+     * which of its divisions the divisor is never nought where it is reached
+     * ({@link AskedWhereReached}).
+     *
+     * <p>Each site is asked of every case the reading of the body meets it in, under the way the
+     * body went to reach it, as {@link #heldOnTheWay} asks: one is reached on no way where the
+     * way to each of them is never taken. A site met nowhere — under a closure the body never
+     * applies — is reached as far as this says, and a body this reading stops in, or one walking
+     * more than once, is said of nothing.
+     */
+    public WhereReached whereReached(AskedWhereReached asked) {
+        try {
+            Ways ways = ways(asked.operation(), asked.body(), asked.mostElements());
+            if (ways == null) {
+                return WhereReached.NOTHING_SHOWN;
+            }
+            Set<LibraryTerm> onNoWay = Collections.newSetFromMap(new IdentityHashMap<>());
+            Set<LibraryTerm> neverByNought = Collections.newSetFromMap(new IdentityHashMap<>());
+            LinearForm<LawNumber<Value>> nought = LinearForm.constant(ExactRatio.of(BigInteger.ZERO));
+            for (LibraryTerm site : asked.sites()) {
+                List<Reading.Case> met = ways.met(site);
+                if (met == null) {
+                    continue;
+                }
+                if (met.stream().allMatch(each -> ways.follows(site, each, Props.always(false)))) {
+                    onNoWay.add(site);
+                } else if (asked.divisions().contains(site) && met.stream().allMatch(each -> {
+                    Value divisor = divisorOf(each.is());
+                    return divisor != null && ways.follows(site, each,
+                            Props.compared(ways.reading.number(divisor), Rel.NE, nought));
+                })) {
+                    neverByNought.add(site);
+                }
+            }
+            return new WhereReached(onNoWay, neverByNought);
+        } catch (Reading.Stopped stopped) {
+            return WhereReached.NOTHING_SHOWN;
+        }
+    }
+
+    /** What {@code quotient} is divided by, where it is a quotient, or null. */
+    private static Value divisorOf(Value quotient) {
+        return quotient instanceof Value.Arithmetic(BinOp op, var _, Value divisor)
+                && op == BinOp.DIV ? divisor : null;
+    }
+
+    /**
+     * An operation's body read for what holds on the way to each part of it: the cases a reading
+     * of it meets each part in outside the walk it makes, and, where it makes one, at a step of
+     * it, read by induction ({@link Induction}) — where every collection it is handed holds no
+     * more than the elements asked.
+     */
+    private final class Ways {
+        private final Reading reading;
+        private final List<Value> params;
+        private final Map<LibraryTerm, List<Reading.Case>> outside;
+        private final Walked walked;
+        private final Map<LibraryTerm, List<Reading.Case>> inside;
+        private final List<Universal> ended;
+        private final Function<Value, Granularity> spaced;
+        /** The arguments by place that are collections. */
+        private final List<Integer> handed;
+        private final List<LawProposition<Value>> fitting;
+
+        private Ways(Reading reading, List<Value> params,
+                     Map<LibraryTerm, List<Reading.Case>> outside, Walked walked,
+                     Function<Value, Granularity> spaced, List<Integer> handed,
+                     List<LawProposition<Value>> fitting) {
+            this.reading = reading;
+            this.params = params;
+            this.outside = outside;
+            this.walked = walked;
+            this.inside = walked == null ? Map.of() : walked.met();
+            this.ended = walked == null ? List.of() : walked.induction().whereItEnds();
+            this.spaced = spaced;
+            this.handed = handed;
+            this.fitting = fitting;
+        }
+
+        /** Whether {@code site} is met at a step of the walk and not outside it. */
+        boolean atAStep(LibraryTerm site) {
+            return !outside.containsKey(site);
+        }
+
+        /** Every case {@code site} is met in, or null where it is met nowhere. */
+        List<Reading.Case> met(LibraryTerm site) {
+            return atAStep(site) ? inside.get(site) : outside.get(site);
+        }
+
+        /** Whether {@code goal} follows where {@code site} is met as {@code each}. */
+        boolean follows(LibraryTerm site, Reading.Case each, LawProposition<Value> goal) {
+            return atAStep(site) ? walked.follows(each, fitting, goal)
+                    : LibraryProver.this.follows(reading, given(each, fitting), ended, goal,
+                            spaced);
+        }
+    }
+
+    /** {@code body}, {@code operation}'s, read for what holds on the way to each part of it, or
+     *  null where it walks more than once. */
+    private Ways ways(ValueName.Stdlib.Operation operation, LibraryTerm body,
+                      BigInteger mostElements) {
+        Reading reading = new Reading(library, readThrough);
+        List<Value> params = arguments(operation);
+        List<Reading.Case> cases = reading.cases(body, new Reading.Frame(params, Map.of()));
+        Map<LibraryTerm, List<Reading.Case>> outside = new IdentityHashMap<>(reading.met());
+        Set<Value.Made> walks = new LinkedHashSet<>();
+        cases.forEach(each -> walksIn(each.is(), walks));
+        if (walks.size() > 1) {
+            return null;
+        }
+        List<Integer> handed = new ArrayList<>();
+        List<Type> takes = library.takes(operation);
+        for (int at = 0; at < takes.size(); at++) {
+            if (aCollection(takes.get(at))) {
+                handed.add(at);
+            }
+        }
+        List<LawProposition<Value>> fitting = new ArrayList<>();
+        for (int at : handed) {
+            fitting.add(Props.compared(reading.size(params.get(at)), Rel.LE,
+                    LinearForm.constant(ExactRatio.of(mostElements))));
+        }
+        Walked walked = walks.isEmpty() ? null
+                : walked(operation, reading, params, walks.iterator().next(), mostElements);
+        return new Ways(reading, params, outside, walked, spacing(operation, Map.of()), handed,
+                fitting);
     }
 
     /** {@code also}, and that the way to {@code met} was taken. */

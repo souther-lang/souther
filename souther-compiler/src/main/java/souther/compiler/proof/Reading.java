@@ -99,7 +99,8 @@ final class Reading {
      *  thing are two places a run works it out. */
     private final Map<LibraryTerm, List<Case>> met = new IdentityHashMap<>();
     /** What holds on the way to the part of a body being read: a fork's condition inside its arm,
-     *  what an option is inside the arm that reads it. */
+     *  what an option is inside the arm that reads it, what the left of an operator that stops
+     *  early came to inside its right. */
     private final List<LawProposition<Value>> way = new ArrayList<>();
 
     Reading(Library library, Set<ValueName.Stdlib.Operation> readThrough) {
@@ -255,12 +256,25 @@ final class Reading {
         return new Value.Arithmetic(BinOp.SUB, new Value.Whole(0), value);
     }
 
-    /** Every combination of the cases of the two operands, each put to {@code op}. */
+    /**
+     * Every combination of the cases of the two operands, each put to {@code op}.
+     *
+     * <p>The right is read where the operator runs it ({@link BinOp#rightRunsWhenLeftIs}): on
+     * every run, or only where the left came out the way that lets it run, which is what holds on
+     * the way to what the right works out. What the two come to together is the same either way.
+     */
     private List<Case> operated(BinOp op, LibraryTerm left, LibraryTerm right, Frame frame) {
         List<Case> out = new ArrayList<>();
-        List<Case> rights = cases(right, frame);
+        Boolean runsWhenLeftIs = op.rightRunsWhenLeftIs();
+        List<Case> rights = runsWhenLeftIs == null ? cases(right, frame) : null;
         for (Case one : cases(left, frame)) {
-            for (Case other : rights) {
+            List<Case> others = rights;
+            if (runsWhenLeftIs != null) {
+                LawProposition<Value> holds = side(one.is(), AnswerAspect.TRUTH);
+                others = reachedWhere(Props.both(one.when(),
+                        runsWhenLeftIs ? holds : holds.denied()), right, frame);
+            }
+            for (Case other : others) {
                 out.add(new Case(Props.both(one.when(), other.when()),
                         operated(op, one.is(), other.is())));
             }

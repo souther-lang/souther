@@ -75,11 +75,11 @@ final class ConstantAlgebra {
      * the other operand is read at all.
      */
     static Optional<Object> settledByTheLeft(BinOp op, Object left) {
-        if (!(left instanceof Boolean settled)) {
+        Boolean runsWhenLeftIs = op.rightRunsWhenLeftIs();
+        if (!(left instanceof Boolean settled) || runsWhenLeftIs == null) {
             return Optional.empty();
         }
-        return (op == BinOp.AND && !settled) || (op == BinOp.OR && settled)
-                ? Optional.of(settled) : Optional.empty();
+        return settled != runsWhenLeftIs ? Optional.of(settled) : Optional.empty();
     }
 
     /** What {@code op} makes of two constants, or empty where these two do not answer it. */

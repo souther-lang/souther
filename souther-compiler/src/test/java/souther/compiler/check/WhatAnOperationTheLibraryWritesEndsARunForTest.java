@@ -59,14 +59,51 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
                 LibraryEndings.of(rewritten).of(IS_EMPTY));
     }
 
-    /** A quotient builds nothing, so what it ends a run for is said whatever its operands are. */
+    /** A quotient builds nothing, and ends a run for a divisor of nought only where its divisor
+     *  may be nought where it is worked out. */
     @Test
     void aQuotientEndsARunForWhatItsSitesDo() {
-        Stdlib rewritten = rewritten(IS_EMPTY_BODY, "List.length(xs) / 1 >= 0");
-
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+                endingsOfIsEmptyAs("List.length(xs) / 1 >= 0"));
         assertEquals(new Endings.Known(AbortSet.of(AbortKind.DIVISION_BY_ZERO,
                         AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
-                LibraryEndings.of(rewritten).of(IS_EMPTY));
+                endingsOfIsEmptyAs("1 / List.length(xs) >= 0"));
+    }
+
+    /**
+     * A site is asked where the body reaches it: the right of {@code &&} only past a left that
+     * held, the right of {@code ||} only past one that did not, an arm only where the fork takes
+     * it. One reached on no way ends nothing; a quotient reached only where its divisor is not
+     * nought ends nothing for it, and a whole number reached only where it stays inside an
+     * {@code Int} nothing for passing it. Each is beside the same site reached where what it ends
+     * a run for may happen.
+     */
+    @Test
+    void aSiteEndsARunOnlyWhereTheBodyReachesIt() {
+        Endings quotient = endingsOfIsEmptyAs("1 / List.length(xs) >= 0");
+        Endings passing = new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE));
+        for (String never : new String[] {"false && 1 / List.length(xs) >= 0",
+                "true || 1 / List.length(xs) >= 0"}) {
+            assertEquals(NONE, endingsOfIsEmptyAs(never), never);
+        }
+        for (String spared : new String[] {"List.length(xs) > 0 && 1 / List.length(xs) >= 0",
+                "List.length(xs) == 0 || 1 / List.length(xs) >= 0",
+                "if List.length(xs) == 0 then true else 1 / List.length(xs) >= 0"}) {
+            assertEquals(passing, endingsOfIsEmptyAs(spared), spared);
+        }
+        for (String reached : new String[] {"List.length(xs) == 0 && 1 / List.length(xs) >= 0",
+                "List.length(xs) > 0 || 1 / List.length(xs) >= 0",
+                "if List.length(xs) > 0 then true else 1 / List.length(xs) >= 0"}) {
+            assertEquals(quotient, endingsOfIsEmptyAs(reached), reached);
+        }
+        assertEquals(NONE, endingsOfIsEmptyAs(
+                "List.length(xs) < 10 && List.length(xs) + 9223372036854775790 > 0"));
+        assertEquals(passing, endingsOfIsEmptyAs(
+                "List.length(xs) > 10 && List.length(xs) + 9223372036854775790 > 0"));
+    }
+
+    private static Endings endingsOfIsEmptyAs(String body) {
+        return LibraryEndings.of(rewritten(IS_EMPTY_BODY, body)).of(IS_EMPTY);
     }
 
     /** A kernel's is what its contract says, and not read again here. */

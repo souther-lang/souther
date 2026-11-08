@@ -11,11 +11,13 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.proof.AskedOnTheWay;
+import souther.compiler.proof.AskedWhereReached;
 import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.HeldOnTheWay;
 import souther.compiler.proof.LibraryProver;
 import souther.compiler.proof.LibraryTerm;
 import souther.compiler.proof.LibraryTerms;
+import souther.compiler.proof.WhereReached;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.PieceOfAnElement;
@@ -28,6 +30,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -51,7 +54,11 @@ import java.util.function.Supplier;
  * builds holds too much, or where the whole number it works out passes an {@code Int}, ends none
  * where the proofs show it holds no more than something the operation is handed, or lies inside
  * the type, wherever it is reached ({@link LibraryProver#heldOnTheWay}); and the operation answers
- * where what those sites hold fits where that is all they are shown to hold.
+ * where what those sites hold fits where that is all they are shown to hold. A site is asked
+ * where the body reaches it, as the proofs read the way there — a fork's condition, an option
+ * present or not, the left of {@code &&} and {@code ||}: one reached on no way ends none, and a
+ * division whose divisor is never nought where it is reached ends none for that
+ * ({@link LibraryProver#whereReached}).
  *
  * <p>Apart from the functions handed: a function the body applies that is no operation of the
  * library is the caller's to read where it is handed, and one the body builds is read where it is
@@ -251,6 +258,7 @@ final class LibraryEndings {
             LibraryTerm body = LibraryTerms.of(library, library.helpers().get(operation));
             OfTheBody read = new OfTheBody(prover.typesOf(operation, body));
             read.visit(body);
+            read.whereReached(operation, body);
             if (read.all.endsNone()) {
                 return new Read(NONE, new GetsPast.Always());
             }
@@ -305,6 +313,11 @@ final class LibraryEndings {
             /** What a site holds at most by its own owner's word, over the operation's
              *  parameters, where that is a number of them. */
             private final List<LinearForm<LawNumber<Integer>>> bounds = new ArrayList<>();
+            /** Every site that may end a run, with what it ends one for of itself. */
+            private final Map<LibraryTerm, Endings> ending = new IdentityHashMap<>();
+            /** The sites that divide, which end a run for a divisor of nought. */
+            private final Set<LibraryTerm> divisions =
+                    Collections.newSetFromMap(new IdentityHashMap<>());
             private Endings all = NONE;
             private Endings apart = NONE;
 
@@ -314,11 +327,40 @@ final class LibraryEndings {
 
             void visit(LibraryTerm term) {
                 Endings itself = itself(term);
-                all = all.and(itself);
-                if (!collections.contains(term) && !numbers.contains(term)) {
-                    apart = apart.and(itself);
+                if (!itself.endsNone()) {
+                    ending.put(term, itself);
                 }
                 LibraryTerm.forEachPart(term, this::visit);
+            }
+
+            /**
+             * What the sites end a run for where the body reaches them
+             * ({@link LibraryProver#whereReached}): one it reaches on no way ends none, and a
+             * division whose divisor is never nought where it is reached ends none for that.
+             */
+            void whereReached(ValueName.Stdlib.Operation operation, LibraryTerm body) {
+                WhereReached reached = ending.isEmpty() ? WhereReached.NOTHING_SHOWN
+                        : prover.whereReached(new AskedWhereReached(operation, body,
+                                ending.keySet(), divisions, GetsPast.MOST_ELEMENTS));
+                collections.removeAll(reached.onNoWay());
+                numbers.removeAll(reached.onNoWay());
+                ending.forEach((site, ends) -> {
+                    if (reached.onNoWay().contains(site)) {
+                        return;
+                    }
+                    Endings left = ends;
+                    if (reached.neverByNought().contains(site)
+                            && ends instanceof Endings.Known(AbortSet kinds)) {
+                        Set<AbortKind> rest = EnumSet.noneOf(AbortKind.class);
+                        rest.addAll(kinds.kinds());
+                        rest.remove(AbortKind.DIVISION_BY_ZERO);
+                        left = new Endings.Known(AbortSet.copyOf(rest));
+                    }
+                    all = all.and(left);
+                    if (!collections.contains(site) && !numbers.contains(site)) {
+                        apart = apart.and(left);
+                    }
+                });
             }
 
             /**
@@ -386,6 +428,9 @@ final class LibraryEndings {
                     numbers.add(term);
                 }
                 AbortSet sites = AbortSites.ofAnOperatorAnswering(op, answer);
+                if (sites.contains(AbortKind.DIVISION_BY_ZERO)) {
+                    divisions.add(term);
+                }
                 return sites.contains(AbortKind.INVARIANT_NOT_HELD)
                         ? NOT_KNOWN : new Endings.Known(sites);
             }

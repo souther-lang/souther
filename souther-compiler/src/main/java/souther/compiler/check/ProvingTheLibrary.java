@@ -6,6 +6,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.proof.AppliedClosures;
 import souther.compiler.proof.AskedOnTheWay;
+import souther.compiler.proof.AskedWhereReached;
 import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.HeldOnTheWay;
 import souther.compiler.proof.Lemma;
@@ -18,6 +19,7 @@ import souther.compiler.proof.Unproved;
 import souther.compiler.proof.WalksFromASeed;
 import souther.compiler.proof.WhatAStatementSurvives;
 import souther.compiler.proof.WhatItAccumulates;
+import souther.compiler.proof.WhereReached;
 import souther.compiler.proof.WhereTheElementsCameFrom;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ArgumentsStand;
@@ -132,6 +134,11 @@ final class ProvingTheLibrary implements LibraryProofs {
     @Override
     public HeldOnTheWay heldOnTheWay(AskedOnTheWay asked) {
         return prover.heldOnTheWay(asked);
+    }
+
+    @Override
+    public WhereReached whereReached(AskedWhereReached asked) {
+        return prover.whereReached(asked);
     }
 
     /** The operations of {@code stdlib} a proof reads the body of where it is called: the walks it

@@ -686,6 +686,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " operator it is"),
             new Held("souther.compiler.proof.LibraryProver.walksIn",
                     "the same, looking for a walk among the operands"),
+            new Held("souther.compiler.proof.LibraryProver.divisorOf",
+                    "takes the divisor of a quotient a library body computes, to ask whether it"
+                            + " is ever nought where the quotient is worked out"),
             new Held("souther.compiler.proof.Substituted.value",
                     "puts one value in place of another in both operands of a number a body"
                             + " computes, keeping the operator it was written with"),
@@ -718,9 +721,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "names the sum, the difference and the product a decimal operation of the"
                             + " library computes, which the fold gives the arithmetic the"
                             + " operators have"),
-            new Held("souther.compiler.check.WhatAClauseNeeds.work",
-                    "names the conjunction and the disjunction, which are the two forms that carry"
-                            + " a false part on to the whole clause; any other operator says"
+            new Held("souther.compiler.check.WhatAClauseNeeds.workJoined",
+                    "asks what an operator joining two conditions joins them by, which is how a"
+                            + " false part carries on to the whole clause; any other operator says"
                             + " nothing of the lookup or of the elements being apart"),
             new Held("souther.compiler.coverage.DecisionSources.Rules.isTheirVerdict",
                     "names the conjunction and the disjunction, the two forms that join the"

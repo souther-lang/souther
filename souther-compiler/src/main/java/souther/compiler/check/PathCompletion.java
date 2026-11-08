@@ -405,7 +405,7 @@ final class PathCompletion {
         Core bare = Core.withoutStanding(e);
         Known past = k;
         switch (bare) {
-            case Core.Binary binary when binary.op() == BinOp.AND || binary.op() == BinOp.OR -> {
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
                 // The left is worked out first, and the right only on the runs the left lets
                 // through.
                 past = workedOut(binary.left(), past, at, asked, read);

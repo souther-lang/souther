@@ -56,6 +56,11 @@ class AnOperatorIsAskedWhatItComposesInOnePlaceTest {
                     "the one reading of what a condition states, which joins the propositions the"
                             + " two halves state the way the connective composes them"),
 
+            new Licence("souther.compiler.check.WhatAClauseNeeds.workJoined", 1,
+                    "whether a clause is false where one part of it is: the one place that walk"
+                            + " meets a connective, and what it composes is how the false part"
+                            + " carries on to the whole"),
+
             new Licence("souther.compiler.check.ClauseHelpers.shaped", 1,
                     "the shape an author wrote a clause in, which is walking into what composes"
                             + " both halves. The one place an authored part is recognised: which"
