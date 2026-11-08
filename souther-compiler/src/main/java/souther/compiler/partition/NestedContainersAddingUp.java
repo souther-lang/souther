@@ -5,6 +5,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
@@ -210,8 +211,7 @@ final class NestedContainersAddingUp {
             return new TermRealizations.Realization.Stopped(met);
         }
         return new TermRealizations.Realization.Unexhausted(met,
-                "no grouping of the leaves that this writes met the counts of every container on"
-                        + " the way to `" + run + "`");
+                new SearchMessage.NoGroupingOfTheLeavesMetTheCounts(String.valueOf(run)));
     }
 
     /**
@@ -287,8 +287,7 @@ final class NestedContainersAddingUp {
             return new TermRealizations.Realization.Stopped(met);
         }
         return new TermRealizations.Realization.Unexhausted(met,
-                "no grouping of the elements that this writes met the counts of every container"
-                        + " on the way to `" + run + "`");
+                new SearchMessage.NoGroupingOfTheElementsMetTheCounts(String.valueOf(run)));
     }
 
     /**
@@ -375,8 +374,7 @@ final class NestedContainersAddingUp {
         return new TermRealizations.Realization.Unexhausted(
                 met.nothing() ? CompositionShortfall.writing(
                         Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)) : met,
-                "no grouping of the leaves that this writes met the counts of every container on"
-                        + " the way to `" + run + "`");
+                new SearchMessage.NoGroupingOfTheLeavesMetTheCounts(String.valueOf(run)));
     }
 
     /**
@@ -426,8 +424,8 @@ final class NestedContainersAddingUp {
                     return refusing(new TermRealizations.Realization.Unexhausted(
                             CompositionShortfall.writing(Set.of(CompositionRepertoire
                                     .VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
-                            "`" + asked + "` is asked for a value where an element holds the"
-                                    + " containers the total is spread over"));
+                            new SearchMessage.AskedForAValueWhereAnElementHoldsTheContainers(
+                                    String.valueOf(asked))));
                 }
             }
             DemandsInside asked = at == 0 ? inside : DemandsInside.NOTHING;
@@ -453,8 +451,8 @@ final class NestedContainersAddingUp {
                     return refusing(new TermRealizations.Realization.Unexhausted(
                             CompositionShortfall.writing(Set.of(
                                     CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)),
-                            "nothing here reads the way from `" + here + "` to `"
-                                    + chain.get(at + 1) + "`"));
+                            new SearchMessage.NothingReadsTheWayFrom(String.valueOf(here),
+                                    String.valueOf(chain.get(at + 1)))));
                 }
             }
         }

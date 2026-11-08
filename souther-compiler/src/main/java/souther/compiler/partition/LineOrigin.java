@@ -9,6 +9,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Endpoint;
@@ -582,6 +583,11 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
      * has no name, what a reader is pointed at is worked out when a sentence is written, from the
      * question the handle names ({@link souther.compiler.check.RuleReportAnchor}).
      */
+    default SearchMessage toldWithoutAPlace() {
+        return authoredLine().toldWithoutAPlace();
+    }
+
+    // BRIDGE-1464: callers move to toldWithoutAPlace
     default String saidWithoutAPlace() {
         return authoredLine().saidWithoutAPlace();
     }

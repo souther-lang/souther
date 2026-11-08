@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.inputs.TermPath;
 
 import java.util.LinkedHashMap;
@@ -82,31 +83,31 @@ final class LocationWrites {
              * things, which is what a reader would go looking for at the wrong place. And what each
              * was asked for is said as what it was: a count is no value.
              */
-            String said() {
+            SearchMessage said() {
                 if (asked.what() == Asked.A_VALUE && already.what() == Asked.A_VALUE) {
                     if (asked.at().equals(already.at())) {
-                        return "`" + asked.at() + "` would have to hold two values at once";
+                        return new SearchMessage.WouldHaveToHoldTwoValuesAtOnce(
+                                String.valueOf(asked.at()));
                     }
                     boolean askedInside = asked.at().isAtOrUnder(already.at());
                     TermPath inner = askedInside ? asked.at() : already.at();
                     TermPath outer = askedInside ? already.at() : asked.at();
-                    return "`" + inner + "` is inside `" + outer + "`, and each is asked for a"
-                            + " value of its own";
+                    return new SearchMessage.InsideAndEachAskedForAValue(String.valueOf(inner),
+                            String.valueOf(outer));
                 }
                 if (asked.what() == Asked.HOW_MANY_IT_HOLDS
                         && already.what() == Asked.HOW_MANY_IT_HOLDS) {
-                    return "`" + asked.at() + "` is asked to hold two numbers of elements, and no"
-                            + " number is both";
+                    return new SearchMessage.AskedToHoldTwoNumbersOfElements(
+                            String.valueOf(asked.at()));
                 }
                 TermPath counted = asked.what() == Asked.HOW_MANY_IT_HOLDS ? asked.at()
                         : already.at();
                 TermPath valued = asked.what() == Asked.A_VALUE ? asked.at() : already.at();
                 if (counted.equals(valued)) {
-                    return "`" + counted + "` is asked for a value and for how many elements it"
-                            + " holds, and the value already says how many";
+                    return new SearchMessage.AskedForAValueAndHowMany(String.valueOf(counted));
                 }
-                return "`" + counted + "` is inside `" + valued + "`, and the value asked at `"
-                        + valued + "` already says how many elements `" + counted + "` holds";
+                return new SearchMessage.TheValueAlreadySaysHowMany(String.valueOf(counted),
+                        String.valueOf(valued));
             }
         }
 

@@ -3,9 +3,12 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.inputs.TermPath;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -76,10 +79,10 @@ class AWriteInsideAnotherIsOneLocationTest {
     void aConflictOfOnePlaceInsideAnotherNamesBothWhicheverCameFirst() {
         String inside = "`lines[*].amount` is inside `lines`, and each is asked for a value of its"
                 + " own";
-        assertEquals(inside, conflict(value(AN_AMOUNT), value(LINES)).said());
-        assertEquals(inside, conflict(value(LINES), value(AN_AMOUNT)).said());
+        assertEquals(inside, english(conflict(value(AN_AMOUNT), value(LINES)).said()));
+        assertEquals(inside, english(conflict(value(LINES), value(AN_AMOUNT)).said()));
         assertEquals("`lines` would have to hold two values at once",
-                conflict(value(LINES), value(LINES)).said());
+                english(conflict(value(LINES), value(LINES)).said()));
     }
 
     @Test
@@ -115,7 +118,7 @@ class AWriteInsideAnotherIsOneLocationTest {
         LocationWrites.Written refused = writes.size(LINES, THREE);
         assertEquals(conflict(howMany(LINES), howMany(LINES)), refused);
         assertEquals("`lines` is asked to hold two numbers of elements, and no number is both",
-                ((LocationWrites.Written.Conflicting) refused).said());
+                english(((LocationWrites.Written.Conflicting) refused).said()));
     }
 
     /**
@@ -134,8 +137,8 @@ class AWriteInsideAnotherIsOneLocationTest {
         assertEquals(conflict(howMany(LINES), value(LINES)), sized);
         String said = "`lines` is asked for a value and for how many elements it holds, and the"
                 + " value already says how many";
-        assertEquals(said, ((LocationWrites.Written.Conflicting) written).said());
-        assertEquals(said, ((LocationWrites.Written.Conflicting) sized).said());
+        assertEquals(said, english(((LocationWrites.Written.Conflicting) written).said()));
+        assertEquals(said, english(((LocationWrites.Written.Conflicting) sized).said()));
     }
 
     /** A count of a container inside a value written whole names both and what each was asked. */
@@ -147,7 +150,12 @@ class AWriteInsideAnotherIsOneLocationTest {
         assertEquals(conflict(howMany(HELD), value(LINES)), refused);
         assertEquals("`lines[*].parts` is inside `lines`, and the value asked at `lines` already"
                         + " says how many elements `lines[*].parts` holds",
-                ((LocationWrites.Written.Conflicting) refused).said());
+                english(((LocationWrites.Written.Conflicting) refused).said()));
+    }
+
+    /** What a conflict says, in the words an English reader is shown. */
+    private static String english(Message said) {
+        return Messages.render(said, Locale.ENGLISH);
     }
 
     /** What a row can be written to hold is no conflict, and is not made one. */

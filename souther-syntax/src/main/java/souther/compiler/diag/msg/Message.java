@@ -40,5 +40,6 @@ public sealed interface Message permits ArithmeticMessage, AttemptMessage, Behav
         DataMessage, DeadBranchMessage, DeclarationMessage, ExampleMessage, GeneratedRowsMessage,
         HelperMessage, ImportMessage,
         InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage, NameMessage, ParseMessage,
-        ReasonMessage, ReportMessage, TypeMessage, UnreachableMessage, WrittenAtMessage {
+        ReasonMessage, ReportMessage, SearchMessage, TypeMessage, UnreachableMessage,
+        WrittenAtMessage {
 }

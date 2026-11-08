@@ -2,6 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.diag.Localizable;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.numeric.Count;
@@ -21,6 +24,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -306,27 +310,38 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * alone instead, every border would say a side and an order's one point outside it would be
      * given a side nobody was choosing between.
      */
+    public Message sideOf(DomainPoint at) {
+        PointRole role = roleOf(at);
+        return sideSaid(at, answers.keySet().stream()
+                .anyMatch(each -> !each.equals(at) && roleOf(each) == role));
+    }
+
+    // BRIDGE-1464: callers move to sideOf
     public String whichSide(DomainPoint point) {
-        PointRole role = roleOf(point);
-        return sideSaid(point, answers.keySet().stream()
-                .anyMatch(each -> !each.equals(point) && roleOf(each) == role));
+        return Messages.render(sideOf(point), Locale.ENGLISH);
     }
 
     /**
      * The same, of {@code point} of a line that claims {@code facts}: which side of it the point is
      * on, where another point of that line plays the same role.
      */
-    public static String whichSideOf(LineFacts facts, DomainPoint point) {
+    public static Message sideOf(LineFacts facts, DomainPoint point) {
         PointRole role = PointRole.of(point, facts.holdsAt(point));
         return sideSaid(point, pointsOf(facts).stream().anyMatch(each -> !each.equals(point)
                 && PointRole.of(each, facts.holdsAt(each)) == role));
     }
 
-    private static String sideSaid(DomainPoint point, boolean andAnother) {
+    // BRIDGE-1464: callers move to sideOf
+    public static String whichSideOf(LineFacts facts, DomainPoint point) {
+        return Messages.render(sideOf(facts, point), Locale.ENGLISH);
+    }
+
+    private static Message sideSaid(DomainPoint point, boolean andAnother) {
         if (!andAnother) {
-            return "";
+            return new SearchMessage.NothingSaid();
         }
-        return point.side() == Towards.BELOW ? " below the line" : " above the line";
+        return point.side() == Towards.BELOW ? new SearchMessage.BelowTheLine()
+                : new SearchMessage.AboveTheLine();
     }
 
     /** What this border asks of the rows at the one point playing {@code role}. */

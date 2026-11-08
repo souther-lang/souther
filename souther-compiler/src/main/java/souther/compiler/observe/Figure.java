@@ -1,5 +1,7 @@
 package souther.compiler.observe;
 
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
@@ -7,6 +9,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
@@ -49,8 +52,8 @@ public sealed interface Figure permits Figure.Budget, WorkFigure.At {
         }
 
         @Override
-        public String counts() {
-            return budget.counts();
+        public Message countsSaid() {
+            return budget.countsSaid();
         }
 
         @Override
@@ -63,7 +66,12 @@ public sealed interface Figure permits Figure.Budget, WorkFigure.At {
     String name();
 
     /** What it counts, in the words a report says it in: "how many …". */
-    String counts();
+    Message countsSaid();
+
+    // BRIDGE-1464: callers move to countsSaid
+    default String counts() {
+        return Messages.render(countsSaid(), Locale.ENGLISH);
+    }
 
     /** The figure itself as it stood on the run that reached it, in the words of what it counts. */
     String most();

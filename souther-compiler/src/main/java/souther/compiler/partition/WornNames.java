@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.TypeSymbol;
 
@@ -34,7 +35,7 @@ sealed interface WornNames {
     /** A name nothing here can write, which takes the whole value with it. */
     record Unwritable(TypeSymbol name) implements WornNames {
 
-        String why() {
+        SearchMessage why() {
             return noSpellingFor(name);
         }
     }
@@ -76,13 +77,12 @@ sealed interface WornNames {
     }
 
     /** Why nothing here can write a value of {@code name}: no spelling reaches it. */
-    static String noSpellingFor(TypeSymbol name) {
+    static SearchMessage noSpellingFor(TypeSymbol name) {
         return name instanceof TypeSymbol.AtModule at
-                ? "`" + at.module() + "` does not expose `" + at.name()
-                        + "`, so nothing here can name it"
+                ? new SearchMessage.TheModuleDoesNotExposeIt(String.valueOf(at.module()),
+                        String.valueOf(at.name()))
                 // What the language declares is kept by nobody: a declaration of this module
                 // spells it, so the language's has no name left here.
-                : "`" + name.name() + "` is declared here, so what the language declares under"
-                        + " that name has no name here";
+                : new SearchMessage.TheNameIsDeclaredHere(String.valueOf(name.name()));
     }
 }

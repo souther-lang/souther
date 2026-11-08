@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleRef;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.SearchMessage;
 
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -100,8 +103,13 @@ public record BorderObligationId(AuthoredLine line, Optional<Level> at) {
 
     /** What a report calls this line — the author's word for the rule where they wrote one and what
      *  the rule is where they did not, and never a place a body reached it at. */
+    public SearchMessage toldWithoutAPlace() {
+        return line.toldWithoutAPlace();
+    }
+
+    // BRIDGE-1464: callers move to toldWithoutAPlace
     public String saidWithoutAPlace() {
-        return line.saidWithoutAPlace();
+        return Messages.render(toldWithoutAPlace(), Locale.ENGLISH);
     }
 
     /**
@@ -115,11 +123,17 @@ public record BorderObligationId(AuthoredLine line, Optional<Level> at) {
      * line. A rule the author named is found by its name from anywhere and one debt however many
      * behaviors carry it, so the handle is the whole of it.
      */
-    public String saidAfter(String handle) {
-        return line.said(handle + switch (line.which().rule()) {
-            case RuleRef.Named _ -> "";
-            case RuleRef.Written written -> " in " + written.behavior();
+    public SearchMessage toldAfter(String handle) {
+        return line.told(switch (line.which().rule()) {
+            case RuleRef.Named _ -> new SearchMessage.TheRuleCited(handle);
+            case RuleRef.Written written ->
+                    new SearchMessage.TheRuleInTheBehavior(handle, written.behavior());
         });
+    }
+
+    // BRIDGE-1464: callers move to toldAfter
+    public String saidAfter(String handle) {
+        return Messages.render(toldAfter(handle), Locale.ENGLISH);
     }
 
     /** The declaration this line is owed to, where a declaration's clause drew it. */
