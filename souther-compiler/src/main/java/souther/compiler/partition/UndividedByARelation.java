@@ -78,6 +78,7 @@ import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
@@ -620,12 +621,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   partner can hold, and those strings: the values there some value of the
      *                   partner equals, and the rest, which no value of it does. In the order of
      *                   the relation's sides
+     * @param shownReachedAt for some of {@code mayStopBefore}, the values a row built and run was
+     *                   shown to get to the relation at ({@link ReachWitnesses}): those are
+     *                   reached, and the rest of the values there are shown neither way
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                         boolean rowsArrive, Set<Figure> stoppedAt,
                         Set<FilingCoordinate> mayStopBefore,
-                        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
+                        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered,
+                        Map<FilingCoordinate, List<String>> shownReachedAt) {
 
         WhatItLeaves {
             undivided = Set.copyOf(undivided);
@@ -635,10 +640,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // In the order the sides were said in: whoever files a reading for each numbers them
             // as it goes, and an order the keys' hashes decide numbers them differently each run.
             partnered = Collections.unmodifiableMap(new LinkedHashMap<>(partnered));
+            Map<FilingCoordinate, List<String>> shown = new LinkedHashMap<>();
+            shownReachedAt.forEach((at, values) -> shown.put(at, List.copyOf(values)));
+            shownReachedAt = Collections.unmodifiableMap(shown);
             if (!undivided.containsAll(mayStopBefore)) {
                 throw new IllegalArgumentException("a run stopping before the relation is said of"
                         + " a place the relation is shown to leave undivided");
             }
+            if (!mayStopBefore.containsAll(shownReachedAt.keySet())) {
+                throw new IllegalArgumentException("a value is shown reached by a row at a place"
+                        + " a run may stop on the way from");
+            }
+        }
+
+        WhatItLeaves(Set<FilingCoordinate> undivided,
+                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
+                     boolean rowsArrive, Set<Figure> stoppedAt,
+                     Set<FilingCoordinate> mayStopBefore,
+                     Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
+            this(undivided, settled, rowsArrive, stoppedAt, mayStopBefore, partnered, Map.of());
         }
 
         WhatItLeaves(Set<FilingCoordinate> undivided,
@@ -672,8 +692,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             stillUndivided.removeAll(parted);
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             stops.removeAll(parted);
+            Map<FilingCoordinate, List<String>> shown = new LinkedHashMap<>(shownReachedAt);
+            shown.keySet().removeAll(parted);
             return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, stops,
-                    strings);
+                    strings, shown);
         }
 
         /** What a way that no row comes along shows of {@code places}: every one of them, of the
@@ -690,9 +712,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * settling it settles it wherever a row gets there.
          */
         WhatItLeaves mayStopBefore(Set<FilingCoordinate> places) {
+            return mayStopBefore(places, Map.of());
+        }
+
+        /**
+         * The same, with the values a row was shown to get to the relation at, at some of the
+         * places it may stop before ({@code shown}): those are reached, which says nothing of the
+         * rest.
+         */
+        WhatItLeaves mayStopBefore(Set<FilingCoordinate> places,
+                                   Map<FilingCoordinate, List<String>> shown) {
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             places.stream().filter(undivided::contains).forEach(stops::add);
-            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops, partnered);
+            Map<FilingCoordinate, List<String>> reached =
+                    new LinkedHashMap<>(shownReachedAt);
+            shown.forEach((at, values) -> {
+                if (stops.contains(at)) {
+                    reached.merge(at, values, WhatItLeaves::bothShown);
+                }
+            });
+            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops, partnered,
+                    reached);
+        }
+
+        /** The values shown reached at a place along one way and along another, each once. */
+        private static List<String> bothShown(List<String> one,
+                                                     List<String> other) {
+            Set<String> both = new LinkedHashSet<>(one);
+            both.addAll(other);
+            return List.copyOf(both);
         }
 
         /** What both this and {@code other} show, for rows that may come along either: a place
@@ -719,6 +767,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             stops.addAll(other.mayStopBefore);
             stops.retainAll(both);
+            // A value a row gets to the relation at along either way is a value reached.
+            Map<FilingCoordinate, List<String>> reached =
+                    new LinkedHashMap<>(shownReachedAt);
+            other.shownReachedAt.forEach((at, values) ->
+                    reached.merge(at, values, WhatItLeaves::bothShown));
+            reached.keySet().retainAll(stops);
             // Strings a partner can hold are the classes of the position, and a position parted
             // one way along one way and another along the other is parted by neither.
             Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> alikeStrings =
@@ -729,7 +783,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     alikeStrings.put(term, strings.orAnother(theirs));
                 }
             });
-            return new WhatItLeaves(both, alike, true, stopped, stops, alikeStrings);
+            return new WhatItLeaves(both, alike, true, stopped, stops, alikeStrings, reached);
         }
     }
 
@@ -1629,7 +1683,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** The places shown undivided over what the declarations leave. */
-    Set<FilingCoordinate> undivided(InputReading read, CountWitnesses.Lookup witnesses) {
+    Set<FilingCoordinate> undivided(InputReading read, ComparisonWitnesses.AtAComparison witnesses) {
         return undividedWhereRowsArrive(read, List.of(), witnesses);
     }
 
@@ -1637,7 +1691,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  ({@link #leftWhereRowsArrive}). */
     Set<FilingCoordinate> undividedWhereRowsArrive(InputReading read,
                                                    List<Reachability.Reaching> ways,
-                                                   CountWitnesses.Lookup witnesses) {
+                                                   ComparisonWitnesses.AtAComparison witnesses) {
         return leftWhereRowsArrive(read, ways, witnesses).undivided();
     }
 
@@ -1817,7 +1871,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** What this leaves its places over what the declarations leave. */
-    WhatItLeaves left(InputReading read, CountWitnesses.Lookup witnesses) {
+    WhatItLeaves left(InputReading read, ComparisonWitnesses.AtAComparison witnesses) {
         return leftWhereRowsArrive(read, List.of(), witnesses);
     }
 
@@ -1837,7 +1891,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                  beside how many the container holds ({@link #countWithinItsContainer})
      */
     WhatItLeaves leftWhereRowsArrive(InputReading read, List<Reachability.Reaching> ways,
-                                     CountWitnesses.Lookup witnesses) {
+                                     ComparisonWitnesses.AtAComparison witnesses) {
         WhatItLeaves nothingShown = new WhatItLeaves(new LinkedHashSet<>(amongThemselves),
                 Map.of());
         SidesAsDeclared declared = sidesAsDeclared(read);
@@ -2736,7 +2790,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                    boolean heldWhole,
                                    Optional<Set<String>> declined, DemandReading.Answered past,
                                    Optional<List<TakenConstraint>> applied,
-                                   CountWitnesses.Lookup witnesses) {
+                                   ComparisonWitnesses.AtAComparison witnesses) {
         // A way stating nothing but that the rows are off the line this relation draws — the form
         // held unequal to nought, as `sign == 0` taken the other way holds
         // `Decimal.compare(a, b)` — ties no side to anything: it takes the rows on the line away,
@@ -2837,7 +2891,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         greatestOf(carriers.get(at))), out, settled);
             }
             return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written,
-                    declined);
+                    declined, witnesses);
         }
         if (kind == Kind.DIVISIBILITY) {
             boolean apart = standApart(0, 1, independent);
@@ -2847,7 +2901,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         endsOf(carriers.get(1))), out, settled);
             }
             return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written,
-                    declined);
+                    declined, witnesses);
         }
         // A string inside another parts each by the strings the other can be inside, or hold: no
         // string is shown undivided, which is a claim about every pair of values, and the strings
@@ -2862,7 +2916,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 shown = shown.partnered(partnering.strings());
                 accounted = partnering.accountedFor();
             }
-            return reachedAlong(shown, past, read, along, written, declined, accounted);
+            return reachedAlong(shown, past, read, along, written, declined, accounted,
+                    witnesses);
         }
         // Where an element stands in a walk, or how many elements meet a statement, lies beside
         // how many the container holds, and the two are asked together and not each apart.
@@ -2889,7 +2944,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             putDown(within.whole(), ofTheWhole, out, settled);
             return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written,
-                    declined);
+                    declined, witnesses);
         }
         // Each side asked once: whether another reaches it, and where it does not, which of its
         // values settle the relation.
@@ -2966,7 +3021,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             shown = shown.partnered(partnering.strings());
             accountedFor = partnering.accountedFor();
         }
-        return reachedAlong(shown, past, read, along, written, declined, accountedFor);
+        return reachedAlong(shown, past, read, along, written, declined, accountedFor,
+                witnesses);
     }
 
     /**
@@ -4125,8 +4181,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
                                       InputReading read, SearchRegion region,
-                                      List<OnAWay> conditions, Optional<Set<String>> declined) {
-        return reachedAlong(shown, past, read, region, conditions, declined, Set.of());
+                                      List<OnAWay> conditions, Optional<Set<String>> declined,
+                                      ComparisonWitnesses.AtAComparison witnesses) {
+        return reachedAlong(shown, past, read, region, conditions, declined, Set.of(), witnesses);
     }
 
     /**
@@ -4134,13 +4191,63 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the numbers the way ties them to gets the run past, or are parted with the rest left open,
      * so that a run stopped by a tie reading only such places is not one the relation is
      * claimed to be reached despite ({@link #roomOnTheWay}).
+     *
+     * <p>Where a run may stop, a row a run of which is shown to get to the relation
+     * ({@link ComparisonWitnesses.AtAComparison#reached}) shows the value it holds at a place
+     * reached, where it holds one value there, and nothing of any other value: the place is still
+     * not shown reached at every value.
      */
     private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
                                       InputReading read, SearchRegion region,
                                       List<OnAWay> conditions, Optional<Set<String>> declined,
-                                      Set<TermPath> accountedFor) {
-        return mayStopOnWhatItReads(past, read, region, conditions, declined, accountedFor)
-                ? shown.mayStopBefore(places()) : shown;
+                                      Set<TermPath> accountedFor,
+                                      ComparisonWitnesses.AtAComparison witnesses) {
+        if (!mayStopOnWhatItReads(past, read, region, conditions, declined, accountedFor)) {
+            return shown;
+        }
+        Map<FilingCoordinate, List<String>> reached = new LinkedHashMap<>();
+        witnesses.reached().found().ifPresent(row -> places().forEach(at -> {
+            TermPath place = theValueAt(at);
+            List<String> written = place == null ? null
+                    : row.valuesAt(place, read).map(values -> writtenOut(values, place, read))
+                            .orElse(null);
+            // That the run went through the relation says it was worked out at some value the row
+            // holds there, and not at which: a walk that stops early leaves the values after it
+            // unasked. A row holding one value there was asked at that one.
+            if (written != null && new LinkedHashSet<>(written).size() == 1) {
+                reached.put(at, List.of(written.getFirst()));
+            }
+        }));
+        return shown.mayStopBefore(places(), reached);
+    }
+
+    /** Each of {@code values}, held at {@code place}, as the model writes a value of its type —
+     *  or null where some is no value written out. */
+    private static List<String> writtenOut(List<ObservedValue> values, TermPath place,
+                                           InputReading read) {
+        Type type = read.domain().typeAt(place, read.rules());
+        RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
+                read.domain().machines(), read.domain().today());
+        List<String> out = new ArrayList<>();
+        for (ObservedValue each : values) {
+            if (type == null || !(ObservedFixtures.of(each, type, reading)
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate fixture))) {
+                return null;
+            }
+            out.add(fixture.text());
+        }
+        return out;
+    }
+
+    /** The position {@code at} is the value at, or null where it is a number taken of one — how
+     *  many a container holds, a part of a date — whose values are no values a row holds. */
+    private static TermPath theValueAt(FilingCoordinate at) {
+        return switch (at) {
+            case FilingCoordinate.AtPosition(TermPath path) -> path;
+            case FilingCoordinate.OfTerm(NumericTerm term) ->
+                    term instanceof NumericTerm.ValueOf(TermPath position) ? position : null;
+        };
     }
 
     /**
@@ -5162,7 +5269,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * show it.
      */
     private Within countWithinItsContainer(List<OnAWay> conditions,
-                                           CountWitnesses.Lookup witnesses,
+                                           ComparisonWitnesses.AtAComparison witnesses,
                                            Set<Figure> stopped) {
         if (sides.size() != 2) {
             return null;

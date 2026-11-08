@@ -8744,6 +8744,15 @@
                   "$ref": "#/$defs/figure"
                 }
               },
+              "shownReachedAt": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Values of the position a row built at the boundary and run was shown to get to the rule at, each as the model writes a value of its type — written only where `reason` is `relation_not_shown_reached_at_every_value`. Each one listed is reached, on the row that held it; nothing is said of any value not listed, and the word still says that not every value is shown to get there. Absent where no row was run to the rule.",
+                "items": {
+                  "type": "string"
+                }
+              },
               "rule": {
                 "$ref": "#/$defs/ruleHandle",
                 "description": "How a reader finds the rule this could not turn into a line. The same handle an `unanswered` entry and a `boundaries` entry carry for the same rule, and its forms are `ruleHandle`. Present exactly where the entry is about a rule; a position the reading never reached has none, and a placeholder here would say a rule had been looked at that nothing saw. Not what tells one rule from another: `ruleId` beside this is."

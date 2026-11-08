@@ -126,7 +126,7 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/partition/Cutting$Read$Several;"
                         + "Lsouther/compiler/diag/Citation;Lsouther/compiler/inputs/InputReading;Z"
                         + "Ljava/util/function/Supplier;"
-                        + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
+                        + "Lsouther/compiler/partition/ComparisonWitnesses$AtAComparison;)"
                         + "Lsouther/compiler/partition/ComparisonAssessment;")));
         by.put(DERIVED_BY_THE_LINES_ASSESSED, Set.of());
         by.put(EXPANDED_OF_A_LINE, Set.of(AMethod.of(
@@ -138,7 +138,7 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/partition/Reachability;"
                         + "Lsouther/compiler/partition/WaysToACase;Ljava/util/List;Z"
                         + "Lsouther/compiler/inputs/InputReading;"
-                        + "Lsouther/compiler/partition/CountWitnesses$Lookup;)Ljava/util/List;")));
+                        + "Lsouther/compiler/partition/ComparisonWitnesses$AtAComparison;)Ljava/util/List;")));
         by.put(READ_ON_BY_THE_LINES_DRAWN, Set.of(AMethod.of(
                 "souther/compiler/partition/ComparisonAssessment", "ofEach",
                 "(Ljava/lang/String;Lsouther/compiler/check/StatedComparison;"
@@ -147,7 +147,7 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/partition/ClosureApplications;"
                         + "Lsouther/compiler/types/BindingId;Lsouther/compiler/coverage/Arrivals;Z"
                         + "Lsouther/compiler/partition/WhatConditionsState;Ljava/util/Optional;"
-                        + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
+                        + "Lsouther/compiler/partition/ComparisonWitnesses$AtAComparison;)"
                         + "Lsouther/compiler/partition/ComparisonAssessment$Assessed;")));
         by.put(READ_ON_BY_THE_LINES_ASSESSED, Set.of(AMethod.of(
                 "souther/compiler/partition/ComparisonReadings", "walk",
@@ -165,7 +165,7 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/check/ElementBindings;"
                         + "Lsouther/compiler/check/PathReachability$Arrivals;"
                         + "Lsouther/compiler/partition/RuleReachNumbering;"
-                        + "Lsouther/compiler/partition/CountWitnesses$AtComparisons;)"
+                        + "Lsouther/compiler/partition/ComparisonWitnesses$AtComparisons;)"
                         + "Lsouther/compiler/partition/GuardThresholds$Guards;")));
         by.put(READ_ON_BY_THE_GUARDS, Set.of(AMethod.of(
                 "souther/compiler/query/Coverages", "partitioningOf",
@@ -175,7 +175,7 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/check/PathReachability$Arrivals;"
                         + "Lsouther/compiler/check/StatedContract;"
                         + "Lsouther/compiler/values/Allowance;"
-                        + "Lsouther/compiler/query/Coverages$WitnessesOfACount;)"
+                        + "Lsouther/compiler/query/Coverages$WitnessesAtSites;)"
                         + "Lsouther/compiler/query/Coverages$Partitioned;")));
         by.put(READ_ON_BY_THE_PARTITION, Set.of(AMethod.of(
                 "souther/compiler/query/Adequacy$Readings", "assess",

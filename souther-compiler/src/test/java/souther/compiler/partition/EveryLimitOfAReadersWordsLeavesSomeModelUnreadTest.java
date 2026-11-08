@@ -262,7 +262,7 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         // toward the way as one value at each position.
         // Read off the compilation the rest is, as a module's comparisons are when it is measured.
         List<ComparisonReadings.Reading> comparisons = ComparisonReadings.of(behavior, analysis,
-                reading, reads, CountWitnesses.AtComparisons.NONE).comparisons();
+                reading, reads, ComparisonWitnesses.AtComparisons.NONE).comparisons();
         meanings.stated().values().forEach(stated -> {
             for (boolean way : List.of(true, false)) {
                 Proposition decides = way ? stated.states() : stated.states().denied();

@@ -4074,10 +4074,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // And which calls of a helper the rule was read at, after the position: a rule a
                 // helper writes is one place for every call, and the readings of it at different
                 // calls are told apart by the call and by nothing else on the line.
-                out.append(String.format("      %s %s: %s — %s%s, about `%s`%s%s%n",
+                out.append(String.format("      %s %s: %s — %s%s%s, about `%s`%s%s%n",
                         mark(f), it.readingStopped() ? "not read" : "no line",
                         cited(it.cited(), rendering, declaredIn, places),
-                        whyUnread(it.reason()), stoppedAt(it.figures()), it.at(),
+                        whyUnread(it.reason()), stoppedAt(it.figures()),
+                        shownReached(it.shownReachedAt()), it.at(),
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         sentTo(it.finding().sentTo(), parts, rendering, declaredIn)));
@@ -4085,9 +4086,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         declaredIn);
             }
             if (f.about() instanceof About.ARuleNothingClassified(var it)) {
-                out.append(String.format("      %s not read: %s — %s%s, about `%s`%s%s%n",
+                out.append(String.format("      %s not read: %s — %s%s%s, about `%s`%s%s%n",
                         mark(f), cited(it.cited(), rendering, declaredIn, places),
-                        whyUnread(it.reason()), stoppedAt(it.figures()), it.at(),
+                        whyUnread(it.reason()), stoppedAt(it.figures()),
+                        shownReached(it.shownReachedAt()), it.at(),
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         sentTo(it.sentTo(), parts, rendering, declaredIn)));
@@ -8982,6 +8984,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // And the figures it stopped at, which the word is coarser than: a consumer told a
             // part of a rule was not read is told which figure a wider run would have to allow.
             figuresMet(said, each.figures());
+            // And the values a row built and run got to the rule at, as the model writes them,
+            // where what stopped it is that not every value is shown to: absent where none was,
+            // and never a claim about any value it does not list.
+            if (!each.shownReachedAt().isEmpty()) {
+                ArrayNode shown = said.putArray("shownReachedAt");
+                each.shownReachedAt().forEach(shown::add);
+            }
             // And which rule, where one was read and could not be used. Absent where the reading
             // never arrived at the rules of the position: there is nothing to name, and a field
             // holding a placeholder would say this compiler had looked at a rule it never saw.
@@ -11150,6 +11159,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return figures.isEmpty() ? "" : ", stopped at " + figures.stream()
                 .map(each -> figuresSaid(List.of(each)))
                 .collect(Collectors.joining(" and at "));
+    }
+
+    /** The values a row built and run got to the rule at, as the model writes them, beside a word
+     *  saying not every value is shown to: what is shown, and that nothing else is. */
+    private static String shownReached(List<String> values) {
+        return values.isEmpty() ? "" : "; a row was run to it at " + String.join(", ", values)
+                + ", and no other value is shown either way";
     }
 
     /**

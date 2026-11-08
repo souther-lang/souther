@@ -191,6 +191,6 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
                 inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                 inputs.dependencies());
         return ComparisonReadings.of("f", analysis, read, reads,
-                CountWitnesses.AtComparisons.NONE).comparisons();
+                ComparisonWitnesses.AtComparisons.NONE).comparisons();
     }
 }

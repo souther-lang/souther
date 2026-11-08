@@ -337,7 +337,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Optional<List<Cutting.OnAnApplication>> worksOutOnEach,
                    Optional<StopEvidence> stopsIn, List<StopEvidence.OnAnArm> onTheArms,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
-                   SaidOnTheWay saidOnTheWay, CountWitnesses.Lookup witnesses,
+                   SaidOnTheWay saidOnTheWay, ComparisonWitnesses.AtAComparison witnesses,
                    DemandReading.Answered getsPast, ElementsNamed readsTheElements,
                    LinesReadOn readOn) {
 
@@ -460,7 +460,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         InputReads atTheRoot, ArmsNamed.Gathered armsNamed,
                         ForkDependencies.Gathered dependencies,
                         WithinOneApplication.Gathered oneApplication,
-                        CountWitnesses.AtComparisons witnesses, WaysToNodes ways) {
+                        ComparisonWitnesses.AtComparisons witnesses, WaysToNodes ways) {
 
         /** The same reading, in the body of a recursive helper read at a call of it: its own
          *  tree, and the copy that call makes of each construct in it. */
@@ -505,7 +505,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                  row, which is answered where a run is and handed in
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
-                                 InputReads reads, CountWitnesses.AtComparisons witnesses) {
+                                 InputReads reads, ComparisonWitnesses.AtComparisons witnesses) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -827,7 +827,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static ComparisonAssessment onItsRunsWhereUnread(
             String behavior, StatedComparison comparison, ConstructOccurrence stands,
             Citation where, ComparisonAssessment assessed, InputReading read,
-            CountWitnesses.Lookup witnesses) {
+            ComparisonWitnesses.AtAComparison witnesses) {
         if (!(assessed instanceof ComparisonAssessment.Unread unread)
                 || unread.where() != WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT) {
             return assessed;
@@ -871,7 +871,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             ? () -> in.conditions().comparison(comparison, reads, in.read())
                                     .readOff()
                             : Map::of;
-            CountWitnesses.Lookup witnesses = WhatARunWorksOutBeforeACount.past(
+            ComparisonWitnesses.AtAComparison witnesses = WhatARunWorksOutBeforeACount.past(
                     in.context().equals(CallContext.OF_THE_BODY) ? in.root() : null, e, reads,
                     readOff, in.read().domain().parameterReads(), in.witnesses().at(stands));
             // Read only where the policy admits it, and under the names in force here, which is

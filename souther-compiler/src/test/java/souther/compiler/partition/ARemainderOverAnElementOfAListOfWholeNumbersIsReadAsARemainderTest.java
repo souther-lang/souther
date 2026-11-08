@@ -519,7 +519,7 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
                         inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                         inputs.dependencies()),
-                CountWitnesses.AtComparisons.NONE).comparisons();
+                ComparisonWitnesses.AtComparisons.NONE).comparisons();
         ComparisonReadings.Reading last = readings.getLast();
         if (!(last.statement() instanceof ComparisonReadings.Stated.AComparison(var comparison))) {
             throw new AssertionError("the last statement is a comparison: " + last);
