@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
+import souther.compiler.diag.Localizable;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Figure;
@@ -389,6 +390,13 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                 ? read.part().map(part -> part.said(readAt)).orElse(null) : null;
     }
 
+    /** The same, as the catalog's phrase, for a diagnostic told in the reader's language. */
+    public Localizable decidesWherePhrase() {
+        List<TermPath> readAt = positionsReadAt();
+        return border.origin() instanceof LineOrigin.ComparisonOrigin read
+                ? read.part().map(part -> part.phrase(readAt)).orElse(null) : null;
+    }
+
     /**
      * Which of the lines of the comparison that {@code apart} finds saying the same words under
      * different points this reading is of, as a surface says it — or null where its words are
@@ -452,6 +460,20 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
             return border.operator(at) + " " + border.against(at)
                     + (where == null ? "" : " where " + where)
                     + (label == null ? "" : " (" + label + ")");
+        }
+
+        /** The same, as the catalog's phrase, for a diagnostic told in the reader's language. */
+        public Localizable askedPhrase(WhereTheReadingsDiffer apart) {
+            Localizable asked = border.border().asked(at);
+            if (asked == null) {
+                return null;
+            }
+            Localizable where = border.decidesWherePhrase();
+            if (where != null) {
+                asked = Localizable.of("reading.where", asked, where);
+            }
+            Localizable label = apart.labelPhrase(border, at);
+            return label == null ? asked : Localizable.of("reading.labelled", asked, label);
         }
 
         /** What the point is against, or null where none is owed. */

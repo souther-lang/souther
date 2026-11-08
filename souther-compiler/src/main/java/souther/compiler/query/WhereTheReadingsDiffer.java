@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.check.RuleRef;
+import souther.compiler.diag.Localizable;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.DomainPoint;
@@ -143,13 +144,27 @@ public final class WhereTheReadingsDiffer {
     /** Which of the lines of its comparison {@code reading} is of, where its words at
      *  {@code point} are shared with another line's — or null where they are its own. */
     String label(BorderAssessment reading, DomainPoint point) {
+        int[] place = placeAmong(reading, point);
+        return place == null ? null : "line " + place[0] + " of " + place[1];
+    }
+
+    /** The same, as the catalog's phrase, for a diagnostic told in the reader's language. */
+    Localizable labelPhrase(BorderAssessment reading, DomainPoint point) {
+        int[] place = placeAmong(reading, point);
+        return place == null ? null : Localizable.of("reading.line.of",
+                Integer.toString(place[0]), Integer.toString(place[1]));
+    }
+
+    /** Which line, counted from one, of how many saying the same words, or null where the words of
+     *  this reading are its own. */
+    private int[] placeAmong(BorderAssessment reading, DomainPoint point) {
         Words words = wordsOf(reading, point);
         if (words == null || !shared.contains(words)) {
             return null;
         }
         List<Line> lines = numbered.get(words.of());
         int place = lines.indexOf(lineOf(reading));
-        return place < 0 ? null : "line " + (place + 1) + " of " + lines.size();
+        return place < 0 ? null : new int[] {place + 1, lines.size()};
     }
 
     private static Line lineOf(BorderAssessment reading) {

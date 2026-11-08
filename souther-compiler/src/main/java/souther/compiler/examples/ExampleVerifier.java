@@ -1243,8 +1243,7 @@ public final class ExampleVerifier {
         }
         return Diagnostic.at(ex.pos())
                 .say(new ExampleMessage.TheTargetCannotBeEvaluated(name))
-                .hint(new ExampleMessage.WhatAnExampleRuns(
-                        "it is a helper `let`, and this module declares no behavior of that name"))
+                .hint(new ExampleMessage.WhatAnExampleRuns())
                 .build();
     }
 

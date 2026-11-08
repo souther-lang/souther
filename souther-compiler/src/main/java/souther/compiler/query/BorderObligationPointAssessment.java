@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Localizable;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderObligationPoint;
@@ -776,7 +777,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * @param readAt the copies of the comparison the line was read at, which is what a surface names
      *               the calls of a helper by ({@link BorderAssessment#readAt})
      */
-    public record ReadingSaid(Reading where, String at, String asks, ModelOccurrences readAt) {}
+    public record ReadingSaid(Reading where, String at, String asks, Localizable asked,
+                              ModelOccurrences readAt) {}
 
     /**
      * How many readings a surface says under the point before saying how many are left.
@@ -838,8 +840,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         List<ReadingSaid> out = new ArrayList<>();
         met.forEach((where, at) -> {
             DomainPoint asked = seats.get(where).asked();
-            out.add(new ReadingSaid(where, at.axis(),
-                    new BorderAssessment.Point(at, asked, at.at(asked)).asked(apart),
+            BorderAssessment.Point point = new BorderAssessment.Point(at, asked, at.at(asked));
+            out.add(new ReadingSaid(where, at.axis(), point.asked(apart), point.askedPhrase(apart),
                     at.readAt()));
         });
         out.sort(Comparator.comparing((ReadingSaid said) -> said.at())

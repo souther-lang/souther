@@ -16,8 +16,8 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1902)
     record TheTargetCannotBeEvaluated(String target) implements ExampleMessage, Reported {}
 
-    /** What an example can run, and what this one is. */
-    record WhatAnExampleRuns(String here) implements ExampleMessage, Supporting {}
+    /** What an example can run, and that a helper of the name is not one of them. */
+    record WhatAnExampleRuns() implements ExampleMessage, Supporting {}
 
     /** `examples for` names a module that is not being compiled. */
     @Code(DiagnosticCode.E1907)
@@ -588,7 +588,7 @@ public sealed interface ExampleMessage extends Message {
      * position's terms. One of these per reading, in the order the readings' sentences sort, so
      * that which reading a walk met first is not what a reader sees first.
      */
-    record TheLineAsReadAt(String at, String asks) implements ExampleMessage, Supporting {}
+    record TheLineAsReadAt(String at, Localizable asks) implements ExampleMessage, Supporting {}
 
     /** How many readings were not said, where a line has more than a sentence has room for. A
      *  count and not a silence: left out unsaid, the readings shown read as all there are. */

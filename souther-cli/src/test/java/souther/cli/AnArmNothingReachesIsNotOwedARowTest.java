@@ -17,6 +17,7 @@ import souther.compiler.coverage.WalkProbe;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
 import souther.compiler.diag.LabeledRegion;
+import souther.compiler.diag.Localizable;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Note;
 import souther.compiler.diag.msg.DeadBranchMessage.ThePositionStopsShortOfIt;
@@ -226,7 +227,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
                     | "one" : (Odd(1)) -> High
                 """);
 
-        assertTrue(proofs.contains(new ThePositionStopsShortOfIt("c", "one of 1, 3, 7")),
+        assertTrue(proofs.contains(new ThePositionStopsShortOfIt("c",
+                        Localizable.of("values.one.of", "1, 3, 7"))),
                 () -> "the values the rule names, and not where they run between: " + proofs);
     }
 
@@ -249,7 +251,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
                     | "one" : (Code("a\\"b")) -> High
                 """);
 
-        assertTrue(proofs.contains(new ThePositionStopsShortOfIt("c", "one of \"a\\\"b\", \"c\\\\d\"")),
+        assertTrue(proofs.contains(new ThePositionStopsShortOfIt("c",
+                        Localizable.of("values.one.of", "\"a\\\"b\", \"c\\\\d\""))),
                 () -> "each value as the literal it is read back from: " + proofs);
     }
 

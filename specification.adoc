@@ -6881,8 +6881,8 @@ Emitted when an `+example+` names a target that is not a behavior of the module 
 [,text]
 ----
 `taxIncluded` cannot be evaluated as an example.
-Hint: An example runs a behavior with a `let` body, or a `>->` composition of them; here
-it is a helper `let`, and this module declares no behavior of that name.
+Hint: An example runs a behavior with a `let` body, or a `>->` composition of them. This is
+a helper `let`, and this module declares no behavior of that name.
 ----
 
 Emitted when an `+example+` names something this module declares that is not a behavior — a helper `+let+` (<<fn-declaration>>). Being injected is not a reason: an injected behavior is a behavior, and its rows are recorded (<<example-pending>>). Neither is a `+depends on+` dependency, which is supplied by a fake (<<example-fakes>>), nor a `+>->+` composition, which is evaluated by running its stages.
