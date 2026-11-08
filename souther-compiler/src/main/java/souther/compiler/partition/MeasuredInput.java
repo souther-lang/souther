@@ -155,6 +155,15 @@ public final class MeasuredInput {
      */
     private final Map<AStatementAtARow.RelationRead, AStatementAtARow.OneRelation> relations =
             new ConcurrentHashMap<>();
+    /**
+     * What the rules of the values standing in this input need its containers to hold
+     * ({@link #membersTheRulesNeed}).
+     *
+     * <p>Worked out with the input because every way composed for every point asks it, and it is
+     * the reading's and nothing a way brings. No part of what makes two of these one: it is
+     * derived from {@link #ruleRoots} and the rules read.
+     */
+    private final List<ContentsAsked.Asked> membersNeeded;
 
     /** A position as what it is offered turns on: where the value stops and the runs it is in, how
      *  much it holds, the class it is held to and the values its rules name — and not the rest of
@@ -180,6 +189,7 @@ public final class MeasuredInput {
         this.divided = divided;
         this.reach = reach;
         this.ruleRoots = ruleRoots;
+        this.membersNeeded = membersNeeded(ruleRoots, written.rules());
     }
 
     /**
@@ -339,7 +349,11 @@ public final class MeasuredInput {
      * asked of none here: what is asked inside an element names no container further in.
      */
     List<ContentsAsked.Asked> membersTheRulesNeed() {
-        RuleReadingSource source = ruleReading().source();
+        return membersNeeded;
+    }
+
+    private static List<ContentsAsked.Asked> membersNeeded(RuleRoots ruleRoots,
+                                                           RuleReadingSource source) {
         List<ContentsAsked.Asked> out = new ArrayList<>();
         for (InputDomain.RuleRoot root : ruleRoots.roots()) {
             List<TermPath> holding = root.at().containersHoldingIt();

@@ -74,9 +74,13 @@ final class LibraryEndings {
 
     private final Supplier<BoundOperationFacts> facts;
 
-    /** Every operation of the library read, on the first asking: read with what is proved of the
-     *  library, and proving that is most of the cost of reading a library. */
-    private Map<ValueName.Stdlib.Operation, Read> read;
+    /**
+     * The reading of the library, made on the first asking, with what is proved of the library —
+     * proving that is most of the cost of reading one. Each operation is read where it is first
+     * asked, with what it calls. Which is asked first changes no answer: one met again while it is
+     * being read is not known, and so is everything calling it.
+     */
+    private Reading reading;
 
     private LibraryEndings(Stdlib library, Supplier<BoundOperationFacts> facts) {
         this.library = library;
@@ -96,24 +100,17 @@ final class LibraryEndings {
     /** What an operation ends a run for apart from what it is handed, and where it answers. */
     private record Read(Endings own, GetsPast completion) {}
 
-    private synchronized Map<ValueName.Stdlib.Operation, Read> read() {
-        if (read == null) {
-            BoundOperationFacts proved = facts.get();
-            Reading reading = new Reading(library, proved.proofs(), proved);
-            library.entries().keySet().forEach(reading::of);
-            library.rewrites().keySet().forEach(reading::of);
-            read = Map.copyOf(reading.settled);
-        }
-        return read;
-    }
-
-    private Read readOf(ValueName.Stdlib.Operation operation) {
-        Read found = read().get(operation);
-        if (found == null) {
+    private synchronized Read readOf(ValueName.Stdlib.Operation operation) {
+        if (!library.entries().containsKey(operation)
+                && !library.rewrites().containsKey(operation)) {
             throw new IllegalArgumentException(
                     "`" + operation.qualified() + "` is no operation of the library read");
         }
-        return found;
+        if (reading == null) {
+            BoundOperationFacts proved = facts.get();
+            reading = new Reading(library, proved.proofs(), proved);
+        }
+        return reading.of(operation);
     }
 
     /**
@@ -213,8 +210,12 @@ final class LibraryEndings {
             if (!reading.add(operation)) {
                 return new Read(NOT_KNOWN, new GetsPast.NotKnown());
             }
-            Read out = worked(operation);
-            reading.remove(operation);
+            Read out;
+            try {
+                out = worked(operation);
+            } finally {
+                reading.remove(operation);
+            }
             settled.put(operation, out);
             return out;
         }
