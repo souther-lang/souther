@@ -456,23 +456,17 @@ public final class Generator {
      *             beside the reason rather than folded into it: the reason is the category a reader
      *             acts on, and this is the sentence that says which case of it this was. Folded into
      *             {@code detail} it would be printed where the subject goes.
-     * @param alsoShort what else was true of the search, under the position it is about: the rules
-     *             about a position's strings that gave the offer no value. <b>Beside the reason and
-     *             never instead of it</b>, which is what tells it from {@code said}. That one is
-     *             this category in this case and a reader is shown it in place of the category's
-     *             own words; these are a second thing that happened, and a reader shown them
-     *             instead would be told the rule and never told that a figure stopped the search.
-     *             So a reader of one of these writes both, and neither is dropped for the other
-     * @param stoppedAt the constructions the rows composed here were run and stopped at, because an
-     *             invariant clause did not hold: beside the reason as {@code alsoShort} is. Each is
-     *             an input the model has not decided about, which is what an author takes to
-     *             whoever decides it, and the reason alone does not tell it from a search that ran
-     *             out
+     * @param beside what else was true of the search: the rules about a position's strings that
+     *             gave the offer no value, and where the runs of the rows composed stopped.
+     *             <b>Beside the reason and never instead of it</b>, which is what tells it from
+     *             {@code said}. That one is this category in this case and a reader is shown it in
+     *             place of the category's own words; these are other things that happened, and a
+     *             reader shown them instead would be told the rule and never told that a figure
+     *             stopped the search. So a reader of one of these writes both, and neither is
+     *             dropped for the other
      */
     public record UnresolvedCombination(List<String> classes, Reason reason, String detail,
-                                        Optional<String> said,
-                                        SequencedMap<TermPath, StringOfferShortfall> alsoShort,
-                                        List<StoppedAtAConstruction> stoppedAt) {
+                                        Optional<String> said, BesideTheWord beside) {
 
         public enum Reason {
             /**
@@ -980,30 +974,26 @@ public final class Generator {
 
         public UnresolvedCombination {
             classes = List.copyOf(classes);
-            // Copied like the classes beside it, and for the reason a record copies anything: two
-            // of these are equal by what they hold, so a caller keeping the map it handed in is a
-            // caller who can change what one of them is after it was made.
-            alsoShort = java.util.Collections.unmodifiableSequencedMap(
-                    new LinkedHashMap<>(alsoShort));
             said = said == null ? Optional.empty() : said;
-            stoppedAt = List.copyOf(stoppedAt);
+            Objects.requireNonNull(beside, "what is beside the word is something, if only nothing");
         }
 
+        /** The same, of a search whose offer was short of {@code alsoShort} and nothing else. */
         public UnresolvedCombination(List<String> classes, Reason reason, String detail,
                                      Optional<String> said,
                                      SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
-            this(classes, reason, detail, said, alsoShort, List.of());
+            this(classes, reason, detail, said, BesideTheWord.shortOf(alsoShort));
         }
 
         public UnresolvedCombination(List<String> classes, Reason reason, String detail,
                                      Optional<String> said) {
-            this(classes, reason, detail, said, new LinkedHashMap<>());
+            this(classes, reason, detail, said, BesideTheWord.NOTHING);
         }
 
-        /** The same, with the constructions the rows composed for it stopped at. */
-        UnresolvedCombination stoppingAt(Collection<StoppedAtAConstruction> constructions) {
-            return new UnresolvedCombination(classes, reason, detail, said, alsoShort,
-                    List.copyOf(constructions));
+        /** The same, with where the runs of the rows composed for it stopped. */
+        UnresolvedCombination stoppingAt(Collection<WhereARunStopped> where) {
+            return new UnresolvedCombination(classes, reason, detail, said,
+                    beside.stopping(where));
         }
 
         public UnresolvedCombination(List<String> classes, Reason reason) {
@@ -1449,7 +1439,7 @@ public final class Generator {
             }
             ObservedRun run = trial.run(row);
             ObservedRun now = new ObservedRun(heldOnce(sawAlike, run.watched()),
-                    heldOnce(answeredAlike, run.answer()), run.refused());
+                    heldOnce(answeredAlike, run.answer()), run.stopped());
             ran.put(written, now);
             return now;
         }
@@ -1480,6 +1470,38 @@ public final class Generator {
         static List<String> identity(RowToRun row) {
             return new ComposedRow(row.inputs(), row.answers()).identity();
         }
+
+        /**
+         * Where the runs of {@code rows}, each a row as it is written ({@link #identity}), stopped
+         * without answering, each place once, in the order of the rows: read off the runs kept
+         * here, whoever ran them. A row not run is none of them.
+         *
+         * <p>Asked of the one that holds every run, so that what a search says its rows stopped at
+         * does not turn on which part of it watched the runs: a judge running a row to say whether
+         * it is the one looked for runs it here as much as a ranking of rows does.
+         */
+        Set<WhereARunStopped> stoppedAmong(Collection<List<String>> rows) {
+            Set<WhereARunStopped> out = new LinkedHashSet<>();
+            for (List<String> each : rows) {
+                ObservedRun run = ran.get(each);
+                if (run != null && !(run.answer() instanceof AnswerObservation.Answered)) {
+                    run.stopped().ifPresent(out::add);
+                }
+            }
+            return out;
+        }
+
+        /** Whether a run of one of {@code rows} went past what a run may spend, read off the runs
+         *  kept here as {@link #stoppedAmong} is. */
+        boolean ranOutAmong(Collection<List<String>> rows) {
+            for (List<String> each : rows) {
+                ObservedRun run = ran.get(each);
+                if (run != null && run.answer() instanceof AnswerObservation.RanOut) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     /**
@@ -1502,15 +1524,16 @@ public final class Generator {
      *
      * @param watched where it went, or that nothing can say
      * @param answer  what it answered, or that it answered nothing
-     * @param refused the construction it stopped at, where it stopped at one
+     * @param stopped where it stopped without answering, where it stopped at one of the language's
+     *                own ends
      */
     public record ObservedRun(Watched watched, AnswerObservation answer,
-                              Optional<StoppedAtAConstruction> refused) {
+                              Optional<WhereARunStopped> stopped) {
 
         public ObservedRun {
             Objects.requireNonNull(watched, "a run says where it went, or that nothing can say");
             Objects.requireNonNull(answer, "a run says what it answered, or that it answered nothing");
-            Objects.requireNonNull(refused, "a run says whether a construction stopped it");
+            Objects.requireNonNull(stopped, "a run says whether it stopped somewhere");
         }
 
         /** A row nothing ran: nothing can say where it went, and it answered nothing. */
@@ -5789,7 +5812,7 @@ public final class Generator {
             return switch (this) {
                 case BoundaryAttempt.Built _ -> false;
                 case BoundaryAttempt.Unresolved it -> it.why().reason().leavesSomethingUntried()
-                        || !it.why().alsoShort().isEmpty();
+                        || !it.why().beside().shortOf().isEmpty();
                 case BoundaryAttempt.Stopped _, BoundaryAttempt.Unexhausted _,
                      BoundaryAttempt.Limited _, BoundaryAttempt.Unplanned _ -> true;
             };
@@ -6520,7 +6543,7 @@ public final class Generator {
         RowPreference preferring =
                 stood.outcome() instanceof AnswersStoodIn.Stood(var answers)
                         ? judge.<RowPreference>map(each -> each.refusesAbsolutely()
-                                        ? new ReachingWhatIsJudged(each, answers)
+                                        ? new ReachingWhatIsJudged(each, answers, trial)
                                         : new TellingArmsApart(trial, answers, each))
                                 .orElseGet(() -> new TellingArmsApart(trial, answers))
                 : null;
@@ -6935,7 +6958,7 @@ public final class Generator {
      * word: a run that stopped at one is a row that did not answer, and another value might have.
      */
     static BoundaryAttempt noRowAnswered(String label, SearchShortfall found, boolean aRunRanOut,
-                                         Set<StoppedAtAConstruction> stoppedAt,
+                                         Set<WhereARunStopped> stoppedAt,
                                          CompositionAccount unrepresented) {
         BoundaryAttempt came = leftUntried(label, found,
                 UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
@@ -10854,7 +10877,7 @@ public final class Generator {
         private final RunOnce trial;
         private final List<StoodInAnswer> answers;
         /** Every row ranked so far, as it is written, so a row composed again is not ranked again. */
-        private final Set<List<String>> ranked = new HashSet<>();
+        private final Set<List<String>> ranked = new LinkedHashSet<>();
         /** Where the first row ranked went: the arms it passed and how its conditions came out. */
         private AlignedObservation way;
         /** The rewrites of the arms and the walks on that way, which every row compared is asked. */
@@ -10864,10 +10887,6 @@ public final class Generator {
         private int bestTold = -1;
         /** How many rows that met the requirement were run and came to an answer. */
         private int answering;
-        /** Whether a row that met the requirement was run and went past what a run may spend. */
-        private boolean aRunRanOut;
-        /** The constructions rows that met the requirement were run and stopped at, each once. */
-        private final Set<StoppedAtAConstruction> stoppedAt = new LinkedHashSet<>();
         /** Whether the walk was stopped for handing more rows than it may. */
         private boolean stoppedAtItsFigure;
         /** How many rows a walk has handed here, ranked or not. */
@@ -10942,15 +10961,17 @@ public final class Generator {
             return best == null && !stoppedAtItsFigure && refused != null;
         }
 
-        /** Whether a run of a row that met the requirement went past what a run may spend. */
+        /** Whether a run of a row ranked here went past what a run may spend, read off the runs
+         *  ({@link RunOnce}). */
         @Override
         public boolean aRunRanOut() {
-            return aRunRanOut;
+            return trial.ranOutAmong(ranked);
         }
 
+        /** Where the runs of the rows ranked here stopped, read off the runs ({@link RunOnce}). */
         @Override
-        public Set<StoppedAtAConstruction> stoppedAt() {
-            return Collections.unmodifiableSet(stoppedAt);
+        public Set<WhereARunStopped> stoppedAt() {
+            return trial.stoppedAmong(ranked);
         }
 
         /**
@@ -10985,8 +11006,6 @@ public final class Generator {
             // A row is a candidate only where its run answered: what it was composed to read back
             // says what the run comes to where it answers, and nothing of whether it does.
             if (!(ran.answer() instanceof AnswerObservation.Answered)) {
-                aRunRanOut |= ran.answer() instanceof AnswerObservation.RanOut;
-                ran.refused().ifPresent(stoppedAt::add);
                 return Acceptance.PASSED;
             }
             // A row the judge refuses is none of the rows ranked: the figure on those is a figure
@@ -11050,7 +11069,13 @@ public final class Generator {
     @FunctionalInterface
     public interface RowJudge {
 
-        /** Whether the run of {@code row} is what was looked for. */
+        /**
+         * Whether the run of {@code row} is what was looked for.
+         *
+         * <p>A row this runs is run through the trial the search was handed, which is where what
+         * the run came to is kept ({@link RunOnce}): where it stopped is asked of that, whichever
+         * part of the search was looking.
+         */
         boolean accepts(RowToRun row);
 
         /**
@@ -11114,7 +11139,7 @@ public final class Generator {
          * once: what an author is shown where no row came to an answer, since each is an input the
          * model has not decided about.
          */
-        Set<StoppedAtAConstruction> stoppedAt();
+        Set<WhereARunStopped> stoppedAt();
     }
 
     /**
@@ -11134,16 +11159,22 @@ public final class Generator {
 
         private final RowJudge judge;
         private final List<StoodInAnswer> answers;
-        /** Every row judged so far, as it is written, so a row composed again is not run again. */
+        /** Where the rows the judge runs are run, which is what is asked where they stopped. */
+        private final RunOnce trial;
+        /** Every row handed here so far, as it is written, so a row composed again is not run
+         *  again. */
         private final Set<List<String>> judged = new HashSet<>();
+        /** The rows put to the judge, as they are written, in the order they were. */
+        private final Set<List<String>> putToTheJudge = new LinkedHashSet<>();
         private List<FixtureTemplate> taken;
         private boolean stoppedAtItsFigure;
         /** How many rows the walk has handed here, judged or not. */
         private int handed;
 
-        ReachingWhatIsJudged(RowJudge judge, List<StoodInAnswer> answers) {
+        ReachingWhatIsJudged(RowJudge judge, List<StoodInAnswer> answers, Trial trial) {
             this.judge = judge;
             this.answers = List.copyOf(answers);
+            this.trial = runningOnce(trial);
         }
 
         @Override
@@ -11161,6 +11192,7 @@ public final class Generator {
                 if (met != Acceptance.TAKEN) {
                     return met;
                 }
+                putToTheJudge.add(RunOnce.identity(row));
                 if (judge.accepts(row)) {
                     taken = List.copyOf(inputs);
                     return Acceptance.TAKEN;
@@ -11181,15 +11213,17 @@ public final class Generator {
                     : SearchShortfall.NONE;
         }
 
+        /** Whether a run the judge made of a row put to it went past what a run may spend, read
+         *  off the runs ({@link RunOnce}). */
         @Override
         public boolean aRunRanOut() {
-            return false;
+            return trial.ranOutAmong(putToTheJudge);
         }
 
-        /** None: what this keeps of a row is whether the judge took it, and nothing of a run. */
+        /** Where the runs the judge made of the rows put to it stopped, read off the runs. */
         @Override
-        public Set<StoppedAtAConstruction> stoppedAt() {
-            return Set.of();
+        public Set<WhereARunStopped> stoppedAt() {
+            return trial.stoppedAmong(putToTheJudge);
         }
     }
 

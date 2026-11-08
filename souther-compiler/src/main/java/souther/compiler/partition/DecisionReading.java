@@ -91,10 +91,17 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
      *              that is not is a rule this compiler read less of than the body states, which is
      *              a weakening of the measurement rather than a rule the body does not have
      */
-    public record Ruled(DecisionRule rule, List<RuleStep> steps, boolean whole) {
+    public record Ruled(DecisionRule rule, List<RuleStep> steps, boolean whole,
+                        List<PassedConstruction> passed) {
 
         public Ruled {
             steps = List.copyOf(steps);
+            passed = List.copyOf(passed);
+        }
+
+        /** The same, of a path that goes through no construction. */
+        public Ruled(DecisionRule rule, List<RuleStep> steps, boolean whole) {
+            this(rule, steps, whole, List.of());
         }
 
         /** Every condition the path consulted, said as what a run through it would be seen
@@ -103,11 +110,14 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
             return steps.stream().map(RuleStep::shown).toList();
         }
 
-        /** The same conditions in the words a composer of a row works from, which is what a row
-         *  standing in this rule would have to satisfy of the input. */
+        /** The same conditions in the words a composer of a row works from, with what getting past
+         *  each construction on the way states: what a row standing in this rule would have to
+         *  satisfy of the input. */
         public WayToTheBorder states() {
-            return WayToTheBorder.forArrival(steps.stream()
-                    .flatMap(each -> each.states().stream()).toList());
+            List<OnTheWay> stated = new ArrayList<>();
+            steps.forEach(each -> stated.addAll(each.states()));
+            passed.forEach(each -> stated.addAll(each.states()));
+            return WayToTheBorder.forArrival(stated);
         }
 
         /** What a row has to be, beside the way, for each case the statements on this path draw
@@ -179,9 +189,22 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
             Objects.requireNonNull(why, "a way no input takes is proved to be one");
         }
 
-        /** Whether the way consulted {@code rule}'s conditions as {@code rule} did, which makes
-         *  the rule one past it. */
+        /**
+         * Whether the proof stands for {@code other}: it consulted every condition this way did as
+         * this way did, and goes through every construction this way does, so whatever left this
+         * way no input leaves {@code other} none.
+         */
+        public boolean standsFor(Ruled other) {
+            return consultedAsIn(other.rule()) && other.passed().containsAll(way.passed());
+        }
+
+        /** The same, of a rule along a way through no construction. */
         public boolean standsFor(DecisionRule rule) {
+            return consultedAsIn(rule) && way.passed().isEmpty();
+        }
+
+        /** Whether the way consulted {@code rule}'s conditions as {@code rule} did. */
+        private boolean consultedAsIn(DecisionRule rule) {
             return way.rule().consulted().entrySet().stream().allMatch(each ->
                     each.getValue().equals(rule.consulted().get(each.getKey())));
         }
@@ -312,9 +335,10 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
         List<ImpossiblePath> impossible = proved.leastOfThem();
         List<Ruled> found = new ArrayList<>();
         for (Arrival<DecisionPath> way : arrived) {
-            DecisionRule rule = way.path().rule();
-            if (impossible.stream().noneMatch(each -> each.standsFor(rule))) {
-                found.add(new Ruled(rule, way.path().steps(), way.isComplete()));
+            Ruled ruled = new Ruled(way.path().rule(), way.path().steps(), way.isComplete(),
+                    way.path().passed());
+            if (impossible.stream().noneMatch(each -> each.standsFor(ruled))) {
+                found.add(ruled);
             }
         }
         return new DecisionReading(behavior, found, impossible, new Enumeration.Complete(),

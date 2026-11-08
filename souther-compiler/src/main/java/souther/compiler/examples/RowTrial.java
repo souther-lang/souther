@@ -1,7 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.execute.EvaluationPolicy;
-import souther.compiler.execute.RefusedConstruction;
+import souther.compiler.execute.RunStop;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
@@ -31,7 +31,9 @@ import souther.compiler.observe.Limits;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.runtime.ConstraintViolation;
+import souther.runtime.EnsuresFailure;
 import souther.runtime.InvariantFailure;
+import souther.runtime.UnreachableReached;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -198,14 +200,14 @@ public final class RowTrial {
             case ProbeImage.Uninstrumented _ ->
                     applied(ready.applying(), ready.over(), steps, ready.reading())
                             .map(came -> new RowTrials.Ran(new RunRecord.NoAccount(),
-                                    came.answer(), came.refused()));
+                                    came.answer(), came.stopped()));
             case ProbeImage.Instrumented(NumberingIdentity numbering, var _, var _) -> {
                 Probe.begin(numbering);
                 try {
                     yield applied(ready.applying(), ready.over(), steps, ready.reading())
                             .map(came -> new RowTrials.Ran(
                                     new RunRecord.Recorded(Probe.snapshot()), came.answer(),
-                                    came.refused()));
+                                    came.stopped()));
                 } finally {
                     // On every way out, including one nothing here catches. A recording left
                     // installed is where the next reader on this thread would start.
@@ -403,8 +405,7 @@ public final class RowTrial {
                             new AnswerObservation.RanOut(RunLimits.figureOf(e, steps)),
                             Optional.empty()));
                 }
-                return Optional.of(new Applied(new AnswerObservation.NotAnswered(),
-                        refusedConstruction(e)));
+                return Optional.of(new Applied(new AnswerObservation.NotAnswered(), stopOf(e)));
             }
         } finally {
             EvaluationContext.end();
@@ -412,26 +413,35 @@ public final class RowTrial {
         return Optional.of(new Applied(reading.read(answered), Optional.empty()));
     }
 
-    /** What a run answered, and the construction it stopped at where it stopped at one. */
-    private record Applied(AnswerObservation answer, Optional<RefusedConstruction> refused) {}
+    /** What a run answered, and where it stopped where it stopped without answering. */
+    private record Applied(AnswerObservation answer, Optional<RunStop> stopped) {}
 
     /**
-     * The construction {@code stopped} ended at, where what ended it was an invariant clause
-     * refusing one: the {@link ConstraintViolation} a generated body throws from {@code orThrow},
-     * wherever among the causes the application wrapped it.
+     * Where {@code stopped} ended, read off the language's own ends among the causes the
+     * application wrapped it in: a {@link ConstraintViolation} — a construction refused, an
+     * {@code ensures} not kept, or an operation the runtime would not finish — or an
+     * {@link UnreachableReached}. None where it ended some other way.
      */
-    private static Optional<RefusedConstruction> refusedConstruction(InvocationFailure stopped) {
+    private static Optional<RunStop> stopOf(InvocationFailure stopped) {
         for (Throwable cause = stopped.getCause(); cause != null; cause = cause.getCause()) {
+            if (cause instanceof UnreachableReached reached) {
+                return Optional.of(new RunStop.AtAnUnreachable(String.valueOf(
+                        reached.getMessage())));
+            }
             if (cause instanceof ConstraintViolation violation) {
-                if (!(violation.failure() instanceof InvariantFailure failed)) {
-                    return Optional.empty();
-                }
-                ConstraintViolation.ConstructionSite site = violation.site();
-                return Optional.of(new RefusedConstruction(failed.declared().module(),
-                        failed.declared().type(), Optional.ofNullable(failed.clause()),
-                        failed.declared().ordinal(),
-                        site == null ? failed.module() : site.module(),
-                        site == null ? 0 : site.line(), site == null ? 0 : site.column()));
+                return Optional.of(switch (violation.failure()) {
+                    case InvariantFailure failed -> {
+                        ConstraintViolation.ConstructionSite site = violation.site();
+                        yield new RunStop.AtAConstruction(failed.declared().module(),
+                                failed.declared().type(), Optional.ofNullable(failed.clause()),
+                                failed.declared().ordinal(),
+                                site == null ? failed.module() : site.module(),
+                                site == null ? 0 : site.line(), site == null ? 0 : site.column());
+                    }
+                    case EnsuresFailure failed -> new RunStop.AtAnEnsures(failed.module(),
+                            failed.behavior(), Optional.ofNullable(failed.clause()));
+                    case null -> new RunStop.AtAnEnd(String.valueOf(violation.getMessage()));
+                });
             }
         }
         return Optional.empty();

@@ -15,7 +15,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
 
-import souther.compiler.execute.RefusedConstruction;
+import souther.compiler.execute.RunStop;
 
 import java.util.ArrayList;
 import java.util.Optional;
@@ -255,9 +255,9 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
      */
     @Test
     void theConstructionsTheRunsStoppedAtAreKeptBesideTheRowsWhicheverTheWord() {
-        StoppedAtAConstruction stop = new StoppedAtAConstruction(new RefusedConstruction("m", "T",
+        WhereARunStopped stop = new WhereARunStopped(new RunStop.AtAConstruction("m", "T",
                 Optional.empty(), 0, "m", 8, 23), Optional.empty());
-        Set<StoppedAtAConstruction> stops = Set.of(stop);
+        Set<WhereARunStopped> stops = Set.of(stop);
 
         Generator.BoundaryAttempt.Unresolved none = assertInstanceOf(
                 Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
@@ -273,9 +273,9 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                                 List.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED))),
                         false, stops, CompositionAccount.NOTHING));
 
-        assertEquals(List.of(stop), none.why().stoppedAt());
-        assertEquals(List.of(stop), figure.why().stoppedAt());
-        assertEquals(List.of(stop), population.why().stoppedAt());
+        assertEquals(List.of(stop), none.why().beside().stopped());
+        assertEquals(List.of(stop), figure.why().beside().stopped());
+        assertEquals(List.of(stop), population.why().beside().stopped());
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 none.why().reason());
     }
@@ -326,7 +326,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                         SearchShortfall.of(CompositionShortfall.NONE, offered),
                         false, Set.of(), CompositionAccount.NOTHING));
 
-        assertEquals(offered, no.why().alsoShort());
+        assertEquals(offered, no.why().beside().shortOf());
     }
 
     /** A row whose run aborts is passed over for the next one composed, which answers. */

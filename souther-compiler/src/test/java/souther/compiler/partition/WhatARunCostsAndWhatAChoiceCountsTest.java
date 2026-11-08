@@ -317,7 +317,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
     @Test
     void aJudgeThatRefusesAbsolutelyOffersNoRowItRefused() {
         Generator.ReachingWhatIsJudged judging = new Generator.ReachingWhatIsJudged(
-                _ -> false, List.of());
+                _ -> false, List.of(), _ -> Generator.ObservedRun.nothingRan());
         Generator.RowTaking taking = judging.over(_ -> Generator.Acceptance.TAKEN);
 
         assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(1))));

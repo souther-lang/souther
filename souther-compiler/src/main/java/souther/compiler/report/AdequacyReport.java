@@ -73,6 +73,8 @@ import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LeftOutPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.WhereARunStopped;
+import souther.compiler.execute.RunStop;
 import souther.compiler.partition.InputUse;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.NotOwedReason;
@@ -2316,7 +2318,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             readings(out, module.apart(), each.debt(),_ -> true, at -> whatWasTried(
                     each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
-                    rendering, null),
+                    rendering, null, places),
                     Map.of(), rendering, null);
         }
         for (Adequacy.DeclaredDebt each : account.undecided()) {
@@ -2328,7 +2330,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             readings(out, module.apart(), each.debt(),_ -> true, at -> whatWasTried(
                     each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
-                    rendering, null),
+                    rendering, null, places),
                     Map.of(), rendering, null);
         }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<Adequacy.DeclaredDebt> covered
@@ -3825,7 +3827,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + RuleHandleProse.said(point.describe(places), rendering, declaredIn) + ")")));
             readings(out, apart, point,_ -> true, at -> whatWasTried(
                     point.owedAt(at).searches(),
-                    behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn),
+                    behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn,
+                    places),
                     behavior.conditionPlaces().copies(), rendering, declaredIn);
         }
         for (BorderObligationPointAssessment point : owed.undecided()) {
@@ -3836,7 +3839,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             readings(out, apart, point,_ -> true, at -> whatWasTried(
                     point.owedAt(at).searches(),
-                    behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn),
+                    behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn,
+                    places),
                     behavior.conditionPlaces().copies(), rendering, declaredIn);
         }
         // A border the model drew that nothing here answered for, said whether or not one came of
@@ -5267,9 +5271,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * short of ({@link GeneratedRows#beside}). Changed with those two and never apart from them.
      */
     static List<Object> shownOnThePage(Generator.UnresolvedCombination why) {
-        return why.said().isPresent()
-                ? List.of(why.said().get(), why.alsoShort(), why.stoppedAt())
-                : List.of(why.reason(), why.subject(), why.alsoShort(), why.stoppedAt());
+        return why.said().isPresent() ? List.of(why.said().get(), why.beside())
+                : List.of(why.reason(), why.subject(), why.beside());
     }
 
     /**
@@ -5277,7 +5280,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * ({@link #synthesisShortfalls}). Not the sentence beside the word, and not what it is about.
      */
     static List<Object> shownInTheDocument(Generator.UnresolvedCombination why) {
-        return List.of(why.reason(), why.alsoShort());
+        return List.of(why.reason(), why.beside());
     }
 
     /**
@@ -5675,13 +5678,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** What the search for a value at an edge came to, where it ran and found none. */
     private static String whatWasTried(SearchOutcomes outcomes,
                                        ConditionsShown shown,
-                                       SourceRendering rendering, SourceId declaredIn) {
+                                       SourceRendering rendering, SourceId declaredIn,
+                                       PublishedRuleHandle.WhereARuleIs places) {
         // Which searches are worth a sentence is the outcomes' answer, not this one's. Told apart
         // here, two of them would be one piece of news whenever the words for them happened to
         // match — a report deciding what happened from what it was about to write.
         List<String> said = new ArrayList<>();
         for (ItemAssessment.Attempt each : outcomes.worthSaying()) {
-            said.add(whatWasTried(each, shown, rendering, declaredIn));
+            said.add(whatWasTried(each, shown, rendering, declaredIn, places));
         }
         // One sentence per search, with the readings' own separator between them. Run together,
         // two searches of one reading read as one clause that says two things.
@@ -5691,7 +5695,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** The same, of one search of the point. */
     private static String whatWasTried(ItemAssessment.Attempt attempt,
                                        ConditionsShown shown,
-                                       SourceRendering rendering, SourceId declaredIn) {
+                                       SourceRendering rendering, SourceId declaredIn,
+                                       PublishedRuleHandle.WhereARuleIs places) {
         // One opening per outcome, and not one for everything that came back without a row. A
         // search this compiler stopped and a search that had everything and reached nothing are
         // different news, and a proof is not a failure at all — read under one opening, an author
@@ -5709,7 +5714,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ItemAssessment.Attempt.Stopped it ->
                     " — this compiler stopped at " + Reasons.said(it.stoppedBy())
                             + andWritesSomeOf(it.notAllOf()) + andCouldNotHold(it.unheld()) + ": "
-                            + saidOrWhy(it.why())
+                            + GeneratedRows.beside(saidOrWhy(it.why()), it.why(), rendering, places)
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // Said as what this compiler writes rather than as a number it stopped at, because
             // there is no number: an author told to raise one would raise it and get the same
@@ -5718,7 +5723,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what reaches it is a wider run or nothing.
             case ItemAssessment.Attempt.Unexhausted it ->
                     " — this compiler " + leftUntried(it.notAllOf(), it.unheld()) + ": "
-                            + saidOrWhy(it.why())
+                            + GeneratedRows.beside(saidOrWhy(it.why()), it.why(), rendering, places)
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // Both halves, because neither says what the other does. The word is what the search
             // itself came to; the figure is why that word is not about the whole of the point. Said
@@ -5728,7 +5733,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     " — over less than the point had, which stops at "
                             + Reasons.said(it.limitedBy()) + andWritesSomeOf(it.notAllOf())
                             + andCouldNotHold(it.unheld()) + ": "
-                            + saidOrWhy(it.why())
+                            + GeneratedRows.beside(saidOrWhy(it.why()), it.why(), rendering, places)
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
@@ -5753,7 +5758,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // that follows keeps saying an empty search does not make the point unreachable.
             case ItemAssessment.Attempt.Unresolved it -> {
                 String word = (it.why().reason().provesInfeasible() ? "" : "nothing composed one: ")
-                        + saidOrWhy(it.why());
+                        + GeneratedRows.beside(saidOrWhy(it.why()), it.why(), rendering, places);
                 String leftOut =
                         whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
                 yield " — " + (leftOut.isEmpty() ? word : leftOut + "; " + word);
@@ -9734,6 +9739,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
             causes(one, each.why(), sources, places);
+            runsStopped(one, each.why(), sources);
         }
     }
 
@@ -9757,11 +9763,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void causes(ObjectNode into, Generator.UnresolvedCombination why,
                                DocumentSources sources,
                                PublishedRuleHandle.WhereARuleIs places) {
-        if (why.alsoShort().isEmpty()) {
+        if (why.beside().shortOf().isEmpty()) {
             return;
         }
         DocumentArray causes = DocumentPart.SYNTHESIS_SHORTFALL_CAUSES.putArray(into);
-        for (Map.Entry<TermPath, StringOfferShortfall> at : why.alsoShort().entrySet()) {
+        for (Map.Entry<TermPath, StringOfferShortfall> at : why.beside().shortOf().entrySet()) {
             for (StringOfferShortfall.NotOffered each : at.getValue().these()) {
                 DocumentItem row = causes.addObject();
                 ObjectNode said = row.node();
@@ -9786,6 +9792,45 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case StringOfferShortfall.Why.PatternTooCostly it ->
                             said.put("limit", word(ReportedShortfall.limit(it)));
                 }
+            }
+        }
+    }
+
+    /**
+     * Where the runs of the rows composed stopped, one entry per place, in the document's own
+     * words: which of the language's ends it was, the rule that refused the run where one did, the
+     * place of the construction where it was one, and what the runtime said where nothing names a
+     * rule.
+     *
+     * <p>Nothing where no run stopped, so the absence says no run stopped at any of them.
+     */
+    private static void runsStopped(ObjectNode into, Generator.UnresolvedCombination why,
+                                    DocumentSources sources) {
+        List<WhereARunStopped> stops = why.beside().stopped();
+        if (stops.isEmpty()) {
+            return;
+        }
+        DocumentArray out = DocumentPart.SYNTHESIS_SHORTFALL_RUNS_STOPPED.putArray(into);
+        for (WhereARunStopped each : stops) {
+            DocumentItem row = out.addObject();
+            ObjectNode said = row.node();
+            said.put("at", word(each.stop().kind()));
+            Optional<PublishedRuleHandle> refusing = GeneratedRows.ruleRefusing(each.stop());
+            if (refusing.isPresent()) {
+                RuleHandleSurface.SYNTHESIS_SHORTFALL_STOPPED_RULE.put(row, refusing.get(),
+                        sources.rendering(), null);
+            }
+            switch (each.stop()) {
+                case RunStop.AtAConstruction it when it.placed() -> {
+                    if (each.source().isPresent()) {
+                        said.put("sourceId", sources.written(each.source().get()));
+                    }
+                    said.put("line", it.line());
+                    said.put("column", it.column());
+                }
+                case RunStop.AtAConstruction _, RunStop.AtAnEnsures _ -> { }
+                case RunStop.AtAnEnd it -> said.put("said", it.said());
+                case RunStop.AtAnUnreachable it -> said.put("said", it.said());
             }
         }
     }

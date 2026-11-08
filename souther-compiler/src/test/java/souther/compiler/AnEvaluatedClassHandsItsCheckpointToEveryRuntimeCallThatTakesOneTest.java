@@ -117,6 +117,99 @@ class AnEvaluatedClassHandsItsCheckpointToEveryRuntimeCallThatTakesOneTest {
         assertTrue(read > 0, "classes that ship were read");
     }
 
+    /**
+     * Every member of the runtime a generated class calls or binds is one this runtime has, by the
+     * descriptor the class reaches it by.
+     *
+     * <p>Generated classes run against the runtime of the compiler that generated them, and only
+     * that one (spec §generated-classes-run-on-their-compilers-runtime). What holds that is that
+     * the two are released as one, and what this holds is the other half: the runtime of this
+     * version offers everything the classes this version generates link against — a factory, a
+     * constructor, an entry an {@code invokedynamic} binds — so a signature changed on one side and
+     * not on the other is refused here rather than as a link failure in a run.
+     */
+    @Test
+    void everyMemberOfTheRuntimeAClassReachesIsOneTheRuntimeHas() {
+        List<String> missing = new ArrayList<>();
+        int reachedAtAll = 0;
+        Map<String, ClassFileImage> classes = new LinkedHashMap<>(shippedClasses());
+        classes.putAll(evaluatedClasses());
+        for (Map.Entry<String, ClassFileImage> each : classes.entrySet()) {
+            for (MethodModel method : parse(each.getValue()).methods()) {
+                if (method.code().isEmpty()) {
+                    continue;
+                }
+                for (CodeElement element : method.code().get()) {
+                    for (String unlinked : unlinkedRuntimeMembers(element)) {
+                        missing.add(where(each.getKey(), method) + " reaches " + unlinked);
+                    }
+                    reachedAtAll += runtimeMembersReached(element);
+                }
+            }
+        }
+        assertEquals(List.of(), missing);
+        assertTrue(reachedAtAll > 0, "the classes reach the runtime, so an empty list above means"
+                + " something");
+    }
+
+    /** How many members of the runtime {@code element} reaches. */
+    private static int runtimeMembersReached(CodeElement element) {
+        int out = 0;
+        if (element instanceof InvokeInstruction invoke
+                && invoke.owner().asInternalName().startsWith("souther/runtime/")) {
+            out++;
+        }
+        if (element instanceof InvokeDynamicInstruction indy) {
+            for (ConstantDesc argument : indy.bootstrapArgs()) {
+                if (argument instanceof DirectMethodHandleDesc handle
+                        && handle.owner().descriptorString().startsWith("Lsouther/runtime/")) {
+                    out++;
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The members of the runtime {@code element} reaches that this runtime does not offer by the
+     * descriptor reached, looked up from a package other than the runtime's as a generated class
+     * looks them up: only what is public reaches.
+     */
+    private static List<String> unlinkedRuntimeMembers(CodeElement element) {
+        List<String> out = new ArrayList<>();
+        MethodHandles.Lookup lookup = MethodHandles.lookup();
+        if (element instanceof InvokeInstruction invoke
+                && invoke.owner().asInternalName().startsWith("souther/runtime/")) {
+            Reached reached = new Reached(invoke.owner().asInternalName(),
+                    invoke.name().stringValue(), invoke.typeSymbol());
+            try {
+                Class<?> owner = owner(reached);
+                var type = reached.type().resolveConstantDesc(lookup);
+                switch (invoke.opcode()) {
+                    case INVOKESTATIC -> lookup.findStatic(owner, reached.name(), type);
+                    case INVOKESPECIAL -> lookup.findConstructor(owner,
+                            type.changeReturnType(void.class));
+                    default -> lookup.findVirtual(owner, reached.name(), type);
+                }
+            } catch (ReflectiveOperationException | IllegalStateException e) {
+                out.add(reached.toString());
+            }
+        }
+        if (element instanceof InvokeDynamicInstruction indy) {
+            for (ConstantDesc argument : indy.bootstrapArgs()) {
+                if (argument instanceof DirectMethodHandleDesc handle
+                        && handle.owner().descriptorString().startsWith("Lsouther/runtime/")) {
+                    try {
+                        handle.resolveConstantDesc(lookup);
+                    } catch (ReflectiveOperationException e) {
+                        out.add(handle.toString());
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
     /** A method a call or a binding reaches. */
     private record Reached(String owner, String name, MethodTypeDesc type) {
         @Override

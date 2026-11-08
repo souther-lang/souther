@@ -9,6 +9,7 @@ import souther.compiler.numeric.Rel;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,11 +33,12 @@ class AReadingOfADecisionTakesInNoMoreConditionsThanItsFigureTest {
             new NoInputTakesIt.Clash.TwoAtOnce(
                     new Reachability.TwoAtOnce.Counts(TermPath.of("xs"))));
 
-    /** A way consulting the one comparison {@code constant >= 0}, held. */
-    private static DecisionRule way(int constant) {
+    /** A way consulting the one comparison {@code constant >= 0}, held, through no construction. */
+    private static DecisionPath.Way way(int constant) {
         DecisionCondition.AComparison compared = new DecisionCondition.AComparison(
                 LinearForm.constant(ExactRatio.of(constant)), Rel.GE);
-        return new DecisionRule(Map.of(compared, new DecidedCondition.Compared(compared, true)));
+        return new DecisionPath.Way(new DecisionRule(Map.of(compared,
+                new DecidedCondition.Compared(compared, true))), Set.of());
     }
 
     @Test

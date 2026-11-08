@@ -44,7 +44,11 @@ public enum DocumentPart {
     /** What gave the offer no value, where a search of a rule of a decision composed nothing. */
     SYNTHESIS_SHORTFALL_CAUSES("causes",
             "/$defs/decision/properties/obligations/items/properties/synthesisShortfalls/items"
-                    + "/properties/causes");
+                    + "/properties/causes"),
+
+    SYNTHESIS_SHORTFALL_RUNS_STOPPED("runsStopped",
+            "/$defs/decision/properties/obligations/items/properties/synthesisShortfalls/items"
+                    + "/properties/runsStopped");
 
     private final String key;
     private final String schemaPath;

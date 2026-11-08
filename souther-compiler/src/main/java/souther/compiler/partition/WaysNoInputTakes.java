@@ -17,8 +17,9 @@ import java.util.function.Supplier;
  */
 final class WaysNoInputTakes {
 
-    /** Each way once, by what it consulted, with the first proof had of it. */
-    private final Map<DecisionRule, DecisionReading.ImpossiblePath> proved = new LinkedHashMap<>();
+    /** Each way once, by what it consulted and went through, with the first proof had of it. */
+    private final Map<DecisionPath.Way, DecisionReading.ImpossiblePath> proved =
+            new LinkedHashMap<>();
 
     /**
      * What each way asked of comes to, by what it consulted: the ways a body is joined into, and
@@ -26,13 +27,15 @@ final class WaysNoInputTakes {
      * over and over, met in one order or another. What a way states is what each condition it
      * consulted states coming out as it did, which the reading of the body answers once.
      *
-     * <p>Keyed by the rule, while the proof reads what each condition states. The two are one
-     * question because a condition states one thing however often a way consults it
-     * ({@link DecisionPath.Consulted#again}): two ways that are the same rule state the same of the
-     * input. A condition whose statement turned on where it was consulted would have to be a
-     * condition of its own, or this would answer one way with another's proof.
+     * <p>Keyed by the way — the rule and the constructions it goes through — while the proof reads
+     * what each condition and each construction states. The two are one question because a
+     * condition states one thing however often a way consults it
+     * ({@link DecisionPath.Consulted#again}), and so does a construction: two ways that are the
+     * same rule through the same constructions state the same of the input. A condition whose
+     * statement turned on where it was consulted would have to be a condition of its own, or this
+     * would answer one way with another's proof.
      */
-    private final Map<DecisionRule, Optional<NoInputTakesIt>> asked = new HashMap<>();
+    private final Map<DecisionPath.Way, Optional<NoInputTakesIt>> asked = new HashMap<>();
 
     /** How many more conditions this reading takes in, in all
      *  ({@link CompositionBudget#CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE}). */
@@ -43,7 +46,7 @@ final class WaysNoInputTakes {
      * and nothing once this reading has taken in as many conditions as it does in all, which is no
      * proof and keeps the way.
      */
-    Optional<NoInputTakesIt> whyNoInputTakes(DecisionRule consulted,
+    Optional<NoInputTakesIt> whyNoInputTakes(DecisionPath.Way consulted,
                                              Supplier<Optional<NoInputTakesIt>> proving) {
         Optional<NoInputTakesIt> known = asked.get(consulted);
         if (known != null) {
@@ -71,9 +74,9 @@ final class WaysNoInputTakes {
 
     /** That no input takes {@code path}, for {@code why}. */
     void add(DecisionPath path, NoInputTakesIt why) {
-        proved.putIfAbsent(path.rule(),
-                new DecisionReading.ImpossiblePath(
-                        new DecisionReading.Ruled(path.rule(), path.steps(), true), why));
+        proved.putIfAbsent(path.way(),
+                new DecisionReading.ImpossiblePath(new DecisionReading.Ruled(path.rule(),
+                        path.steps(), true, path.passed()), why));
     }
 
     /**
@@ -86,7 +89,7 @@ final class WaysNoInputTakes {
         List<DecisionReading.ImpossiblePath> out = new ArrayList<>();
         for (DecisionReading.ImpossiblePath each : proved.values()) {
             boolean pastAnother = proved.values().stream().anyMatch(other -> other != each
-                    && other.standsFor(each.way().rule()));
+                    && other.standsFor(each.way()));
             if (!pastAnother) {
                 out.add(each);
             }

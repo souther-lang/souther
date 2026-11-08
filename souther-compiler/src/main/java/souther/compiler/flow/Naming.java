@@ -79,6 +79,19 @@ public interface Naming<P> {
     P forkArm(Core fork, int part);
 
     /**
+     * That a run got past {@code construction}, which the model wrote: what that states of the
+     * input where this naming says it, joined onto the way as any part of it is.
+     *
+     * <p>No arm. A construction is no fork — a run either gets past it or stops there, and a run
+     * that stops arrives nowhere — so this splits no way and is no condition a way is told apart by.
+     * A naming with nothing to say about what a construction asks of a run answers {@link #nowhere},
+     * which joins onto a way as nothing.
+     */
+    default P passing(Core.Construct construction) {
+        return nowhere();
+    }
+
+    /**
      * {@code onlyWay} as a run that went down arm {@code part} of {@code fork} is seen taking it,
      * written down whole, or null where this naming has no words for that.
      *

@@ -418,6 +418,14 @@ not this compiler's is refused, naming the compiler that built it, rather than r
 misunderstood. A module compiled here SHALL NOT also be on the class path, and a module on the class
 path that needs one absent from it is reported against the path.
 
+[[generated-classes-run-on-their-compilers-runtime]]The classes a compiler generates run against the
+souther-runtime of the same version as that compiler, and against no other. What they call in the
+runtime — the abort a broken constraint leaves by, what a refused construction says, the operations
+of the library — is the contract between the two as one version releases them, and the next version
+is free to change it. A program holding classes of two versions holds two contracts with one
+runtime, and is not supported: it is rebuilt with one compiler, as a module of another version is
+refused where it is compiled against.
+
 A module on the class path needs another when what it declares names it — in a field's type, a
 spread, an invariant, a helper an invariant calls, or the output an `+exposing+` clause declares for a
 composition. A `+let+` body

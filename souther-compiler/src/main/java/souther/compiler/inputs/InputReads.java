@@ -949,10 +949,15 @@ public final class InputReads {
      * The same, for a rule a declaration states, which is the tree the analysis of that declaration
      * reads and keeps the language's operations standing as calls, whichever tree the value it is
      * handed is read in.
+     *
+     * <p>Entered as the body of a call is ({@link #calledWith}): the rule is a tree of its own, so
+     * what it binds to the elements of what ({@code elements}, made where the rule's tree is) is
+     * its own and is none of the tree's this reads. Without it, the parameter of a closure an
+     * operation hands the elements of a field to is a name standing for no element of anything.
      */
-    public InputReads forADeclaredRule() {
-        return new InputReads(names.overStandingCalls(), alternatives, declared, dependencies,
-                applied);
+    public InputReads forADeclaredRule(ElementBindings elements) {
+        return new InputReads(names.entering(elements).overStandingCalls(), alternatives,
+                declared, dependencies, applied);
     }
 
     /** The same, as one of {@code readings} readings of one condition, the readings beyond the

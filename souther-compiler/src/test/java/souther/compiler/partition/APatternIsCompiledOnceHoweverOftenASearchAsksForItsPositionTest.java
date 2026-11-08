@@ -132,17 +132,12 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
      * producer and borrowed by every question. The count beside it is met at every length from four
      * up, by what the rules offer together, and at exactly four, by a value of the length the count
      * asks for — two questions, each worked out once, each building its own strings of that length.
-     *
-     * <p>And where the search under a check refusing everything runs out, the format's position is
-     * offered a string one character longer than the least its counts leave, as a list is offered
-     * one element more: one more question, building the format's strings of one character — none,
-     * for a format of four, which is that question's answer.
      */
     private static final Map<String, Integer> MACHINES_BUILT = Map.of(
             A_FORMAT, 1,
             A_FORMAT_AND_A_COUNT, 3,
             A_SET_OF_THEM, 1,
-            A_FORMAT_IN_ONE_VALUE, 2);
+            A_FORMAT_IN_ONE_VALUE, 1);
 
     /** How many patterns the rules of each model state, which is how many machines a producer
      *  builds. */

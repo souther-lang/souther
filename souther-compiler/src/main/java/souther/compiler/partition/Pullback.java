@@ -2856,6 +2856,17 @@ final class Pullback {
     }
 
     /**
+     * What a run getting past {@code construction} states of this input ({@link #built}), read as
+     * an arm of a fork is read: off the values the construction is handed.
+     */
+    static Pulled ofAConstruction(Core.Construct construction, InputReads reads,
+                                  InputReading read) {
+        Pullback reading = new Pullback(read, Optional.empty(),
+                namesIn(construction, reads, read));
+        return reading.pulled(reading.built(construction, reads));
+    }
+
+    /**
      * What a run entering each arm of {@code fork} — a {@code match}, or an attempted construction
      * — states, where {@code fork} is read in {@code reads} ({@link #entering}).
      *
@@ -3036,17 +3047,7 @@ final class Pullback {
             return Collections.nCopies(1 + attempt.els().size(), new Derivation.Stopped(
                     new WhyUnread.AnInvariantNotReached(), false));
         }
-        List<Derivation> holds = new ArrayList<>();
-        InputReads inTheRules = reads.forADeclaredRule();
-        for (ClausesInOrder.OneClause clause : clauses.inOrder()) {
-            holds.add(switch (clause) {
-                case ClausesInOrder.OneClause.Stated stated ->
-                        observe(stated.term(), AnswerAspect.TRUTH, inTheRules.handingTheFields(
-                                stated.given(), reads, read.rules().newtypes()));
-                case ClausesInOrder.OneClause.Unread unread -> new Derivation.Stopped(
-                        new WhyUnread.AClauseOfAnInvariant(unread.clause(), unread.why()), false);
-            });
-        }
+        List<Derivation> holds = holding(clauses, reads);
         List<Derivation> out = new ArrayList<>();
         out.add(new Derivation.ItWasBuilt(holds));
         for (Core.ElseArm arm : attempt.els()) {
@@ -3057,6 +3058,34 @@ final class Pullback {
             out.add(new Derivation.ItDeparted(holds, answers));
         }
         return out;
+    }
+
+    /**
+     * What a run getting past {@code construction} states: every clause of the invariant of the
+     * type it builds holds of what it is handed, which is what the arm of an attempt of the same
+     * construction that built the value states. A run that does not get past it stops there.
+     */
+    private Derivation built(Core.Construct construction, InputReads reads) {
+        ClausesInOrder clauses = ClausesInOrder.at(construction, read.rules());
+        if (!clauses.everyRuleReached()) {
+            return new Derivation.Stopped(new WhyUnread.AnInvariantNotReached(), false);
+        }
+        return new Derivation.ItWasBuilt(holding(clauses, reads));
+    }
+
+    /** Each of {@code clauses} holding, read over what the construction hands it, in order. */
+    private List<Derivation> holding(ClausesInOrder clauses, InputReads reads) {
+        List<Derivation> holds = new ArrayList<>();
+        for (ClausesInOrder.OneClause clause : clauses.inOrder()) {
+            holds.add(switch (clause) {
+                case ClausesInOrder.OneClause.Stated stated -> observe(stated.term(),
+                        AnswerAspect.TRUTH, reads.forADeclaredRule(stated.elements())
+                                .handingTheFields(stated.given(), reads, read.rules().newtypes()));
+                case ClausesInOrder.OneClause.Unread unread -> new Derivation.Stopped(
+                        new WhyUnread.AClauseOfAnInvariant(unread.clause(), unread.why()), false);
+            });
+        }
+        return holds;
     }
 
     /**

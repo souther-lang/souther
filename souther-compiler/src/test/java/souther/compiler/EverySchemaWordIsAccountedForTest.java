@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.Placement;
+import souther.compiler.execute.RunStop;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.WrittenOwner;
 
@@ -715,6 +716,12 @@ class EverySchemaWordIsAccountedForTest {
                             "properties", "synthesisShortfalls", "items", "properties", "causes",
                             "items", "properties", "limit"),
                     ReportedShortfall.Limit.class),
+            // Which of the language's ends a run of a row composed there stopped at.
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].runsStopped[].at",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties",
+                            "runsStopped", "items", "properties", "at"),
+                    RunStop.Kind.class),
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
                     Adequacy.Kind.class),

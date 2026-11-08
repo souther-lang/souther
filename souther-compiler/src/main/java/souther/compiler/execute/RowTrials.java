@@ -99,15 +99,15 @@ public interface RowTrials {
      *
      * @param recorded where it went, or that nothing was recording
      * @param answer   what it answered, or that it answered nothing
-     * @param refused  the construction it stopped at, where it stopped at one
+     * @param stopped  where it stopped without answering, where it stopped at one of the
+     *                 language's own ends
      */
-    record Ran(RunRecord recorded, AnswerObservation answer,
-               Optional<RefusedConstruction> refused) {
+    record Ran(RunRecord recorded, AnswerObservation answer, Optional<RunStop> stopped) {
 
         public Ran {
             Objects.requireNonNull(recorded, "a run says what was recorded of it, or that nothing was");
             Objects.requireNonNull(answer, "a run says what it answered, or that it answered nothing");
-            Objects.requireNonNull(refused, "a run says whether a construction stopped it");
+            Objects.requireNonNull(stopped, "a run says whether it stopped somewhere");
         }
     }
 

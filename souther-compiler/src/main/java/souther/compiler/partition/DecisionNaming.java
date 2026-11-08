@@ -134,10 +134,25 @@ final class DecisionNaming implements Naming<DecisionPath> {
         for (DecisionPath.Consulted each : path.consulted()) {
             List<DecisionPath.Consulted> without = new ArrayList<>(least.consulted());
             without.remove(each);
-            if (without.isEmpty()) {
+            if (without.isEmpty() && least.passed().isEmpty()) {
                 continue;
             }
-            DecisionPath less = new DecisionPath(without);
+            DecisionPath less = new DecisionPath(without, least.passed());
+            Optional<NoInputTakesIt> still = noInputTakes(less);
+            if (still.isPresent()) {
+                least = less;
+                leastWhy = still.get();
+            }
+        }
+        // And each construction gone through the proof is had without, the same way: a proof
+        // through fewer of them stands for every way through more.
+        for (PassedConstruction each : path.passed()) {
+            List<PassedConstruction> without = new ArrayList<>(least.passed());
+            without.remove(each);
+            if (without.isEmpty() && least.consulted().isEmpty()) {
+                continue;
+            }
+            DecisionPath less = new DecisionPath(least.consulted(), without);
             Optional<NoInputTakesIt> still = noInputTakes(less);
             if (still.isPresent()) {
                 least = less;
@@ -160,16 +175,12 @@ final class DecisionNaming implements Naming<DecisionPath> {
         return none.isPresent();
     }
 
-    /** Why no input brings out every condition {@code path} consulted as it did, where that is
-     *  proved. */
+    /** Why no input brings out every condition {@code path} consulted as it did and gets past
+     *  every construction it goes through, where that is proved. */
     private Optional<NoInputTakesIt> noInputTakes(DecisionPath path) {
-        return proved.whyNoInputTakes(path.rule(), () -> {
-            List<OnTheWay> stated = new ArrayList<>();
-            path.consulted().forEach(each -> stated.addAll(each.states()));
-            return WayToTheBorder.forArrival(stated)
-                    .takenByNoInput(meanings.states().read().quantities().region(),
-                            proved::takesIn);
-        });
+        return proved.whyNoInputTakes(path.way(), () -> WayToTheBorder.forArrival(path.stated())
+                .takenByNoInput(meanings.states().read().quantities().region(),
+                        proved::takesIn));
     }
 
     @Override
@@ -222,6 +233,19 @@ final class DecisionNaming implements Naming<DecisionPath> {
         return meanings.entering(match, part, reads, numbering)
                 .map(read -> atAnArm(read, match.occurrence(), part))
                 .orElse(DecisionPath.NOWHERE);
+    }
+
+    /**
+     * That a run got past {@code construction}: what every clause of the invariant of the type it
+     * builds states holding of what it is handed, gone through by the way and asked of a row
+     * composed for it. Nothing where the type holds its values to no invariant, which a run gets
+     * past whatever it hands it.
+     */
+    @Override
+    public DecisionPath passing(Core.Construct construction) {
+        List<OnTheWay> states = meanings.constructing(construction, reads, numbering);
+        return states.isEmpty() ? DecisionPath.NOWHERE
+                : DecisionPath.NOWHERE.passing(new PassedConstruction(states));
     }
 
     /**

@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputReads;
 
 import souther.compiler.meaning.Proposition;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -109,5 +110,12 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
     ReachingCuts.Stating attempting(Core.IfConstructed attempt, int part, SourcePos at,
                                     InputReads reads, ConditionNumbering numbering) {
         return ReachingCuts.attempting(attempt, part, at, read, reads, numbering);
+    }
+
+    /** What getting past {@code construction} says of the input, nothing where it is held to no
+     *  clause. */
+    List<OnTheWay> constructing(Core.Construct construction, InputReads reads,
+                                ConditionNumbering numbering) {
+        return ReachingCuts.constructing(construction, read, reads, numbering);
     }
 }

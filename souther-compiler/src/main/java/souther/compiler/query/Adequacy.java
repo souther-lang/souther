@@ -176,7 +176,7 @@ import souther.compiler.partition.RewriteSearch;
 import souther.compiler.partition.InteractionCells;
 import souther.compiler.partition.RowRegion;
 import souther.compiler.partition.StatementsOfAnInput;
-import souther.compiler.partition.StoppedAtAConstruction;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
@@ -7743,9 +7743,8 @@ public final class Adequacy {
                             case RunRecord.Recorded(var seen) ->
                                     new Generator.Watched.Ran(numbering.align(seen));
                             case RunRecord.NoAccount _ -> new Generator.Watched.NoAccount();
-                        }, ran.answer(), ran.refused().map(refused ->
-                                new StoppedAtAConstruction(refused, Optional.ofNullable(
-                                        Compilation.sourceIdOf(db, refused.siteModule()))))))
+                        }, ran.answer(), ran.stopped().map(stop -> new WhereARunStopped(stop,
+                                stop.writtenIn().map(module -> Compilation.sourceIdOf(db, module))))))
                         .orElseGet(Generator.ObservedRun::nothingRan);
             }
 
