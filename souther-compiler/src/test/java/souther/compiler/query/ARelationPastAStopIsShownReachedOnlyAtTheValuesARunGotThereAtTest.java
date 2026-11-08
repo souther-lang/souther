@@ -90,6 +90,64 @@ class ARelationPastAStopIsShownReachedOnlyAtTheValuesARunGotThereAtTest {
                 | "two deals no rate covers" : (twoDeals, noRates) -> Missing { n = 1 }
             """;
 
+    /**
+     * The same two deals, walked by an operation that applies its closure to every element: a run
+     * that answers made the relation on each, unless something inside the closure chose, or the
+     * closure was handed fewer elements than the position holds.
+     */
+    private static final String WALKING_EVERY = """
+            module probe
+
+            data Deal = { currency: String, amount: Int }
+            data Rates = { rates: Map<String, Int> }
+            data Ok = { n: Int }
+            data Missing = { n: Int }
+
+            let twoDeals = [ Deal { currency = "X", amount = 6 }, Deal { currency = "Y", amount = 1 } ]
+            let noRates = Rates { rates = Map.empty }
+
+            behavior everyUnpriced : (deals: List<Deal>, rates: Rates) -> Ok | Missing
+            let everyUnpriced (deals, rates) = {
+                let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
+                guard List.length(weighed) == List.length(deals)
+                    else Missing { n = List.length(List.filter(
+                        d -> Bool.not(Map.containsKey(d.currency, rates.rates)), deals)) }
+                Ok { n = List.length(weighed) }
+            }
+
+            example everyUnpriced
+                | "two deals no rate covers" : (twoDeals, noRates) -> Missing { n = 2 }
+
+            behavior choosingUnpriced : (deals: List<Deal>, rates: Rates) -> Ok | Missing
+            let choosingUnpriced (deals, rates) = {
+                let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
+                guard List.length(weighed) == List.length(deals)
+                    else Missing { n = List.length(List.filter(
+                        d -> d.amount > 5 && Bool.not(Map.containsKey(d.currency, rates.rates)),
+                        deals)) }
+                Ok { n = List.length(weighed) }
+            }
+
+            example choosingUnpriced
+                | "two deals no rate covers" : (twoDeals, noRates) -> Missing { n = 1 }
+
+            behavior firstUnpriced : (deals: List<Deal>, rates: Rates) -> Ok | Missing
+            let firstUnpriced (deals, rates) = {
+                let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
+                guard List.length(weighed) == List.length(deals)
+                    else Missing { n = List.length(List.filter(
+                        d -> Bool.not(Map.containsKey(d.currency, rates.rates)),
+                        List.take(1, deals))) }
+                Ok { n = List.length(weighed) }
+            }
+
+            example firstUnpriced
+                | "two deals no rate covers" : (twoDeals, noRates) -> Missing { n = 1 }
+            """;
+
     @Test
     void aRowRunToTheRelationShowsTheValuesItHeldThereAndNoOther() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
@@ -145,5 +203,37 @@ class ARelationPastAStopIsShownReachedOnlyAtTheValuesARunGotThereAtTest {
         List<String> shown = new ArrayList<>();
         evidence.get("anyUnpriced").notRead().forEach(each -> shown.addAll(each.shownReachedAt()));
         assertEquals(List.of(), shown, evidence.get("anyUnpriced").notRead().toString());
+    }
+
+    /**
+     * A row holding two values where the relation stands in a closure applied to every element,
+     * with nothing inside it choosing, shows both: a run that answers made every application, and
+     * each got to the relation. A choice inside the closure, or a closure handed only some of the
+     * elements, shows neither.
+     */
+    @Test
+    void aRowHoldingTwoValuesWhereEveryElementIsWalkedShowsBoth() {
+        Compilation compilation = Compilation.ofSource(WALKING_EVERY, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        Map<String, PartitionEvidence> evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value();
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        assertEquals(List.of("\"X\"", "\"Y\""), shownAt(evidence, "everyUnpriced"),
+                evidence.get("everyUnpriced").notRead().toString());
+        assertEquals(List.of(), shownAt(evidence, "choosingUnpriced"),
+                evidence.get("choosingUnpriced").notRead().toString());
+        assertEquals(List.of(), shownAt(evidence, "firstUnpriced"),
+                evidence.get("firstUnpriced").notRead().toString());
+    }
+
+    /** What {@code behavior}'s report shows its deals' currency reached at. */
+    private static List<String> shownAt(Map<String, PartitionEvidence> evidence, String behavior) {
+        List<String> shown = new ArrayList<>();
+        evidence.get(behavior).notRead().stream()
+                .filter(each -> each.at().equals("deals[*].currency"))
+                .forEach(each -> shown.addAll(each.shownReachedAt()));
+        return shown;
     }
 }

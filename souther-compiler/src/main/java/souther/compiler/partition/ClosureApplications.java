@@ -49,19 +49,71 @@ import java.util.function.UnaryOperator;
 sealed interface ClosureApplications {
 
     /** Inside no closure at all. */
-    ClosureApplications OUTSIDE = new Outside(ElementsMetOn.EVERY);
+    ClosureApplications OUTSIDE = new Outside(ElementsMetOn.EVERY, MadeOnEvery.NONE_AROUND);
 
     /**
      * Inside no closure handed values written out.
      *
-     * @param metOn which elements of the input a run makes what stands here on, where it stands
-     *              inside closures over the input's containers: nothing about each application is
-     *              said here, and which elements a run gets to still is
+     * @param metOn       which elements of the input a run makes what stands here on, where it
+     *                    stands inside closures over the input's containers: nothing about each
+     *                    application is said here, and which elements a run gets to still is
+     * @param madeOnEvery the elements a run making what stands here once is shown to make it on
+     *                    every one of
      */
-    record Outside(ElementsMetOn metOn) implements ClosureApplications {
+    record Outside(ElementsMetOn metOn, MadeOnEvery madeOnEvery) implements ClosureApplications {
 
         public Outside {
             Objects.requireNonNull(metOn, "what stands here is made on some elements");
+            Objects.requireNonNull(madeOnEvery, "and on every one of some, or of none shown");
+        }
+    }
+
+    /**
+     * The elements a run that makes what stands here once is shown to make it on every one of:
+     * each closure around it applied by its operation to every element ({@link
+     * HowAClosureIsApplied#TO_EVERY_ELEMENT}) of a container that is one position of the input,
+     * holding its elements as the row writes them ({@link ElementsHeldFrom}), and nothing on the
+     * way from where each closure's body is entered to here forking. A run that answers has made
+     * every application each operation makes, and each application made gets here, so a run made
+     * it on one element is a run that made it on all of them.
+     *
+     * <p>Not which elements a run gets to, which is {@link ElementsMetOn}'s to say and says it of
+     * a run that stops short too. This is what a run that answers and was recorded here once is
+     * shown to have done, and it is shown only where nothing on the way chose.
+     *
+     * @param elements the element of each such position ({@link TermPath#element}), outermost
+     *                 first, and none inside no closure, where what stands here is made once; empty
+     *                 where it is not shown — a closure applied to some elements, over what no
+     *                 position holds as written, or a fork inside one
+     */
+    record MadeOnEvery(Optional<List<TermPath>> elements) {
+
+        /** Inside no closure. */
+        static final MadeOnEvery NONE_AROUND = new MadeOnEvery(Optional.of(List.of()));
+
+        /** Not shown. */
+        static final MadeOnEvery NOT_SHOWN = new MadeOnEvery(Optional.empty());
+
+        public MadeOnEvery {
+            elements = elements.map(List::copyOf);
+        }
+
+        /** The same, inside one more closure made on every element of {@code position}, or not
+         *  shown where that is empty. */
+        MadeOnEvery inside(Optional<TermPath> position) {
+            if (elements.isEmpty() || position.isEmpty()) {
+                return NOT_SHOWN;
+            }
+            List<TermPath> deeper = new ArrayList<>(elements.get());
+            deeper.add(position.get().element());
+            return new MadeOnEvery(Optional.of(deeper));
+        }
+
+        /** The same, past a fork: inside a closure, an application the fork leaves out of here is
+         *  one a run made without getting here. Outside every closure the run was recorded here,
+         *  and so went the way it did. */
+        MadeOnEvery forked() {
+            return elements.filter(List::isEmpty).isPresent() ? this : NOT_SHOWN;
         }
     }
 
@@ -123,15 +175,18 @@ sealed interface ClosureApplications {
      *                          none before it stopped the operation
      * @param madeBy            which application of which call it is, for each closure it stands
      *                          inside whose call some source wrote, the outermost first
+     * @param madeOnEvery       the elements a run making what stands in it once is shown to make
+     *                          it on every one of
      */
     record Application(InputReads reads, Proposition reached,
                        Map<BindingId, Denotation> carriedIntoTheFirst, ElementsMetOn metOn,
-                       List<MadeBy> madeBy) {
+                       List<MadeBy> madeBy, MadeOnEvery madeOnEvery) {
 
         public Application {
             Objects.requireNonNull(reads, "an application is read in some names");
             Objects.requireNonNull(reached, "and is made under something");
             Objects.requireNonNull(metOn, "and on some elements");
+            Objects.requireNonNull(madeOnEvery, "and on every one of some, or of none shown");
             carriedIntoTheFirst = Collections.unmodifiableMap(
                     new LinkedHashMap<>(carriedIntoTheFirst));
             madeBy = List.copyOf(madeBy);
@@ -139,32 +194,43 @@ sealed interface ClosureApplications {
 
         /** The same application, read in {@code names}. */
         Application readIn(InputReads names) {
-            return new Application(names, reached, carriedIntoTheFirst, metOn, madeBy);
+            return new Application(names, reached, carriedIntoTheFirst, metOn, madeBy,
+                    madeOnEvery);
         }
 
         /** The same application, made under {@code where}. */
         Application madeUnder(Proposition where) {
-            return new Application(reads, where, carriedIntoTheFirst, metOn, madeBy);
+            return new Application(reads, where, carriedIntoTheFirst, metOn, madeBy,
+                    madeOnEvery);
         }
 
         /** The same application, carrying {@code carried} into the first step of each walk. */
         Application carrying(Map<BindingId, Denotation> carried) {
-            return new Application(reads, reached, carried, metOn, madeBy);
+            return new Application(reads, reached, carried, metOn, madeBy, madeOnEvery);
+        }
+
+        /** The same application, past a fork ({@link MadeOnEvery#forked}). */
+        Application forked() {
+            return new Application(reads, reached, carriedIntoTheFirst, metOn, madeBy,
+                    madeOnEvery.forked());
         }
 
         /**
          * An application made inside this one: read in {@code names}, made under {@code where}
          * on {@code on}, carrying what this one carries, and made by the calls this one is and
-         * by {@code by}, where a call some source wrote made it.
+         * by {@code by}, where a call some source wrote made it — and made on every element of
+         * {@code everyOf}, where it is one application standing for every element of that
+         * position, on every element this one is.
          *
          * <p>Which call made an application is carried here and handed on only by these, so
          * nothing a reading reads it in passing ({@code WhatExplainsACountIsReadOnlyWhereItIsTold}).
          */
         Application inside(InputReads names, Proposition where, ElementsMetOn on,
-                           Optional<MadeBy> by) {
+                           Optional<MadeBy> by, Optional<TermPath> everyOf) {
             List<MadeBy> deeper = new ArrayList<>(madeBy);
             by.ifPresent(deeper::add);
-            return new Application(names, where, carriedIntoTheFirst, on, deeper);
+            return new Application(names, where, carriedIntoTheFirst, on, deeper,
+                    madeOnEvery.inside(everyOf));
         }
 
         /** {@code stated}, said to be the statement of this application of each call it is
@@ -237,7 +303,7 @@ sealed interface ClosureApplications {
      */
     default ElementsMetOn elementsMetOn() {
         return switch (this) {
-            case Outside(var metOn) -> metOn;
+            case Outside(var metOn, var _) -> metOn;
             case NotSaid(var metOn) -> metOn;
             case None _ -> ElementsMetOn.EVERY;
             case Each(var each) -> {
@@ -250,15 +316,32 @@ sealed interface ClosureApplications {
     }
 
     /**
+     * The elements a run making what stands inside these once is shown to make it on every one
+     * of: one answer where every application agrees, and not shown where they do not, or where
+     * which applications are made is not said.
+     */
+    default MadeOnEvery madeOnEvery() {
+        return switch (this) {
+            case Outside(var _, var made) -> made;
+            case NotSaid _, None _ -> MadeOnEvery.NOT_SHOWN;
+            case Each(var each) -> {
+                MadeOnEvery first = each.getFirst().madeOnEvery();
+                yield each.stream().allMatch(one -> one.madeOnEvery().equals(first)) ? first
+                        : MadeOnEvery.NOT_SHOWN;
+            }
+        };
+    }
+
+    /**
      * The applications inside {@code block}, entered by {@code step} from where it stands, which
      * is read in {@code reads} by a walk that is inside these.
      */
     default ClosureApplications into(Core.Block block, ScopeStep step, InputReads reads,
                                      InputReading read) {
         return switch (this) {
-            case Outside(var metOn) -> applied(block, step,
+            case Outside(var metOn, var made) -> applied(block, step,
                     List.of(new Application(reads, WhereAnApplicationIsMade.nothingAsked(),
-                            Map.of(), metOn, List.of())),
+                            Map.of(), metOn, List.of(), made)),
                     read, true);
             case Each(var outer) -> applied(block, step, outer, read, false);
             case NotSaid _, None _ -> this;
@@ -315,7 +398,8 @@ sealed interface ClosureApplications {
                         int ordinal = at;
                         out.add(around.inside(each.get(at).reads(), reached.get(at),
                                 around.metOn(), madeBy.map(call ->
-                                        new MadeBy(asWritten(call, symbols), ordinal))));
+                                        new MadeBy(asWritten(call, symbols), ordinal)),
+                                Optional.empty()));
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
@@ -330,7 +414,8 @@ sealed interface ClosureApplications {
                     out.add(around.inside(entered,
                             where.map(some -> WhereAnApplicationIsMade.past(around.reached(),
                                     some.holdingSomething())).orElse(around.reached()),
-                            metOn(block, containers, around, entered, read), Optional.empty()));
+                            metOn(block, containers, around, entered, read), Optional.empty(),
+                            everyElementOf(block, containers, around, read)));
                 }
                 case InputReads.Applications.Unsaid _ -> {
                     return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(
@@ -351,7 +436,29 @@ sealed interface ClosureApplications {
         }
         // Outside every closure handed values written out, there is one application, and what is
         // kept of it is which elements it is made on.
-        return handed || asked || !outside ? new Each(out) : new Outside(out.getFirst().metOn());
+        return handed || asked || !outside ? new Each(out)
+                : new Outside(out.getFirst().metOn(), out.getFirst().madeOnEvery());
+    }
+
+    /**
+     * The position whose every element the operation applying {@code block} over
+     * {@code containers} hands it, as the row writes them — or empty where it hands some, or
+     * what no one position of the input holds as written, or the elements of several.
+     *
+     * <p>Only a position held on every run ({@link ElementsHeldFrom} under nothing): one chosen
+     * between it and a list written empty holds nothing on some runs, and inside another closure
+     * which runs those are is what each application of that one chose.
+     */
+    private static Optional<TermPath> everyElementOf(Core.Block block, List<Denotation> containers,
+                                                     Application around, InputReading read) {
+        if (containers.size() != 1 || !around.reads().howItIsApplied(block).stream()
+                .allMatch(HowAClosureIsApplied.TO_EVERY_ELEMENT::equals)) {
+            return Optional.empty();
+        }
+        return ElementsHeldFrom.of(containers.getFirst(), read)
+                .filter(held -> held.where() instanceof Proposition.Always(boolean always)
+                        && always)
+                .map(ElementsHeldFrom::position);
     }
 
     /**
@@ -470,10 +577,12 @@ sealed interface ClosureApplications {
                 Proposition stated = conditions.truth(condition, one.reads(), read).proposition();
                 Proposition past = holding ? stated : conditions.denied(stated);
                 return Proposition.leavesSomethingUnread(past)
-                        && pastOnTheFirstStep(condition, holding, one, read) ? one
-                        : one.madeUnder(WhereAnApplicationIsMade.past(one.reached(), past));
+                        && pastOnTheFirstStep(condition, holding, one, read) ? one.forked()
+                        : one.madeUnder(WhereAnApplicationIsMade.past(one.reached(), past))
+                                .forked();
             }).toList());
-            case Outside _, NotSaid _, None _ -> this;
+            case Outside(var metOn, var made) -> new Outside(metOn, made.forked());
+            case NotSaid _, None _ -> this;
         };
     }
 
@@ -546,6 +655,9 @@ sealed interface ClosureApplications {
     default ClosureApplications choosing(Choice.Decides decidedBy, Symbols symbols,
                                          DeclarationNewtypes newtypes,
                                          Function<InputReads, Proposition> entered) {
+        if (this instanceof Outside(var metOn, var made)) {
+            return new Outside(metOn, made.forked());
+        }
         if (!(this instanceof Each(var each))) {
             return this;
         }
@@ -554,7 +666,8 @@ sealed interface ClosureApplications {
                 .map(one -> one.readIn(one.reads().choosing(decidedBy, symbols, newtypes))
                         .madeUnder(entered == null ? one.reached()
                                 : WhereAnApplicationIsMade.past(one.reached(),
-                                        entered.apply(one.reads()))))
+                                        entered.apply(one.reads())))
+                        .forked())
                 .toList();
         return entering.isEmpty() ? new None() : new Each(entering);
     }

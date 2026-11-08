@@ -871,9 +871,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             ? () -> in.conditions().comparison(comparison, reads, in.read())
                                     .readOff()
                             : Map::of;
+            // Which elements the comparison reads, by the names that stand for them.
+            ElementsNamed readsTheElements = reads.elementsNamedIn(e, in.newtypes());
             ComparisonWitnesses.AtAComparison witnesses = WhatARunWorksOutBeforeACount.past(
                     in.context().equals(CallContext.OF_THE_BODY) ? in.root() : null, e, reads,
-                    readOff, in.read().domain().parameterReads(), in.witnesses().at(stands));
+                    readOff, in.read().domain().parameterReads(), in.witnesses().at(stands))
+                    .madeOnEveryElementOf(madeOnEvery(applying, readsTheElements, in));
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.
@@ -930,7 +933,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // What a line of it is looked for beside is the way as statements of the elements the
             // comparison reads: a condition on the way read of another element of one of its
             // containers is about a value the line is not.
-            ElementsNamed readsTheElements = reads.elementsNamedIn(e, in.newtypes());
             ElementsOnTheWay.Kept besideIt = ElementsOnTheWay.keptToOneElementEach(assumed,
                     readsTheElements, numbering.saidOnTheWay(List.of(assumed)));
             out.add(new Reading(stands, stated.statement(), where, reads, besideIt.way(), standing,
@@ -1234,6 +1236,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              ClosureApplications applying) { }
 
     /**
+     * The elements a run that answers and goes through a comparison standing inside
+     * {@code applying} once is shown to make it on every one of ({@link
+     * ClosureApplications.MadeOnEvery}) — none where that is not shown.
+     *
+     * <p>Only in the body the reading was handed: a helper's body is run by every call of it, so
+     * a run recorded there may be another call's. And only where the comparison reads the
+     * innermost of those elements through a name for it and in no other way ({@code reads}): a
+     * name a closure binds stands for each element it is handed, and what is read of the
+     * container some other way is no element the closure was handed.
+     */
+    private static List<TermPath> madeOnEvery(ClosureApplications applying, ElementsNamed reads,
+                                              Body in) {
+        List<TermPath> elements = applying.madeOnEvery().elements().orElse(List.of());
+        if (elements.isEmpty() || !in.context().equals(CallContext.OF_THE_BODY)) {
+            return List.of();
+        }
+        ElementsNamed.Slot innermost = ElementsNamed.Slot.innermostOf(elements.getLast());
+        return innermost != null && reads.named().containsKey(innermost)
+                && !reads.unnamed().contains(innermost) ? elements : List.of();
+    }
+
+    /**
      * {@code call} read as a call of a helper that walks a list the input holds by its head and
      * calls itself on the rest — or null where it is no such call, or one this reading reads no
      * further.
@@ -1256,7 +1280,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static Recursion recursionAt(Core.Call call, Body in, InputReads reads,
                                          ClosureApplications applying) {
         if (in.root() == null || !in.context().equals(CallContext.OF_THE_BODY)
-                || !(applying instanceof ClosureApplications.Outside(var metOn))
+                || !(applying instanceof ClosureApplications.Outside(var metOn, var _))
                 || !(AnOperationApplied.of(call) instanceof AnOperationApplied(
                         ValueName.Helper helper, List<Core> args))) {
             return null;
@@ -1292,7 +1316,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
                         metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
-                        List.of()))));
+                        List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN))));
     }
 
     /**

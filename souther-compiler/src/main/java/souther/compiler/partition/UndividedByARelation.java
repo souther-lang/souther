@@ -4193,9 +4193,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * claimed to be reached despite ({@link #roomOnTheWay}).
      *
      * <p>Where a run may stop, a row a run of which is shown to get to the relation
-     * ({@link ComparisonWitnesses.AtAComparison#reached}) shows the value it holds at a place
-     * reached, where it holds one value there, and nothing of any other value: the place is still
-     * not shown reached at every value.
+     * ({@link ComparisonWitnesses.AtAComparison#reached}) shows the values it holds at a place
+     * that the run is shown to have made the relation at ({@link ReachWitnesses.Witness#shownAt}),
+     * and nothing of any other value: the place is still not shown reached at every value.
      */
     private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
                                       InputReading read, SearchRegion region,
@@ -4209,13 +4209,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         witnesses.reached().found().ifPresent(row -> places().forEach(at -> {
             TermPath place = theValueAt(at);
             List<String> written = place == null ? null
-                    : row.valuesAt(place, read).map(values -> writtenOut(values, place, read))
+                    : row.shownAt(place, read).map(values -> writtenOut(values, place, read))
                             .orElse(null);
-            // That the run went through the relation says it was worked out at some value the row
-            // holds there, and not at which: a walk that stops early leaves the values after it
-            // unasked. A row holding one value there was asked at that one.
-            if (written != null && new LinkedHashSet<>(written).size() == 1) {
-                reached.put(at, List.of(written.getFirst()));
+            if (written != null) {
+                reached.put(at, List.copyOf(new LinkedHashSet<>(written)));
             }
         }));
         return shown.mayStopBefore(places(), reached);

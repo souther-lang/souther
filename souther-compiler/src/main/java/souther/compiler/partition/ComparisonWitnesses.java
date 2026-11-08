@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.types.ConstructOccurrence;
+
+import java.util.List;
 
 /**
  * Where the reading of one comparison asks for the rows shown to get to it: a row showing a count
@@ -24,6 +27,31 @@ public final class ComparisonWitnesses {
         /** What the search for a row that gets to the comparison came to. */
         default ReachWitnesses.Sought reached() {
             return ReachWitnesses.Sought.NOTHING;
+        }
+
+        /**
+         * The same, a run of each row found getting to the comparison shown to make it on every
+         * element of each of {@code elements} ({@link ReachWitnesses.Witness#madeOnEvery}): a
+         * fact about where the comparison stands, which the search for the row does not know.
+         */
+        default AtAComparison madeOnEveryElementOf(List<TermPath> elements) {
+            if (elements.isEmpty()) {
+                return this;
+            }
+            AtAComparison found = this;
+            return new AtAComparison() {
+                @Override
+                public CountWitnesses.Sought of(Quantity.HowManyMeet count) {
+                    return found.of(count);
+                }
+
+                @Override
+                public ReachWitnesses.Sought reached() {
+                    ReachWitnesses.Sought sought = found.reached();
+                    return new ReachWitnesses.Sought(sought.found()
+                            .map(row -> row.madeOnEveryElementOf(elements)), sought.stoppedAt());
+                }
+            };
         }
 
         /** Nothing found: nothing more is shown than the reading shows alone. */

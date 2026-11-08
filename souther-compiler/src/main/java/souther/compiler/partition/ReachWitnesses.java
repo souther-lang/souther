@@ -8,6 +8,7 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -19,8 +20,9 @@ import java.util.Set;
  * comparison, past whatever the run works out on the way.
  *
  * <p>What it shows is that row and nothing more. A relation the way to it may stop before is
- * shown reached at the values the row holds at the places it reads, and at no other value: a
- * second row is what shows a second value, and no row shows every value. A reader that says what
+ * shown reached at the values the row holds at the places it reads that a run of it is shown to
+ * have made the relation at ({@link Witness#shownAt}), and at no other value: a second row is what
+ * shows a second value, and no row shows every value. A reader that says what
  * the relation leaves of a place says the values shown beside what was not shown, and never
  * reads the one as the other ({@code UndividedByARelation}).
  *
@@ -32,31 +34,73 @@ public final class ReachWitnesses {
     private ReachWitnesses() {}
 
     /**
-     * A row shown to get to a comparison: the fixtures it is written with, and what the boundary
-     * built of each.
+     * A row shown to get to a comparison: the fixtures it is written with, what the boundary built
+     * of each, and the elements a run of it is shown to make the comparison on every one of.
      *
-     * @param inputs the row, one fixture per parameter
-     * @param built  what the boundary built of each
+     * @param inputs      the row, one fixture per parameter
+     * @param built       what the boundary built of each
+     * @param madeOnEvery the element of each container the comparison's closures walk, outermost
+     *                    first, where a run that answers and goes through the comparison once is
+     *                    shown to make it on every element of each, read through the name each
+     *                    closure hands it; none where that is not shown
      */
-    public record Witness(List<FixtureTemplate> inputs, List<ObservedValue> built) {
+    public record Witness(List<FixtureTemplate> inputs, List<ObservedValue> built,
+                          List<TermPath> madeOnEvery) {
 
         public Witness {
             inputs = List.copyOf(inputs);
             built = List.copyOf(built);
+            madeOnEvery = List.copyOf(madeOnEvery);
             if (inputs.size() != built.size()) {
                 throw new IllegalArgumentException("a row is built of each of its inputs");
             }
         }
 
-        /** Every value the row holds at {@code place}, as the behavior's inputs are walked by
-         *  {@code read}, or empty where the walk does not reach it. */
-        public Optional<List<ObservedValue>> valuesAt(TermPath place, InputReading read) {
+        /** A row the search found, nothing shown of which elements a run of it made the
+         *  comparison on. */
+        public Witness(List<FixtureTemplate> inputs, List<ObservedValue> built) {
+            this(inputs, built, List.of());
+        }
+
+        /** The same row, a run of which is shown to make the comparison on every element of each
+         *  of {@code elements}. */
+        public Witness madeOnEveryElementOf(List<TermPath> elements) {
+            return new Witness(inputs, built, elements);
+        }
+
+        /**
+         * The values the row holds at {@code place} that a run of it is shown to have made the
+         * comparison at, as the behavior's inputs are walked by {@code read} — or empty where none
+         * is.
+         *
+         * <p>That the run went through the comparison says it was made at some value the row
+         * holds there, and not at which: a walk that stops early leaves the values after it
+         * unasked. So a row holding one value there shows that one, and a row holding several
+         * shows all of them only where the place stands inside exactly the containers the
+         * comparison is shown made on every element of ({@link #madeOnEvery}); otherwise none.
+         */
+        public Optional<List<ObservedValue>> shownAt(TermPath place, InputReading read) {
             BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
                     new StandingAtAPoint.RowWalk(BehaviorInputs.of(read), new ObservedInputs(built,
                             new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
-            return row.everyValueAt(place)
-                    instanceof WalkResult.Reached<List<ObservedValue>>(List<ObservedValue> there)
-                    ? Optional.of(List.copyOf(there)) : Optional.empty();
+            if (!(row.everyValueAt(place)
+                    instanceof WalkResult.Reached<List<ObservedValue>>(List<ObservedValue> there))
+                    || there.isEmpty()) {
+                return Optional.empty();
+            }
+            if (new LinkedHashSet<>(there).size() == 1) {
+                return Optional.of(List.of(there.getFirst()));
+            }
+            List<TermPath> inside = new ArrayList<>();
+            for (TermPath container : place.containersHoldingIt()) {
+                TermPath element = container.element();
+                if (!place.standsAtOrUnder(element)) {
+                    return Optional.empty();
+                }
+                inside.add(element);
+            }
+            return inside.equals(madeOnEvery) ? Optional.of(List.copyOf(there))
+                    : Optional.empty();
         }
     }
 
