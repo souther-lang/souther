@@ -675,10 +675,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "writes the statement that holds of a set of whole numbers the one way, as the"
                             + " order of a value below a whole number and the equality: above 2 and"
                             + " at least 3 are one statement of whole numbers"),
-            new Held("souther.compiler.check.Accumulations.spelledOut",
-                    "reads whether a fold adds what it is handed from nought, multiplies it from"
-                            + " one, or adds one to what it has: the step that is a library"
-                            + " operation written out"),
             new Held("souther.compiler.check.Term.runsOfAStatement",
                     "reads which whole numbers a statement holds of, from the order of a value"
                             + " below a whole number, the equality, and what joins and denies them"),

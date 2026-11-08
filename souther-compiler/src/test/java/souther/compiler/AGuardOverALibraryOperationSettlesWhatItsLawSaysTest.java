@@ -160,21 +160,41 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "- List.length(List.filter(n -> n <= 1, xs)))", false),
             new Row("Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) "
                     + "- List.length(List.filter(n -> n <= 3, xs)))", true),
-            // A fold that spells out a library operation is that operation's value.
-            new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n, 0, xs))", false),
-            new Row("Digit(List.fold((acc, n) -> acc + n, 0, xs) - List.sum(xs))", false),
-            new Row("Digit(List.sum(xs) - List.fold((acc, n) -> n + acc, 0, xs))", false),
-            new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n, 1, xs))", true),
-            new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n + 1, 0, xs))", true),
-            new Row("Digit(List.product(xs) - List.fold((acc, n) -> acc * n, 1, xs))", false),
-            new Row("Digit(List.product(xs) - List.fold((acc, n) -> acc * n, 2, xs))", true),
-            new Row("Digit(List.length(xs) - List.fold((acc, n) -> acc + 1, 0, xs))", false),
-            new Row("Digit(List.fold((acc, n) -> 1 + acc, 0, xs) - List.length(xs))", false),
-            new Row("Digit(List.length(xs) - List.fold((acc, n) -> acc + 2, 0, xs))", true),
-            new Row("if List.fold((acc, n) -> acc + n, 0, xs) > 0 then "
-                    + "Digit(List.length(xs) - 1) else Digit(0)", false),
-            new Row("if List.fold((acc, n) -> acc + 1, 0, xs) >= 2 then "
-                    + "Digit(List.length(xs) - 2) else Digit(0)", false),
+            // A fold written out is not the library's sum: the sum gets through where the fold
+            // stops at a step, so what is known of one is not known of the other.
+            new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n, 0, xs))", true),
+            // What a statement holds of among the elements a filter kept is what both hold of
+            // among the elements it was handed.
+            new Row("Digit(List.length(List.filter(n -> n > 2, List.filter(n -> n > 1, xs))) "
+                    + "- List.length(List.filter(n -> n > 2, xs)))", false),
+            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n > 2, List.filter(n -> n > 1, xs))))",
+                    false),
+            new Row("if List.any(n -> n > 2, List.filter(n -> n > 1, xs)) then "
+                    + "Digit(List.length(List.filter(n -> n > 2, xs)) - 1) else Digit(0)", false),
+            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n > 2, List.filter(n -> n < 5, xs))))",
+                    false),
+            new Row("Digit(List.length(List.filter(n -> n > 2, List.filter(n -> n < 5, xs))) "
+                    + "- List.length(List.filter(n -> n > 2, xs)))", true),
+            // A closure that answers a container written out answers the same number of them
+            // whatever it is handed.
+            new Row("Digit(List.length(List.flatMap(n -> [n, n], xs)) - 2 * List.length(xs))",
+                    false),
+            new Row("Digit(2 * List.length(xs) - List.length(List.flatMap(n -> [n, n], xs)))",
+                    false),
+            new Row("Digit(List.length(List.flatMap(n -> [n, n], xs)) - 3 * List.length(xs))",
+                    true),
+            new Row("Digit(List.length(List.flatMap(n -> [n], xs)) - List.length(xs))", false),
+            new Row("Digit(List.length(List.flatMap(n -> if n > 2 then [n] else [n, n], xs)) "
+                    + "- List.length(xs))", true),
+            // Nothing between the strings joined is the strings put end to end.
+            new Row("Digit(String.length(String.concat([s, t])) "
+                    + "- String.length(String.join(\"\", [s, t])))", false),
+            new Row("Digit(String.length(String.join(\"\", [s, t])) "
+                    + "- String.length(String.concat([s, t])))", false),
+            new Row("Digit(String.length(String.concat([s, t])) "
+                    + "- String.length(String.join(\",\", [s, t])))", true),
             // A join is the append it is, however it is written.
             new Row("Digit(List.length(xs ++ xs) - List.length(List.append(xs, xs)))", false),
             new Row("Digit(List.length(List.append(xs, xs)) - List.length(xs ++ xs))", false),

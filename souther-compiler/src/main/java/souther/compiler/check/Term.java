@@ -1486,6 +1486,16 @@ final class Term {
                     ? List.of(container) : List.of(container, closure);
         }
 
+        /** The closure of one parameter that answers true where both of two such closures do, or
+         *  null where either is any other. */
+        Term closureAnsweringBoth(Term one, Term other) {
+            return one != null && other != null && one.shape == Shape.CLOSURE
+                    && other.shape == Shape.CLOSURE && Integer.valueOf(1).equals(one.of)
+                    && Integer.valueOf(1).equals(other.of)
+                    ? closure(1, choice(one.parts.getFirst(), other.parts.getFirst(),
+                            written(false))) : null;
+        }
+
         /**
          * The closure of one parameter that answers true of exactly {@code runs}, written the one
          * way: the runs one after another as a choice, each as the parameter being its one number,

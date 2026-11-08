@@ -2,9 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.semantics.Accumulation;
-import souther.compiler.types.BinOp;
-import souther.compiler.types.BindingId;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.Set;
@@ -47,77 +44,6 @@ final class Accumulations {
                 DefaultBoundOperationFacts.get().accumulates(call.operation());
         return walk == null ? null
                 : new Accumulating(walk.how(), CallArguments.of(walk.container(), call));
-    }
-
-    /**
-     * A fold written out that is a library operation over whole numbers: {@code operation} over
-     * {@code container}, which is {@code what} where it accumulates and is the count of its
-     * container where {@code what} is null.
-     */
-    record Spelled(ValueName operation, Accumulation what, Core container) {}
-
-    /** What a fold is written as once the library has put its starting position in. */
-    private static final ValueName FOLD = ValueName.Stdlib.operation("List", "foldFrom");
-
-    /**
-     * The library operation {@code call} is, where it is a fold of whole numbers from the value
-     * the operation starts from by the step the operation repeats: adding what is handed, from
-     * nought, is {@code List.sum}; multiplying, from one, is {@code List.product}; adding one, from
-     * nought, is how many there are.
-     *
-     * <p>The same value, so the same term: a reader that took the two for different values would
-     * hold what one says of the total against a total it had not been told is the same. Only a
-     * step written out in the call, and only over whole numbers — a total of decimals or a step
-     * that reads anything but the two it is handed is a fold and nothing more.
-     */
-    static Spelled spelledOut(Core.PreservedCall call) {
-        if (!FOLD.equals(call.operation())) {
-            return null;
-        }
-        Reductions.Reducing walk = Reductions.reducing(call,
-                closure -> Core.withoutStanding(closure) instanceof Core.Block block
-                        ? block : null);
-        if (walk == null || walk.step().params().size() != 2
-                || !(Core.withoutStanding(walk.seed()) instanceof Core.Int seed)
-                || !(Core.withoutStanding(walk.step().body()) instanceof Core.Binary step)
-                || !Type.INT.equals(step.type())) {
-            return null;
-        }
-        BindingId accumulator = walk.accumulator().binding();
-        BindingId element = walk.element().binding();
-        if (seed.value() == 0 && step.op() == BinOp.ADD && handed(step, accumulator, element)) {
-            return new Spelled(ValueName.Stdlib.operation("List", "sum"),
-                    new Accumulation(Accumulation.Identity.ZERO, Accumulation.Combine.ADD),
-                    walk.container());
-        }
-        if (seed.value() == 1 && step.op() == BinOp.MUL && handed(step, accumulator, element)) {
-            return new Spelled(ValueName.Stdlib.operation("List", "product"),
-                    new Accumulation(Accumulation.Identity.ONE, Accumulation.Combine.MULTIPLY),
-                    walk.container());
-        }
-        if (seed.value() == 0 && step.op() == BinOp.ADD
-                && (oneMore(step.left(), step.right(), accumulator)
-                        || oneMore(step.right(), step.left(), accumulator))) {
-            return new Spelled(ValueName.Stdlib.operation("List", "length"), null,
-                    walk.container());
-        }
-        return null;
-    }
-
-    /** Whether {@code step} combines the two it is handed, in whichever order. */
-    private static boolean handed(Core.Binary step, BindingId accumulator, BindingId element) {
-        return (reads(step.left(), accumulator) && reads(step.right(), element))
-                || (reads(step.left(), element) && reads(step.right(), accumulator));
-    }
-
-    private static boolean oneMore(Core held, Core one, BindingId accumulator) {
-        return reads(held, accumulator)
-                && Core.withoutStanding(one) instanceof Core.Int literal && literal.value() == 1;
-    }
-
-    private static boolean reads(Core value, BindingId binding) {
-        return Core.withoutStanding(value) instanceof Core.Read read
-                && read.binding().equals(binding);
     }
 
     /** The operations there is a rule about. */
