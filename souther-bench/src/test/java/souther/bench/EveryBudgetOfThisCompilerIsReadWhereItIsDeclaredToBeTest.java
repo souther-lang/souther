@@ -305,7 +305,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " the elimination stopped there and no value was shown"),
             Map.entry("souther.compiler.partition.UndividedByARelation#leftWhereRowsArrive("
                             + "Lsouther/compiler/inputs/InputReading;Ljava/util/List;"
-                            + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
+                            + "Lsouther/compiler/partition/ComparisonWitnesses$AtAComparison;)"
                             + "Lsouther/compiler/partition/UndividedByARelation$WhatItLeaves;",
                     "says the figures a way it is shown nothing of was looked along whole past,"
                             + " or read again up to, as what the relation stopped at"),
@@ -521,7 +521,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Iterator;",
                     "holds the values made of one type to the same figure, and says it was reached"
                             + " through the counter it is handed"),
-            Map.entry("souther.compiler.query.Coverages$2#endedBy("
+            Map.entry("souther.compiler.query.Coverages$3#endedBy("
                             + "Lsouther/compiler/query/SearchOutcomes;"
                             + "Lsouther/compiler/partition/Realization;)"
                             + "Lsouther/compiler/query/SearchOutcomes;",
@@ -882,16 +882,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/DecidingCase;)V",
                     "more ways of choosing than are taken apart, naming the figure and the ones"
                             + " the cases were never taken apart at"),
-            // The search for a row showing how many elements meet a statement takes every value
-            // from none to all of a container, and what it stopped at, one consumer each.
-            Map.entry("souther.compiler.partition.CountWitnesses#<clinit>()V",
-                    "how many values of each parameter, and rows of them, a witness of a count is"
-                            + " sought among"),
-            Map.entry("souther.compiler.partition.CountWitnesses#upTo("
+            // The search for a row a witness is found on — of how many elements meet a statement,
+            // or of a run getting to a comparison — and what it stopped at, one consumer each.
+            Map.entry("souther.compiler.partition.RowSearch#<clinit>()V",
+                    "how many values of each parameter, and rows of them, a witness is sought"
+                            + " among"),
+            Map.entry("souther.compiler.partition.RowSearch#upTo("
                             + "Ljava/util/List;Ljava/util/Set;)Ljava/util/List;",
                     "stops at the values of a parameter a witness is sought among, and adds the"
                             + " figure to what the search came to"),
-            Map.entry("souther.compiler.partition.CountWitnesses#rowsOf("
+            Map.entry("souther.compiler.partition.RowSearch#rowsOf("
                             + "Ljava/util/List;Ljava/util/Set;)Ljava/util/List;",
                     "stops at the rows a witness is sought among, and adds the figure to what the"
                             + " search came to"),

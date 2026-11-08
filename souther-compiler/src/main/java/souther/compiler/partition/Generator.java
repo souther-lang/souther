@@ -6502,7 +6502,8 @@ public final class Generator {
         // The order is one for every way of writing them under the cases, since which parameter a
         // container is handed a value of does not turn on the case it is written under. And what a
         // count composed above hands on for each element it counts, at the counts it was asked.
-        ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay(), numbers);
+        ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay(), numbers)
+                .and(subject.membersTheRulesNeed());
         CompositionOrder order;
         switch (CompositionOrder.of(parametersOf(subject), asked)) {
             case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
@@ -11868,7 +11869,8 @@ public final class Generator {
         Map<RealizationTarget, AskedAt> numbers = atThoseNumbers(where.at(),
                 whatEachOfThemIsANumberOf(itemAsks, where.routed(), where.counted(), leaves));
         return new HeldTogether.Asked(new LinkedHashMap<>(numbers), where.at(), required, reaching,
-                ContentsAsked.of(reaching.boundedOnTheWay(), numbers), where.someElement(),
+                ContentsAsked.of(reaching.boundedOnTheWay(), numbers)
+                        .and(subject.membersTheRulesNeed()), where.someElement(),
                 where.composed(), where.bounds());
     }
 
@@ -12984,6 +12986,10 @@ public final class Generator {
      * of, which is the fewest that holds one other than all of them — or, held to one value with a
      * position of this parameter, the value built there. The walk is made once more with those, and
      * what came of it is the answer; what of this compiler's that met goes with it.
+     *
+     * <p>And once more where a position is held apart from a value built elsewhere and nothing was
+     * built at all: a value the walk offered it may be the one it is to be none of, and a value
+     * the plan could not compose with that value in it was never built to be passed over.
      */
     private static Outcome valueAt(MeasuredInput subject, int p,
                                    Map<TermPath, List<FixtureTemplate>> decided,
@@ -13000,10 +13006,12 @@ public final class Generator {
                 found, taking, made, cases);
         if (first instanceof Outcome.Built || first instanceof Outcome.PassedOver
                 || first instanceof Outcome.Halted || made[0] == null
-                || made[0].notHeld().isEmpty()) {
+                || (made[0].notHeld().isEmpty() && !made[0].here().holdsSomethingApart())) {
             return first;
         }
-        found.notHeld(made[0].notHeld().getFirst());
+        if (!made[0].notHeld().isEmpty()) {
+            found.notHeld(made[0].notHeld().getFirst());
+        }
         Map<TermPath, List<FixtureTemplate>> offered = offeredApart(subject, decided, made[0],
                 found);
         return offered == null ? first : valueAtOnce(subject, p, offered, asked, settled,

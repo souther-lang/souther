@@ -729,7 +729,7 @@ public final class AnAnswerComposed {
                         taken.operation(), place, taken.arguments(), taken.at(),
                         subject.rules().inners(), subject.symbols());
                 case DecisionAtom.ComputedOverAnAnswer computed ->
-                        InputNumber.overWhatWasComputedByPosition(computed.operation(), place,
+                        InputNumber.overWhatWasComputed(computed.operation(), place,
                                 computed.computation(), computed.each(), computed.direction(),
                                 subject.rules().inners(), subject.symbols());
                 case DecisionAtom.OfTheInput _ -> throw new IllegalStateException(

@@ -12,10 +12,12 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.UnreadReason;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -218,13 +220,18 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
                 "Map.size(Map.fromList(List.map(x -> (x.id, x), items))) == List.length(items)",
                 "Map.size(Map.fromList(List.map(x -> (x.id, 9223372036854775807 + x.id), items)))"
                         + " == List.length(items)");
-        Set<String> answeringEverywhere = Set.of(
+        // And every count through a list's different elements: the library shows a walk keeping
+        // the first of each answers for every list.
+        Set<String> answeringEverywhere = new HashSet<>(Set.of(
                 "Set.size(Set.fromList(items)) == List.length(items)",
                 "Set.size(Set.fromList(items)) - List.length(items) == 0",
                 "2 * Set.size(Set.fromList(items)) == 2 * List.length(items)",
                 "Set.size(Set.fromList(List.map(.id, items))) == List.length(items)",
                 "List.allDistinctBy(x -> x, List.map(.id, items))",
-                "Map.size(Map.fromList(List.map(x -> (x.id, x), items))) == List.length(items)");
+                "Map.size(Map.fromList(List.map(x -> (x.id, x), items))) == List.length(items)"));
+        Stream.concat(identity.stream(), byId.stream())
+                .filter(rule -> rule.contains("List.distinct"))
+                .forEach(answeringEverywhere::add);
         List<String> none = List.of(
                 "List.length(List.distinct(items)) <= List.length(items)",
                 "List.length(List.distinct(items)) /= List.length(items)",

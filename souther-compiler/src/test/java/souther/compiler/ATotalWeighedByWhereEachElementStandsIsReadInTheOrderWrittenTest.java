@@ -631,7 +631,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         String human = report(model(BRANCH, "xs"));
         assertTrue(human.contains("nothing could show a row can be written at the ON point"),
                 human);
-        assertTrue(human.contains("chosen by where they stand"), human);
+        assertTrue(human.contains("by where they stand"), human);
         assertFalse(human.contains("no row can be written"), human);
     }
 

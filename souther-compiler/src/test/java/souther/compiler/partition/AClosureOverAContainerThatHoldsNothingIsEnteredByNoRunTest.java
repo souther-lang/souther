@@ -164,7 +164,7 @@ class AClosureOverAContainerThatHoldsNothingIsEnteredByNoRunTest {
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
                         inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                         inputs.dependencies()),
-                CountWitnesses.AtComparisons.NONE).comparisons();
+                ComparisonWitnesses.AtComparisons.NONE).comparisons();
         assertEquals(2, readings.size(), readings::toString);
         return readings.getLast().getsPast();
     }

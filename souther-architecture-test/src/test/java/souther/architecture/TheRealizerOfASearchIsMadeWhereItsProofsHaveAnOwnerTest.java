@@ -60,7 +60,7 @@ class TheRealizerOfASearchIsMadeWhereItsProofsHaveAnOwnerTest {
                     + "Lsouther/compiler/query/Coverages$Probe;"
                     + "Lsouther/compiler/partition/ReachingCuts;Ljava/util/Set;)"
                     + "Lsouther/compiler/query/LineReadings;",
-            "souther/compiler/query/Coverages$1#classLiesOutsideTheCase("
+            "souther/compiler/query/Coverages$2#classLiesOutsideTheCase("
                     + "Lsouther/compiler/partition/Criterion;)Z");
 
     @Test

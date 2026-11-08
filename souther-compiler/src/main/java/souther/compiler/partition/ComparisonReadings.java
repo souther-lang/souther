@@ -19,7 +19,6 @@ import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -337,7 +336,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Optional<List<Cutting.OnAnApplication>> worksOutOnEach,
                    Optional<StopEvidence> stopsIn, List<StopEvidence.OnAnArm> onTheArms,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
-                   SaidOnTheWay saidOnTheWay, CountWitnesses.Lookup witnesses,
+                   SaidOnTheWay saidOnTheWay, ComparisonWitnesses.AtAComparison witnesses,
                    DemandReading.Answered getsPast, ElementsNamed readsTheElements,
                    LinesReadOn readOn) {
 
@@ -460,7 +459,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         InputReads atTheRoot, ArmsNamed.Gathered armsNamed,
                         ForkDependencies.Gathered dependencies,
                         WithinOneApplication.Gathered oneApplication,
-                        CountWitnesses.AtComparisons witnesses, WaysToNodes ways) {
+                        ComparisonWitnesses.AtComparisons witnesses, WaysToNodes ways) {
 
         /** The same reading, in the body of a recursive helper read at a call of it: its own
          *  tree, and the copy that call makes of each construct in it. */
@@ -505,7 +504,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                  row, which is answered where a run is and handed in
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
-                                 InputReads reads, CountWitnesses.AtComparisons witnesses) {
+                                 InputReads reads, ComparisonWitnesses.AtComparisons witnesses) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -674,7 +673,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         return upTo.after(new DemandReading.PriorApplications(
                 walkedOneAfterAnother(first.entered(), reads),
-                new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed())));
+                new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed(),
+                        before.before())));
     }
 
     /**
@@ -826,7 +826,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static ComparisonAssessment onItsRunsWhereUnread(
             String behavior, StatedComparison comparison, ConstructOccurrence stands,
             Citation where, ComparisonAssessment assessed, InputReading read,
-            CountWitnesses.Lookup witnesses) {
+            ComparisonWitnesses.AtAComparison witnesses) {
         if (!(assessed instanceof ComparisonAssessment.Unread unread)
                 || unread.where() != WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT) {
             return assessed;
@@ -870,9 +870,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             ? () -> in.conditions().comparison(comparison, reads, in.read())
                                     .readOff()
                             : Map::of;
-            CountWitnesses.Lookup witnesses = WhatARunWorksOutBeforeACount.past(
+            // Which elements the comparison reads, by the names that stand for them.
+            ElementsNamed readsTheElements = reads.elementsNamedIn(e, in.newtypes());
+            ComparisonWitnesses.AtAComparison witnesses = WhatARunWorksOutBeforeACount.past(
                     in.context().equals(CallContext.OF_THE_BODY) ? in.root() : null, e, reads,
-                    readOff, in.read().domain().parameterReads(), in.witnesses().at(stands));
+                    readOff, in.read().domain().parameterReads(), in.witnesses().at(stands))
+                    .madeOnEveryElementOf(madeOnEvery(applying, readsTheElements, in));
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.
@@ -929,7 +932,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // What a line of it is looked for beside is the way as statements of the elements the
             // comparison reads: a condition on the way read of another element of one of its
             // containers is about a value the line is not.
-            ElementsNamed readsTheElements = reads.elementsNamedIn(e, in.newtypes());
             ElementsOnTheWay.Kept besideIt = ElementsOnTheWay.keptToOneElementEach(assumed,
                     readsTheElements, numbering.saidOnTheWay(List.of(assumed)));
             out.add(new Reading(stands, stated.statement(), where, reads, besideIt.way(), standing,
@@ -959,24 +961,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // Inside a closure whose applications are said, what the left came to is a statement
             // about each application, so it goes onto what each is reached under and not onto the
             // way every application shares.
-            case Core.Binary both when both.op() == BinOp.AND -> {
+            case Core.Binary both when both.op().stopsWhenItsAnswerIsSettled() -> {
+                boolean runsWhenLeftIs = both.op().rightRunsWhenLeftIs();
                 walk(both.left(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
-                walk(both.right(), in, reads, applying.taking(both.left(), true, in.read()), flow,
+                walk(both.right(), in, reads,
+                        applying.taking(both.left(), runsWhenLeftIs, in.read()), flow,
                         applying.saysWhatStandsInIt() ? assumed
                                 : taking(Condition.of(both.left(), reads, symbols, in.newtypes(),
-                                        numbering), true, in.read(), assumed, in.conditions(),
-                                        numbering),
-                        live, out, forks, numbering);
-            }
-            case Core.Binary either when either.op() == BinOp.OR -> {
-                walk(either.left(), in, reads, applying, flow, assumed, live, out, forks,
-                        numbering);
-                walk(either.right(), in, reads, applying.taking(either.left(), false, in.read()),
-                        flow,
-                        applying.saysWhatStandsInIt() ? assumed
-                                : taking(Condition.of(either.left(), reads, symbols,
-                                        in.newtypes(), numbering), false, in.read(), assumed,
+                                        numbering), runsWhenLeftIs, in.read(), assumed,
                                         in.conditions(), numbering),
                         live, out, forks, numbering);
             }
@@ -1233,6 +1226,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              ClosureApplications applying) { }
 
     /**
+     * The elements a run that answers and goes through a comparison standing inside
+     * {@code applying} once is shown to make it on every one of ({@link
+     * ClosureApplications.MadeOnEvery}) — none where that is not shown.
+     *
+     * <p>Only in the body the reading was handed: a helper's body is run by every call of it, so
+     * a run recorded there may be another call's. And only where the comparison reads the
+     * innermost of those elements through a name for it and in no other way ({@code reads}): a
+     * name a closure binds stands for each element it is handed, and what is read of the
+     * container some other way is no element the closure was handed.
+     */
+    private static List<TermPath> madeOnEvery(ClosureApplications applying, ElementsNamed reads,
+                                              Body in) {
+        List<TermPath> elements = applying.madeOnEvery().elements().orElse(List.of());
+        if (elements.isEmpty() || !in.context().equals(CallContext.OF_THE_BODY)) {
+            return List.of();
+        }
+        ElementsNamed.Slot innermost = ElementsNamed.Slot.innermostOf(elements.getLast());
+        return innermost != null && reads.named().containsKey(innermost)
+                && !reads.unnamed().contains(innermost) ? elements : List.of();
+    }
+
+    /**
      * {@code call} read as a call of a helper that walks a list the input holds by its head and
      * calls itself on the rest — or null where it is no such call, or one this reading reads no
      * further.
@@ -1255,7 +1270,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static Recursion recursionAt(Core.Call call, Body in, InputReads reads,
                                          ClosureApplications applying) {
         if (in.root() == null || !in.context().equals(CallContext.OF_THE_BODY)
-                || !(applying instanceof ClosureApplications.Outside(var metOn))
+                || !(applying instanceof ClosureApplications.Outside(var metOn, var _))
                 || !(AnOperationApplied.of(call) instanceof AnOperationApplied(
                         ValueName.Helper helper, List<Core> args))) {
             return null;
@@ -1291,7 +1306,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
                         metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
-                        List.of()))));
+                        List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN))));
     }
 
     /**
@@ -1321,8 +1336,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (e == target) {
             return new Way(WhereAnApplicationIsMade.nothingAsked());
         }
-        if (e instanceof Core.Binary both
-                && (both.op() == BinOp.AND || both.op() == BinOp.OR)) {
+        if (e instanceof Core.Binary both && both.op().stopsWhenItsAnswerIsSettled()) {
             Way left = wayTo(both.left(), target, reads, in);
             if (left != null) {
                 return left;
@@ -1333,7 +1347,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
             Proposition leftAnswered =
                     in.conditions().truth(both.left(), reads, in.read()).proposition();
-            return right.past(both.op() == BinOp.AND ? leftAnswered : leftAnswered.denied());
+            return right.past(both.op().rightRunsWhenLeftIs() ? leftAnswered
+                    : leftAnswered.denied());
         }
         if (e instanceof Core.Block) {
             return holds(e, target) ? Way.NOT_READ : null;

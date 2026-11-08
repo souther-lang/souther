@@ -85,6 +85,7 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                         "List.fold((acc, x) -> acc + 1, 0, ROWS)"),
                 List.of("List.sum(List.map(.quantity, ROWS))",
                         "List.fold((acc, x) -> acc + x.quantity, 0, ROWS)",
+                        "List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))",
                         "List.fold((acc, x) -> acc + x.quantity, 0, List.sortBy(.sku, ROWS))",
                         "List.sum(List.map(.quantity, List.sortBy(.sku, ROWS)))",
                         "List.sum(List.map(x -> x, List.map(.quantity, ROWS)))",
@@ -130,25 +131,29 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                         "List.sum(List.drop(1, List.take(4, NUMS)))",
                         "List.sum(List.take(5, List.take(3, List.drop(1, NUMS))))",
                         "List.sum(List.drop(1, List.drop(0, List.take(4, NUMS))))"),
-                List.of("List.sum(List.take(1, List.drop(1, List.reverse(NUMS))))"));
+                List.of("List.sum(List.take(1, List.drop(1, List.reverse(NUMS))))"),
+                // What a filter keeps is every element counting nought where its closure fails,
+                // which a choice in the closure says as well, and in any order.
+                List.of("List.sum(List.map(i -> if i.active then i.quantity else 0, ROWS))",
+                        "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))",
+                        "List.fold((acc, x) -> acc + x.quantity, 0,"
+                                + " List.filter(i -> i.active, ROWS))"),
+                List.of("List.sum(List.map(x -> if x > 0 then x else 0, NUMS))",
+                        "List.sum(List.filter(x -> x > 0, NUMS))",
+                        "List.sum(List.reverse(List.filter(x -> x > 0, NUMS)))"));
     }
 
     /**
-     * Shapes neither side reads. What a filter keeps is a sum over those and over no element of
-     * the list, and which of them turns on what each holds. Nor is a sum over what a closure puts
-     * end to end, a fold over a map, or a reordering of the numbers a fold adds read.
+     * Shapes neither side reads: a sum over what a closure puts end to end, or a reordering of
+     * the numbers a fold adds.
      */
     private static List<String> unread() {
         return List.of(
-                "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))",
-                "List.fold((acc, x) -> acc + x.quantity, 0, List.filter(i -> i.active, ROWS))",
                 // Sorted, the position an element is at is no position it was written at.
                 "List.sum(List.mapIndexed((i, x) -> i * x, List.sortBy(x -> x, NUMS)))",
-                "List.sum(List.reverse(List.filter(x -> x > 0, NUMS)))",
                 // A reversal between the selections puts their positions in another list.
                 "List.sum(List.take(1, List.reverse(List.drop(1, NUMS))))",
                 "List.sum(List.flatMap(i -> [i.quantity], ROWS))",
-                "List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))",
                 "List.fold((acc, x) -> acc + x, 0,"
                         + " List.sortBy(x -> x, List.map(.quantity, ROWS)))");
     }

@@ -1,11 +1,14 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Quantities;
@@ -152,6 +155,15 @@ public final class MeasuredInput {
      */
     private final Map<AStatementAtARow.RelationRead, AStatementAtARow.OneRelation> relations =
             new ConcurrentHashMap<>();
+    /**
+     * What the rules of the values standing in this input need its containers to hold
+     * ({@link #membersTheRulesNeed}).
+     *
+     * <p>Worked out with the input because every way composed for every point asks it, and it is
+     * the reading's and nothing a way brings. No part of what makes two of these one: it is
+     * derived from {@link #ruleRoots} and the rules read.
+     */
+    private final List<ContentsAsked.Asked> membersNeeded;
 
     /** A position as what it is offered turns on: where the value stops and the runs it is in, how
      *  much it holds, the class it is held to and the values its rules name — and not the rest of
@@ -177,6 +189,7 @@ public final class MeasuredInput {
         this.divided = divided;
         this.reach = reach;
         this.ruleRoots = ruleRoots;
+        this.membersNeeded = membersNeeded(ruleRoots, written.rules());
     }
 
     /**
@@ -323,6 +336,40 @@ public final class MeasuredInput {
      */
     List<RuleRoots.Naming> rulesNaming(TermPath path) {
         return named.computeIfAbsent(path, ruleRoots::naming);
+    }
+
+    /**
+     * Which containers of this input the rules of the values standing in it need to hold a member
+     * of the same value, as a way's demands are said ({@link ContentsAsked.Asked}): every value
+     * whose rules reach a position ({@link RuleRoots}), each member a clause of it cannot be true
+     * without ({@link PlacesTheRulesRead#membersNeeded}), at the places where the value stands.
+     *
+     * <p>A value standing in the elements of one container is asked of every element, and the
+     * demand is the plan's to meet in each element it writes. One inside two containers or more is
+     * asked of none here: what is asked inside an element names no container further in.
+     */
+    List<ContentsAsked.Asked> membersTheRulesNeed() {
+        return membersNeeded;
+    }
+
+    private static List<ContentsAsked.Asked> membersNeeded(RuleRoots ruleRoots,
+                                                           RuleReadingSource source) {
+        List<ContentsAsked.Asked> out = new ArrayList<>();
+        for (InputDomain.RuleRoot root : ruleRoots.roots()) {
+            List<TermPath> holding = root.at().containersHoldingIt();
+            if (holding.size() > 1) {
+                continue;
+            }
+            Optional<ContentsAsked.Around> around = holding.isEmpty() ? Optional.empty()
+                    : Optional.of(ContentsAsked.Around.over(holding.getFirst(), false));
+            for (ClauseRead read : PlacesTheRulesRead.membersNeeded(root.type(), source)) {
+                ClauseRead.Member member = read.member().orElseThrow();
+                out.add(new ContentsAsked.Asked(root.at().then(read.at().steps()),
+                        root.at().then(member.lookedFor().steps()), true, member.asAKey(),
+                        around));
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

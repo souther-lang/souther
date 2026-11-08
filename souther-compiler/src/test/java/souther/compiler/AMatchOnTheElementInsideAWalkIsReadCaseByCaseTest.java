@@ -418,8 +418,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                     then Many else Few
                 """);
         String report = report(compiled);
-        assertTrue(report.contains("when cap@Some then 1 when cap@None then 0 | lines[*]"),
-                report);
+        assertTrue(report.contains("#lines [present lines[*].cap]"), report);
         assertFalse(unreadBeyondReach(report), report);
         String rows = rowsOf(compiled);
         assertTrue(RowsOfABlock.at(rows, "([Line { cap = 0 }])").fills()

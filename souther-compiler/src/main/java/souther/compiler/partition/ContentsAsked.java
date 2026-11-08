@@ -232,6 +232,21 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
     }
 
     /**
+     * The same, with {@code more} asked of containers beside — what the rules of the values a row
+     * holds ask of them ({@link MeasuredInput#membersTheRulesNeed}), which every row a way is
+     * written as is held to as well. One asked already is asked once.
+     */
+    ContentsAsked and(List<Asked> more) {
+        List<Asked> out = new ArrayList<>(asked);
+        for (Asked each : more) {
+            if (!out.contains(each)) {
+                out.add(each);
+            }
+        }
+        return new ContentsAsked(out, related, reads);
+    }
+
+    /**
      * What {@code within}, asked of the elements {@code around} ranges over, asks of the container
      * it names — written the one way every demand on a container inside an element is.
      */
@@ -564,7 +579,36 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 }
             }
         }
+        heldTo.addAll(apartFromWhatItHoldsNone(within, given));
         return new Resolution.Resolved(new Here(within, given, leftOpen, heldTo, alongside));
+    }
+
+    /**
+     * Each position of this parameter a container is to hold, held apart from each value handed
+     * on that the same container is to hold nothing equal to: a container holding the value at
+     * one and none equal to the other holds two values there, so the two are not one.
+     *
+     * <p>Only a position standing outside every container, which is one value in every row: one
+     * inside an element is a value for each element, and is held apart in each where the plan
+     * writes it. As an element and as a key are apart: a map may hold a value as a key and not as
+     * a value.
+     */
+    private static List<HeldTo> apartFromWhatItHoldsNone(List<Asked> within, List<Given> given) {
+        List<HeldTo> out = new ArrayList<>();
+        for (Asked held : within) {
+            if (!held.holding() || held.around().isPresent()
+                    || held.value().insideAContainer()) {
+                continue;
+            }
+            for (Given kept : given) {
+                Asked none = kept.asked();
+                if (!none.holding() && none.ofTheKey() == held.ofTheKey()
+                        && none.container().equals(held.container())) {
+                    out.add(new HeldTo(held.value(), kept.value(), false));
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -655,6 +699,11 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             leftOpen = List.copyOf(leftOpen);
             heldTo = List.copyOf(heldTo);
             alongside = List.copyOf(alongside);
+        }
+
+        /** Whether some position of this parameter is held apart from a value built elsewhere. */
+        boolean holdsSomethingApart() {
+            return heldTo.stream().anyMatch(each -> !each.same());
         }
 
         /**

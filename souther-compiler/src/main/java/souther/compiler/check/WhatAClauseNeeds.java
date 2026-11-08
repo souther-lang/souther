@@ -1,13 +1,14 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.types.BinOp;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -74,15 +75,25 @@ final class WhatAClauseNeeds {
                 }
                 yield work(let.body());
             }
-            case Core.Binary joined when joined.op() == BinOp.AND ->
-                    work(joined.left()) == Worked.FALSE || work(joined.right()) == Worked.FALSE
-                            ? Worked.FALSE : Worked.UNKNOWN;
-            case Core.Binary joined when joined.op() == BinOp.OR ->
-                    work(joined.left()) == Worked.FALSE && work(joined.right()) == Worked.FALSE
-                            ? Worked.FALSE : Worked.UNKNOWN;
+            case Core.Binary joined -> workJoined(joined);
             case Core.Match match -> workMatch(match);
             case Core.PreservedCall call -> workCall(call);
             default -> Worked.UNKNOWN;
+        };
+    }
+
+    /** What {@code joined} comes to where it joins two conditions ({@link ConditionJoin}): false
+     *  where both halves are wanted and one is false, or either would do and both are. */
+    private Worked workJoined(Core.Binary joined) {
+        Optional<ConditionJoin> how = ConditionJoin.of(joined.op());
+        if (how.isEmpty()) {
+            return Worked.UNKNOWN;
+        }
+        return switch (how.get()) {
+            case BOTH -> work(joined.left()) == Worked.FALSE
+                    || work(joined.right()) == Worked.FALSE ? Worked.FALSE : Worked.UNKNOWN;
+            case EITHER -> work(joined.left()) == Worked.FALSE
+                    && work(joined.right()) == Worked.FALSE ? Worked.FALSE : Worked.UNKNOWN;
         };
     }
 

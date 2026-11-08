@@ -15,6 +15,7 @@ import net.unit8.notation199x.pattern.Meter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -91,6 +92,19 @@ public sealed interface BlockReason {
          * told a figure stopped something is told which, and at the number the run used.
          */
         List<Figure> figures();
+
+        /**
+         * The values a row built and run was shown to get to the rule at, where what stopped the
+         * reading is that not every value is shown to get there — none for every other stop.
+         *
+         * <p>Beside the word and not inside it, as the figures are. What is shown is that each of
+         * these is reached, on the row that held it; the rest of the values are not shown either
+         * way, and the word says so whatever is here.
+         */
+        default List<String> shownReachedAt() {
+            return this instanceof RelationNotShownReachedAtEveryValue(var shown) ? shown
+                    : List.of();
+        }
     }
 
     /**
@@ -367,6 +381,18 @@ public sealed interface BlockReason {
                 }
                 case RelationRowsNotShownComputed(NumberRegion numbers) -> numbers.compareTo(
                         ((RelationRowsNotShownComputed) other).numbers());
+                // By the values shown reached, one after another, and then by how many.
+                case RelationNotShownReachedAtEveryValue(List<String> shown) -> {
+                    List<String> theirs =
+                            ((RelationNotShownReachedAtEveryValue) other).shownReachedAt();
+                    for (int i = 0; i < Math.min(shown.size(), theirs.size()); i++) {
+                        int byValue = shown.get(i).compareTo(theirs.get(i));
+                        if (byValue != 0) {
+                            yield byValue;
+                        }
+                    }
+                    yield Integer.compare(shown.size(), theirs.size());
+                }
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -375,8 +401,7 @@ public sealed interface BlockReason {
                      EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
-                     RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _ -> 0;
+                     RelationNotShownToReachEveryValue _, OrderedExtentEndIsNoValue _ -> 0;
             };
         }
 
@@ -610,15 +635,17 @@ public sealed interface BlockReason {
 
     /**
      * What tells {@code reason} from another reason: the reason itself, with the figures it was met
-     * at left out.
+     * at left out, and the values a row was shown to get to the rule at.
      *
      * <p>Asked by everything that holds these by what they are — a set, a key, a check that two
      * accounts agree. Compared as values, two accounts of one reason met at different figures are
      * two reasons, and what they come to is a rule said twice, or one reading refused for
-     * disagreeing with another about which limit a position ran into first.
+     * disagreeing with another about which limit a position ran into first. A row shown on one
+     * way and another on the next are evidence of one reason in the same way.
      */
     static Object factOf(BlockReason reason) {
-        return reason instanceof MetAtFigures ? reason.getClass() : reason;
+        return reason instanceof MetAtFigures || reason instanceof RelationNotShownReachedAtEveryValue
+                ? reason.getClass() : reason;
     }
 
     /**
@@ -648,6 +675,11 @@ public sealed interface BlockReason {
                     both(it, (MetAtFigures) other));
             case RelationNotShownWhereTheSearchStopped it ->
                     new RelationNotShownWhereTheSearchStopped(both(it, (MetAtFigures) other));
+            case RelationNotShownReachedAtEveryValue it -> {
+                List<String> shown = new ArrayList<>(it.shownReachedAt());
+                shown.addAll(((RelationNotShownReachedAtEveryValue) other).shownReachedAt());
+                yield new RelationNotShownReachedAtEveryValue(shown);
+            }
             default -> one;
         };
         return (R) out;
@@ -1348,7 +1380,18 @@ public sealed interface BlockReason {
      * relation and the other side is what is not shown to reach it. A comparison that comes out one
      * way wherever a row gets to it is not this, since that is said whichever values get there.
      */
-    record RelationNotShownReachedAtEveryValue() implements RuleReadingStopped {}
+    record RelationNotShownReachedAtEveryValue(List<String> shownReachedAt)
+            implements RuleReadingStopped {
+
+        public RelationNotShownReachedAtEveryValue {
+            shownReachedAt = List.copyOf(new LinkedHashSet<>(shownReachedAt));
+        }
+
+        /** No value shown reached by a row. */
+        public RelationNotShownReachedAtEveryValue() {
+            this(List.of());
+        }
+    }
 
     /**
      * What the rule states was read in full, and it relates the value here to another value, and

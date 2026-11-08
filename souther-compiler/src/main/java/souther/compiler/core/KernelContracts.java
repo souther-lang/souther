@@ -3,9 +3,10 @@ package souther.compiler.core;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.GetsPast;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.LawNumber;
 
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -157,9 +158,9 @@ public final class KernelContracts {
      */
     public static GetsPast completionOf(Kernel kernel) {
         return switch (kernel) {
-            case SET_UNION -> fits(new GetsPast.AnswerSize.SumOf(List.of(0, 1), 0));
-            case SET_INSERT -> fits(new GetsPast.AnswerSize.SumOf(List.of(1), 1));
-            case MAP_INSERT -> fits(new GetsPast.AnswerSize.SumOf(List.of(2), 1));
+            case SET_UNION -> fits(GetsPast.together(0, 0, 1));
+            case SET_INSERT -> fits(GetsPast.together(1, 1));
+            case MAP_INSERT -> fits(GetsPast.together(1, 2));
             case STRING_LOWERCASE, STRING_UPPERCASE -> new GetsPast.WhereTheTextFits(0);
             default -> abortsOf(kernel).isEmpty() ? new GetsPast.Always()
                     : new GetsPast.NotKnown();
@@ -175,7 +176,7 @@ public final class KernelContracts {
         return kernel == Kernel.INT_FLOOR_MOD ? 1 : -1;
     }
 
-    private static GetsPast fits(GetsPast.AnswerSize answer) {
+    private static GetsPast fits(LinearForm<LawNumber<Integer>> answer) {
         return new GetsPast.WhereTheAnswerFits(answer);
     }
 }

@@ -609,7 +609,7 @@ public final class AnswerAsAnInput {
                 answers.add(computed.list().answered());
                 TermPath place = TermPath.of(head, computed.list().steps());
                 NumericTerm term = hasNoReadingToTakeTheNumberBy() ? new NumericTerm.ValueOf(place)
-                        : InputNumber.overWhatWasComputedByPosition(computed.operation(), place,
+                        : InputNumber.overWhatWasComputed(computed.operation(), place,
                                 computed.computation(), computed.each(), computed.direction(),
                                 inners, symbols);
                 yield term == null ? null : new DecisionAtom.OfTheInput(term);

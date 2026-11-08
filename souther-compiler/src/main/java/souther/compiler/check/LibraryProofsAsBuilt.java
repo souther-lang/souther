@@ -1,7 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.proof.AskedOnTheWay;
+import souther.compiler.proof.LibraryProver;
+import souther.compiler.proof.LibraryTerm;
+import souther.compiler.proof.OnTheWay;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.io.BufferedReader;
@@ -17,6 +23,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * What proving the operations the library writes against their bodies came to when this compiler
@@ -61,7 +68,7 @@ public final class LibraryProofsAsBuilt {
             return LibraryProofs.PROVING;
         }
         LibraryProofsAsBuilt record = new LibraryProofsAsBuilt(read);
-        return (_, _, _, stated, awaiting) -> record.over(stated, awaiting);
+        return (stdlib, facts, _, stated, awaiting) -> record.over(stdlib, facts, stated, awaiting);
     }
 
     /** Proves the library here and writes what each proof came to at {@code args[0]}. */
@@ -75,12 +82,40 @@ public final class LibraryProofsAsBuilt {
         Files.write(to, lines, StandardCharsets.UTF_8);
     }
 
-    /** The proofs read off this record, of what {@code stated} and {@code awaiting} say. */
-    private LibraryProofs over(Map<ValueName.Stdlib.Operation,
+    /**
+     * The proofs read off this record, of what {@code stated} and {@code awaiting} say. What else
+     * is asked of the bodies once every law is settled is no statement the record holds, and is
+     * proved here, over {@code facts} as they are settled, on the first asking.
+     */
+    private LibraryProofs over(Stdlib stdlib, BoundOperationFacts facts,
+                               Map<ValueName.Stdlib.Operation,
                                        Map<OperationLaw.Observed, ProvingTheLibrary.Stated>> stated,
                                List<BoundOperationFact> awaiting) {
         Map<BoundOperationFact, String> named = named(awaiting);
+        Supplier<LibraryProver> settled = new Supplier<>() {
+            private LibraryProver prover;
+
+            @Override
+            public synchronized LibraryProver get() {
+                if (prover == null) {
+                    prover = new LibraryProver(LibraryUnderProof.settledBy(stdlib, facts),
+                            ProvingTheLibrary.readThrough(stdlib, facts));
+                }
+                return prover;
+            }
+        };
         return new LibraryProofs() {
+
+            @Override
+            public Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation,
+                                                  LibraryTerm body) {
+                return settled.get().typesOf(operation, body);
+            }
+
+            @Override
+            public OnTheWay onTheWay(AskedOnTheWay asked) {
+                return settled.get().onTheWay(asked);
+            }
 
             @Override
             public BoundOperationFacts.Settled settle(ValueName.Stdlib.Operation operation,
@@ -134,6 +169,17 @@ public final class LibraryProofsAsBuilt {
                     boolean holds = proving.proves(fact);
                     outcomes.put(named.get(fact), holds ? HOLDS : DOES_NOT_HOLD);
                     return holds;
+                }
+
+                @Override
+                public Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation,
+                                                      LibraryTerm body) {
+                    return proving.typesOf(operation, body);
+                }
+
+                @Override
+                public OnTheWay onTheWay(AskedOnTheWay asked) {
+                    return proving.onTheWay(asked);
                 }
             };
         };

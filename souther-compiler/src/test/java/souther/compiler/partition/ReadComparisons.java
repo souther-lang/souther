@@ -50,7 +50,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                         inputs.declared(rules), checked.elementBindings().get(behavior),
                         ValueDefinitions.of(checked.analysisBodies().get(behavior),
                                 rules.newtypes()),
-                        inputs.dependencies()), CountWitnesses.AtComparisons.NONE).comparisons(),
+                        inputs.dependencies()), ComparisonWitnesses.AtComparisons.NONE).comparisons(),
                 inputs, rules);
     }
 
@@ -59,13 +59,13 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
      * as themselves — which is the tree a module's comparisons are read off when it is measured.
      */
     static ReadComparisons ofTheAnalysis(String source, String behavior) {
-        return ofTheAnalysis(source, behavior, CountWitnesses.AtComparisons.NONE);
+        return ofTheAnalysis(source, behavior, ComparisonWitnesses.AtComparisons.NONE);
     }
 
     /** The same, with a witness of a count asked of {@code witnesses} where a reading asks for
      *  one. */
     static ReadComparisons ofTheAnalysis(String source, String behavior,
-                                         CountWitnesses.AtComparisons witnesses) {
+                                         ComparisonWitnesses.AtComparisons witnesses) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()

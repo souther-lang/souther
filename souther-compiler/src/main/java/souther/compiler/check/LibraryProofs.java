@@ -1,7 +1,12 @@
 package souther.compiler.check;
 
+import souther.compiler.proof.AskedOnTheWay;
+import souther.compiler.proof.LibraryProver;
+import souther.compiler.proof.LibraryTerm;
+import souther.compiler.proof.OnTheWay;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -26,6 +31,14 @@ interface LibraryProofs {
 
     /** Whether {@code fact}, stated of an operation the library writes, holds of its body. */
     boolean proves(BoundOperationFact fact);
+
+    /** The type of what each operator of {@code operation}'s body, {@code body}, is read to
+     *  answer, once every law of the library is settled ({@link LibraryProver#typesOf}). */
+    Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation, LibraryTerm body);
+
+    /** What is proved of the way to the sites of a body {@code asked} names, once every law of
+     *  the library is settled ({@link LibraryProver#onTheWay}). */
+    OnTheWay onTheWay(AskedOnTheWay asked);
 
     /** How the proofs of one set of facts are come by. */
     interface Source {
@@ -62,6 +75,17 @@ interface LibraryProofs {
         @Override
         public boolean proves(BoundOperationFact fact) {
             return true;
+        }
+
+        @Override
+        public Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation,
+                                              LibraryTerm body) {
+            return Map.of();
+        }
+
+        @Override
+        public OnTheWay onTheWay(AskedOnTheWay asked) {
+            return OnTheWay.NOTHING_SHOWN;
         }
     };
 }

@@ -465,11 +465,15 @@ public sealed interface ReportMessage extends Message {
 
     record DividedNoWay(String position) implements ReportMessage, Prose {}
 
-    record RuleNotRead(String rule, Message why, Message stopped, String at, String calls,
-                       Message sentTo) implements ReportMessage, Prose {}
+    record RuleNotRead(String rule, Message why, Message stopped, Message shown, String at,
+                       String calls, Message sentTo) implements ReportMessage, Prose {}
 
-    record RuleDrawsNoLine(String rule, Message why, Message stopped, String at, String calls,
-                           Message sentTo) implements ReportMessage, Prose {}
+    record RuleDrawsNoLine(String rule, Message why, Message stopped, Message shown, String at,
+                           String calls, Message sentTo) implements ReportMessage, Prose {}
+
+    /** The values a row built and run got to a rule at, beside a word saying not every value is
+     *  shown to: what is shown, and that nothing else is. */
+    record ShownReachedAt(Message values) implements ReportMessage, Prose {}
 
     record SentTo(String at) implements ReportMessage, Prose {}
 

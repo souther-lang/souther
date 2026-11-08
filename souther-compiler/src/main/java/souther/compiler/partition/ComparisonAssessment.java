@@ -195,7 +195,7 @@ sealed interface ComparisonAssessment {
                                        UndividedByARelation relation,
                                        UndividedByARelation.WhatItLeaves left,
                                        AuthoredPointMapping authored, InputReading reading,
-                                       CountWitnesses.Lookup witnesses) {
+                                       ComparisonWitnesses.AtAComparison witnesses) {
             return new AcrossPositions(cutting, at, places, relation, left,
                     settlingLines(new DrawnBeside(cutting.of().behavior(), at, authored.line(),
                             Optional.of(authored.claims())), left.settled(), reading, witnesses),
@@ -212,7 +212,7 @@ sealed interface ComparisonAssessment {
          *  values settling it are not the ones already drawn. */
         AcrossPositions whereRowsArrive(InputReading reading,
                                         List<Reachability.Reaching> ways,
-                                        CountWitnesses.Lookup witnesses) {
+                                        ComparisonWitnesses.AtAComparison witnesses) {
             UndividedByARelation.WhatItLeaves arriving =
                     relation.leftWhereRowsArrive(reading, ways, witnesses);
             return arriving.settled().equals(left.settled())
@@ -280,7 +280,7 @@ sealed interface ComparisonAssessment {
     private static List<AtAPosition> settlingLines(
             DrawnBeside beside,
             Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
-            InputReading reading, CountWitnesses.Lookup witnesses) {
+            InputReading reading, ComparisonWitnesses.AtAComparison witnesses) {
         List<AtAPosition> out = new ArrayList<>();
         List<NumericTerm> terms = new ArrayList<>(settled.keySet());
         for (NumericTerm term : NumericTerms.inOrder(terms)) {
@@ -347,6 +347,9 @@ sealed interface ComparisonAssessment {
      *                  for the place, and it is said so
      * @param partnered each string position the relation is shown to part by the strings its
      *                  partner can hold, where the partner is a piece of a string
+     * @param shownReachedAt for some of {@code mayStopBefore}, the values a row built and run was
+     *                  shown to get to some relation about it at
+     *                  ({@link UndividedByARelation.WhatItLeaves#shownReachedAt})
      */
     record AgainstAnotherValue(List<FilingCoordinate> filedAt,
                                List<UndividedByARelation> relations,
@@ -356,7 +359,8 @@ sealed interface ComparisonAssessment {
                                Set<FilingCoordinate> mayStopBefore,
                                Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
                                Map<NumericTerm.FromOnePosition,
-                                       UndividedByARelation.StringsAPartnerCanHold> partnered)
+                                       UndividedByARelation.StringsAPartnerCanHold> partnered,
+                               Map<FilingCoordinate, List<String>> shownReachedAt)
             implements ComparisonAssessment {
 
         public AgainstAnotherValue {
@@ -364,6 +368,7 @@ sealed interface ComparisonAssessment {
             relations = List.copyOf(relations);
             undivided = Set.copyOf(undivided);
             mayStopBefore = Set.copyOf(mayStopBefore);
+            shownReachedAt = Collections.unmodifiableMap(new LinkedHashMap<>(shownReachedAt));
             Map<FilingCoordinate, Set<Figure>> held = new LinkedHashMap<>();
             stoppedAt.forEach((at, figures) -> held.put(at, Set.copyOf(figures)));
             stoppedAt = Collections.unmodifiableMap(held);
@@ -378,20 +383,33 @@ sealed interface ComparisonAssessment {
             }
         }
 
+        /** The same, with no value shown reached by a row. */
+        AgainstAnotherValue(List<FilingCoordinate> filedAt, List<UndividedByARelation> relations,
+                            Set<FilingCoordinate> undivided, List<AtAPosition> settling,
+                            Optional<DrawnBeside> beside,
+                            Map<FilingCoordinate, Set<Figure>> stoppedAt,
+                            Set<FilingCoordinate> mayStopBefore,
+                            Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
+                            Map<NumericTerm.FromOnePosition,
+                                    UndividedByARelation.StringsAPartnerCanHold> partnered) {
+            this(filedAt, relations, undivided, settling, beside, stoppedAt, mayStopBefore,
+                    noRowShownComputed, partnered, Map.of());
+        }
+
         /** {@code read}, with what it leaves undivided over what the declarations leave, and the
          *  lines parting what settles it drawn {@code beside}. */
         static AgainstAnotherValue of(Cutting.Read.AgainstAnotherValue read,
                                       InputReading reading, Optional<DrawnBeside> beside,
-                                      CountWitnesses.Lookup witnesses) {
+                                      ComparisonWitnesses.AtAComparison witnesses) {
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Map.of(), Set.of(), Map.of(), Map.of())
+                    beside, Map.of(), Set.of(), Map.of(), Map.of(), Map.of())
                     .whereRowsArrive(reading, List.of(), witnesses);
         }
 
         /** The same, with what it leaves undivided over the rows that arrive along {@code ways}. */
         AgainstAnotherValue whereRowsArrive(InputReading reading,
                                             List<Reachability.Reaching> ways,
-                                            CountWitnesses.Lookup witnesses) {
+                                            ComparisonWitnesses.AtAComparison witnesses) {
             List<Set<FilingCoordinate>> about = new ArrayList<>();
             List<UndividedByARelation.WhatItLeaves> leaves = new ArrayList<>();
             for (UndividedByARelation each : relations) {
@@ -421,6 +439,9 @@ sealed interface ComparisonAssessment {
             // And where a run may stop on the way to a relation about it, at the places shown
             // undivided: what is shown of them stands, and that every value gets there does not.
             Set<FilingCoordinate> stops = new LinkedHashSet<>();
+            // And the values a row got to a relation about it at, which are reached whichever
+            // relation of the comparison it was.
+            Map<FilingCoordinate, List<String>> reached = new LinkedHashMap<>();
             for (FilingCoordinate at : filedAt) {
                 for (int i = 0; i < relations.size(); i++) {
                     if (about.get(i).contains(at) && !leaves.get(i).stoppedAt().isEmpty()) {
@@ -430,13 +451,17 @@ sealed interface ComparisonAssessment {
                     if (shown.contains(at) && about.get(i).contains(at)
                             && leaves.get(i).mayStopBefore().contains(at)) {
                         stops.add(at);
+                        List<String> values = leaves.get(i).shownReachedAt().get(at);
+                        if (values != null) {
+                            reached.computeIfAbsent(at, _ -> new ArrayList<>()).addAll(values);
+                        }
                     }
                 }
             }
             return new AgainstAnotherValue(filedAt, relations, shown, lines, beside, stopped,
                     stops, noRowShownComputedAt(leaves.stream()
                             .flatMap(each -> each.settled().entrySet().stream()).toList()),
-                    partedByTheirPartners(about, leaves));
+                    partedByTheirPartners(about, leaves), reached);
         }
 
         /**
@@ -520,7 +545,7 @@ sealed interface ComparisonAssessment {
         /** The same relation with only {@code lines} parting what settles it. */
         AgainstAnotherValue partedBy(List<AtAPosition> lines) {
             return new AgainstAnotherValue(filedAt, relations, undivided, lines, beside,
-                    stoppedAt, mayStopBefore, noRowShownComputed, partnered);
+                    stoppedAt, mayStopBefore, noRowShownComputed, partnered, shownReachedAt);
         }
     }
 
@@ -1237,7 +1262,7 @@ sealed interface ComparisonAssessment {
                                    BindingId answer, Arrivals answering,
                                    boolean drawnByAnInvariant, WhatConditionsState conditions,
                                    Optional<ExpansionLineage> writtenIn,
-                                   CountWitnesses.Lookup witnesses) {
+                                   ComparisonWitnesses.AtAComparison witnesses) {
         return ofEach(behavior, comparison, at, read, reads, applying, answer, answering,
                 drawnByAnInvariant, conditions, writtenIn, witnesses).assessment();
     }
@@ -1260,7 +1285,7 @@ sealed interface ComparisonAssessment {
                            InputReading read, InputReads reads, ClosureApplications applying,
                            BindingId answer, Arrivals answering, boolean drawnByAnInvariant,
                            WhatConditionsState conditions, Optional<ExpansionLineage> writtenIn,
-                           CountWitnesses.Lookup witnesses) {
+                           ComparisonWitnesses.AtAComparison witnesses) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
@@ -1280,7 +1305,7 @@ sealed interface ComparisonAssessment {
                                                  Citation at, InputReading read,
                                                  InputReads reads, boolean drawnByAnInvariant,
                                                  WhatConditionsState conditions,
-                                                 CountWitnesses.Lookup witnesses,
+                                                 ComparisonWitnesses.AtAComparison witnesses,
                                                  Cutting.Read cut) {
         return switch (cut) {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
@@ -1337,7 +1362,7 @@ sealed interface ComparisonAssessment {
     private static ComparisonAssessment aLine(Cutting.Read line, Citation at, InputReading read,
                                               boolean drawnByAnInvariant,
                                               Supplier<ComparisonAssessment> aboutNoPosition,
-                                              CountWitnesses.Lookup witnesses,
+                                              ComparisonWitnesses.AtAComparison witnesses,
                                               Supplier<UndividedByARelation.Working> working) {
         return switch (line) {
             case Cutting.Read.Cuts cuts ->
@@ -1378,7 +1403,7 @@ sealed interface ComparisonAssessment {
                                                    Cutting.Read.Several lines, Citation at,
                                                    InputReading read, boolean drawnByAnInvariant,
                                                    Supplier<ComparisonAssessment> aboutNoPosition,
-                                                   CountWitnesses.Lookup witnesses) {
+                                                   ComparisonWitnesses.AtAComparison witnesses) {
         return new Several(lines.parts().stream()
                 .map(part -> Several.Part.ofCases(part.id(), switch (part.line()) {
                     // Parted from the rest by lines only where the statement turns on the relation
@@ -1409,7 +1434,7 @@ sealed interface ComparisonAssessment {
      */
     static ComparisonAssessment ofAnApplication(String behavior, Cutting.Read answered,
                                                 Citation at, InputReading read,
-                                                CountWitnesses.Lookup witnesses) {
+                                                ComparisonWitnesses.AtAComparison witnesses) {
         return switch (answered) {
             case Cutting.Read.Several lines -> eachLineOf(behavior, Optional.empty(), lines, at,
                     read, false, () -> {
@@ -1485,7 +1510,7 @@ sealed interface ComparisonAssessment {
             List<ComparisonArrival> arrivals,
             boolean drawnByAnInvariant,
             InputReading reading,
-            CountWitnesses.Lookup witnesses) {
+            ComparisonWitnesses.AtAComparison witnesses) {
         if (read instanceof Several several) {
             return several.eachPart(part -> aPartNarrowed(part, way, wayToACase, arrivals,
                     drawnByAnInvariant, reading, witnesses));
@@ -1502,7 +1527,7 @@ sealed interface ComparisonAssessment {
                                                   List<ComparisonArrival> arrivals,
                                                   boolean drawnByAnInvariant,
                                                   InputReading reading,
-                                                  CountWitnesses.Lookup witnesses,
+                                                  ComparisonWitnesses.AtAComparison witnesses,
                                                   boolean readsTheRelation) {
         Cutting cutting = switch (read) {
             case AtAPosition at -> at.cutting();
@@ -1719,7 +1744,7 @@ sealed interface ComparisonAssessment {
                                                     List<ComparisonArrival> arrivals,
                                                     boolean drawnByAnInvariant,
                                                     InputReading reading,
-                                                    CountWitnesses.Lookup witnesses) {
+                                                    ComparisonWitnesses.AtAComparison witnesses) {
         // A line over a relation is read once, along the ways that decide where there are any and
         // along the way otherwise: read along the way first, it would be read again in the cases.
         ComparisonAssessment arrived = part.line() instanceof Several
@@ -1916,7 +1941,7 @@ sealed interface ComparisonAssessment {
     private static List<Several.Part> aRelationPartNarrowed(
             Several.Part part, AgainstAnotherValue against,
             WaysToACase wayToACase, List<ComparisonArrival> arrivals,
-            InputReading reading, CountWitnesses.Lookup witnesses) {
+            InputReading reading, ComparisonWitnesses.AtAComparison witnesses) {
         // What a condition says of the way to it and of the lines it parts is the condition's
         // and not the case's, and a case said for several is asked of each condition in turn.
         Map<Proposition, InACase> asked = new HashMap<>();
@@ -2082,7 +2107,7 @@ sealed interface ComparisonAssessment {
      */
     static ComparisonAssessment onItsRuns(String behavior, StatedComparison comparison,
                                           ModelOccurrence which, Citation at, Unread stopped,
-                                          InputReading read, CountWitnesses.Lookup witnesses) {
+                                          InputReading read, ComparisonWitnesses.AtAComparison witnesses) {
         if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers
                 || !Type.INT.equals(comparison.left().type())
                 || !Type.INT.equals(comparison.right().type())) {
@@ -2228,7 +2253,7 @@ sealed interface ComparisonAssessment {
      */
     private static ComparisonAssessment onTheQuantity(
             Citation at, Cutting cutting, AuthoredPointMapping authored, InputReading read,
-            boolean drawnByAnInvariant, CountWitnesses.Lookup witnesses) {
+            boolean drawnByAnInvariant, ComparisonWitnesses.AtAComparison witnesses) {
         // A line made on one term against a place: its form is that term and nothing is added.
         return onTheQuantity(at, cutting, authored, read, drawnByAnInvariant, witnesses,
                 UndividedByARelation.Working.NOTHING);
@@ -2242,7 +2267,7 @@ sealed interface ComparisonAssessment {
      */
     private static ComparisonAssessment onTheQuantity(
             Citation at, Cutting cutting, AuthoredPointMapping authored, InputReading read,
-            boolean drawnByAnInvariant, CountWitnesses.Lookup witnesses,
+            boolean drawnByAnInvariant, ComparisonWitnesses.AtAComparison witnesses,
             UndividedByARelation.Working working) {
         Quantities quantities = read.quantities();
         // Whether there is an input at all, before anything is asked about where its values run.
@@ -2554,7 +2579,8 @@ sealed interface ComparisonAssessment {
         return relatingAt(across.filedAt().stream()
                 .filter(place -> !divided.contains(place)).toList(), across.undivided(),
                 stopped, across.left().mayStopBefore(),
-                noRowShownComputedAt(across.left().settled().entrySet()));
+                noRowShownComputedAt(across.left().settled().entrySet()),
+                across.left().shownReachedAt());
     }
 
     /** The same, of a relation to another value. */
@@ -2563,7 +2589,8 @@ sealed interface ComparisonAssessment {
         Set<FilingCoordinate> divided = against.dividedBySettling(partneredKept);
         return relatingAt(against.filedAt().stream()
                 .filter(place -> !divided.contains(place)).toList(), against.undivided(),
-                against.stoppedAt(), against.mayStopBefore(), against.noRowShownComputed());
+                against.stoppedAt(), against.mayStopBefore(), against.noRowShownComputed(),
+                against.shownReachedAt());
     }
 
     /**
@@ -2628,7 +2655,8 @@ sealed interface ComparisonAssessment {
      *
      * <p>A place shown undivided that a run may stop on the way to the relation for
      * ({@code mayStopBefore}) says that instead: undivided over every value is a claim that every
-     * value gets there, which is what is not shown.
+     * value gets there, which is what is not shown. The values a row was shown to get there at
+     * ({@code shownReachedAt}) go with it, and change no word.
      *
      * <p>A place with numbers no row is shown computed in ({@code noRowShownComputed}) is told
      * each region, after the word above where it is shown undivided and before the words below
@@ -2638,13 +2666,15 @@ sealed interface ComparisonAssessment {
                                    Set<FilingCoordinate> undivided,
                                    Map<FilingCoordinate, Set<Figure>> stoppedAt,
                                    Set<FilingCoordinate> mayStopBefore,
-                                   Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed) {
+                                   Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
+                                   Map<FilingCoordinate, List<String>> shownReachedAt) {
         return places.stream().distinct().flatMap(at -> {
             List<LeftAt> why = new ArrayList<>();
             boolean shownUndivided = undivided.contains(at);
             if (shownUndivided) {
                 why.add(new LeftAt(at, mayStopBefore.contains(at)
-                        ? new BlockReason.RelationNotShownReachedAtEveryValue()
+                        ? new BlockReason.RelationNotShownReachedAtEveryValue(
+                                shownReachedAt.getOrDefault(at, List.of()))
                         : new BlockReason.ComparisonRelatingTwoValues()));
             }
             // Numbers no row is shown computed in are told whether or not the place is shown
