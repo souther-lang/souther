@@ -316,6 +316,30 @@ public final class LibraryProver {
     }
 
     /**
+     * Whether {@code operation}'s answer is, on every run of its body, {@code operator} applied to
+     * its two arguments in the order they are taken.
+     */
+    public Outcome isTheOperator(ValueName.Stdlib.Operation operation, BinOp operator) {
+        Reading reading = new Reading(library, readThrough);
+        try {
+            List<Value> params = arguments(operation);
+            Value applied = operator == BinOp.CONCAT
+                    ? new Value.Joined(params.get(0), params.get(1))
+                    : new Value.Arithmetic(operator, params.get(0), params.get(1));
+            for (Reading.Case each : reading.cases(reading.bodyOf(operation),
+                    new Reading.Frame(params, Map.of()))) {
+                if (!each.is().equals(applied)) {
+                    return new Outcome.Open(new Unproved.DoesNotFollow(
+                            Unproved.Obligation.THE_STATEMENT));
+                }
+            }
+            return new Outcome.Proved(new Proof.ByTheBody(operation, reading.used()));
+        } catch (Reading.Stopped stopped) {
+            return stoppedAt(stopped);
+        }
+    }
+
+    /**
      * The type of what each operator of {@code operation}'s body, {@code body}, answers, read off
      * what it is handed: an argument as the operation's signature says, a number written out as
      * its own, what an operation answers as that operation's signature says, and what a walk

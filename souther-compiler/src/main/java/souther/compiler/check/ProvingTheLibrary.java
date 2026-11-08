@@ -173,6 +173,8 @@ final class ProvingTheLibrary implements LibraryProofs {
                     elements.assemblesPieces(operation, assembles.source().position(),
                             assembles.closure().position(), assembles.piece())
                             instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.IsTheOperator is -> prover.isTheOperator(operation,
+                    is.operator()) instanceof LibraryProver.Outcome.Proved;
             case BoundOperationFact.KeepsTheElementsWhereItHolds keeps ->
                     elements.keepsWhereItHolds(operation, keeps.source().position(),
                             keeps.closure().position())

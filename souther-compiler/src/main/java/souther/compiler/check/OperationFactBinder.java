@@ -634,6 +634,22 @@ final class OperationFactBinder {
                     holdSizeEquivalence(stdlib, declaration, means.size());
             case OperationFact.AgreesWithAnotherWhereItIsGivenText agrees ->
                     holdAgreement(stdlib, declaration, agrees);
+            // Two of one kind of value in and one of that kind out, which is what an operator
+            // over a kind of value is.
+            case OperationFact.IsTheOperator is -> {
+                String name = theLibraryOperation(operation.operation()).qualified();
+                List<Type> takes = declaration.params();
+                if (takes.size() != 2
+                        || !sameShape(takes.get(0), takes.get(1), new HashMap<>(), new HashMap<>())
+                        || !sameShape(takes.get(0), declaration.result(), new HashMap<>(),
+                                new HashMap<>())) {
+                    throw new IllegalStateException(name + " is said to be the operator "
+                            + is.operator() + ", and it does not take two values of one type and"
+                            + " answer one");
+                }
+                yield new BoundOperationFact.IsTheOperator(operation, is.operator(),
+                        new DeclaredArgument(operation, 0, takes.getFirst()));
+            }
             // Names nothing beyond the operation it is about, so there is nothing about it to hold
             // to a signature beyond the declaration every fact is held to above. What it comes to
             // bound is the fact about that declaration.

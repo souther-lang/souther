@@ -954,6 +954,59 @@ public final class BoundOperationFacts {
         return one(BoundOperationFact.MeansTheSameAsASizeOfNought.class, operation);
     }
 
+    /** The operator {@code operation} is, or null where it is none
+     *  ({@link BoundOperationFact.IsTheOperator}). */
+    public BinOp operatorOf(ValueName operation) {
+        BoundOperationFact.IsTheOperator held =
+                one(BoundOperationFact.IsTheOperator.class, operation);
+        return held == null ? null : held.operator();
+    }
+
+    /** Whether {@code operation} is the operator that puts two values end to end, over lists. */
+    public boolean putsListsEndToEnd(ValueName operation) {
+        return operandOf(operation, BinOp.CONCAT) instanceof Type.ListOf;
+    }
+
+    /** The type {@code operation} takes two of where it is {@code operator}, or null where it is
+     *  not that operator. */
+    Type operandOf(ValueName operation, BinOp operator) {
+        BoundOperationFact.IsTheOperator held =
+                one(BoundOperationFact.IsTheOperator.class, operation);
+        return held == null || held.operator() != operator ? null : held.operand().stands();
+    }
+
+    /**
+     * The operation {@code operator} is over two values of {@code operand}, or null where none is
+     * declared to be: the one whose declared type {@code operand} is an instance of.
+     */
+    public ValueName operationFor(BinOp operator, Type operand) {
+        for (ValueName operation : ones(BoundOperationFact.IsTheOperator.class)) {
+            Type declared = operandOf(operation, operator);
+            if (declared != null && instanceOf(operand, declared)) {
+                return operation;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code actual} is the type {@code declared} stands for with its variables filled
+     *  in, to the depth a declared operand is written: a container of anything is any container
+     *  of that kind. */
+    private static boolean instanceOf(Type actual, Type declared) {
+        return switch (declared) {
+            case Type.Var _ -> true;
+            case Type.ListOf l -> actual instanceof Type.ListOf a
+                    && instanceOf(a.element(), l.element());
+            case Type.SetOf l -> actual instanceof Type.SetOf a
+                    && instanceOf(a.element(), l.element());
+            case Type.OptionOf l -> actual instanceof Type.OptionOf a
+                    && instanceOf(a.element(), l.element());
+            case Type.MapOf l -> actual instanceof Type.MapOf a
+                    && instanceOf(a.key(), l.key()) && instanceOf(a.value(), l.value());
+            default -> declared.equals(actual);
+        };
+    }
+
     /** What {@code operation} answers where it is given a string at a place: the operation it then
      *  agrees with, or null where it agrees with none. */
     public BoundOperationFact.AgreesWithAnotherWhereItIsGivenText agreesWhereItIsGivenText(

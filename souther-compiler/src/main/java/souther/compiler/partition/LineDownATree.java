@@ -117,8 +117,6 @@ final class LineDownATree {
 
         private static final ValueName.Stdlib.Operation IS_EMPTY =
                 ValueName.Stdlib.operation("List", "isEmpty");
-        private static final ValueName.Stdlib.Operation APPEND =
-                ValueName.Stdlib.operation("List", "append");
 
         private final RecursionOverATree search;
         private final TermPath root;
@@ -226,11 +224,11 @@ final class LineDownATree {
             if (walk != null) {
                 return evalWalk(walk, here, env);
             }
-            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(ValueName operation,
-                                                                          List<Core> args))
-                    || !operation.equals(APPEND) || args.size() != 2) {
+            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied applied)
+                    || !applied.putsListsEndToEnd() || applied.args().size() != 2) {
                 return null;
             }
+            List<Core> args = applied.args();
             return eval(args.get(0), here, env) instanceof Abs.One
                     && eval(args.get(1), here, env) instanceof Abs.Below below
                     ? new Abs.Line(below.field()) : null;

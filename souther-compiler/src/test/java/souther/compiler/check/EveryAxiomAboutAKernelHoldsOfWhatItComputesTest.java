@@ -234,6 +234,51 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
     }
 
     /**
+     * Every kernel said to be an operator answers what the operator answers over the same two
+     * values, over the empty value, one that holds something, and the two the other way round.
+     */
+    @Test
+    void everyKernelSaidToBeAnOperatorAnswersWhatTheOperatorAnswers() throws Exception {
+        Stdlib stdlib = DefaultStdlib.get();
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        StringBuilder source = new StringBuilder("module demo\n\ndata N = { n: Int }\n");
+        List<String> runs = new ArrayList<>();
+        for (ValueName.Stdlib.Operation operation : stdlib.entries().keySet()) {
+            if (stdlib.intrinsicOf(operation) == null || facts.operatorOf(operation) == null) {
+                continue;   // what is stated of a written operation is proved of its body
+            }
+            if (facts.operatorOf(operation) != souther.compiler.types.BinOp.CONCAT
+                    || !Type.STRING.equals(facts.operandOf(operation, facts.operatorOf(operation)))) {
+                throw new IllegalStateException("no operator but ++ over strings is written here,"
+                        + " which " + operation.qualified() + " is otherwise");
+            }
+            String name = "operator" + runs.size();
+            source.append("\ndata I").append(name).append(" = { a: String, b: String }\n\n")
+                    .append("behavior ").append(name).append(" : (i: I").append(name)
+                    .append(") -> N constructs N\nlet ").append(name).append(" (i) = N {\n")
+                    .append("    n = if ").append(operation.qualified())
+                    .append("(i.a, i.b) == i.a ++ i.b then 1 else 0\n}\n");
+            runs.add(name);
+        }
+        WhatTheLibraryComputes.Program program =
+                new WhatTheLibraryComputes.Program("demo", source.toString());
+        List<String> wrong = new ArrayList<>();
+        for (String name : runs) {
+            for (String first : List.of("", "a", "xy")) {
+                for (String second : List.of("", "b", "zw")) {
+                    Object out = program.answer(name, "I" + name, "N",
+                            Map.of("a", first, "b", second));
+                    if (!Map.of("n", 1L).equals(out)) {
+                        wrong.add(name + " over " + first + ", " + second + " answered " + out);
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), wrong, source::toString);
+        assertTrue(!runs.isEmpty(), "no kernel is said to be an operator");
+    }
+
+    /**
      * Every number in the list a kernel is said to bound stands where each bound says, against the
      * argument it names, over arguments either side of one another and of nought.
      */

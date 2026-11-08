@@ -830,6 +830,22 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation is what {@code operator} comes to over two values of the type it takes, and
+     * answers a value of that type: {@code a ++ b} over lists is {@code List.append(a, b)}, and
+     * over strings {@code String.append(a, b)}.
+     *
+     * <p>Said of the operation so that a reader meeting the operator asks which operation it is
+     * for the type it is written over, and a reader meeting the operation asks whether it is the
+     * operator, rather than each holding the pair as two names of its own.
+     */
+    record IsTheOperator(souther.compiler.types.BinOp operator) implements OperationFact {
+
+        public IsTheOperator {
+            Objects.requireNonNull(operator, "this one names the operator it is");
+        }
+    }
+
+    /**
      * Where the operation is handed the string {@code text} at {@code position}, it answers what
      * {@code other} answers on the arguments that remain, in their order.
      *

@@ -432,6 +432,9 @@ public final class OperationFacts {
                     at(0))),
             // And the code points of one, each the number it is.
             about("String", "codePoints", new OperationFact.ListsTheCodePointsOf(at(0))),
+            // What the operator ++ comes to over two strings, and over two lists.
+            about("String", "append", new OperationFact.IsTheOperator(BinOp.CONCAT)),
+            about("List", "append", new OperationFact.IsTheOperator(BinOp.CONCAT)),
             // Nothing between the strings joined is the strings put end to end.
             about("String", "join", new OperationFact.AgreesWithAnotherWhereItIsGivenText(
                     ValueName.Stdlib.operation("String", "concat"), 0, "")),

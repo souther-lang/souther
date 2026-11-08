@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.types.BinOp;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -35,9 +34,10 @@ public record AnOperationApplied(ValueName operation, List<Core> args) {
             // The checker types the operator over two strings or two lists and refuses it over
             // anything else, so a join that is no string's is a list's: the string's append and the
             // list's are the two operations it can be.
-            case Core.Binary joined when joined.op() == BinOp.CONCAT -> new AnOperationApplied(
-                    ValueName.Stdlib.operation(Type.STRING.equals(joined.type()) ? "String" : "List",
-                            "append"), List.of(joined.left(), joined.right()));
+            case Core.Binary joined when joined.op() == BinOp.CONCAT
+                    && DefaultBoundOperationFacts.get().operationFor(BinOp.CONCAT, joined.type())
+                    instanceof ValueName operation ->
+                    new AnOperationApplied(operation, List.of(joined.left(), joined.right()));
             case null, default -> null;
         };
     }
@@ -59,6 +59,12 @@ public record AnOperationApplied(ValueName operation, List<Core> args) {
         List<Core> remaining = new ArrayList<>(call.args());
         remaining.remove(agrees.position());
         return new AnOperationApplied(agrees.other().operation(), remaining);
+    }
+
+    /** Whether it puts two lists end to end: the operation declared to be the operator
+     *  {@code ++}, over a list. */
+    public boolean putsListsEndToEnd() {
+        return DefaultBoundOperationFacts.get().putsListsEndToEnd(operation);
     }
 
     /** What it passes where {@code which} stands, or null where it passes nothing there. */

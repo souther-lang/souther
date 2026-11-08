@@ -110,6 +110,13 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
             new Authority("where an operator of the language answers a value, by the type it"
                             + " answers",
                     "souther.compiler.abort.AbortSites#completionOfAnOperator", Traversal.OPAQUE),
+            new Authority("which operation of the library an operator is over the type it is"
+                            + " written over, as the library declares it",
+                    "souther.compiler.check.BoundOperationFacts#operationFor", Traversal.OPAQUE),
+            new Authority("whether an operation of the library is the operator that puts two"
+                            + " lists end to end, as the library declares it",
+                    "souther.compiler.check.BoundOperationFacts#putsListsEndToEnd",
+                    Traversal.OPAQUE),
             new Authority("whether every function a call is handed is a closure written at it",
                     "souther.compiler.check.WhatARunMayEndFor#closuresWrittenAt",
                     Traversal.OPAQUE),

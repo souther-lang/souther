@@ -274,6 +274,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                            DeclaredArgument closure, PieceOfAnElement piece)
             implements OneAboutAnOperation {}
 
+    /** {@code operation} is what {@code operator} comes to over two values of the type
+     *  {@code operand} stands as, and answers one. */
+    record IsTheOperator(DeclaredOperation operation, souther.compiler.types.BinOp operator,
+                         DeclaredArgument operand)
+            implements OneAboutAnOperation {}
+
     /** Where {@code operation} is handed {@code text} at {@code position}, it answers what
      *  {@code other} answers on the arguments that remain, in their order. */
     record AgreesWithAnotherWhereItIsGivenText(DeclaredOperation operation,
