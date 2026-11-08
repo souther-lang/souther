@@ -20,6 +20,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -498,9 +499,14 @@ final class Clauses {
         void readsOf(Core clause) {
             walk(clause);
             for (Lookup each : lookups) {
-                read(each.container(), WhatAClauseNeeds.aMemberFound(clause, each.lookup())
-                        ? ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS
-                        : ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
+                if (WhatAClauseNeeds.aMemberFound(clause, each.lookup())) {
+                    bindings.add(each.container().root());
+                    reads.add(new ClauseRead(keyOf(each.container()),
+                            ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
+                            memberLookedUp(each.lookup())));
+                } else {
+                    read(each.container(), ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
+                }
             }
             for (Apart each : aparts) {
                 read(each.container(), WhatAClauseNeeds.elementsApart(clause, each.call())
@@ -564,6 +570,22 @@ final class Clauses {
         private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
             bindings.add(at.root());
             reads.add(new ClauseRead(keyOf(at), kind, run));
+        }
+
+        /**
+         * The member {@code lookup} looks for, where what it looks for is a place of the value:
+         * a key of a map for a lookup in one, an element otherwise.
+         */
+        private Optional<ClauseRead.Member> memberLookedUp(Core lookup) {
+            if (!(AnOperationApplied.of(lookup) instanceof AnOperationApplied(var operation,
+                    List<Core> args)) || args.isEmpty()) {
+                return Optional.empty();
+            }
+            Location lookedFor = locationOf(args.getFirst());
+            boolean asAKey = operation.equals(ValueName.Stdlib.operation("Map", "get"))
+                    || operation.equals(ValueName.Stdlib.operation("Map", "containsKey"));
+            return lookedFor == null ? Optional.empty()
+                    : Optional.of(new ClauseRead.Member(keyOf(lookedFor), asAKey));
         }
 
         /** What the rules of the value call the place {@code at}. */

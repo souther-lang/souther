@@ -142,22 +142,23 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.abort.AbortSites.ofAnOperatorOfAnyType",
                     "the same, of the sites every typing the operator is admitted at is written"
                             + " as, for a tree whose operands carry no type"),
-            new Held("souther.compiler.check.LibraryEndings.Reading.operator",
+            new Held("souther.compiler.abort.AbortSites.ofAnOperatorAnswering",
+                    "the same, at the type the operator answers, for a tree whose operators are"
+                            + " read to answer a type and whose operands are not"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.OfTheBody.operator",
                     "hands the operator a library operation's body writes to AbortSites, which"
-                            + " answers what it ends a run for"),
+                            + " answers what it ends a run for and where it answers, and names"
+                            + " the whole-number arithmetic among them as a site the library's"
+                            + " proofs are asked of"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.OfTheBody.itself",
+                    "takes the operator a library operation's body writes, and its operands, off"
+                            + " the term, to hand on"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.ofTheBody",
+                    "asks WhereAnOperatorAnswers where an Int sum answers, for the whole numbers"
+                            + " a library operation's body works out"),
             new Held("souther.compiler.abort.AbortSites.completionOfAnOperator",
                     "which operator answers where the collection it answers fits, and of which"
                             + " operands: the join of two lists"),
-            new Held("souther.compiler.check.LibraryEndings.Reading.answerOfTheBody",
-                    "hands the operator a way of a library operation's body ends in to"
-                            + " AbortSites, which answers where it answers"),
-            new Held("souther.compiler.check.LibraryEndings.Reading.counted",
-                    "names the addition a walk of the library counts by"),
-            new Held("souther.compiler.check.LibraryEndings.Reading.putInOne",
-                    "names the join a walk of the library puts one element in by"),
-            new Held("souther.compiler.check.LibraryEndings.Reading.everyNumberStaysAnInt",
-                    "asks WhereAnOperatorAnswers where the addition a walk of the library counts"
-                            + " by answers"),
             new Held("souther.compiler.check.WhatARunMayEndFor"
                     + ".completionApartFromTheClosuresWrittenAtIt",
                     "hands an operator the analysis reads to AbortSites, which answers where it"
@@ -687,8 +688,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "hands out the operator a number a body computes was written with"),
             new Held("souther.compiler.proof.Value.Arithmetic.<init>",
                     "takes the operator a number a body computes was written with"),
-            new Held("souther.compiler.proof.Reading.cases",
+            new Held("souther.compiler.proof.Reading.casesOf",
                     "reads an operator a library body writes into what it computes or states"),
+            new Held("souther.compiler.proof.LibraryTerm.forEachPart",
+                    "hands on the two operands an operator of a library body is made of"),
+            new Held("souther.compiler.proof.LibraryProver.typeOf",
+                    "reads the type a number a library body computes is of off the operator and"
+                            + " its operands: a quotient is a Rational"),
+            new Held("souther.compiler.proof.LibraryProver.ofTheSameType",
+                    "takes the number a negation negates, to read the type of what it answers"),
             new Held("souther.compiler.proof.Reading.operated",
                     "what an operator a library body writes comes to over the two values it was"
                             + " handed: a number computed, or a statement of how they stand"),
@@ -703,6 +711,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " operator it is"),
             new Held("souther.compiler.proof.LibraryProver.walksIn",
                     "the same, looking for a walk among the operands"),
+            new Held("souther.compiler.proof.LibraryProver.divisorOf",
+                    "takes the divisor of a quotient a library body computes, to ask whether it"
+                            + " is ever nought where the quotient is worked out"),
             new Held("souther.compiler.proof.Substituted.value",
                     "puts one value in place of another in both operands of a number a body"
                             + " computes, keeping the operator it was written with"),
@@ -735,9 +746,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "names the sum, the difference and the product a decimal operation of the"
                             + " library computes, which the fold gives the arithmetic the"
                             + " operators have"),
-            new Held("souther.compiler.check.WhatAClauseNeeds.work",
-                    "names the conjunction and the disjunction, which are the two forms that carry"
-                            + " a false part on to the whole clause; any other operator says"
+            new Held("souther.compiler.check.WhatAClauseNeeds.workJoined",
+                    "asks what an operator joining two conditions joins them by, which is how a"
+                            + " false part carries on to the whole clause; any other operator says"
                             + " nothing of the lookup or of the elements being apart"),
             new Held("souther.compiler.coverage.DecisionSources.Rules.isTheirVerdict",
                     "names the conjunction and the disjunction, the two forms that join the"

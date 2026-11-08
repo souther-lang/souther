@@ -2,8 +2,10 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.proof.AppliedClosures;
+import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.Library;
 import souther.compiler.proof.Slot;
+import souther.compiler.proof.Unproved;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.semantics.LawNumber;
@@ -11,6 +13,7 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
 
@@ -44,6 +47,31 @@ final class LibraryUnderProof implements Library {
         this.settling = settling;
         this.building = building;
         this.relating = relating;
+    }
+
+    /**
+     * The library as what is settled of {@code facts} says, every proof of it done: for a reading
+     * of the library's bodies made after its laws are settled, which takes them as they stand.
+     */
+    static Library settledBy(Stdlib stdlib, BoundOperationFacts facts) {
+        return new LibraryUnderProof(stdlib, facts,
+                (operation, observed) -> asAProofTakesIt(facts.settled(operation, observed)),
+                operation -> {
+                    BuiltFrom<DeclaredArgument> built = facts.buildsItsResultFrom(operation);
+                    return built == null ? null : built.withArguments(DeclaredArgument::position);
+                },
+                facts::relationsOf);
+    }
+
+    /** How {@code settling} is taken by a proof: over the arguments by place. */
+    static Settled asAProofTakesIt(BoundOperationFacts.Settled settling) {
+        return switch (settling) {
+            case null -> null;
+            case BoundOperationFacts.Settled.ByALaw(var law, var _) ->
+                    new Settled.ByALaw(ByPlace.law(law, DeclaredArgument::position));
+            case BoundOperationFacts.Settled.Unsaid(Unsayable why) -> new Settled.Unsaid(why);
+            case BoundOperationFacts.Settled.Open(var _, Unproved why) -> new Settled.Open(why);
+        };
     }
 
     @Override

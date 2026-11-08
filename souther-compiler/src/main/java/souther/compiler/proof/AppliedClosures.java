@@ -378,8 +378,8 @@ public final class AppliedClosures {
                 }
                 case LibraryTerm.Operator operator -> {
                     walk(operator.left(), scope, always);
-                    boolean shortCircuits = operator.op() == BinOp.AND || operator.op() == BinOp.OR;
-                    walk(operator.right(), scope, always && !shortCircuits);
+                    walk(operator.right(), scope,
+                            always && !operator.op().stopsWhenItsAnswerIsSettled());
                 }
                 case LibraryTerm.Let let -> {
                     walk(let.value(), scope, always);
@@ -475,7 +475,7 @@ public final class AppliedClosures {
         private void stopping(LibraryTerm.Closure step, Scope inside) {
             if (!(step.body() instanceof LibraryTerm.Operator(BinOp op, LibraryTerm.Bound carried,
                     LibraryTerm.Applied applied, var _))
-                    || (op != BinOp.OR && op != BinOp.AND)
+                    || op.rightRunsWhenLeftIs() == null
                     || !isTheClosure(applied.function())
                     || !(inside.roles().get(carried.binding())
                             instanceof Role.Carried(LibraryTerm.Truth(boolean seed), var _, var _,
@@ -483,16 +483,18 @@ public final class AppliedClosures {
                     || inside.enclosing() != HowAClosureIsApplied.TO_EVERY_ELEMENT) {
                 return;
             }
-            boolean or = op == BinOp.OR;
-            if (seed == or) {
+            // The application is made while what is carried lets the right run, and the walk
+            // stops at the first one that does not leave it so.
+            boolean goesOnWhile = op.rightRunsWhenLeftIs();
+            if (seed != goesOnWhile) {
                 return;   // a walk from the truth the join decides decides nothing more
             }
             Combinator rule = applying(applied, inside);
             if (rule != null) {
                 sites.add(new Site(new Combinator(rule.closureArg(), rule.elementParam(),
                         rule.containerArg(), rule.keyParam(), rule.positionParam(),
-                        or ? HowAClosureIsApplied.UNTIL_ONE_HOLDS
-                                : HowAClosureIsApplied.UNTIL_ONE_FAILS,
+                        goesOnWhile ? HowAClosureIsApplied.UNTIL_ONE_FAILS
+                                : HowAClosureIsApplied.UNTIL_ONE_HOLDS,
                         Combinator.FROM_THE_FIRST), true));
             }
         }

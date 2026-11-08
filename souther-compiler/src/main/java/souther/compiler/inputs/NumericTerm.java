@@ -1954,6 +1954,15 @@ public sealed interface NumericTerm
             return source.subjectPath();
         }
 
+        /** The places the run's values are read off: what a computation of each element reads of
+         *  it ({@link RunSource.ComputedOccurrences#placesReadOff}), and otherwise every place a
+         *  move puts. */
+        @Override
+        public List<TermPath> placesReadOff() {
+            return source instanceof RunSource.ComputedOccurrences computed
+                    ? computed.placesReadOff() : NumericTerm.super.placesReadOff();
+        }
+
         /** The container the run walks ({@link RunSource#standsAt}), where it walks one: the nodes
          *  of a tree stand in none. */
         @Override

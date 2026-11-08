@@ -215,17 +215,10 @@ final class RunReach {
                 }
                 return domain.boundsOf(affine.form());
             }
+            // Either answer at any element: which elements a run holds, and which positions it
+            // has, are the row's, and a range that assumed some of them would be narrower than a
+            // row of others reaches.
             case ElementValue.Choose choice -> {
-                NumericDomain.Bounds yes =
-                        ofWhatWasComputed(choice.whenSet(), elements, orders, typeAt, reading);
-                NumericDomain.Bounds no =
-                        ofWhatWasComputed(choice.otherwise(), elements, orders, typeAt, reading);
-                return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
-            }
-            // Either answer at any element: which positions a run has, and so which answers it
-            // takes, is the row's, and a range that assumed some of them would be narrower than
-            // a row of other positions reaches.
-            case ElementValue.ByPosition choice -> {
                 NumericDomain.Bounds yes =
                         ofWhatWasComputed(choice.whenHolds(), elements, orders, typeAt, reading);
                 NumericDomain.Bounds no =

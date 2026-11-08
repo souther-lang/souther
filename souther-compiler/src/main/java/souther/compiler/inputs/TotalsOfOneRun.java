@@ -242,7 +242,7 @@ public final class TotalsOfOneRun {
                         coefs.put(product.toString(), weight));
                 constant = products.form().constant();
             }
-            case ElementValue.Choose _, ElementValue.ByPosition _, ElementValue.Indexed _,
+            case ElementValue.Choose _, ElementValue.Indexed _,
                  ElementValue.OfItsCase _, ElementValue.SumOfChoices _ -> {
                 return null;
             }

@@ -57,6 +57,7 @@ import java.util.function.Function;
 public final class ContainerSizesUnderAWitness {
 
     private final Function<Core, Optional<BigInteger>> ofTheInput;
+    private final Function<Core, Optional<BigInteger>> ofEachElementOfTheInput;
     private final Map<BindingId, Core> boundTo = new HashMap<>();
     private final Map<Core, WalkAt> walks = new IdentityHashMap<>();
     private final Map<BindingId, WalkAt> carriedBy = new HashMap<>();
@@ -65,8 +66,10 @@ public final class ContainerSizesUnderAWitness {
     private final Set<Core> asking = new HashSet<>();
 
     private ContainerSizesUnderAWitness(Core within,
-                                        Function<Core, Optional<BigInteger>> ofTheInput) {
+                                        Function<Core, Optional<BigInteger>> ofTheInput,
+                                        Function<Core, Optional<BigInteger>> ofEachElement) {
         this.ofTheInput = ofTheInput;
+        this.ofEachElementOfTheInput = ofEachElement;
         List<Core> calls = new ArrayList<>();
         names(within, calls);
         for (Core each : calls) {
@@ -79,13 +82,18 @@ public final class ContainerSizesUnderAWitness {
     }
 
     /**
-     * The most the collection {@code collection} holds on any run, read off how it is built
-     * alone: a collection written out, one an arm of a match or a branch of a fork chooses,
-     * one assembled of what is written. Nothing where it is built of a collection of the input,
-     * whose size nothing here bounds.
+     * The most the collection {@code collection} holds on every run whose input collections hold
+     * no more than {@code ofTheInput} says, read off how it is built: a collection written out,
+     * one an arm of a match or a branch of a fork chooses, one assembled of what is written, and
+     * a filter of a collection of the input, which holds no more than that one does.
+     *
+     * @param ofTheInput the most a collection of the input read at a node holds on such a run, or
+     *                   nothing where the node reads no collection of the input or nothing bounds
+     *                   it
      */
-    public static Optional<BigInteger> mostHeldWhateverTheInputHolds(Core collection) {
-        return new ContainerSizesUnderAWitness(collection, node -> Optional.empty())
+    public static Optional<BigInteger> mostHeld(Core collection,
+                                                Function<Core, Optional<BigInteger>> ofTheInput) {
+        return new ContainerSizesUnderAWitness(collection, ofTheInput, node -> Optional.empty())
                 .most(collection);
     }
 
@@ -93,13 +101,16 @@ public final class ContainerSizesUnderAWitness {
      * Whether {@code operator}, standing in {@code within} and answering where {@code fits} says,
      * answers on every run whose input collections hold no more than {@code ofTheInput} says.
      *
-     * @param ofTheInput the most a collection of the input read at a node holds on such a run, or
-     *                   nothing where the node reads no collection of the input or nothing bounds
-     *                   it
+     * @param ofTheInput    the most a collection of the input read at a node holds on such a run,
+     *                      or nothing where the node reads no collection of the input or nothing
+     *                      bounds it
+     * @param ofEachElement the same, of the most each element of such a collection holds
      */
     public static boolean answersOn(Core within, Core operator, GetsPast completion,
-                                    Function<Core, Optional<BigInteger>> ofTheInput) {
-        return new ContainerSizesUnderAWitness(within, ofTheInput).answers(operator, completion);
+                                    Function<Core, Optional<BigInteger>> ofTheInput,
+                                    Function<Core, Optional<BigInteger>> ofEachElement) {
+        return new ContainerSizesUnderAWitness(within, ofTheInput, ofEachElement)
+                .answers(operator, completion);
     }
 
     /** Whether {@code operator}, standing in what this reads and answering where
@@ -107,7 +118,7 @@ public final class ContainerSizesUnderAWitness {
     private boolean answers(Core operator, GetsPast completion) {
         return switch (completion) {
             case GetsPast.Always _ -> true;
-            case GetsPast.WhereTheAnswerFits(GetsPast.AnswerSize answer) ->
+            case GetsPast.WhereTheAnswerFits(LinearForm<LawNumber<Integer>> answer) ->
                     answer(operator, answer)
                             .map(most -> most.compareTo(GetsPast.MOST_ELEMENTS) <= 0)
                             .orElse(false);
@@ -199,37 +210,14 @@ public final class ContainerSizesUnderAWitness {
         return Core.withoutStanding(closure) instanceof Core.Block written ? written : null;
     }
 
-    /** The most the answer of {@code node} holds, as {@code size} says of what it is handed. */
-    private Optional<BigInteger> answer(Core node, GetsPast.AnswerSize size) {
+    /** The most the answer of {@code node} holds, as {@code size}, a number of what it is handed
+     *  by place, says. */
+    private Optional<BigInteger> answer(Core node, LinearForm<LawNumber<Integer>> size) {
         List<Core> operands = operandsOf(node);
         if (operands == null) {
             return Optional.empty();
         }
-        return switch (size) {
-            case GetsPast.AnswerSize.SumOf(List<Integer> at, int more) -> {
-                BigInteger total = BigInteger.valueOf(more);
-                for (int each : at) {
-                    Optional<BigInteger> one = each < operands.size()
-                            ? most(operands.get(each)) : Optional.empty();
-                    if (one.isEmpty()) {
-                        yield Optional.empty();
-                    }
-                    total = total.add(one.get());
-                }
-                yield Optional.of(total);
-            }
-            case GetsPast.AnswerSize.PiecesOf(int source, int function) -> {
-                if (source >= operands.size() || function >= operands.size()
-                        || !(Core.withoutStanding(operands.get(function))
-                                instanceof Core.Block made)) {
-                    yield Optional.empty();
-                }
-                Optional<BigInteger> elements = most(operands.get(source));
-                Optional<BigInteger> piece = most(made.body());
-                yield elements.isPresent() && piece.isPresent()
-                        ? Optional.of(elements.get().multiply(piece.get())) : Optional.empty();
-            }
-        };
+        return mostOf(size, at -> at < operands.size() ? operands.get(at) : null);
     }
 
     /** The most the collection {@code e} answers holds on such a run, or nothing where that is
@@ -263,6 +251,12 @@ public final class ContainerSizesUnderAWitness {
             }
             case Core.LetIn li -> most(li.body());
             case Core.If fork -> larger(most(fork.then()), most(fork.els()));
+            // A part of what a walk carries that is a walk of its own, at a step or of what the
+            // walk answers.
+            case Core.TupleGet _, Core.FieldAccess _, Core.FieldProjection _
+                    when aPartOfAWalk(SeededWalk.Part.taken(node)) instanceof PartOfAWalk(
+                            WalkAt walk, boolean handedToTheStep) ->
+                    carried(walk, handedToTheStep);
             // Of the value an attempt answers where it is built or where it is refused: how many
             // elements it holds if it answers, not that it does.
             case Core.IfConstructed attempt -> {
@@ -285,7 +279,8 @@ public final class ContainerSizesUnderAWitness {
                     yield carried(walk, false);
                 }
                 if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                        instanceof GetsPast.WhereTheAnswerFits(GetsPast.AnswerSize size)) {
+                        instanceof GetsPast.WhereTheAnswerFits(
+                                LinearForm<LawNumber<Integer>> size)) {
                     yield answer(node, size);
                 }
                 yield assembledOrStated(node);
@@ -334,24 +329,46 @@ public final class ContainerSizesUnderAWitness {
         return Optional.empty();
     }
 
-    /** The most {@code form} comes to, each number in it the most a collection handed to
-     *  {@code applied} holds, or a part of one. */
+    /** The same, of {@code form} over the arguments of {@code applied}. */
     private Optional<BigInteger> mostOf(LinearForm<LawNumber<DeclaredArgument>> form,
                                         AnOperationApplied applied) {
+        return mostOf(form, applied::argument);
+    }
+
+    /**
+     * The most {@code form}, a number of what a site is handed, comes to: each number in it the
+     * most a collection {@code handed} names holds, or a part of one, or the most the elements of
+     * one hold between them — as many as it holds, each holding as many as one of them may, or
+     * as many as the closure handed beside it answers on one.
+     */
+    private <A> Optional<BigInteger> mostOf(LinearForm<LawNumber<A>> form,
+                                            Function<A, Core> handed) {
         Optional<BigInteger> out = whole(form.constant());
-        for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : form.coefs().entrySet()) {
+        for (Map.Entry<LawNumber<A>, ExactRatio> term : form.coefs().entrySet()) {
             if (out.isEmpty() || term.getValue().signum() < 0) {
                 return Optional.empty();
             }
-            DeclaredArgument container = switch (term.getKey()) {
-                case LawNumber.SizeOf<DeclaredArgument>(
-                        LawSubject.Argument<DeclaredArgument>(var argument)) -> argument;
-                case LawNumber.HowManyMeet<DeclaredArgument>(var argument, var _) -> argument;
-                case LawNumber.HowManyDifferent<DeclaredArgument>(var argument, var _) -> argument;
-                default -> null;
+            Optional<BigInteger> held = switch (term.getKey()) {
+                case LawNumber.SizeOf<A>(LawSubject.Argument<A>(A argument)) -> mostIn(handed,
+                        argument);
+                case LawNumber.HowManyMeet<A>(A argument, var _) -> mostIn(handed, argument);
+                case LawNumber.HowManyDifferent<A>(A argument, var _) -> mostIn(handed, argument);
+                case LawNumber.SumOver<A>(A argument, LawNumber.SizeOf<A>(
+                        LawSubject.ElementOf<A>(A same))) when same.equals(argument) -> {
+                    Core container = handed.apply(argument);
+                    yield container == null ? Optional.empty()
+                            : times(most(container), mostOfAnElement(container));
+                }
+                case LawNumber.SumOver<A>(A argument, LawNumber.SizeOf<A>(
+                        LawSubject.WhatTheClosureAnswers<A>(A closure))) -> {
+                    Core container = handed.apply(argument);
+                    Core function = handed.apply(closure);
+                    yield container == null || function == null
+                            || !(Core.withoutStanding(function) instanceof Core.Block made)
+                            ? Optional.empty() : times(most(container), most(made.body()));
+                }
+                default -> Optional.empty();
             };
-            Core handed = container == null ? null : applied.argument(container);
-            Optional<BigInteger> held = handed == null ? Optional.empty() : most(handed);
             Optional<BigInteger> coefficient = whole(term.getValue());
             if (held.isEmpty() || coefficient.isEmpty()) {
                 return Optional.empty();
@@ -361,10 +378,72 @@ public final class ContainerSizesUnderAWitness {
         return out;
     }
 
+    /** The most the collection {@code handed} names at {@code argument} holds. */
+    private <A> Optional<BigInteger> mostIn(Function<A, Core> handed, A argument) {
+        Core container = handed.apply(argument);
+        return container == null ? Optional.empty() : most(container);
+    }
+
+    /** The most any element of the collection {@code container} holds: of one written out, the
+     *  most of those written; of one of the input, as the caller says. */
+    private Optional<BigInteger> mostOfAnElement(Core container) {
+        Core node = Core.withoutStanding(container);
+        Optional<BigInteger> input = ofEachElementOfTheInput.apply(node);
+        if (input.isPresent()) {
+            return input;
+        }
+        if (!(node instanceof Core.ListLit written)) {
+            return Optional.empty();
+        }
+        Optional<BigInteger> out = Optional.of(BigInteger.ZERO);
+        for (Core each : written.elements()) {
+            out = larger(out, most(each));
+        }
+        return out;
+    }
+
+    private static Optional<BigInteger> times(Optional<BigInteger> one,
+                                              Optional<BigInteger> other) {
+        return one.isPresent() && other.isPresent()
+                ? Optional.of(one.get().multiply(other.get())) : Optional.empty();
+    }
+
     /** {@code ratio} rounded up to a whole number, or nothing where it is below nought. */
     private static Optional<BigInteger> whole(ExactRatio ratio) {
         return ratio.signum() >= 0 && ratio.ceiling() instanceof ExactAnswer.Held<BigInteger>(var up)
                 ? Optional.of(up) : Optional.empty();
+    }
+
+    /**
+     * The walk of a part of what a walk carries, and whether it is read where its step is handed
+     * that ({@link #carried}).
+     */
+    private record PartOfAWalk(WalkAt walk, boolean handedToTheStep) {}
+
+    /**
+     * The walk of the part {@code taken} takes, where it takes it of what a walk carries — read
+     * through the names given that on the way, {@code let (n, ys) = acc} among them — or of what
+     * a walk answers, and that part is a walk of its own ({@link WalkAt#ofThePart}). Null where it
+     * is none of these.
+     */
+    private PartOfAWalk aPartOfAWalk(SeededWalk.Taken taken) {
+        Core whole = Core.withoutStanding(taken.whole());
+        Set<BindingId> followed = new HashSet<>();
+        while (whole instanceof Core.Read name && carriedBy.get(name.binding()) == null
+                && boundTo.get(name.binding()) != null && followed.add(name.binding())) {
+            whole = Core.withoutStanding(boundTo.get(name.binding()));
+        }
+        WalkAt walking = whole instanceof Core.Read name ? carriedBy.get(name.binding()) : null;
+        boolean handed = walking != null;
+        WalkAt walk = handed ? walking : walks.get(whole);
+        // A part of a part is a part of the walk of the outer one.
+        if (walk == null && SeededWalk.Part.taken(whole) instanceof SeededWalk.Taken inner
+                && aPartOfAWalk(inner) instanceof PartOfAWalk outer) {
+            walk = outer.walk();
+            handed = outer.handedToTheStep();
+        }
+        WalkAt part = walk == null ? null : walk.ofThePart(taken);
+        return part == null ? null : new PartOfAWalk(part, handed);
     }
 
     /**
@@ -444,8 +523,7 @@ public final class ContainerSizesUnderAWitness {
      */
     private Optional<BigInteger> putInByAnOperator(Core node, BindingId carried) {
         if (!(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                instanceof GetsPast.WhereTheAnswerFits(
-                        GetsPast.AnswerSize.SumOf(List<Integer> at, int more)))) {
+                instanceof GetsPast.WhereTheAnswerFits(LinearForm<LawNumber<Integer>> size))) {
             return Optional.empty();
         }
         AnOperationApplied applied = AnOperationApplied.of(node);
@@ -453,32 +531,26 @@ public final class ContainerSizesUnderAWitness {
             return Optional.empty();
         }
         List<Core> operands = applied.args();
-        int carriedAt = -1;
-        BigInteger total = BigInteger.valueOf(more);
-        for (int each : at) {
-            if (each >= operands.size()) {
-                return Optional.empty();
-            }
-            Core operand = Core.withoutStanding(operands.get(each));
-            if (isCarried(operand, carried) && carriedAt < 0) {
-                carriedAt = each;
-                continue;
-            }
-            if (reads(operand, carried)) {
-                return Optional.empty();
-            }
-            Optional<BigInteger> one = most(operand);
-            if (one.isEmpty()) {
-                return Optional.empty();
-            }
-            total = total.add(one.get());
-        }
-        for (int other = 0; other < operands.size(); other++) {
-            if (!at.contains(other) && reads(operands.get(other), carried)) {
+        // What is carried, under any name given it, counted once and as it is; every other
+        // operand reads none of it.
+        Integer carriedAt = null;
+        for (int at = 0; at < operands.size(); at++) {
+            Core operand = Core.withoutStanding(operands.get(at));
+            LawNumber<Integer> itsSize = new LawNumber.SizeOf<>(new LawSubject.Argument<>(at));
+            if (carriedAt == null && isCarried(operand, carried)
+                    && ExactRatio.ONE.equals(size.coefs().get(itsSize))) {
+                carriedAt = at;
+            } else if (reads(operand, carried)) {
                 return Optional.empty();
             }
         }
-        return carriedAt < 0 ? Optional.empty() : Optional.of(total);
+        if (carriedAt == null) {
+            return Optional.empty();
+        }
+        LinearForm<LawNumber<Integer>> beside = size.minus(LinearForm.atom(
+                new LawNumber.SizeOf<>(new LawSubject.Argument<>(carriedAt)))).orNull();
+        return beside == null ? Optional.empty()
+                : mostOf(beside, at -> at < operands.size() ? operands.get(at) : null);
     }
 
     /** Whether {@code e} looks a key up in what is carried under {@code carried}, with a key
@@ -542,7 +614,19 @@ public final class ContainerSizesUnderAWitness {
      * the name the step is handed what it carries under ({@link Reductions},
      * {@link Combinators}).
      */
-    private record WalkAt(Core seed, Core container, Core.Block step, BindingId carried) {
+    private record WalkAt(Core seed, Core container, Core.Block step, Core.Binder accumulator) {
+
+        BindingId carried() {
+            return accumulator.binding();
+        }
+
+        /** This walk read for the part {@code part} takes of what it carries alone
+         *  ({@link SeededWalk#ofThePart}), or null where that part is no walk of its own. */
+        WalkAt ofThePart(SeededWalk.Taken part) {
+            SeededWalk.OfThePart alone = SeededWalk.ofThePart(seed, step, accumulator, part);
+            return alone == null ? null
+                    : new WalkAt(alone.seed(), container, alone.step(), accumulator);
+        }
 
         /** {@code e} as a walk, or null where it applies none, or its step is no block
          *  {@code blockOf} reaches. */
@@ -551,8 +635,7 @@ public final class ContainerSizesUnderAWitness {
             Reductions.Reducing walk = applied == null ? null
                     : Reductions.reducing(applied.operation(), applied.args(), blockOf);
             return walk == null || walk.accumulator().binding() == null ? null
-                    : new WalkAt(walk.seed(), walk.container(), walk.step(),
-                            walk.accumulator().binding());
+                    : new WalkAt(walk.seed(), walk.container(), walk.step(), walk.accumulator());
         }
     }
 }

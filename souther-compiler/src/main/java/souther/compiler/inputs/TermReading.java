@@ -1024,6 +1024,15 @@ final class TermReading {
             return at instanceof ObservedValue.Bool set ? set.value() : null;
         }
 
+        @Override
+        public String text(ElementProjection field) {
+            ObservedValue at = held(field);
+            if (at != null && !(at instanceof ObservedValue.Text)) {
+                stopped = new Reading.NotNumber();
+            }
+            return at instanceof ObservedValue.Text text ? text.value() : null;
+        }
+
         /**
          * Asked of the value at the place the arms narrow and not at the narrowed place: a value of
          * another case holds nothing at the second, which is an answer about the case and not an

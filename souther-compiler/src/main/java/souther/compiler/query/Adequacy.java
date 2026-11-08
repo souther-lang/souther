@@ -19,6 +19,8 @@ import souther.compiler.partition.ClauseOfAConstruction;
 import souther.compiler.partition.PassedConstruction;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.partition.CountWitnesses;
+import souther.compiler.partition.ReachWitnesses;
+import souther.compiler.partition.RowSearch;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
@@ -1185,6 +1187,63 @@ public final class Adequacy {
 
         @Override
         public Answer<CountWitnesses.Sought> compute(Db db) {
+            ASearchForARow search = ASearchForARow.of(db, name, behavior, reaching);
+            return Answer.of(search == null ? CountWitnesses.Sought.NOTHING
+                    : CountWitnesses.of(count, behavior, search.read(), search.named(),
+                            search.taken(), search.building(), search.running()));
+        }
+    }
+
+    /**
+     * A row {@code behavior} answers on, a run of it going through one of {@code reaching}
+     * ({@link ReachWitnesses}) — or nothing where none was found, which is no finding that none
+     * exists. Asked as a count's witness is ({@link WitnessOfACount}), of a comparison a reading
+     * did not show every value of what it relates to get to.
+     *
+     * @param reaching the places a run going through the comparison is recorded at
+     */
+    public record WitnessOfAReach(String name, String behavior,
+                                  Set<ConditionOutcomeSite> reaching)
+            implements Key<ReachWitnesses.Sought> {
+
+        public WitnessOfAReach {
+            reaching = Set.copyOf(reaching);
+        }
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<ReachWitnesses.Sought> compute(Db db) {
+            ASearchForARow search = ASearchForARow.of(db, name, behavior, reaching);
+            return Answer.of(search == null ? ReachWitnesses.Sought.NOTHING
+                    : ReachWitnesses.of(search.read(), search.named(), search.taken(),
+                            search.building(), search.running()));
+        }
+    }
+
+    /**
+     * What a search for a row of {@code behavior}'s inputs is made of ({@link RowSearch}): the
+     * reading of the inputs, the values the model names at each parameter's type, what each row
+     * written for the behavior took, the boundary that builds a value, and a run of a row that
+     * says whether it went through one of the places a comparison is recorded at, and where it
+     * stopped where it answered nothing.
+     *
+     * <p>Asked below any division of the behavior: of what it takes, the values the model names,
+     * the classes the compile produced and a run on them, and of nothing a division reads. A
+     * behavior that depends on another is run only with the dependency stood in for, which this
+     * has no answer for, so there is no search for one.
+     */
+    private record ASearchForARow(InputReading read, List<List<FixtureTemplate>> named,
+                                  List<List<ObservedValue>> taken, RowSearch.Building building,
+                                  RowSearch.Running running) {
+
+        /** The search for a row of {@code behavior} going through one of {@code reaching}, or
+         *  null where the module did not build far enough to run one. */
+        static ASearchForARow of(Db db, String name, String behavior,
+                                 Set<ConditionOutcomeSite> reaching) {
             Prepared prepared = db.ask(new Shapes.Prepared(name)).value();
             CheckSurface surface = db.ask(new Shapes.CheckSurface(name)).value();
             Sig sig = db.ask(new Bodies.Signatures(name)).value() instanceof Map<String, Sig> all
@@ -1204,7 +1263,7 @@ public final class Adequacy {
             if (surface == null || sig == null || read == null || building == null
                     || trials == null || numbering == null || requires == null
                     || !requires.none()) {
-                return Answer.of(CountWitnesses.Sought.NOTHING);
+                return null;
             }
             // What the model names at each parameter's type. The search is one run of rows
             // composed, so the references it names are numbered within it.
@@ -1224,7 +1283,7 @@ public final class Adequacy {
                     : rows.rowsSeen().stream().map(RowOutcome::inputs)
                             .filter(inputs -> inputs.size() == sig.ins().size()).toList();
             RowTrials.OfBehavior applying = trials.forBehavior(behavior, sig);
-            return Answer.of(CountWitnesses.of(count, behavior, read, named, taken,
+            return new ASearchForARow(read, named, taken,
                     (at, fixture) -> building.build(sig.ins().get(at), fixture)
                             instanceof BoundaryValues.Built.Value(ObservedValue value)
                             ? Optional.of(value) : Optional.<ObservedValue>empty(),
@@ -1232,19 +1291,21 @@ public final class Adequacy {
                                     .toList(), List.of())
                             .flatMap(RowTrials.Prepared::run)
                             .map(ran -> ran.answer() instanceof AnswerObservation.Answered
-                                    ? CountWitnesses.Run.stoppedNowhere(
+                                    ? RowSearch.Run.stoppedNowhere(
                                             ran.recorded() instanceof RunRecord.Recorded(var seen)
-                                                    && wentThrough(numbering.align(seen)))
+                                                    && wentThrough(numbering.align(seen),
+                                                            reaching))
                                     // A run that answered nothing is no witness, and where it
-                                    // stopped is said beside the count it was tried for.
-                                    : new CountWitnesses.Run(false,
+                                    // stopped is said beside what it was tried for.
+                                    : new RowSearch.Run(false,
                                             ran.stopped().map(stop -> whereItStopped(db, stop))))
-                            .orElseGet(() -> CountWitnesses.Run.stoppedNowhere(false))));
+                            .orElseGet(() -> RowSearch.Run.stoppedNowhere(false)));
         }
 
-        /** Whether the run {@code seen} is had some place of {@link #reaching} come out either
+        /** Whether the run {@code seen} is had some place of {@code reaching} come out either
          *  way. */
-        private boolean wentThrough(AlignedObservation seen) {
+        private static boolean wentThrough(AlignedObservation seen,
+                                           Set<ConditionOutcomeSite> reaching) {
             return reaching.stream().anyMatch(at -> seen.saw(at, true) || seen.saw(at, false));
         }
     }
@@ -2916,8 +2977,20 @@ public final class Adequacy {
                     // the two came to would be bought by nobody.
                     db.ask(new Front.Adequacy()).value().measures()
                             .allowanceForBehaviorDistinctions(),
-                    (count, reaching) -> db.ask(new WitnessOfACount(name, behavior, count,
-                            reaching)).value());
+                    new Coverages.WitnessesAtSites() {
+                        @Override
+                        public CountWitnesses.Sought ofACount(Quantity.HowManyMeet count,
+                                                              Set<ConditionOutcomeSite> reaching) {
+                            return db.ask(new WitnessOfACount(name, behavior, count, reaching))
+                                    .value();
+                        }
+
+                        @Override
+                        public ReachWitnesses.Sought reaching(
+                                Set<ConditionOutcomeSite> reaching) {
+                            return db.ask(new WitnessOfAReach(name, behavior, reaching)).value();
+                        }
+                    });
             return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
                     read.rulesReachedAt()));
         }

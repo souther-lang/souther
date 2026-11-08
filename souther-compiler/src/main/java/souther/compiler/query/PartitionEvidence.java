@@ -408,6 +408,18 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         List<WhereARunStopped> runsStopped();
 
         /**
+         * The values a row built and run was shown to get to the rule at, where the reading stopped
+         * because not every value is shown to get there — none for every other entry.
+         *
+         * <p>Beside the word and not inside it, as the figures are: each of these is reached, and
+         * the word still says what is not shown of the rest
+         * ({@link BlockReason.ReadingStopReason#shownReachedAt}).
+         */
+        default List<String> shownReachedAt() {
+            return List.of();
+        }
+
+        /**
          * Every handle a reader was offered for what this is about, which is nothing for an entry
          * about no rule.
          *
@@ -445,6 +457,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public List<WhereARunStopped> runsStopped() {
                 return ReportedReason.runsStopped(finding.why());
+            }
+
+            @Override
+            public List<String> shownReachedAt() {
+                return finding.why() instanceof BlockReason.ReadingStopReason stopped
+                        ? stopped.shownReachedAt() : List.of();
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */
@@ -496,6 +514,11 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public List<WhereARunStopped> runsStopped() {
                 return ReportedReason.runsStopped(finding.why());
+            }
+
+            @Override
+            public List<String> shownReachedAt() {
+                return finding.why().shownReachedAt();
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */

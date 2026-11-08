@@ -1827,6 +1827,42 @@
         },
         {
           "type": "object",
+          "description": "The choice between two by a comparison of the element's numbers: `whenHolds` where `form`, a form of its fields, stands to nought as `relation` says, and `otherwise` elsewhere. The form is scaled so the weight of the field whose name sorts first is one, so one comparison is spelled one way however its sides were written.",
+          "required": [
+            "kind",
+            "form",
+            "relation",
+            "whenHolds",
+            "otherwise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "compared"
+            },
+            "form": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "relation": {
+              "enum": [
+                "==",
+                "/=",
+                "<",
+                "<=",
+                ">",
+                ">="
+              ]
+            },
+            "whenHolds": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "otherwise": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "The choice between two by where the element stands in the container it was walked from, counted from nought in the order the row writes them: `whenHolds` where the position, or what is left of it divided by `divisor` with the quotient floored, stands to `against` as `relation` says, and `otherwise` elsewhere. `divisor` is absent where the position is compared as it is. Which answer an element takes is fixed by the row and not by any value it holds.",
           "required": [
             "kind",
@@ -1858,6 +1894,39 @@
             },
             "against": {
               "type": "integer"
+            },
+            "whenHolds": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "otherwise": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The choice between two by the string at a place of the element: `whenHolds` where the string at `place` is `value`, the same scalar values in the same order, and `otherwise` elsewhere — or, where `equal` is false, `whenHolds` where it is not.",
+          "required": [
+            "kind",
+            "place",
+            "value",
+            "equal",
+            "whenHolds",
+            "otherwise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "written"
+            },
+            "place": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "equal": {
+              "type": "boolean"
             },
             "whenHolds": {
               "$ref": "#/$defs/elementComputation"
@@ -8972,6 +9041,15 @@
               "runsStopped": {
                 "$ref": "#/$defs/runsStopped",
                 "description": "Where a relation's other value was not shown to reach every value here because the rows searched for to show it met what they were asked to and the behavior's runs on them stopped without answering, where those runs stopped, each place once and in one order. Written under `relation_not_shown_to_reach_every_value`, which says neither that a row was tried nor where its run stopped. Not a figure: a wider run stops there too, which is why it is not in `figures`. Absent where no run of a row tried for the entry stopped."
+              },
+              "shownReachedAt": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Values of the position a row built at the boundary and run was shown to get to the rule at, each as the model writes a value of its type — written only where `reason` is `relation_not_shown_reached_at_every_value`. Each one listed is reached, on the row that held it; nothing is said of any value not listed, and the word still says that not every value is shown to get there. Absent where no row was run to the rule.",
+                "items": {
+                  "type": "string"
+                }
               },
               "rule": {
                 "$ref": "#/$defs/ruleHandle",

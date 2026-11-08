@@ -983,9 +983,9 @@ final class DemandReading {
      * @param owed      the operators the run may stop at whose owner says where they answer, each
      *                  owed a proof that some run gets past it ({@link Pullback.StopObligation}):
      *                  until a reader shows that, the places it reads are as tied as those above
-     * @param before    what the applications of a closure before the one a comparison is reached
-     *                  in work out, for each closure it is read in ({@link PriorApplications}):
-     *                  until a reader shows a run with none, as much the run's as the above
+     * @param before    what the applications a run walking one element does not make work out
+     *                  ({@link PriorApplications}): until a reader shows a run with none, as much
+     *                  the run's as the above
      */
     record Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
                     List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
@@ -1128,12 +1128,17 @@ final class DemandReading {
          *  part they were read in standing in {@code body}, where the names an owed operator is
          *  handed are bound. */
         static Answered leavingUnsaid(Pullback.OperatorsAnswer operators, Core body) {
-            return operators.unsaidAt().isEmpty() && !operators.unsaidElsewhere()
-                    && operators.obligations().isEmpty() ? NOTHING
+            return operators.leavesNothingUnsaid() ? NOTHING
                     : new Answered(List.of(),
                             operators.unsaidAt().stream().map(Tie::between).toList(),
                             operators.unsaidElsewhere(),
                             operators.obligations().stream().map(each -> each.readIn(body))
+                                    .toList(),
+                            operators.afterTheFirst().stream().map(each ->
+                                    new PriorApplications(Optional.of(List.of(
+                                            new PriorApplications.WalkedOver(each.container(),
+                                                    each.reads()))),
+                                            leavingUnsaid(each.workedOut(), body)))
                                     .toList());
         }
 
@@ -1155,13 +1160,16 @@ final class DemandReading {
     }
 
     /**
-     * What the applications of the closures a comparison stands in before the one it is reached in
-     * work out: each runs the closure's body whole, the comparison's own working out apart, and
-     * the call works out what it does between them.
+     * What the applications of closures that a run walking one element of each container does not
+     * make work out: those of a closure a comparison stands in before the one it is reached in,
+     * and those of a walk's step after the first ({@link Pullback.AfterTheFirst}). The first runs
+     * the closure's body whole, the comparison's own working out apart, and the call works out
+     * what it does between them; the second runs the step on what the elements before it came to.
      *
      * <p>A run whose every walked container holds one element makes none: its one application of
-     * each closure is the one the comparison is reached in. So what they work out is owed only of
-     * a run that holds more, and a reader showing a run of one owes nothing of it.
+     * each closure is the one the comparison is reached in, and the one a walk hands its seed. So
+     * what they work out is owed only of a run that holds more, and a reader showing a run of one
+     * owes nothing of it.
      *
      * <p>Equal only to itself, as an owed operator is.
      */

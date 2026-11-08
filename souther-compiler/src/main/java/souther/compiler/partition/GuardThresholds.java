@@ -205,7 +205,7 @@ public final class GuardThresholds {
                             ElementBindings elements,
                             PathReachability.Arrivals arrives,
                             RuleReachNumbering reaches,
-                            CountWitnesses.AtComparisons witnesses) {
+                            ComparisonWitnesses.AtComparisons witnesses) {
         // A behavior with no representation for the analysis to read leaves nothing to read. This
         // reading is of that tree — where the language's operations stand — so where there is none
         // there are no rules to be had from it, and the answer is the same one a behavior with no
@@ -234,7 +234,7 @@ public final class GuardThresholds {
                                    ElementBindings elements,
                                    PathReachability.Arrivals arrives,
                                    RuleReachNumbering reaches,
-                                   CountWitnesses.AtComparisons witnesses) {
+                                   ComparisonWitnesses.AtComparisons witnesses) {
         InputDomain inputs = read.domain();
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();

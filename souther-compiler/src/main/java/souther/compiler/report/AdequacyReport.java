@@ -4106,11 +4106,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // And which calls of a helper the rule was read at, after the position: a rule a
                 // helper writes is one place for every call, and the readings of it at different
                 // calls are told apart by the call and by nothing else on the line.
-                out.append(String.format("      %s %s: %s — %s%s%s, about `%s`%s%s%n",
+                out.append(String.format("      %s %s: %s — %s%s%s%s, about `%s`%s%s%n",
                         mark(f), it.readingStopped() ? "not read" : "no line",
                         cited(it.cited(), rendering, declaredIn, places),
                         whyUnread(it.reason()), stoppedAt(it.figures()),
-                        runsStoppedSaid(it.runsStopped(), rendering), it.at(),
+                        runsStoppedSaid(it.runsStopped(), rendering),
+                        shownReached(it.shownReachedAt()), it.at(),
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         sentTo(it.finding().sentTo(), parts, rendering, declaredIn)));
@@ -4118,10 +4119,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         declaredIn);
             }
             if (f.about() instanceof About.ARuleNothingClassified(var it)) {
-                out.append(String.format("      %s not read: %s — %s%s%s, about `%s`%s%s%n",
+                out.append(String.format("      %s not read: %s — %s%s%s%s, about `%s`%s%s%n",
                         mark(f), cited(it.cited(), rendering, declaredIn, places),
                         whyUnread(it.reason()), stoppedAt(it.figures()),
-                        runsStoppedSaid(it.runsStopped(), rendering), it.at(),
+                        runsStoppedSaid(it.runsStopped(), rendering),
+                        shownReached(it.shownReachedAt()), it.at(),
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         sentTo(it.sentTo(), parts, rendering, declaredIn)));
@@ -7850,19 +7852,36 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         });
             }
             case ElementValue.Choose it -> {
-                into.put("kind", "choose");
-                into.put("flag", it.flag().spelled());
-                elementComputation(into.putObject("whenSet"), it.whenSet());
-                elementComputation(into.putObject("otherwise"), it.otherwise());
-            }
-            case ElementValue.ByPosition it -> {
-                into.put("kind", "position");
-                if (it.test().divisor() != ElementValue.PositionTest.THE_POSITION_ITSELF) {
-                    into.put("divisor", it.test().divisor());
+                switch (it.test()) {
+                    case ElementValue.Test.Flag flag -> {
+                        into.put("kind", "choose");
+                        into.put("flag", flag.place().spelled());
+                        elementComputation(into.putObject("whenSet"), it.whenHolds());
+                    }
+                    case ElementValue.Test.Compared compared -> {
+                        into.put("kind", "compared");
+                        elementComputation(into.putObject("form"),
+                                new ElementValue.Affine(compared.form()));
+                        into.put("relation", compared.relation().written());
+                        elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                    }
+                    case ElementValue.Test.Written written -> {
+                        into.put("kind", "written");
+                        into.put("place", written.place().spelled());
+                        into.put("value", written.written());
+                        into.put("equal", written.equal());
+                        elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                    }
+                    case ElementValue.PositionTest test -> {
+                        into.put("kind", "position");
+                        if (test.divisor() != ElementValue.PositionTest.THE_POSITION_ITSELF) {
+                            into.put("divisor", test.divisor());
+                        }
+                        into.put("relation", test.relation().written());
+                        into.put("against", test.against());
+                        elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                    }
                 }
-                into.put("relation", it.test().relation().written());
-                into.put("against", it.test().against());
-                elementComputation(into.putObject("whenHolds"), it.whenHolds());
                 elementComputation(into.putObject("otherwise"), it.otherwise());
             }
             case ElementValue.Indexed it -> {
@@ -9082,6 +9101,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // And where the runs of the rows tried for it stopped, which is no figure: each is an
             // input the model has not decided about, and the word does not say which.
             runsStopped(said, each.runsStopped(), sources);
+            // And the values a row built and run got to the rule at, as the model writes them,
+            // where what stopped it is that not every value is shown to: absent where none was,
+            // and never a claim about any value it does not list.
+            if (!each.shownReachedAt().isEmpty()) {
+                ArrayNode shown = said.putArray("shownReachedAt");
+                each.shownReachedAt().forEach(shown::add);
+            }
             // And which rule, where one was read and could not be used. Absent where the reading
             // never arrived at the rules of the position: there is nothing to name, and a field
             // holding a placeholder would say this compiler had looked at a rule it never saw.
@@ -11350,6 +11376,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return figures.isEmpty() ? "" : ", stopped at " + figures.stream()
                 .map(each -> figuresSaid(List.of(each)))
                 .collect(Collectors.joining(" and at "));
+    }
+
+    /** The values a row built and run got to the rule at, as the model writes them, beside a word
+     *  saying not every value is shown to: what is shown, and that nothing else is. */
+    private static String shownReached(List<String> values) {
+        return values.isEmpty() ? "" : "; a row was run to it at " + String.join(", ", values)
+                + ", and no other value is shown either way";
     }
 
     /**

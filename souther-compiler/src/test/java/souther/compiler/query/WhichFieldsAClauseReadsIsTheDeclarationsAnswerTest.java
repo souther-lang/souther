@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -170,11 +171,11 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                         |> Option.withDefault(false)
                 """);
         assertEquals(List.of(
-                        Set.of(values("key"), neededMember("table")),
-                        Set.of(values("key"), neededMember("table")),
+                        Set.of(values("key"), neededKey("table", "key")),
+                        Set.of(values("key"), neededKey("table", "key")),
                         Set.of(values("key"), lookedUpMember("other")),
                         Set.of(values("key"), lookedUpMember("tags"), howMany("tags")),
-                        Set.of(values("key"), neededMember("table"), neededMember("tags"))),
+                        Set.of(values("key"), neededKey("table", "key"), neededMember("tags"))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
         everyClauseReadsWhatItsRulesRead(c);
     }
@@ -329,6 +330,14 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
     private static ClauseRead neededMember(String... steps) {
         return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS,
                 RuleKey.THE_VALUE);
+    }
+
+    /** A member the clause needs the map at {@code container} to hold as a key: the value at the
+     *  place {@code lookedFor}. */
+    private static ClauseRead neededKey(String container, String lookedFor) {
+        return new ClauseRead(new RuleKey(List.of(container)),
+                ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
+                Optional.of(new ClauseRead.Member(new RuleKey(List.of(lookedFor)), true)));
     }
 
     private static ClauseRead lookedUpMember(String... steps) {

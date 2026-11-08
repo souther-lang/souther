@@ -4538,8 +4538,15 @@ public final class InputReads {
      * <p>The walk this container is and not one over the same elements. Two walks over {@code xs}
      * answer different values, so which step's body an element is is read off the application that
      * built the container ({@link ElementBindings#stepAnsweredOnEachElement}), and where that
-     * application answers no run of one value per element — a {@code filter} keeps some of them, a
-     * set's {@code map} may answer one value for two — the element is an element and nothing more.
+     * application answers no run of one value per element — a set's {@code map} may answer one
+     * value for two — the element is an element and nothing more.
+     *
+     * <p>An element of what holds some of the very elements of a list — a {@code filter}, a
+     * {@code take}, a reordering ({@link InputPath#argumentWhoseElementsItHolds}) — is an element
+     * of that list, and is read as one: {@code List.filter(p -> p > 10, List.map(i -> i.price,
+     * xs))} holds {@code i.price} for the elements of {@code xs} it keeps. Which are kept is not
+     * said, and a rule about the element holds of the kept ones only, as of what a
+     * {@code flatMap} keeps ({@link #insideTheListsAnswered}).
      *
      * <p>Read in the environment the walk stands in. A name the step's body reads from outside it
      * was bound above the walk, and what it stands for there is what the step was applied under.
@@ -4556,8 +4563,44 @@ public final class InputReads {
             return answered.meaning();
         }
         ReadMeaning component = componentOfAnAnsweredElement(standing, symbols, newtypes, met);
-        return component != null ? component
-                : insideTheListsAnswered(standing, symbols, newtypes, met);
+        if (component != null) {
+            return component;
+        }
+        ReadMeaning inside = insideTheListsAnswered(standing, symbols, newtypes, met);
+        if (inside != null) {
+            return inside;
+        }
+        Denotation beneath = theListItHoldsTheElementsOf(standing, symbols, newtypes, met);
+        return beneath == null ? null : answerOnEachElement(beneath, symbols, newtypes, met);
+    }
+
+    /**
+     * The list whose very elements {@code standing} holds some of, as it stands where it is
+     * handed, or null where it holds none's ({@link InputPath#argumentWhoseElementsItHolds}).
+     */
+    private static Denotation theListItHoldsTheElementsOf(Denotation standing, Symbols symbols,
+                                                          DeclarationNewtypes newtypes,
+                                                          Set<BindingId> met) {
+        ValueName operation;
+        List<Core> args;
+        switch (Core.withoutStanding(standing.value())) {
+            case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+                operation = reached.denotes();
+                args = call.args();
+            }
+            case Core.PreservedCall kept -> {
+                operation = kept.declared().operation();
+                args = kept.args();
+            }
+            default -> {
+                return null;
+            }
+        }
+        DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
+        int position = holds == null ? -1 : CallArguments.positionOf(holds, operation);
+        return position < 0 || position >= args.size() ? null
+                : standing(new Denotation(args.get(position), standing.at()), symbols, newtypes,
+                        met);
     }
 
     /**

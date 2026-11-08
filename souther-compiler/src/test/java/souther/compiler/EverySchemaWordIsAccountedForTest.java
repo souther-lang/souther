@@ -1263,23 +1263,32 @@ class EverySchemaWordIsAccountedForTest {
                 allowedAt(schema(), List.of("$defs", "behavior", "properties", "implementation")));
     }
 
-    /** Where a choice by position is said in a document, the way it compares the position. */
-    private static final List<String> A_POSITION_RELATION = List.of("$defs", "elementComputation",
+    /** Where a choice by a comparison of the element's numbers is said in a document, the way it
+     *  compares them. */
+    private static final List<String> A_COMPARED_RELATION = List.of("$defs", "elementComputation",
             "oneOf", "2", "properties", "relation");
 
+    /** Where a choice by position is said in a document, the way it compares the position. */
+    private static final List<String> A_POSITION_RELATION = List.of("$defs", "elementComputation",
+            "oneOf", "3", "properties", "relation");
+
     /**
-     * How a choice by an element's position compares it, which the schema and the relations spell
-     * alike: the operator the language writes each with.
+     * How a choice by a comparison of the element compares, by its numbers or by its position,
+     * which the schema and the relations spell alike: the operator the language writes each with.
      *
      * <p>Read off {@link Rel#values()} for the reason the states of a body are read off theirs.
      */
     @Test
     void theWordsAPositionIsComparedByAreTheRelationsThereAre() {
-        assertEquals(Arrays.stream(Rel.values()).map(Rel::written).collect(Collectors.toSet()),
-                allowedAt(schema(), A_POSITION_RELATION));
-        assertEquals("position", schema().at("/" + String.join("/", A_POSITION_RELATION)
-                .replace("/relation", "/kind")).get("const").asString(),
-                "the branch read is the one a choice by position is written in");
+        Map<List<String>, String> written = Map.of(A_COMPARED_RELATION, "compared",
+                A_POSITION_RELATION, "position");
+        written.forEach((at, kind) -> {
+            assertEquals(Arrays.stream(Rel.values()).map(Rel::written).collect(Collectors.toSet()),
+                    allowedAt(schema(), at));
+            assertEquals(kind, schema().at("/" + String.join("/", at)
+                    .replace("/relation", "/kind")).get("const").asString(),
+                    "the branch read is the one a choice " + kind + " is written in");
+        });
     }
 
     /**
@@ -1734,6 +1743,7 @@ class EverySchemaWordIsAccountedForTest {
         // How a choice by position compares it, held to the relations by
         // `theWordsAPositionIsComparedByAreTheRelationsThereAre`.
         held.add("/" + String.join("/", A_POSITION_RELATION));
+        held.add("/" + String.join("/", A_COMPARED_RELATION));
         // Why a condition nothing read was not, by kind and by the word within it. Written by a
         // switch over the sealed reasons and the enums under them, for the reason the two above
         // are, and held to the schema by the same validation of the corpus documents.

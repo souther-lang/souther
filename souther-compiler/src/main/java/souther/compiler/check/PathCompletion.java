@@ -405,7 +405,7 @@ final class PathCompletion {
         Core bare = Core.withoutStanding(e);
         Known past = k;
         switch (bare) {
-            case Core.Binary binary when binary.op() == BinOp.AND || binary.op() == BinOp.OR -> {
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
                 // The left is worked out first, and the right only on the runs the left lets
                 // through.
                 past = workedOut(binary.left(), past, at, asked, read);
@@ -433,10 +433,19 @@ final class PathCompletion {
                     past = workedOut(argument, past, at, asked, read);
                 }
             }
-            case Core.If branching -> {
-                past = workedOut(branching.cond(), past, at, asked, read);
-                read[0] &= endsNone(branching.then()) && endsNone(branching.els());
-                return past;
+            // A choice: what it is worked out on before it chooses is read here, and the arms,
+            // worked out only where each is chosen, are not read into. Which is which is
+            // ScopeStep's to say.
+            case Core.If _, Core.Match _ -> {
+                Known[] before = {past};
+                ScopeStep.forEachChild(bare, (child, step) -> {
+                    if (step instanceof ScopeStep.Chosen) {
+                        read[0] &= endsNone(child);
+                    } else {
+                        before[0] = workedOut(child, before[0], at, asked, read);
+                    }
+                });
+                return before[0];
             }
             default -> {
                 read[0] &= endsNone(bare);

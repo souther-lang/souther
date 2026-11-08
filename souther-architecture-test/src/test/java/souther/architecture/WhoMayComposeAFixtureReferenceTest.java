@@ -73,10 +73,11 @@ class WhoMayComposeAFixtureReferenceTest {
             "souther/compiler/partition/FixtureReferences -> " + ORIGIN + "#<init>(I)V",
             "souther/compiler/partition/Generator -> " + MINTER + "#<init>("
                     + "Ljava/lang/String;Ljava/lang/String;Lsouther/compiler/partition/WrittenOut;)V",
-            // A search for a row showing a count reaches every value beside its container's size
-            // is a run of its own: it composes rows to try and offers none, and the values a module
-            // states that it names are numbered within that one search.
-            "souther/compiler/query/Adequacy$WitnessOfACount -> " + MINTER
+            // A search for a row a witness is found on — showing a count reaches every value beside
+            // its container's size, or a run getting to a comparison — is a run of its own: it
+            // composes rows to try and offers none, and the values a module states that it names
+            // are numbered within that one search.
+            "souther/compiler/query/Adequacy$ASearchForARow -> " + MINTER
                     + "#<init>(Ljava/lang/String;Ljava/lang/String;)V");
 
     /**
