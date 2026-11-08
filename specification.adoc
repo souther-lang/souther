@@ -5507,7 +5507,7 @@ E1003 is retired. It required a violation case on a behavior constructing an inv
 
 [,text]
 ----
-Field `submittedAt` from `...TravelRequestCommon` conflicts with a field of `Submitted`.
+Field `submittedAt` from `...TravelRequestCommon` conflicts with the one `...SubmittedAt` supplies.
 ----
 
 [#e1005]
@@ -5601,7 +5601,9 @@ Reported at the second declaration (<<a-declaration-is-made-once>>): a `+let+`, 
 
 [,text]
 ----
-`let Amount` and data `Amount` are one name where a value is written.
+`let Amount` and data `Amount` are one name where a value is written. A data is written as a value
+— a unit data is one, a newtype is applied to what it wraps, a record is constructed by its name —
+so the two cannot share a spelling. Rename one.
 ----
 
 Reported where a `+let+` and a data of one module carry one name (<<a-spelling-answers-one-thing-where-a-value-is-written>>). A data is written where a value goes, so the two would be one spelling with two answers. A behavior and its implementing `+let+` are not this: they are one thing's declaration and its body.
@@ -5639,7 +5641,7 @@ Reported at the field (<<a-construction-names-fields-of-its-type>>).
 [,text]
 ----
 A spread `...request` copies the fields the cases of `TravelRequest` share, and they share none: no
-data is spread by every case.
+data is spread by every case. Open `request` with `match` and spread the case.
 ----
 
 Reported at the spread (<<a-spread-copies-a-product>>). A spread is nominal (<<field-spread>>): what it copies is the data every case spread, and a sum whose cases share no such data has nothing for it to name.
@@ -5711,7 +5713,9 @@ Reported at the declaration (<<a-sum-does-not-contain-itself>>), naming the chai
 
 [,text]
 ----
-Value `ceiling` reaches itself: ceiling -> limit -> ceiling.
+`let ceiling` is defined in terms of itself (ceiling -> limit -> ceiling). A value is replaced by
+its definition wherever it is used, so a value defined through itself has no definition to be
+replaced by. A helper may recurse because it is compiled to a method; a value is not.
 ----
 
 Reported wherever the cycle closes (<<a-value-does-not-reach-itself>>). A value with no parameter list is substituted where it is named, so a cycle among them has nothing to substitute first.
@@ -5741,7 +5745,8 @@ Reported at the name (<<a-name-held-as-a-value-is-a-value>>). A behavior, a modu
 
 [,text]
 ----
-`map` is a standard-library function and must be called qualified, as `List.map`.
+`map` is a standard-library name. Write it qualified (`List.map`, `Set.map`, `Option.map`) or import
+the name you mean.
 ----
 
 Reported at the name (<<a-standard-library-function-is-called-qualified>>). The qualifier is what reaches the library, and it is also what tells `+List.length+` from `+String.length+`.
@@ -5781,7 +5786,8 @@ Reported at the second clause of a name (<<invariant-clause-names-are-distinct>>
 
 [,text]
 ----
-`_` cannot name an invariant clause of `Amount`.
+`_` cannot name an invariant clause of `Amount`. In `guard ... as ... else`, the clauses without a
+name are handled by `| _ -> ...`, so a clause named `_` could never be handled by its name.
 Hint: Give the clause a name of its own, or leave it unnamed — an unnamed clause is still checked,
 and is handled by `| _ -> ...`.
 ----
@@ -5794,7 +5800,7 @@ Reported where a clause is written `+invariant _ = …+` (<<invariant-clause-nam
 [,text]
 ----
 The invariant of `QuoteLines` constructs `Line`, but an invariant may not construct a data — it
-observes the value being built, it does not build one.
+observes the value being built, it does not build another.
 ----
 
 Reported at the construction (<<an-invariant-observes-and-does-not-build>>), naming the clause it is written in or reached from. Building inside a check would run that type's own check inside this one, so whether this value holds would depend on whether another one did.
@@ -5804,8 +5810,8 @@ Reported at the construction (<<an-invariant-observes-and-does-not-build>>), nam
 
 [,text]
 ----
-The invariant of `Amount` calls the `partial` helper `spin`, which may not terminate; an invariant
-is checked at construction time and must terminate.
+The invariant of `Amount` calls the `partial` helper `spin` (invariant -> spin), which may not
+terminate; an invariant is checked at construction time and must terminate.
 ----
 
 Reported at the clause (<<an-invariant-answers-on-every-path>>). An invariant runs at every construction and at every boundary, so a path through it that answers nothing — an `+unreachable+`, or a `+partial+` helper that may not stop — is a check that may not come back.
@@ -6028,8 +6034,9 @@ Reported at the parameter, or at the behavior for its output (<<an-optional-does
 
 [,text]
 ----
-`inventory` crosses the boundary, so the Map it holds must be keyed by String, a temporal, an
-enumeration, or a newtype over one of those.
+`Warehouse.inventory` crosses the boundary, so the Map it holds cannot be keyed by Int.
+Hint: A Map is a JSON object, whose keys are strings, so a Map that crosses needs a key that renders
+as and parses from a bare string. Inside a behavior body a Map may be keyed by any value.
 ----
 
 Reported at the field, parameter or output holding the Map (<<a-map-that-crosses-is-keyed-by-a-text-key>>). The boundary writes a key as text and reads it back the same way, so a key with no text form is one nothing outside can address.
@@ -6039,8 +6046,8 @@ Reported at the field, parameter or output holding the Map (<<a-map-that-crosses
 
 [,text]
 ----
-This collection would have to compare (Int) -> Int as its key, and a function has no value to
-compare.
+A Map finds a value by its key, which asks whether two keys are equal, and a function has no value
+to compare: (Int) -> Int.
 ----
 
 Reported at the collection (<<a-collection-member-supports-equality>>). A `+Set+` asks whether two elements are the same and a `+Map+` whether two keys are; the message says which of the two asked, because that is what the author is holding.
@@ -6109,7 +6116,9 @@ Reported at the pattern (<<a-tuple-pattern-matches-its-tuple>>).
 [,text]
 ----
 I cannot read a field `submittedAt` on `TravelRequest`: a sum has no fields of its own, its cases
-do, and which case this is is not known until it is opened.
+do, and which case this is is not known until it is opened. Open it with `match` and read
+`submittedAt` in each case.
+Hint: These cases have no `submittedAt` field: Drafting.
 ----
 
 Reported at the read (<<a-field-read-is-declared-by-the-value>>). A sum exposes a field only where every case spreads the data declaring it (<<sum-data>>), so the message says which of the two it is: no case has the field, or each case declares its own and nothing is shared.
@@ -6143,7 +6152,7 @@ This code is about *writing* a temporal. Parts that name no moment are not this:
 [,text]
 ----
 The pattern of `String.matches` must evaluate to a string at compile time, so it can be validated
-there: write a string literal.
+there: write a string literal, or join literals and values named by a top-level `let` with `++`.
 ----
 
 [,text]
@@ -6159,7 +6168,9 @@ Reported at the pattern (<<a-matches-pattern-is-a-literal-regular-expression>>).
 
 [,text]
 ----
-`Amount` and `Rate` are newtypes over Int, and adding them would answer with neither.
+Amount and Rate are different newtypes, so arithmetic does not combine them.
+Hint: If both measure the same thing, convert one to the other's newtype and combine those. If they
+do not, there is nothing to combine.
 ----
 
 Reported at the operator (<<newtype-arithmetic-follows-the-units>>). Which rule was broken — same-newtype addition, a product's units, a quotient's, a scalar, a reciprocal — is what an author needs and is not readable from the operand types, so the refusal names its own rule rather than reporting a type mismatch.
@@ -6197,7 +6208,7 @@ Read from the body as it is emitted, so a claim written in a `+let+` this body c
 [,text]
 ----
 No input the model allows reaches this branch, so no example row can go through it.
-Hint: The conditions that lead here cannot all be true at once: line 11 true, line 12 false.
+Hint: The conditions that lead here cannot all be true at once.
 Hint: Remove the branch, or change the model's rules so that some input reaches it. The
 branch itself is not what rules it out.
 ----
@@ -6236,7 +6247,7 @@ A module depends on every module it imports and on every module it names in a qu
 
 [,text]
 ----
-module `List` uses a name reserved for the standard-library qualifier `List` (as in `List.…` /
+module `List` uses a name reserved for the standard-library qualifier `List` (as in `List. …` /
 `import List ( … )`); pick another module name.
 ----
 
@@ -6305,9 +6316,9 @@ Reported where a name an `+import+` brings in has more than one answer here (<<a
 [,text]
 ----
 Module `example.employee` is on the class path, and this compiler cannot read what it published.
-  It was built by Souther 0.4.0, which does not agree with this compiler about what an importing
-  module may use.
-  Rebuild `example.employee` with this compiler, or compile against the version that built it.
+Hint: It was built by Souther 0.4.0, which does not agree with this compiler about what an importing
+module may use.
+Hint: Rebuild `example.employee` with this compiler, or compile against the version that built it.
 ----
 
 Reported where a module the class path carries cannot be read back into the surface this compiler understands (<<a-published-module-can-be-read-back>>). What went wrong inside the artifact is said under the report: a class containing metadata this compiler cannot read, a boundary revision that does not agree (<<a-published-module-agrees-with-this-compiler>>), declarations that name a different module from the one they were found under, a declaration whose class is not there (<<a-published-module-carries-what-it-says-it-declares>>), published text this compiler does not parse, an `+import+` line of the published surface it cannot read.
@@ -6322,10 +6333,10 @@ One report and one code, whichever failure it was, because the author reading it
 [,text]
 ----
 Module `lib.b` was built against the behavior `lib.c.step` as it was then, and the `lib.c` in this
-  compilation offers it another way: built with was `(lib.c.rate) through
-  Llib/c/Step$Impl;(Lsouther/runtime/Behavior;)V`, and it is `(lib.c.bonus) through
-  Llib/c/Step$Impl;(Lsouther/runtime/Behavior;)V` here.
-  Rebuild `lib.b` against this `lib.c`, or compile against the `lib.c` it was built with.
+compilation offers it another way: built with was `(lib.c.rate) through
+Llib/c/Step$Impl;(Lsouther/runtime/Behavior;)V`, and it is `(lib.c.bonus) through
+Llib/c/Step$Impl;(Lsouther/runtime/Behavior;)V` here.
+Hint: Rebuild `lib.b` against this `lib.c`, or compile against the `lib.c` it was built with.
 ----
 
 Reported where the classes of a module the path carries read a declaration of another module — a behavior, a type or a published value — and that module, as this compilation has it, offers it otherwise than they read it, or declares nothing of that kind and name (<<a-published-module-agrees-with-what-it-was-built-against>>). The first fact that moved is named: how the behavior is realized, whether it is exposed, what it takes or answers, how it is held, built or applied, how a type is laid out or built, which entry a value is read through and what it answers. Reported the same way where those classes carry a copy of a declaration of another module — a helper, the constant or the block a value answers with, a type's invariant — and that module, as this compilation has it, offers another copy, or declares nothing of that kind and name (<<a-published-module-agrees-with-what-it-copied>>): what was copied is named, and the constant as it was and as it is. The artifact was built against another version of that module. What it requires injected and whom it names is <<e1506>>, and a behavior it requires that its module no longer declares is said there and not again here.
@@ -6338,8 +6349,8 @@ Said about the module on the path whose classes read the declaration, which is t
 [,text]
 ----
 Module `lib.x` on the path needs `app.common`, which is compiled here. A module on the path runs
-  where the classes compiled here cannot be seen.
-  Compile `lib.x` here too, or take `app.common` from the path instead of compiling it here.
+where the classes compiled here cannot be seen.
+Hint: Compile `lib.x` here too, or take `app.common` from the path instead of compiling it here.
 ----
 
 Reported where a module the path carries reaches a module a source of this compilation declares (<<a-module-on-the-path-reaches-only-the-path>>) — named by its published declarations, or only linked against or copied by its classes. The module's classes would run without finding what they name, so the compilation stops before anything is generated or an example runs. Separate from <<e1503>>, which is one name declared in two places — and where the module reached is also on the path, which of the two a module on the path reaches is not decided, so that is said as <<e1503>> alone — and from <<e1510>>, which is a module built against another version of a dependency: the module here may be exactly the one it was built against, and rebuilding the module on the path against it changes nothing. Said about the module on the path that reaches the one compiled here, at each import line here that leads to it, for every module the path carries.
@@ -6381,7 +6392,9 @@ Reported where `+exposing+` names a data's `+decoder+` or `+encoder+` (<<exposin
 
 [,text]
 ----
-Behavior `submit` is exposed and its input names `Draft`, which this module does not expose.
+`submit` is exposed, and its input `Draft` is not.
+Hint: What a module exposes cannot depend on what it does not expose: a module that imports it has
+no name for `Draft` and cannot use its class. Add `Draft` to `exposing`, or take `submit` out of it.
 ----
 
 Reported where an exposed behavior's input or output, or an exposed data's field, names a type this module keeps to itself (<<an-exposed-signature-names-only-exposed-types>>). A caller would be handed a value of a type it cannot name. An injection target says it differently, because there the caller is Java.
@@ -6633,8 +6646,8 @@ The cycle is reported wherever it closes, and the edges may be calls, `+depends 
 
 [,text]
 ----
-Injected behavior `findMember` declares `constructs StoredData`, but StoredData is
-not exposed, so Java cannot build it.
+Injected behavior `findMember` declares `constructs StoredData`, but StoredData is not exposed, so
+Java cannot build it.
 Hint: Expose StoredData.
 ----
 
@@ -6648,7 +6661,8 @@ Exposing it is the whole of the hint. Making it a unit was the other way out whi
 [,text]
 ----
 `convert` takes 2 inputs, so it cannot follow `>->` in `placeOrder`. Every stage after the first
-takes one input: call it inline, or give it a data holding both.
+takes one input: call it inline, or open the branches with `match`. Only the first stage may take
+several.
 ----
 
 Reported at the stage (<<a-stage-after-the-first-takes-one-input>>). What reaches a stage is the one value the stage before answered with, so there is nothing to fill a second parameter from.
@@ -6699,7 +6713,7 @@ Reported at the argument (<<a-function-goes-where-a-function-is-taken>>). Which 
 
 [,text]
 ----
-A fold's block must return the accumulator type Amount, but got Int.
+The block passed to `step` of `List.fold` must return Amount, but returns Int.
 ----
 
 Reported at the expression that supplies the block's result (<<a-block-answers-the-type-its-position-takes>>): a `+fold+`'s accumulator, a predicate's `+Bool+`, the element type of what is being grown. A block's own position is where its parameters start, and the value being refused came from its body, so the report is at the body's answer — past any `+let+` written above it, which holds what it binds and not what the block answered. An `+if+` or a `+match+` the body ends in is that answer: its type is the one its arms join to, so no single arm supplied it.
@@ -6730,13 +6744,15 @@ Reported at the binding (<<a-function-binding-has-one-type>>). Applying it at tw
 [,text]
 ----
 Cannot infer the type of the function `f`: write its type (`let f: (Int) -> Bool = ...`), or apply
-it in this scope so its parameter types follow.
+it in this scope so its parameter types can be read off the application. An application inside a
+lambda is in that lambda's scope, not this one, and says nothing here.
 ----
 
 [,text]
 ----
 `inc` is used by an entry and holds a function, but its function type is not written: write it
-(`let inc: (Int) -> Bool = ...`).
+(`let inc: (Int) -> Bool = ...`). A top-level value is typed where it is written, so what applies
+`inc` elsewhere does not type it.
 ----
 
 Reported at the binding (<<a-function-bindings-type-is-known>>). The second form is a top-level value another module or a fixture reaches by an entry — a nullary bridge that is no copy of the value, so there is no application anywhere else to settle its type from. An application of it in another definition does not help there, so the message does not offer one.
@@ -6789,7 +6805,7 @@ Reported at the helper (<<a-helper-answers-what-it-declares>>).
 [,text]
 ----
 Recursive helper `let depth` must declare its return type (`let depth (...) : <type> = ...`),
-because its result cannot be inferred from a body that names itself.
+because its result cannot be inferred through the recursion.
 ----
 
 Reported at the helper (<<a-recursive-helper-declares-its-return-type>>).
@@ -6810,9 +6826,9 @@ Reported at the call (<<a-recursive-helper-does-not-reach-an-injected-behavior>>
 
 [,text]
 ----
-This empty collection's element type cannot be inferred here.
-Hint: Annotate the binding it feeds (`let x: <type> = ...`), place the fold directly in a typed
-position — the field or behavior output it feeds — or seed it with a non-empty value.
+This empty collection's element type cannot be inferred here. Annotate the binding it feeds
+(`let x: <type> = ...`), place the fold directly in a typed position — the field or behavior output
+it feeds — or seed it with a non-empty value.
 ----
 
 Reported at the operation (<<an-empty-collections-element-type-is-determined>>). What an empty collection holds does not follow from the collection, so it follows from the application it is written in — the position the result lands in, the other arguments, what a fold's step answers — or from nothing at all.
@@ -6843,7 +6859,8 @@ Reported at the call (<<what-is-summed-is-a-number>>). The same shape as <<e1816
 [,text]
 ----
 `allocate` is a behavior, and it cannot be called from here.
-Hint: Call it from the behavior's own `let` and pass the result in, or name it in `depends on`.
+Hint: A helper `let` cannot call a behavior, and a `>->` composition is composed, not called. Call
+`allocate` from a behavior's own `let` and pass the result in.
 ----
 
 Reported at the call (<<a-helper-does-not-call-a-behavior>>). A helper is expanded into whatever calls it and travels to an importing module as source, so what it may name is what travels with it; a `+>->+` composition is composed with a behavior rather than calling one. Not <<e1023>>, which is a name that resolves to nothing; this one resolves, to a behavior.
@@ -7256,7 +7273,6 @@ Not raised for a class a measurement could not place a row in. A row whose value
 [,text]
 ----
 `quotes` is no behavior in scope, so there is nothing for this to stand in for.
-Hint: Declare it here or import it.
 ----
 
 Emitted where a `+fake+` or a `+with+` names something no behavior in scope answers to (<<example-fakes>>). The name is read as a behavior is read anywhere else, so a dependency another module declares is admitted, and a behavior of that spelling declared here is not mistaken for it (<<qualified-reference>>).
@@ -7271,7 +7287,7 @@ What the named behavior is implemented by is not asked. A stand-in is a statemen
 [,text]
 ----
 More than one `fake` block stands in for `findManager`, so none of them is used.
-Hint: write the rows of every `fake findManager` block as one block
+Hint: write the rows of every `fake` block for `findManager` as one block
 ----
 
 Emitted at every `+fake+` block naming a behavior another block of the module also names (<<example-fakes>>), each in the file its block is written in. Two targets name one behavior when resolution denotes one, however either is written.
@@ -7777,8 +7793,8 @@ Reported where a walk exhausted the stack (<<running-out-of-room-is-reported>>).
 
 [,text]
 ----
-behaviors `bill` and `Bill` both capitalize to the same JVM class `Bill`; rename one so their class
-names differ.
+behaviors `bill` and `Bill` both capitalize to the same JVM class `Bill` (spec jvm-behavior); rename
+one so their class names differ.
 ----
 
 Reported at the second of the two (<<no-two-declarations-become-one-class>>). A declaration reaches a class name three ways — a behavior capitalizes (<<jvm-behavior>>), a union output becomes a sealed interface (<<jvm-sum>>), a foreign union member becomes a bridge case (<<bridge-case>>) — and a model may already have declared something of that name. Names are not reserved ahead of time: one nothing collides with stays available.
@@ -7789,7 +7805,7 @@ Reported at the second of the two (<<no-two-declarations-become-one-class>>). A 
 [,text]
 ----
 `hashCode` cannot be a field of `Member`: the generated class reads its fields through accessors of
-the same name, and `hashCode()` is already a method every class has.
+the same name, and `hashCode()` is already a method every JVM value has. Choose another name.
 ----
 
 Reported at the field (<<a-field-does-not-collide-with-an-object-method>>). `+equals+` is not among them: `+equals()+` and `+equals(Object)+` are different methods, and Java allows it as a component name.
@@ -7826,7 +7842,7 @@ Reported where a `+String.matches+` pattern is read, at the pattern (<<a-pattern
 
 [,text]
 ----
-A behavior signature uses `:` before its parameters: `behavior submit : (...) -> ...`.
+A behavior is written with `:` before its parameters (a signature) or `=` (a composition).
 ----
 
 Reported where a declaration does not read (<<declaration-syntax>>): the module header, a top-level `+data+`, `+behavior+` or `+let+`, a behavior's signature, a `+depends on+` clause. The message names the form that was expected rather than the token that was found, since what a reader needs is the shape and not the position.

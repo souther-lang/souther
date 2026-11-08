@@ -131,8 +131,13 @@ public sealed interface ExampleMessage extends Message {
     record ADependencyReachedThroughHasNoFake(String behavior, String dependency, String through)
             implements ExampleMessage, Reported {}
 
-    /** What to write for it. */
-    record WriteAFakeLikeThis(String shown) implements ExampleMessage, Supporting {}
+    /** What to write for it: a `with` on the row, or a `fake` table, each spelled the way this
+     *  module writes the dependency. */
+    record WriteAFakeOnTheRowOrInTheModule(String dependency) implements ExampleMessage, Supporting {}
+
+    /** Why no stand-in could be built: nothing this module can name says what the dependency
+     *  answers. */
+    record TheDependencyHasNoSignature(String dependency) implements ExampleMessage, Supporting {}
 
     /** The fake's value could not be built. */
     @Code(DiagnosticCode.E1908)
