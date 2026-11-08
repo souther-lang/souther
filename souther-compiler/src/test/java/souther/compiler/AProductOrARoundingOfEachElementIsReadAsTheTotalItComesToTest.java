@@ -310,22 +310,40 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
     }
 
     /**
-     * Held at one value in every element, both fields of a product of two values that are two or
-     * three come to even totals only, and nine — three times three — is a total such a list comes
-     * to all the same. So the point beside the line at ten is said as one the search walked some
-     * of the containers for, and not as one no container comes to.
+     * Held at one value in every element, a field of a product of two values that are two or
+     * three makes the total a multiple of the value it is held at: even with it at two, a multiple
+     * of three with it at three. Thirteen is neither, and is a total such a list comes to all the
+     * same — two times two and three times three. So the point beside the line at fourteen is said
+     * as one the search walked some of the containers for, and not as one no container comes to.
      */
     @Test
     void aPointTheFieldsHeldStillDoNotReachIsNoPointNothingReaches() {
         String model = HELD_STILL.replace("data Line", "data P = Int\n    invariant value >= 2"
+                + " && value <= 3\ndata Line").formatted("P", "x.p.value", 14);
+        String report = report(measured(model));
+        assertTrue(report.contains("List.sum({1·p·q + 0 | xs[*]}): = 13 — "), report);
+        String thirteen = report.lines().filter(line -> line.contains(": = 13 — ")).findFirst()
+                .orElseThrow();
+        assertTrue(thirteen.contains("the containers whose elements differ at a field the computed"
+                + " number reads besides the one solved for"), thirteen);
+        assertFalse(thirteen.contains("no value can stand there"), thirteen);
+    }
+
+    /**
+     * A field held still is held at one, or the whole number nearest it its declaration leaves,
+     * and at each end of what the declaration leaves it: nine, three times three, is written with
+     * the field at three, which a field held only at two does not reach.
+     */
+    @Test
+    void aFieldHeldStillIsHeldAtEachEndOfItsRunAsWell() {
+        String model = HELD_STILL.replace("data Line", "data P = Int\n    invariant value >= 2"
                 + " && value <= 3\ndata Line").formatted("P", "x.p.value", 10);
         String report = report(measured(model));
-        assertTrue(report.contains("List.sum({1·p·q + 0 | xs[*]}): = 9 — "), report);
-        String nine = report.lines().filter(line -> line.contains(": = 9 — ")).findFirst()
-                .orElseThrow();
-        assertTrue(nine.contains("the containers whose elements differ at a field the computed"
-                + " number reads besides the one solved for"), nine);
-        assertFalse(nine.contains("no value can stand there"), nine);
+        String nine = report.lines().filter(line -> line.contains("List.sum({1·p·q + 0 | xs[*]})")
+                && line.contains(": = 9")).findFirst().orElse("");
+        assertFalse(nine.contains("the containers whose elements differ"), report);
+        String rows = rowsOf(measured(model));
+        assertTrue(rows.contains("q = Q(3)"), rows);
     }
 
     private static final String PARENTHESISED = """

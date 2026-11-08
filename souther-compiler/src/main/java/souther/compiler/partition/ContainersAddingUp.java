@@ -199,9 +199,22 @@ final class ContainersAddingUp {
                                 Set.of(CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR)),
                         null);
             }
-            return throughEach(ways, solved -> walkedInPartWhereHeldStill(solved,
-                    composedThrough(solved, answer, container, keptApart, orders, within,
-                            reading, alsoHolding, alsoAddingUp, inside)));
+            // Each way is tried with the fields it holds still at each of the values it holds them
+            // at, until one writes the total.
+            return throughEach(ways, way -> {
+                List<FieldSolved> settled = way.settledIn(within);
+                if (settled.isEmpty()) {
+                    // A field held still at no value the region leaves it is a way this did not
+                    // try, which is not the region leaving the total no row.
+                    return new TermRealizations.Realization.Unexhausted(
+                            CompositionShortfall.writing(Set.of(
+                                    CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL)),
+                            "no value held the other fields of the elements still");
+                }
+                return throughEach(settled, solved -> walkedInPartWhereHeldStill(solved,
+                        composedThrough(solved, answer, container, keptApart, orders, within,
+                                reading, alsoHolding, alsoAddingUp, inside)));
+            });
         }
         return composedThrough(null, answer, container, keptApart, orders, within, reading,
                 alsoHolding, alsoAddingUp, inside);
@@ -374,18 +387,10 @@ final class ContainersAddingUp {
      * solves for, or on the total's own values where it is null.
      */
     private static TermRealizations.Realization composedThrough(
-            FieldSolved unsettled, Place answer, Type container, List<List<String>> keptApart,
+            FieldSolved solved, Place answer, Type container, List<List<String>> keptApart,
             TermOrders orders, SearchRegion within, RuleReadingContext reading,
             HowManyIsAskedFor alsoHolding, List<AlsoAddingUp> alsoAddingUp,
             DemandsInside demanded) {
-        // A field held still at no value the region leaves it is a way this did not try, which is
-        // not the region leaving the total no row.
-        FieldSolved solved = unsettled == null ? null : unsettled.settledIn(within);
-        if (unsettled != null && solved == null) {
-            return new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
-                    Set.of(CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL)),
-                    "no value held the other fields of the elements still");
-        }
         // The fields a sum of products is fixed at are asked of every element, beside whatever
         // else each is asked to hold.
         DemandsInside inside = demanded;
@@ -935,36 +940,75 @@ final class ContainersAddingUp {
 
         /**
          * This way with the fields it fixes at values {@code within} leaves each of them, and the
-         * weight and constant worked out at those values — or null where the region leaves some
-         * fixed field no value, or none that leaves the field solved for in the sum.
+         * weight and constant worked out at those values, once for each way of fixing them —
+         * none where the region leaves some fixed field no value, or none that leaves the field
+         * solved for in the sum.
          *
-         * <p>One where the region holds it, since then the field solved for is weighed by what the
-         * products weigh it by and nothing else; otherwise the whole number nearest one the region
-         * leaves. Nought would take the field out of every product it is in.
+         * <p>First at one where the region holds it, since then the field solved for is weighed by
+         * what the products weigh it by and nothing else, or otherwise at the whole number nearest
+         * one the region leaves; then at each end of the region's run that is a whole number. A
+         * total one element comes to over fields added or taken away is then written wherever the
+         * fields' runs reach it: with the field of the widest run solved for and the rest at their
+         * ends, what is left for it to come to lies within its run. A way that takes the field
+         * solved for out of every product it is in, as nought may, is no way of solving for it.
          */
-        FieldSolved settledIn(SearchRegion within) {
+        List<FieldSolved> settledIn(SearchRegion within) {
             if (fixing == null) {
-                return this;
+                return List.of(this);
             }
-            Map<ElementProjection, ExactRatio> at = new LinkedHashMap<>();
+            List<Map<ElementProjection, ExactRatio>> ways = new ArrayList<>();
+            ways.add(new LinkedHashMap<>());
             for (ElementProjection other : fixing.at().keySet()) {
-                ExactRatio value = within.projectionOf(new NumericTerm.ValueOf(
-                        other.from(fixing.elements())))
-                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds left)
-                        ? nearestOne(left == null ? NumericDomain.Bounds.OPEN : left) : null;
-                if (value == null) {
-                    return null;
+                if (!(within.projectionOf(new NumericTerm.ValueOf(other.from(fixing.elements())))
+                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held))) {
+                    return List.of();
                 }
-                at.put(other, value);
+                List<ExactRatio> values = heldAt(held == null ? NumericDomain.Bounds.OPEN : held);
+                if (values.isEmpty()) {
+                    return List.of();
+                }
+                List<Map<ElementProjection, ExactRatio>> wider = new ArrayList<>();
+                for (Map<ElementProjection, ExactRatio> way : ways) {
+                    for (ExactRatio value : values) {
+                        Map<ElementProjection, ExactRatio> at = new LinkedHashMap<>(way);
+                        at.put(other, value);
+                        wider.add(at);
+                    }
+                }
+                ways = wider;
             }
-            LinearForm<ElementProjection> left =
-                    ElementValue.solvedThrough(fixing.products(), fixing.free(), at);
-            ExactRatio weighs = left == null ? null : left.coefs().get(fixing.free());
-            if (weighs == null || weighs.isZero()) {
-                return null;
+            List<FieldSolved> out = new ArrayList<>();
+            for (Map<ElementProjection, ExactRatio> at : ways) {
+                LinearForm<ElementProjection> left =
+                        ElementValue.solvedThrough(fixing.products(), fixing.free(), at);
+                ExactRatio weighs = left == null ? null : left.coefs().get(fixing.free());
+                if (weighs != null && !weighs.isZero()) {
+                    out.add(new FieldSolved(field, carrier, weighs, left.constant(), ofOneCase,
+                            kept, ofTheCase, new Fixing(fixing.products(), fixing.free(),
+                                    fixing.elements(), at)));
+                }
             }
-            return new FieldSolved(field, carrier, weighs, left.constant(), ofOneCase, kept,
-                    ofTheCase, new Fixing(fixing.products(), fixing.free(), fixing.elements(), at));
+            return out;
+        }
+
+        /** The values a field held still is held at where {@code left} is its run: one, or the
+         *  whole number nearest it that is not nought, then each end that is a whole number the
+         *  run holds, each once. */
+        private static List<ExactRatio> heldAt(NumericDomain.Bounds left) {
+            List<ExactRatio> out = new ArrayList<>();
+            ExactRatio one = nearestOne(left);
+            if (one != null) {
+                out.add(one);
+            }
+            for (boolean lower : new boolean[] {true, false}) {
+                Endpoint end = lower ? left.min() : left.max();
+                BigInteger whole = end == null ? null : end.wholeAdmitted(lower);
+                ExactRatio at = whole == null ? null : ExactRatio.of(whole);
+                if (at != null && left.admits(at) && !out.contains(at)) {
+                    out.add(at);
+                }
+            }
+            return out;
         }
 
         /** One where {@code left} holds it, and otherwise the whole number nearest it that
