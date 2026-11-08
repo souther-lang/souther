@@ -130,6 +130,68 @@ class ATotalOfFieldsTakenOneFromAnotherIsWrittenWhereverTheFieldsReachItTest {
         assertTrue(written, () -> at + " is written by no row: " + offered.unresolved());
     }
 
+    private static final String COUNTED = """
+            module w1
+            data F = Int
+                invariant value >= 1 && value <= 3
+            data L = { p: F, q: F }
+            data One = { ls: List<L> }
+                invariant %s
+            behavior m : (b: One) -> Bool
+            let m (b) = List.sum(List.map(l -> l.p.value + l.q.value, b.ls)) %s
+            """;
+
+    private static final Pattern TWO_FIELDS =
+            Pattern.compile("L \\{ p = F\\((\\d+)\\), q = F\\((\\d+)\\) }");
+
+    /**
+     * Fields of one to three, in a container of two or of two or more, come to five, which one
+     * element also comes to: the field held still is held for the count the container holds, so
+     * two elements are written coming to five, and no element of one.
+     */
+    @Test
+    void theFieldsHeldStillAreHeldForTheCountTheContainerHolds() {
+        for (String count : List.of("List.length(ls) == 2", "List.length(ls) >= 2")) {
+            List<String> rows = rowsAt(COUNTED.formatted(count, ">= 5"), DECIMAL_TOTAL + " = 5");
+            assertFalse(rows.isEmpty(), count);
+            for (String row : rows) {
+                Matcher element = TWO_FIELDS.matcher(row);
+                int elements = 0;
+                int sum = 0;
+                while (element.find()) {
+                    elements++;
+                    sum += Integer.parseInt(element.group(1)) + Integer.parseInt(element.group(2));
+                }
+                assertTrue(elements >= 2, row);
+                assertEquals(5, sum, row);
+            }
+        }
+    }
+
+    /**
+     * Fields of one to three come to nought only in a container of none, which holds no field
+     * to hold still: written where the container may hold none, and where it holds none at all.
+     */
+    @Test
+    void aContainerOfNoneIsWrittenForATotalOfNought() {
+        for (String count : List.of("List.length(ls) <= 2", "List.length(ls) == 0")) {
+            List<String> rows = rowsAt(COUNTED.formatted(count, "<= 0"), DECIMAL_TOTAL + " = 0");
+            assertEquals(List.of("One { ls = [] }"), rows.stream().distinct().toList(), count);
+        }
+    }
+
+    /** The first input of each row offered for the point {@code label} in {@code model}. */
+    private static List<String> rowsAt(String model, String label) {
+        Generator.GenerationResult offered = offeredFor(model);
+        List<String> rows = offered.rows().stream()
+                .filter(row -> row.purposes().stream().anyMatch(purpose ->
+                        purpose instanceof Generator.Purpose.ForAPoint point
+                                && point.label().equals(label)))
+                .map(row -> row.inputs().getFirst().text()).toList();
+        assertFalse(rows.isEmpty(), () -> label + " is written by no row: " + offered.unresolved());
+        return rows;
+    }
+
     /**
      * Twelve fields of nought to one come to twelve only with every one at one: eleven held and
      * one solved for, each held at the value the total leaves it, and no way of holding them is

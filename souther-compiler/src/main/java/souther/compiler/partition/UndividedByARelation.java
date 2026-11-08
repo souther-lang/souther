@@ -8346,7 +8346,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (stated == null) {
             return null;
         }
-        OneElementsRun alone;
+        // How many each container holds is asked first: one that holds no element at any count
+        // comes to nought, whatever one element would.
+        List<TermPath> containers = containersOf(over);
+        List<NumericDomain.Bounds> counts = new ArrayList<>();
+        for (TermPath container : containers) {
+            NumericDomain.Bounds held = howManyAreHeld(container, read, region);
+            if (held == null) {
+                return null;
+            }
+            if (held.max() != null && countAt(held.max(), false) instanceof ExactRatio most
+                    && most.compareTo(ExactRatio.ONE) < 0) {
+                return held.admits(Count.ZERO) ? NOUGHT_ALONE.meet(stated.run()) : null;
+            }
+            counts.add(held);
+        }
+        NumericDomain.Bounds alone;
         if (elements.isEmpty() && over.source() instanceof RunSource.ComputedOccurrences computed
                 && computed.computation() instanceof ElementValue.Affine weighed) {
             alone = summedOverWeighedFieldsOfOneElement(computed.elements(), weighed, read,
@@ -8354,51 +8369,52 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         } else if (elements.isEmpty()) {
             alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
         } else {
-            List<TermPath> containers = over.subjectPath().containersHoldingIt();
-            NumericDomain.Bounds each = containers.size() != 1 ? null
+            alone = containers.size() != 1 ? null
                     : shownOfAnElementAlone(elements, containers.getFirst(), read, region,
                             stated.rest(), null);
-            alone = each == null ? null : new OneElementsRun(each, containers);
         }
-        NumericDomain.Bounds totals = alone == null ? null
-                : ofTheElements(alone, read, region, carrier, !atOneElement.contains(over));
+        NumericDomain.Bounds totals = alone == null || containers.isEmpty() ? null
+                : ofTheElements(alone, counts, carrier, !atOneElement.contains(over));
         return totals == null ? null : totals.meet(stated.run());
     }
 
-    /**
-     * What one element of a total comes to, as a run every value of which it is shown to take, and
-     * the containers it is an element of: one, or for a walk joining two maps, an entry of each.
-     */
-    private record OneElementsRun(NumericDomain.Bounds run, List<TermPath> containers) {
+    /** The one total a container of no element comes to. */
+    private static final NumericDomain.Bounds NOUGHT_ALONE = new NumericDomain.Bounds(
+            Endpoint.inclusive(Count.ZERO), Endpoint.inclusive(Count.ZERO));
 
-        OneElementsRun {
-            containers = List.copyOf(containers);
+    /**
+     * The containers a total over {@code over} is over: the one the elements stand in, or for a
+     * walk joining two maps, the map walked and the map looked into.
+     */
+    private static List<TermPath> containersOf(NumericTerm.TakenOver over) {
+        if (over.source() instanceof RunSource.JoinedOccurrences joined) {
+            List<TermPath> containers = new ArrayList<>(joined.elements().containersHoldingIt());
+            containers.addAll(joined.alongside().containersHoldingIt());
+            return List.copyOf(containers);
         }
+        return over.subjectPath().containersHoldingIt();
     }
 
     /**
-     * The totals {@code one}'s containers come to, on {@code carrier}: where one container holds
-     * the elements and {@code overMany}, every total of as many as it is shown to hold
-     * ({@link #overTheCounts}); otherwise what one element comes to, where each container may
-     * hold one. Nought joins where a container may hold none, since a container of none comes to
-     * it.
+     * The totals containers holding {@code counts} come to, one element of them coming to
+     * {@code alone}, on {@code carrier}: where one container holds the elements and
+     * {@code overMany}, every total of as many as it is shown to hold ({@link #overTheCounts});
+     * otherwise what one element comes to, where each container may hold one. Nought joins where
+     * a container may hold none, since a container of none comes to it.
      */
-    private static NumericDomain.Bounds ofTheElements(OneElementsRun one, InputReading read,
-                                                      SearchRegion region, Carrier carrier,
-                                                      boolean overMany) {
-        boolean composed = overMany && one.containers().size() == 1;
-        NumericDomain.Bounds counts = null;
+    private static NumericDomain.Bounds ofTheElements(NumericDomain.Bounds alone,
+                                                      List<NumericDomain.Bounds> counts,
+                                                      Carrier carrier, boolean overMany) {
+        boolean composed = overMany && counts.size() == 1;
         boolean noughtIsATotal = false;
-        for (TermPath container : one.containers()) {
-            NumericDomain.Bounds held = howManyAreHeld(container, read, region);
-            if (held == null || (!composed && !held.admits(Count.of(1)))) {
+        for (NumericDomain.Bounds held : counts) {
+            if (!composed && !held.admits(Count.of(1))) {
                 return null;
             }
             noughtIsATotal |= held.admits(Count.ZERO);
-            counts = held;
         }
-        NumericDomain.Bounds run = composed ? overTheCounts(one.run(), counts, carrier)
-                : one.run();
+        NumericDomain.Bounds run = composed ? overTheCounts(alone, counts.getFirst(), carrier)
+                : alone;
         return run == null ? null : noughtIsATotal ? withNought(run, carrier) : run;
     }
 
@@ -8572,7 +8588,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * every sum of a value of each is one element's. What a container of none, or of more, comes
      * to is the totals' to say ({@link #ofTheElements}).
      */
-    private static OneElementsRun summedOverWeighedFieldsOfOneElement(
+    private static NumericDomain.Bounds summedOverWeighedFieldsOfOneElement(
             TermPath elements, ElementValue.Affine weighed, InputReading read, SearchRegion region,
             List<OnAWay> conditions, Carrier carrier) {
         List<TermPath> places = new ArrayList<>();
@@ -8612,9 +8628,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         // The number added to each element's fields is the element's, and moves the sum by it.
-        sum = movedBy(sum, weighed.form().constant(), carrier);
-        return sum == null || container == null ? null
-                : new OneElementsRun(sum, List.of(container));
+        return container == null ? null : movedBy(sum, weighed.form().constant(), carrier);
     }
 
     /**
@@ -8738,11 +8752,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * asked at. What a container of none, or of more, comes to is the totals' to say
      * ({@link #ofTheElements}).
      */
-    private static OneElementsRun summedOverProductsOfOneElement(
+    private static NumericDomain.Bounds summedOverProductsOfOneElement(
             NumericTerm.TakenOver over, InputReading read, SearchRegion region,
             List<OnAWay> conditions, Carrier carrier) {
         List<NumericTerm.FromOnePosition> factors = new ArrayList<>();
-        List<TermPath> containers = new ArrayList<>();
         // What the total comes to with every factor at one but the one at a place: that factor
         // times the weight, and the number beside it. Null where it is asked at no value.
         List<LinearForm<NumericTerm.FromOnePosition>> heldAtOne = new ArrayList<>();
@@ -8752,8 +8765,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // and the number at the entry of the map looked into: no other way is written.
             factors.add(new NumericTerm.ValueOf(joined.elements()));
             factors.add(new NumericTerm.ValueOf(joined.alongside()));
-            containers.addAll(joined.elements().containersHoldingIt());
-            containers.addAll(joined.alongside().containersHoldingIt());
             heldAtOne.add(null);
             heldAtOne.add(LinearForm.atom(factors.get(1)));
         } else {
@@ -8763,8 +8774,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     .anyMatch(each -> each.rounding() != null)) {
                 return null;
             }
-            containers.addAll(over.subjectPath().containersHoldingIt());
-            if (containers.size() != 1) {
+            if (over.subjectPath().containersHoldingIt().size() != 1) {
                 return null;
             }
             Set<ElementProjection> fields = new LinkedHashSet<>();
@@ -8827,7 +8837,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // The fields held still are held at one value in every element, so a container of several
         // comes to as many of that number; a join of two maps is the entry of each.
-        return asked == null ? null : new OneElementsRun(asked, containers);
+        return asked;
     }
 
     /**
@@ -9164,19 +9174,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                int wanted) {
         RuleReadingSource rules = read.rules();
         Type type = read.domain().typeAt(container, rules);
-        List<TermPath> entry = read.domain().entryOf(container, rules);
-        KeptApart apart = new KeptApart();
-        for (TermPath part : entry) {
-            if (namedDownTo(part, container.steps().size(), read, null, apart) != Named.NOT) {
-                return null;
-            }
-        }
         NumericTerm.TakenOf count = type == null ? null
                 : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
                         container, type, rules.inners(), rules.symbols());
         NumericDomain.Bounds run = count == null ? null : region.wholeRunOf(count);
         if (run == null) {
             return null;
+        }
+        // Held to none, the container is written with no element, so nothing of an element
+        // holds a count back; and what a rule reading inside the elements says of none is
+        // asked of the rules that read it.
+        if (run.max() != null && run.max().wholeAdmitted(false) instanceof BigInteger fewer
+                && fewer.signum() <= 0) {
+            return run.holdsAValue() && noneIsRead(container, read) ? run : null;
+        }
+        List<TermPath> entry = read.domain().entryOf(container, rules);
+        KeptApart apart = new KeptApart();
+        for (TermPath part : entry) {
+            if (namedDownTo(part, container.steps().size(), read, null, apart) != Named.NOT) {
+                return null;
+            }
         }
         int most;
         if (!anElementShown && !entry.stream().allMatch(part ->
@@ -10221,6 +10238,69 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** A reading written in the rules of the value at {@code root}. */
     private record Written(TermPath root, ClauseRead reading) {}
+
+    /**
+     * Whether {@code container}, held to no element, is one its rules leave written with none:
+     * every rule of a value around it, and of it, reached and stated, and each reading of it or
+     * of a place inside it or around it one a container of none meets whatever else it says. How
+     * many it holds is the region's to say; a run each element is held to, and elements held
+     * apart, leave none nothing to fail. A rule that needs a member or looks one up, or reads
+     * the container or a value around it whole, may want an element, so it leaves this unshown.
+     */
+    private static boolean noneIsRead(TermPath container, InputReading read) {
+        for (int length = 0; length <= container.steps().size(); length++) {
+            TermPath here = container.prefix(length);
+            Position around = read.domain().at(here.position());
+            if (around == null || around.nothingExists()) {
+                return false;
+            }
+            List<TypeSymbol> worn = new ArrayList<>(around.view().wrappers());
+            switch (around.view().shape()) {
+                case Shape.Product product -> worn.add(product.name());
+                case Shape.Sum sum -> worn.add(sum.name());
+                default -> { }
+            }
+            for (TypeSymbol each : worn) {
+                if (!(each instanceof TypeSymbol.AtModule name)) {
+                    continue;
+                }
+                PublishedRules rules = RulesRead.of(read).byName().computeIfAbsent(name,
+                        named -> PublishedRules.governing(named, read.rules().published()));
+                if (!rules.everyRuleReached()) {
+                    return false;
+                }
+                for (ClauseMeaning clause : rules.reached()) {
+                    if (!(clause instanceof ClauseMeaning.Stated stated)) {
+                        return false;
+                    }
+                    for (ClauseMeaning.Parts.One part : stated.parts().leaves()) {
+                        for (ClauseRead reading : part.reads()) {
+                            if (!metByNone(reading, here, container, read)) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code reading}, written in the rules of the value at {@code here}, is met by
+     *  {@code container} holding none ({@link #noneIsRead}). */
+    private static boolean metByNone(ClauseRead reading, TermPath here, TermPath container,
+                                     InputReading read) {
+        switch (reading.kind()) {
+            case HOW_MANY_IT_HOLDS, EACH_ELEMENTS_RUN, ELEMENTS_THE_CLAUSE_NEEDS_APART -> {
+                return true;
+            }
+            default -> {
+                List<TermPath> places = placesRead(reading, here, read);
+                return !places.isEmpty() && places.stream().noneMatch(place ->
+                        place.isAtOrUnder(container) || container.isAtOrUnder(place));
+            }
+        }
+    }
 
     /**
      * What a clause reading {@code reading} says of what stands at {@code rest} below

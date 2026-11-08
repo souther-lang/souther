@@ -15,8 +15,8 @@ import java.util.function.Predicate;
 
 /**
  * The values to hold the other fields of each element at, the same in every element, so that a
- * container comes to {@code total} with the one field left solved for: worked out of the total,
- * and not searched for.
+ * container of a given count comes to {@code total} with the one field left solved for: worked
+ * out of the total, and not searched for.
  *
  * <p>What each element comes to is a form of its fields, {@code c + Σ wⱼ·qⱼ + w·f}, each field
  * anywhere in its run. Held at one value in every element, the fields held add {@code Q} to each
@@ -24,11 +24,14 @@ import java.util.function.Predicate;
  * over them, which is anywhere from {@code n} times the least it adds to {@code n} times the
  * most. So the total is written with {@code n} elements wherever {@code Q} can be chosen with
  * {@code total / n − c − Q} within what one element's field adds — a run of {@code Q}, met with
- * what the held fields can add together — and the fewest such {@code n} is taken. The value of
- * {@code Q} is then shared out among the held fields: each starts at the end it adds least at,
- * and each in turn takes as much of what is left as its run lets it. Every total one element
- * comes to over the fields' runs, and every one of as many elements as that, is written so, which
- * is what the reading of the total says it takes ({@code UndividedByARelation#overTheCounts}).
+ * what the held fields can add together. The value of {@code Q} is then shared out among the
+ * held fields: each starts at the end it adds least at, and each in turn takes as much of what is
+ * left as its run lets it. Every total {@code n} elements come to over the fields' runs is
+ * written so where the field solved for steps through its run, which is what the reading of the
+ * total says it takes ({@code UndividedByARelation#overTheCounts}).
+ *
+ * <p>The count is the caller's: which counts the container may hold is its rules' to say, and a
+ * count this chose would be one they may not leave it.
  *
  * <p>On an order that steps every value is a whole number; on one that does not, a value is one
  * a row can be written at ({@code writable}). Where no value is, nothing is held, and the total
@@ -68,17 +71,20 @@ final class FieldsHeldForATotal {
     }
 
     /**
-     * The value to hold each of {@code held} at, so that elements of {@code constant} plus the
-     * held fields and {@code free} come to {@code total} for as few elements as do — or null
-     * where no such values are shown. Whether the container may hold so many is the count's to
-     * say, where the elements are written.
+     * The value to hold each of {@code held} at, so that {@code many} elements of
+     * {@code constant} plus the held fields and {@code free} come to {@code total} — or null
+     * where no such values are shown.
      *
+     * @param many     how many elements the container holds, one or more
      * @param whole    whether the fields' values step by whole numbers
      * @param writable whether a value is one a row of the fields can be written at
      */
     static <K> Map<K, ExactRatio> heldFor(Map<K, Field> held, Field free, ExactRatio constant,
-                                         ExactRatio total, boolean whole,
+                                         ExactRatio total, int many, boolean whole,
                                          Predicate<ExactRatio> writable) {
+        if (many < 1) {
+            throw new IllegalArgumentException("a container of none holds no field: " + many);
+        }
         ExactRatio heldLeast = ExactRatio.ZERO;
         ExactRatio heldMost = ExactRatio.ZERO;
         for (Field each : held.values()) {
@@ -86,12 +92,6 @@ final class FieldsHeldForATotal {
                     : heldLeast.plus(each.leastAdded()).orNull();
             heldMost = heldMost == null || each.mostAdded() == null ? null
                     : heldMost.plus(each.mostAdded()).orNull();
-        }
-        ExactRatio least = plusAll(constant, heldLeast, free.leastAdded());
-        ExactRatio greatest = plusAll(constant, heldMost, free.mostAdded());
-        BigInteger many = fewest(total, least, greatest);
-        if (many == null) {
-            return null;
         }
         ExactRatio each = total.dividedBy(ExactRatio.of(many)).orNull();
         ExactRatio beside = each == null ? null : each.minus(constant).orNull();
@@ -113,37 +113,6 @@ final class FieldsHeldForATotal {
             }
         }
         return null;
-    }
-
-    /**
-     * The fewest elements, each coming to anywhere from {@code least} to {@code greatest} — null
-     * where there is no end — whose totals reach {@code total}: one where one element does;
-     * otherwise as many as the total takes of the greatest, or of the least below nought, where
-     * that many reach it on the other side as well. Null where no count does.
-     */
-    private static BigInteger fewest(ExactRatio total, ExactRatio least, ExactRatio greatest) {
-        if (within(total, least, greatest)) {
-            return BigInteger.ONE;
-        }
-        ExactRatio toward = greatest != null && total.compareTo(greatest) > 0 ? greatest
-                : least != null && total.compareTo(least) < 0 ? least : null;
-        if (toward == null || toward.signum() != total.signum()) {
-            return null;
-        }
-        if (!(total.dividedBy(toward).flatMap(ExactRatio::ceiling)
-                instanceof ExactAnswer.Held<BigInteger>(BigInteger many))) {
-            return null;
-        }
-        ExactRatio count = ExactRatio.of(many);
-        ExactRatio low = least == null ? null : least.times(count).orNull();
-        ExactRatio high = greatest == null ? null : greatest.times(count).orNull();
-        return within(total, low, high) ? many : null;
-    }
-
-    /** {@code constant} with each of the rest added, or null where one of them is. */
-    private static ExactRatio plusAll(ExactRatio constant, ExactRatio one, ExactRatio other) {
-        ExactRatio sum = one == null ? null : constant.plus(one).orNull();
-        return sum == null || other == null ? null : sum.plus(other).orNull();
     }
 
     /**

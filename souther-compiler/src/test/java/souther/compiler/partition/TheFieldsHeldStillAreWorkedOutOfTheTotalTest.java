@@ -19,16 +19,15 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * The values the fields held still are held at are worked out of the total
- * ({@link FieldsHeldForATotal#heldFor}), held to the totals themselves: each value is in its
- * field's run, and with them the field solved for makes up the rest within its run for some
- * count; and where the field solved for has the widest run, every total that many elements of
- * the fields' runs come to is given values.
+ * ({@link FieldsHeldForATotal#heldFor}) for the count the container holds, held to the totals
+ * themselves: each value is in its field's run, and with them the field solved for makes up the
+ * rest within its run over that many elements; and where the field solved for has the widest
+ * run, every total that many elements of the fields' runs come to is given values.
  */
 class TheFieldsHeldStillAreWorkedOutOfTheTotalTest {
 
-    /** The most elements the totals asked are looked for over: enough for every total asked to
-     *  be reached by elements that come to one each. */
-    private static final int MOST = 32;
+    /** The counts the totals are asked over. */
+    private static final int MOST = 3;
 
     @Test
     void theValuesWorkedOutComeToTheTotalAndEveryReachedTotalHasThem() {
@@ -41,39 +40,12 @@ class TheFieldsHeldStillAreWorkedOutOfTheTotalTest {
                 for (int[] second : runs) {
                     for (int weightOfFirst : new int[] {1, -1}) {
                         for (int constant = 0; constant <= 1; constant++) {
-                            Map<String, FieldsHeldForATotal.Field> held = new LinkedHashMap<>();
-                            held.put("q", field(weightOfFirst, first));
-                            held.put("r", field(1, second));
-                            FieldsHeldForATotal.Field solved = field(1, free);
-                            for (int total = -12; total <= 24; total++) {
-                                asked++;
-                                Map<String, ExactRatio> values = FieldsHeldForATotal.heldFor(
-                                        held, solved, ratio(constant), ratio(total), true,
-                                        any -> true);
-                                boolean widest = free[1] - free[0] >= first[1] - first[0]
-                                        && free[1] - free[0] >= second[1] - second[0];
-                                if (values == null) {
-                                    if (widest && reached(total, constant, weightOfFirst, first,
-                                            second, free)) {
-                                        fail("no values for " + total + " over q" + range(first)
-                                                + "·" + weightOfFirst + " r" + range(second)
-                                                + " f" + range(free) + " + " + constant);
-                                    }
-                                    continue;
+                            for (int many = 1; many <= MOST; many++) {
+                                for (int total = -12; total <= 24; total++) {
+                                    asked++;
+                                    given += heldOver(free, first, weightOfFirst, second,
+                                            constant, many, total) ? 1 : 0;
                                 }
-                                given++;
-                                long q = whole(values.get("q"));
-                                long r = whole(values.get("r"));
-                                assertTrue(q >= first[0] && q <= first[1], values::toString);
-                                assertTrue(r >= second[0] && r <= second[1], values::toString);
-                                long each = constant + weightOfFirst * q + r;
-                                boolean made = false;
-                                for (int n = 1; n <= MOST && !made; n++) {
-                                    long rest = total - n * each;
-                                    made = rest >= (long) n * free[0] && rest <= (long) n * free[1];
-                                }
-                                int at = total;
-                                assertTrue(made, () -> at + " with " + values);
                             }
                         }
                     }
@@ -82,6 +54,50 @@ class TheFieldsHeldStillAreWorkedOutOfTheTotalTest {
         }
         assertNotEquals(0, given);
         assertNotEquals(asked, given);
+    }
+
+    /**
+     * Whether {@code q·w + r}, held, and {@code f}, solved for, are given values for
+     * {@code many} elements to come to {@code total}: values in the fields' runs that so many
+     * elements come to it with, and values wherever so many reach it and {@code f} is widest.
+     */
+    private static boolean heldOver(int[] free, int[] first, int weightOfFirst, int[] second,
+                                    int constant, int many, int total) {
+        Map<String, FieldsHeldForATotal.Field> held = new LinkedHashMap<>();
+        held.put("q", field(weightOfFirst, first));
+        held.put("r", field(1, second));
+        Map<String, ExactRatio> values = FieldsHeldForATotal.heldFor(held, field(1, free),
+                ratio(constant), ratio(total), many, true, any -> true);
+        boolean widest = free[1] - free[0] >= first[1] - first[0]
+                && free[1] - free[0] >= second[1] - second[0];
+        if (values == null) {
+            if (widest && reached(total, many, constant, weightOfFirst, first, second, free)) {
+                fail("no values for " + total + " of " + many + " over q" + range(first) + "·"
+                        + weightOfFirst + " r" + range(second) + " f" + range(free) + " + "
+                        + constant);
+            }
+            return false;
+        }
+        long q = whole(values.get("q"));
+        long r = whole(values.get("r"));
+        assertTrue(q >= first[0] && q <= first[1], values::toString);
+        assertTrue(r >= second[0] && r <= second[1], values::toString);
+        long rest = total - many * (constant + weightOfFirst * q + r);
+        assertTrue(rest >= (long) many * free[0] && rest <= (long) many * free[1],
+                () -> total + " of " + many + " with " + values);
+        return true;
+    }
+
+    /** Two fields of one to three, two elements, come to five, which one element also comes to:
+     *  the field held is held for two elements, at one, and not at what one element takes. */
+    @Test
+    void theFieldsAreHeldForTheCountTheyAreAskedFor() {
+        Map<String, FieldsHeldForATotal.Field> held = new LinkedHashMap<>();
+        held.put("q", field(1, new int[] {1, 3}));
+        Map<String, ExactRatio> values = FieldsHeldForATotal.heldFor(held,
+                field(1, new int[] {1, 3}), ExactRatio.ZERO, ratio(5), 2, true, any -> true);
+        assertNotNull(values);
+        assertEquals(1, whole(values.get("q")));
     }
 
     /** Two fields of two to eight tenths come to every number from four tenths to one and six
@@ -95,7 +111,7 @@ class TheFieldsHeldStillAreWorkedOutOfTheTotalTest {
                 decimal("0.2"), decimal("0.8"));
         for (String total : List.of("0.4", "1.0", "1.6", "1.13")) {
             Map<String, ExactRatio> values = FieldsHeldForATotal.heldFor(held, free,
-                    ExactRatio.ZERO, decimal(total), false, any -> true);
+                    ExactRatio.ZERO, decimal(total), 1, false, any -> true);
             assertNotNull(values, total);
             ExactRatio q = values.get("q");
             ExactRatio rest = decimal(total).minus(q).orNull();
@@ -115,7 +131,7 @@ class TheFieldsHeldStillAreWorkedOutOfTheTotalTest {
             held.put(i, field(1, new int[] {0, 1}));
         }
         Map<Integer, ExactRatio> values = FieldsHeldForATotal.heldFor(held,
-                field(1, new int[] {0, 1}), ExactRatio.ZERO, ratio(15), true, any -> true);
+                field(1, new int[] {0, 1}), ExactRatio.ZERO, ratio(15), 1, true, any -> true);
         assertNotNull(values);
         long sum = values.values().stream()
                 .mapToLong(TheFieldsHeldStillAreWorkedOutOfTheTotalTest::whole).sum();
@@ -123,18 +139,13 @@ class TheFieldsHeldStillAreWorkedOutOfTheTotalTest {
         assertEquals(20, values.size());
     }
 
-    /** Whether {@code total} is what some count up to {@link #MOST} of elements comes to, each
-     *  element {@code constant + w·q + r + f} with each field anywhere in its run. */
-    private static boolean reached(int total, int constant, int weight, int[] q, int[] r,
+    /** Whether {@code total} is what {@code many} elements come to, each element
+     *  {@code constant + w·q + r + f} with each field anywhere in its run apart from the rest. */
+    private static boolean reached(int total, int many, int constant, int weight, int[] q, int[] r,
                                    int[] f) {
         int low = constant + Math.min(weight * q[0], weight * q[1]) + r[0] + f[0];
         int high = constant + Math.max(weight * q[0], weight * q[1]) + r[1] + f[1];
-        for (int n = 1; n <= MOST; n++) {
-            if (total >= n * low && total <= n * high) {
-                return true;
-            }
-        }
-        return false;
+        return total >= many * low && total <= many * high;
     }
 
     private static FieldsHeldForATotal.Field field(int weight, int[] run) {

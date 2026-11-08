@@ -47,6 +47,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -201,22 +202,11 @@ final class ContainersAddingUp {
                                 Set.of(CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR)),
                         null);
             }
-            // Each way is tried with the fields it holds still at the values it holds them at for
-            // this total, until one writes it.
-            return throughEach(ways, way -> {
-                FieldSolved solved = way.settledIn(within, answer);
-                if (solved == null) {
-                    // A field held still at no value the region leaves it is a way this did not
-                    // try, which is not the region leaving the total no row.
-                    return new TermRealizations.Realization.Unexhausted(
-                            CompositionShortfall.writing(Set.of(
-                                    CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL)),
-                            "no value held the other fields of the elements still");
-                }
-                return walkedInPartWhereHeldStill(solved, composedThrough(solved, answer,
-                        container, keptApart, orders, within, reading, alsoHolding,
-                        alsoAddingUp, inside));
-            });
+            // Each way is tried until one writes the total; the fields it holds still are held, at
+            // each count, at the values they are held at for this total.
+            return throughEach(ways, way -> walkedInPartWhereHeldStill(way, composedThrough(way,
+                    answer, container, keptApart, orders, within, reading, alsoHolding,
+                    alsoAddingUp, inside)));
         }
         return composedThrough(null, answer, container, keptApart, orders, within, reading,
                 alsoHolding, alsoAddingUp, inside);
@@ -393,15 +383,7 @@ final class ContainersAddingUp {
             TermOrders orders, SearchRegion within, RuleReadingContext reading,
             HowManyIsAskedFor alsoHolding, List<AlsoAddingUp> alsoAddingUp,
             DemandsInside demanded) {
-        // The fields a sum of products is fixed at are asked of every element, beside whatever
-        // else each is asked to hold.
         DemandsInside inside = demanded;
-        if (solved != null && solved.fixing() != null) {
-            inside = holdingWhatIsFixed(solved.fixing(), orders, demanded, reading);
-            if (inside == null) {
-                return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-            }
-        }
         // An arm whose case is taken of a place beside the field asks every element to be of it,
         // beside whatever else each is asked to hold.
         if (solved != null && solved.ofTheCase() != null) {
@@ -469,8 +451,14 @@ final class ContainersAddingUp {
         // A value asked at the position each element's share is written at, or around it, is that
         // position asked two things: the share and the value. One element holds one of them there,
         // and which would be whichever the composing read first, so neither is offered.
+        // The fields held still are asked a value of every element as well, at whichever count.
+        List<TermPath> askedInside = new ArrayList<>(inside.among().keySet());
+        if (solved != null && solved.fixing() != null) {
+            solved.fixing().at().keySet()
+                    .forEach(each -> askedInside.add(each.from(solved.fixing().elements())));
+        }
         TermPath share = underTheCasesNamed(occurring, inside.required());
-        for (TermPath asked : inside.among().keySet()) {
+        for (TermPath asked : askedInside) {
             TermPath spelled = underTheCasesNamed(asked, inside.required());
             if (spelled.isAtOrUnder(share) || share.isAtOrUnder(spelled)) {
                 return new TermRealizations.Realization.None(
@@ -488,43 +476,50 @@ final class ContainersAddingUp {
         // because the plan is made against every position a figure is written at.
         List<Also> also = new ArrayList<>();
         for (AlsoAddingUp each : alsoAddingUp) {
-            switch (alsoOf(each, target, share, also, inside, apart, within)) {
+            switch (alsoOf(each, target, share, also, inside, askedInside, apart, within)) {
                 case Also one -> also.add(one);
                 case AlsoRead.Refused(TermRealizations.Realization said) -> {
                     return said;
                 }
             }
         }
-        Ways ways = waysDown(holding.element(), target.writeRoot().element(), occurring,
-                inside, also.stream().map(Also::share).toList(), apart, reading);
-        if (ways.narrowingBeyondTheFirst()) {
-            return severalTotalsNotComposed("which case the elements hold the other totals' fields"
-                    + " under is a choice the first total's path does not make");
-        }
-        // Nothing to fill a container along, so there is no count and no shape of one to try. Said
-        // before the counts are walked rather than as a condition on each figure below: a figure
-        // reached where no container could have been built either way is one raising takes nothing
-        // away from, and the walks below are what the figures are about.
-        if (ways.filled().isEmpty()) {
-            return ways.cutBy().isEmpty()
-                    ? new TermRealizations.Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                            ways.said(occurring))
-                    : new TermRealizations.Realization.Stopped(
-                            CompositionShortfall.of(ways.cutBy()));
-        }
+        List<TermPath> alsoAt = also.stream().map(Also::share).toList();
+        Function<DemandsInside, Ways> planning = demands -> waysDown(holding.element(),
+                target.writeRoot().element(), occurring, demands, alsoAt, apart, reading);
         WhatWasLeft left = new WhatWasLeft();
+        PlannedForEachCount planned;
+        if (solved == null || solved.fixing() == null) {
+            Ways ways = planning.apply(inside);
+            if (ways.narrowingBeyondTheFirst()) {
+                return severalTotalsNotComposed("which case the elements hold the other totals'"
+                        + " fields under is a choice the first total's path does not make");
+            }
+            // Nothing to fill a container along, so there is no count and no shape of one to try.
+            // Said before the counts are walked rather than as a condition on each figure below: a
+            // figure reached where no container could have been built either way is one raising
+            // takes nothing away from, and the walks below are what the figures are about.
+            if (ways.filled().isEmpty()) {
+                return ways.cutBy().isEmpty()
+                        ? new TermRealizations.Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                                ways.said(occurring))
+                        : new TermRealizations.Realization.Stopped(
+                                CompositionShortfall.of(ways.cutBy()));
+            }
+            // What the planning gave up at, which is a way that was there to try and was not. A
+            // way down that was never planned is a value never composed, and a reader told only
+            // that nothing was composed would look for the rule that refuses it.
+            for (CompositionBudget cut : ways.cutBy()) {
+                left.refused(cut);
+            }
+            planned = PlannedForEachCount.once(solved, ways);
+        } else {
+            left.notAllOf(CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL);
+            planned = PlannedForEachCount.heldStill(solved, within, answer, orders, inside,
+                    reading, planning);
+        }
         if (solved != null && solved.ofOneCase()) {
             left.notAllOf(CompositionRepertoire.MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER);
-        }
-        if (solved != null && solved.fixing() != null) {
-            left.notAllOf(CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL);
-        }
-        // What the planning gave up at, which is a way that was there to try and was not. A way down
-        // that was never planned is a value never composed, and a reader told only that nothing was
-        // composed would look for the rule that refuses it.
-        for (CompositionBudget cut : ways.cutBy()) {
-            left.refused(cut);
         }
         // Several totals are spread over the elements one at a time and put side by side, which is
         // some of the containers that come to all of them and not every one.
@@ -532,8 +527,8 @@ final class ContainersAddingUp {
             left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
         }
         WhatIsOffered offered = new WhatIsOffered();
-        Makings makings = new Makings(total.at(), ends, holding, view, elements, ways, apart,
-                reading, solved, also);
+        Makings makings = new Makings(total.at(), ends, holding, view, elements, planned, apart,
+                reading, also);
         // Every count the rules leave, which are all the counts there are: what the container may
         // hold is what the rules say, so a walk that runs out of them has run out of the population
         // and not only of what this compiler writes.
@@ -553,11 +548,115 @@ final class ContainersAddingUp {
             return new TermRealizations.Realization.Stopped(met);
         }
         if (!met.nothing()) {
-            return new TermRealizations.Realization.Unexhausted(met, ways.said(occurring));
+            return new TermRealizations.Realization.Unexhausted(met, planned.said(occurring));
         }
         return new TermRealizations.Realization.None(
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                ways.said(occurring));
+                planned.said(occurring));
+    }
+
+    /**
+     * The way a total is solved through at one count of the elements, and the ways down an
+     * element is built by under it.
+     */
+    private record AtACount(FieldSolved solved, Ways ways) {}
+
+    /**
+     * The way a total is solved through and the ways down an element is built by, at each count
+     * of the elements.
+     *
+     * <p>The same at every count where no field is held still. Where some are, the values they
+     * are held at are a question of the count — what {@code n} elements come to turns on what
+     * each holds — so they are worked out for each count it is asked at
+     * ({@link FieldSolved#settledIn}), and a container of none holds none of them. What an
+     * element is built of is asked of the values it holds, so the ways down are planned once for
+     * each set of values and not once per count.
+     */
+    private static final class PlannedForEachCount {
+
+        private final FieldSolved solved;
+        private final FieldSolved.HeldRuns runs;
+        private final Place total;
+        private final TermOrders orders;
+        private final DemandsInside inside;
+        private final RuleReadingContext reading;
+        private final Function<DemandsInside, Ways> planning;
+        private final Map<Map<ElementProjection, ExactRatio>, Optional<Ways>> byValues =
+                new HashMap<>();
+        private Ways last;
+
+        private PlannedForEachCount(FieldSolved solved, FieldSolved.HeldRuns runs, Place total,
+                                    TermOrders orders, DemandsInside inside,
+                                    RuleReadingContext reading,
+                                    Function<DemandsInside, Ways> planning) {
+            this.solved = solved;
+            this.runs = runs;
+            this.total = total;
+            this.orders = orders;
+            this.inside = inside;
+            this.reading = reading;
+            this.planning = planning;
+        }
+
+        /** {@code ways} at every count, under {@code solved}, which holds no field still. */
+        static PlannedForEachCount once(FieldSolved solved, Ways ways) {
+            PlannedForEachCount planned = new PlannedForEachCount(solved, null, null, null, null,
+                    null, null);
+            planned.last = ways;
+            return planned;
+        }
+
+        /** The ways of {@code solved}, which holds fields still, at the values each count holds
+         *  them at for {@code total}. */
+        static PlannedForEachCount heldStill(FieldSolved solved, SearchRegion within, Place total,
+                                             TermOrders orders, DemandsInside inside,
+                                             RuleReadingContext reading,
+                                             Function<DemandsInside, Ways> planning) {
+            return new PlannedForEachCount(solved, solved.runsHeld(within), total, orders, inside,
+                    reading, planning);
+        }
+
+        /**
+         * The way and the ways down at {@code many} elements — or null where none is written at
+         * that count, said in {@code left}: no values held the fields still, the values held are
+         * not ones the elements can hold beside what else they are asked, or nothing builds an
+         * element holding them.
+         */
+        AtACount at(int many, WhatWasLeft left) {
+            if (planning == null) {
+                return new AtACount(solved, last);
+            }
+            FieldSolved settled = solved.settledIn(runs, total, many);
+            if (settled == null) {
+                return null;
+            }
+            Map<ElementProjection, ExactRatio> values =
+                    settled.fixing() == null ? Map.of() : settled.fixing().at();
+            Optional<Ways> ways = byValues.get(values);
+            if (ways == null) {
+                DemandsInside demands = settled.fixing() == null ? inside
+                        : holdingWhatIsFixed(settled.fixing(), orders, inside, reading);
+                ways = demands == null ? Optional.empty() : Optional.of(planning.apply(demands));
+                ways.ifPresent(planned -> {
+                    planned.cutBy().forEach(left::refused);
+                    if (planned.narrowingBeyondTheFirst()) {
+                        left.notAllOf(
+                                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS);
+                    }
+                    last = planned;
+                });
+                byValues.put(values, ways);
+            }
+            return ways.filter(planned -> !planned.narrowingBeyondTheFirst()
+                            && !planned.filled().isEmpty())
+                    .map(planned -> new AtACount(settled, planned)).orElse(null);
+        }
+
+        /** What the ways planned found, said where nothing was composed. */
+        String said(TermPath demand) {
+            return last == null ? "no value held the other fields of the elements still"
+                    : last.said(demand);
+        }
     }
 
     /** What reading one of the other totals came to: the total ready to be spread, or why not. */
@@ -590,7 +689,8 @@ final class ContainersAddingUp {
      */
     private static AlsoRead alsoOf(AlsoAddingUp asked, RealizationTarget.OfANumber first,
                                    TermPath firstShare, List<Also> readSoFar,
-                                   DemandsInside inside, KeptApart apart, SearchRegion within) {
+                                   DemandsInside inside, List<TermPath> askedInside,
+                                   KeptApart apart, SearchRegion within) {
         TermOrders orders = asked.orders();
         RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
         if (!target.writeRoot().equals(first.writeRoot())
@@ -621,7 +721,7 @@ final class ContainersAddingUp {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
         }
         TermPath share = underTheCasesNamed(field, inside.required());
-        List<TermPath> taken = new ArrayList<>(inside.among().keySet().stream()
+        List<TermPath> taken = new ArrayList<>(askedInside.stream()
                 .map(each -> underTheCasesNamed(each, inside.required())).toList());
         for (Also each : readSoFar) {
             taken.add(each.share());
@@ -873,14 +973,14 @@ final class ContainersAddingUp {
      * @param total     the number the elements are to come to
      * @param container the position the container stands at, read once and worn by what is built
      * @param apart     what the rules keep its elements apart at
-     * @param solved    where the total is of what a walk computed of each element, the one field
-     *                  that is chosen and solved for; null where the total is of what the elements
-     *                  hold
+     * @param planned   at each count, where the total is of what a walk computed of each element,
+     *                  the one field that is chosen and solved for, and the ways down an element
+     *                  is built by
      * @param also      the other totals the same elements come to, each at a field of its own
      */
     private record Makings(BigDecimal total, Ends ends, Shape.Sequence holding, TypeView container,
-                           Carrier elements, Ways ways, KeptApart apart,
-                           RuleReadingContext reading, FieldSolved solved, List<Also> also) {}
+                           Carrier elements, PlannedForEachCount planned, KeptApart apart,
+                           RuleReadingContext reading, List<Also> also) {}
 
     /**
      * The one field of each element a total of what a walk computed of it is solved for.
@@ -951,26 +1051,22 @@ final class ContainersAddingUp {
         }
 
         /**
-         * This way with the fields it fixes at values {@code within} leaves each of them, and the
-         * weight and constant worked out at those values — or null where the region leaves some
-         * fixed field no value, or none that leaves the field solved for in the sum.
+         * The runs a region leaves the fields a way holds still, and the field it solves for.
          *
-         * <p>Where every product is of one field — a form of several fields added or taken away —
-         * the values are worked out of {@code total} ({@link FieldsHeldForATotal}): the fields
-         * held then add what leaves the field solved for to make up the rest within its run, for
-         * as few elements as do. That is every total the fields' runs reach, which is what the
-         * reading of such a total says it takes.
-         *
-         * <p>A product of fields is held at one where the region holds it, since then the field
-         * solved for is weighed by what the products weigh it by and nothing else, or otherwise at
-         * the whole number nearest one the region leaves; that is the value the reading of such a
-         * total takes the rest at. A way that takes the field solved for out of every product it
-         * is in, as nought may, is no way of solving for it.
+         * @param held the run of each field held still
+         * @param free the run of the field solved for, or null where the region shows it none
          */
-        FieldSolved settledIn(SearchRegion within, Place total) {
-            if (fixing == null) {
-                return this;
+        record HeldRuns(Map<ElementProjection, NumericDomain.Bounds> held,
+                        NumericDomain.Bounds free) {
+
+            HeldRuns {
+                held = Collections.unmodifiableMap(new LinkedHashMap<>(held));
             }
+        }
+
+        /** The runs {@code within} leaves the fields this way holds still and the one it solves
+         *  for — or null where it leaves some field held still none. */
+        HeldRuns runsHeld(SearchRegion within) {
             Map<ElementProjection, NumericDomain.Bounds> runs = new LinkedHashMap<>();
             for (ElementProjection other : fixing.at().keySet()) {
                 if (!(within.projectionOf(new NumericTerm.ValueOf(other.from(fixing.elements())))
@@ -979,9 +1075,43 @@ final class ContainersAddingUp {
                 }
                 runs.put(other, held == null ? NumericDomain.Bounds.OPEN : held);
             }
+            return new HeldRuns(runs, within.projectionOf(new NumericTerm.ValueOf(field))
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds free)
+                    ? (free == null ? NumericDomain.Bounds.OPEN : free) : null);
+        }
+
+        /**
+         * This way for a container of {@code many} elements, with the fields it fixes at values
+         * {@code runs} leaves each of them, and the weight and constant worked out at those
+         * values — or null where the region leaves some fixed field no value, or none that leaves
+         * the field solved for in the sum. A container of none holds no field, and fixes none.
+         *
+         * <p>Where every product is of one field — a form of several fields added or taken away —
+         * the values are worked out of {@code total} for that many elements
+         * ({@link FieldsHeldForATotal}): the fields held then add what leaves the field solved for
+         * to make up the rest within its run. That is every total so many elements of the fields'
+         * runs reach, which is what the reading of such a total says it takes.
+         *
+         * <p>A product of fields is held at one where the region holds it, since then the field
+         * solved for is weighed by what the products weigh it by and nothing else, or otherwise at
+         * the whole number nearest one the region leaves; that is the value the reading of such a
+         * total takes the rest at, whatever the count. A way that takes the field solved for out
+         * of every product it is in, as nought may, is no way of solving for it.
+         */
+        FieldSolved settledIn(HeldRuns runs, Place total, int many) {
+            if (fixing == null) {
+                return this;
+            }
+            if (many == 0) {
+                return new FieldSolved(field, carrier, weight, constant, ofOneCase, kept,
+                        ofTheCase, null);
+            }
+            if (runs == null) {
+                return null;
+            }
             Map<ElementProjection, ExactRatio> at = fixing.products().coefs().keySet().stream()
                     .allMatch(each -> each.rounding() == null && each.fields().size() == 1)
-                    ? heldForTheTotal(runs, within, total) : heldAtOne(runs);
+                    ? heldForTheTotal(runs, total, many) : heldAtOne(runs.held());
             if (at == null) {
                 return null;
             }
@@ -1011,21 +1141,17 @@ final class ContainersAddingUp {
         }
 
         /**
-         * The fields of {@code runs}, each held at one value in every element, where they are
-         * fields of a form added up to {@code total} with the field solved for, whose run
-         * {@code within} says ({@link FieldsHeldForATotal#heldFor}) — or null where no values do.
+         * The fields held of {@code runs}, each held at one value in every element of
+         * {@code many}, where they are fields of a form added up to {@code total} with the field
+         * solved for ({@link FieldsHeldForATotal#heldFor}) — or null where no values do.
          */
-        private Map<ElementProjection, ExactRatio> heldForTheTotal(
-                Map<ElementProjection, NumericDomain.Bounds> runs, SearchRegion within,
-                Place total) {
-            if (!(total instanceof Count count)
-                    || !(within.projectionOf(new NumericTerm.ValueOf(field))
-                            instanceof NumericDomain.FormProjection.Within(
-                                    NumericDomain.Bounds freeRun))) {
+        private Map<ElementProjection, ExactRatio> heldForTheTotal(HeldRuns runs, Place total,
+                                                                   int many) {
+            if (!(total instanceof Count count) || runs.free() == null) {
                 return null;
             }
             Map<ElementProjection, FieldsHeldForATotal.Field> held = new LinkedHashMap<>();
-            for (Map.Entry<ElementProjection, NumericDomain.Bounds> each : runs.entrySet()) {
+            for (Map.Entry<ElementProjection, NumericDomain.Bounds> each : runs.held().entrySet()) {
                 FieldsHeldForATotal.Field one = weighed(fixing.products(), each.getKey(),
                         each.getValue(), carrier);
                 if (one == null) {
@@ -1033,10 +1159,10 @@ final class ContainersAddingUp {
                 }
                 held.put(each.getKey(), one);
             }
-            FieldsHeldForATotal.Field free = weighed(fixing.products(), fixing.free(),
-                    freeRun == null ? NumericDomain.Bounds.OPEN : freeRun, carrier);
+            FieldsHeldForATotal.Field free = weighed(fixing.products(), fixing.free(), runs.free(),
+                    carrier);
             return free == null ? null : FieldsHeldForATotal.heldFor(held, free,
-                    fixing.products().constant(), count.exactly(),
+                    fixing.products().constant(), count.exactly(), many,
                     carrier.spacing() == Granularity.DISCRETE,
                     value -> DecimalOperation.writtenForARow(value)
                             instanceof ExactAnswer.Held<Optional<BigDecimal>>(var written)
@@ -1371,7 +1497,11 @@ final class ContainersAddingUp {
             // could not be worked out is said whichever of the others turns the count away.
             List<BigDecimal> alsoTotals = otherTotalsOver(many);
             BigDecimal total = makings.total();
-            FieldSolved solved = makings.solved();
+            AtACount at = makings.planned().at(many, left);
+            if (at == null) {
+                return Taken.AND_MORE;
+            }
+            FieldSolved solved = at.solved();
             int carrying = solved == null ? many : solved.carrying(many);
             // The elements that carry no share stand at the start and are one of the values each
             // could hold; where every element is to be apart from every other, those alike are
@@ -1383,7 +1513,7 @@ final class ContainersAddingUp {
                 }
             }
             if (solved != null) {
-                switch (makings.solved().fieldsAddingUpTo(total, many)) {
+                switch (solved.fieldsAddingUpTo(total, many)) {
                     case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> {
                         left.unheld(new CompositionCapacity(
                                 CompositionCapacity.Where.VALUES_A_TOTAL_IS_SPREAD_OVER,
@@ -1434,7 +1564,7 @@ final class ContainersAddingUp {
                         if (!spreadTheRest(alsoTotals, many, how, sharesOfTheRest)) {
                             continue;
                         }
-                        if (asFarAs(containers(written, sharesOfTheRest), offered, left)
+                        if (asFarAs(containers(written, sharesOfTheRest, at.ways()), offered, left)
                                 == Traversal.STOPPED) {
                             return Taken.AND_DONE;
                         }
@@ -1513,8 +1643,8 @@ final class ContainersAddingUp {
          * this compiler has said it will do no more.
          */
         private Iterable<FixtureTemplate> containers(List<BigDecimal> split,
-                                                     List<AlsoSpread> alsoSplit) {
-            return () -> makings.ways().filled().stream()
+                                                     List<AlsoSpread> alsoSplit, Ways ways) {
+            return () -> ways.filled().stream()
                     .map(each -> filled(split, makings.holding(), makings.container(), each,
                             makings.apart(), makings.elements(), alsoSplit, makings.reading()))
                     .<FixtureTemplate>mapMulti((built, out) -> {

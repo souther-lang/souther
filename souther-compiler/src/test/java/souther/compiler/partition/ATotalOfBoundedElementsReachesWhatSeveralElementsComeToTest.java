@@ -38,6 +38,10 @@ class ATotalOfBoundedElementsReachesWhatSeveralElementsComeToTest {
                 invariant value <= 4
             data G = { p: ThreeOrFour }
             data W = Int
+            data Empty = { ls: List<S> }
+                invariant List.length(ls) == 0
+            data NoneButNeeded = { ls: List<S> }
+                invariant List.length(ls) == 0 && List.any(l -> l.p.value > 0, ls)
             """;
 
     private static Compilation measured(String inputs, String body, Adequacy.Asked asked) {
@@ -112,6 +116,20 @@ class ATotalOfBoundedElementsReachesWhatSeveralElementsComeToTest {
         String report = report("ls: List<S>, c: W",
                 "List.fold((acc, l) -> acc + l.p.value - l.q.value, 0, ls) <= c.value");
         assertEquals(Set.of("c"), notShown(report), report);
+    }
+
+    /** A list held to no element comes to nought, whatever its elements would come to, and the
+     *  number compared is reached on both sides of it; held to none beside a rule that needs an
+     *  element, it is no list a row is written at, and nothing is shown. */
+    @Test
+    void aTotalOfAContainerHoldingNoneIsNought() {
+        String body = "List.sum(List.map(l -> l.p.value + l.q.value, b.ls)) <= c.value";
+        String report = report("b: Empty, c: W", body);
+        assertEquals(Set.of(), notShown(report), report);
+        assertEquals(Set.of("List.sum({1·p + 1·q + 0 | b.ls[*]})"), related(report), report);
+        String needing = report("b: NoneButNeeded, c: W", body);
+        assertEquals(Set.of("List.sum({1·p + 1·q + 0 | b.ls[*]})", "c"), notShown(needing),
+                needing);
     }
 
     /** Elements of three or four come to three or four, then six to eight, then nine on with no
