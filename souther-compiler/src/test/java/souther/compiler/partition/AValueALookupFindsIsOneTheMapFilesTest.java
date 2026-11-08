@@ -14,22 +14,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a lookup finds under a key is one of the values the map files, and what is worked out of
- * it stops a run on that value and on nothing else of the map: a rate found under a deal's
- * currency and multiplied by its amount ties the amount to the rates, and leaves a rule past it
- * about which currencies are keys of the rates reached as it is where the rate is answered as
- * found. Worked out of the currency as well, it ties the currency, and the rule is not shown
- * reached at every currency.
+ * What a lookup finds under a key is one of the values the map files, and which one turns on the
+ * key: a rule of the map may hold the value under one key to what stops a run, and a run with a
+ * deal in that currency then never reaches a rule past the lookup. A rule past it about which
+ * currencies are keys of the rates is reached at every currency only where nothing worked out of
+ * what was found may stop the run.
  */
 class AValueALookupFindsIsOneTheMapFilesTest {
 
     private static final String DECLARATIONS = """
             module probe
 
-            data Deal = { currency: String, amount: Decimal, p: Int }
-            data Rates = { rates: Map<String, Decimal> }
+            data Deal = { currency: String, amount: Int }
+            data Rates = { rates: Map<String, Int> }
+                invariant zeroUnderZ = zeroAtZ(rates)
             data Ok = { n: Int }
             data Missing = { n: Int }
+
+            let zeroAtZ (rates: Map<String, Int>): Bool =
+                Map.get("Z", rates)
+                    |> Option.map(r -> r == 0)
+                    |> Option.withDefault(false)
             """;
 
     /** A weight for each deal its currency is priced in, and past a count of them, a rule about
@@ -47,13 +52,16 @@ class AValueALookupFindsIsOneTheMapFilesTest {
             }
             """;
 
+    /**
+     * A deal in the currency the rates hold at nought stops every run at the remainder by its
+     * rate, so the rule is not reached at that currency, and is not said to be reached at every
+     * one. A rate answered as found stops nothing, and the rule is reached at every currency.
+     */
     @Test
-    void whatIsWorkedOutOfAValueFoundStopsARunOnThatValueAlone() {
+    void aValueFoundUnderAKeyTheMapsRulesHoldIsNoValueChosenApartFromTheKey() {
         Map<String, String> judged = new LinkedHashMap<>();
         judged.put("asFound", "rate");
-        judged.put("multiplied", "d.amount * rate");
-        judged.put("rounded", "Decimal.round(2, HALF_UP, d.amount * rate * 0.01m)");
-        judged.put("ofTheCurrency", "Decimal.fromInt(String.length(d.currency)) * rate");
+        judged.put("dividedBy", "Int.floorMod(d.amount, rate)");
         StringBuilder source = new StringBuilder(DECLARATIONS);
         judged.forEach((name, weight) -> source.append(JUDGED.formatted(name, weight)));
         Compilation compilation = Compilation.ofSource(source.toString(), "Main");
@@ -65,19 +73,12 @@ class AValueALookupFindsIsOneTheMapFilesTest {
                 .map(each -> each.diagnostic().code()).toList(), "the models under test compile");
         Map<String, List<String>> priced = new LinkedHashMap<>();
         judged.keySet().forEach(name -> priced.put(name, evidence.get(name).notRead().stream()
-                .filter(each -> each.at().equals("deals[*].currency")
-                        || each.at().equals("rates.rates[key]"))
-                .map(each -> each.at() + "=" + each.reason()).sorted().toList()));
+                .filter(each -> each.at().equals("deals[*].currency"))
+                .map(each -> each.at() + "=" + each.reason()).toList()));
 
-        assertEquals(List.of(
-                "deals[*].currency=" + UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
-                "rates.rates[key]=" + UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
-                priced.get("asFound"));
-        for (String way : List.of("multiplied", "rounded")) {
-            assertEquals(priced.get("asFound"), priced.get(way), way);
-        }
-        assertTrue(priced.get("ofTheCurrency").contains("deals[*].currency="
-                        + UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
+        String reached = "deals[*].currency=" + UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
+        assertEquals(List.of(reached), priced.get("asFound"), priced.toString());
+        assertTrue(priced.get("dividedBy").stream().noneMatch(reached::equals),
                 priced.toString());
     }
 }

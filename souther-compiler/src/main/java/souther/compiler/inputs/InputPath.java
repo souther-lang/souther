@@ -1174,11 +1174,6 @@ final class InputPath {
                 instanceof ElementLineage.SameAs<DeclaredArgument> same) {
             holds = same.source().argument();
         }
-        // An option of one element of a container holds, where it holds a value, one of the very
-        // values the container does: what `Map.get` finds under a key is a value of the map.
-        if (holds == null) {
-            holds = DefaultBoundOperationFacts.get().answersAnElementOf(operation);
-        }
         return holds;
     }
 
