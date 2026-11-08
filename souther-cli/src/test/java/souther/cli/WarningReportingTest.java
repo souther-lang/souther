@@ -75,7 +75,7 @@ class WarningReportingTest {
         assertTrue(ja.contains("(警告)"), ja);
         String said = Messages.render(new NothingKnownHereEstablishesTheInvariant("Eaches"),
                 Locale.JAPANESE);
-        assertTrue(ja.contains(said.substring(0, said.indexOf('。') + 1)), ja);
+        assertTrue(ja.contains(said), ja);
     }
 
     @Test

@@ -5851,7 +5851,8 @@ Reported at the subject (<<a-match-subject-is-a-sum>>). A primitive is told apar
 
 [,text]
 ----
-`Drafting` is a case of `TravelRequest`, so this arm belongs to a match over `TravelRequest`.
+`Drafting` is not a case of Payment.
+Hint: `Drafting` is a case of `TravelRequest`, so this arm belongs to a match over `TravelRequest`.
 ----
 
 Reported at the arm (<<a-match-arm-names-a-case-of-the-subject>>). Where the case belongs to another sum the message says which, since an arm in the wrong `+match+` reads exactly like a misspelling and is not one. Where a nested `+match+` has swallowed the arms that follow it on the line, it says that instead, that being how the arm arrived under the wrong subject.

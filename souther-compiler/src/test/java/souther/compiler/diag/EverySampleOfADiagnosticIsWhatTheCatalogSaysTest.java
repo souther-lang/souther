@@ -4,12 +4,25 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
+
+import souther.compiler.diag.msg.Code;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.MessageCodes;
+import souther.compiler.diag.msg.MessageKeys;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -36,6 +49,8 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{[A-Za-z0-9]+}");
     /** A line that starts a sentence of its own: a hint or a note under the message. */
     private static final Pattern PREFIX = Pattern.compile("^\\s*(?:Hint|hint|Note|note):\\s*");
+    /** A line of quoted source, or the caret under one. */
+    private static final Pattern SOURCE = Pattern.compile("^\\s*(?:[0-9]+\\s*\\||\\^)");
     /** What a block shows that is not a sentence of the catalog. */
     private static final Pattern NOT_A_SENTENCE = Pattern.compile(
             "^\\s*(?:[0-9]+\\s*\\||\\^|-- |found:|expected:|[\\w./-]+\\.sou:[0-9]+:[0-9]+$)");
@@ -56,12 +71,83 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
                 "a sample shows a sentence the compiler does not print; write the catalog's");
     }
 
-    private record Sentence(String section, int line, String text) {}
+    /**
+     * And the sentence a sample opens with is one its code reports: a sample showing what another
+     * code reports would be a sentence the catalog writes and still not what this diagnostic prints.
+     *
+     * <p>A sample is of the section's code unless the paragraph introducing it names the codes it
+     * is of, as a section about several codes does ("E2015 leaves a clause …"). What a sample opens
+     * with is its first sentence that is not a label under the quoted source.
+     */
+    @Test
+    void aSampleOpensWithWhatItsCodeReports() throws IOException {
+        List<Entry> entries = entries();
+        Map<String, Set<String>> reportedBy = reportedByCode();
+        List<String> elsewhere = new ArrayList<>();
+        for (Sentence sentence : sentencesOfSamples(spec())) {
+            if (!sentence.opens()) {
+                continue;
+            }
+            Set<String> own = new TreeSet<>();
+            for (String code : sentence.codes()) {
+                own.addAll(reportedBy.getOrDefault(code, Set.of()));
+            }
+            if (entries.stream().noneMatch(entry -> own.contains(entry.key())
+                    && entry.writes(sentence.text()))) {
+                elsewhere.add(sentence.section() + " line " + sentence.line() + ": "
+                        + sentence.text());
+            }
+        }
+        assertEquals(List.of(), elsewhere,
+                "a sample opens with a sentence its code does not report");
+    }
+
+    /** The catalog key of every message that reports a rule, by the section its code is named for. */
+    private static Map<String, Set<String>> reportedByCode() {
+        Map<String, Set<String>> by = new TreeMap<>();
+        Deque<Class<?>> open = new ArrayDeque<>(List.of(Message.class));
+        while (!open.isEmpty()) {
+            Class<?> each = open.pop();
+            if (each.isSealed()) {
+                open.addAll(List.of(each.getPermittedSubclasses()));
+            } else if (each.isRecord() && each.isAnnotationPresent(Code.class)) {
+                by.computeIfAbsent(MessageCodes.of(each).name().toLowerCase(Locale.ROOT),
+                        _ -> new TreeSet<>()).add(MessageKeys.of(each));
+            }
+        }
+        return by;
+    }
+
+    /** A sentence of a sample, the codes the sample is of, and whether it is the one the sample
+     *  opens with. */
+    private record Sentence(String section, Set<String> codes, int line, String text,
+                            boolean opens) {}
+
+    /** A code named in prose, as {@code E2015}. */
+    private static final Pattern A_CODE = Pattern.compile("\\bE([0-9]{4})\\b");
+
+    /** The codes the paragraph just above line {@code at} names, or the section's where it names
+     *  none. */
+    private static Set<String> codesOf(String[] lines, int at, String section) {
+        int above = at - 1;
+        while (above >= 0 && lines[above].isBlank()) {
+            above--;
+        }
+        Set<String> named = new TreeSet<>();
+        for (; above >= 0 && !lines[above].isBlank() && !lines[above].startsWith("[")
+                && !lines[above].startsWith("="); above--) {
+            Matcher code = A_CODE.matcher(lines[above]);
+            while (code.find()) {
+                named.add("e" + code.group(1));
+            }
+        }
+        return named.isEmpty() ? Set.of(section) : named;
+    }
 
     /** A catalog entry as the sentences it can print. What comes before its first placeholder is
      *  how every one of them starts, so a sentence that does not start so is not matched against
      *  the rest. */
-    private record Entry(String opening, Pattern sentences) {
+    private record Entry(String key, String opening, Pattern sentences) {
         boolean writes(String sentence) {
             return sentence.startsWith(opening) && sentences.matcher(sentence).matches();
         }
@@ -83,18 +169,24 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
                     || !lines[i + 1].equals("----")) {
                 continue;
             }
+            Set<String> codes = codesOf(lines, i, section);
             int at = i + 2;
             StringBuilder text = null;
             int startedAt = 0;
+            boolean opens = false;
+            boolean opened = false;
+            boolean underSource = false;
             for (; at < lines.length && !lines[at].equals("----"); at++) {
                 String line = lines[at];
                 boolean ownStart = PREFIX.matcher(line).find();
+                boolean source = SOURCE.matcher(line).find();
                 if (line.isBlank() || NOT_A_SENTENCE.matcher(line).find() || ownStart) {
                     if (text != null) {
-                        found.add(new Sentence(section, startedAt, text.toString()));
+                        found.add(new Sentence(section, codes, startedAt, text.toString(), opens));
                         text = null;
                     }
                     if (!ownStart) {
+                        underSource = source || (underSource && !line.isBlank());
                         continue;
                     }
                 }
@@ -102,12 +194,15 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
                 if (text == null) {
                     text = new StringBuilder(said);
                     startedAt = at + 1;
+                    // A sentence right under the quoted source is a label of it, not the message.
+                    opens = !opened && !ownStart && !underSource;
+                    opened = opened || opens;
                 } else {
                     text.append(' ').append(said);
                 }
             }
             if (text != null) {
-                found.add(new Sentence(section, startedAt, text.toString()));
+                found.add(new Sentence(section, codes, startedAt, text.toString(), opens));
             }
             i = at;
         }
@@ -131,7 +226,7 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
             for (String part : own) {
                 quoted.add(Pattern.quote(part));
             }
-            entries.add(new Entry(own[0],
+            entries.add(new Entry(key, own[0],
                     Pattern.compile(String.join(".+?", quoted), Pattern.DOTALL)));
         }
         return entries;

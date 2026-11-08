@@ -307,7 +307,7 @@ class CompilerBuildDriverTest {
         assertTrue(rendered.contains("(警告)"), rendered);
         String said = Messages.render(new NothingKnownHereEstablishesTheInvariant("Eaches"),
                 Locale.JAPANESE);
-        assertTrue(rendered.contains(said.substring(0, said.indexOf('。') + 1)), rendered);
+        assertTrue(rendered.contains(said), rendered);
     }
 
     @Test

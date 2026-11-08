@@ -63,8 +63,7 @@ class SoutherProcessorWarningTest {
         assertTrue(reported.warnings().contains("(警告)"), reported.warnings());
         String said = Messages.render(new NothingKnownHereEstablishesTheInvariant("Eaches"),
                 Locale.JAPANESE);
-        assertTrue(reported.warnings().contains(said.substring(0, said.indexOf('。') + 1)),
-                reported.warnings());
+        assertTrue(reported.warnings().contains(said), reported.warnings());
     }
 
     @Test
