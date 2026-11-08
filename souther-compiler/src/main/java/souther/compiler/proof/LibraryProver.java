@@ -370,26 +370,28 @@ public final class LibraryProver {
     }
 
     /**
-     * Whether {@code one} says more of what a join is than {@code other}, the other side's type:
-     * where the other says nothing, where one says a list or a string and the other neither, and
-     * where both say a list and only one says of what.
+     * Whether {@code side} says more of what a join is than {@code besides}, the other side's
+     * type: where the other says nothing, where it says a list or a string and the other
+     * neither, and where both say a list and only it says of what.
      */
-    private static boolean saysMoreOfAJoin(Type one, Type other) {
-        if (one == null) {
+    private static boolean saysMoreOfAJoin(Type side, Type besides) {
+        if (side == null) {
             return false;
         }
-        if (other == null) {
+        if (besides == null) {
             return true;
         }
-        boolean oneSaysOfWhat = one instanceof Type.ListOf(Type element)
-                && element != null && !(element instanceof Type.Nothing);
-        boolean otherSaysOfWhat = other instanceof Type.ListOf(Type element)
-                && element != null && !(element instanceof Type.Nothing);
-        if (one instanceof Type.ListOf && other instanceof Type.ListOf) {
-            return oneSaysOfWhat && !otherSaysOfWhat;
+        if (side instanceof Type.ListOf && besides instanceof Type.ListOf) {
+            return saysOfWhat(side) && !saysOfWhat(besides);
         }
-        return (one instanceof Type.ListOf || one == Type.STRING)
-                && !(other instanceof Type.ListOf || other == Type.STRING);
+        return (side instanceof Type.ListOf || side == Type.STRING)
+                && !(besides instanceof Type.ListOf || besides == Type.STRING);
+    }
+
+    /** Whether {@code list} says what it holds: neither the empty list nor one of no type. */
+    private static boolean saysOfWhat(Type list) {
+        return list instanceof Type.ListOf(Type element)
+                && element != null && !(element instanceof Type.Nothing);
     }
 
     /** A value of the type what {@code term} came to, {@code value}, is of: a negation is read as
