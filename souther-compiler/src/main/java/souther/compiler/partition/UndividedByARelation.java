@@ -8339,8 +8339,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         NumericDomain.Bounds alone;
         if (elements.isEmpty() && over.source() instanceof RunSource.ComputedOccurrences computed
-                && computed.computation() instanceof ElementValue.Affine weighed
-                && weighed.form().constant().isZero()) {
+                && computed.computation() instanceof ElementValue.Affine weighed) {
             alone = summedOverWeighedFieldsOfOneElement(computed.elements(), weighed, read,
                     region, stated.rest(), carrier);
         } else if (elements.isEmpty()) {
@@ -8358,7 +8357,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * A run every value of which a total of {@code weighed}, fields of each element of
      * {@code elements} added or taken away, is shown to take — or null where none is shown, or a
      * field is weighed by anything else: one element comes to what its fields do, added or taken
-     * away. Each field is shown to take its run
+     * away, and the number written beside them ({@link #movedBy}). Each field is shown to take its
+     * run
      * with nothing but that field asked of the element, and no rule of the declarations ties two
      * of the fields to one another ({@link #tiedByARule}), so the fields are written apart and
      * every sum of a value of each is one element's. Nought, the total of a container holding
@@ -8403,6 +8403,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
         }
+        // The number added to each element's fields is the element's, and moves the sum by it.
+        sum = movedBy(sum, weighed.form().constant(), carrier);
         NumericDomain.Bounds held = container == null ? null
                 : howManyAreHeld(container, read, region);
         return sum == null || held == null ? null
@@ -8520,8 +8522,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the one the value is asked at only where every other field may stand at one, and where the
      * weight is one or minus one: a field weighed two takes every other number of the run it is
      * moved to. So each run taken is the run one field is shown to take with nothing but that
-     * field asked of the element, moved by the number beside it; and the runs are one run only
-     * where they are alike. No rule of the declarations ties two of the fields to one another
+     * field asked of the element, moved by the number beside it. The builder tries each field
+     * until one writes the value, so the runs are taken together where they overlap, and the
+     * first alone where they do not. No rule of the declarations ties two of the fields to one
+     * another
      * ({@link #tiedByARule}): the fields are then written apart, each at the number it is asked
      * at.
      */
@@ -8546,7 +8550,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         } else {
             if (!(over.source() instanceof RunSource.ComputedOccurrences computed)
                     || !(computed.computation() instanceof ElementValue.Multilinear product)
-                    || !product.form().constant().isZero()
                     || product.form().coefs().keySet().stream()
                     .anyMatch(each -> each.rounding() != null)) {
                 return null;
@@ -8602,14 +8605,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 restAtOne &= other == at || runs.get(other).admits(Count.of(1));
             }
             NumericDomain.Bounds moved = !restAtOne ? null
-                    : movedBy(runs.get(at).timesEach(weight), held.constant());
+                    : movedBy(runs.get(at).timesEach(weight), held.constant(), carrier);
             if (moved == null) {
                 continue;
             }
-            if (asked != null && !asked.equals(moved)) {
-                return null;
-            }
-            asked = moved;
+            // The builder tries each way until one writes the value, so a value either way takes
+            // is taken; the two are one run where they overlap, and where they do not, the run
+            // taken first is still taken.
+            asked = asked == null ? moved
+                    : asked.meet(moved).holdsAValue() ? NumericDomain.Bounds.spanning(asked, moved)
+                    : asked;
         }
         // Each container may hold the one entry; the total is nought where some container holds
         // none, which a join of it is empty.
@@ -9274,14 +9279,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         };
     }
 
-    /** Every value of {@code run} with the whole number {@code by} added, or null where
-     *  {@code run} is null or {@code by} is no whole number: a run of whole numbers moved by any
-     *  other lands between them. */
-    private static NumericDomain.Bounds movedBy(NumericDomain.Bounds run, ExactRatio by) {
+    /** Every value of {@code run} with {@code by} added, on {@code carrier} — or null where
+     *  {@code run} is null, {@code by} is no number written out, or the carrier steps and
+     *  {@code by} is no whole number: a run of whole numbers moved by any other lands between
+     *  them. */
+    private static NumericDomain.Bounds movedBy(NumericDomain.Bounds run, ExactRatio by,
+                                                Carrier carrier) {
         if (run == null || by.isZero()) {
             return run;
         }
-        if (!by.isWhole() || !(Count.written(by)
+        if ((carrier.spacing() == Granularity.DISCRETE && !by.isWhole())
+                || !(Count.written(by)
                 instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> written))
                 || written.isEmpty()) {
             return null;

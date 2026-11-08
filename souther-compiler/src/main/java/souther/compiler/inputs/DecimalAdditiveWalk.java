@@ -7,22 +7,23 @@ import java.util.Objects;
 /**
  * A walk over a list of the input that adds a part of each element to the answer so far, or takes
  * it away, from a seed the program writes: {@code List.fold((acc, n) -> Decimal.add(acc,
- * n.gross.value), 0.0m, notes)}. A part is paths of the element added, taken away and multiplied,
- * a product on the way multiplying at most {@code factors} of them. Its answer is the seed and
- * {@code added}, the total of the parts as the relation names its terms; a run works it out one
- * step per element, each operation of the part and the sum or difference with the answer so far,
- * and each can stop it for want of room. A total of what a closure makes of each element ({@code List.sum(List.map(l
- * -> Decimal.multiply(l.price, l.qty), lines))}) is the same walk from nought: the library adds
- * the parts up exactly, at the scale the walk ends at.
+ * n.gross.value), 0.0m, notes)}. A part is paths of the element and numbers written out, added,
+ * taken away and multiplied. Its answer is the seed and {@code added}, the total of the parts as
+ * the relation names its terms; a run works it out one step per element, each operation of the
+ * part and the sum or difference with the answer so far, and each can stop it for want of room.
+ * A total of what a closure makes of each element ({@code List.sum(List.map(l ->
+ * Decimal.multiply(l.price, l.qty), lines))}) is the same walk from nought: the library adds the
+ * parts up exactly, at the scale the walk ends at.
  *
  * <p>That every step has room is shown by induction over the walk, and not by asking one sum of
  * the seed and the total: a sum of the same number worked out once lines up other scales than
  * the steps do. A number of a row is written at no more than
  * {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT} places before or after the point
- * ({@link DecimalOperation#writtenForARow}), a product is at the sum of its factors' scales, and a
- * sum or a difference is at the greater of its operands'. So each part, and each product on the
- * way to it, is at no more than {@code factors} times that bound, and the answer so far, starting
- * at the seed's scale, after any number of steps is at a scale no further from nought than the
+ * ({@link DecimalOperation#writtenForARow}), a number written out is at its own scale, a product
+ * is at the sum of its factors' scales, and a sum or a difference is at the greater of its
+ * operands'. So every operation worked out of an element is at a scale no further from nought
+ * than {@code scaleOfEveryPart}, which the step's tree says, and the answer so far, starting at
+ * the seed's scale, after any number of steps is at a scale no further from nought than the
  * seed's or the parts', whichever is further. Where that is within what room is shown for, every
  * step has room, on every list a row is built with. The scale the walk ends at is how the list is
  * written and not a fact of the total, so what is worked out of the answer is asked as what is
@@ -35,26 +36,25 @@ import java.util.Objects;
  * @param seed    the decimal the walk starts from, at the scale the program writes it
  * @param added   what the walk adds to the seed, over the terms of a row: the total it adds up, or
  *                that total taken away
- * @param factors the most paths of an element any product on the way to a part multiplies, one
- *                where none is multiplied
+ * @param scaleOfEveryPart the scale furthest from nought that any operation worked out of an
+ *                         element is at, the answer so far apart
  */
-public record DecimalAdditiveWalk(BigDecimal seed, DecimalOperation.Formed added, int factors)
-        implements DecimalWork {
+public record DecimalAdditiveWalk(BigDecimal seed, DecimalOperation.Formed added,
+                                  long scaleOfEveryPart) implements DecimalWork {
 
     public DecimalAdditiveWalk {
         Objects.requireNonNull(seed, "the decimal a walk starts from");
         Objects.requireNonNull(added, "the total a walk adds up");
-        if (factors < 1) {
-            throw new IllegalArgumentException("a part of an element multiplies at least one path"
-                    + " of it: " + factors);
+        if (scaleOfEveryPart < 0) {
+            throw new IllegalArgumentException("a scale furthest from nought is no less than"
+                    + " nought: " + scaleOfEveryPart);
         }
     }
 
-    /** The scale furthest from nought that the answer so far, a part, or a product on the way to
-     *  one is at, on every step of the walk. */
+    /** The scale furthest from nought that the answer so far, or any operation worked out of an
+     *  element, is at, on every step of the walk. */
     long scaleOfEveryStep() {
-        return Math.max(Math.abs((long) seed.scale()),
-                (long) factors * DecimalOperation.PLACES_A_ROW_IS_BUILT_AT);
+        return Math.max(Math.abs((long) seed.scale()), scaleOfEveryPart);
     }
 
     /** Whether every step of the walk has room on every row: what it works out is at no scale

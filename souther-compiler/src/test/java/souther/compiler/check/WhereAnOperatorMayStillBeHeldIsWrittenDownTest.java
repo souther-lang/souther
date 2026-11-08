@@ -506,10 +506,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether the stopped expression is a quotient and where the operator's"
                             + " own account says it answers, so that its operands are told with"
                             + " the rest"),
-            new Held("souther.compiler.partition.AddedOfEachElement.partOf",
+            new Held("souther.compiler.partition.AddedOfEachElement.Reader.partOf",
                     "reads what a step or a closure works out of each element as the tree of"
                             + " operations it is written as: an operation not written is one no"
                             + " run can stop at, and one written is one a run works out"),
+            new Held("souther.compiler.partition.AddedOfEachElement.nameThatIsTheTotal",
+                    "asks whether the answer is a name added to the answer so far from nought,"
+                            + " whose value is then the total on a row of one element"),
             new Held("souther.compiler.partition.AddedOfEachElement.Worked#op",
                     "the operation a step works out of two parts of an element, held in the"
                             + " order it is written"),
@@ -524,9 +527,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.AddedOfEachElement.addsTo",
                     "asks whether the answer so far is added along sums and differences from"
                             + " the top, and taken from nothing"),
-            new Held("souther.compiler.partition.AddedOfEachElement.factorsOf",
-                    "counts the paths a product on the way multiplies, a sum or a difference"
-                            + " being at the greater of its operands' scales"),
+            new Held("souther.compiler.partition.AddedOfEachElement.scaleOf",
+                    "reads the scale an operation of decimals is at from its operands': a"
+                            + " product's is their sum, a sum's or a difference's the greater"),
             new Held("souther.compiler.partition.AddedOfEachElement.Checker.checked",
                     "works out what each operation of an element's part comes to from what its"
                             + " operands do, and asks whether a sum with the answer so far from"

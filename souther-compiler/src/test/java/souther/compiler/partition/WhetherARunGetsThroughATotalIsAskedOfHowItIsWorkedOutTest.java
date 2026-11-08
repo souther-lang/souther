@@ -603,7 +603,9 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
      * way. The same over numbers that may be below nought, or taken away from, is not shown:
      * {@code n.value + 1 - 1} totals what {@code n.value} does, and stops at the greatest
      * {@code Int} where that total does not. Nor is a function handed by its name, whose body is
-     * in no tree read here.
+     * in no tree read here. {@code n.value - 1} over numbers at nought or more is never past the
+     * type, so the total is told; one element comes to minus one at the least, so the total does
+     * not reach every value of {@code gross}.
      */
     @Test
     void aTotalOfWhatIsNeverBelowNoughtGetsThroughWhereverTheTotalIsAnInt() {
@@ -611,9 +613,10 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
         assertTrue(related(report(inputs, NAT,
                 "gross >= List.sum(List.map(n -> 2 * n.value, ns))"))
                 .contains("List.sum({2·the element itself + 0 | ns[*]})"));
-        assertEquals(Set.of("List.sum({1·the element itself + -1 | ns[*]})", "gross"),
-                notShown(report(inputs, NAT,
-                        "gross >= List.sum(List.map(n -> n.value - 1, ns))")));
+        String lessOne = report(inputs, NAT, "gross >= List.sum(List.map(n -> n.value - 1, ns))");
+        assertEquals(Set.of("gross"), notShown(lessOne), lessOne);
+        assertEquals(Set.of("List.sum({1·the element itself + -1 | ns[*]})"), related(lessOne),
+                lessOne);
         String byAName = report(inputs, NAT + "\nlet lessOne (n: Nat) : Int = n.value + 1 - 1",
                 "gross >= List.sum(List.map(lessOne, ns))");
         assertEquals(Set.of(), related(byAName), byAName);
@@ -667,7 +670,9 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
                 "List.sum(List.map(l -> l.p.value - l.q.value, ls)) <= c",
                 "List.sum(List.map(l -> Int.subtract(l.p.value, l.q.value), ls)) <= c",
                 "List.fold((acc, l) -> acc + l.p.value - l.q.value, 0, ls) <= c",
-                "List.fold((acc, l) -> acc + (l.p.value - l.q.value), 0, ls) <= c")) {
+                "List.fold((acc, l) -> acc + (l.p.value - l.q.value), 0, ls) <= c",
+                "List.sum(List.map(l -> { let d = l.p.value - l.q.value\n d }, ls)) <= c",
+                "List.fold((acc, l) -> { let d = l.p.value - l.q.value\n acc + d }, 0, ls) <= c")) {
             String report = report("ls: List<Two>, c: Int", declarations, body);
             assertEquals(Set.of(total, "c"), related(report), () -> body + report);
         }
@@ -676,12 +681,34 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
         assertTrue(related(fromTen).contains("c"), fromTen);
         for (String body : List.of(
                 "List.fold((acc, l) -> acc + l.p.value - l.q.value, 10, ls) <= c",
-                "List.sum(List.map(l -> { let d = l.p.value - l.q.value\n d }, ls)) <= c")) {
-            String report = report("ls: List<Two>, c: Int", declarations, body);
+                "List.sum(List.map(l -> { let unused = k + 1\n l.p.value - l.q.value }, ls)) <= c")) {
+            String report = report("ls: List<Two>, c: Int, k: Int", declarations, body);
             assertEquals(Set.of(), related(report), () -> body + report);
         }
         String overEveryInt = report("ls: List<AnyTwo>, c: Int", declarations,
                 "List.fold((acc, l) -> acc + (l.p.value - l.q.value), 10, ls) <= c");
         assertEquals(Set.of(), related(overEveryInt), overEveryInt);
+    }
+
+    /**
+     * A part written through a helper is the helper's body with what it was handed, and a part
+     * that adds a number written out to the fields is worked out with it: {@code p - q + 1} over
+     * fields at nought or more is within the type, and one element comes to it.
+     */
+    @Test
+    void anElementsPartThroughAHelperOrWithANumberWrittenOutIsWorkedOutAsWritten() {
+        String declarations = NAT + "\ndata Two = { p: Nat, q: Nat }"
+                + "\nlet apart (l: Two) : Int = l.p.value - l.q.value";
+        String inputs = "ls: List<Two>, c: Int";
+        String helped = report(inputs, declarations,
+                "List.sum(List.map(l -> apart(l), ls)) <= c");
+        assertEquals(Set.of("List.sum({1·p + -1·q + 0 | ls[*]})", "c"), related(helped), helped);
+        for (String body : List.of(
+                "List.sum(List.map(l -> l.p.value - l.q.value + 1, ls)) <= c",
+                "List.fold((acc, l) -> acc + (l.p.value - l.q.value + 1), 0, ls) <= c")) {
+            String report = report(inputs, declarations, body);
+            assertEquals(Set.of("List.sum({1·p + -1·q + 1 | ls[*]})", "c"), related(report),
+                    () -> body + report);
+        }
     }
 }
