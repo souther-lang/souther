@@ -8297,16 +8297,6 @@ final class Pullback {
             if (held instanceof ConstantComparison.Settled settled && settled.holds()) {
                 continue;
             }
-            // Nor of one whose form comes only to numbers where it answers, over what each of its
-            // numbers says it lies between: it answers on every run, as an operation is said to
-            // that comes to where it answers whatever its operands are (comesToWhereItAnswers).
-            // Twice how many elements meet something is an Int however many do.
-            if (over instanceof Answers.AsAnOperator(var _,
-                    WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))
-                    && FormRange.ofNumbers(form, read, _ -> null) instanceof FormRange range
-                    && range.liesWithin(least, greatest)) {
-                continue;
-            }
             if (held != null && form.coefs().isEmpty()) {
                 if (!held.holdsOf(form.constant())) {
                     operated.beginGroup();
@@ -8322,12 +8312,26 @@ final class Pullback {
                     ? null : whereItStands(form, held);
             if (answers != null) {
                 out.add(answers);
-            } else {
+            } else if (!comesOnlyToWhereItAnswers(over)) {
                 operated.beginGroup();
                 operated.leaveUnsaid(form.coefs().keySet(), null);
             }
         }
         return out;
+    }
+
+    /**
+     * Whether {@code over}, an operator told where nothing says where it answers, comes only to
+     * numbers where it answers, over what each of its numbers says it lies between: it then
+     * answers on every run, as an operation is said to that comes to where it answers whatever
+     * its operands are ({@link #comesToWhereItAnswers}). Twice how many elements meet something
+     * is an {@code Int} however many do.
+     */
+    private boolean comesOnlyToWhereItAnswers(Answers.ByTheFormOfANumber over) {
+        return over instanceof Answers.AsAnOperator(var form,
+                WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))
+                && FormRange.ofNumbers(form, read, _ -> null) instanceof FormRange range
+                && range.liesWithin(least, greatest);
     }
 
     /** {@code form} standing as {@code held} says, over the quantities it is a form of — or null
