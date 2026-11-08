@@ -251,14 +251,19 @@ public final class TotalsOfOneRun {
     }
 
     /**
-     * What every weight of {@code form} and its constant are whole multiples of, signed so that
-     * the weight first in the order of the names it weighs is positive once divided by it: a total
-     * of minus a field is minus that field's total, whichever way it was written.
+     * What every weight of {@code form} is a whole multiple of, signed so that the weight first in
+     * the order of the names it weighs is positive once divided by it: a total of minus a field is
+     * minus that field's total, whichever way it was written.
+     *
+     * <p>The weights of the fields and not the number beside them. What one element comes to is
+     * then its fields at the weights they share nothing more of, and the number beside them as it
+     * falls: {@code Σ(price + 1.5)} is that total at the weight one, and {@code Σ(2·price + 3)} is
+     * it at the weight two. Divided by what the number shares as well, the first would be half of
+     * the second, a total whose field is weighed two, and the values it takes would be those of
+     * twice a field, which are not the values of the total that was written.
      */
     private static ExactRatio sharedBy(LinearForm<String> form) {
-        List<ExactRatio> weights = new ArrayList<>(form.coefs().values());
-        weights.add(form.constant());
-        ExactRatio shared = AdditiveImage.divisorOf(weights);
+        ExactRatio shared = AdditiveImage.divisorOf(form.coefs().values());
         String first = form.coefs().keySet().stream().sorted().findFirst().orElseThrow();
         return form.coefs().get(first).signum() < 0 ? shared.negated() : shared;
     }
