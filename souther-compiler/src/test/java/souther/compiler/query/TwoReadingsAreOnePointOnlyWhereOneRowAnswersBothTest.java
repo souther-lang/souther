@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleRef;
+import souther.compiler.report.InEnglish;
 import souther.compiler.numeric.Towards;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.PointRole;
@@ -186,7 +187,8 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
         for (BorderObligationPointAssessment each : points) {
             if (each.role() == PointRole.OFF) {
                 assertEquals(each.at().side() == Towards.BELOW
-                                ? " below the line" : " above the line", each.whichSide(),
+                                ? " below the line" : " above the line",
+                        InEnglish.said(each.whichSide()),
                         () -> each.at() + " is on that side of the author's line");
             }
         }

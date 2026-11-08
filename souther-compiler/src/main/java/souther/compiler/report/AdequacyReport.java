@@ -2369,7 +2369,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // facts.
         for (Adequacy.DeclaredExclusion each : module.declaredExclusions()) {
             String rule = RuleHandleProse.said(each.read().describe(places), page.rendering(),
-                    page.language(), null) + each.stoppedAt();
+                    page.language(), null) + page.say(each.stoppedAt());
             String role = each.role().name();
             Message why = whyNotOwed(each.point().reason());
             noted(out, page, each.namesItsLevel()
