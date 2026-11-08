@@ -754,7 +754,9 @@ final class CardinalityComposer {
         if (!unread.isEmpty()) {
             unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
         }
-        if (anElementCanBe) {
+        // Where no choice was tried at all, nothing was learned of an element, and every choice
+        // not tried is left as the walk of them left it.
+        if (anElementCanBe || choices.each().isEmpty()) {
             refused.addAll(choices.rest().figures());
             unnamed.addAll(choices.rest().populations());
             unheld.addAll(choices.rest().unheld());

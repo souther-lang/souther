@@ -190,6 +190,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " container is composed with, how many runs of what its elements"
                             + " can come to are kept, and how many values an element is tried"
                             + " moved to"),
+            Map.entry("souther.compiler.partition.ContainerAsAWhole#choices()"
+                            + "Lsouther/compiler/partition/TermRealizations$Together;",
+                    "puts the most elements a container is composed with in what the choices"
+                            + " fell short of, where holding the container to it took a number"
+                            + " of the whole away"),
             Map.entry("souther.compiler.partition.ContainerAsAWhole$Sized#spread("
                             + "Ljava/util/List;Ljava/util/List;ILjava/util/function/Function;"
                             + "Ljava/util/List;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;)"

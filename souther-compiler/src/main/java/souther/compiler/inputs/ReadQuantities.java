@@ -2030,6 +2030,12 @@ final class ReadQuantities implements Quantities {
      * the total of the amounts. Onto the rules and not met against an answer, since it relates
      * two numbers and says nothing of either alone. The rules as they were where it is no such
      * total, or where a number in it is spaced by nothing.
+     *
+     * <p>Of the numbers, and not of what a row works out. A total of one place no row works out
+     * may be past where its order stops while the total asked is not — the numbers less one of
+     * the greatest {@code Int} and two come to it, and the numbers come to two past it — so the
+     * totals of the places are held to nothing here but this, and where their order stops is
+     * said only where a question asks of them, as of every term.
      */
     private ConstraintState<InputAtom> withWhatItAddsUp(ConstraintState<InputAtom> rules,
                                                         NumericTerm term,
@@ -2051,7 +2057,7 @@ final class ReadQuantities implements Quantities {
         }
         LinearForm<InputAtom> over = over(same, under);
         return over == null ? rules : insideItsOrder(rules.taking(over, Rel.EQ, spaces),
-                NumericTerms.ordered(List.copyOf(same.coefs().keySet())), under);
+                NumericTerms.ordered(List.of(term)), under);
     }
 
     /** Whether any narrowing this context selects is one of the readings this input holds, which
@@ -2315,27 +2321,52 @@ final class ReadQuantities implements Quantities {
      * <p>Asked only of the container holding something, a question about what its elements add
      * up to would leave out every row where it holds none, where they add up to what the walk
      * starts from; asked of neither, it would leave that number free there.
+     *
+     * <p>Every way of {@link #MOST_CONTAINERS_ASKED_BOTH_WAYS} of them at most, the first the
+     * terms name, since the ways are as many as two to the power of the containers. The rest are
+     * asked as nothing says of them: what that answers is wider and never narrower, and
+     * {@code settled} is set false where any was left so, since an emptiness the ways would have
+     * shown may then not be.
      */
     private List<StructuralContext> eitherWay(StructuralContext under,
-                                              Collection<NumericTerm> terms) {
-        TermPath open = null;
+                                              Collection<NumericTerm> terms, boolean[] settled) {
         List<NumericTerm> every = new ArrayList<>(terms);
         every.addAll(fixed.keySet());
         assumed.forEach(each -> every.addAll(each.terms()));
+        Set<TermPath> open = new LinkedHashSet<>();
         for (NumericTerm each : every) {
             TermPath walked = each.walkedOver();
             if (walked != null && !under.says(walked)) {
-                open = walked;
-                break;
+                open.add(walked);
             }
         }
-        if (open == null) {
-            return List.of(under);
+        if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
+            settled[0] = false;
         }
-        List<StructuralContext> out = new ArrayList<>(eitherWay(under.holding(open), terms));
-        out.addAll(eitherWay(under.holdingNothing(open), terms));
+        List<StructuralContext> out = new ArrayList<>(List.of(under));
+        for (TermPath container : open.stream().limit(MOST_CONTAINERS_ASKED_BOTH_WAYS).toList()) {
+            List<StructuralContext> both = new ArrayList<>(out.size() * 2);
+            for (StructuralContext each : out) {
+                both.add(each.holding(container));
+                both.add(each.holdingNothing(container));
+            }
+            out = both;
+        }
         return out;
     }
+
+    /** The same, for a question that does not ask whether its answer settled. */
+    private List<StructuralContext> eitherWay(StructuralContext under,
+                                              Collection<NumericTerm> terms) {
+        return eitherWay(under, terms, new boolean[] {true});
+    }
+
+    /**
+     * How many containers a question is asked of each way of holding something or none
+     * ({@link #eitherWay}). Not a figure a search stops at: past it nothing is given up but how
+     * narrow the answer is, and an emptiness so asked is said not to have looked to the end.
+     */
+    private static final int MOST_CONTAINERS_ASKED_BOTH_WAYS = 3;
 
     /** What {@code each} answers across {@code contexts} together: the range spanning every one
      *  a value is left in, and nothing left where none is. */
@@ -2804,7 +2835,7 @@ final class ReadQuantities implements Quantities {
         // and taken in can be ({@link #eitherWay}), as a sum is asked of its cases: the input is
         // empty only where every one of them is, and the proof is the first one's.
         Optional<EmptyInput> proof = Optional.empty();
-        for (StructuralContext each : eitherWay(under, List.of())) {
+        for (StructuralContext each : eitherWay(under, List.of(), settled)) {
             switch (viability(each, null, settled)) {
                 case Viability.ProvedImpossible it -> {
                     if (proof.isEmpty()) {

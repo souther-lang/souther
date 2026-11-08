@@ -142,16 +142,21 @@ final class ContainerAsAWhole {
     /** The orders the numbers inside an element are written on, which an element is asked of the
      *  region at. */
     private final Quantities measuring;
+    /** Whether holding the container to the most elements a count composes one with took a
+     *  number away from one of the numbers of the whole: a number left only to a larger
+     *  container is one the figure stopped, and not one the model refuses. */
+    private final boolean cutByTheFigure;
 
     private ContainerAsAWhole(TermPath container, List<OneNumber> numbers, List<ATotal> asked,
                               NumericTerm.FromOnePosition counted, boolean sizeIsRead,
-                              Quantities measuring) {
+                              Quantities measuring, boolean cutByTheFigure) {
         this.container = container;
         this.numbers = List.copyOf(numbers);
         this.asked = List.copyOf(asked);
         this.counted = counted;
         this.sizeIsRead = sizeIsRead;
         this.measuring = measuring;
+        this.cutByTheFigure = cutByTheFigure;
     }
 
     /** Whether nothing of the container as a whole is fixed, which is every count that reads only
@@ -231,8 +236,14 @@ final class ContainerAsAWhole {
             out.put(holds, new OneNumber(holds, null, null, sizes(
                     ContainersAddingUp.howMany(view, container, within, reading, null), size)));
         }
+        boolean cut = false;
+        if (composable != within) {
+            for (NumericTerm each : out.keySet()) {
+                cut |= !Objects.equals(within.projectionOf(each), composable.projectionOf(each));
+            }
+        }
         return new ContainerAsAWhole(container, new ArrayList<>(out.values()), totals, counted,
-                howManyIsRead, measuring);
+                howManyIsRead, measuring, cut);
     }
 
     /**
@@ -346,14 +357,21 @@ final class ContainerAsAWhole {
 
     /**
      * Every choice of a number for each number of the whole, up to the figure the choices of
-     * several totals are held to, and why there are no more.
+     * several totals are held to, and why there are no more — with the most elements a count
+     * composes a container with among them where holding the container to it took a number away
+     * ({@link #composableIn}).
      */
     TermRealizations.Together choices() {
         List<TermRealizations.Tried> each = new ArrayList<>();
         for (OneNumber one : numbers) {
             each.add(one.tried());
         }
-        return TermRealizations.Together.of(each);
+        TermRealizations.Together out = TermRealizations.Together.of(each);
+        if (!cutByTheFigure) {
+            return out;
+        }
+        return new TermRealizations.Together(out.each(), out.rest().and(CompositionShortfall.of(
+                Set.of(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH))));
     }
 
     /**
