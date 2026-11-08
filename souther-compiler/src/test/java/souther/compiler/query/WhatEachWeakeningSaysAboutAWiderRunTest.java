@@ -18,15 +18,8 @@ import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.source.SourceId;
-import souther.compiler.observe.Figure;
 import souther.compiler.partition.Border;
-import souther.compiler.partition.ClauseOfAConstruction;
-import souther.compiler.partition.CompositionBudget;
-import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
-import souther.compiler.partition.NoInputTakesIt;
-import souther.compiler.partition.PassedConstruction;
-import souther.compiler.partition.Reachability;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.ReadingGap;
@@ -119,8 +112,6 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("DecisionReadingIncomplete", "answers/MAY_CHANGE");
         // A rule read short is short of words, which no figure gives it.
         table.put("DecisionRuleReadShort", "answers/UNAFFECTED");
-        // A proof held to a larger figure of conditions taken in answers the way it left open.
-        table.put("AWayLeftUndecided", "answers/MAY_CHANGE");
         // The rows written hold each key once, and a run allowed more writes no row that holds
         // one twice: what is short is a capacity and not a figure.
         table.put("KeyedOverwriteCasesUnmeasured", "answers/UNAFFECTED");
@@ -253,7 +244,6 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.MeetingsNotJoined _,
                  Weakening.DecisionReadingIncomplete _,
                  Weakening.DecisionRuleReadShort _,
-                 Weakening.AWayLeftUndecided _,
                  Weakening.KeyedOverwriteCasesUnmeasured _,
                  Weakening.ReachableNodeCasesUnmeasured _ -> "answers";
         };
@@ -312,13 +302,6 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                         souther.compiler.partition.CompositionBudget
                                 .PATHS_OF_A_DECISION_READ)));
         out.add(new Weakening.DecisionRuleReadShort("b"));
-        out.add(new Weakening.AWayLeftUndecided("b", new DecisionReading.UndecidedAtAFigure(
-                new DecisionReading.Ruled(new DecisionRule(Map.of()), List.of(), true,
-                        List.of(new PassedConstruction(List.of(), null,
-                                new ClauseOfAConstruction.NotReached()))),
-                new NoInputTakesIt.TheConditionsClash(new NoInputTakesIt.Clash.TwoAtOnce(
-                        new Reachability.TwoAtOnce.Counts(TermPath.of("xs")))),
-                new Figure.Budget(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, 4))));
         out.add(new Weakening.KeyedOverwriteCasesUnmeasured("b"));
         out.add(new Weakening.ReachableNodeCasesUnmeasured("b"));
         out.add(new Weakening.RewriteUndecided("m", "b",

@@ -253,9 +253,11 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Excluded>
      * comparison every run reaching which stops in an operation it is read through
      * ({@link BlockReason.ComparisonAnswersNowhere}), which states nothing
      * on either side because no run gets past it. No row can answer the way, since every row down
-     * it stops too. What is wrong is the body, building a value nothing it is handed there can be,
-     * and that defect is the check's to report at the construction (E2010); the account says the
-     * way and where its runs stop, and leaves the verdict where the rules put it.
+     * it stops too. What is wrong is the body, building a value nothing it is handed there can be.
+     * This is a fact about the model that stands by itself: the check of the model's invariants
+     * may or may not report the same construction as well, and this neither depends on that
+     * report nor stands in for it. The account says the way and where its runs stop, and leaves
+     * the verdict where the rules put it.
      *
      * <p>Some construction the proof keeps names the clause it is held to. One whose invariant was
      * not reached states only that it was not read, which proves no contradiction, so a proof had
@@ -292,8 +294,10 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Excluded>
      *
      * <p>Either of the other two. Some input may bring out the conditions on the way, and then every
      * such run stops at one of the constructions kept, which is the body building a value nothing
-     * it is handed there can be — or none does, and then the way is unreachable. No rule past it is owed a row either way, since no run
-     * gets past the constructions; what is open is which, and what keeps it open is the figure.
+     * it is handed there can be — or none does, and then the way is unreachable. No rule past it
+     * is owed a row either way, since the proof that no input both takes the conditions and gets
+     * past the constructions was had in full. What the figure left open is which of the two the
+     * way is, and that changes no verdict.
      *
      * @param way    what the way consulted and the constructions still in the proof, never none
      *               of them

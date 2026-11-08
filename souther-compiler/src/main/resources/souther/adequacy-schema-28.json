@@ -416,7 +416,6 @@
           "arms_unsettled",
           "decision_not_fully_read",
           "decision_rule_read_short",
-          "decision_way_undecided",
           "keyed_overwrite_cases_unmeasured",
           "reachable_node_cases_unmeasured",
           "decision_of_row_unreadable",
@@ -7111,7 +7110,7 @@
         "waysEveryRunStops": {
           "type": "array",
           "minItems": 1,
-          "description": "The ways through the body every run of which the reading proved stops at a construction, apart from `waysNoInputTakes` and from the rules: inputs bring the conditions out as the way does — no proof is had of them alone — and none of those inputs gets past the constructions the proof keeps, each of which is refused by a clause of the invariant of the type it builds. Each stands for every rule that goes on from it, as a way no input takes does; none of those rules is in `obligations` or counted in `coverage`, and the model has a body that aborts along the way, which `waysNoInputTakes` would not say. Each is a fact about the model and no finding, as a rule every run reaching which stops in an operation is (`rule_answers_nowhere`): no row can answer it, since every row down the way stops too, and the verdict is what it would be without it. What is wrong is the body, which the check reports at the construction (E2010). Absent where no way was proved one every run of stops.",
+          "description": "The ways through the body every run of which the reading proved stops at a construction, apart from `waysNoInputTakes` and from the rules: inputs bring the conditions out as the way does — no proof is had of them alone — and none of those inputs gets past the constructions the proof keeps, each of which is refused by a clause of the invariant of the type it builds. Each stands for every rule that goes on from it, as a way no input takes does; none of those rules is in `obligations` or counted in `coverage`, and the model has a body that aborts along the way, which `waysNoInputTakes` would not say. Each is a fact about the model and no finding, as a rule every run reaching which stops in an operation is (`rule_answers_nowhere`): no row can answer it, since every row down the way stops too, and the verdict is what it would be without it. It is a fact about the model that stands by itself: a check of the model's invariants may or may not report the same construction as well, and this entry neither depends on that report nor stands in for it. Absent where no way was proved one every run of stops.",
           "items": {
             "type": "object",
             "required": [
@@ -7133,7 +7132,7 @@
         "waysUndecided": {
           "type": "array",
           "minItems": 1,
-          "description": "The ways through the body no input gets past where the reading stopped at a figure before it could say whether any input takes them, apart from `waysNoInputTakes` and `waysEveryRunStops` and from the rules: the proof that no input gets past the constructions on the way was had, and the proof without one of them was not answered for the figure. So the way is one of the two and neither is said: some input may bring its conditions out, and then every such run stops at a construction kept; or none does, and the way is unreachable. Each stands for every rule that goes on from it, as the ways of the other two lists do; none of those rules is in `obligations` or counted in `coverage`. Each is a `decision_way_undecided` weakening of the decision's measure as well, which keeps the verdict open under the figure. Absent where no proof stopped short of saying which.",
+          "description": "The ways through the body no input gets past where the reading stopped at a figure before it could say whether any input takes them, apart from `waysNoInputTakes` and `waysEveryRunStops` and from the rules: the proof that no input gets past the constructions on the way was had, and the proof without one of them was not answered for the figure. So the way is one of the two and neither is said: some input may bring its conditions out, and then every such run stops at a construction kept; or none does, and the way is unreachable. Each stands for every rule that goes on from it, as the ways of the other two lists do; none of those rules is in `obligations` or counted in `coverage`. No input gets past the constructions on either, so no rule past the way is owed a row whichever it is, and the way holds no verdict open. Absent where no proof stopped short of saying which.",
           "items": {
             "type": "object",
             "required": [

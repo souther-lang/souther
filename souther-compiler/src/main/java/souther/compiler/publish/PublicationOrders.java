@@ -548,7 +548,6 @@ public final class PublicationOrders {
                 WeakeningWord.ARMS_UNSETTLED,
                 WeakeningWord.DECISION_NOT_FULLY_READ,
                 WeakeningWord.DECISION_RULE_READ_SHORT,
-                WeakeningWord.DECISION_WAY_UNDECIDED,
                 WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED,
                 WeakeningWord.REACHABLE_NODE_CASES_UNMEASURED,
                 WeakeningWord.DECISION_OF_ROW_UNREADABLE,

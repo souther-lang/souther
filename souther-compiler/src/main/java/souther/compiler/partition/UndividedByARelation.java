@@ -799,30 +799,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * @param reachedAt   the values a row got there at, each once, as the model writes them
      * @param runsStopped where the runs of the rows tried stopped, each once
+     * @param stoppedAt   the figures the search stopped at before it had tried everything it would
+     *                    have, each once: a run allowed more may find the row they left untried
      */
-    record GettingThere(List<String> reachedAt, Set<WhereARunStopped> runsStopped) {
+    record GettingThere(List<String> reachedAt, Set<WhereARunStopped> runsStopped,
+                        Set<Figure> stoppedAt) {
 
-        /** No row searched for, or none shown: no value reached and no run stopped. */
-        static final GettingThere NOTHING = new GettingThere(List.of(), Set.of());
+        /** No row searched for, or none shown: no value reached, no run stopped and no figure
+         *  stopped at. */
+        static final GettingThere NOTHING = new GettingThere(List.of(), Set.of(), Set.of());
 
         GettingThere {
             reachedAt = List.copyOf(new LinkedHashSet<>(reachedAt));
             runsStopped = Set.copyOf(runsStopped);
+            stoppedAt = Set.copyOf(stoppedAt);
         }
 
-        /** What this and {@code other} show of one place, each value and each stop once. */
+        /** What this and {@code other} show of one place, each value, each stop and each figure
+         *  once. */
         GettingThere and(GettingThere other) {
             List<String> values = new ArrayList<>(reachedAt);
             values.addAll(other.reachedAt);
             Set<WhereARunStopped> runs = new LinkedHashSet<>(runsStopped);
             runs.addAll(other.runsStopped);
-            return new GettingThere(values, runs);
+            Set<Figure> figures = new LinkedHashSet<>(stoppedAt);
+            figures.addAll(other.stoppedAt);
+            return new GettingThere(values, runs, figures);
         }
 
         /** The word for the place, not shown reached at every value, with what this shows. */
         BlockReason.RelationNotShownReachedAtEveryValue reason() {
             return new BlockReason.RelationNotShownReachedAtEveryValue(reachedAt,
-                    WhereARunStopped.inOrder(runsStopped));
+                    WhereARunStopped.inOrder(runsStopped), Figure.inOrder(stoppedAt));
         }
     }
 
@@ -4253,11 +4261,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<String> written = sought.found()
                     .flatMap(row -> place == null ? Optional.empty() : row.shownAt(place, read))
                     .map(values -> writtenOut(values, place, read)).orElse(null);
-            // Where no row got there, the runs of the rows tried stopped wherever they did, and
-            // that is said at every place the relation compares, as what was not shown is.
-            if (written != null || !sought.runsStopped().isEmpty()) {
+            // Where no row got there, the figures the search stopped at and the places the runs of
+            // the rows tried stopped are said at every place the relation compares, as what was
+            // not shown is.
+            if (written != null || !sought.runsStopped().isEmpty()
+                    || !sought.stoppedAt().isEmpty()) {
                 reached.put(at, new GettingThere(written == null ? List.of() : written,
-                        sought.runsStopped()));
+                        sought.runsStopped(), sought.stoppedAt()));
             }
         }
         return shown.mayStopBefore(places(), reached);

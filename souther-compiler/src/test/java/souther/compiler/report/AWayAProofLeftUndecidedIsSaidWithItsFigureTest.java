@@ -20,7 +20,6 @@ import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
-import souther.compiler.query.Weakening;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -38,8 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A way no input gets past, where the proof stopped at a figure before it could say whether any
  * input takes it, is said as undecided with the figure: a {@code ?} line on the page naming the
  * figure and where the runs along it would stop, an entry of its own under the decision in the
- * document, no finding, and a weakening of the decision's measure that keeps the verdict open under
- * what stopped at a figure.
+ * document and no finding. It holds no verdict open: no input gets past the constructions on it
+ * either way.
  *
  * <p>Driven from a reading made at its owner, for the reason
  * {@link AWayEveryRunOfWhichStopsIsSaidAndOwedNothingTest} is: the body of a model the check accepts, read under
@@ -96,8 +95,12 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    @Test
-    void theWayIsSaidUndecidedWithTheFigureInTheReportTheDocumentAndTheVerdict() {
+    /** The report of the model, and the same with the reading of `two` in place of its own, which
+     *  holds a way the proof left undecided. */
+    private record Undecided(Compilation bodies, AdequacyReport own, AdequacyReport undecided,
+                             DecisionReading.UndecidedAtAFigure way) {}
+
+    private static Undecided undecidedWay() {
         Compilation bodies = Compilation.ofSource(BODIES, "Main");
         bodies.measure(Adequacy.Asked.fullReport());
         bodies.answerEverything();
@@ -109,7 +112,114 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
         assertEquals(1, read.undecided().size(), () -> "the way into the constructions: "
                 + read.excluded());
         DecisionReading.UndecidedAtAFigure way = read.undecided().getFirst();
-        AdequacyReport undecided = withTheWay(bodies, own, read, way);
+        return new Undecided(bodies, own, withTheWay(bodies, own, read, way), way);
+    }
+
+    /**
+     * The proof that no input both takes the way's conditions and gets past the constructions on
+     * it was had in full, so no rule past the way is owed a row whichever way the question left
+     * open comes out. The way holds nothing open: a verdict that is satisfied without it is
+     * satisfied with it.
+     */
+    @Test
+    void aWayLeftUndecidedDoesNotTurnASatisfiedVerdictUndetermined() {
+        Undecided had = undecidedWay();
+
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, had.own().adequacy(),
+                "the verdict without the way is the one asked to stay");
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, had.undecided().adequacy());
+        assertEquals(had.own().whatKeepsTheVerdictOpen(),
+                had.undecided().whatKeepsTheVerdictOpen(), "the way holds nothing open");
+        assertEquals(had.own().heldOpen(), had.undecided().heldOpen(),
+                "and is counted under nothing");
+        assertEquals(List.of(), had.undecided().adequacyGaps(), "and no gap is made of it");
+    }
+
+    /** The reading of `two` under the other rules, held to {@code allowance} conditions taken in. */
+    private static DecisionReading readAt(Compilation bodies, int allowance) {
+        return Allowances.DECLARED
+                .with(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, allowance)
+                .over(() -> readUnderTheOtherRules(bodies));
+    }
+
+    /**
+     * The allowance of conditions taken in is a boundary of the proof and not a mode of it. A
+     * proof that takes in as many conditions as the allowance is had in full, and the way is said
+     * as the unbounded reading says it; one more condition than the allowance and the proof is cut
+     * off, which is said as the way being undecided at the allowance. At no allowance, however
+     * small, is a cut-off proof read as a proof of the way: a way not proved is a way kept, and one
+     * the proof without a construction was cut short for is undecided, never a way every run of
+     * which stops.
+     *
+     * <p>Across the three allowances around the boundary the rules owed rows and the verdict are
+     * the same: a cut-off proof changes what is said of the way and nothing that is owed.
+     */
+    @Test
+    void aProofCutOffAtItsAllowanceIsUndecidedAndNeverAProvenExclusion() {
+        Compilation bodies = Compilation.ofSource(BODIES, "Main");
+        bodies.measure(Adequacy.Asked.fullReport());
+        bodies.answerEverything();
+        assertEquals(List.of(), bodies.errors(), "the model the body is read off compiles");
+        AdequacyReport own = AdequacyReport.of(bodies);
+        DecisionReading unbounded = readUnderTheOtherRules(bodies);
+        assertEquals(1, unbounded.everyRunStops().size(), () -> "the proof in full: "
+                + unbounded.excluded());
+
+        int needed = 0;
+        while (readAt(bodies, needed).everyRunStops().isEmpty()) {
+            needed++;
+            assertTrue(needed < 64, "the proof is had in full at some small allowance");
+        }
+        for (int allowance = 0; allowance < needed; allowance++) {
+            DecisionReading cut = readAt(bodies, allowance);
+            int at = allowance;
+            assertEquals(List.of(), cut.impossible(), () -> "at " + at + ": " + cut.excluded());
+            assertEquals(List.of(), cut.everyRunStops(), () -> "at " + at + ": " + cut.excluded());
+        }
+
+        DecisionReading under = readAt(bodies, needed - 1);
+        DecisionReading at = readAt(bodies, needed);
+        DecisionReading over = readAt(bodies, needed + 1);
+        assertEquals(1, under.undecided().size(), () -> "one condition short: " + under.excluded());
+        assertEquals(new Figure.Budget(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
+                needed - 1), under.undecided().getFirst().figure());
+        assertEquals(unbounded.everyRunStops(), at.everyRunStops(), "as many as it takes");
+        assertEquals(List.of(), at.undecided());
+        assertEquals(unbounded.everyRunStops(), over.everyRunStops(), "and more");
+        assertEquals(List.of(), over.undecided());
+
+        assertEquals(at.found(), under.found(), "the rules owed rows are the same cut off");
+        assertEquals(at.found(), over.found());
+        JsonNode atDecision = decisionOf(bodies, own, at, at.everyRunStops().getFirst());
+        JsonNode underDecision = decisionOf(bodies, own, under, under.undecided().getFirst());
+        JsonNode overDecision = decisionOf(bodies, own, over, over.everyRunStops().getFirst());
+        for (String said : List.of("obligations", "coverage")) {
+            assertEquals(atDecision.path(said), underDecision.path(said), said);
+            assertEquals(atDecision.path(said), overDecision.path(said), said);
+        }
+        assertEquals(withTheWay(bodies, own, at, at.everyRunStops().getFirst()).adequacy(),
+                withTheWay(bodies, own, under, under.undecided().getFirst()).adequacy());
+        assertEquals(withTheWay(bodies, own, at, at.everyRunStops().getFirst()).adequacy(),
+                withTheWay(bodies, own, over, over.everyRunStops().getFirst()).adequacy());
+    }
+
+    /** The decision of `two` the document writes, of the report holding {@code read}. */
+    private static JsonNode decisionOf(Compilation bodies, AdequacyReport own,
+                                       DecisionReading read, DecisionReading.Excluded way) {
+        AdequacyReport report = withTheWay(bodies, own, read, way);
+        JsonNode document = JSON.readTree(report.json(
+                SourceRendering.namedByIdentity(bodies.texts())));
+        DocumentShape.assertShapedLikeTheSchema(document);
+        return behaviorOf(document, "two").path("decision");
+    }
+
+    @Test
+    void theWayIsSaidUndecidedWithTheFigureInTheReportAndTheDocument() {
+        Undecided had = undecidedWay();
+        Compilation bodies = had.bodies();
+        DecisionReading.UndecidedAtAFigure way = had.way();
+        AdequacyReport undecided = had.undecided();
+        assertEquals(FIGURE, way.figure());
         SourceRendering rendering = SourceRendering.namedByIdentity(bodies.texts());
 
         String human = undecided.human(rendering);
@@ -125,20 +235,6 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
                 () -> "the way is marked undecided, with its figure: " + human);
         assertFalse(human.contains("every run along a way through this body stops"),
                 "and is not said to be a way every run of which stops");
-
-        assertTrue(undecided.whatKeepsTheVerdictOpen().stream().anyMatch(each ->
-                        each instanceof AdequacyUncertainty.ByWeakening(
-                                Weakening.AWayLeftUndecided(var behavior, var left))
-                                && behavior.equals("two") && left.equals(way)
-                                && each.figures().equals(List.of(FIGURE))
-                                && ReaderDisposition.of(each)
-                                        instanceof ReaderDisposition.StoppedAtAFigure),
-                () -> "the verdict is held open by the way, at the figure: "
-                        + undecided.whatKeepsTheVerdictOpen());
-        assertEquals(own.heldOpen().atAFigure() + 1, undecided.heldOpen().atAFigure(),
-                "counted under what stopped at a figure");
-        assertEquals(List.of(), undecided.adequacyGaps(), "and no gap is made of it");
-        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, undecided.adequacy());
 
         JsonNode document = JSON.readTree(undecided.json(rendering));
         DocumentShape.assertShapedLikeTheSchema(document);
@@ -163,7 +259,7 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
     /** {@code own}, with the reading of `two` in place of its own. */
     private static AdequacyReport withTheWay(Compilation bodies, AdequacyReport own,
                                              DecisionReading read,
-                                             DecisionReading.UndecidedAtAFigure way) {
+                                             DecisionReading.Excluded way) {
         List<AdequacyReport.ModuleReport> modules = new ArrayList<>();
         for (AdequacyReport.ModuleReport module : own.modules()) {
             List<AdequacyReport.BehaviorReport> behaviors = new ArrayList<>();
@@ -182,7 +278,7 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
     private static AdequacyReport.BehaviorReport undecided(Compilation bodies,
                                                            AdequacyReport.BehaviorReport b,
                                                            DecisionReading read,
-                                                           DecisionReading.UndecidedAtAFigure way) {
+                                                           DecisionReading.Excluded way) {
         DecisionEvidence decision = b.evidence().decision();
         BehaviorEvidence e = b.evidence();
         BehaviorEvidence evidence = new BehaviorEvidence(e.reading(), e.signature(),
@@ -194,7 +290,7 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
         readings.put(way.way(), AdequacyReport.conditionsOf(bodies.db(), "demo",
                 AdequacyReport.placesFor(bodies.db(), "demo", "two"), way.way()));
         Map<DecisionReading.Ruled, List<WhereARunStopped>> stops = new HashMap<>(b.wayStops());
-        stops.put(way.way(), Adequacy.whereRunsStopAt(bodies.db(), way.stoppedAt()));
+        stops.put(way.way(), Adequacy.whereRunsStopAt(bodies.db(), way.way().passed()));
         return new AdequacyReport.BehaviorReport(b.name(), b.implementation(), evidence,
                 b.rowsOwed(), b.claimed(), b.reported(), b.armPlaces(), b.conditionPlaces(),
                 b.rulePlaces(), b.partPlaces(), readings, b.ruleSettlements(),

@@ -35,13 +35,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * report writes it as a {@code ·} line under the decision naming the construction and the clause
  * its runs stop at, the document publishes it under {@code decision.waysEveryRunStops} and as no
  * finding, and the verdict is what it is without it — as for a comparison every run reaching which
- * stops in an operation. What is wrong is the body, which the check reports (E2010).
+ * stops in an operation. What is wrong is the body; the account is a fact about the model by
+ * itself, whether or not a check of the model's invariants reports the same construction.
  *
- * <p>Every compiled model where this happens that could be written is refused by the check of its
- * body (E2010), so the report is driven from a reading made at its owner: the body of a model the
- * check accepts, read under the rules of declarations of the same names whose invariant the way's
- * conditions contradict, put in place of the behavior's own reading. What the report is held to is
- * what it writes of that reading, which is the same whichever model it came from.
+ * <p>The report is driven from a reading made at its owner: the body of a model that compiles, read
+ * under the rules of declarations of the same names whose invariant the way's conditions
+ * contradict, put in place of the behavior's own reading. What the report is held to is what it
+ * writes of that reading, which is the same whichever model it came from.
  */
 class AWayEveryRunOfWhichStopsIsSaidAndOwedNothingTest {
 

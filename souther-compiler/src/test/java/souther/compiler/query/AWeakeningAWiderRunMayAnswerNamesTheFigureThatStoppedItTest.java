@@ -19,14 +19,10 @@ import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.Border;
-import souther.compiler.partition.ClauseOfAConstruction;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionReading;
-import souther.compiler.partition.NoInputTakesIt;
-import souther.compiler.partition.PassedConstruction;
-import souther.compiler.partition.Reachability;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
@@ -109,9 +105,6 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
             assertEquals(gap.figures(), new Weakening.ModelReadingIncomplete(gap).figures(),
                     gap::toString);
         }
-        DecisionReading.UndecidedAtAFigure way = wayLeftUndecided();
-        assertEquals(List.of(way.figure()), new Weakening.AWayLeftUndecided("b", way).figures(),
-                "a way a proof was cut short for names the figure the proof stopped at");
     }
 
     /**
@@ -265,7 +258,6 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                 new DecisionReading.Enumeration.StoppedAtAFigure(
                         CompositionBudget.PATHS_OF_A_DECISION_READ)));
         out.put("DecisionRuleReadShort", new Weakening.DecisionRuleReadShort("b"));
-        out.put("AWayLeftUndecided", new Weakening.AWayLeftUndecided("b", wayLeftUndecided()));
         out.put("KeyedOverwriteCasesUnmeasured", new Weakening.KeyedOverwriteCasesUnmeasured("b"));
         out.put("ReachableNodeCasesUnmeasured", new Weakening.ReachableNodeCasesUnmeasured("b"));
         Replacement rewrite = new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
@@ -352,18 +344,6 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                         new BlockReason.ValueRulesNotReachedPastDepthLimit()),
                 new ClosureGap.PositionNotReachedInto("b", at,
                         new BlockReason.ValueRulesNotReached()));
-    }
-
-    /** A way through a body a proof that no input takes it was cut short for, at the figure of
-     *  conditions it may take in. */
-    private static DecisionReading.UndecidedAtAFigure wayLeftUndecided() {
-        return new DecisionReading.UndecidedAtAFigure(
-                new DecisionReading.Ruled(new DecisionRule(Map.of()), List.of(), true,
-                        List.of(new PassedConstruction(List.of(), null,
-                                new ClauseOfAConstruction.NotReached()))),
-                new NoInputTakesIt.TheConditionsClash(new NoInputTakesIt.Clash.TwoAtOnce(
-                        new Reachability.TwoAtOnce.Counts(TermPath.of("xs")))),
-                new Figure.Budget(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, 4));
     }
 
     /** One border, since which border it is is no part of what this is about. */

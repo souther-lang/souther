@@ -235,7 +235,7 @@ public final class ReportedReason {
         return switch (reason) {
             case BlockReason.RelationNotShownWhereItsRowsStopped(var stopped) -> stopped;
             // The rows a search for one getting to the relation tried, where none got there.
-            case BlockReason.RelationNotShownReachedAtEveryValue(var _, var stopped) -> stopped;
+            case BlockReason.RelationNotShownReachedAtEveryValue(var _, var stopped, var _) -> stopped;
             default -> List.of();
         };
     }

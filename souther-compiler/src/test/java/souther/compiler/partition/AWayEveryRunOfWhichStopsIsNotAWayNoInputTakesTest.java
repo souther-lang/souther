@@ -29,12 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * the way refuses, is a way every run of which stops there — and not a way no input takes. Only a
  * way whose own conditions leave no input is that, whatever it goes through.
  *
- * <p>The check of a body refuses a construction its invariant fails wherever it is built (E2010),
- * and every model written so far that would put such a way in a body is refused there. The reading
- * is asked here at its owner instead: the body of a model the check accepts, read under the rules of
- * declarations of the same names whose invariants the way's conditions contradict. What the reading
- * is held to is what it makes of a way and a construction, which is the same whichever model the
- * rules came from.
+ * <p>The reading is asked here at its owner: the body of a model that compiles, read under the
+ * rules of declarations of the same names whose invariants the way's conditions contradict. What
+ * the reading is held to is what it makes of a way and a construction, which is the same whichever
+ * model the rules came from. That a check of a body may also refuse some model with such a way is
+ * a separate fact about that model, and nothing here depends on it.
  */
 class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
 

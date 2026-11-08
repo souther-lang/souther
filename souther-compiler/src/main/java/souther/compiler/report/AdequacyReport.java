@@ -4980,10 +4980,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * the conditions the way came to.
      *
      * <p>A {@code ?} and not a {@code ·}: the way may be one every run of which stops or one no
-     * input takes, and the two are said apart, and nothing here says which. What holds it open
-     * is the figure, said as every figure stop is said ({@link #next}); the measure of the decision
-     * carries it ({@link Weakening.AWayLeftUndecided}), so a verdict it keeps open counts it under
-     * what stopped at a figure.
+     * input takes, and the two are said apart, and nothing here says which. What left it open is
+     * the figure, said as every figure stop is said ({@link #next}). It holds no verdict open:
+     * the proof that no input both takes the conditions and gets past the constructions was had,
+     * so no rule past the way is owed a row whichever of the two it is.
      */
     private static void undecided(StringBuilder out, BehaviorReport behavior,
                                   DecisionEvidence decision, SourceRendering rendering,
@@ -5010,8 +5010,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * and not a {@code !}, for the reason a comparison every run reaching which stops in an
      * operation is one ({@link BlockReason.ComparisonAnswersNowhere}): no run gets past, so the
      * rules past the way state nothing on either side and nothing is owed at them, and no row could
-     * answer the way, since every row down it stops too. What is wrong is the body, and that is the
-     * check's to report where it reads the construction (E2010); the verdict here is not changed.
+     * answer the way, since every row down it stops too. What is wrong is the body. This is a fact
+     * about the model that stands by itself: the check of the model's invariants may or may not
+     * report the same construction as well. The verdict here is not changed.
      * Each construction and clause said as a run stopped there says it
      * ({@link GeneratedRows#stoppedAt}).
      */
@@ -11649,7 +11650,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // policy and travels as the reason.
             case Weakening.DecisionReadingIncomplete _ -> WeakeningWord.DECISION_NOT_FULLY_READ;
             case Weakening.DecisionRuleReadShort _ -> WeakeningWord.DECISION_RULE_READ_SHORT;
-            case Weakening.AWayLeftUndecided _ -> WeakeningWord.DECISION_WAY_UNDECIDED;
             case Weakening.KeyedOverwriteCasesUnmeasured _ ->
                     WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED;
             case Weakening.ReachableNodeCasesUnmeasured _ ->

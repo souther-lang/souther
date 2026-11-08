@@ -276,16 +276,6 @@ public enum WeakeningWord {
     DECISION_RULE_READ_SHORT,
 
     /**
-     * A way through a body no input gets past, where whether any input takes it was not decided
-     * for a figure: every run along it stops at a construction, or no run goes down it.
-     *
-     * <p>Apart from the two words above: the rules are in hand and read whole, and what is open is
-     * whether the body has a way every run of which aborts. No rule past the way is owed a row
-     * either way.
-     */
-    DECISION_WAY_UNDECIDED,
-
-    /**
      * The overwrite order of a repeated key in a map the body files from a list may bear on a
      * condition's boundary or branch, and what that decides has not been measured.
      *
