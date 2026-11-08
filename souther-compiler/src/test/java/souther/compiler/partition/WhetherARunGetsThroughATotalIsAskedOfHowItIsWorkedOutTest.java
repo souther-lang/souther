@@ -138,6 +138,42 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
     }
 
     /**
+     * A walk told with its running totals is worked out after the list it walks, and a total of
+     * products after the closure that makes them: what working those out may stop a run at is no
+     * step's. Where {@code n + 1} is written in the list, or in a closure making it, a run stops
+     * there at the greatest {@code n}, and the steps are not every operation a row gets past.
+     */
+    @Test
+    void whatIsWorkedOutToReachAWalksStepsIsAskedOfTheWalk() {
+        String declarations = """
+                data Note = { gross: Int }
+                data Line = { p: Int, q: Int }""";
+        String walked = "List.fold((acc, x) -> acc + x.gross, 0, %s) >= k";
+        String plain = report("n: Int, ns: List<Note>, k: Int", declarations,
+                walked.formatted("ns"));
+        assertTrue(related(plain).contains("List.sum(ns[*].gross)"), plain);
+        for (String list : List.of("""
+                {
+                        let unused = n + 1
+                        ns
+                    }""", """
+                List.map(x -> {
+                        let unused = n + 1
+                        x
+                    }, ns)""")) {
+            String report = report("n: Int, ns: List<Note>, k: Int", declarations,
+                    walked.formatted(list));
+            assertEquals(Set.of(), related(report), () -> list + report);
+        }
+        String products = report("n: Int, ls: List<Line>, k: Int", declarations, """
+                List.sum(List.map(l -> l.p * l.q, {
+                        let unused = n + 1
+                        ls
+                    })) >= k""");
+        assertEquals(Set.of(), related(products), products);
+    }
+
+    /**
      * Over a container, a value bound and never read is no part of what the closure answers, so
      * it is not between nought and the total: doubled, it passes the type at an element the
      * total holds. Bound and read, it is part of the answer, and the total is left either way.

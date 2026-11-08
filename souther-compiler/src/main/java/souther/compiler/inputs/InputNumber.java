@@ -1204,8 +1204,12 @@ public final class InputNumber {
                                                      RuleReadingSource source,
                                                      Function<Core, Core.Block> blockOf) {
         SeededWalk walk = SeededWalk.of(e, blockOf);
-        if (walk == null || !(Core.withoutStanding(walk.seed()) instanceof Core.Int seed)
-                || walk.step().params().size() != 3) {
+        ExactRatio seed = walk == null ? null : switch (Core.withoutStanding(walk.seed())) {
+            case Core.Int written -> ExactRatio.of(written.value());
+            case Core.Decimal written -> ExactRatio.of(written.value());
+            default -> null;
+        };
+        if (seed == null || walk.step().params().size() != 3) {
             return null;
         }
         Denotation container = reads.standing(walk.container(), source.symbols(), source.newtypes());
@@ -1227,16 +1231,15 @@ public final class InputNumber {
         namedIn(walk.step().body(), names.given);
         TermPath alongside = lookedUpBy(walk.step().body(), accumulator, value, key, names, reads,
                 source);
-        if (alongside == null || !names.everyBindingWasRead()
-                || alongside.containersHoldingIt().size() != 1
-                || !isAMapOfWholeNumbersKeyedAlike(walked, alongside, inputs, source)) {
+        Type numbers = alongside == null || alongside.containersHoldingIt().size() != 1 ? null
+                : numbersOfMapsKeyedAlike(walked, alongside, inputs, source);
+        if (numbers == null || !names.everyBindingWasRead()) {
             return null;
         }
         NumericTerm.TakenOver total = NumericTerm.TakenOver.of(SUM,
-                new RunSource.JoinedOccurrences(walked, alongside), Type.INT, source.inners(),
+                new RunSource.JoinedOccurrences(walked, alongside), numbers, source.inners(),
                 source.symbols());
-        return total == null ? null : new SeedAndAdded(ExactRatio.of(seed.value()),
-                LinearForm.atom(total));
+        return total == null ? null : new SeedAndAdded(seed, LinearForm.atom(total));
     }
 
     /**
@@ -1320,22 +1323,29 @@ public final class InputNumber {
     /**
      * The values of the map the step looks into, where the step is the answer so far plus the
      * entry's value times the lookup of the entry's key in it with a written nought where it
-     * holds none — or null where the step is anything else.
+     * holds none — or null where the step is anything else. The sum and the product are written
+     * with the operator or as the library's operation ({@link WrittenOperation}). A decimal nought
+     * is written at no more places than a row is built at
+     * ({@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}), so its product with a value is at the
+     * scale a product of two numbers of a row is.
      */
     private static TermPath lookedUpBy(Core step, BindingId accumulator, BindingId value,
                                        BindingId key, Following names, InputReads reads,
                                        RuleReadingSource source) {
-        if (!(followed(step, names) instanceof Core.Binary sum) || sum.op() != BinOp.ADD) {
+        List<Core> sum = WrittenOperation.operandsOf(followed(step, names), BinOp.ADD,
+                source.symbols());
+        if (sum == null) {
             return null;
         }
-        Core added = isTheName(sum.left(), accumulator, names) ? sum.right()
-                : isTheName(sum.right(), accumulator, names) ? sum.left() : null;
-        if (added == null || !(followed(added, names) instanceof Core.Binary product)
-                || product.op() != BinOp.MUL) {
+        Core added = isTheName(sum.get(0), accumulator, names) ? sum.get(1)
+                : isTheName(sum.get(1), accumulator, names) ? sum.get(0) : null;
+        List<Core> product = added == null ? null
+                : WrittenOperation.operandsOf(followed(added, names), BinOp.MUL, source.symbols());
+        if (product == null) {
             return null;
         }
-        Core looked = isTheName(product.left(), value, names) ? product.right()
-                : isTheName(product.right(), value, names) ? product.left() : null;
+        Core looked = isTheName(product.get(0), value, names) ? product.get(1)
+                : isTheName(product.get(1), value, names) ? product.get(0) : null;
         if (looked == null || !(followed(looked, names) instanceof Core.Match option)
                 || option.cases().size() != 2) {
             return null;
@@ -1349,8 +1359,7 @@ public final class InputNumber {
                 none = arm;
             }
         }
-        if (some == null || none == null
-                || !(followed(none.body(), names) instanceof Core.Int zero) || zero.value() != 0
+        if (some == null || none == null || !isANoughtWritten(followed(none.body(), names))
                 || !isTheName(some.body(), some.binding().binder().binding(), names)
                 || !(AnOperationApplied.of(followed(option.scrutinee(), names))
                         instanceof AnOperationApplied get)
@@ -1363,18 +1372,29 @@ public final class InputNumber {
                 ? at.element() : null;
     }
 
-    /** Whether the maps whose values stand at the two places are maps of whole numbers under
-     *  keys of one type, and two. */
-    private static boolean isAMapOfWholeNumbersKeyedAlike(TermPath walked, TermPath alongside,
-                                                          InputDomain inputs,
-                                                          RuleReadingSource source) {
+    /** Whether {@code e} is nought written out: a whole number, or a decimal at no more places
+     *  than a row is built at. */
+    private static boolean isANoughtWritten(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Int zero -> zero.value() == 0;
+            case Core.Decimal zero -> zero.value().signum() == 0 && zero.value().scale() >= 0
+                    && zero.value().scale() <= DecimalOperation.PLACES_A_ROW_IS_BUILT_AT;
+            default -> false;
+        };
+    }
+
+    /** The numbers the maps whose values stand at the two places hold, where they are two maps
+     *  of whole numbers, or two of decimals, under keys of one type; null otherwise. */
+    private static Type numbersOfMapsKeyedAlike(TermPath walked, TermPath alongside,
+                                                InputDomain inputs, RuleReadingSource source) {
         TermPath one = walked.containersHoldingIt().getFirst();
         TermPath other = alongside.containersHoldingIt().getFirst();
         return !one.equals(other)
                 && inputs.typeAt(one, source) instanceof Type.MapOf first
                 && inputs.typeAt(other, source) instanceof Type.MapOf second
-                && first.value() == Type.INT && second.value() == Type.INT
-                && first.key().equals(second.key());
+                && (first.value() == Type.INT || first.value() == Type.DECIMAL)
+                && first.value() == second.value() && first.key().equals(second.key())
+                ? first.value() : null;
     }
 
     private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");

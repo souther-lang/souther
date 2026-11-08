@@ -178,12 +178,12 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
      * A total that is a number among others in a comparison is read as one of them, and the walk
      * is not the sum for where a run gets through it. The walk adds one gross at a time and holds
      * every answer so far to {@code Int}, so grosses of either sign can pass the type on the way
-     * to a total that is in it, as {@code [max, 1, -1]} does at its second step. Nothing shows
-     * which totals every list coming to them gets through, so no row is shown computed and no
-     * place is shown left either way.
+     * to a total that is in it, as {@code [max, 1, -1]} does at its second step. A row of one
+     * element runs no total on the way, and every total in the type is the gross of one element,
+     * so the relation is read at those rows, as it is of a walk adding each element as it stands.
      */
     @Test
-    void aTotalBesideAnotherNumberIsReadAndNotShownComputed() {
+    void aTotalBesideAnotherNumberIsReadAtTheRowsOneElementWrites() {
         String report = report("""
                 module example.folded
 
@@ -194,11 +194,60 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                 let fits (limit, ns, asked) =
                     asked <= limit - List.fold((acc, n) -> acc + n.gross, 0, ns)
                 """);
-        assertTrue(report.contains("List.sum(ns[*].gross)"), report);
-        assertEquals(Set.of(), placesSaying(report, "rather than dividing the values here"),
-                report);
         assertEquals(Set.of("asked", "limit", "List.sum(ns[*].gross)"), placesSaying(report,
-                "not shown to reach every value here"), report);
+                "rather than dividing the values here"), report);
+        assertEquals(Set.of(), placesSaying(report, "not shown to reach every value here"),
+                report);
+    }
+
+    /**
+     * A walk taking each gross away runs totals on the way as one adding them does, and a row of
+     * one element runs none: the total of minus each gross is what minus one gross is. Grosses
+     * of nought or more leave every such total one element's to write. Over every {@code Int}
+     * the least total is not, since minus one gross stops short of it by one.
+     */
+    @Test
+    void aWalkTakingEachElementAwayIsReadAtTheRowsOneElementWrites() {
+        String report = report("""
+                module example.folded
+
+                data Gross = Int
+                    invariant value >= 0
+                data Note = { gross: Gross }
+
+                behavior fits : (limit: Int, ns: List<Note>) -> Bool
+
+                let fits (limit, ns) =
+                    List.fold((acc, n) -> acc - n.gross.value, 100, ns) <= limit
+                """);
+        assertEquals(Set.of("List.sum({-1·gross + 0 | ns[*]})"), placesSaying(report,
+                "rather than dividing the values here"), report);
+        assertEquals(Set.of(), placesSaying(report, "not shown to reach every value here"),
+                report);
+    }
+
+    /**
+     * A field of what a walk carrying a record answers is the field's own walk, and every field's
+     * walk is worked out at every step: the gross with its running totals, the count by one, which
+     * lies between its seed and its answer at every step.
+     */
+    @Test
+    void aFieldOfAWalkCarryingARecordIsReadAsTheFieldsOwnWalk() {
+        String report = report("""
+                module example.folded
+
+                data Note = { gross: Int }
+                data Totals = { gross: Int, count: Int }
+
+                behavior fits : (limit: Int, ns: List<Note>) -> Bool
+
+                let fits (limit, ns) =
+                    List.fold((acc, n) -> Totals { gross = acc.gross + n.gross,
+                                                   count = acc.count + 1 },
+                              Totals { gross = 0, count = 0 }, ns).gross <= limit
+                """);
+        assertEquals(Set.of("List.sum(ns[*].gross)", "limit"), placesSaying(report,
+                "rather than dividing the values here"), report);
     }
 
     /** The places the lines of {@code report} saying {@code words} of a rule's line are about. */

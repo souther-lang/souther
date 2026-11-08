@@ -29,7 +29,9 @@ import souther.compiler.check.ValueUniverse;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DecimalAdditiveWalk;
 import souther.compiler.inputs.DecimalOperation;
+import souther.compiler.inputs.DecimalWork;
 import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
@@ -391,7 +393,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                 is written by one element alone ({@link #operationsOverTheSides})
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                   boolean onEveryRun, List<DecimalOperation> decimals,
+                   boolean onEveryRun, List<DecimalWork> decimals,
                    List<NumericTerm> partials) {
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
@@ -404,7 +406,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                boolean onEveryRun, List<DecimalOperation> decimals) {
+                boolean onEveryRun, List<DecimalWork> decimals) {
             this(operations, told, onEveryRun, decimals, List.of());
         }
 
@@ -464,8 +466,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 // What an operation is worked out of is told by where it stands among them.
                 both.add(each.shifted(earlier.operations.size()));
             }
-            List<DecimalOperation> bothDecimals = new ArrayList<>(earlier.decimals);
-            for (DecimalOperation each : decimals) {
+            List<DecimalWork> bothDecimals = new ArrayList<>(earlier.decimals);
+            for (DecimalWork each : decimals) {
                 bothDecimals.add(each.shifted(earlier.decimals.size()));
             }
             List<NumericTerm> bothPartials = new ArrayList<>();
@@ -1397,7 +1399,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // relation, or is two sides, leaves them all out.
         boolean decimalsOverTheSides = working.decimals().stream()
                 .allMatch(each -> overTheSides(each, named));
-        List<DecimalOperation> decimals = decimalsOverTheSides ? working.decimals() : List.of();
+        List<DecimalWork> decimals = decimalsOverTheSides ? working.decimals() : List.of();
         leftOut |= !decimalsOverTheSides;
         // An operation left out is one a row is not asked to get past here: not every one told.
         WhatARelationLeavesUndivided.Told told =
@@ -1594,13 +1596,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         };
     }
 
-    /** Whether every number {@code operation} reads from a row is a side of this relation, once. */
-    private static boolean overTheSides(DecimalOperation operation,
-                                        Map<Object, Integer> named) {
-        return operation.operands().stream().allMatch(operand -> !(operand
-                instanceof DecimalOperation.Formed formed)
-                || formed.coefs().keySet().stream()
-                        .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom))));
+    /** Whether every number {@code work} reads from a row as a place of it is a side of this
+     *  relation, once. A total, an operand's or what a walk adds up, is held by the list a row is
+     *  built with, which the relation may name as no term of its own. */
+    private static boolean overTheSides(DecimalWork work, Map<Object, Integer> named) {
+        return switch (work) {
+            case DecimalAdditiveWalk _ -> true;
+            case DecimalOperation operation -> operation.operands().stream()
+                    .allMatch(operand -> !(operand instanceof DecimalOperation.Formed formed)
+                            || formed.coefs().keySet().stream()
+                                    .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom))));
+        };
     }
 
     /**
@@ -8252,7 +8258,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         List<NumericTerm.ValueOf> values = valuesOfOneElement(over);
-        return values.isEmpty() ? null : values.getFirst();
+        if (!values.isEmpty()) {
+            return values.getFirst();
+        }
+        // Fields of the element added or taken away are counted on the order the fields are: a
+        // weight of one or minus one moves no value off it.
+        if (over.source() instanceof RunSource.ComputedOccurrences computed
+                && computed.computation() instanceof ElementValue.Affine weighed
+                && weighed.form().constant().isZero() && !weighed.form().coefs().isEmpty()
+                && weighed.form().coefs().values().stream().allMatch(weight ->
+                        ExactRatio.ONE.equals(weight.abs()))) {
+            return new NumericTerm.ValueOf(weighed.form().coefs().keySet().iterator().next()
+                    .from(computed.elements()));
+        }
+        return null;
     }
 
     /**
@@ -8319,7 +8338,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         NumericDomain.Bounds alone;
-        if (elements.isEmpty()) {
+        if (elements.isEmpty() && over.source() instanceof RunSource.ComputedOccurrences computed
+                && computed.computation() instanceof ElementValue.Affine weighed
+                && weighed.form().constant().isZero()) {
+            alone = summedOverWeighedFieldsOfOneElement(computed.elements(), weighed, read,
+                    region, stated.rest(), carrier);
+        } else if (elements.isEmpty()) {
             alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
         } else {
             List<TermPath> containers = over.subjectPath().containersHoldingIt();
@@ -8328,6 +8352,61 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             stated.rest(), carrier);
         }
         return alone == null ? null : alone.meet(stated.run());
+    }
+
+    /**
+     * A run every value of which a total of {@code weighed}, fields of each element of
+     * {@code elements} added or taken away, is shown to take — or null where none is shown, or a
+     * field is weighed by anything else: one element comes to what its fields do, added or taken
+     * away. Each field is shown to take its run
+     * with nothing but that field asked of the element, and no rule of the declarations ties two
+     * of the fields to one another ({@link #tiedByARule}), so the fields are written apart and
+     * every sum of a value of each is one element's. Nought, the total of a container holding
+     * none, is the whole's and no field's, so it joins the sum once.
+     */
+    private static NumericDomain.Bounds summedOverWeighedFieldsOfOneElement(
+            TermPath elements, ElementValue.Affine weighed, InputReading read, SearchRegion region,
+            List<OnAWay> conditions, Carrier carrier) {
+        List<TermPath> places = new ArrayList<>();
+        TermPath container = null;
+        NumericDomain.Bounds sum = null;
+        for (Map.Entry<ElementProjection, ExactRatio> each : weighed.form().coefs().entrySet()) {
+            // A run is an interval and says nothing of a step between its values: a field weighed
+            // two takes every other whole number of the interval it is moved to.
+            if (!ExactRatio.ONE.equals(each.getValue().abs())) {
+                return null;
+            }
+            TermPath place = each.getKey().from(elements);
+            List<TermPath> containers = place.containersHoldingIt();
+            if (containers.size() != 1
+                    || (container != null && !container.equals(containers.getFirst()))) {
+                return null;
+            }
+            container = containers.getFirst();
+            NumericDomain.Bounds field = shownOfAnElementAlone(
+                    List.of(new NumericTerm.ValueOf(place)), container, read, region, conditions,
+                    null);
+            NumericDomain.Bounds part = field == null ? null : field.timesEach(each.getValue());
+            if (part == null) {
+                return null;
+            }
+            for (TermPath before : places) {
+                if (tiedByARule(before, place, read)) {
+                    return null;
+                }
+            }
+            places.add(place);
+            // Each field's run is the one the region answers for the place, every end a value
+            // taken, and moved by one or minus one: the runs a sum of their ends is a sum of.
+            sum = sum == null ? part : sum.plus(part);
+            if (sum == null) {
+                return null;
+            }
+        }
+        NumericDomain.Bounds held = container == null ? null
+                : howManyAreHeld(container, read, region);
+        return sum == null || held == null ? null
+                : held.admits(Count.ZERO) ? withNought(sum, carrier) : sum;
     }
 
     /**
@@ -9172,19 +9251,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         };
     }
 
-    /** {@code run} with nought, where nought is in it or it starts just past nought on
-     *  {@code carrier} — and {@code run} alone otherwise. */
+    /** {@code run} with nought, the total of a container holding none, where the two are one run
+     *  on {@code carrier}: on either side of nought ({@link NumericDomain.Bounds#joining}). */
     private static NumericDomain.Bounds withNought(NumericDomain.Bounds run, Carrier carrier) {
-        Endpoint least = run.min();
-        if (run.admits(ExactRatio.ZERO) || least == null || !(least.at() instanceof Count from)) {
-            return run;
-        }
-        ExactRatio at = from.exactly();
-        boolean justPast = (at.isZero() && !least.inclusive())
-                || (carrier.spacingBetweenValues() == Granularity.DISCRETE
-                        && at.equals(ExactRatio.ONE) && least.inclusive());
-        return justPast ? new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO), run.max())
-                : run;
+        return run.joining(Count.ZERO, carrier.spacingBetweenValues());
     }
 
     /**
