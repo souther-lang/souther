@@ -1,6 +1,9 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,14 +12,19 @@ import java.util.Map;
  * The rules written over the positions their equalities leave free, so that a goal asked of them
  * is written the same way the rules are.
  *
- * <p>Each equality is solved for the last of its positions in the order the domain walks them, and
- * a position solved for is put in terms of the rest wherever it appears: in the other equalities,
- * in every other rule, and in a goal. What is solved for depends on the rules and the order and on
- * nothing else — the last of the positions a set of equalities relates that none of them was
- * already solved for — so the rules come out the same whichever order they were said in, and a
- * question that takes one of them as its premise ({@link FormReach}) finds in it what it would
- * have needed two to find. {@code x = a + b} beside {@code y = b + a} proves {@code x - y} is
- * nought.
+ * <p>Each equality is solved for one of its positions, and a position solved for is put in terms of
+ * the rest wherever it appears: in the other equalities, in every other rule, and in a goal. A
+ * question that takes one rule as its premise ({@link FormReach}) finds in the rules so written what
+ * it would have needed two to find. {@code x = a + b} beside {@code y = b + a} proves
+ * {@code x - y} is nought.
+ *
+ * <p>Which position an equality is solved for is the one the rules use most, and among positions
+ * they use alike, the last in the order the domain walks them ({@link Use}). Chosen by the names,
+ * the rules written over what is left differ between two namings of one system, and what a question
+ * finds in them with it. What the rules use of a position — how many name it, and in what shape of
+ * rule — is the same under any naming, so the names decide only between positions nothing tells
+ * apart. The rules come out the same whichever order they were said in, since each equality is
+ * solved for the position ranked last of those that none of the others was already solved for.
  *
  * <p>What the reduced rules say is what the rules say, less. Every rule here follows from the
  * rules it was made of, and a goal written as {@link #put} writes it is equal to the goal wherever
@@ -39,7 +47,23 @@ final class ReducedRules<A> {
     /** An equality solved for {@code pivot}: {@code pivot + Σ rest = at}. */
     private record Solved<A>(A pivot, Map<A, ExactRatio> rest, ExactRatio at) {}
 
+    /**
+     * How the rules use a position, written without its name: how many of them name it, and each
+     * of those as the kind of rule, what the position weighs in it, how many positions it weighs
+     * and what it is held to. A position is solved for in preference to one used less, and to one
+     * used in other ways.
+     */
+    private record Use(int count, String ways) implements Comparable<Use> {
+
+        @Override
+        public int compareTo(Use other) {
+            int byCount = Integer.compare(count, other.count);
+            return byCount != 0 ? byCount : ways.compareTo(other.ways);
+        }
+    }
+
     private final CanonicalOrder<A> order;
+    private final Map<A, Use> uses = new HashMap<>();
     private final List<Solved<A>> solved = new ArrayList<>();
     private final List<Rule<A>> rules = new ArrayList<>();
     private boolean contradicted;
@@ -64,6 +88,7 @@ final class ReducedRules<A> {
             return null;
         }
         ReducedRules<A> reduced = new ReducedRules<>(order);
+        reduced.uses.putAll(usesIn(all, order));
         for (AffineConstraint.Equality<A> each : equalities) {
             if (!reduced.take(each)) {
                 return null;
@@ -86,6 +111,30 @@ final class ReducedRules<A> {
             reduced.rules.add(rule);
         }
         return reduced;
+    }
+
+    /** How {@code all} use each position they name. */
+    private static <A> Map<A, Use> usesIn(List<AffineConstraint<A>> all, CanonicalOrder<A> order) {
+        Map<A, List<String>> ways = new HashMap<>();
+        for (AffineConstraint<A> each : all) {
+            String shape = switch (each) {
+                case AffineConstraint.HalfSpace<A> half ->
+                        (half.bound().inclusive() ? "<=" : "<") + half.bound().at();
+                case AffineConstraint.Equality<A> equality -> "=" + equality.at();
+                case AffineConstraint.Disequality<A> hole -> "/=" + hole.at();
+            };
+            int named = each.form().atomsIn(order).size();
+            for (Map.Entry<A, ExactRatio> entry : each.form().entriesIn(order)) {
+                ways.computeIfAbsent(entry.getKey(), _ -> new ArrayList<>())
+                        .add(shape + ";" + entry.getValue() + ";" + named);
+            }
+        }
+        Map<A, Use> out = new HashMap<>();
+        ways.forEach((atom, each) -> {
+            Collections.sort(each);
+            out.put(atom, new Use(each.size(), String.join("|", each)));
+        });
+        return out;
     }
 
     /** The rules over the free positions. */
@@ -215,8 +264,15 @@ final class ReducedRules<A> {
         return at == null ? null : new Goal<>(rest, at);
     }
 
-    /** What {@code weights} weigh, in the one order the domain walks its positions in. */
+    /**
+     * What {@code weights} weigh, the positions solved for first-last: ranked by how the rules use
+     * them, and among those used alike in the order the domain walks them. The last is the one an
+     * equality is solved for.
+     */
     private List<Map.Entry<A, ExactRatio>> walked(Map<A, ExactRatio> weights) {
-        return order.walking(weights.entrySet(), Map.Entry::getKey);
+        List<Map.Entry<A, ExactRatio>> ranked =
+                new ArrayList<>(order.walking(weights.entrySet(), Map.Entry::getKey));
+        ranked.sort(Comparator.comparing(each -> uses.get(each.getKey())));
+        return ranked;
     }
 }

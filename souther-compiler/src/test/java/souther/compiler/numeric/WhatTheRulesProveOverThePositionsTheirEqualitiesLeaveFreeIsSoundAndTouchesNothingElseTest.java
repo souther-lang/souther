@@ -47,22 +47,31 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
     }
 
     private static LinearForm<String> form(Row row) {
+        return form(row, NAMES);
+    }
+
+    /** {@code row} with its positions called {@code names}. */
+    private static LinearForm<String> form(Row row, String[] names) {
         LinearForm<String> out = LinearForm.constant(ExactRatio.of(row.constant()));
         for (Term t : row.terms()) {
-            out = out.plus(LinearForm.<String>atom(NAMES[t.atom()])
+            out = out.plus(LinearForm.<String>atom(names[t.atom()])
                     .times(ExactRatio.of(t.coef())).orNull()).orNull();
         }
         return out;
     }
 
     private static NumericDomain<String> domain(List<Row> rules) {
+        return domain(rules, NAMES);
+    }
+
+    private static NumericDomain<String> domain(List<Row> rules, String[] names) {
         Map<String, NumberSpace> spaces = new LinkedHashMap<>();
-        for (String each : NAMES) {
+        for (String each : names) {
             spaces.put(each, NumberSpace.spacedOnly(Granularity.DISCRETE));
         }
         NumericDomain<String> out = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         for (Row rule : rules) {
-            out = out.assume(form(rule), rule.rel(), spaces);
+            out = out.assume(form(rule, names), rule.rel(), spaces);
         }
         return out;
     }
@@ -159,6 +168,43 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
                         rules + " " + goal);
             }
         }
+    }
+
+    /**
+     * What a system proves does not depend on what its positions are called: a position is solved
+     * for by how the rules use it, and the names decide only between positions used alike.
+     */
+    @Test
+    void whatIsProvedDoesNotDependOnWhatThePositionsAreCalled() {
+        Random random = new Random(19);
+        List<String> moved = new ArrayList<>();
+        for (int round = 0; round < 250; round++) {
+            List<Row> rules = system(random);
+            NumericDomain<String> plain = domain(rules);
+            if (plain.isBottom()) {
+                continue;
+            }
+            List<Row> goals = new ArrayList<>();
+            for (int i = 0; i < 10; i++) {
+                goals.add(random(random, 3, false));
+            }
+            for (int variant = 0; variant < 3; variant++) {
+                List<Integer> shuffled = new ArrayList<>(List.of(0, 1, 2, 3));
+                Collections.shuffle(shuffled, random);
+                String[] renamed = new String[ATOMS];
+                for (int i = 0; i < ATOMS; i++) {
+                    renamed[i] = "n" + shuffled.get(i);
+                }
+                NumericDomain<String> other = domain(rules, renamed);
+                for (Row goal : goals) {
+                    if (plain.entails(form(goal), goal.rel())
+                            != other.entails(form(goal, renamed), goal.rel())) {
+                        moved.add(rules + " " + goal + " as " + String.join(",", renamed));
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), moved);
     }
 
     /** The equalities said in another order are the same equalities, and are solved the same. */
