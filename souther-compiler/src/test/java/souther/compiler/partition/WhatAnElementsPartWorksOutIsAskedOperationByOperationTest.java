@@ -36,8 +36,8 @@ import static org.junit.jupiter.api.Assertions.fail;
  */
 class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
 
-    private static final BigInteger LEAST = BigInteger.valueOf(-8);
-    private static final BigInteger GREATEST = BigInteger.valueOf(7);
+    private static final BigInteger LEAST = BigInteger.valueOf(-4);
+    private static final BigInteger GREATEST = BigInteger.valueOf(3);
     private static final Core P = new Core.Int(0, Type.INT, null);
     private static final Core Q = new Core.Int(1, Type.INT, null);
     private static final AddedOfEachElement.Part PATH_P = new AddedOfEachElement.Path(P);
@@ -48,7 +48,7 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
     private static final BindingId D = new BindingId(new BindingOwner.OfValue("w1", "m"), 0);
     private static final AddedOfEachElement.Part NAMED_D = new AddedOfEachElement.Named(D);
     private static final List<long[]> RANGES = List.of(
-            new long[] {0, 7}, new long[] {-8, 7}, new long[] {-2, 1});
+            new long[] {0, 3}, new long[] {-4, 3}, new long[] {-1, 1});
     private static final List<BinOp> OPS = List.of(BinOp.ADD, BinOp.SUB, BinOp.MUL);
 
     @Test
@@ -86,8 +86,8 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
     @Test
     void theOrderAPartIsWrittenInDecidesWhatIsShown() {
         AddedOfEachElement.Part difference = worked(BinOp.SUB, PATH_P, PATH_Q);
-        long[] noughtOrMore = {0, 7};
-        long[] every = {-8, 7};
+        long[] noughtOrMore = {0, 3};
+        long[] every = {-4, 3};
         // p - q of two numbers at nought or more is within the ends, whatever row it is on.
         assertEquals(AddedOfEachElement.Through.EVERY_ROW,
                 through(difference, 0, noughtOrMore, noughtOrMore));
@@ -97,7 +97,7 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
         // acc + (p - q) from two works the difference out first, which gets through.
         assertEquals(AddedOfEachElement.Through.A_ROW_OF_ONE_ELEMENT,
                 through(worked(BinOp.ADD, SO_FAR, difference), 2, noughtOrMore, noughtOrMore));
-        // acc + p - q from two works out 2 + p first, past the ends where p is seven.
+        // acc + p - q from two works out 2 + p first, past the ends where p is two or more.
         assertEquals(AddedOfEachElement.Through.NOT_SHOWN,
                 through(worked(BinOp.SUB, worked(BinOp.ADD, SO_FAR, PATH_P), PATH_Q), 2,
                         noughtOrMore, noughtOrMore));
@@ -110,7 +110,7 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
         assertEquals(AddedOfEachElement.Through.NOT_SHOWN,
                 through(worked(BinOp.ADD, SO_FAR, difference), 2, every, every));
         // A name given p + 3 is worked out though nothing reads it, and passes the ends where
-        // p is past four.
+        // p is past nought.
         AddedOfEachElement unread = new AddedOfEachElement(
                 List.of(new AddedOfEachElement.Bound(D, worked(BinOp.ADD, PATH_P, THREE))),
                 Map.of(), PATH_Q);
@@ -184,19 +184,17 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
             for (long qv = q[0]; qv <= q[1]; qv++) {
                 Map<Core, Long> values = Map.of(P, pv, Q, qv);
                 Map<BindingId, Long> named = new HashMap<>();
-                boolean stops = false;
+                boolean[] stops = {false};
                 for (AddedOfEachElement.Bound bound : each.bound()) {
-                    stops |= stops(bound.value(), seed, values, named);
-                    named.put(bound.name(), exactly(bound.value(), seed, values, named));
+                    named.put(bound.name(), workedOut(bound.value(), seed, values, named, stops));
                 }
-                stops |= stops(each.answer(), seed, values, named);
-                long total = exactly(each.answer(), seed, values, named);
+                long total = workedOut(each.answer(), seed, values, named, stops);
                 boolean totalStops = total < LEAST.longValue() || total > GREATEST.longValue();
-                if (stops && !totalStops) {
+                if (stops[0] && !totalStops) {
                     fail(through + " for " + each + " from " + seed + " at p=" + pv + " q=" + qv
                             + ": an operation stops where the total " + total + " does not");
                 }
-                if (through == AddedOfEachElement.Through.EVERY_ROW && stops) {
+                if (through == AddedOfEachElement.Through.EVERY_ROW && stops[0]) {
                     fail("every row is claimed for " + each + ", and it stops at p=" + pv
                             + " q=" + qv);
                 }
@@ -204,9 +202,13 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
         }
     }
 
-    /** What {@code part} comes to on a row of one element, worked out exactly. */
-    private static long exactly(AddedOfEachElement.Part part, long seed, Map<Core, Long> values,
-                                Map<BindingId, Long> named) {
+    /**
+     * What {@code part} comes to on a row of one element, worked out exactly, operand by operand;
+     * {@code stops} is set where an operation meets a number past the ends. A name read works
+     * out nothing again.
+     */
+    private static long workedOut(AddedOfEachElement.Part part, long seed, Map<Core, Long> values,
+                                  Map<BindingId, Long> named, boolean[] stops) {
         return switch (part) {
             case AddedOfEachElement.Path(Core read) -> values.get(read);
             case AddedOfEachElement.Written(BigDecimal value) -> value.longValueExact();
@@ -214,24 +216,13 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
             case AddedOfEachElement.SoFar _ -> seed;
             case AddedOfEachElement.ReadWithTheTotal _ ->
                     throw new IllegalStateException("not among the trees asked");
-            case AddedOfEachElement.Worked(BinOp op, var left, var right) -> apply(op,
-                    exactly(left, seed, values, named), exactly(right, seed, values, named));
+            case AddedOfEachElement.Worked(BinOp op, var left, var right) -> {
+                long value = apply(op, workedOut(left, seed, values, named, stops),
+                        workedOut(right, seed, values, named, stops));
+                stops[0] |= value < LEAST.longValue() || value > GREATEST.longValue();
+                yield value;
+            }
         };
-    }
-
-    /** Whether working {@code part} out, operand by operand, meets a number past the ends; a
-     *  name read works out nothing again. */
-    private static boolean stops(AddedOfEachElement.Part part, long seed, Map<Core, Long> values,
-                                 Map<BindingId, Long> named) {
-        if (!(part instanceof AddedOfEachElement.Worked(BinOp op, var left, var right))) {
-            return false;
-        }
-        if (stops(left, seed, values, named) || stops(right, seed, values, named)) {
-            return true;
-        }
-        long value = apply(op, exactly(left, seed, values, named),
-                exactly(right, seed, values, named));
-        return value < LEAST.longValue() || value > GREATEST.longValue();
     }
 
     private static long apply(BinOp op, long left, long right) {
