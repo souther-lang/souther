@@ -3,7 +3,11 @@ package souther.compiler.diag;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.doc.SpecDocument;
+import souther.compiler.diag.msg.Code;
 import souther.compiler.diag.msg.MessageCodes;
+import souther.compiler.diag.msg.Prose;
+import souther.compiler.diag.msg.Reported;
+import souther.compiler.diag.msg.Supporting;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.MessageTemplate;
@@ -655,12 +659,13 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * {@link souther.compiler.diag.msg.Supporting}, and names none — a code there is read by
      * nothing, and counted by the rule below as a rule something reports.
      *
-     * <p>Every message carries one of the two roles and never both, which is what makes being a
+     * <p>Every message carries one of the three roles and never two, which is what makes being a
      * {@code Reported} the same thing as being usable as one: the builder takes each where it
      * belongs, so a message written for a hint cannot reach {@code say} and one written as a subject
-     * cannot reach {@code hint}. Held here as well because a leaf could carry neither and fall
-     * through both. The roles sit outside the {@link Message} hierarchy, so this walk never meets
-     * them and what may be a message stays what {@code Message} permits.
+     * cannot reach {@code hint}. A line of a report is {@link Prose}, which no diagnostic takes and
+     * which names no code either. Held here as well because a leaf could carry none and fall
+     * through all three. The roles sit outside the {@link Message} hierarchy, so this walk never
+     * meets them and what may be a message stays what {@code Message} permits.
      */
     @Test
     void everyMessageIsARecordThatNamesItsRule() {
@@ -671,21 +676,25 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
                 wrong.add(leaf.getName() + " is not a record");
                 continue;
             }
-            boolean reports = souther.compiler.diag.msg.Reported.class.isAssignableFrom(leaf);
-            boolean supports = souther.compiler.diag.msg.Supporting.class.isAssignableFrom(leaf);
-            if (reports == supports) {
-                wrong.add(leaf.getName() + (reports
-                        ? " is both what a diagnostic is about and what is said beside one"
-                        : " is neither what a diagnostic is about nor what is said beside one"));
+            boolean reports = Reported.class.isAssignableFrom(leaf);
+            boolean supports = Supporting.class.isAssignableFrom(leaf);
+            boolean prose = Prose.class.isAssignableFrom(leaf);
+            int roles = (reports ? 1 : 0) + (supports ? 1 : 0) + (prose ? 1 : 0);
+            if (roles != 1) {
+                wrong.add(leaf.getName() + (roles == 0
+                        ? " is neither what a diagnostic is about, nor what is said beside one,"
+                                + " nor a line of a report"
+                        : " carries more than one of the three roles"));
             }
-            boolean named = leaf.getAnnotation(souther.compiler.diag.msg.Code.class) != null;
+            boolean named = leaf.getAnnotation(Code.class) != null;
             if (reports && !named) {
                 wrong.add(leaf.getName() + " reports a rule and names no code");
             }
             // A hint's code is read by nothing — a diagnostic's comes from its subject — so one
-            // written here is a number that looks reported and is not.
-            if (supports && named) {
-                wrong.add(leaf.getName() + " is a hint or a label and names a code");
+            // written here is a number that looks reported and is not. A line of a report is
+            // about no rule at all.
+            if ((supports || prose) && named) {
+                wrong.add(leaf.getName() + " is not what a diagnostic is about and names a code");
             }
         }
         wrong.sort(String::compareTo);

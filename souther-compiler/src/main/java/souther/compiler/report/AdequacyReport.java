@@ -3611,8 +3611,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     excluded == 0 ? "" : "   excluded " + excluded,
                     notes(partition.axes().stream()
                                     .filter(a -> a.reached().made().isEmpty()).toList(),
-                            a -> ReasonProse.of(ReportMeasurement.of(a.reached()).reason())
-                                    .clause()),
+                            a -> Page.sameness(ReasonProse.of(
+                                    ReportMeasurement.of(a.reached()).reason()).clause())),
                     inFull(partitioned.status())));
             // The position as well as the class. A class name alone is the same words about two
             // positions of one behavior whose types divide into classes named after the same cases,
@@ -4764,7 +4764,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         rows.met().size(), meetings.counted(), held))
                 .orElseGet(() -> String.format("    interaction combinations %d   %s%s%n",
                         meetings.counted(),
-                        ReasonProse.of(meetings.made().why()).sentence(), held)));
+                        Page.sameness(ReasonProse.of(meetings.made().why()).sentence()), held)));
         for (UnobservedGroup group : behavior.unobserved()) {
             decidedTogether(out, group, declaredIn, rendering);
             for (UnobservedChoices missing : group.choices()) {
@@ -4875,7 +4875,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 .map(placed -> String.format("    decision    rules %d   taken %d%n",
                         decision.rules().size(), placed.rules().size()))
                 .orElseGet(() -> String.format("    decision    rules %d   %s%n",
-                        decision.rules().size(), ReasonProse.of(took.why()).sentence())));
+                        decision.rules().size(),
+                        Page.sameness(ReasonProse.of(took.why()).sentence()))));
         for (ReportedFinding f : behavior.reported()) {
             if (!(f.finding().about() instanceof About.ARuleNoRowTakes rule)) {
                 continue;
@@ -5453,7 +5454,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
                         UnaskedReasons why) ->
                         "undecided whether a row is at the " + point + " — "
-                                + ReasonProse.of(why.asOne()).clause();
+                                + Page.sameness(ReasonProse.of(why.asOne()).clause());
                 // Named for what happened, which is not one thing. A reading that did not come
                 // back is of a row this compiler composed; a composing that stopped never had one
                 // — and an opening written for the first says a row was built at a point where
@@ -5654,7 +5655,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void sayWhy(StringBuilder out, String measure, MeasureReason reason) {
         if (reason.about() == MeasureReason.About.THE_BEHAVIOR) {
             out.append(String.format("    %s%s%n",
-                    DisplayColumns.padRight(measure, 12), ReasonProse.of(reason).sentence()));
+                    DisplayColumns.padRight(measure, 12),
+                    Page.sameness(ReasonProse.of(reason).sentence())));
         }
     }
 
@@ -11041,7 +11043,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ReaderDisposition.LookAtWhatTheMeasureWentWithout _ ->
                     "read what this measure went without";
             case ReaderDisposition.LookAtWhyNothingWasMeasured it ->
-                    ReasonProse.of(it.why()).clause();
+                    Page.sameness(ReasonProse.of(it.why()).clause());
             case ReaderDisposition.LookAtWhatShowedNoRow _ ->
                     "read what was tried to show a row can be written there";
             case ReaderDisposition.LookAtTheFork _ -> "read the fork nothing told apart";

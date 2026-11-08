@@ -257,10 +257,16 @@ public final class Messages {
      *
      * <p>A value written in the catalog itself — the kind of element an operation needs, which is a
      * phrase and not a name — is rendered in the language the message is being asked in, as it was
-     * when the values were an array. Everything else is what it prints as.
+     * when the values were an array. So is a message carried as a value — a clause a line of a
+     * report says inside its own sentence — which is rendered through its own entry, in the same
+     * language. Everything else is what it prints as.
      */
     public static String text(Object value, Locale locale) {
-        return value instanceof Localizable l ? get(l.key(), locale, l.args()) : String.valueOf(value);
+        return switch (value) {
+            case Localizable l -> get(l.key(), locale, l.args());
+            case Message m -> render(m, locale);
+            case null, default -> String.valueOf(value);
+        };
     }
 
     /** Whether the catalog defines {@code key} for {@code locale} (or its English base). */
