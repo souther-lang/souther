@@ -507,12 +507,25 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether the stopped expression is a quotient and where the operator's"
                             + " own account says it answers, so that its operands are told with"
                             + " the rest"),
-            new Held("souther.compiler.partition.AffineReading.1.onlyAddsTheElement",
-                    "asks whether a walk's step is the answer so far and the element added, as"
-                            + " it is written: an operation not written is one no run can stop at"),
-            new Held("souther.compiler.partition.AffineReading.1.multipliesFieldsOf",
-                    "asks whether an expression is fields of the one element multiplied and"
+            new Held("souther.compiler.partition.AddedOfEachElement.ofTheStep",
+                    "asks whether a walk's step is the answer so far with a part of the element"
+                            + " added or taken away, as it is written: an operation not written is"
+                            + " one no run can stop at"),
+            new Held("souther.compiler.partition.AddedOfEachElement.factorsOf",
+                    "asks whether an expression is paths of the one element multiplied and"
                             + " nothing else, so that the product is worked out as it is written"),
+            new Held("souther.compiler.inputs.WrittenOperation.operandsOf",
+                    "asks whether an expression is one sum, difference or product of whole numbers"
+                            + " or decimals, by the operator or the library's operation"),
+            new Held("souther.compiler.inputs.WrittenOperation.isTheLibrarys",
+                    "asks which kernels of the library are the operator written as a call"),
+            new Held("souther.compiler.inputs.WrittenOperation.<clinit>",
+                    "names the kernels of the library each operator is written as"),
+            new Held("souther.compiler.partition.AffineReading.1.addsAWrittenWholeNumber",
+                    "asks whether a walk's step is the answer so far plus a written whole number,"
+                            + " so that every answer so far lies between the seed and the answer"),
+            new Held("souther.compiler.partition.AffineReading.WhatWasTold.addsUpDecimals",
+                    "tells the sums the library works a total of decimals out by, from nought"),
             new Held("souther.compiler.inputs.InputNumber.lookedUpBy",
                     "asks whether a walk's step adds the entry's value times the lookup of the"
                             + " entry's key in another map, with a written nought where it holds"

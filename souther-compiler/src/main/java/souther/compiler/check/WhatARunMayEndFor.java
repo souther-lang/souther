@@ -11,6 +11,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -232,17 +233,30 @@ public final class WhatARunMayEndFor {
                 || kept.type() != Type.INT) {
             return null;
         }
+        OptionalInt at = theListItAddsUp(kept);
+        return at.isPresent() ? new GetsPast.WhereTheTotalFits(at.getAsInt()) : null;
+    }
+
+    /**
+     * Which operand of {@code e} is the list it adds up, where it is a call that accumulates from
+     * nought by adding, by the operation's own account ({@link Accumulations}); empty where it is
+     * no such call. Whatever the numbers are: what a run stops at in adding them is the type's.
+     */
+    public static OptionalInt theListItAddsUp(Core e) {
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall kept)) {
+            return OptionalInt.empty();
+        }
         Accumulations.Accumulating accumulating = Accumulations.accumulating(kept);
         if (accumulating == null || !accumulating.what().equals(new Accumulation(
                 Accumulation.Identity.ZERO, Accumulation.Combine.ADD))) {
-            return null;
+            return OptionalInt.empty();
         }
         for (int at = 0; at < kept.args().size(); at++) {
             if (kept.args().get(at) == accumulating.container()) {
-                return new GetsPast.WhereTheTotalFits(at);
+                return OptionalInt.of(at);
             }
         }
-        return null;
+        return OptionalInt.empty();
     }
 
     /** Whether every function {@code kept} is handed is a closure written at the call. */

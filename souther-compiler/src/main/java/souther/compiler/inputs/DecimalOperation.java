@@ -40,7 +40,8 @@ import java.util.TreeSet;
  * @param after    the operations, by where they are among those told, whose result this one is
  *                 worked out of, and theirs: each is worked out before it on every run
  */
-public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> after) {
+public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> after)
+        implements DecimalWork {
 
     public DecimalOperation {
         operands = List.copyOf(operands);
@@ -76,26 +77,45 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * out over. Two scales this great sum to a scale an {@code int} holds with room to spare, and
      * the digits an addition lines up are fewer than a {@code BigInteger} holds.
      */
-    private static final long SCALE_THE_ROOM_IS_SHOWN_FOR = 1L << 27;
+    static final long SCALE_THE_ROOM_IS_SHOWN_FOR = 1L << 27;
 
     /**
      * The places of the input each of {@code all} reads, by the key of the term, through the
-     * operations it is worked out of.
+     * operations it is worked out of. A walk reads the total it adds up.
      */
-    static List<Set<Object>> readsOf(List<DecimalOperation> all) {
+    static List<Set<Object>> readsOf(List<DecimalWork> all) {
+        return readsOf(all, true);
+    }
+
+    /** The same, with the totals read left out where {@code totals} is false: the places each
+     *  reads as the row holds them. */
+    private static List<Set<Object>> readsOf(List<DecimalWork> all, boolean totals) {
         List<Set<Object>> reads = new ArrayList<>();
-        for (DecimalOperation each : all) {
+        for (DecimalWork work : all) {
             Set<Object> here = new LinkedHashSet<>();
-            for (Operand operand : each.operands) {
-                switch (operand) {
-                    case Formed formed -> here.addAll(formed.coefs().keySet());
-                    case Total total -> here.add(total.term());
-                    case Worked worked -> {
-                        if (worked.operation() < reads.size()) {
-                            here.addAll(reads.get(worked.operation()));
+            switch (work) {
+                case DecimalAdditiveWalk walk -> {
+                    if (totals) {
+                        here.addAll(walk.added().coefs().keySet());
+                    }
+                }
+                case DecimalOperation each -> {
+                    for (Operand operand : each.operands) {
+                        switch (operand) {
+                            case Formed formed -> here.addAll(formed.coefs().keySet());
+                            case Total total -> {
+                                if (totals) {
+                                    here.add(total.term());
+                                }
+                            }
+                            case Worked worked -> {
+                                if (worked.operation() < reads.size()) {
+                                    here.addAll(reads.get(worked.operation()));
+                                }
+                            }
+                            case Written _ -> { }
                         }
                     }
-                    case Written _ -> { }
                 }
             }
             reads.add(here);
@@ -140,7 +160,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * cannot be is not claimed over; one that needs the partner put in another way needs that way
      * stated with it.
      */
-    public static boolean allowAClaimOver(List<DecimalOperation> all, Object asked,
+    public static boolean allowAClaimOver(List<DecimalWork> all, Object asked,
                                           Object partner) {
         List<Set<Object>> reads = readsOf(all);
         Rooms rooms = roomsOf(all);
@@ -163,19 +183,22 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * Whether every operation of {@code all} that reads {@code asked} reads another term with it
      * and has room at every number ({@link #roomsOf}). A run with no end on a side is asked at the
      * edge of what is built for such operations: the room is the same there as at any number. An
-     * operation reading the term alone has room by the scale the term is written at, which the far
-     * side of a run with no end does not say, and is not taken here.
+     * operation reading the term alone as a place of the row has room by the scale the term is
+     * written at, which the far side of a run with no end does not say, and is not taken here. A
+     * total, and a walk adding one up ({@link DecimalAdditiveWalk}), are at a scale the numbers a
+     * row is built from bound, whatever number the term comes to, and are taken alone.
      */
-    static boolean everyOperationReadingItHasRoomAtEveryNumber(List<DecimalOperation> all,
+    static boolean everyOperationReadingItHasRoomAtEveryNumber(List<DecimalWork> all,
                                                                Object asked) {
         List<Set<Object>> reads = readsOf(all);
+        List<Set<Object>> asPlaces = readsOf(all, false);
         Rooms rooms = roomsOf(all);
         if (rooms == null) {
             return false;
         }
         for (int i = 0; i < all.size(); i++) {
-            if (reads.get(i).contains(asked)
-                    && (reads.get(i).size() < 2 || !rooms.atEveryNumber().get(i))) {
+            if (reads.get(i).contains(asked) && (!rooms.atEveryNumber().get(i)
+                    || (asPlaces.get(i).contains(asked) && reads.get(i).size() < 2))) {
                 return false;
             }
         }
@@ -187,7 +210,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * sizes of the addends of a form then say nothing of whether a row completes them: a row that
      * is built completes every one of them.
      */
-    static boolean everyOperationHasRoomAtEveryNumber(List<DecimalOperation> all) {
+    static boolean everyOperationHasRoomAtEveryNumber(List<DecimalWork> all) {
         Rooms rooms = roomsOf(all);
         if (rooms == null) {
             return false;
@@ -204,22 +227,13 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * its operands and its answer are kept to what is shown room for. One that is not (a factor at
      * the edge of the scale range has room for a total at one scale and none at the next) is
      * completed at no row, whichever representative of the total a row is worked out with.
+     *
+     * <p>A walk adding up a list ends at the scale its elements are written at, as a total does,
+     * and is asked as one.
      */
-    static boolean leavesNoCompletionToHowATotalIsWritten(List<DecimalOperation> all) {
-        if (all.stream().noneMatch(each -> each.operands.stream().anyMatch(Total.class::isInstance))) {
-            return true;
-        }
-        boolean[] dependsOnATotal = new boolean[all.size()];
-        boolean any = false;
-        for (int i = 0; i < all.size(); i++) {
-            for (Operand operand : all.get(i).operands) {
-                dependsOnATotal[i] |= operand instanceof Total
-                        || (operand instanceof Worked worked && worked.operation() < i
-                        && dependsOnATotal[worked.operation()]);
-            }
-            any |= dependsOnATotal[i];
-        }
-        if (!any) {
+    static boolean leavesNoCompletionToHowATotalIsWritten(List<DecimalWork> all) {
+        BitSet dependsOnATotal = dependsOnATotal(all);
+        if (dependsOnATotal.isEmpty()) {
             return true;
         }
         Rooms rooms = roomsOf(all);
@@ -227,11 +241,31 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
             return false;
         }
         for (int i = 0; i < all.size(); i++) {
-            if (dependsOnATotal[i] && !rooms.bounded().get(i)) {
+            if (dependsOnATotal.get(i) && !rooms.bounded().get(i)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /** Which of {@code all} are worked out of a total, directly or through those before them; a
+     *  walk adding a list up is one. */
+    private static BitSet dependsOnATotal(List<DecimalWork> all) {
+        BitSet out = new BitSet(all.size());
+        for (int i = 0; i < all.size(); i++) {
+            switch (all.get(i)) {
+                case DecimalAdditiveWalk _ -> out.set(i);
+                case DecimalOperation each -> {
+                    for (Operand operand : each.operands) {
+                        if (operand instanceof Total || (operand instanceof Worked worked
+                                && worked.operation() < i && out.get(worked.operation()))) {
+                            out.set(i);
+                        }
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -245,18 +279,27 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      *                      as it stands ({@link #isAPlaceAsItStands}), a total, a literal or the
      *                      answer of an operation told before. A place weighed or moved is a
      *                      decimal only where the number it comes to is written at no more places
-     *                      than a row is built at, which turns on the other terms.
+     *                      than a row is built at, which turns on the other terms. A walk is
+     *                      bounded where every step of it is ({@link DecimalAdditiveWalk}), and
+     *                      then has room at every row, since it reads only the elements a row
+     *                      holds and the seed.
      */
     private record Rooms(BitSet bounded, BitSet atEveryNumber) {
     }
 
     /** The rooms of {@code all}; null where an operation is worked out of one told after it. */
-    private static Rooms roomsOf(List<DecimalOperation> all) {
+    private static Rooms roomsOf(List<DecimalWork> all) {
         BitSet bounded = new BitSet(all.size());
         BitSet atEveryNumber = new BitSet(all.size());
         long[] scaleOf = new long[all.size()];
         for (int i = 0; i < all.size(); i++) {
-            DecimalOperation each = all.get(i);
+            if (all.get(i) instanceof DecimalAdditiveWalk walk) {
+                scaleOf[i] = walk.scaleOfEveryStep();
+                bounded.set(i, walk.everyStepHasRoom());
+                atEveryNumber.set(i, walk.everyStepHasRoom());
+                continue;
+            }
+            DecimalOperation each = (DecimalOperation) all.get(i);
             long[] over = new long[2];
             boolean standing = true;
             for (int o = 0; o < 2; o++) {
@@ -410,24 +453,58 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * {@code values}, each by its key, in the order they are told — and so whether a run that
      * works them out gets past them. False where an operand is a number the row does not have,
      * and where an operation's room turns on how a total is written
-     * ({@link #leavesNoCompletionToHowATotalIsWritten}): a row has a representative of a total,
-     * and an operation it is no fact of is not shown worked out on it.
+     * ({@link #leavesNoCompletionToHowATotalIsWritten}).
+     *
+     * <p>An operation worked out of a total, and a walk adding one up, is then bounded, and has
+     * room at every row that is built whatever the total comes to; it is not worked out here.
+     * What is asked of it is that the row is one that is built: the places it reads are the row's,
+     * and a total the row names is one a list it is built with comes to, at no more places than a
+     * row is built at. A total the row does not name is held by the list the row is built with
+     * all the same, at such places: the relation may name it as no term of its own, as two totals
+     * of one run are named as one ({@link TotalsOfOneRun#addedUp}).
      */
-    public static boolean allCompleteAt(List<DecimalOperation> all, Map<Object, ExactRatio> values) {
+    public static boolean allCompleteAt(List<DecimalWork> all, Map<Object, ExactRatio> values) {
         if (all.isEmpty()) {
             return true;
         }
         if (!leavesNoCompletionToHowATotalIsWritten(all)) {
             return false;
         }
+        BitSet ofATotal = dependsOnATotal(all);
         BigDecimal[] results = new BigDecimal[all.size()];
         for (int i = 0; i < all.size(); i++) {
-            results[i] = all.get(i).workedOut(results, values);
+            if (ofATotal.get(i)) {
+                if (!readsWhatARowIsBuiltWith(all.get(i), values)) {
+                    return false;
+                }
+                continue;
+            }
+            results[i] = ((DecimalOperation) all.get(i)).workedOut(results, values);
             if (results[i] == null) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Whether what {@code work} reads of a row at {@code values} is what a row that is built
+     * holds: each place it reads, at a decimal a row is built at, and each total the row names,
+     * at no more places than a row is built at.
+     */
+    private static boolean readsWhatARowIsBuiltWith(DecimalWork work,
+                                                    Map<Object, ExactRatio> values) {
+        return switch (work) {
+            case DecimalAdditiveWalk walk -> !values.keySet().containsAll(
+                    walk.added().coefs().keySet()) || walk.added().at(values).isPresent();
+            case DecimalOperation each -> each.operands.stream().allMatch(operand ->
+                    switch (operand) {
+                        case Formed formed -> formed.at(values).isPresent();
+                        case Total total -> !values.containsKey(total.term())
+                                || total.at(values).isPresent();
+                        case Written _, Worked _ -> true;
+                    });
+        };
     }
 
     /** The number this comes to, or null where the row has no operand for it or the run time has
@@ -455,6 +532,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
 
     /** The same, with the operations it is worked out of moved {@code by} places later among
      *  those told. */
+    @Override
     public DecimalOperation shifted(int by) {
         return new DecimalOperation(op,
                 operands.stream().map(each -> each instanceof Worked worked
