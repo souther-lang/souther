@@ -1569,17 +1569,27 @@ final class Term {
         }
 
         /**
-         * The closure whose answer {@code closure} denies, or null where it denies none.
-         *
-         * <p>A comparison is held as the statement it makes or the denial of one
-         * ({@link #comparison}), so {@code n -> n <= 2} is the denial of {@code n -> n > 2} by how
-         * it is built, and how many elements it holds of is how many there are less how many the
-         * other holds of.
+         * The closure of one parameter that answers true where {@code closure} answers false, or
+         * null where it is no such closure. The denial of a denial is the statement itself
+         * ({@link #not}), and a comparison is held as the statement it makes or the denial of one
+         * ({@link #comparison}).
          */
-        Term closureWhoseAnswerThisDenies(Term closure) {
+        Term closureDenying(Term closure) {
             return closure.shape == Shape.CLOSURE && Integer.valueOf(1).equals(closure.of)
-                    && closure.parts.getFirst().shape == Shape.NOT
-                    ? closure(1, closure.parts.getFirst().parts.getFirst()) : null;
+                    ? closure(1, not(closure.parts.getFirst())) : null;
+        }
+
+        /**
+         * {@code closure} written the one way where it states something of whole numbers, so that
+         * two statements of one set are one term, and as it is where it does not — or null where
+         * there is none.
+         */
+        Term normalClosure(Term closure) {
+            Term.StatementOverWholeNumbers statement = closure == null ? null
+                    : closure.statementOverWholeNumbers();
+            Term written = statement == null ? null
+                    : closureAnswering(statement.subject(), statement.runs());
+            return written == null ? closure : written;
         }
 
         /** How many distinct terms this has been asked for — what a test measuring the sharing

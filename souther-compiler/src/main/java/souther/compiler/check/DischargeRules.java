@@ -461,12 +461,24 @@ final class DischargeRules {
      * name this spells.
      */
     static Core.Block keptWhereItHolds(Core.PreservedCall call, Denotations at) {
-        BoundOperationFacts.Assembled assembled = facts().assembles(call.operation());
-        if (assembled == null || assembled.piece() != PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS) {
-            return null;
-        }
-        Core.Block predicate = Terms.blockOf(CallArguments.of(assembled.closure(), call), at);
+        KeptWhereItHolds kept = keptElements(call);
+        Core.Block predicate = kept == null ? null : Terms.blockOf(kept.closure(), at);
         return predicate == null || predicate.params().size() != 1 ? null : predicate;
+    }
+
+    /** The elements {@code call} answers: those of {@code source} that {@code closure} holds of. */
+    record KeptWhereItHolds(Core source, Core closure) {}
+
+    /**
+     * What {@code call} keeps and by what, or null where the operation does not answer the
+     * elements of a container where a closure holds of them: the container and the closure as
+     * the call was handed them.
+     */
+    static KeptWhereItHolds keptElements(Core.PreservedCall call) {
+        BoundOperationFacts.Assembled assembled = facts().assembles(call.operation());
+        return assembled == null || assembled.piece() != PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS
+                ? null : new KeptWhereItHolds(CallArguments.of(assembled.source(), call),
+                        CallArguments.of(assembled.closure(), call));
     }
 
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the

@@ -1768,7 +1768,8 @@ final class Predicates {
         if (compared != null) {
             out = out.taking(compared, stated.relationUnder(positive), Known.Held.ON_THE_PATH,
                     terms.spacesOf(compared));
-            out = whatTheAnswersSayOfWhatTheyWereMadeOf(out, compared);
+            out = whatTheLawsOfTheSizesSay(out, compared);
+            out = whatTheWalksOfAComparisonSay(out, stated, at);
             taken = true;
             shapeRead |= readsItsShape(stated.left(), at) && readsItsShape(stated.right(), at);
         }
@@ -1781,84 +1782,75 @@ final class Predicates {
     }
 
     /**
-     * {@code k} with what an answer says of what it was made of, for each atom in {@code form}
-     * the path now puts on one side of where an empty container would leave it.
+     * {@code k} with what the law of an operation says of its arguments, for each size in
+     * {@code form} the operation answered and the path now puts on one side of nought:
+     * {@code String.trim(s)} holds something exactly where some code point of {@code s} is not
+     * whitespace, so a path where it holds something is one where {@code s} does.
      *
-     * <p>The law of an operation, for a size: {@code String.trim(s)} holds something exactly where
-     * some code point of {@code s} is not whitespace, so a path where it holds something is one
-     * where {@code s} does. It is the law read the other way from the recipe the size carries
+     * <p>The law read the other way from the recipe the size carries
      * ({@link Derivation.HoldsSomethingWhere}): the recipe says where the size lies from where the
      * arguments are, and this says where the arguments are from where the path put the size. Only
-     * what is certain that way is taken ({@link LawOverAtoms#certain}).
-     *
-     * <p>And a walk over a container, which answers where it started when the container holds
-     * none: a total that is not nought is one over something, whatever the step. Each count either
-     * names is asked in turn, once.
+     * what is certain that way is taken ({@link LawOverAtoms#certain}), and each count it names is
+     * asked in turn, once.
      */
-    private Known whatTheAnswersSayOfWhatTheyWereMadeOf(Known k, LinearForm<FactSubject> form) {
+    private Known whatTheLawsOfTheSizesSay(Known k, LinearForm<FactSubject> form) {
         Deque<FactSubject> asked = new ArrayDeque<>(form.coefs().keySet());
-        asked.removeIf(atom -> !readsBackToItsArguments(atom));
-        if (asked.isEmpty()) {
-            return k;
-        }
+        asked.removeIf(atom -> lawOfTheSize(atom) == null);
         Set<FactSubject> seen = new HashSet<>();
         Known out = k;
         while (!asked.isEmpty()) {
             FactSubject atom = asked.pop();
-            if (!seen.add(atom) || !readsBackToItsArguments(atom)) {
-                continue;
+            Derivation.HoldsSomethingWhere.Holding law = seen.add(atom) ? lawOfTheSize(atom) : null;
+            Boolean something = law == null ? null
+                    : out.numbers().entails(LinearForm.atomMinusConstant(atom, ExactRatio.ONE),
+                            Rel.GE) ? Boolean.TRUE
+                    : out.numbers().entails(LinearForm.atom(atom), Rel.LE) ? Boolean.FALSE : null;
+            List<NumericConstraint> certain = something == null ? List.of()
+                    : LawOverAtoms.certain(law, something);
+            if (certain == null) {
+                return out.reachingNothing();
             }
-            Known before = out;
-            if (terms.knowledgeOf(atom).computation()
-                    instanceof AtomKnowledge.Computation.Reduction(var walk, FactSubject walked)) {
-                out = awayFromWhereNoneLeavesIt(out, atom, walk, walked, asked);
-            } else {
-                Derivation.HoldsSomethingWhere.Holding law = lawOfTheSize(atom);
-                Boolean something = out.numbers().entails(
-                        LinearForm.atomMinusConstant(atom, ExactRatio.ONE), Rel.GE) ? Boolean.TRUE
-                        : out.numbers().entails(LinearForm.atom(atom), Rel.LE) ? Boolean.FALSE
-                        : null;
-                List<NumericConstraint> certain = something == null ? List.of()
-                        : LawOverAtoms.certain(law, something);
-                if (certain == null) {
-                    return out.reachingNothing();
-                }
-                for (NumericConstraint each : certain) {
-                    out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
-                            terms.spacesOf(each.form()));
-                    asked.addAll(each.form().coefs().keySet());
-                }
+            for (NumericConstraint each : certain) {
+                out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
+                        terms.spacesOf(each.form()));
+                asked.addAll(each.form().coefs().keySet());
             }
             // Only a path that was given something new can have been left with no way through.
-            if (out != before && out.reachesNothing()) {
+            if (!certain.isEmpty() && out.reachesNothing()) {
                 return out;
             }
         }
         return out;
     }
 
-    /** Whether what the path puts on {@code atom} says something of what it was made of: a walk
-     *  over a container, or a size whose operation holds something by a law. */
-    private boolean readsBackToItsArguments(FactSubject atom) {
-        return terms.knowledgeOf(atom).computation()
-                instanceof AtomKnowledge.Computation.Reduction(var _, FactSubject walked)
-                ? walked != null : lawOfTheSize(atom) != null;
-    }
-
-    /** {@code k}, with the container {@code atom} was walked over holding something where the path
-     *  puts {@code atom} either side of the seed — and that count asked in turn, onto
-     *  {@code asked}. A walk over none answers its seed, whatever its step is. */
-    private Known awayFromWhereNoneLeavesIt(Known k, FactSubject atom, InductiveBounds.Walk walk,
-                                            FactSubject walked, Deque<FactSubject> asked) {
-        LinearForm<FactSubject> away = walked == null ? null
-                : LinearForm.atom(atom).minus(walk.seed()).orNull();
-        if (away == null
-                || !(k.numbers().entails(away, Rel.GT) || k.numbers().entails(away, Rel.LT))) {
-            return k;
+    /**
+     * {@code k} with what a walk a comparison reads says of the container it walked, where the
+     * path puts its answer either side of the seed: a walk over none answers its seed, whatever
+     * its step is, so a total that is not nought is one over something.
+     *
+     * <p>Read off the expression the comparison is written over, which is where the container is
+     * known: a walk is one value however many places walk equal values, and how many a container
+     * holds is the place's.
+     */
+    private Known whatTheWalksOfAComparisonSay(Known k, StatedComparison stated, Denotations at) {
+        List<Core> leaves = new ArrayList<>();
+        Terms.additiveLeaves(stated.left(), leaves);
+        Terms.additiveLeaves(stated.right(), leaves);
+        Known out = k;
+        for (Core leaf : leaves) {
+            Terms.WalkOver walk = terms.walkOver(leaf, at);
+            LinearForm<FactSubject> away = walk == null ? null
+                    : LinearForm.atom(walk.answer()).minus(walk.seed()).orNull();
+            if (away != null && (out.numbers().entails(away, Rel.GT)
+                    || out.numbers().entails(away, Rel.LT))) {
+                LinearForm<FactSubject> something =
+                        LinearForm.atomMinusConstant(walk.walked(), ExactRatio.ONE);
+                out = out.taking(something, Rel.GE, Known.Held.ON_THE_PATH,
+                        terms.spacesOf(something));
+                out = whatTheLawsOfTheSizesSay(out, LinearForm.atom(walk.walked()));
+            }
         }
-        LinearForm<FactSubject> something = LinearForm.atomMinusConstant(walked, ExactRatio.ONE);
-        asked.add(walked);
-        return k.taking(something, Rel.GE, Known.Held.ON_THE_PATH, terms.spacesOf(something));
+        return out;
     }
 
     /** The law {@code atom}, a size, holds something by, where the operation that answered the

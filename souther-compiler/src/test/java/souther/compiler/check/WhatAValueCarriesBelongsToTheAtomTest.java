@@ -234,7 +234,7 @@ class WhatAValueCarriesBelongsToTheAtomTest {
         assertThrows(Terms.OneTermTwoDerivations.class, () -> terms.computedBy(atom,
                 new AtomKnowledge.Computation.Reduction(new InductiveBounds.Walk(
                         LinearForm.constant(ExactRatio.ZERO), other,
-                        LinearForm.atom(other), StepInputFacts.none()), null)));
+                        LinearForm.atom(other), StepInputFacts.none()))));
     }
 
     /**

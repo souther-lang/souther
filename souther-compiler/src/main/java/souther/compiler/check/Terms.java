@@ -1499,8 +1499,7 @@ final class Terms {
         // recipes alone ({@link #reached}).
         InductiveBounds.Walk made = new InductiveBounds.Walk(seed, accumulator, step,
                 StepInputFacts.of(walk, inside, this, reached(step)));
-        computedBy(atom, new AtomKnowledge.Computation.Reduction(made,
-                sizeOfWhatItHolds(walk.container(), at)));
+        computedBy(atom, new AtomKnowledge.Computation.Reduction(made));
     }
 
     /**
@@ -1539,8 +1538,7 @@ final class Terms {
                 UniversalElementFacts.of(accumulating.container(), at, this);
         computedBy(atom, new AtomKnowledge.Computation.Reduction(new InductiveBounds.Walk(
                 seed, accumulator, step,
-                StepInputFacts.ofTheElement(elements, element, this, reached(step))),
-                sizeOfWhatItHolds(accumulating.container(), at)));
+                StepInputFacts.ofTheElement(elements, element, this, reached(step)))));
     }
 
     /** The value an accumulation starts from, as a number — or null where the domain carries no such
@@ -2217,7 +2215,7 @@ final class Terms {
             case AtomKnowledge.Computation.Derived(Derivation recipe) ->
                     b instanceof AtomKnowledge.Computation.Derived it
                             && sameDerivation(recipe, it.recipe());
-            case AtomKnowledge.Computation.Reduction(InductiveBounds.Walk walk, FactSubject _) ->
+            case AtomKnowledge.Computation.Reduction(InductiveBounds.Walk walk) ->
                     b instanceof AtomKnowledge.Computation.Reduction it && walk.equals(it.walk());
         };
     }
@@ -2298,6 +2296,44 @@ final class Terms {
 
         OneTermTwoIntrinsicAnswers(String message) {
             super(message);
+        }
+    }
+
+    /** What a walk answers, the seed it answers where it walks none, and how many it walked over. */
+    record WalkOver(FactSubject answer, LinearForm<FactSubject> seed, FactSubject walked) {}
+
+    /**
+     * What {@code call} walks over where it is a reduction or an accumulation, or null where it is
+     * neither or this names none of the three.
+     *
+     * <p>Asked of the expression and not kept of the atom: a walk is one value however many places
+     * walk equal values, and how many the container it walked holds is the place's.
+     */
+    WalkOver walkOver(Core call, Denotations at) {
+        if (!(asOperator(call) instanceof Core.PreservedCall operation)) {
+            return null;
+        }
+        Reductions.Reducing walk = Reductions.reducing(operation, at);
+        Accumulations.Accumulating accumulating = walk == null
+                ? Accumulations.accumulating(operation) : null;
+        Core container = walk != null ? walk.container()
+                : accumulating == null ? null : accumulating.container();
+        LinearForm<FactSubject> seed = walk != null ? affineOf(walk.seed(), at)
+                : accumulating == null ? null : startedFrom(accumulating.what().identity());
+        FactSubject answer = container == null || seed == null ? null : atomOf(call, at);
+        FactSubject walked = answer == null ? null : sizeOfWhatItHolds(container, at);
+        return walked == null ? null : new WalkOver(answer, seed, walked);
+    }
+
+    /** The values {@code side} is a sum of, taken through sums and differences: what a form over
+     *  it is made of before any of them is more than one value. */
+    static void additiveLeaves(Core side, List<Core> out) {
+        if (Core.withoutStanding(side) instanceof Core.Binary joined
+                && (joined.op() == BinOp.ADD || joined.op() == BinOp.SUB)) {
+            additiveLeaves(joined.left(), out);
+            additiveLeaves(joined.right(), out);
+        } else {
+            out.add(side);
         }
     }
 
@@ -2419,42 +2455,30 @@ final class Terms {
         by = holding == null ? by : holding;
         // What a statement holds of among the elements a filter kept is what it and the filter's
         // statement hold of together among the elements the filter was handed.
-        for (AnOperationApplied kept = by == null || asked != AnswerAspect.TRUTH ? null
-                : filtering(source); kept != null; kept = filtering(source)) {
-            Term both = interned.closureAnsweringBoth(bodyKey(kept.args().get(0), at), by);
-            Term handed = bodyKey(kept.args().get(1), at);
+        for (DischargeRules.KeptWhereItHolds kept = by == null || asked != AnswerAspect.TRUTH ? null
+                : keptBy(source); kept != null; kept = keptBy(source)) {
+            Term both = interned.closureAnsweringBoth(bodyKey(kept.closure(), at), by);
+            Term handed = bodyKey(kept.source(), at);
             if (both == null || handed == null) {
                 break;
             }
             by = both;
             counted = handed;
-            source = kept.args().get(1);
+            source = kept.source();
         }
         // Of a statement over whole numbers, the count of the set it holds of or of the numbers it
         // leaves, whichever the order puts first: the count of the other is how many there are
         // less this one. Of any other statement, the one that denies another is counted as that.
-        Term.StatementOverWholeNumbers statement = by == null || asked != AnswerAspect.TRUTH ? null
-                : by.statementOverWholeNumbers();
-        WholeNumberRuns runs = statement == null ? null : statement.runs();
+        // A statement and its denial are counted by the one the order of terms puts first, and
+        // the count of the other is how many there are less that one.
         Term counting = by;
         boolean denies = false;
-        if (runs != null) {
-            WholeNumberRuns left = runs.others();
-            boolean leftFirst = left.precedes(runs);
-            Term written = interned.closureAnswering(statement.subject(), leftFirst ? left : runs);
-            if (written == null) {
-                runs = null;
-            } else {
-                denies = leftFirst;
-                runs = leftFirst ? left : runs;
-                counting = written;
-            }
-        }
-        if (runs == null) {
-            Term denied = by == null || asked != AnswerAspect.TRUTH ? null
-                    : interned.closureWhoseAnswerThisDenies(by);
-            denies = denied != null;
-            counting = denies ? denied : by;
+        Term opposite = by == null || asked != AnswerAspect.TRUTH ? null
+                : interned.normalClosure(interned.closureDenying(by));
+        if (opposite != null) {
+            counting = interned.normalClosure(by);
+            denies = Term.inOneOrder(opposite, counting) < 0;
+            counting = denies ? opposite : counting;
         }
         FactSubject atom = named(interned.howManyMeet(counted, counting, asked), Carrier.WHOLE);
         if (atom == null) {
@@ -2464,9 +2488,11 @@ final class Terms {
         if (firstFiledFrom(atom, readOff(container, closure, at))) {
             carrying(atom, amongTheElements(atom, source, at));
         }
-        if (runs != null) {
-            wholeNumberCounts.putIfAbsent(atom,
-                    new CountOfWholeNumbers(counted, statement.subject(), runs, all));
+        Term.StatementOverWholeNumbers statement = counting == null ? null
+                : counting.statementOverWholeNumbers();
+        if (statement != null && asked == AnswerAspect.TRUTH) {
+            wholeNumberCounts.putIfAbsent(atom, new CountOfWholeNumbers(counted,
+                    statement.subject(), statement.runs(), all));
         }
         if (!denies) {
             return LinearForm.atom(atom);
@@ -2500,15 +2526,11 @@ final class Terms {
                 List.of(closure == null ? interned.bound(0, 0) : by.parts().getFirst()));
     }
 
-    private static final Set<ValueName> FILTERS = Set.of(
-            ValueName.Stdlib.operation("List", "filter"), ValueName.Stdlib.operation("Set", "filter"));
-
-    /** {@code container} as a filter's application to the elements it was handed, or null where
-     *  it is not one. */
-    private static AnOperationApplied filtering(Core container) {
-        AnOperationApplied applied = AnOperationApplied.of(container);
-        return applied != null && applied.args().size() == 2 && FILTERS.contains(applied.operation())
-                ? applied : null;
+    /** What {@code container} keeps of what it was handed and by what, where it is the answer of
+     *  an operation declared to keep the elements a closure holds of — and null where it is not. */
+    private static DischargeRules.KeptWhereItHolds keptBy(Core container) {
+        return Core.withoutStanding(container) instanceof Core.PreservedCall call
+                ? DischargeRules.keptElements(call) : null;
     }
 
     /** What a count of the elements that fall in a set of whole numbers is a count of: the

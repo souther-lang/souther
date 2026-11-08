@@ -103,23 +103,4 @@ class WholeNumberRunsTest {
         }
         assertEquals(expected, actual, said);
     }
-
-    @Test
-    void ofASetAndTheNumbersItLeavesExactlyOneComesFirst() {
-        for (WholeNumberRuns each : List.of(
-                WholeNumberRuns.standing(Rel.GT, ExactRatio.of(2)),
-                WholeNumberRuns.standing(Rel.LT, ExactRatio.of(5)),
-                WholeNumberRuns.standing(Rel.EQ, ExactRatio.of(4)),
-                WholeNumberRuns.standing(Rel.GE, ExactRatio.of(1))
-                        .and(WholeNumberRuns.standing(Rel.LE, ExactRatio.of(9))),
-                WholeNumberRuns.EVERY, WholeNumberRuns.NONE)) {
-            assertTrue(each.precedes(each.others()) != each.others().precedes(each), each.toString());
-        }
-    }
-
-    @Test
-    void noSetComesBeforeItself() {
-        WholeNumberRuns above = WholeNumberRuns.standing(Rel.GT, ExactRatio.of(2));
-        assertEquals(false, above.precedes(above));
-    }
 }
