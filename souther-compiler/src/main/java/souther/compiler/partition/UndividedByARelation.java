@@ -10297,16 +10297,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  {@code container} holding none ({@link #noneIsRead}). */
     private static boolean metByNone(ClauseRead reading, TermPath here, TermPath container,
                                      InputReading read) {
-        switch (reading.kind()) {
-            case HOW_MANY_IT_HOLDS, EACH_ELEMENTS_RUN, ELEMENTS_THE_CLAUSE_NEEDS_APART -> {
-                return true;
-            }
+        return switch (reading.kind()) {
+            case HOW_MANY_IT_HOLDS, EACH_ELEMENTS_RUN, ELEMENTS_THE_CLAUSE_NEEDS_APART -> true;
             default -> {
                 List<TermPath> places = placesRead(reading, here, read);
-                return !places.isEmpty() && places.stream().noneMatch(place ->
+                yield !places.isEmpty() && places.stream().noneMatch(place ->
                         place.isAtOrUnder(container) || container.isAtOrUnder(place));
             }
-        }
+        };
     }
 
     /**

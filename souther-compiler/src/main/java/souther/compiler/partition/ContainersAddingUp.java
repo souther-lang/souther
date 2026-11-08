@@ -170,20 +170,21 @@ final class ContainersAddingUp {
                                            DemandsInside inside) {
         // What the caller asked inside an element contradicting itself is no way down that did not
         // plan: it is every way down, settled before any of them is tried. Met inside the walk it
-        // was a refusal of one way that the walk had no account of.
-        Optional<Requirements.Merge.Conflict> contradicts = inside.contradiction();
-        if (contradicts.isPresent()) {
-            Requirements.Merge.Conflict conflict = contradicts.get();
-            return new TermRealizations.Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                    "what each element is asked to hold puts `" + conflict.at() + "` both at "
-                            + conflict.one().spelled() + " and at " + conflict.other().spelled());
+        // was a refusal of one way that the walk had no account of. Only the container of none,
+        // which holds no element to ask it of, is left, and only for a total of nought; composing
+        // a list answers whether it is one, and a list of lists is refused here.
+        TermRealizations.Realization contradicted = contradicting(inside);
+        if (contradicted != null && !(answer instanceof Count asked && asked.at().signum() == 0)) {
+            return contradicted;
         }
         // The lists of a list put end to end: a container inside the elements of another, so an
         // element holds as many occurrences of the number as its own container does and the total is
         // spread over the leaves and then grouped, level by level.
         if (orders.term() instanceof NumericTerm.TakenOver over
                 && over.source() instanceof RunSource.FlattenedOccurrences flat) {
+            if (contradicted != null) {
+                return contradicted;
+            }
             if (!alsoAddingUp.isEmpty()) {
                 return severalTotalsNotComposed(
                         "the lists of a list are spread over one total at a time");
@@ -196,6 +197,9 @@ final class ContainersAddingUp {
         // place. A computation this does not solve for is a population this compiler writes none
         // of, which is not the same as the model admitting no row.
         if (FieldSolved.of(orders) instanceof List<FieldSolved> ways) {
+            if (ways.isEmpty() && contradicted != null) {
+                return contradicted;
+            }
             if (ways.isEmpty()) {
                 return new TermRealizations.Realization.Unexhausted(
                         CompositionShortfall.writing(
@@ -410,6 +414,10 @@ final class ContainersAddingUp {
         // the type again for any of them is another answer to which names it wears.
         TypeView view = TypeView.of(container, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
+        TermRealizations.Realization contradicted = contradicting(inside);
+        if (contradicted != null && !(view.shape() instanceof Shape.Sequence)) {
+            return contradicted;
+        }
         if (view.shape() instanceof Shape.Mapping map) {
             return aMapHoldingTheTotalInOneEntry(total, map, view, target, occurring, elements,
                     within, reading, alsoHolding, alsoAddingUp, inside);
@@ -428,6 +436,12 @@ final class ContainersAddingUp {
                 howMany(view, target.writeRoot(), within, reading, alsoHolding);
         if (howMany == null) {
             return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+        }
+        // No element holds what each is asked to: the container of none, which holds no element
+        // to ask it of, is the one left.
+        if (contradicted != null) {
+            return ofNoneAlone(total, view, howMany, alsoHolding, alsoAddingUp, ruleSource,
+                    CompositionShortfall.NONE, contradicted);
         }
         // Where its occurrences are asked as an element's, which is asked of a container holding
         // one: where they run nowhere, no element can be, and the container of none is the one
@@ -494,17 +508,19 @@ final class ContainersAddingUp {
                 return severalTotalsNotComposed("which case the elements hold the other totals'"
                         + " fields under is a choice the first total's path does not make");
             }
-            // Nothing to fill a container along, so there is no count and no shape of one to try.
+            // Nothing to fill a container along, so there is no count of one or more and no shape
+            // of one to try; the container of none is built along no way, and is the one left.
             // Said before the counts are walked rather than as a condition on each figure below: a
             // figure reached where no container could have been built either way is one raising
             // takes nothing away from, and the walks below are what the figures are about.
             if (ways.filled().isEmpty()) {
-                return ways.cutBy().isEmpty()
-                        ? new TermRealizations.Realization.None(
-                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                                ways.said(occurring))
-                        : new TermRealizations.Realization.Stopped(
-                                CompositionShortfall.of(ways.cutBy()));
+                return ofNoneAlone(total, view, howMany, alsoHolding, alsoAddingUp, ruleSource,
+                        CompositionShortfall.of(ways.cutBy()), ways.cutBy().isEmpty()
+                                ? new TermRealizations.Realization.None(
+                                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                                        ways.said(occurring))
+                                : new TermRealizations.Realization.Stopped(
+                                        CompositionShortfall.of(ways.cutBy())));
             }
             // What the planning gave up at, which is a way that was there to try and was not. A
             // way down that was never planned is a value never composed, and a reader told only
@@ -562,9 +578,9 @@ final class ContainersAddingUp {
      * <p>The same at every count where no field is held still. Where some are, the values they
      * are held at are a question of the count — what {@code n} elements come to turns on what
      * each holds — so they are worked out for each count it is asked at
-     * ({@link FieldSolved#settledIn}), and a container of none holds none of them. What an
-     * element is built of is asked of the values it holds, so the ways down are planned once for
-     * each set of values and not once per count.
+     * ({@link FieldSolved#settledIn}). What an element is built of is asked of the values it
+     * holds, so the ways down are planned once for each set of values and not once per count. A
+     * container of none holds no element and is asked neither ({@link HowManyElements}).
      */
     private static final class PlannedForEachCount {
 
@@ -634,12 +650,11 @@ final class ContainersAddingUp {
             if (planning == null) {
                 return last;
             }
-            Map<ElementProjection, ExactRatio> values =
-                    settled.fixing() == null ? Map.of() : settled.fixing().at();
+            Map<ElementProjection, ExactRatio> values = settled.fixing().at();
             Optional<Ways> ways = byValues.get(values);
             if (ways == null) {
-                DemandsInside demands = settled.fixing() == null ? inside
-                        : holdingWhatIsFixed(settled.fixing(), orders, inside, reading);
+                DemandsInside demands =
+                        holdingWhatIsFixed(settled.fixing(), orders, inside, reading);
                 ways = demands == null ? Optional.empty() : Optional.of(planning.apply(demands));
                 ways.ifPresent(planned -> {
                     planned.cutBy().forEach(left::refused);
@@ -1084,10 +1099,11 @@ final class ContainersAddingUp {
         }
 
         /**
-         * This way for a container of {@code many} elements, with the fields it fixes at values
-         * {@code runs} leaves each of them, and the weight and constant worked out at those
-         * values — or null where the region leaves some fixed field no value, or none that leaves
-         * the field solved for in the sum. A container of none holds no field, and fixes none.
+         * This way for a container of {@code many} elements, one or more, with the fields it
+         * fixes at values {@code runs} leaves each of them, and the weight and constant worked out
+         * at those values — or null where the region leaves some fixed field no value, or none
+         * that leaves the field solved for in the sum. A container of none holds no field, and is
+         * written without asking this ({@link HowManyElements}).
          *
          * <p>Where every product is of one field — a form of several fields added or taken away —
          * the values are worked out of {@code total} for that many elements
@@ -1104,10 +1120,6 @@ final class ContainersAddingUp {
         FieldSolved settledIn(HeldRuns runs, Place total, int many) {
             if (fixing == null) {
                 return this;
-            }
-            if (many == 0) {
-                return new FieldSolved(field, carrier, weight, constant, ofOneCase, kept,
-                        ofTheCase, null);
             }
             if (runs == null) {
                 return null;
@@ -1496,6 +1508,9 @@ final class ContainersAddingUp {
             if (many > figure().maximum()) {
                 return Taken.NOT_TAKEN;
             }
+            if (many == 0) {
+                return ofNone();
+            }
             // Asked of every total before any of them is decided on, so that the reason a total
             // could not be worked out is said whichever of the others turns the count away.
             List<BigDecimal> alsoTotals = otherTotalsOver(many);
@@ -1578,6 +1593,22 @@ final class ContainersAddingUp {
                 }
             }
             return Taken.AND_MORE;
+        }
+
+        /**
+         * The container of none, offered where every total asked of it is nought: it comes to
+         * nought for each of them whatever each element would come to, so it is written with no
+         * field held still and along no way down an element is built by.
+         */
+        private Taken ofNone() {
+            if (makings.total().signum() != 0
+                    || makings.also().stream().anyMatch(each -> each.total().signum() != 0)) {
+                return Taken.AND_MORE;
+            }
+            Proposals none = holding(List.of(), makings.container(), makings.reading().source());
+            left.met(none.met());
+            return asFarAs(none.values(), offered, left) == Traversal.STOPPED ? Taken.AND_DONE
+                    : Taken.AND_MORE;
         }
 
         /**
@@ -2219,9 +2250,48 @@ final class ContainersAddingUp {
             }
             values.add(one.values().getFirst());
         }
-        FixtureTemplate written =
-                WornNames.under(container.wrappers(), FixtureTemplate.collection(values), ruleSource);
-        return Proposals.ofNullable(written).meeting(met);
+        return holding(values, container, ruleSource).meeting(met);
+    }
+
+    /**
+     * What is said where what each element is asked to hold contradicts itself, and no element
+     * holds it — or null where one can.
+     */
+    private static TermRealizations.Realization contradicting(DemandsInside inside) {
+        return inside.contradiction().<TermRealizations.Realization>map(conflict ->
+                new TermRealizations.Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        "what each element is asked to hold puts `" + conflict.at() + "` both at "
+                                + conflict.one().spelled() + " and at "
+                                + conflict.other().spelled())).orElse(null);
+    }
+
+    /**
+     * The container of none, where no element can be written: offered where every total is
+     * nought and the rules leave the container {@code view} holding none ({@code howMany},
+     * {@code alsoHolding}) — and {@code otherwise} where not. It holds no element to ask anything
+     * of, so nothing asked of the elements holds it back.
+     *
+     * @param met what was met on the way to finding no element written, said beside it
+     */
+    private static TermRealizations.Realization ofNoneAlone(
+            Count total, TypeView view, DeclaredBounds.CountRange howMany,
+            HowManyIsAskedFor alsoHolding, List<AlsoAddingUp> alsoAddingUp,
+            RuleReadingSource source, CompositionShortfall met,
+            TermRealizations.Realization otherwise) {
+        boolean nought = total.at().signum() == 0 && alsoAddingUp.stream().allMatch(each ->
+                each.total() instanceof Count count && count.at().signum() == 0);
+        boolean holdsNone = howMany.least() == 0 && (alsoHolding == null || alsoHolding.holds(0));
+        Proposals none = nought && holdsNone ? holding(List.of(), view, source) : Proposals.NONE;
+        return none.isEmpty() ? otherwise
+                : new TermRealizations.Realization.Built(none.values(), met.and(none.met()));
+    }
+
+    /** The container at {@code container} holding {@code values}, under the names it wears. */
+    private static Proposals holding(List<FixtureTemplate> values, TypeView container,
+                                     RuleReadingSource source) {
+        return Proposals.ofNullable(WornNames.under(container.wrappers(),
+                FixtureTemplate.collection(values), source));
     }
 
     /**
