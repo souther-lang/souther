@@ -25,8 +25,9 @@ class AFigureThatCutThePlanShortIsSaidAsThatTest {
 
     @Test
     void aCutPlanIsNotSaidAsAStop() {
-        String said = Reasons.met(new CameToNothing(word(), CompositionShortfall.NONE,
-                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)), InEnglish.PAGE);
+        String said = InEnglish.said(Reasons.met(new CameToNothing(word(),
+                CompositionShortfall.NONE,
+                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS))));
 
         assertFalse(said.contains("stopped at"), said);
         assertTrue(said.startsWith("this compiler's plan of the value was limited by "), said);
@@ -35,9 +36,9 @@ class AFigureThatCutThePlanShortIsSaidAsThatTest {
     /** And a search that met a figure and was handed a cut plan is said as both, the stop first. */
     @Test
     void aStopAndACutPlanAreBothSaid() {
-        String said = Reasons.met(new CameToNothing(word(),
+        String said = InEnglish.said(Reasons.met(new CameToNothing(word(),
                 CompositionShortfall.of(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)),
-                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)), InEnglish.PAGE);
+                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS))));
 
         assertTrue(said.startsWith("this compiler stopped at "), said);
         assertTrue(said.contains(", and this compiler's plan of the value was limited by "), said);

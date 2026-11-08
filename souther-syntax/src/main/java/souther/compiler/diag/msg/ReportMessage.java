@@ -20,13 +20,13 @@ public sealed interface ReportMessage extends Message {
     record Nothing() implements ReportMessage, Prose {}
 
     /** Two things said one after the other in a list. */
-    record Listed(String first, String rest) implements ReportMessage, Prose {}
+    record Listed(Message first, Message rest) implements ReportMessage, Prose {}
 
     /** Two things said together. */
-    record Both(String first, String rest) implements ReportMessage, Prose {}
+    record Both(Message first, Message rest) implements ReportMessage, Prose {}
 
     /** Two reasons said one after the other. */
-    record Reasons(String first, String rest) implements ReportMessage, Prose {}
+    record Reasons(Message first, Message rest) implements ReportMessage, Prose {}
 
     // --- the names of the measures ---
 
@@ -333,15 +333,15 @@ public sealed interface ReportMessage extends Message {
 
     record InCopies(String calls) implements ReportMessage, Prose {}
 
-    record CallInside(String inner, String outer) implements ReportMessage, Prose {}
+    record CallInside(String inner, Message outer) implements ReportMessage, Prose {}
 
     record CallWithNoPlace(String name, String step) implements ReportMessage, Prose {}
 
-    record InCalls(String calls) implements ReportMessage, Prose {}
+    record InCalls(Message calls) implements ReportMessage, Prose {}
 
-    record PlaceInCalls(String place, String calls) implements ReportMessage, Prose {}
+    record PlaceInCalls(Message place, Message calls) implements ReportMessage, Prose {}
 
-    record WhatInCalls(Message what, String calls) implements ReportMessage, Prose {}
+    record WhatInCalls(Message what, Message calls) implements ReportMessage, Prose {}
 
     // --- more joining ---
 
@@ -363,17 +363,18 @@ public sealed interface ReportMessage extends Message {
     /** A rule, and what was asked of it that nothing answered. */
     record RuleThenAsked(String rule, Message asked) implements ReportMessage, Prose {}
 
-    record ListedSaid(Message first, Message rest) implements ReportMessage, Prose {}
+    /** What a search met of this compiler's, said before what the search came back with. */
+    record MetFirst(Message met, Message rest) implements ReportMessage, Prose {}
 
-    record ReasonsSaid(Message first, Message rest) implements ReportMessage, Prose {}
-
-    record Also(String first, String rest) implements ReportMessage, Prose {}
+    /** One thing said, and another true beside it. */
+    record Also(Message first, Message rest) implements ReportMessage, Prose {}
 
     record AndAlso(Message first, Message rest) implements ReportMessage, Prose {}
 
     record AndThen(String said) implements ReportMessage, Prose {}
 
-    record Either(String first, String rest) implements ReportMessage, Prose {}
+    /** Either of two things. */
+    record Either(Message first, Message rest) implements ReportMessage, Prose {}
 
     record Then(Message first, Message rest) implements ReportMessage, Prose {}
 
@@ -667,7 +668,7 @@ public sealed interface ReportMessage extends Message {
     record AnArmOutOfSightAnsweredAs(String arm, String as, Message where)
             implements ReportMessage, Prose {}
 
-    record TheBodyAlwaysAnswered(String row) implements ReportMessage, Prose {}
+    record TheBodyAlwaysAnswered(Message row) implements ReportMessage, Prose {}
 
     record TheFoldAt(String at, Message walked) implements ReportMessage, Prose {}
 
@@ -689,7 +690,7 @@ public sealed interface ReportMessage extends Message {
 
     record AnArmAnsweringAs(String arm, String as) implements ReportMessage, Prose {}
 
-    record TheBodyAnsweringWhatARowAnswers(String row) implements ReportMessage, Prose {}
+    record TheBodyAnsweringWhatARowAnswers(Message row) implements ReportMessage, Prose {}
 
     record TheFoldStoppingAfterItsFirstElement() implements ReportMessage, Prose {}
 
@@ -746,7 +747,7 @@ public sealed interface ReportMessage extends Message {
 
     record OnlyRowsThatDoNotHoldTakeADecisionRule(String rows) implements ReportMessage, Prose {}
 
-    record NothingCouldShowARowAtADecisionRule(String cameTo) implements ReportMessage, Prose {}
+    record NothingCouldShowARowAtADecisionRule(Message cameTo) implements ReportMessage, Prose {}
 
     record NotComposedAgainst(String what) implements ReportMessage, Prose {}
 
@@ -907,11 +908,13 @@ public sealed interface ReportMessage extends Message {
 
     record AlsoLeftOut(String said) implements ReportMessage, Prose {}
 
-    record NotEveryConditionOnTheWayToTheLine(String conditions) implements ReportMessage, Prose {}
+    record NotEveryConditionOnTheWayToTheLine(Message conditions)
+            implements ReportMessage, Prose {}
 
-    record NotEveryConditionOnTheWayToTheRule(String conditions) implements ReportMessage, Prose {}
+    record NotEveryConditionOnTheWayToTheRule(Message conditions)
+            implements ReportMessage, Prose {}
 
-    record WhyLeftOutAt(Message why, String where) implements ReportMessage, Prose {}
+    record WhyLeftOutAt(Message why, Message where) implements ReportMessage, Prose {}
 
     record WritesSomeOf(Message populations) implements ReportMessage, Prose {}
 
@@ -1193,7 +1196,7 @@ public sealed interface ReportMessage extends Message {
     record RemaindersComeOutWays(String comparisons, String dividend, String divisor, String ways)
             implements ReportMessage, Prose {}
 
-    record ChoicesMultiplyTheHelper(String helper, String at, Message inside)
+    record ChoicesMultiplyTheHelper(String helper, Message at, Message inside)
             implements ReportMessage, Prose {}
 
     record TheCallIsWrittenInsideHelpers(String helpers) implements ReportMessage, Prose {}

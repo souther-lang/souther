@@ -76,15 +76,15 @@ class AReaderSaysOnceWhatItCannotTellApartTest {
      */
     @Test
     void thePageSaysOneSentenceAboutTwoThingsOnce() {
-        String said = AdequacyReport.nothingToTry(
+        String said = InEnglish.said(AdequacyReport.nothingToTry(
                 List.of(came("nothing stood in", "one position", ELEMENTS),
                         came("nothing stood in", "another position", CHARACTERS)),
-                InEnglish.PAGE, cited -> null).text();
+                InEnglish.PAGE, cited -> null).said());
 
         assertEquals(1, said.split("nothing stood in", -1).length - 1,
                 () -> "the page cannot tell these two apart: " + said);
-        assertTrue(said.startsWith(Reasons.met(CompositionShortfall.of(Set.of(ELEMENTS,
-                        CHARACTERS)), InEnglish.PAGE)),
+        assertTrue(said.startsWith(InEnglish.said(Reasons.met(CompositionShortfall.of(
+                        Set.of(ELEMENTS, CHARACTERS))))),
                 () -> "and the clause opens on both figures: " + said);
     }
 

@@ -229,7 +229,7 @@ public final class GeneratedRows {
     private static void declarations(StringBuilder out, Offering offering, Page page,
                                      PublishedRuleHandle.WhereARuleIs places) {
         BorderAccount account = offering.account();
-        Set<String> said = new LinkedHashSet<>();
+        Set<Message> said = new LinkedHashSet<>();
         for (Map.Entry<BorderObligationPoint, BorderAccount.Unmet> each
                 : account.unmet().entrySet()) {
             // Nothing about a point one of the rows above stands at. What is left to write is what
@@ -242,28 +242,27 @@ public final class GeneratedRows {
                 // Said once, of the line, and in the declaration's own words. What each reading
                 // proved it of is not repeated: they agree, which is what let this be said at all.
                 case BorderAccount.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
-                        say(out, said, page, on -> on.say(
-                                new GeneratedRowsMessage.NoRowCanBeWrittenAtTheLine(asked,
-                                        owedBy, NoValue.standsAtIt())));
+                        say(out, said, page, new GeneratedRowsMessage.NoRowCanBeWrittenAtTheLine(
+                                asked, owedBy, NoValue.standsAtIt()));
                 // One line per reading, because they are not one fact: a reading whose rules leave
                 // nothing at its own position and one whose search stopped are different news, and
                 // a line carrying whichever came first would carry the order the walk took.
                 case BorderAccount.Unmet.WhatTheReadingsCameTo(var _, var asked, var came) ->
-                        came.forEach(at -> say(out, said, page, on -> on.say(switch (at) {
+                        came.forEach(at -> say(out, said, page, switch (at) {
                             case BorderAccount.At.Searched(var reading, var why) ->
                                     new GeneratedRowsMessage.NoRowFor(why.subject(),
-                                            reading.behavior(), saidOf(why, on, places));
+                                            reading.behavior(), saidOf(why, page, places));
                             // Said, because a reading that was asked about and could not be
                             // searched is a thing that happened to this run. Left out, a reader
                             // sees the readings that answered and no sign that another was asked.
                             case BorderAccount.At.CouldNotBeSearched(var reading) ->
                                     new GeneratedRowsMessage.NoRowForAnUnsearchedBehavior(asked,
                                             reading.behavior());
-                        })));
+                        }));
                 case BorderAccount.Unmet.NothingWasSearched(var owedBy, var asked) ->
-                        say(out, said, page, on -> on.say(new GeneratedRowsMessage.NoRowForOwedBy(
+                        say(out, said, page, new GeneratedRowsMessage.NoRowForOwedBy(
                                 asked, owedBy, why(Generator.UnresolvedCombination.Reason
-                                        .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED))));
+                                        .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED)));
             }
         }
     }
@@ -380,8 +379,8 @@ public final class GeneratedRows {
      * with the case once it runs — so what is said is that nothing aims a row at it, and nothing
      * about the rows above.
      */
-    private static Message openingFor(GenerationOutcome.NotSupported.Reason why, String what,
-                                      String behavior, String said) {
+    private static Message openingFor(GenerationOutcome.NotSupported.Reason why, Message what,
+                                      String behavior, Message said) {
         return switch (why) {
             case NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED, THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE,
                  THE_WAYS_INTO_THIS_ARM_ARE_NOT_TOLD_APART, MORE_WAYS_IN_THAN_THE_READING_HOLDS, THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT,
@@ -561,9 +560,14 @@ public final class GeneratedRows {
 
         /** The same, with a name marked as the words it is, as a note under a block says it. */
         String quoted(Page page) {
+            return page.say(quoted());
+        }
+
+        /** The same as a message, for a line that is told apart by what it says. */
+        Message quoted() {
             Message said = name.isPresent() ? new GeneratedRowsMessage.Quoted(words) : words;
-            return page.say(place.<Message>map(at -> new GeneratedRowsMessage.Placed(said, at))
-                    .orElse(said));
+            return place.<Message>map(at -> new GeneratedRowsMessage.Placed(said, at))
+                    .orElse(said);
         }
     }
 
@@ -1044,7 +1048,7 @@ public final class GeneratedRows {
                               Page page, Offering offering,
                               PublishedRuleHandle.WhereARuleIs places, Db db) {
         String module = offering.request().module();
-        Set<String> said = new LinkedHashSet<>();
+        Set<Message> said = new LinkedHashSet<>();
         // What is said about each finding, kept apart by the finding: two findings can be said in
         // the same words, and they are still two.
         Set<Said> saidOf = new HashSet<>();
@@ -1055,14 +1059,14 @@ public final class GeneratedRows {
         // line holding what both met rather than one line twice with half of it apiece.
         for (CameToNothing each : CameToNothing.joinedAsShown(filling.composed().unresolved(),
                 GeneratedRows::shownForWhatItIsAbout)) {
-            say(out, said, page, on -> on.say(new GeneratedRowsMessage.NoRowFor(
-                    each.why().subject(), behavior, saidOf(each, on, places))));
+            say(out, said, page, new GeneratedRowsMessage.NoRowFor(
+                    each.why().subject(), behavior, saidOf(each, page, places)));
         }
         // And the points, whose figures are said at the point's own account in the report rather
         // than here. Written with the same clause, one figure would reach a reader twice.
         for (Generator.UnresolvedCombination each : filling.boundaries().unresolved()) {
-            say(out, said, page, on -> on.say(new GeneratedRowsMessage.NoRowFor(each.subject(),
-                    behavior, saidOf(each, on, places))));
+            say(out, said, page, new GeneratedRowsMessage.NoRowFor(each.subject(),
+                    behavior, saidOf(each, page, places)));
         }
         // Every finding a row could answer, and not only the ones a strategy took. One printed in
         // the report and left out of this block is one an author is told nothing about, while the
@@ -1096,12 +1100,13 @@ public final class GeneratedRows {
                     for (CameToNothing came : CameToNothing.joinedAsShown(cannot.why(), named
                             ? GeneratedRows::shownUnderItsFinding
                             : GeneratedRows::shownForWhatItIsAbout)) {
-                        say(out, saidOf, Owed.by(each.finding()), page, on -> on.say(
+                        say(out, saidOf, Owed.by(each.finding()), page,
                                 new GeneratedRowsMessage.NoRowForThe(named
-                                        ? called(each.finding(), db, module, on, places)
-                                                .quoted(on)
-                                        : "`" + came.why().subject() + "`",
-                                        behavior, saidOf(came, on, places))));
+                                        ? called(each.finding(), db, module, page, places)
+                                                .quoted()
+                                        : new ReportMessage.Verbatim(
+                                                "`" + came.why().subject() + "`"),
+                                        behavior, saidOf(came, page, places)));
                     }
                 }
                 // Told apart from the one above it in its own words. A strategy that tried and
@@ -1113,19 +1118,19 @@ public final class GeneratedRows {
                 // thing that stands in two places is read at both, and what is missing at one of
                 // them is not what is missing at the other.
                 case GenerationOutcome.NotSupported none -> none.reasons().forEach(why ->
-                        say(out, saidOf, Owed.by(each.finding()), page, on -> on.say(
-                                openingFor(why, called(each.finding(), db, module, on, places)
-                                        .quoted(on), behavior, on.say(why.told())))));
+                        say(out, saidOf, Owed.by(each.finding()), page,
+                                openingFor(why, called(each.finding(), db, module, page, places)
+                                        .quoted(), behavior, why.told())));
                 // Said rather than passed over, because the report counts this coordinate among
                 // what is missing and no row is offered for it. Left out, an author reads a gap
                 // above and no account of why nothing was written for it; the account is that the
                 // line it is a coordinate of is owed one row and has one — written already, or
                 // composed at another of the line's positions and offered above.
                 case GenerationOutcome.ObligationAlreadySettled _ -> say(out, saidOf,
-                        Owed.by(each.finding()), page, on -> on.say(
-                                new GeneratedRowsMessage.NoRowOfferedAnsweredElsewhere(
-                                        called(each.finding(), db, module, on, places).quoted(on),
-                                        behavior)));
+                        Owed.by(each.finding()), page,
+                        new GeneratedRowsMessage.NoRowOfferedAnsweredElsewhere(
+                                called(each.finding(), db, module, page, places).quoted(),
+                                behavior));
                 // Filtered out above, and listed here so that the switch stays exhaustive: an
                 // answer added later has to be given words rather than falling silently into
                 // whichever arm a default would have put it in.
@@ -1140,37 +1145,36 @@ public final class GeneratedRows {
             // told that twice reads two things having gone wrong.
             switch (why) {
                 case GenerationReason.PositionWithheld withheld -> say(out, said, page,
-                        on -> on.say(new GeneratedRowsMessage.NoRowsOfferedAtAWithheldPosition(
-                                String.valueOf(withheld.axis()))));
-                case GenerationReason.SearchLimit limit -> say(out, said, page, on -> on.say(
+                        new GeneratedRowsMessage.NoRowsOfferedAtAWithheldPosition(
+                                String.valueOf(withheld.axis())));
+                case GenerationReason.SearchLimit limit -> say(out, said, page,
                         limit.owed() == 1
                                 ? new GeneratedRowsMessage.StoppedOneClassOrArmPastTheLimit(
                                         limit.behavior())
                                 : new GeneratedRowsMessage.StoppedClassesAndArmsPastTheLimit(
-                                        limit.behavior(), limit.owed())));
+                                        limit.behavior(), limit.owed()));
                 // Beside the line above rather than folded into it. That one is a budget an author
                 // can raise; this is a walk that was never made, and a reader told the first where
                 // the second happened would raise a limit that changes nothing.
                 // What was not walked, and not what is missing from the block. A row through an arm
                 // behind one of these comes from the way into the arm and is offered above, so a
                 // line saying rows were not offered here says a row is owed where one is written.
-                case GenerationReason.GroupsNotOffered held -> say(out, said, page, on -> on.say(
+                case GenerationReason.GroupsNotOffered held -> say(out, said, page,
                         held.groups() == 1
                                 ? new GeneratedRowsMessage.OneGroupWasNotLookedIn(held.behavior())
                                 : new GeneratedRowsMessage.GroupsWereNotLookedIn(held.groups(),
-                                        held.behavior())));
+                                        held.behavior()));
                 case GenerationReason.NothingToBuildAgainst none -> say(out, said, page,
-                        on -> on.say(new GeneratedRowsMessage.StoppedWithNothingToBuildAgainst(
-                                none.behavior())));
+                        new GeneratedRowsMessage.StoppedWithNothingToBuildAgainst(
+                                none.behavior()));
                 case GenerationReason.LinkageFailed failed -> say(out, said, page,
-                        on -> on.say(new GeneratedRowsMessage.StoppedAsTheClassesWouldNotLink(
-                                failed.behavior())));
+                        new GeneratedRowsMessage.StoppedAsTheClassesWouldNotLink(
+                                failed.behavior()));
                 // Not a stop. The rows above it are there and are worth writing; what is said is
                 // that nothing ran them, so what each is offered for is a reading of the body
                 // rather than something anything watched.
                 case GenerationReason.RowsNotConfirmed unconfirmed -> say(out, said, page,
-                        on -> on.say(new GeneratedRowsMessage.RowsOfferedWereNotRun(
-                                unconfirmed.behavior())));
+                        new GeneratedRowsMessage.RowsOfferedWereNotRun(unconfirmed.behavior()));
                 // The reasons it rests on rather than a word of its own. What was not read is a
                 // measurement's answer and is already said in those words; saying it again in the
                 // generator's would be the same fact under two spellings, read side by side.
@@ -1182,9 +1186,8 @@ public final class GeneratedRows {
                 case GenerationReason.RowsNotRead unread -> {
                     for (PublishedIncompleteness because
                             : PublishedIncompleteness.everyOne(unread.because()).written()) {
-                        say(out, said, page, on -> on.say(
-                                new GeneratedRowsMessage.StoppedAsRowsWereNotRead(
-                                        unread.behavior(), Reasons.said(because.fact(), on))));
+                        say(out, said, page, new GeneratedRowsMessage.StoppedAsRowsWereNotRead(
+                                unread.behavior(), Reasons.told(because.fact(), page)));
                     }
                 }
             }
@@ -1194,30 +1197,27 @@ public final class GeneratedRows {
     /**
      * One line, and once. Two gaps can rest on one fact, and a reader owed it is owed it once.
      *
-     * <p>Once as the base wording says it ({@link Page#IN_THE_BASE_WORDING}): two lines are one
-     * where they say one thing, and a translation that says two things alike does not make them
-     * one.
+     * <p>Once for what the line says, and never for how a language words it: two lines are one
+     * where they say one thing, and two things a language happens to word alike are still two.
      */
-    private static void say(StringBuilder out, Set<String> said, Page page,
-                            Function<Page, String> line) {
-        if (said.add(line.apply(page.base()))) {
-            out.append("// ").append(line.apply(page)).append(System.lineSeparator());
+    private static void say(StringBuilder out, Set<Message> said, Page page, Message line) {
+        if (said.add(line)) {
+            out.append("// ").append(page.say(line)).append(System.lineSeparator());
         }
     }
 
     /** A line about one thing, which is that thing's and is said once for it. */
-    private record Said(Owed about, String line) {}
+    private record Said(Owed about, Message line) {}
 
     /**
-     * One line about {@code about}, and once for it. Not once for its words: two things said in
-     * the same words are two, and the second dropped as a repeat of the first is a thing a reader
-     * is not told about. The words compared are the base wording's, for the reason the line above
-     * compares them so.
+     * One line about {@code about}, and once for it. Not once for what it says alone: two things
+     * said alike are two, and the second dropped as a repeat of the first is a thing a reader is
+     * not told about.
      */
     private static void say(StringBuilder out, Set<Said> said, Owed about, Page page,
-                            Function<Page, String> line) {
-        if (said.add(new Said(about, line.apply(page.base())))) {
-            out.append("// ").append(line.apply(page)).append(System.lineSeparator());
+                            Message line) {
+        if (said.add(new Said(about, line))) {
+            out.append("// ").append(page.say(line)).append(System.lineSeparator());
         }
     }
 
@@ -1332,9 +1332,9 @@ public final class GeneratedRows {
      * both. So the two are joined here, and the one carrier that replaces the category is the one
      * whose whole job is to say which case of it this was.
      */
-    private static String saidOf(Generator.UnresolvedCombination left, Page page,
-                                 PublishedRuleHandle.WhereARuleIs places) {
-        return beside(left.told().map(page::say).orElseGet(() -> page.say(why(left.reason()))),
+    private static Message saidOf(Generator.UnresolvedCombination left, Page page,
+                                  PublishedRuleHandle.WhereARuleIs places) {
+        return beside(left.told().<Message>map(told -> told).orElseGet(() -> why(left.reason())),
                 left, page, places);
     }
 
@@ -1366,9 +1366,9 @@ public final class GeneratedRows {
      * made what they were going to make of it — which is a shortfall of this compiler's read as
      * something the model settles.
      */
-    private static String saidOf(CameToNothing came, Page page,
-                                 PublishedRuleHandle.WhereARuleIs places) {
-        return Reasons.met(came, page) + saidOf(came.why(), page, places);
+    private static Message saidOf(CameToNothing came, Page page,
+                                  PublishedRuleHandle.WhereARuleIs places) {
+        return Reasons.opening(Reasons.met(came), saidOf(came.why(), page, places));
     }
 
     /**
@@ -1408,13 +1408,13 @@ public final class GeneratedRows {
         }
         return page.say(switch (stop.came()) {
             case RepairShortfall.AtTheGuard.NoWayPast(List<RepairShortfall.WayPast> ways) -> {
-                List<String> each = new ArrayList<>();
+                List<Message> each = new ArrayList<>();
                 for (int way = 0; way < ways.size(); way++) {
-                    each.add(page.say(new GeneratedRowsMessage.WayPastIt(way + 1,
-                            wayPast(ways.get(way), page, places))));
+                    each.add(new GeneratedRowsMessage.WayPastIt(way + 1,
+                            wayPast(ways.get(way), page, places)));
                 }
                 yield new GeneratedRowsMessage.NoRowWasFoundThatGoesPast(guard,
-                        AdequacyReport.reasons(page, each));
+                        Joined.reasons(each));
             }
             // What the reading of the body settles: said as the model's, with nothing about a
             // search, because there was nothing to search for.
@@ -1429,8 +1429,8 @@ public final class GeneratedRows {
     }
 
     /** What one way past a guard came to, in the words that kind of answer has. */
-    private static String wayPast(RepairShortfall.WayPast way, Page page,
-                                  PublishedRuleHandle.WhereARuleIs places) {
+    private static Message wayPast(RepairShortfall.WayPast way, Page page,
+                                   PublishedRuleHandle.WhereARuleIs places) {
         return switch (way) {
             case RepairShortfall.WayPast.Searched(List<CameToNothing> came) ->
                     saidOf(came, page, places);
@@ -1438,24 +1438,23 @@ public final class GeneratedRows {
             // searches had come to is the answer of looking that did not finish.
             case RepairShortfall.WayPast.CutShort(List<CameToNothing> came,
                                                   Set<CompositionBudget> figures) ->
-                    Reasons.met(CompositionShortfall.of(figures), page) + (came.isEmpty()
-                            ? page.say(new GeneratedRowsMessage.NothingWasLookedFor())
-                            : saidOf(came, page, places));
+                    Reasons.opening(Reasons.met(CompositionShortfall.of(figures)),
+                            came.isEmpty() ? new GeneratedRowsMessage.NothingWasLookedFor()
+                                    : saidOf(came, page, places));
             // Every reason a part gave, in the order the reasons are declared, and the figures that
             // left a part unlooked at first where any did.
             case RepairShortfall.WayPast.NotSearchable(Set<RepairShortfall.Barrier> why,
                                                        Set<CompositionBudget> figures) ->
-                    (figures.isEmpty() ? "" : Reasons.met(CompositionShortfall.of(figures), page))
-                            + AdequacyReport.reasons(page, why.stream().sorted()
-                                    .map(each -> page.say(why(each))).toList());
+                    Reasons.opening(Reasons.met(CompositionShortfall.of(figures)),
+                            Joined.reasons(why.stream().sorted().map(GeneratedRows::why)
+                                    .toList()));
         };
     }
 
     /** What each of the searches one way was held along came to, each word once, in turn. */
-    private static String saidOf(List<CameToNothing> came, Page page,
-                                 PublishedRuleHandle.WhereARuleIs places) {
-        return AdequacyReport.reasons(page, came.stream()
-                .map(each -> saidOf(each, page, places)).toList());
+    private static Message saidOf(List<CameToNothing> came, Page page,
+                                  PublishedRuleHandle.WhereARuleIs places) {
+        return Joined.reasons(came.stream().map(each -> saidOf(each, page, places)).toList());
     }
 
     /** Why a way past a guard was not looked for, in the words a reader of the block is shown. */
@@ -1479,10 +1478,11 @@ public final class GeneratedRows {
      * came to, and one that wrote its own separator would tell a reader who meets both surfaces
      * that they are reading two different facts.
      */
-    static String beside(String category, Generator.UnresolvedCombination left, Page page,
-                         PublishedRuleHandle.WhereARuleIs places) {
-        String also = alsoShort(left.alsoShort(), page, places);
-        return also.isEmpty() ? category : page.say(new ReportMessage.Also(category, also));
+    static Message beside(Message category, Generator.UnresolvedCombination left, Page page,
+                          PublishedRuleHandle.WhereARuleIs places) {
+        Message also = alsoShort(left.alsoShort(), page, places);
+        return also instanceof ReportMessage.Nothing ? category
+                : new ReportMessage.Also(category, also);
     }
 
     /**
@@ -1495,21 +1495,21 @@ public final class GeneratedRows {
      * vocabulary for reasons this one already spells — one that goes stale the first time a reason
      * is added to the other.
      */
-    private static String alsoShort(
+    private static Message alsoShort(
             java.util.SequencedMap<TermPath, StringOfferShortfall> shortfall,
             Page page, PublishedRuleHandle.WhereARuleIs places) {
-        List<String> ways = new ArrayList<>();
+        List<Message> ways = new ArrayList<>();
         for (Map.Entry<TermPath, StringOfferShortfall> at : shortfall.entrySet()) {
             for (StringOfferShortfall.NotOffered each : at.getValue().these()) {
                 ways.add(gaveNothing(each, at.getKey(), page, places));
             }
         }
-        return AdequacyReport.reasons(page, ways);
+        return Joined.reasons(ways);
     }
 
     /** One thing that gave the offer no value, said as what it was and what stopped it. */
-    private static String gaveNothing(StringOfferShortfall.NotOffered each, TermPath at,
-                                      Page page, PublishedRuleHandle.WhereARuleIs places) {
+    private static Message gaveNothing(StringOfferShortfall.NotOffered each, TermPath at,
+                                       Page page, PublishedRuleHandle.WhereARuleIs places) {
         // Named by the rule where a rule is what it was about, and never by the position alone: a
         // position carrying two rules about its strings, one of them this compiler cannot read, is
         // one an author fixes by rewriting that one. And never by a rule where what it was about is
@@ -1525,7 +1525,7 @@ public final class GeneratedRows {
             case StringOfferShortfall.Subject.ComposingAValue _ ->
                     new GeneratedRowsMessage.ComposingAValueFor(at.toString());
         };
-        return page.say(new GeneratedRowsMessage.GaveNothing(subject, becauseOf(each.why())));
+        return new GeneratedRowsMessage.GaveNothing(subject, becauseOf(each.why()));
     }
 
     /**

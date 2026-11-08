@@ -9,7 +9,7 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.Rewriting;
 import souther.compiler.coverage.RunRewrite;
 import souther.compiler.coverage.WalkRewrites;
-import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.MessageOrder;
 import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.flow.Ways;
 import souther.compiler.meaning.PieceDemand;
@@ -471,19 +471,25 @@ public final class Generator {
                                         SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
 
         /**
-         * The components, with what the class said in its English words.
+         * An order over what two of these say, where nothing a reader is told first parts them:
+         * the classes, the reason, what it is about, what the class said and what else the offer
+         * was short of.
          *
-         * <p>A reader orders these by this text where nothing else tells two apart
-         * ({@code RuleSearch}), so it says the sentence and not the message's structure: two of
-         * these that read alike sort alike, whichever record of the catalog says the sentence.
+         * <p>What the class said is ordered as the message it is ({@link MessageOrder}) and never
+         * as a language words it, so a rewording of the catalog moves no search ahead of another.
          */
-        @Override
-        public String toString() {
-            return "UnresolvedCombination[classes=" + classes + ", reason=" + reason
-                    + ", detail=" + detail + ", said="
-                    + told.map(each -> Messages.render(each, Messages.BASE_LANGUAGE))
-                    + ", alsoShort=" + alsoShort + "]";
-        }
+        public static final Comparator<UnresolvedCombination> IN_WHAT_IT_SAYS =
+                Comparator.<UnresolvedCombination, String>comparing(
+                                each -> String.valueOf(each.classes()))
+                        .thenComparing(UnresolvedCombination::reason)
+                        .thenComparing(each -> String.valueOf(each.detail()))
+                        .thenComparing(UnresolvedCombination::told,
+                                Comparator.comparing((Optional<SearchMessage> each) ->
+                                                each.isPresent())
+                                        .thenComparing(each -> each.orElse(null),
+                                                Comparator.nullsFirst(
+                                                        MessageOrder.OF_WHAT_IS_SAID)))
+                        .thenComparing(each -> String.valueOf(each.alsoShort()));
 
         public enum Reason {
             /**

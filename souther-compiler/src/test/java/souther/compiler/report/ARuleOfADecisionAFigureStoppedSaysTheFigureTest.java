@@ -92,8 +92,8 @@ class ARuleOfADecisionAFigureStoppedSaysTheFigureTest {
         List<String> lines = ruleLines(page);
 
         assertEquals(1, lines.size(), () -> "the rule through case Some is the one: " + page);
-        assertTrue(lines.get(0).contains(Reasons.met(CompositionShortfall.of(Set.of(figure)),
-                        InEnglish.PAGE)),
+        assertTrue(lines.get(0).contains(InEnglish.said(Reasons.met(
+                        CompositionShortfall.of(Set.of(figure))))),
                 () -> "the rule's own line opens on the figure its search stopped at: "
                         + lines.get(0));
 

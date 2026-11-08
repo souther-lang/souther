@@ -93,6 +93,7 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.MessageOrder;
 import souther.compiler.diag.msg.ReportMessage;
 
 import java.math.BigInteger;
@@ -715,9 +716,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
          * <p>The place of each is worked out when the report was assembled, by the question that
          * places a finding about one, so that a reader is sent to one place for a rewrite.
          *
-         * <p>Held apart in the base wording ({@link Page#IN_THE_BASE_WORDING}), which is what the
-         * measure's answer was worked out to part. A translation that words two of them alike says
-         * two rewrites in the same words; it does not make them one.
+         * <p>Held apart by what each line says, which is what the measure's answer was worked out
+         * to part. A language that words two of them alike says two rewrites in the same words; it
+         * does not make them one.
          */
         Map<Replacement, String> rewritesSaid(String module, SourceId declaredIn, Page page) {
             Map<Replacement, Message> said = new LinkedHashMap<>();
@@ -733,8 +734,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         RewriteVocabulary.apart(evidence.replacement().measured().made()
                                 .orElseThrow().toldApartBy(each.replacement()))));
             }
-            Set<String> apart = new HashSet<>();
-            said.values().forEach(each -> apart.add(Page.sameness(each)));
+            Set<Message> apart = new HashSet<>(said.values());
             if (apart.size() != said.size()) {
                 throw new IllegalStateException("two rewrites of `" + name + "` are said alike: "
                         + apart);
@@ -1793,10 +1793,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /** One copy's calls, innermost first, each in the one after it. */
     private static String chain(List<CallSite> calls, Page page, SourceId declaredIn) {
-        String said = calls.getLast().said(page, declaredIn);
+        return page.say(chained(calls, page, declaredIn));
+    }
+
+    /** The calls a copy was made at, or nothing where it stands in none. */
+    private static Message calledAt(List<CallSite> calls, Page page, SourceId declaredIn) {
+        return calls.isEmpty() ? new ReportMessage.Nothing() : chained(calls, page, declaredIn);
+    }
+
+    /** The same as a message, for a line that is told apart by what it says. */
+    private static Message chained(List<CallSite> calls, Page page, SourceId declaredIn) {
+        Message said = new ReportMessage.Verbatim(calls.getLast().said(page, declaredIn));
         for (int i = calls.size() - 2; i >= 0; i--) {
-            said = page.say(new ReportMessage.CallInside(calls.get(i).said(page, declaredIn),
-                    said));
+            said = new ReportMessage.CallInside(calls.get(i).said(page, declaredIn), said);
         }
         return said;
     }
@@ -3186,7 +3195,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>And in the language {@code language} names, which the caller resolved for this reader. The
      * words are the catalog's; which lines are said, and in which order, is not a question of the
-     * language ({@link Page#IN_THE_BASE_WORDING}).
+     * language ({@link Page}).
      */
     public String human(SourceRendering rendering, Locale language) {
         Page page = new Page(rendering, language);
@@ -3623,10 +3632,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * numbered within its source, so the source is said with it.
      */
     static String rowShown(RowRef row, Page page) {
+        return page.say(rowNamed(row, page));
+    }
+
+    /** The same as a message, for a line that is told apart by what it says. */
+    static Message rowNamed(RowRef row, Page page) {
         return row.identity() instanceof RowIdentity.Named
-                ? row.behavior() + " " + row.identity().shown()
-                : page.say(new ReportMessage.RowInSource(row.behavior(), row.identity().shown(),
-                        page.rendering().names().nameOf(row.source())));
+                ? new ReportMessage.Verbatim(row.behavior() + " " + row.identity().shown())
+                : new ReportMessage.RowInSource(row.behavior(), row.identity().shown(),
+                        page.rendering().names().nameOf(row.source()));
     }
 
     /**
@@ -3634,38 +3648,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * written so.
      */
     static String listed(Page page, List<String> each) {
-        if (each.isEmpty()) {
-            return "";
-        }
-        String said = each.getLast();
-        for (int i = each.size() - 2; i >= 0; i--) {
-            said = page.say(new ReportMessage.Listed(each.get(i), said));
-        }
-        return said;
+        return page.say(Joined.listed(Joined.asWritten(each)));
     }
 
     /** The same, of things said together: {@code a and b and c}. */
     static String both(Page page, List<String> each) {
-        if (each.isEmpty()) {
-            return "";
-        }
-        String said = each.getLast();
-        for (int i = each.size() - 2; i >= 0; i--) {
-            said = page.say(new ReportMessage.Both(each.get(i), said));
-        }
-        return said;
+        return page.say(Joined.both(Joined.asWritten(each)));
     }
 
     /** The same, of reasons said one after another: {@code a; b; c}. */
     static String reasons(Page page, List<String> each) {
-        if (each.isEmpty()) {
-            return "";
-        }
-        String said = each.getLast();
-        for (int i = each.size() - 2; i >= 0; i--) {
-            said = page.say(new ReportMessage.Reasons(each.get(i), said));
-        }
-        return said;
+        return page.say(Joined.reasons(Joined.asWritten(each)));
     }
 
     /** The positions this report has an axis for, which is what tells a claim it can print beside
@@ -4286,9 +4279,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             numbered.get(at).ordinal(), numbered.get(at).of(),
                             inCopies(reading.readAt(), behavior.conditionPlaces().copies(),
                                     page, declaredIn),
-                            caseExpansionSaid(reading.cameTo(), construct -> writtenIn(
+                            caseExpansionSaid(reading.cameTo(), construct -> writtenInSaid(
                                     construct, parts, page, declaredIn),
-                                    copy -> chain(callsAt(behavior.conditionPlaces().copies(),
+                                    copy -> calledAt(callsAt(behavior.conditionPlaces().copies(),
                                             copy).calls(), page, declaredIn), page))))
                             .append(NEW_LINE);
                 }
@@ -5039,7 +5032,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (SettledAt came : unsettledShown(behavior)) {
             out.append("      ? ").append(page.say(
                     new ReportMessage.NothingCouldShowARowAtADecisionRule(whatItCameTo(
-                            came.settlement(), page, behavior.rulePlace()).text())))
+                            came.settlement(), page, behavior.rulePlace()).said())))
                     .append(NEW_LINE);
             // The place the search was made at, which is the one whose conditions it went
             // without.
@@ -5109,7 +5102,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static Map<SaidAlike, String> leftOutBy(SettledAt came, BehaviorReport behavior,
                                                     Page page, SourceId declaredIn) {
         ConditionsShown shown = behavior.conditionPlaces().along(came.at().saidOnTheWay());
-        return saidOnceBy(came.leftOut(), shown::copiesOf, shown.places(), page, declaredIn);
+        Map<SaidAlike, String> out = new LinkedHashMap<>();
+        saidOnceBy(came.leftOut(), shown::copiesOf, shown.places(), page, declaredIn)
+                .forEach((key, said) -> out.put(key, page.say(said)));
+        return out;
     }
 
     /**
@@ -5159,7 +5155,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  DecisionEvidence decision, Page page,
                                  PublishedRuleHandle.WhereARuleIs places, SourceId declaredIn) {
         Set<Said> order = new java.util.TreeSet<>(Said.IN_ORDER);
-        Map<String, Integer> counted = new LinkedHashMap<>();
+        Map<Message, Integer> counted = new LinkedHashMap<>();
         int all = 0;
         // Each rule once, however many places state it: what is counted is the rules. And said with
         // what left each of its places no row, each once — the model may leave two calls of a
@@ -5171,9 +5167,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 continue;
             }
             Said said = everyReason(rule.places().stream().map(came -> said(came, page,
-                    places, behavior.conditionPlaces(), declaredIn)).toList(), page);
+                    places, behavior.conditionPlaces(), declaredIn)).toList());
             order.add(said);
-            counted.merge(said.sameness(), 1, Integer::sum);
+            counted.merge(said.said(), 1, Integer::sum);
             all++;
         }
         if (all == 0) {
@@ -5186,12 +5182,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // most of them.
         if (counted.size() == 1) {
             out.append(line).append(" — ")
-                    .append(order.iterator().next().text()).append('\n');
+                    .append(page.say(order.iterator().next().said())).append('\n');
             return;
         }
         out.append(line).append(NEW_LINE);
         order.forEach(said -> out.append(String.format("          · %d — %s%n",
-                counted.get(said.sameness()), said.text())));
+                counted.get(said.said()), page.say(said.said()))));
     }
 
     /**
@@ -5200,19 +5196,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>The first is the place the rule's answer was read off, so the rule is counted where that
      * answer is; the rest are what left its other places no row, which a reader is owed as much.
      */
-    static Said everyReason(List<Said> atEach, Page page) {
-        List<String> told = new ArrayList<>();
-        List<String> sameness = new ArrayList<>();
-        List<String> text = new ArrayList<>();
-        atEach.forEach(each -> {
-            if (!told.contains(each.sameness())) {
-                told.add(each.sameness());
-                sameness.add(each.sameness());
-                text.add(each.text());
-            }
-        });
+    static Said everyReason(List<Said> atEach) {
+        Set<Message> told = new LinkedHashSet<>();
+        atEach.forEach(each -> told.add(each.said()));
         return new Said(atEach.getFirst().family(), atEach.getFirst().within(),
-                String.join("; ", sameness), reasons(page, text));
+                Joined.reasons(List.copyOf(told)));
     }
 
     /**
@@ -5227,38 +5215,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * is that kind's own order to give — asked of {@link PublicationOrders} the way every other
      * plurality this report says together is.
      *
-     * <p>What tells two answers apart is the sentence in the base wording, and what a reader is
-     * shown is the sentence in the page's language ({@link Page#IN_THE_BASE_WORDING}).
+     * <p>What tells two answers apart is what the sentence says, and never how a language words
+     * it: the message, which a page renders when it writes the line.
      *
-     * @param sameness the sentence as the base catalog words it
-     * @param text     the sentence as the page says it
+     * @param said what the sentence says
      */
-    record Said(int family, int within, String sameness, String text) {
+    record Said(int family, int within, Message said) {
 
         /**
          * The order these are said in: by what kind of answer, then within it.
          *
-         * <p>And by the sentence last, which orders nothing a reader sees and is what keeps two
-         * answers two. A comparator that called them one where their places agree would drop a
-         * sentence the count beside it still holds, and the numbers under a block would stop
-         * adding up to the block.
+         * <p>And by what each says last ({@link MessageOrder}), which is what keeps two answers
+         * two. A comparator that called them one where their places agree would drop a sentence
+         * the count beside it still holds, and the numbers under a block would stop adding up to
+         * the block.
          */
-        static final java.util.Comparator<Said> IN_ORDER =
-                java.util.Comparator.comparingInt(Said::family)
-                        .thenComparingInt(Said::within)
-                        .thenComparing(Said::sameness);
-
-        /** One answer as {@code made} says it, told apart by how it says it in the base wording. */
-        static Said on(Page page, Function<Page, Said> made) {
-            Said here = made.apply(page);
-            Said base = made.apply(page.base());
-            return new Said(here.family(), here.within(), base.text(), here.text());
-        }
-
-        /** One answer whose sentence is one message. */
-        static Said of(int family, int within, Message said, Page page) {
-            return new Said(family, within, Page.sameness(said), page.say(said));
-        }
+        static final Comparator<Said> IN_ORDER = Comparator.comparingInt(Said::family)
+                .thenComparingInt(Said::within)
+                .thenComparing(Said::said, MessageOrder.OF_WHAT_IS_SAID);
     }
 
     /**
@@ -5279,18 +5253,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static Said said(SettledAt came, Page page,
                              PublishedRuleHandle.WhereARuleIs places,
                              ConditionsShown shown, SourceId declaredIn) {
-        return Said.on(page, on -> {
-            Said said = whatItCameTo(came.settlement(), on, places);
-            // And what it was arrived at without, after what it came to. The word says what
-            // happened and the clause says what the row it happened to was composed short of,
-            // which is the pair a point line is written as for the same reason: opened on the word
-            // alone, a reader is told a search had everything and reached nothing.
-            String left = whatWasLeftOut(WhatWasLeftOut.OF_A_RULE, came.leftOut(),
-                    shown.along(came.at().saidOnTheWay()), on, declaredIn);
-            return left.isEmpty() ? said
-                    : new Said(said.family(), said.within(), said.sameness(),
-                            reasons(on, List.of(said.text(), left)));
-        });
+        Said said = whatItCameTo(came.settlement(), page, places);
+        // And what it was arrived at without, after what it came to. The word says what happened
+        // and the clause says what the row it happened to was composed short of, which is the pair
+        // a point line is written as for the same reason: opened on the word alone, a reader is
+        // told a search had everything and reached nothing.
+        if (came.leftOut().isEmpty()) {
+            return said;
+        }
+        return new Said(said.family(), said.within(), Joined.reasons(List.of(said.said(),
+                whatWasLeftOut(WhatWasLeftOut.OF_A_RULE, came.leftOut(),
+                        shown.along(came.at().saidOnTheWay()), page, declaredIn))));
     }
 
     private static Said whatItCameTo(RuleSettlement came, Page page,
@@ -5299,16 +5272,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Composed and run first, because they are what a reader can tell this compiler about:
             // a row that went elsewhere is a way this steered wrong and the model may be fine.
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
-                    Said.of(0, 0, new ReportMessage.AComposedRowWentElsewhere(), page);
+                    new Said(0, 0, new ReportMessage.AComposedRowWentElsewhere());
             // Beside it and after it, because the difference is what a reader may conclude: this
             // row met less than the way asks, so where it went is what such a row does and not
             // something about the rule. What it was short of follows this sentence.
             case RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _ ->
-                    Said.of(0, 1, new ReportMessage.AComposedRowWasShortOfTheWay(), page);
+                    new Said(0, 1, new ReportMessage.AComposedRowWasShortOfTheWay());
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
                     nothingToTry(came.synthesisShortfalls(), page, places);
             case RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent(var reading) ->
-                    Said.of(2, PublicationOrders.positionOf(reading), switch (reading) {
+                    new Said(2, PublicationOrders.positionOf(reading), switch (reading) {
                         case NO_RULE_IS_RECOGNISABLE ->
                                 new ReportMessage.EveryRuleTurnsOnSomethingUnrecorded();
                         case NO_RECOGNISABLE_RULE_MATCHES ->
@@ -5319,21 +5292,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 new ReportMessage.ItWasPlacedAtMoreThanOneRule();
                         case ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT ->
                                 new ReportMessage.ItWentDownAWayNoInputTakes();
-                    }, page);
+                    });
             case RuleRequirement.Unsettled.NothingWatchedTheRow _ ->
-                    Said.of(3, 0, new ReportMessage.NothingWatchedTheRow(), page);
+                    new Said(3, 0, new ReportMessage.NothingWatchedTheRow());
             // The model's own answers, after the ones that are about what this compiler managed.
             case RuleRequirement.Excluded.OnePositionCannotBeBoth one ->
-                    Said.of(4, 0, readOff(one), page);
+                    new Said(4, 0, readOff(one));
             case RuleRequirement.Excluded.AnArmNothingReaches arm ->
-                    Said.of(5, 0, readOff(arm), page);
+                    new Said(5, 0, readOff(arm));
             // The same reading as the arm's, asked where a comparison comes out one way.
             case RuleRequirement.Excluded.AComparisonOutcomeNothingReaches outcome ->
-                    Said.of(5, 0, readOff(outcome), page);
+                    new Said(5, 0, readOff(outcome));
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay never ->
-                    Said.of(6, 0, readOff(never), page);
+                    new Said(6, 0, readOff(never));
             case RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone numbers ->
-                    Said.of(6, 0, readOff(numbers), page);
+                    new Said(6, 0, readOff(numbers));
             // In the words the composings were said in, which are the model's. The other two here
             // are read off the rules before anything is composed and have nothing of a search to
             // say; this one is what the composings themselves proved, so what they came back with
@@ -5394,16 +5367,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     static Said nothingToTry(List<RuleSearch.Came> came, Page page,
                              PublishedRuleHandle.WhereARuleIs places) {
-        List<String> clauses = new ArrayList<>();
+        List<Message> clauses = new ArrayList<>();
         for (RuleSearch.Came each
                 : RuleSearch.Came.joinedAsShown(came, AdequacyReport::shownOnThePage)) {
-            clauses.add(Reasons.met(each.figures(), each.populations(), each.unheld(),
-                    each.planCut(), page)
-                    + GeneratedRows.beside(saidOrWhy(each.why(), page), each.why(), page,
-                            places));
+            clauses.add(Reasons.opening(Reasons.met(each.figures(), each.populations(),
+                    each.unheld(), each.planCut()),
+                    GeneratedRows.beside(saidOrWhy(each.why()), each.why(), page, places)));
         }
-        String said = reasons(page, clauses);
-        return new Said(1, PublicationOrders.positionOf(came.get(0).why().reason()), said, said);
+        return new Said(1, PublicationOrders.positionOf(came.get(0).why().reason()),
+                Joined.reasons(clauses));
     }
 
     /**
@@ -5436,15 +5408,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static Said proved(RuleSearch.CameToNothing proofs, Page page,
                                PublishedRuleHandle.WhereARuleIs places) {
-        List<String> clauses = new ArrayList<>();
+        List<Message> clauses = new ArrayList<>();
         for (RuleSearch.Came proof
                 : RuleSearch.Came.joinedAsShown(proofs.ways(), AdequacyReport::shownOnThePage)) {
             Generator.UnresolvedCombination why = proof.why();
-            clauses.add(GeneratedRows.beside(saidOrWhy(why, page), why, page, places));
+            clauses.add(GeneratedRows.beside(saidOrWhy(why), why, page, places));
         }
-        String said = reasons(page, clauses);
         return new Said(7, PublicationOrders.positionOf(proofs.ways().get(0).why().reason()),
-                said, said);
+                Joined.reasons(clauses));
     }
 
     /**
@@ -5461,11 +5432,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // And which call of the helper it is in, after what it is. A helper called three times is
         // one place in the source, and three conditions of a rule sent there alike are three a
         // reader cannot tell apart.
-        List<String> calls = shown.through().stream().filter(each -> !each.isEmpty())
-                .map(each -> chain(each, page, declaredIn)).distinct().toList();
+        List<Message> calls = shown.through().stream().filter(each -> !each.isEmpty())
+                .map(each -> chained(each, page, declaredIn)).distinct().toList();
         Message what = what(shown, declaredIn, page.rendering());
         return page.say(calls.isEmpty() ? what
-                : new ReportMessage.WhatInCalls(what, listed(page, calls)));
+                : new ReportMessage.WhatInCalls(what, Joined.listed(calls)));
     }
 
     /** {@code n} counted as a person counts evaluations: the 1st, the 2nd, the 3rd, the 4th. */
@@ -5665,14 +5636,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /** Things that each hold, said one after another: {@code a, and b, and c}. */
     static String also(Page page, List<String> each) {
-        if (each.isEmpty()) {
-            return "";
-        }
-        String said = each.getLast();
-        for (int i = each.size() - 2; i >= 0; i--) {
-            said = page.say(new ReportMessage.Also(each.get(i), said));
-        }
-        return said;
+        return page.say(Joined.also(Joined.asWritten(each)));
     }
 
     /**
@@ -5862,7 +5826,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // than folded into the figures or left out because a figure was there to name.
             case ItemAssessment.Attempt.Stopped it -> page.say(new ReportMessage.ThisCompilerStoppedAt(
                     Reasons.said(it.stoppedBy(), page), andWritesSomeOf(it.notAllOf(), page),
-                    andCouldNotHold(it.unheld(), page), saidOrWhy(it.why(), page),
+                    andCouldNotHold(it.unheld(), page), page.say(saidOrWhy(it.why())),
                     alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // Said as what this compiler writes rather than as a number it stopped at, because
             // there is no number: an author told to raise one would raise it and get the same
@@ -5872,7 +5836,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ItemAssessment.Attempt.Unexhausted it -> page.say(
                     new ReportMessage.ThisCompilerLeftUntried(
                             leftUntried(it.notAllOf(), it.unheld(), page),
-                            saidOrWhy(it.why(), page),
+                            page.say(saidOrWhy(it.why())),
                             alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // Both halves, because neither says what the other does. The word is what the search
             // itself came to; the figure is why that word is not about the whole of the point. Said
@@ -5881,7 +5845,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ItemAssessment.Attempt.Limited it -> page.say(
                     new ReportMessage.OverLessThanThePointHad(Reasons.said(it.limitedBy(), page),
                             andWritesSomeOf(it.notAllOf(), page),
-                            andCouldNotHold(it.unheld(), page), saidOrWhy(it.why(), page),
+                            andCouldNotHold(it.unheld(), page), page.say(saidOrWhy(it.why())),
                             alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
@@ -5904,8 +5868,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what a search with them in would have found is not something to say — and the word
             // that follows keeps saying an empty search does not make the point unreachable.
             case ItemAssessment.Attempt.Unresolved it -> {
-                String word = it.why().reason().provesInfeasible() ? saidOrWhy(it.why(), page)
-                        : page.say(new ReportMessage.NothingComposedOne(saidOrWhy(it.why(), page)));
+                String word = it.why().reason().provesInfeasible() ? page.say(saidOrWhy(it.why()))
+                        : page.say(new ReportMessage.NothingComposedOne(page.say(saidOrWhy(it.why()))));
                 String leftOut =
                         whatTheRegionLeftOut(it.unaccountedFor(), shown, page, declaredIn);
                 yield " — " + (leftOut.isEmpty() ? word : reasons(page, List.of(leftOut, word)));
@@ -5945,7 +5909,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static String whatTheRegionLeftOut(
             List<ConditionGap> left, ConditionsShown shown,
             Page page, SourceId declaredIn) {
-        return whatWasLeftOut(WhatWasLeftOut.OF_A_LINE, left, shown, page, declaredIn);
+        return page.say(whatWasLeftOut(WhatWasLeftOut.OF_A_LINE, left, shown, page,
+                declaredIn));
     }
 
     /** What a way led to that the conditions on it were left out of the composing for. */
@@ -5960,18 +5925,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>Each thing to say once, with the calls of a helper it was met at ({@link #saidOnce}).
      */
-    private static String whatWasLeftOut(
+    private static Message whatWasLeftOut(
             WhatWasLeftOut toWhat, List<ConditionGap> gaps, ConditionsShown shown,
             Page page, SourceId declaredIn) {
         if (gaps.isEmpty()) {
-            return "";
+            return new ReportMessage.Nothing();
         }
-        String said = listed(page, saidOnce(gaps, shown::copiesOf, shown.places(), page,
+        Message said = Joined.listed(saidOnce(gaps, shown::copiesOf, shown.places(), page,
                 declaredIn));
-        return page.say(switch (toWhat) {
+        return switch (toWhat) {
             case OF_A_LINE -> new ReportMessage.NotEveryConditionOnTheWayToTheLine(said);
             case OF_A_RULE -> new ReportMessage.NotEveryConditionOnTheWayToTheRule(said);
-        });
+        };
     }
 
     /**
@@ -5997,56 +5962,58 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param copiesOf each copy what a gap is about was read off, with where its construct is
      *                 written and the calls it was made at
      */
-    private static List<String> saidOnce(List<ConditionGap> gaps,
-                                         Function<ConditionGap, List<CopyShown>> copiesOf,
-                                         Map<ConditionReportAnchor, Citation> places,
-                                         Page page, SourceId declaredIn) {
+    private static List<Message> saidOnce(List<ConditionGap> gaps,
+                                          Function<ConditionGap, List<CopyShown>> copiesOf,
+                                          Map<ConditionReportAnchor, Citation> places,
+                                          Page page, SourceId declaredIn) {
         return List.copyOf(saidOnceBy(gaps, copiesOf, places, page, declaredIn).values());
     }
 
     /** The same, each under the key that made it one: what finds the entry a gap is told in. */
-    private static Map<SaidAlike, String> saidOnceBy(
+    private static Map<SaidAlike, Message> saidOnceBy(
             List<ConditionGap> gaps, Function<ConditionGap, List<CopyShown>> copiesOf,
             Map<ConditionReportAnchor, Citation> places,
             Page page, SourceId declaredIn) {
         SourceRendering rendering = page.rendering();
         // For each sentence, every place it was asked at, the gap's own first, with the calls of
         // each: one condition consulted at two places is one sentence that sends a reader to both.
-        Map<SaidAlike, Map<String, Set<String>>> where = new LinkedHashMap<>();
+        Map<SaidAlike, Map<String, Set<Message>>> where = new LinkedHashMap<>();
         Map<SaidAlike, ConditionGap> first = new LinkedHashMap<>();
         for (ConditionGap gap : gaps) {
             SaidAlike key = SaidAlike.of(gap);
             first.putIfAbsent(key, gap);
-            Map<String, Set<String>> at = where.computeIfAbsent(key, _ -> new LinkedHashMap<>());
+            Map<String, Set<Message>> at =
+                    where.computeIfAbsent(key, _ -> new LinkedHashMap<>());
             Citation written = places.get(gap.anchor());
             String own = written == null ? "" : written.said(rendering, declaredIn);
             at.computeIfAbsent(own, _ -> new LinkedHashSet<>());
             for (CopyShown copy : copiesOf.apply(gap)) {
                 String place = copy.written() == null ? own
                         : copy.written().said(rendering, declaredIn);
-                Set<String> calls = at.computeIfAbsent(place, _ -> new LinkedHashSet<>());
+                Set<Message> calls = at.computeIfAbsent(place, _ -> new LinkedHashSet<>());
                 if (!copy.calls().isEmpty()) {
-                    calls.add(chain(copy.calls(), page, declaredIn));
+                    calls.add(chained(copy.calls(), page, declaredIn));
                 }
             }
         }
-        Map<SaidAlike, String> out = new LinkedHashMap<>();
+        Map<SaidAlike, Message> out = new LinkedHashMap<>();
         first.forEach((key, gap) -> {
-            List<String> said = new ArrayList<>();
+            List<Message> said = new ArrayList<>();
             where.get(key).forEach((place, calls) -> {
-                String in = listed(page, List.copyOf(calls));
-                if (in.isEmpty()) {
+                if (calls.isEmpty()) {
                     if (!place.isEmpty()) {
-                        said.add(place);
+                        said.add(new ReportMessage.Verbatim(place));
                     }
                 } else {
-                    said.add(page.say(place.isEmpty() ? new ReportMessage.InCalls(in)
-                            : new ReportMessage.PlaceInCalls(place, in)));
+                    Message in = Joined.listed(List.copyOf(calls));
+                    said.add(place.isEmpty() ? new ReportMessage.InCalls(in)
+                            : new ReportMessage.PlaceInCalls(new ReportMessage.Verbatim(place),
+                                    in));
                 }
             });
             Message why = whyLeftOut(gap);
-            out.put(key, page.say(said.isEmpty() ? why
-                    : new ReportMessage.WhyLeftOutAt(why, listed(page, said))));
+            out.put(key, said.isEmpty() ? why
+                    : new ReportMessage.WhyLeftOutAt(why, Joined.listed(said)));
         });
         return out;
     }
@@ -6111,7 +6078,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     private static Message whatTheInputSideLeftOut(ReachabilityGap gap) {
         return switch (gap) {
-            case ReachabilityGap.Unstated(var condition) -> reasonsOf(
+            case ReachabilityGap.Unstated(var condition) -> Joined.reasons(
                     condition.whys().stream().map(AdequacyReport::whyDeclined).toList());
             // The model's word and not this compiler's. Every other sentence here says what was not
             // managed and leaves the condition owed; this one says the rules leave nothing, which is
@@ -6173,7 +6140,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                             new ReportMessage.AnOrderOfNoOnePosition();
                                 }, past.isEmpty() ? new ReportMessage.Nothing()
                                         : new ReportMessage.MadeFromWhatTheReadingStoppedAt(
-                                                reasonsOf(past.stream()
+                                                Joined.reasons(past.stream()
                                                         .map(AdequacyReport::whyNotRead)
                                                         .toList())));
                         // What stopped the looking, and not that nothing was found. An author does
@@ -6188,20 +6155,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    /**
-     * Reasons said one after another, as one message: the first, then each of the rest after it.
-     *
-     * <p>A message and not a string, so that a reason held as a value — the entry a search went
-     * without is keyed apart from its sentence — is still said in whichever language the line that
-     * carries it is said in.
-     */
-    private static Message reasonsOf(List<Message> each) {
-        Message said = each.getLast();
-        for (int i = each.size() - 2; i >= 0; i--) {
-            said = new ReportMessage.ReasonsSaid(each.get(i), said);
-        }
-        return said;
-    }
 
     /** The figures a walk met, the populations it wrote some of, and the values it could not
      *  hold, each in its own words, figures first. */
@@ -6417,8 +6370,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>The one reading for every sentence about such a search. A reader that wrote the category
      * alone would drop the one part an author can act on.
      */
-    private static String saidOrWhy(Generator.UnresolvedCombination why, Page page) {
-        return why.told().map(page::say).orElseGet(() -> page.say(whyUnresolved(why)));
+    private static Message saidOrWhy(Generator.UnresolvedCombination why) {
+        return why.told().<Message>map(told -> told).orElseGet(() -> whyUnresolved(why));
     }
 
     /** The category a search came back with, where the class it was about said nothing itself. */
@@ -9359,8 +9312,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * a sign of multiplication, which would say the count is their product.
      */
     private static String caseExpansionSaid(CaseExpansion.CameTo expansion,
-                                            Function<ModelOccurrence, String> writtenIn,
-                                            Function<ModelOccurrence, String> calledAt,
+                                            Function<ModelOccurrence, Message> writtenIn,
+                                            Function<ModelOccurrence, Message> calledAt,
                                             Page page) {
         StringBuilder out = new StringBuilder(page.say(
                 switch (expansion.counted().structuralWays()) {
@@ -9389,7 +9342,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 if (!attributed.factors().isEmpty()) {
                     out.append(page.say(new ReportMessage.ItsPartsWereMadeBy(reasons(page,
                             attributed.factors().stream()
-                                    .map(factor -> factorSaid(factor, writtenIn, page))
+                                    .map(factor -> factorSaid(factor,
+                                            each -> page.say(writtenIn.apply(each)), page))
                                     .toList()))));
                 }
                 if (attributed.unattributed() > 0) {
@@ -9444,19 +9398,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * Nothing about what the case would come to, which is another compilation.
      */
     private static String multipliedHelperSaid(CaseExpansion.MultipliedHelper helper,
-                                               Function<ModelOccurrence, String> writtenIn,
-                                               Function<ModelOccurrence, String> calledAt,
+                                               Function<ModelOccurrence, Message> writtenIn,
+                                               Function<ModelOccurrence, Message> calledAt,
                                                Page page) {
-        Set<String> at = new LinkedHashSet<>();
+        // Each place once for what it says: two readings made at one place in one call are one
+        // place to send a reader to.
+        Set<Message> at = new LinkedHashSet<>();
         Set<ValueName.Helper> inside = new LinkedHashSet<>();
         for (ModelOccurrence each : helper.madeAt()) {
-            String calls = calledAt.apply(each);
-            at.add(calls.isEmpty() ? writtenIn.apply(each)
-                    : page.say(new ReportMessage.PlaceInCalls(writtenIn.apply(each), calls)));
+            Message calls = calledAt.apply(each);
+            at.add(calls instanceof ReportMessage.Nothing ? writtenIn.apply(each)
+                    : new ReportMessage.PlaceInCalls(writtenIn.apply(each), calls));
             inside.addAll(CaseExpansion.MultipliedHelper.calledInside(each));
         }
         return page.say(new ReportMessage.ChoicesMultiplyTheHelper(helper.helper().name(),
-                reasons(page, List.copyOf(at)), inside.isEmpty() ? new ReportMessage.Nothing()
+                Joined.reasons(List.copyOf(at)), inside.isEmpty() ? new ReportMessage.Nothing()
                         : new ReportMessage.TheCallIsWrittenInsideHelpers(
                                 listed(page, inside.stream().map(each -> "`" + each.name() + "`")
                                         .toList()))));
@@ -9504,10 +9460,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *  rendering can say. */
     private static String writtenIn(ModelOccurrence construct, WhereAPartIs parts,
                                     Page page, SourceId declaredIn) {
-        return WrittenOwner.theBodyThatWrote(construct.origin().owner()).definition()
-                + whereItIsWritten(construct)
-                        .map(site -> page.say(sentTo(site, parts, page.rendering(), declaredIn)))
-                        .orElse("");
+        return page.say(writtenInSaid(construct, parts, page, declaredIn));
+    }
+
+    /** The same as a message, for a place that is told apart by what it says. */
+    private static Message writtenInSaid(ModelOccurrence construct, WhereAPartIs parts,
+                                         Page page, SourceId declaredIn) {
+        return new ReportMessage.Then(new ReportMessage.Verbatim(
+                WrittenOwner.theBodyThatWrote(construct.origin().owner()).definition()),
+                whereItIsWritten(construct).<Message>map(site ->
+                        sentTo(site, parts, page.rendering(), declaredIn))
+                        .orElse(new ReportMessage.Nothing()));
     }
 
     static void branch(ObjectNode into, BehaviorReport behavior, DocumentSources sources) {
@@ -11306,14 +11269,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /** Things of which any one will do: {@code a or b or c}. */
     static String eitherOf(Page page, List<String> each) {
-        if (each.isEmpty()) {
-            return "";
-        }
-        String said = each.getLast();
-        for (int i = each.size() - 2; i >= 0; i--) {
-            said = page.say(new ReportMessage.Either(each.get(i), said));
-        }
-        return said;
+        return page.say(Joined.either(Joined.asWritten(each)));
     }
 
     /**

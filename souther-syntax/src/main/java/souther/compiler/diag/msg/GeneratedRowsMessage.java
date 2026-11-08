@@ -79,7 +79,7 @@ public sealed interface GeneratedRowsMessage extends Message {
     record NoRowCanBeWrittenAtTheLine(String asked, String owedBy, Message noValue)
             implements GeneratedRowsMessage, Prose {}
 
-    record NoRowFor(String subject, String behavior, String said)
+    record NoRowFor(String subject, String behavior, Message said)
             implements GeneratedRowsMessage, Prose {}
 
     record NoRowForAnUnsearchedBehavior(String asked, String behavior)
@@ -88,16 +88,16 @@ public sealed interface GeneratedRowsMessage extends Message {
     record NoRowForOwedBy(String asked, String owedBy, Message why)
             implements GeneratedRowsMessage, Prose {}
 
-    record NoRowForThe(String what, String behavior, String said)
+    record NoRowForThe(Message what, String behavior, Message said)
             implements GeneratedRowsMessage, Prose {}
 
-    record NothingOffersARowFor(String what, String behavior, String why)
+    record NothingOffersARowFor(Message what, String behavior, Message why)
             implements GeneratedRowsMessage, Prose {}
 
-    record NothingAimsARowAt(String what, String behavior, String why)
+    record NothingAimsARowAt(Message what, String behavior, Message why)
             implements GeneratedRowsMessage, Prose {}
 
-    record NoRowOfferedAnsweredElsewhere(String what, String behavior)
+    record NoRowOfferedAnsweredElsewhere(Message what, String behavior)
             implements GeneratedRowsMessage, Prose {}
 
     record NoRowsOfferedAtAWithheldPosition(String axis) implements GeneratedRowsMessage, Prose {}
@@ -121,7 +121,7 @@ public sealed interface GeneratedRowsMessage extends Message {
 
     record RowsOfferedWereNotRun(String behavior) implements GeneratedRowsMessage, Prose {}
 
-    record StoppedAsRowsWereNotRead(String behavior, String why)
+    record StoppedAsRowsWereNotRead(String behavior, Message why)
             implements GeneratedRowsMessage, Prose {}
 
     // --- where a row stops ---
@@ -132,9 +132,9 @@ public sealed interface GeneratedRowsMessage extends Message {
 
     record LookingForWith(String first, String rest) implements GeneratedRowsMessage, Prose {}
 
-    record WayPastIt(int way, String came) implements GeneratedRowsMessage, Prose {}
+    record WayPastIt(int way, Message came) implements GeneratedRowsMessage, Prose {}
 
-    record NoRowWasFoundThatGoesPast(String guard, String ways)
+    record NoRowWasFoundThatGoesPast(String guard, Message ways)
             implements GeneratedRowsMessage, Prose {}
 
     record ItsConditionNeverComesOutThatWay(String guard) implements GeneratedRowsMessage, Prose {}

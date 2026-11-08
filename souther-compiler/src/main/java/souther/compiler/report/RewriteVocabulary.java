@@ -94,9 +94,9 @@ final class RewriteVocabulary {
      * The row that came to the value {@code rewrite} has the body answer, in the words a report
      * names a row in.
      */
-    static String answeredBy(ReplacementAsWritten.ByOneAnswer rewrite, Page page) {
+    static Message answeredBy(ReplacementAsWritten.ByOneAnswer rewrite, Page page) {
         RowRef row = rewrite.replacement().answeredBy();
-        return AdequacyReport.rowShown(row, page);
+        return AdequacyReport.rowNamed(row, page);
     }
 
     /**

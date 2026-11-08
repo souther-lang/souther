@@ -83,8 +83,13 @@ final class Reasons {
      * not things a measurement could not read.
      */
     static String said(Incompleteness.Fact gap, Page page) {
-        return page.say(said(gap, gap.target() instanceof Target.OfRow(var row)
-                ? AdequacyReport.rowShown(row, page) : gap.shown(page.rendering())));
+        return page.say(told(gap, page));
+    }
+
+    /** The same as a message, with what it is about named as the page names it. */
+    static Message told(Incompleteness.Fact gap, Page page) {
+        return said(gap, gap.target() instanceof Target.OfRow(var row)
+                ? AdequacyReport.rowShown(row, page) : gap.shown(page.rendering()));
     }
 
     /** The same, of what the reason is about as the page already names it. */
@@ -137,17 +142,9 @@ final class Reasons {
         for (CompositionBudget each : budgets.written()) {
             counted.add(each.countsSaid());
         }
-        return listedOf(counted);
+        return Joined.listed(counted);
     }
 
-    /** Messages said one after the other in a list, as one message. */
-    private static Message listedOf(List<Message> each) {
-        Message said = each.getLast();
-        for (int i = each.size() - 2; i >= 0; i--) {
-            said = new ReportMessage.ListedSaid(each.get(i), said);
-        }
-        return said;
-    }
 
     /**
      * What a population this compiler writes some of is called where a reader meets one.
@@ -162,7 +159,7 @@ final class Reasons {
 
     /** The same as a message, for a sentence that carries the populations as a value. */
     static Message populations(CanonicalSelection<CompositionRepertoire> repertoires) {
-        return listedOf(repertoires.written().stream().map(each -> switch (each) {
+        return Joined.listed(repertoires.written().stream().map(each -> switch (each) {
             case WAYS_A_TOTAL_IS_SPREAD -> (Message) new ReportMessage.WaysATotalIsSpread();
             case PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE ->
                     new ReportMessage.PlacesAPairIsTriedAtOnALine();
@@ -236,11 +233,7 @@ final class Reasons {
                 case NO_REPRESENTATION_EXISTS -> new ReportMessage.WhichHasNoRepresentation(what);
             });
         }
-        Message said = out.getLast();
-        for (int i = out.size() - 2; i >= 0; i--) {
-            said = new ReportMessage.ReasonsSaid(out.get(i), said);
-        }
-        return said;
+        return Joined.reasons(out);
     }
 
     /**
@@ -258,19 +251,19 @@ final class Reasons {
      * <p>Empty where nothing of this compiler's was met, which is a search that came back about the
      * model and has no opening of this kind to make.
      */
-    static String met(CompositionShortfall shortfall, Page page) {
+    static Message met(CompositionShortfall shortfall) {
         return met(PublicationOrders.COMPOSITION_BUDGETS.keep(shortfall.figures()),
                 PublicationOrders.COMPOSITION_REPERTOIRES.keep(shortfall.populations()),
                 PublicationOrders.COMPOSITION_CAPACITIES.keep(shortfall.unheld()),
-                PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of()), page);
+                PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of()));
     }
 
     /** The same, of a search that came to nothing: what it met, and what cut its plan short. */
-    static String met(CameToNothing came, Page page) {
+    static Message met(CameToNothing came) {
         return met(PublicationOrders.COMPOSITION_BUDGETS.keep(came.met().figures()),
                 PublicationOrders.COMPOSITION_REPERTOIRES.keep(came.met().populations()),
                 PublicationOrders.COMPOSITION_CAPACITIES.keep(came.met().unheld()),
-                PublicationOrders.COMPOSITION_BUDGETS.keep(came.planCut()), page);
+                PublicationOrders.COMPOSITION_BUDGETS.keep(came.planCut()));
     }
 
     /**
@@ -281,25 +274,32 @@ final class Reasons {
      * would go looking for a search that did not finish. Nor as a search over a plan cut short:
      * where nothing was planned, no search was made, and the word after the clause says so.
      */
-    static String met(CanonicalSelection<CompositionBudget> figures,
-                      CanonicalSelection<CompositionRepertoire> populations,
-                      CanonicalSelection<CompositionCapacity> unheld,
-                      CanonicalSelection<CompositionBudget> planCut, Page page) {
-        List<String> out = new ArrayList<>();
+    static Message met(CanonicalSelection<CompositionBudget> figures,
+                       CanonicalSelection<CompositionRepertoire> populations,
+                       CanonicalSelection<CompositionCapacity> unheld,
+                       CanonicalSelection<CompositionBudget> planCut) {
+        List<Message> out = new ArrayList<>();
         if (!figures.isEmpty()) {
-            out.add(page.say(new ReportMessage.ThisCompilerStoppedAtFigures(budgets(figures))));
+            out.add(new ReportMessage.ThisCompilerStoppedAtFigures(budgets(figures)));
         }
         if (!planCut.isEmpty()) {
-            out.add(page.say(new ReportMessage.ThePlanOfTheValueWasLimitedBy(budgets(planCut))));
+            out.add(new ReportMessage.ThePlanOfTheValueWasLimitedBy(budgets(planCut)));
         }
         if (!populations.isEmpty()) {
-            out.add(page.say(new ReportMessage.ThisCompilerWritesSomeOfThem(
-                    populations(populations))));
+            out.add(new ReportMessage.ThisCompilerWritesSomeOfThem(populations(populations)));
         }
         if (!unheld.isEmpty()) {
-            out.add(page.say(new ReportMessage.ThisCompilerCouldNotHoldThem(capacities(unheld))));
+            out.add(new ReportMessage.ThisCompilerCouldNotHoldThem(capacities(unheld)));
         }
-        return out.isEmpty() ? "" : AdequacyReport.also(page, out) + ": ";
+        return Joined.also(out);
+    }
+
+    /**
+     * {@code rest} opened on what was {@code met}, or {@code rest} alone where nothing of this
+     * compiler's was: the opening is said first, for the reason {@link #met} gives.
+     */
+    static Message opening(Message met, Message rest) {
+        return met instanceof ReportMessage.Nothing ? rest : new ReportMessage.MetFirst(met, rest);
     }
 
     private Reasons() {}
