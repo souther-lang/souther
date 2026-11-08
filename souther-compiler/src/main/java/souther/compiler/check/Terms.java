@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.Accumulation;
+import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
@@ -2351,15 +2353,18 @@ final class Terms {
      */
     FactSubject howManyAreAtomFor(Core container, Core value, AddsWhatItDoesNotHold.Of of,
                                   Denotations at) {
-        return howManyAre(bodyKey(container, at), bodyKey(value, at), of);
+        return howManyAre(bodyKey(container, at), bodyKey(value, at), of,
+                sizeOfWhatItHolds(container, at));
     }
 
     /** The same, of a container and a value a proposition read off another tree says it of, named
-     *  the way {@link #howManyAreAtomFor} names them, so the two are one number. */
+     *  the way {@link #howManyAreAtomFor} names them, so the two are one number; {@code size} is
+     *  what the container's type is counted by, or null where nothing counts it. */
     FactSubject howManyAreAtPlace(FactSubject container, FactSubject value,
-                                  AddsWhatItDoesNotHold.Of of) {
+                                  AddsWhatItDoesNotHold.Of of, ValueName size) {
         return container == null || value == null ? null
-                : howManyAre(container.identity(), value.identity(), of);
+                : howManyAre(container.identity(), value.identity(), of,
+                        size == null ? null : sizeAtPlace(size, container));
     }
 
     /**
@@ -2377,6 +2382,140 @@ final class Terms {
     FactSubject howManyAreInAtomFor(Core counted, Core holder, AddsWhatItDoesNotHold.Of of,
                                     Denotations at) {
         return howManyAreIn(new Given(counted, at), new Given(holder, at), of);
+    }
+
+    /**
+     * The atom how many elements of {@code container} come out on the holding side of
+     * {@code aspect} is — each element itself where {@code closure} is null, and otherwise what
+     * that closure answers of each — named and with what it carries filed, or null where either is
+     * no value this names.
+     *
+     * <p>A count of the container's elements, so never below nought and never above how many it
+     * holds.
+     */
+    FactSubject howManyMeetAtomFor(Core container, Core closure, AnswerAspect aspect,
+                                   Denotations at) {
+        Term counted = bodyKey(container, at);
+        Term by = closure == null ? null : bodyKey(closure, at);
+        if (counted == null || (closure != null && by == null)) {
+            return null;
+        }
+        FactSubject atom = named(interned.howManyMeet(counted, by, aspect), Carrier.WHOLE);
+        if (atom != null && firstFiledFrom(atom, readOff(container, closure, at))) {
+            carrying(atom, amongTheElements(atom, container, at));
+        }
+        return atom;
+    }
+
+    /**
+     * The atom how many different values the elements of {@code container} come to is — the
+     * elements or their keys as {@code of} says where {@code closure} is null, and otherwise what
+     * that closure answers of each — named and with what it carries filed, or null where either is
+     * no value this names.
+     *
+     * <p>Never below nought and never above how many the container holds, and at least one where
+     * it holds something: one element is one value.
+     */
+    FactSubject howManyDifferentAtomFor(Core container, Core closure, AddsWhatItDoesNotHold.Of of,
+                                        Denotations at) {
+        Term counted = bodyKey(container, at);
+        Term by = closure == null ? null : bodyKey(closure, at);
+        if (counted == null || (closure != null && by == null)) {
+            return null;
+        }
+        FactSubject atom = named(interned.howManyDifferent(counted, by, of), Carrier.WHOLE);
+        if (atom != null && firstFiledFrom(atom, readOff(container, closure, at))) {
+            carrying(atom, amongTheElements(atom, container, at));
+            FactSubject holds = sizeOfWhatItHolds(container, at);
+            LinearForm<FactSubject> past = holds == null ? null
+                    : LinearForm.atomMinusConstant(holds, ExactRatio.ONE);
+            if (past != null) {
+                computedBy(atom, new AtomKnowledge.Computation.Derived(
+                        new Derivation.GuaranteedWhere(List.of(new ConditionalConstraint(
+                                new NumericConstraint(past, Rel.GE),
+                                new NumericConstraint(LinearForm.atomMinusConstant(atom,
+                                        ExactRatio.ONE), Rel.GE))))));
+            }
+        }
+        return atom;
+    }
+
+    /**
+     * The atom how many the elements of {@code container} hold, added up, is — each element where
+     * {@code closure} is null, and otherwise what that closure answers of each — named and with
+     * what it carries filed, or null where either is no value this names.
+     *
+     * <p>No fewer than how many of them hold something, each of which holds at least one, and
+     * nought where none does.
+     */
+    FactSubject sumOfSizesAtomFor(Core container, Core closure, Denotations at) {
+        Term counted = bodyKey(container, at);
+        Term by = closure == null ? null : bodyKey(closure, at);
+        if (counted == null || (closure != null && by == null)) {
+            return null;
+        }
+        FactSubject atom = named(interned.sumOfSizes(counted, by), Carrier.WHOLE);
+        if (atom != null && firstFiledFrom(atom, readOff(container, closure, at))) {
+            FactSubject nonEmpty = howManyMeetAtomFor(container, closure, AnswerAspect.EMPTINESS,
+                    at);
+            if (nonEmpty == null) {
+                carrying(atom, List.of(new NumericConstraint(LinearForm.atom(atom), Rel.GE)));
+            } else {
+                carrying(atom, List.of(new NumericConstraint(
+                        LinearForm.difference(atom, nonEmpty), Rel.GE)));
+                computedBy(atom, new AtomKnowledge.Computation.Derived(
+                        new Derivation.GuaranteedWhere(List.of(new ConditionalConstraint(
+                                new NumericConstraint(LinearForm.atom(nonEmpty), Rel.LE),
+                                new NumericConstraint(LinearForm.atom(atom), Rel.LE))))));
+            }
+        }
+        return atom;
+    }
+
+    /**
+     * The atom how many of the code points of {@code string} are in {@code counted} is, named and
+     * with what it carries filed, or null where the string is no value this names.
+     *
+     * <p>Never below nought and never above how many code points the string holds, which is the
+     * number its length is.
+     */
+    FactSubject codePointsAtomFor(Core string, CodePointClass counted, Denotations at) {
+        Term of = bodyKey(string, at);
+        if (of == null) {
+            return null;
+        }
+        FactSubject atom = named(interned.codePoints(of, counted), Carrier.WHOLE);
+        if (atom != null && firstFiledFrom(atom, readOff(string, null, at))) {
+            carrying(atom, amongTheElements(atom, string, at));
+        }
+        return atom;
+    }
+
+    /** What {@code container} and {@code closure} were given, each where it stands, as the values
+     *  an atom over them is read off. */
+    private ReadOff readOff(Core container, Core closure, Denotations at) {
+        return new ReadOff(given(container, at), closure == null ? null : given(closure, at));
+    }
+
+    /** That {@code atom} counts some of what {@code container} holds: at least none, and no more
+     *  than all of it, where its size is one this names. */
+    private List<NumericConstraint> amongTheElements(FactSubject atom, Core container,
+                                                     Denotations at) {
+        List<NumericConstraint> out = new ArrayList<>();
+        out.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
+        FactSubject holds = sizeOfWhatItHolds(container, at);
+        if (holds != null) {
+            out.add(new NumericConstraint(LinearForm.difference(atom, holds), Rel.LE));
+        }
+        return out;
+    }
+
+    /** The atom of how many {@code container} holds, by the measure its type is counted by, or
+     *  null where nothing counts it or this cannot name the count. */
+    FactSubject sizeOfWhatItHolds(Core container, Denotations at) {
+        ValueName counts = NumericMeasures.takenOf(Core.withoutStanding(container).type(),
+                newtypeInners());
+        return counts == null ? null : sizeAtomFor(counts, container, at);
     }
 
     private FactSubject howManyAreIn(Given counted, Given holder, AddsWhatItDoesNotHold.Of of) {
@@ -2413,12 +2552,14 @@ final class Terms {
         AddedTo grown = holderFirst ? null : onTheCounted;
         if (added != null) {
             between(atom, howManyAreIn(counted, added.before(), of), added.oneValue()
-                    ? howManyAre(countedKey, bodyKey(added.what().value(), added.what().at()), of)
+                    ? howManyAre(countedKey, bodyKey(added.what().value(), added.what().at()), of,
+                            sizeOfWhatItHolds(counted.value(), counted.at()))
                     : howManyAreIn(counted, added.what(), of), carried);
         }
         if (grown != null) {
             between(atom, howManyAreIn(grown.before(), holder, of), grown.oneValue()
-                    ? howManyAre(holderKey, bodyKey(grown.what().value(), grown.what().at()), of)
+                    ? howManyAre(holderKey, bodyKey(grown.what().value(), grown.what().at()), of,
+                            sizeOfWhatItHolds(holder.value(), holder.at()))
                     : howManyAreIn(grown.what(), holder, of), carried);
         }
         carrying(atom, carried);
@@ -2510,14 +2651,25 @@ final class Terms {
         }
     }
 
-    private FactSubject howManyAre(Term within, Term counted, AddsWhatItDoesNotHold.Of of) {
+    /**
+     * The atom how many elements of {@code within}, or keys, are {@code counted} is, carrying that
+     * it is a count of some of them: never below nought, and never above {@code holds}, how many
+     * {@code within} holds, where that is named. Every route that names one names {@code holds}
+     * the way the size of the container is named everywhere, so they file one answer.
+     */
+    private FactSubject howManyAre(Term within, Term counted, AddsWhatItDoesNotHold.Of of,
+                                   FactSubject holds) {
         if (within == null || counted == null) {
             return null;
         }
         FactSubject atom = named(interned.howManyAre(within, counted, of), Carrier.WHOLE);
         if (atom != null) {
-            // A count, and so never below nought.
-            carrying(atom, List.of(new NumericConstraint(LinearForm.atom(atom), Rel.GE)));
+            List<NumericConstraint> carried = new ArrayList<>();
+            carried.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
+            if (holds != null) {
+                carried.add(new NumericConstraint(LinearForm.difference(atom, holds), Rel.LE));
+            }
+            carrying(atom, carried);
         }
         return atom;
     }

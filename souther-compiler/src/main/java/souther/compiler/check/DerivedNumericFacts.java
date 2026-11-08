@@ -764,6 +764,7 @@ final class DerivedNumericFacts {
                     case Boolean holds -> holds ? Shown.YES : Shown.NO;
                 };
             }
+            case Derivation.HoldsSomethingWhere.Holding.Unnamed _ -> Shown.UNSETTLED;
         };
     }
 

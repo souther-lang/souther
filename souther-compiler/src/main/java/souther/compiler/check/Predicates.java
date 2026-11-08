@@ -20,9 +20,11 @@ import souther.compiler.semantics.ResultBound;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1766,6 +1768,7 @@ final class Predicates {
         if (compared != null) {
             out = out.taking(compared, stated.relationUnder(positive), Known.Held.ON_THE_PATH,
                     terms.spacesOf(compared));
+            out = whatTheLawsOfTheSizesSay(out, compared);
             taken = true;
             shapeRead |= readsItsShape(stated.left(), at) && readsItsShape(stated.right(), at);
         }
@@ -1775,6 +1778,62 @@ final class Predicates {
         named.addAll(spokenOf(stated.right(), at, ra));
         out = out.speaking(named);
         return settling(out, Conditions.polar(stated, positive), at, taken, shapeRead);
+    }
+
+    /**
+     * {@code k} with what the law of an operation says of its arguments, for each size in
+     * {@code form} the operation answered and the path now puts on one side of nought:
+     * {@code String.trim(s)} holds something exactly where some code point of {@code s} is not
+     * whitespace, so a path where it holds something is one where {@code s} does.
+     *
+     * <p>The law read the other way from the recipe the size carries
+     * ({@link Derivation.HoldsSomethingWhere}): the recipe says where the size lies from where the
+     * arguments are, and this says where the arguments are from where the path put the size. Only
+     * what is certain that way is taken ({@link LawOverAtoms#certain}), and each count it names is
+     * asked in turn, once.
+     */
+    private Known whatTheLawsOfTheSizesSay(Known k, LinearForm<FactSubject> form) {
+        Deque<FactSubject> asked = new ArrayDeque<>(form.coefs().keySet());
+        Set<FactSubject> seen = new HashSet<>();
+        Known out = k;
+        while (!asked.isEmpty() && !out.reachesNothing()) {
+            FactSubject atom = asked.pop();
+            Derivation.HoldsSomethingWhere.Holding law = seen.add(atom) ? lawOfTheSize(atom) : null;
+            Boolean something = law == null ? null
+                    : out.numbers().entails(LinearForm.atomMinusConstant(atom, ExactRatio.ONE),
+                            Rel.GE) ? Boolean.TRUE
+                    : out.numbers().entails(LinearForm.atom(atom), Rel.LE) ? Boolean.FALSE : null;
+            if (something == null) {
+                continue;
+            }
+            List<NumericConstraint> certain = LawOverAtoms.certain(law, something);
+            if (certain == null) {
+                return out.reachingNothing();
+            }
+            for (NumericConstraint each : certain) {
+                out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
+                        terms.spacesOf(each.form()));
+                asked.addAll(each.form().coefs().keySet());
+            }
+        }
+        return out;
+    }
+
+    /** The law {@code atom}, a size, holds something by, where the operation that answered the
+     *  container is settled whether it does by one — or null where it is not. */
+    private Derivation.HoldsSomethingWhere.Holding lawOfTheSize(FactSubject atom) {
+        if (!(terms.knowledgeOf(atom).computation()
+                instanceof AtomKnowledge.Computation.Derived(Derivation recipe))) {
+            return null;
+        }
+        List<Derivation> recipes = recipe instanceof Derivation.Each(var each) ? each
+                : List.of(recipe);
+        for (Derivation one : recipes) {
+            if (one instanceof Derivation.HoldsSomethingWhere(var holds)) {
+                return holds;
+            }
+        }
+        return null;
     }
 
     /** {@code k} with each of {@code mentioned} recorded as one this condition named. No form is

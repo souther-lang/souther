@@ -5,6 +5,8 @@ import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -160,7 +162,31 @@ final class Term {
          * keys — over the two: how many an intersection of them holds, and what adding to either
          * moves by no more than what was added.
          */
-        HOW_MANY_ARE_IN(Payload.of(AddsWhatItDoesNotHold.Of.class));
+        HOW_MANY_ARE_IN(Payload.of(AddsWhatItDoesNotHold.Of.class)),
+        /**
+         * How many elements of a container come out on the holding side of an aspect — each
+         * element itself, over the container alone, or what a closure answers of each, over the
+         * container and the closure.
+         *
+         * <p>What some element meeting a statement is, read as a number: some element meets it
+         * exactly where this is above nought. Named by what it counts, so {@code List.any(p, xs)}
+         * and what {@code List.filter(p, xs)} holds are about one number.
+         */
+        HOW_MANY_MEET(Payload.of(AnswerAspect.class)),
+        /**
+         * How many different values the elements of a container come to — the elements or their
+         * keys as the payload says, over the container alone, or what a closure answers of each,
+         * over the container and the closure.
+         */
+        HOW_MANY_DIFFERENT(Payload.of(AddsWhatItDoesNotHold.Of.class)),
+        /**
+         * How many the elements of a container hold, added up over all of them — each element, over
+         * the container alone, or what a closure answers of each, over the container and the
+         * closure.
+         */
+        SUM_OF_SIZES(Payload.none()),
+        /** How many of the code points of a string are in a class, over the string. */
+        CODE_POINTS(Payload.of(CodePointClass.class));
 
         private final Payload payload;
 
@@ -944,6 +970,14 @@ final class Term {
             case HOW_MANY_ARE_IN -> sb.append("howManyAreIn(").append(parts.get(0).rendered())
                     .append(", ").append(parts.get(1).rendered()).append(", ").append(of)
                     .append(')');
+            case HOW_MANY_MEET -> joined(sb.append("howManyMeet(").append(of).append(", "), ", ")
+                    .append(')');
+            case HOW_MANY_DIFFERENT ->
+                    joined(sb.append("howManyDifferent(").append(of).append(", "), ", ")
+                            .append(')');
+            case SUM_OF_SIZES -> joined(sb.append("sumOfSizes("), ", ").append(')');
+            case CODE_POINTS -> sb.append("codePoints(").append(parts.get(0).rendered())
+                    .append(", ").append(of).append(')');
         }
         return sb.toString();
     }
@@ -1344,6 +1378,35 @@ final class Term {
          *  its keys as {@code of} says. */
         Term howManyAreIn(Term counted, Term holder, AddsWhatItDoesNotHold.Of of) {
             return of(Shape.HOW_MANY_ARE_IN, of, List.of(counted, holder));
+        }
+
+        /** How many elements of {@code container} come out on the holding side of {@code aspect}:
+         *  each element itself where {@code closure} is null, and otherwise what it answers of
+         *  each. */
+        Term howManyMeet(Term container, Term closure, AnswerAspect aspect) {
+            return of(Shape.HOW_MANY_MEET, aspect, ofEach(container, closure));
+        }
+
+        /** How many different values the elements of {@code container} come to: the elements or
+         *  their keys as {@code of} says where {@code closure} is null, and otherwise what it
+         *  answers of each. */
+        Term howManyDifferent(Term container, Term closure, AddsWhatItDoesNotHold.Of of) {
+            return of(Shape.HOW_MANY_DIFFERENT, of, ofEach(container, closure));
+        }
+
+        /** How many the elements of {@code container} hold, added up: each element where
+         *  {@code closure} is null, and otherwise what it answers of each. */
+        Term sumOfSizes(Term container, Term closure) {
+            return of(Shape.SUM_OF_SIZES, null, ofEach(container, closure));
+        }
+
+        /** How many of the code points of {@code string} are in {@code counted}. */
+        Term codePoints(Term string, CodePointClass counted) {
+            return of(Shape.CODE_POINTS, counted, List.of(string));
+        }
+
+        private static List<Term> ofEach(Term container, Term closure) {
+            return closure == null ? List.of(container) : List.of(container, closure);
         }
 
         /** How many distinct terms this has been asked for — what a test measuring the sharing

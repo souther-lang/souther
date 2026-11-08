@@ -120,11 +120,12 @@ final class IntrinsicNumericFacts {
     /**
      * How many {@code container} holds, where the laws of the operation that answered it say so by
      * what it was handed: whether it holds anything, and how many case by case — or null where no
-     * operation answered it, no law says either, or a part of each is one this side has no name
+     * operation answered it, no law says either, or no part of either is one this side has a name
      * for ({@link LawOverAtoms}).
      *
-     * <p>Each law whole or not at all. One says when the answer holds something and, by the same
-     * statement, when it holds nothing, so a part of it left out would answer the second wrong.
+     * <p>Each law whole, with a part this side has no name for held as one that settles nothing.
+     * One says when the answer holds something and, by the same statement, when it holds nothing,
+     * so a part of it left out would answer the second wrong.
      */
     static Derivation heldWhereItsLawsSay(Core container, FactSubject atom, Denotations at,
                                           Terms terms) {
