@@ -1824,6 +1824,42 @@
         },
         {
           "type": "object",
+          "description": "The choice between two by a comparison of the element's numbers: `whenHolds` where `form`, a form of its fields, stands to nought as `relation` says, and `otherwise` elsewhere. The form is scaled so the weight of the field whose name sorts first is one, so one comparison is spelled one way however its sides were written.",
+          "required": [
+            "kind",
+            "form",
+            "relation",
+            "whenHolds",
+            "otherwise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "compared"
+            },
+            "form": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "relation": {
+              "enum": [
+                "==",
+                "/=",
+                "<",
+                "<=",
+                ">",
+                ">="
+              ]
+            },
+            "whenHolds": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "otherwise": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "The choice between two by where the element stands in the container it was walked from, counted from nought in the order the row writes them: `whenHolds` where the position, or what is left of it divided by `divisor` with the quotient floored, stands to `against` as `relation` says, and `otherwise` elsewhere. `divisor` is absent where the position is compared as it is. Which answer an element takes is fixed by the row and not by any value it holds.",
           "required": [
             "kind",

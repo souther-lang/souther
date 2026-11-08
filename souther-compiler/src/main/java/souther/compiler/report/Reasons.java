@@ -185,8 +185,8 @@ final class Reasons {
                         "the totals of a key from the last element put, among more than one"
                                 + " element of the key";
                 case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR ->
-                        "the elements whose computed number is chosen by a flag, chosen by their"
-                                + " case or chosen by where they stand";
+                        "the elements whose computed number is chosen by a flag, by a comparison"
+                                + " of their numbers, by their case or by where they stand";
                 case MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER ->
                         "the containers mixing the cases a computed number is chosen by";
                 case ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL ->

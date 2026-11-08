@@ -7737,19 +7737,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         });
             }
             case ElementValue.Choose it -> {
-                into.put("kind", "choose");
-                into.put("flag", it.flag().spelled());
-                elementComputation(into.putObject("whenSet"), it.whenSet());
-                elementComputation(into.putObject("otherwise"), it.otherwise());
-            }
-            case ElementValue.ByPosition it -> {
-                into.put("kind", "position");
-                if (it.test().divisor() != ElementValue.PositionTest.THE_POSITION_ITSELF) {
-                    into.put("divisor", it.test().divisor());
+                switch (it.test()) {
+                    case ElementValue.Test.Flag flag -> {
+                        into.put("kind", "choose");
+                        into.put("flag", flag.place().spelled());
+                        elementComputation(into.putObject("whenSet"), it.whenHolds());
+                    }
+                    case ElementValue.Test.Compared compared -> {
+                        into.put("kind", "compared");
+                        elementComputation(into.putObject("form"),
+                                new ElementValue.Affine(compared.form()));
+                        into.put("relation", compared.relation().written());
+                        elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                    }
+                    case ElementValue.PositionTest test -> {
+                        into.put("kind", "position");
+                        if (test.divisor() != ElementValue.PositionTest.THE_POSITION_ITSELF) {
+                            into.put("divisor", test.divisor());
+                        }
+                        into.put("relation", test.relation().written());
+                        into.put("against", test.against());
+                        elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                    }
                 }
-                into.put("relation", it.test().relation().written());
-                into.put("against", it.test().against());
-                elementComputation(into.putObject("whenHolds"), it.whenHolds());
                 elementComputation(into.putObject("otherwise"), it.otherwise());
             }
             case ElementValue.Indexed it -> {

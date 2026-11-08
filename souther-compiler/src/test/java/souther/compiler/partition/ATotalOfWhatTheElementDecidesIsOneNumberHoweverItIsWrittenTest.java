@@ -1,10 +1,15 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.DocumentShape;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -108,5 +113,99 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
                             + UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS),
                     control + " " + unread.get(control));
         }
+    }
+
+    /**
+     * A total of what a filter keeps is the total of every element counting nought where the
+     * filter's closure fails, and a comparison of the element's numbers chooses as a flag does:
+     * each way of writing one of them is the choice summed, word for word, and a comparison is one
+     * test however its sides are written. Filters and takes stacked are their tests together. A
+     * walk numbering what a filter kept, and a take of what a filter kept, count positions that
+     * are none of the list's, and a filter of what a walk answered tests the answer and not the
+     * element: all three stay unread.
+     */
+    @Test
+    void aTotalOfWhatAFilterOrAComparisonKeepsIsTheChoiceSummed() {
+        Map<String, String> judged = new LinkedHashMap<>();
+        judged.put("flagSummed",
+                "List.sum(List.map(i -> if i.active then i.price else 0, items)) >= 0");
+        judged.put("flagFiltered", "List.sum(List.map(i -> i.price, "
+                + "List.filter(i -> i.active, items))) >= 0");
+        judged.put("flagFoldFiltered", "List.fold((acc, i) -> acc + i.price, 0, "
+                + "List.filter(i -> i.active, items)) >= 0");
+        judged.put("comparedSummed",
+                "List.sum(List.map(i -> if i.price > 10 then i.price else 0, items)) >= 0");
+        judged.put("comparedInTheStep", "List.fold((acc, i) -> "
+                + "if i.price > 10 then acc + i.price else acc, 0, items) >= 0");
+        judged.put("comparedFiltered", "List.sum(List.map(i -> i.price, "
+                + "List.filter(i -> i.price > 10, items))) >= 0");
+        judged.put("comparedTheOtherWay", "List.sum(List.map(i -> i.price, "
+                + "List.filter(i -> 10 < i.price, items))) >= 0");
+        judged.put("comparedScaled", "List.sum(List.map(i -> i.price, "
+                + "List.filter(i -> 2 * i.price - 20 > 0, items))) >= 0");
+        judged.put("chosenTwice", "List.sum(List.map(i -> "
+                + "if i.price > 10 then (if i.active then i.price else 0) else 0, items)) >= 0");
+        judged.put("filteredTwice", "List.sum(List.map(i -> i.price, List.filter(i -> i.active, "
+                + "List.filter(i -> i.price > 10, items)))) >= 0");
+        judged.put("chosenOfATake", "List.sum(List.map(i -> if i.active then i.price else 0, "
+                + "List.take(2, items))) >= 0");
+        judged.put("filteredOfATake", "List.sum(List.map(i -> i.price, "
+                + "List.filter(i -> i.active, List.take(2, items)))) >= 0");
+        judged.put("foldOfAFilteredTake", "List.fold((acc, i) -> acc + i.price, 0, "
+                + "List.filter(i -> i.active, List.take(2, items))) >= 0");
+        judged.put("counted", "List.length(List.filter(i -> i.price > 10, items)) >= 1");
+        judged.put("countedBySumming",
+                "List.sum(List.map(i -> if i.price > 10 then 1 else 0, items)) >= 1");
+        judged.put("countedThroughTheFilter",
+                "List.sum(List.map(i -> 1, List.filter(i -> i.price > 10, items))) >= 1");
+        judged.put("countedByAFoldOfTheFilter", "List.fold((acc, i) -> acc + 1, 0, "
+                + "List.filter(i -> i.price > 10, items)) >= 1");
+        judged.put("aTakeOfWhatAFilterKept", "List.sum(List.map(i -> i.price, "
+                + "List.take(2, List.filter(i -> i.active, items)))) >= 0");
+        judged.put("numberingWhatAFilterKept", "List.sum(List.mapIndexed((k, i) -> "
+                + "if k == 0 then i.price else 0, List.filter(i -> i.active, items))) >= 0");
+        judged.put("aFilterOfWhatAWalkAnswered", "List.sum(List.filter(p -> p > 10, "
+                + "List.map(i -> i.price, items))) >= 0");
+        Map<String, List<String>> unread = unread(judged);
+
+        assertTrue(unread.get("comparedSummed").contains(
+                        "List.sum({if 1·price + -10 > 0 then 1·price + 0 else 0 | items[*]})="
+                                + UndividedPosition.Reason.RULE_ABOUT_A_RUN),
+                unread.get("comparedSummed").toString());
+        assertTrue(unread.get("counted").stream().noneMatch(each ->
+                        each.startsWith("items=") || each.startsWith("items[*].price=")),
+                unread.get("counted").toString());
+        Map<String, List<String>> ways = Map.of(
+                "flagSummed", List.of("flagFiltered", "flagFoldFiltered"),
+                "comparedSummed", List.of("comparedInTheStep", "comparedFiltered",
+                        "comparedTheOtherWay", "comparedScaled"),
+                "chosenTwice", List.of("filteredTwice"),
+                "chosenOfATake", List.of("filteredOfATake", "foldOfAFilteredTake"),
+                "counted", List.of("countedBySumming", "countedThroughTheFilter",
+                        "countedByAFoldOfTheFilter"));
+        ways.forEach((oracle, others) -> others.forEach(way ->
+                assertEquals(unread.get(oracle), unread.get(way), way)));
+        for (String control : List.of("aTakeOfWhatAFilterKept", "numberingWhatAFilterKept",
+                "aFilterOfWhatAWalkAnswered")) {
+            assertTrue(unread.get(control).stream().anyMatch(each ->
+                            each.startsWith("items[*].price=")),
+                    control + " " + unread.get(control));
+        }
+    }
+
+    /** A choice by a comparison is written in the report as the schema says one is. */
+    @Test
+    void aChoiceByAComparisonIsWrittenTheWayTheSchemaSays() {
+        Compilation compilation = Compilation.ofSource(DECLARATIONS + JUDGED.formatted("compared",
+                "List.sum(List.map(i -> i.price, List.filter(i -> i.price > 10, items))) >= 0"),
+                "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        DocumentShape.assertShapedLikeTheSchema(document);
+        assertTrue(document.findValues("kind").stream()
+                        .anyMatch(kind -> kind.asString("").equals("compared")),
+                document.toString());
     }
 }
