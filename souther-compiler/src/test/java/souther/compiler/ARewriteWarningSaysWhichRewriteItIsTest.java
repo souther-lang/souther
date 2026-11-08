@@ -6,14 +6,16 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.QuotedFrom;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsAnArmOutOfSightFromItsSibling;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsTheBodyFromOneAnswer;
+import souther.compiler.diag.msg.ExampleMessage.TheValueIsTheOneThisRowCameTo;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -42,17 +44,12 @@ class ARewriteWarningSaysWhichRewriteItIsTest {
                 example spread
                     | (0, 0) -> 0
                     | (3, 3) -> 0
-                """)).stream().map(d -> Messages.render(d.said(), Locale.ENGLISH)).toList();
+                """)).stream().map(d -> whichRewrite(d.said())).toList();
 
         assertEquals(List.of(
-                        "No row of `spread` would come out differently if the `else` arm of a fork"
-                                + " of `souther.int.max`, which this build holds no source of,"
-                                + " answered as the `then` arm.",
-                        "No row of `spread` would come out differently if the `else` arm of a fork"
-                                + " of `souther.int.min`, which this build holds no source of,"
-                                + " answered as the `then` arm.",
-                        "No row of `spread` would come out differently if its body answered what"
-                                + " row `#1` answers whatever it was given."),
+                        "arm.else as arm.then in souther.int.max",
+                        "arm.else as arm.then in souther.int.min",
+                        "the body as row #1"),
                 said);
     }
 
@@ -83,13 +80,23 @@ class ARewriteWarningSaysWhichRewriteItIsTest {
         assertEquals(2, warnings.size(), () -> "a warning for each value: " + warnings);
         Set<QuotedFrom> marked = warnings.stream()
                 .flatMap(d -> d.secondary().stream())
-                .filter(label -> Messages.render(label.said(), Locale.ENGLISH)
-                        .equals("the value is the one this row came to"))
+                .filter(label -> label.said() instanceof TheValueIsTheOneThisRowCameTo)
                 .map(LabeledRegion::place)
                 .map(place -> ((DiagnosticPlace.InSource) place).region().start().quotedFrom())
                 .collect(Collectors.toSet());
         assertEquals(2, marked.size(),
                 () -> "each warning marks its own row, in its own source: " + warnings);
+    }
+
+    /** The facts a warning tells its rewrite apart by, read off the message rather than off how a
+     *  catalog words it. */
+    private static String whichRewrite(Message said) {
+        return switch (said) {
+            case NoRowTellsAnArmOutOfSightFromItsSibling it ->
+                    it.arm().key() + " as " + it.sibling().key() + " in " + it.definition();
+            case NoRowTellsTheBodyFromOneAnswer it -> "the body as row " + it.row();
+            default -> said.toString();
+        };
     }
 
     private static List<Diagnostic> rewriteWarnings(List<String> sources) {

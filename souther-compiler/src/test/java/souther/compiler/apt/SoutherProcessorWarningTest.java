@@ -2,10 +2,13 @@ package souther.compiler.apt;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.InvariantMessage.NothingKnownHereEstablishesTheInvariant;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -58,8 +61,9 @@ class SoutherProcessorWarningTest {
         ProcessorRun reported = ProcessorRun.of(dir, source, "ja");
 
         assertTrue(reported.warnings().contains("(警告)"), reported.warnings());
-        assertTrue(reported.warnings().contains("不変条件に違反する可能性があります"),
-                reported.warnings());
+        String said = Messages.render(new NothingKnownHereEstablishesTheInvariant("Eaches"),
+                Locale.JAPANESE);
+        assertTrue(reported.warnings().contains(said), reported.warnings());
     }
 
     @Test

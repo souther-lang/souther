@@ -142,6 +142,54 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
     }
 
     /**
+     * What an entry writes as code, a translation writes too.
+     *
+     * <p>Code in a message is what the author types — a keyword, a form, a name the message fills
+     * in — and it is the same in every language; a sentence around it is what a translation is for.
+     * So an entry and its translation write the same code, and one that does not is a translation
+     * left behind when the entry's code changed, or written against code the entry never had. That
+     * is the part of a translation a check can hold, and nothing here asks about the sentence.
+     *
+     * <p>A word in angle brackets inside code stands for what the author writes there, and is the
+     * sentence's to name: {@code <name>} and {@code <名前>} are one piece of code.
+     */
+    @Test
+    void everyCatalogWritesTheCodeTheBaseWrites() throws IOException {
+        Properties base = load(baseCatalog().path());
+        List<String> apart = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            if (catalog.isBase()) {
+                continue;
+            }
+            Properties translated = load(catalog.path());
+            for (String key : new TreeSet<>(base.stringPropertyNames())) {
+                String said = translated.getProperty(key);
+                if (said == null) {
+                    continue;
+                }
+                Set<String> wrote = codeOf(base.getProperty(key));
+                Set<String> here = codeOf(said);
+                if (!wrote.equals(here)) {
+                    apart.add(catalog.path().getFileName() + " " + key + ": " + wrote + " / " + here);
+                }
+            }
+        }
+        assertEquals(List.of(), apart, "a translation writes code its entry does not");
+    }
+
+    private static final Pattern CODE = Pattern.compile("`([^`]+)`");
+    private static final Pattern WRITTEN_BY_THE_AUTHOR = Pattern.compile("<[^<>]*>");
+
+    private static Set<String> codeOf(String entry) {
+        Set<String> code = new TreeSet<>();
+        Matcher m = CODE.matcher(entry);
+        while (m.find()) {
+            code.add(WRITTEN_BY_THE_AUTHOR.matcher(m.group(1)).replaceAll("<>"));
+        }
+        return code;
+    }
+
+    /**
      * One catalog per language, across every module.
      *
      * <p>The modules ship onto one class path — the compiler depends on the syntax module — so two

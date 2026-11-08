@@ -18,6 +18,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
+import souther.compiler.diag.msg.ExampleMessage.NotComparedTheTableDidNotAnswer;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
@@ -350,14 +351,13 @@ class CompileFakeExampleDisagreementTest {
                 ((Primary.InSource) one.primary()).place().region()).start().line(), "anchored where the fake names the behavior");
         assertEquals(6, WhereItSits.in(spinning,
                 ((Primary.InSource) one.primary()).place().region()).start().column());
-        // What could not be done, then what stopped: the table is what did not answer, and the
-        // comparison is what that cost. The number is read off the wait this compile was given
-        // rather than written in, so the line still holds if that wait changes — and it is read as
-        // it is set and not as a locale would group it, which is what the number in this line is for.
-        assertTrue(rendered(one).contains("Could not compare this fake with the rows recorded for"
-                        + " `find` — building the table did not answer within "
-                        + DoesNotComeBack.WAIT.toMillis() + "ms."),
-                rendered(one));
+        // The comparison is what could not be done and the table is what did not finish. The number
+        // is read off the wait this compile was given rather than written in, so the line still
+        // holds if that wait changes — and it is the number as it is set and not as a locale would
+        // group it.
+        assertEquals(new NotComparedTheTableDidNotAnswer("find",
+                        Long.toString(DoesNotComeBack.WAIT.toMillis())),
+                one.said(), rendered(one));
     }
 
     /** And a table that finishes says nothing: the code is not one every fake gets. */

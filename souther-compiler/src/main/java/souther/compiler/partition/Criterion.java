@@ -48,6 +48,11 @@ public sealed interface Criterion {
         public String operator() {
             return "=";
         }
+
+        @Override
+        public String askedAs() {
+            return "reading.at";
+        }
     }
 
     /**
@@ -90,6 +95,11 @@ public sealed interface Criterion {
         @Override
         public String operator() {
             return "in";
+        }
+
+        @Override
+        public String askedAs() {
+            return "reading.in";
         }
 
         /**
@@ -285,6 +295,10 @@ public sealed interface Criterion {
 
     /** How this relates a row's quantity to what it is against. */
     String operator();
+
+    /** The catalog's phrase for the same relation, filled with what it is against: a reader in
+     *  another language is told the relation in theirs. */
+    String askedAs();
 
     /**
      * The level this is written against, or null where what it is written against is a run rather

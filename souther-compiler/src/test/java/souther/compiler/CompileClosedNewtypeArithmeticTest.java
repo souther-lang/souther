@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.ArithmeticMessage.AQuotientLeavesTheWrappedType;
 
 import souther.runtime.ConstraintViolation;
 
@@ -121,7 +122,7 @@ class CompileClosedNewtypeArithmeticTest {
                 behavior calc : (n: N) -> N
                 let calc (n) = n / 2
                 """));
-        assertTrue(refused.getMessage().contains("no Int is left to wrap as N"),
+        assertEquals(new AQuotientLeavesTheWrappedType("N", "Int"), refused.diagnostic().said(),
                 refused.getMessage());
         assertEquals(3L, run("""
                 module demo

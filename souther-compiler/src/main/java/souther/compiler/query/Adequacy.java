@@ -2220,10 +2220,12 @@ public final class Adequacy {
              * a branch written between two values named is inside the range, and one written at a
              * value refused is inside a range with no end.
              */
-            private static String shown(ValuesNamed named) {
+            private static Localizable shown(ValuesNamed named) {
                 return switch (named) {
-                    case ValuesNamed.Held held -> "one of " + listed(held.values());
-                    case ValuesNamed.Refused refused -> "any value but " + listed(refused.values());
+                    case ValuesNamed.Held held ->
+                            Localizable.of("values.one.of", listed(held.values()));
+                    case ValuesNamed.Refused refused ->
+                            Localizable.of("values.any.but", listed(refused.values()));
                 };
             }
 
@@ -2249,13 +2251,14 @@ public final class Adequacy {
              * branch and the row a report offers beside it say a range the same way. An end nothing
              * bounds is left out rather than written as an infinity nobody typed.
              */
-            private static String shown(souther.compiler.numeric.NumericDomain.Bounds admits) {
+            private static Localizable shown(souther.compiler.numeric.NumericDomain.Bounds admits) {
                 String low = admits.min() == null ? null
                         : admits.min().at() + (admits.min().inclusive() ? " <= " : " < ");
                 String high = admits.max() == null ? null
                         : (admits.max().inclusive() ? " <= " : " < ") + admits.max().at();
-                return low == null && high == null ? "any number"
-                        : (low == null ? "x" : low + "x") + (high == null ? "" : high);
+                return low == null && high == null ? Localizable.of("values.any.number")
+                        : Localizable.of("values.range",
+                                (low == null ? "x" : low + "x") + (high == null ? "" : high));
             }
 
             @Override
@@ -10406,7 +10409,7 @@ public final class Adequacy {
                     for (BorderObligationPointAssessment.ReadingSaid read : readings.subList(0,
                             Math.min(readings.size(),
                                     BorderObligationPointAssessment.READINGS_SAID))) {
-                        built.hint(new ExampleMessage.TheLineAsReadAt(read.at(), read.asks()));
+                        built.hint(new ExampleMessage.TheLineAsReadAt(read.at(), read.asked()));
                         // And the call of the helper each copy it was read at was made at, marked
                         // there: the line is one place for every call, and the call is what tells
                         // its readings apart.

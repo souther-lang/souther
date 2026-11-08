@@ -125,12 +125,14 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      */
     @Test
     void theSameValueIsTheOtherPointUnderTheOtherOperator() {
-        assertTrue(report(CLOSED).contains("""
+        String closed = report(CLOSED);
+        assertTrue(closed.contains("""
                 the ON point (comparison@10:10)
-                          · read as sized/n: = 100"""), report(CLOSED));
-        assertTrue(report(OPENED).contains("""
+                          · read as sized/n: = 100"""), closed);
+        String opened = report(OPENED);
+        assertTrue(opened.contains("""
                 the OFF point (comparison@10:10)
-                          · read as sized/n: = 100"""), report(OPENED));
+                          · read as sized/n: = 100"""), opened);
     }
 
     /**

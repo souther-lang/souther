@@ -385,7 +385,7 @@ class AdequacyLensTest {
         List<CodeAction> actions = analyzer.codeActions(MODULE, TRIP, on(9), graph);
 
         assertEquals(1, actions.size(), actions.toString());
-        assertEquals("Write the rows `submit` does not cover", actions.get(0).title());
+        assertEquals("Add the missing example rows for `submit`", actions.get(0).title());
         // Offered without the rows, which is the point of offering it: what they cost is paid by
         // somebody taking it.
         CodeAction.Deferred offered =
@@ -806,10 +806,10 @@ class AdequacyLensTest {
         Analyzer analyzer = measuring(Adequacy.Level.ALL);
         ModuleGraph graph = graphOf(Map.of(TWO_URI, TWO));
 
-        assertEquals("Write the rows `first` does not cover",
+        assertEquals("Add the missing example rows for `first`",
                 analyzer.codeActions(TWO_URI, TWO, caret(lineOf(TWO, "behavior first"), 4), graph)
                         .get(0).title());
-        assertEquals("Write the rows `second` does not cover",
+        assertEquals("Add the missing example rows for `second`",
                 analyzer.codeActions(TWO_URI, TWO, caret(lineOf(TWO, "behavior second"), 4), graph)
                         .get(0).title());
     }
@@ -846,7 +846,7 @@ class AdequacyLensTest {
         int first = lineOf(TWO, "behavior first");
         int second = lineOf(TWO, "behavior second");
 
-        assertEquals("Write the rows `first` does not cover",
+        assertEquals("Add the missing example rows for `first`",
                 analyzer.codeActions(TWO_URI, TWO, over(first, 0, second + 1, 0), graph)
                         .get(0).title());
     }
@@ -943,7 +943,7 @@ class AdequacyLensTest {
     private static boolean offersRows(Analyzer analyzer, String uri, String text, Range asked,
                                       ModuleGraph graph) {
         return analyzer.codeActions(uri, text, asked, graph).stream()
-                .anyMatch(action -> action.title().startsWith("Write the rows"));
+                .anyMatch(action -> action.title().startsWith("Add the missing example rows"));
     }
 
     private static Range caret(int line, int column) {

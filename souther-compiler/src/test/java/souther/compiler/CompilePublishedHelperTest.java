@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ModuleMessage.ACarriedHelperBuildsWhatIsKept;
 import souther.compiler.diag.msg.ParseMessage;
 import souther.compiler.diag.CompileException;
 import souther.compiler.jvm.ClassFileImage;
@@ -789,8 +790,8 @@ class CompilePublishedHelperTest {
                 partial let f (n: Int) = walk(n)
                 """));
 
-        assertTrue(e.getMessage().contains("walk"), e.getMessage());
-        assertTrue(e.getMessage().contains("carried"), e.getMessage());
+        assertEquals(new ACarriedHelperBuildsWhatIsKept("pricing.walk", "Step"), e.diagnostic().said(),
+                e.getMessage());
     }
 
     /**

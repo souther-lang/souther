@@ -2,9 +2,13 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsTheArmFromItsSibling;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsTheBodyFromOneAnswer;
+import souther.compiler.diag.msg.ExampleMessage.WriteARowAtThatInput;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.partition.Replacement;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
@@ -14,7 +18,6 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -109,21 +112,21 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         Compilation compilation = Compilation.ofSource(NOTHING_HELD, "Main");
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         compilation.answerEverything();
-        List<String> said = compilation.warnings().stream()
+        List<Diagnostic> said = compilation.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1939".equals(d.code()))
-                .map(d -> Messages.render(d.said(), Locale.ENGLISH) + " | "
-                        + d.notes().stream()
-                                .map(n -> Messages.render(n.said(), Locale.ENGLISH)).toList())
                 .toList();
 
         // Every row holds nothing, so none of them answers differently under the rewrite and the
         // row the hint names is one the search composed.
-        assertTrue(said.stream().anyMatch(each -> each.startsWith(
-                        "No row of `refund` would come out differently if the `case OutOfPocket`"
-                                + " arm of this fork answered as the `case Advance` arm.")
-                        && each.contains("Amount(")),
-                () -> "what a build is told: " + said);
+        assertTrue(said.stream().anyMatch(d -> d.said() instanceof NoRowTellsTheArmFromItsSibling it
+                        && it.behavior().equals("refund")
+                        && List.of(it.arm().args()).equals(List.of("OutOfPocket"))
+                        && List.of(it.sibling().args()).equals(List.of("Advance"))
+                        && d.notes().stream().anyMatch(n -> n.said() instanceof WriteARowAtThatInput row
+                                && row.input().contains("Amount("))),
+                () -> "what a build is told: " + said.stream().map(d -> d.said() + " " + d.notes())
+                        .toList());
     }
 
     /** And the page says it beside the arms, with the gap under the count. */
@@ -213,16 +216,14 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         Compilation warned = Compilation.ofSource(doubled, "Main");
         warned.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         warned.answerEverything();
-        List<String> said = warned.warnings().stream()
+        List<Message> said = warned.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1939".equals(d.code().toString()))
-                .map(d -> Messages.render(d.said(), Locale.ENGLISH))
+                .map(Diagnostic::said)
                 .toList();
         assertEquals(List.of(
-                        "No row of `doubled` would come out differently if its body answered what"
-                                + " row `zero` answers whatever it was given.",
-                        "No row of `doubled` would come out differently if its body answered what"
-                                + " row `one` answers whatever it was given."),
+                        new NoRowTellsTheBodyFromOneAnswer("zero", "doubled"),
+                        new NoRowTellsTheBodyFromOneAnswer("one", "doubled")),
                 said);
 
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),

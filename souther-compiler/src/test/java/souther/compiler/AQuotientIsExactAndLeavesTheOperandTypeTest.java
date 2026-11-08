@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.ArithmeticMessage.AQuotientLeavesTheWrappedType;
 import souther.runtime.Rational;
 
 import org.junit.jupiter.api.Test;
@@ -239,7 +240,8 @@ class AQuotientIsExactAndLeavesTheOperandTypeTest {
                 behavior calc : (y: Yen) -> Yen constructs Yen
                 let calc (y) = y / 2
                 """);
-        assertTrue(e.getMessage().contains("no Int is left to wrap as Yen"), e.getMessage());
+        assertEquals(new AQuotientLeavesTheWrappedType("Yen", "Int"), e.diagnostic().said(),
+                e.getMessage());
     }
 
     /** And the same of a newtype over a Decimal, whose quotient leaves that type too. */
@@ -251,7 +253,8 @@ class AQuotientIsExactAndLeavesTheOperandTypeTest {
                 behavior calc : (m: Money) -> Money constructs Money
                 let calc (m) = m / 2m
                 """);
-        assertTrue(e.getMessage().contains("no Decimal is left to wrap as Money"), e.getMessage());
+        assertEquals(new AQuotientLeavesTheWrappedType("Money", "Decimal"), e.diagnostic().said(),
+                e.getMessage());
     }
 
     /** A Rational crosses no boundary: what a computation holds is not what a field stores or a
