@@ -6,11 +6,14 @@ import souther.cli.CliProcess.Ran;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Note;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.diag.msg.DeadBranchMessage.EveryWayInIsRuledOut;
 import souther.compiler.diag.msg.DeadBranchMessage.ItsDeclarationHoldsNoneOfTheCases;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.AdequacyReport.AdequacyStatus;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -269,19 +272,18 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
     }
 
     @Test
-    void aRecordInputIsTheOneCaseItIsAndRulesTheOthersOut() throws Exception {
-        Output output = run(ONE_CASE, true);
+    void aRecordInputIsTheOneCaseItIsAndRulesTheOthersOut() {
+        Measured measured = measured(ONE_CASE);
 
-        assertTrue(output.report().contains("branch      1/1"),
+        assertTrue(measured.report().contains("branch      1/1"),
                 () -> "the one case a `Draft` can be is the only arm owed a row:\n"
-                        + output.report());
-        assertFalse(output.report().contains("no row goes through"),
-                () -> "and the row for it covers it:\n" + output.report());
-        assertTrue(output.report().contains("adequacy: satisfied"), () -> output.report());
-        assertEquals(0, output.exit(), () -> output.report());
+                        + measured.report());
+        assertFalse(measured.report().contains("no row goes through"),
+                () -> "and the row for it covers it:\n" + measured.report());
+        assertEquals(AdequacyStatus.SATISFIED, measured.adequacy(), measured::report);
         // Said by what the type declares, which is the reason it holds whatever the rules are: each
         // arm after the first is for a case a `Draft` is not.
-        List<Message> proofs = deadBranchProofs(ONE_CASE);
+        List<Message> proofs = measured.deadBranchProofs();
         assertEquals(Set.of("Live", "Done"), proofs.stream()
                         .filter(each -> each instanceof ItsDeclarationHoldsNoneOfTheCases it
                                 && it.declared().equals("Draft"))
@@ -314,25 +316,22 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
      *  matched stands: it is no position of the input, and the statement says which cases of the
      *  input bring each. */
     @Test
-    void anArmOverWhatAHelperAnswersIsRuledOutByEveryHelperArmThatAnswersIt() throws Exception {
-        Output output = run(ANSWERED, true);
+    void anArmOverWhatAHelperAnswersIsRuledOutByEveryHelperArmThatAnswersIt() {
+        Measured measured = measured(ANSWERED);
 
-        List<Message> proofs = deadBranchProofs(ANSWERED);
+        List<Message> proofs = measured.deadBranchProofs();
         assertTrue(proofs.stream().anyMatch(each -> each instanceof EveryWayInIsRuledOut),
                 () -> "the arm for `Settled` is entered by `Done` and `Lost`, and neither is an "
                         + "`OpenStage`: " + proofs);
-        assertTrue(output.report().contains("adequacy: satisfied"),
-                () -> "so it is owed no row:\n" + output.report());
-        assertEquals(0, output.exit(), () -> output.report());
+        assertEquals(AdequacyStatus.SATISFIED, measured.adequacy(),
+                () -> "so it is owed no row:\n" + measured.report());
     }
 
     @Test
-    void whatAnOptionalHoldsIsWhatItsDeclarationSays() throws Exception {
-        Output output = run(AN_OPTIONAL, false);
+    void whatAnOptionalHoldsIsWhatItsDeclarationSays() {
+        Measured measured = measured(AN_OPTIONAL);
 
-        assertEquals(0, output.exit(), () -> output.report() + output.warnings());
-        assertTrue(output.warnings().contains("E1327"), output::warnings);
-        List<Message> proofs = deadBranchProofs(AN_OPTIONAL);
+        List<Message> proofs = measured.deadBranchProofs();
         assertTrue(proofs.contains(
                         new ItsDeclarationHoldsNoneOfTheCases("b.stage@Some", "Draft, Live", "Done")),
                 () -> "the value an optional holds is an `OpenStage` through the helper over the"
@@ -349,17 +348,28 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
         assertEquals(0, output.exit(), () -> output.report());
     }
 
-    /** What each warning about a dead branch gives as its proof, as the messages it is said by. */
-    private static List<Message> deadBranchProofs(String model) {
+    /**
+     * One measurement of a model, read for what a test that asks which proof a dead branch is told
+     * needs: the report `examples` prints, its verdict, and the proofs. Read off the compilation
+     * rather than the command line, because the command line prints the proofs as sentences.
+     */
+    private record Measured(String report, AdequacyStatus adequacy,
+                            List<Message> deadBranchProofs) {}
+
+    private static Measured measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return compilation.warnings().stream()
+        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        AdequacyReport report = AdequacyReport.of(compilation);
+        List<Message> proofs = compilation.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1327".equals(d.code()))
                 .flatMap(d -> Stream.concat(d.notes().stream().map(Note::said),
                         d.secondary().stream().map(LabeledRegion::said)))
                 .toList();
+        return new Measured(report.human(SourceRendering.namedByIdentity(compilation.texts())),
+                report.adequacy(), proofs);
     }
 
     private static int count(String text, String of) {

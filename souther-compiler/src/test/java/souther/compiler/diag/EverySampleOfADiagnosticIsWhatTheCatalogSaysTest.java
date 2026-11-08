@@ -45,10 +45,10 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
 
     @Test
     void everySentenceASampleShowsIsOneTheCatalogWrites() throws IOException {
-        List<Pattern> entries = entries();
+        List<Entry> entries = entries();
         List<String> unwritten = new ArrayList<>();
         for (Sentence sentence : sentencesOfSamples(spec())) {
-            if (entries.stream().noneMatch(entry -> entry.matcher(sentence.text()).matches())) {
+            if (entries.stream().noneMatch(entry -> entry.writes(sentence.text()))) {
                 unwritten.add(sentence.section() + " line " + sentence.line() + ": " + sentence.text());
             }
         }
@@ -57,6 +57,15 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
     }
 
     private record Sentence(String section, int line, String text) {}
+
+    /** A catalog entry as the sentences it can print. What comes before its first placeholder is
+     *  how every one of them starts, so a sentence that does not start so is not matched against
+     *  the rest. */
+    private record Entry(String opening, Pattern sentences) {
+        boolean writes(String sentence) {
+            return sentence.startsWith(opening) && sentences.matcher(sentence).matches();
+        }
+    }
 
     /** The sentences of every {@code [,text]} block in a section named for a code, a sentence being
      *  a line and the lines that continue it, up to a blank line or one that starts its own. */
@@ -106,13 +115,13 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
     }
 
     /** Each catalog entry as the sentences it can print: its placeholders stand for any text. */
-    private static List<Pattern> entries() throws IOException {
+    private static List<Entry> entries() throws IOException {
         Properties catalog = new Properties();
         try (InputStream in = EverySampleOfADiagnosticIsWhatTheCatalogSaysTest.class
                 .getResourceAsStream(CATALOG)) {
             catalog.load(new InputStreamReader(in, StandardCharsets.UTF_8));
         }
-        List<Pattern> entries = new ArrayList<>();
+        List<Entry> entries = new ArrayList<>();
         for (String key : catalog.stringPropertyNames()) {
             String[] own = PLACEHOLDER.split(printed(catalog.getProperty(key)), -1);
             if (String.join("", own).replaceAll("\\s", "").length() < FEWEST_OWN_CHARACTERS) {
@@ -122,7 +131,8 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
             for (String part : own) {
                 quoted.add(Pattern.quote(part));
             }
-            entries.add(Pattern.compile(String.join(".+?", quoted), Pattern.DOTALL));
+            entries.add(new Entry(own[0],
+                    Pattern.compile(String.join(".+?", quoted), Pattern.DOTALL)));
         }
         return entries;
     }
