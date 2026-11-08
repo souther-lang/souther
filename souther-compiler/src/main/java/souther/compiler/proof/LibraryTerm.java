@@ -6,8 +6,13 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * A library operation's body as the rules here read it: what it applies, binds and chooses
@@ -102,6 +107,64 @@ public sealed interface LibraryTerm {
 
     /** Something this reading has no word for, and which kind of thing it was. */
     record Unread(Unwritten what) implements LibraryTerm {}
+
+    /**
+     * A set of the places of a body, each the term written there: two places writing the same
+     * thing are two places a run works it out, so a term is kept as itself and never as one
+     * equal to it.
+     */
+    static Set<LibraryTerm> places() {
+        return Collections.newSetFromMap(new IdentityHashMap<>());
+    }
+
+    /** {@code these}, each kept as the term it is ({@link #places}), and changed by no one. */
+    static Set<LibraryTerm> placesOf(Collection<LibraryTerm> these) {
+        Set<LibraryTerm> out = places();
+        out.addAll(these);
+        return Collections.unmodifiableSet(out);
+    }
+
+    /**
+     * Each term {@code term} is made of, in the order it is written, handed to {@code each}.
+     *
+     * <p>Exhaustive over the terms, so a kind added later stops the build here until somebody
+     * says what it is made of; a reader walking every part of a body asks this and keeps no list
+     * of its own.
+     */
+    static void forEachPart(LibraryTerm term, Consumer<LibraryTerm> each) {
+        switch (term) {
+            case Parameter _, Bound _, WholeNumber _, DecimalNumber _, Truth _, Unread _ -> { }
+            case ListOf(List<LibraryTerm> elements) -> elements.forEach(each);
+            case TupleOf(List<LibraryTerm> elements) -> elements.forEach(each);
+            case Component(LibraryTerm tuple, var _) -> each.accept(tuple);
+            case Call(var _, List<LibraryTerm> args) -> args.forEach(each);
+            case Applied(LibraryTerm function, List<LibraryTerm> args) -> {
+                each.accept(function);
+                args.forEach(each);
+            }
+            case Closure(var _, LibraryTerm body) -> each.accept(body);
+            case Let(var _, LibraryTerm value, LibraryTerm body) -> {
+                each.accept(value);
+                each.accept(body);
+            }
+            case Fork(LibraryTerm condition, LibraryTerm then, LibraryTerm otherwise, var _) -> {
+                each.accept(condition);
+                each.accept(then);
+                each.accept(otherwise);
+            }
+            case OnAnOption(LibraryTerm option, var _, LibraryTerm present, LibraryTerm absent,
+                            var _) -> {
+                each.accept(option);
+                each.accept(present);
+                each.accept(absent);
+            }
+            case Operator(var _, LibraryTerm left, LibraryTerm right, var _) -> {
+                each.accept(left);
+                each.accept(right);
+            }
+            case Negated(LibraryTerm operand) -> each.accept(operand);
+        }
+    }
 
     /** The kinds of thing a body may hold that no rule here reads. */
     enum Unwritten {

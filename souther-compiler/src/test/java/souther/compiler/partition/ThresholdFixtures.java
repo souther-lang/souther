@@ -42,7 +42,7 @@ final class ThresholdFixtures {
                         ElementBindings.of(states, source.newtypes()),
                         PathReachability.Arrivals.NONE,
                         new RuleReachNumbering(source.symbols().module(), behavior),
-                        CountWitnesses.AtComparisons.NONE);
+                        ComparisonWitnesses.AtComparisons.NONE);
     }
 
     /** The lines one behavior's clauses draw, reading the input's rules here. */

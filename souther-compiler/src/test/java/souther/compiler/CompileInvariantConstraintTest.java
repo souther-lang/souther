@@ -448,8 +448,9 @@ class CompileInvariantConstraintTest {
      * list is no constraint: the decoder works the clause out, and a list it stops on stops there
      * as it would without the reading — a repeat included, which the constraint would have
      * reported as a repeat instead. A count multiplied past what an {@code Int} holds, and a key
-     * filed beside a number added past it, are two such rules; a count through
-     * {@code List.distinct} is a third, which the library does not show to answer for every list.
+     * filed beside a number added past it, are two such rules. A count through
+     * {@code List.distinct} is not: the library shows the walk keeping the first of each answers
+     * for every list, so a repeat is reported as one.
      */
     @Test
     void aRuleNotShownToAnswerForEveryListIsWorkedOutAsItIs() throws Exception {
@@ -471,8 +472,8 @@ class CompileInvariantConstraintTest {
                     invariant List.length(List.distinct(value)) == List.length(value)
                 """;
         assertTrue(decoded(distinct, List.of(1L, 2L)) instanceof Ok);
-        assertEquals("invariant_violation", firstIssue(decoded(distinct, List.of(1L, 2L, 1L))).code(),
-                "worked out as the clause, which says it was broken and not which element repeats");
+        assertEquals("duplicate_element", firstIssue(decoded(distinct, List.of(1L, 2L, 1L))).code(),
+                "read as the constraint, which says which element repeats");
     }
 
     /**

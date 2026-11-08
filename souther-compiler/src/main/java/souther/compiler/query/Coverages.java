@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ModelOccurrences;
+import souther.compiler.coverage.AnswerEmissionIndex;
 import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -19,6 +20,7 @@ import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.partition.LinesWhereTheyFall;
+import souther.compiler.partition.ReachWitnesses;
 import souther.compiler.partition.RuleReachNumbering;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
@@ -54,6 +56,7 @@ import souther.compiler.partition.Border;
 import souther.compiler.partition.DrawnBoundary;
 import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ClassCoexistence;
+import souther.compiler.partition.ComparisonWitnesses;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.DerivedValue;
@@ -139,31 +142,54 @@ final class Coverages {
                                souther.compiler.diag.Citation> conditionsMet,
                        Map<Integer, Citation> rulesReachedAt) {}
 
-    /** A row showing {@code count} takes every value beside how many its container holds, at a
-     *  run recorded at one of {@code reaching} ({@link Adequacy.WitnessOfACount}). */
-    interface WitnessesOfACount {
-        CountWitnesses.Sought of(Quantity.HowManyMeet count,
-                                            Set<ConditionOutcomeSite> reaching);
+    /** The rows shown to get to a comparison, by the places a run going through it is recorded
+     *  at ({@link Adequacy.WitnessOfACount}, {@link Adequacy.WitnessOfAReach}). */
+    interface WitnessesAtSites {
+
+        /** A row showing {@code count} takes every value beside how many its container holds, at
+         *  a run recorded at one of {@code reaching}. */
+        CountWitnesses.Sought ofACount(Quantity.HowManyMeet count,
+                                       Set<ConditionOutcomeSite> reaching);
+
+        /** A row a run of which is recorded at one of {@code reaching}. */
+        ReachWitnesses.Sought reaching(Set<ConditionOutcomeSite> reaching);
     }
 
     /**
      * The witnesses of each comparison of {@code body}: those at a run recorded where the
-     * comparison is, by the places the module's emission numbered for it — none for a comparison
-     * nothing records a run at, which no run is shown to get to.
+     * comparison is, by the places the module's emission numbered for it — a comparison written
+     * as one, or an application of an operation of the library answering a truth, whose answer a
+     * run records where it is worked out — none for a comparison nothing records a run at, which
+     * no run is shown to get to.
      */
-    private static CountWitnesses.AtComparisons atTheComparisonsOf(Core body,
-                                                                    CoverageSites.Plan plan,
-                                                                    WitnessesOfACount found) {
+    private static ComparisonWitnesses.AtComparisons atTheComparisonsOf(Core body,
+                                                                 CoverageSites.Plan plan,
+                                                                 WitnessesAtSites found) {
         ComparisonEmissionIndex[] index = {null};
+        AnswerEmissionIndex[] answers = {null};
         return comparison -> {
             if (index[0] == null) {
                 index[0] = ComparisonEmissionIndex.ofBody(body, plan);
+                answers[0] = AnswerEmissionIndex.ofBody(body, plan);
             }
             Set<ConditionOutcomeSite> reaching = new LinkedHashSet<>();
-            ModelOccurrence.statedAt(comparison).map(index[0]::madeFor).orElse(List.of())
+            Optional<ModelOccurrence> stated = ModelOccurrence.statedAt(comparison);
+            stated.map(index[0]::madeFor).orElse(List.of())
                     .forEach(each -> each.site().ifPresent(reaching::add));
-            return reaching.isEmpty() ? CountWitnesses.Lookup.NONE
-                    : count -> found.of(count, reaching);
+            stated.map(answers[0]::madeFor).orElse(List.of())
+                    .forEach(each -> reaching.add(each.index()));
+            return reaching.isEmpty() ? ComparisonWitnesses.AtAComparison.NONE
+                    : new ComparisonWitnesses.AtAComparison() {
+                        @Override
+                        public CountWitnesses.Sought of(Quantity.HowManyMeet count) {
+                            return found.ofACount(count, reaching);
+                        }
+
+                        @Override
+                        public ReachWitnesses.Sought reached() {
+                            return found.reaching(reaching);
+                        }
+                    };
         };
     }
 
@@ -180,9 +206,10 @@ final class Coverages {
      * to read it under, the measurement would be free to be made against one reading and the
      * behavior's rows walked by another.
      *
-     * @param witnesses a row showing a count takes every value beside how many its container
-     *                  holds, at a run recorded at one of a comparison's places — asked where a row
-     *                  is run, and handed in
+     * @param witnesses the rows shown to get to a comparison, at a run recorded at one of its
+     *                  places: one showing a count takes every value beside how many its container
+     *                  holds, and one getting there at all — asked where a row is run, and handed
+     *                  in
      */
     static Partitioned partitioningOf(Hir.SpecBehavior behavior,
                                       souther.compiler.inputs.InputReading read,
@@ -193,7 +220,7 @@ final class Coverages {
                                       souther.compiler.values.Allowance<
                                               souther.compiler.inputs.NumericTerm.FromOnePosition>
                                               distinctions,
-                                      WitnessesOfACount witnesses) {
+                                      WitnessesAtSites witnesses) {
         // Which of the three this elaboration holds, settled before anything reads a body. A tree
         // and a `null` are two facts under one shape, and every reader below would tell them apart
         // again or stop telling them apart at all.

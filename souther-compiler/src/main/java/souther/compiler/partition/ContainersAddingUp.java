@@ -1359,16 +1359,18 @@ final class ContainersAddingUp {
                         }
                     }
                 }
-                case ElementValue.ByPosition choice -> {
+                case ElementValue.Choose choice
+                        when choice.test() instanceof ElementValue.PositionTest test -> {
                     FieldSolved solved = direction == null ? null
-                            : byPosition(choice, elements, direction, orders);
+                            : byPosition(choice, test, elements, direction, orders);
                     if (solved != null) {
                         out.add(solved);
                     }
                 }
-                // A choice by a flag chooses per element on a value nothing here chooses, and a
-                // weight made of the position, or a choice between two forms of the field, weighs
-                // each position apart: the fields adding up to a total are no one quotient of it.
+                // A choice by a test of the element chooses per element on a value nothing here
+                // chooses, and a weight made of the position, or a choice between two forms of the
+                // field, weighs each position apart: the fields adding up to a total are no one
+                // quotient of it.
                 case ElementValue.Multilinear products ->
                         out.addAll(ofProducts(products.form(), elements, orders));
                 case ElementValue.Choose _, ElementValue.Indexed _,
@@ -1384,7 +1386,8 @@ final class ContainersAddingUp {
          * <p>Two forms of the field weigh the positions apart, and a choice inside a choice is a
          * test of a test; neither is a run of positions carrying one form.
          */
-        private static FieldSolved byPosition(ElementValue.ByPosition choice, TermPath elements,
+        private static FieldSolved byPosition(ElementValue.Choose choice,
+                                              ElementValue.PositionTest test, TermPath elements,
                                               TraversalDirection direction, TermOrders orders) {
             if (!(choice.whenHolds() instanceof ElementValue.Affine holds)
                     || !(choice.otherwise() instanceof ElementValue.Affine not)) {
@@ -1400,7 +1403,7 @@ final class ContainersAddingUp {
             return solved == null ? null
                     : new FieldSolved(solved.field(), solved.carrier(), solved.weight(),
                             solved.constant(), false, new Kept(
-                                    formWhereItHolds ? choice.test() : choice.test().denied(),
+                                    formWhereItHolds ? test : test.denied(),
                                     direction, rest.form().constant()), null, null);
         }
 

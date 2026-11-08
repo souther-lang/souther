@@ -4,6 +4,7 @@ import souther.compiler.types.Type;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Where the values an operation walked came from, for a number taken over a run of them.
@@ -312,6 +313,24 @@ public sealed interface RunSource {
         @Override
         public TermPath subjectPath() {
             return elements;
+        }
+
+        /**
+         * The places each value is read off: what the computation reads of the element, below
+         * where the element stands, in the structural order. A computation that turns on where
+         * the element stands, or reads nothing of it, is read off the element itself.
+         *
+         * <p>What the run is filed under is the element, and what its values turn on is these: a
+         * total of {@code if i.active then i.price else 0} turns on the flag and the price of each
+         * element and on nothing else of it, as a total of {@code i.price} turns on the price.
+         */
+        public List<TermPath> placesReadOff() {
+            Set<ElementProjection> parts = computation.reads();
+            if (parts.isEmpty() || computation.readsThePosition()) {
+                return List.of(elements);
+            }
+            return parts.stream().map(part -> part.from(elements)).distinct()
+                    .sorted(TermPath.structuralOrder()).toList();
         }
 
         @Override

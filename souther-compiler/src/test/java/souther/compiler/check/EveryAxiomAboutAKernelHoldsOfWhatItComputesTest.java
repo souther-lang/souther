@@ -271,7 +271,9 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
      * Every kernel said to answer an element of a container answers, where it answers a value, one
      * of the elements the container holds — and one the closure answers true on, where it is said
      * to be found by one. Over arguments either side of nought, so an index and a missing element
-     * are asked as well as a present one.
+     * are asked as well as a present one. An element of a map is a value it files, and the map is
+     * the same elements filed under keys the index names, so a key is asked present and missing
+     * as an index is.
      */
     @Test
     void everyKernelAnsweringAnElementOfAContainerAnswersOneOfItsElements() throws Exception {
@@ -279,6 +281,7 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         StringBuilder source = new StringBuilder("module demo\n\ndata N = { n: Int }\n");
         List<String> runs = new ArrayList<>();
+        Set<String> overAMap = new HashSet<>();
         for (ValueName.Stdlib.Operation operation : stdlib.entries().keySet()) {
             DeclaredArgument from = facts.answersAnElementOf(operation);
             if (from == null) {
@@ -288,14 +291,17 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
             Stdlib.Signature declaration = stdlib.entry(operation).signature();
             List<Type> params = WhatTheLibraryComputes.instantiated(declaration.params(),
                     declaration);
-            List<String> fields = new ArrayList<>(List.of("xs: List<Int>"));
+            String name = "answered" + runs.size();
+            boolean ofAMap = params.get(from.position()) instanceof Type.MapOf;
+            List<String> fields = new ArrayList<>(List.of(ofAMap ? "xs: Map<String, Int>"
+                    : "xs: List<Int>"));
             List<String> args = new ArrayList<>();
             for (int position = 0; position < params.size(); position++) {
                 Type param = params.get(position);
                 if (position == from.position()) {
                     args.add("i.xs");
-                } else if (param == Type.Prim.INT) {
-                    fields.add("a" + position + ": Int");
+                } else if (param == Type.Prim.INT || param == Type.STRING) {
+                    fields.add("a" + position + ": " + Type.show(param));
                     args.add("i.a" + position);
                 } else if (param instanceof Type.FnOf closure
                         && closure.params().equals(List.of(Type.Prim.INT))
@@ -306,7 +312,6 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                             + " is written here");
                 }
             }
-            String name = "answered" + runs.size();
             // Two when a value came out and was one of the elements (and met the closure), one when
             // none did, and nought where a value came out that is none of them.
             source.append("\ndata I").append(name).append(" = { ")
@@ -314,10 +319,14 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                     .append(" : (i: I").append(name).append(") -> N constructs N\nlet ")
                     .append(name).append(" (i) = N {\n    n = match ")
                     .append(operation.qualified()).append("(").append(String.join(", ", args))
-                    .append(") with\n        | Some r -> if List.any(x -> x == r, i.xs)")
+                    .append(") with\n        | Some r -> if List.any(x -> x == r, ")
+                    .append(ofAMap ? "Map.values(i.xs)" : "i.xs").append(")")
                     .append(found ? " && r > 2" : "").append(" then 2 else 0\n")
                     .append("        | None -> 1\n}\n");
             runs.add(name);
+            if (ofAMap) {
+                overAMap.add(name);
+            }
         }
         WhatTheLibraryComputes.Program program =
                 new WhatTheLibraryComputes.Program("demo", source.toString());
@@ -328,9 +337,14 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                     List.of(1L, 3L, 5L), List.of(5L, 3L), List.of(0L, -1L, 4L, 4L))) {
                 for (long index : List.of(-1L, 0L, 1L, 5L)) {
                     Map<String, Object> input = new HashMap<>();
-                    input.put("xs", elements);
+                    boolean ofAMap = overAMap.contains(name);
+                    Map<String, Long> filed = new LinkedHashMap<>();
+                    for (int at = 0; at < elements.size(); at++) {
+                        filed.put("k" + at, elements.get(at));
+                    }
+                    input.put("xs", ofAMap ? filed : elements);
                     for (int position = 0; position < 4; position++) {
-                        input.put("a" + position, index);
+                        input.put("a" + position, ofAMap ? "k" + index : index);
                     }
                     Object out = program.answer(name, "I" + name, "N", input);
                     if (Map.of("n", 2L).equals(out)) {

@@ -88,7 +88,7 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
 
     /** One run of each kind. */
     private static List<RunSource> runs() {
-        ElementValue byPosition = new ElementValue.ByPosition(
+        ElementValue byPosition = new ElementValue.Choose(
                 new ElementValue.PositionTest(2, Rel.EQ, 0),
                 new ElementValue.Affine(LinearForm.atom(ITSELF)),
                 new ElementValue.Affine(new LinearForm<>(ExactRatio.ZERO,
@@ -98,7 +98,7 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
                 new RunSource.FlattenedOccurrences(LINE),
                 RunSource.computedOverTheElementsAt(ELEMENT,
                         new ElementValue.Affine(LinearForm.atom(N)), Type.Prim.INT, null),
-                ((NumericTerm.TakenOver) InputNumber.overWhatWasComputedByPosition(
+                ((NumericTerm.TakenOver) InputNumber.overWhatWasComputed(
                         ValueName.Stdlib.operation("List", "sum"), XS, byPosition,
                         Type.Prim.INT, TraversalDirection.FORWARD, NewtypeInners.NONE, SYMBOLS))
                         .source(),

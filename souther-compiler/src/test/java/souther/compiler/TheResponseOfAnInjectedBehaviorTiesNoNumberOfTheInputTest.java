@@ -331,23 +331,34 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         assertFalse(report.contains("not accounted for: comparison"), report);
     }
 
+    /** A sum over the elements the response kept is the sum of each element counting nought where
+     *  the filter's closure fails, as a choice in the closure says it, and no sum of the response
+     *  however it is walked. */
     @Test
     void aSumOverTheElementsTheResponseKeptIsNotTakenForASumOfTheResponse() {
-        String report = reportOf(summedAs("kept",
-                "List.sum(List.map(.quantity, List.filter(i -> i.active, readSnap(order).rows)))")
-                .replace("quantity: Int }", "quantity: Int, active: Bool }"));
-
-        assertTrue(report.contains("not read: comparison"), report);
+        String chosen = keptAs(
+                "List.sum(List.map(i -> if i.active then i.quantity else 0, readSnap(order).rows))");
+        assertFalse(chosen.contains("not read: comparison"), chosen);
+        assertFalse(chosen.equals(keptAs(SUM_OF_THE_ROWS)), chosen);
+        assertEquals(chosen, keptAs(
+                "List.sum(List.map(.quantity, List.filter(i -> i.active, readSnap(order).rows)))"));
     }
 
     @Test
     void aFoldOverTheElementsTheResponseKeptIsNotTakenForASumOfTheResponse() {
-        String report = reportOf(summedAs("keptfold",
-                "List.fold((acc, x) -> acc + x.quantity, 0,"
-                        + " List.filter(i -> i.active, readSnap(order).rows))")
-                .replace("quantity: Int }", "quantity: Int, active: Bool }"));
+        assertEquals(keptAs(
+                        "List.sum(List.map(i -> if i.active then i.quantity else 0,"
+                                + " readSnap(order).rows))"),
+                keptAs("List.fold((acc, x) -> acc + x.quantity, 0,"
+                        + " List.filter(i -> i.active, readSnap(order).rows))"));
+    }
 
-        assertTrue(report.contains("not read: comparison"), report);
+    /** The report of {@code number} compared over a response whose items hold a flag, with where
+     *  each part stands left out: spellings of one number differ in length. */
+    private static String keptAs(String number) {
+        return reportOf(summedAs("kept", number)
+                .replace("quantity: Int }", "quantity: Int, active: Bool }"))
+                .replaceAll("\\d+:\\d+", "");
     }
 
     @Test

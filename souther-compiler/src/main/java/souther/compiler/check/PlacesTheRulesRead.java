@@ -3,7 +3,9 @@ package souther.compiler.check;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -38,16 +40,44 @@ public record PlacesTheRulesRead(Set<RuleKey> at) {
      * this reads them all rather than one.
      */
     public static PlacesTheRulesRead of(Type value, RuleReadingSource source) {
-        TypeView view = TypeView.of(value, source.inners(), source.symbols(), source.kinds(),
-                source.sums());
         Set<RuleKey> out = new LinkedHashSet<>();
-        for (TypeSymbol each : view.wrappers()) {
-            readBy(each, source, out);
-        }
-        if (view.shape() instanceof Shape.Product product) {
-            readBy(product.name(), source, out);
+        for (ClauseRead read : readsOf(value, source)) {
+            out.add(read.at());
         }
         return new PlacesTheRulesRead(out);
+    }
+
+    /**
+     * Every member a clause of a name {@code value} wears, or of the record it is, cannot be true
+     * without its container holding ({@link ClauseRead.Kind#A_MEMBER_THE_CLAUSE_NEEDS}), where
+     * what is looked for is a place of the value: each read naming its member.
+     */
+    public static List<ClauseRead> membersNeeded(Type value, RuleReadingSource source) {
+        return readsOf(value, source).stream().filter(read -> read.member().isPresent()).toList();
+    }
+
+    /** What every clause of every name {@code value} wears, and of the record it is, reads, each
+     *  read once. */
+    private static List<ClauseRead> readsOf(Type value, RuleReadingSource source) {
+        TypeView view = TypeView.of(value, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        List<TypeSymbol> names = new ArrayList<>(view.wrappers());
+        if (view.shape() instanceof Shape.Product product) {
+            names.add(product.name());
+        }
+        Set<ClauseRead> out = new LinkedHashSet<>();
+        for (TypeSymbol each : names) {
+            if (!(each instanceof TypeSymbol.AtModule declared)) {
+                continue;
+            }
+            for (ClauseMeaning clause : PublishedRules.governing(declared, source.published())
+                    .reached()) {
+                if (clause instanceof ClauseMeaning.Stated stated) {
+                    out.addAll(stated.reads());
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 
     /** Whether some clause reads a place strictly under {@code key}. */
@@ -58,19 +88,5 @@ public record PlacesTheRulesRead(Set<RuleKey> at) {
             }
         }
         return false;
-    }
-
-    private static void readBy(TypeSymbol name, RuleReadingSource source, Set<RuleKey> out) {
-        if (!(name instanceof TypeSymbol.AtModule declared)) {
-            return;
-        }
-        for (ClauseMeaning clause : PublishedRules.governing(declared, source.published())
-                .reached()) {
-            if (clause instanceof ClauseMeaning.Stated stated) {
-                for (ClauseRead read : stated.reads()) {
-                    out.add(read.at());
-                }
-            }
-        }
     }
 }

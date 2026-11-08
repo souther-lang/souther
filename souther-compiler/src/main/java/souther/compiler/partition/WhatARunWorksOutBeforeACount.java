@@ -64,24 +64,34 @@ final class WhatARunWorksOutBeforeACount {
      *                   ({@link Pullback.OnTheInput#readOff}), asked where a count first is
      * @param parameters the binding each parameter of the behavior is read on, by its name
      */
-    static CountWitnesses.Lookup past(Core root, Core comparison, InputReads reads,
+    static ComparisonWitnesses.AtAComparison past(Core root, Core comparison, InputReads reads,
                                       Supplier<Map<Quantity.HowManyMeet, Core>> readOff,
                                       Map<BindingId, String> parameters,
-                                      CountWitnesses.Lookup witnesses) {
-        if (root == null) {
-            return CountWitnesses.Lookup.NONE;
-        }
+                                      ComparisonWitnesses.AtAComparison witnesses) {
         Map<Quantity.HowManyMeet, Boolean> getsThrough = new HashMap<>();
         List<Optional<List<Core>>> worked = new ArrayList<>(1);
-        return count -> {
-            if (worked.isEmpty()) {
-                worked.add(Optional.ofNullable(workedOutUpTo(root, comparison, false)));
+        return new ComparisonWitnesses.AtAComparison() {
+            @Override
+            public CountWitnesses.Sought of(Quantity.HowManyMeet count) {
+                if (root == null) {
+                    return CountWitnesses.Sought.NOTHING;
+                }
+                if (worked.isEmpty()) {
+                    worked.add(Optional.ofNullable(workedOutUpTo(root, comparison, false)));
+                }
+                boolean through = worked.getFirst().isPresent()
+                        && getsThrough.computeIfAbsent(count, asked -> getsThrough(
+                                worked.getFirst().get(), asked, readOff.get().get(asked), root,
+                                reads, parameters));
+                return through ? witnesses.of(count) : CountWitnesses.Sought.NOTHING;
             }
-            boolean through = worked.getFirst().isPresent()
-                    && getsThrough.computeIfAbsent(count, asked -> getsThrough(
-                            worked.getFirst().get(), asked, readOff.get().get(asked), root,
-                            reads, parameters));
-            return through ? witnesses.of(count) : CountWitnesses.Sought.NOTHING;
+
+            /** A row a run of which goes through the comparison asks nothing of what the run
+             *  works out before it: the run is what is watched. */
+            @Override
+            public ReachWitnesses.Sought reached() {
+                return witnesses.reached();
+            }
         };
     }
 

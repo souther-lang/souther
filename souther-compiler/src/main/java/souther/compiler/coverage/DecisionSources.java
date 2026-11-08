@@ -3,7 +3,6 @@ package souther.compiler.coverage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperEntry;
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
@@ -313,7 +312,7 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
                         byBinding.containsKey(local.id());
                 case Hir.Var.Denoting read when read.denotes() instanceof ValueName.Local local ->
                         verdicts.contains(local.id());
-                case Hir.Binary joined when joined.op() == BinOp.AND || joined.op() == BinOp.OR ->
+                case Hir.Binary joined when joined.op().joinsTwoConditions() ->
                         isTheirVerdict(joined.left(), verdicts)
                                 && isTheirVerdict(joined.right(), verdicts);
                 default -> false;

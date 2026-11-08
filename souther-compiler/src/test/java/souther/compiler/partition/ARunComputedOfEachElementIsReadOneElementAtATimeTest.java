@@ -137,7 +137,7 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
     /** A choice by a flag the element holds is made for each element on its own. */
     @Test
     void aChoiceByAFlagIsMadeForEachElement() {
-        ElementValue signed = new ElementValue.Choose(DEBIT,
+        ElementValue signed = new ElementValue.Choose(new ElementValue.Test.Flag(DEBIT),
                 form(ExactRatio.ZERO, Map.of(Q, ExactRatio.of(-1))),
                 form(ExactRatio.ZERO, Map.of(Q, ExactRatio.ONE)));
         // The flag is set where q is negative, so the first two are negated and the third is not.
@@ -153,7 +153,7 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
      */
     @Test
     void aFieldTheChoiceDoesNotReachIsNotAskedFor() {
-        ElementValue chosen = new ElementValue.Choose(DEBIT,
+        ElementValue chosen = new ElementValue.Choose(new ElementValue.Test.Flag(DEBIT),
                 form(ExactRatio.ZERO, Map.of(Q, ExactRatio.ONE)),
                 form(ExactRatio.ZERO, Map.of(P, ExactRatio.ONE)));
         TermOrders orders = ordersOf(total(chosen), Q, P, DEBIT);
@@ -344,9 +344,9 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
                 CasesLeft.of(Refinement.of(new Case.Presence(true)))).then("on");
         assertEquals(ofTheCase.toString(), ofTheOptional.toString());
         assertNotEquals(ofTheCase, ofTheOptional);
-        ElementValue one = new ElementValue.Choose(ofTheCase,
+        ElementValue one = new ElementValue.Choose(new ElementValue.Test.Flag(ofTheCase),
                 form(ExactRatio.ONE, Map.of()), form(ExactRatio.ZERO, Map.of()));
-        ElementValue other = new ElementValue.Choose(ofTheOptional,
+        ElementValue other = new ElementValue.Choose(new ElementValue.Test.Flag(ofTheOptional),
                 form(ExactRatio.of(2), Map.of()), form(ExactRatio.ZERO, Map.of()));
         ElementValue.Affine besides = new ElementValue.Affine(new LinearForm<>(ExactRatio.ZERO,
                 Map.of(Q, ExactRatio.ONE)));

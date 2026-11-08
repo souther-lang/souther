@@ -96,7 +96,7 @@ public final class DeclaredThresholds {
                 InputReads.ofADeclaredClause(roots, read.declared()),
                 ClosureApplications.OUTSIDE, null,
                 Arrivals.inTheTree(clause.readOutOf()), true,
-                WhatConditionsState.of(read), Optional.empty(), CountWitnesses.Lookup.NONE);
+                WhatConditionsState.of(read), Optional.empty(), ComparisonWitnesses.AtAComparison.NONE);
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,
         // and a second sentence about one rule is two answers to one question.

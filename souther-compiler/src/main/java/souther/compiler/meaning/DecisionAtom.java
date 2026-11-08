@@ -131,18 +131,23 @@ public sealed interface DecisionAtom extends Quantity {
     }
 
     /**
-     * What {@code operation} adds up of a computation that turns on where each element of a list a
-     * dependency answered stands: {@code List.sum(List.mapIndexed((i, x) -> i * x, answer))}.
+     * What {@code operation} adds up of a computation of each element of a list a dependency
+     * answered that is no form of the element's own numbers: one turning on where each element
+     * stands, {@code List.sum(List.mapIndexed((i, x) -> i * x, answer))}, or one choosing per
+     * element, {@code List.sum(List.map(x -> if x.active then x.q else 0, answer))}.
      *
      * <p>Held as one number and not as a form of the elements' own numbers
-     * ({@link Quantity.SumOver}), since the weight of an element is its position and no number the
-     * element holds. The position counts from nought in the order {@code direction} hands the
-     * answer's elements in — the order the answer lists them, or the opposite — so two such sums
-     * over one list that part only in the direction are two numbers.
+     * ({@link Quantity.SumOver}), since the weight of an element is its position or the test it
+     * meets and no number the element holds. The position counts from nought in the order
+     * {@code direction} hands the answer's elements in — the order the answer lists them, or the
+     * opposite — so two such sums over one list that part only in the direction are two numbers;
+     * a computation reading no position is of the elements in no order, and has none.
      *
      * @param list        the list the dependency answered
-     * @param computation what the closure made of an element, which reads the position
+     * @param computation what the closure made of an element
      * @param each        what one computed value stands as
+     * @param direction   the order the position counts in, where the computation reads it, and
+     *                    null where it does not
      */
     record ComputedOverAnAnswer(ValueName.Stdlib operation, DecisionSubject.AnAnswer list,
                                 ElementValue computation, Type each,
@@ -156,14 +161,18 @@ public sealed interface DecisionAtom extends Quantity {
         }
 
         public ComputedOverAnAnswer {
-            if (operation == null || list == null || computation == null || each == null
-                    || direction == null) {
+            if (operation == null || list == null || computation == null || each == null) {
                 throw new IllegalArgumentException("a computed total of an answer is some"
-                        + " operation's, of some list, handed in some direction");
+                        + " operation's, of some list");
             }
-            if (!computation.readsThePosition()) {
-                throw new IllegalArgumentException("{" + computation + "} turns on no element's"
-                        + " position, and its total is one of the elements' own numbers");
+            if (computation.readsThePosition() != (direction != null)) {
+                throw new IllegalArgumentException("{" + computation + "} is handed in an order"
+                        + " exactly where it turns on an element's position, and it is handed "
+                        + direction);
+            }
+            if (computation instanceof ElementValue.Affine) {
+                throw new IllegalArgumentException("{" + computation + "} is a form of the"
+                        + " elements' own numbers, and its total is one of theirs");
             }
         }
 

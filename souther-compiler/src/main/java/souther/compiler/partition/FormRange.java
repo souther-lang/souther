@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.abort.GetsPast;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -13,6 +14,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 
@@ -51,11 +53,12 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
     /**
      * The range of {@code form}, worked out as it is written and before any type holds it, over
      * numbers each of which says where it lies whatever the declarations say: a number of the
-     * input as it is worked out ({@link #asWorkedOut}), and a remainder between the ends its
-     * operation states by its divisor ({@link #ofARemainder}), and a name {@code named} answers a
-     * range of, which it holds where it is read: a name is no number of the input and no
-     * remainder, so this is asked of it and of nothing else. The name itself only, and not a field
-     * read off it. Null where some number is anything else.
+     * input as it is worked out ({@link #asWorkedOut}), a remainder between the ends its
+     * operation states by its divisor ({@link #ofARemainder}), a count of the elements meeting
+     * something ({@link #OF_A_COUNT}), and a name {@code named} answers a range of, which it
+     * holds where it is read: a name is no number of the input and no remainder, so this is asked
+     * of it and of nothing else. The name itself only, and not a field read off it. Null where
+     * some number is anything else.
      */
     static FormRange ofNumbers(LinearForm<Quantity> form, InputReading read,
                                Function<BindingId, FormRange> named) {
@@ -63,22 +66,47 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
             case DecisionAtom.OfTheInput(var term, var _) -> asWorkedOut(term, read);
             case Quantity.OfABinding bound when bound.steps().isEmpty() ->
                     named.apply(bound.binding());
+            case Quantity.HowManyMeet _ -> OF_A_COUNT;
             default -> ofARemainder(quantity);
         });
     }
 
+    /** How many elements of a container meet something: none at the fewest, and no more than a
+     *  container holds ({@link GetsPast#MOST_ELEMENTS}). */
+    private static final FormRange OF_A_COUNT = new FormRange(ExactRatio.ZERO,
+            ExactRatio.of(GetsPast.MOST_ELEMENTS));
+
     /**
      * The numbers {@code term} comes to as a run works it out: a product, what its two factors
-     * come to multiplied, since the type it is answered in is what is being asked of it; anything
-     * else, the ends of its place ({@link #endsOf}), which a value there is held to. Null where
-     * the reading answers nothing of the term ({@link Quantities#answersFor}).
+     * come to multiplied, since the type it is answered in is what is being asked of it; a total,
+     * not known, for the same reason ({@link #aTotal}); anything else, the ends of its place
+     * ({@link #endsOf}), which a value there is held to. Null where the reading answers nothing
+     * of the term ({@link Quantities#answersFor}).
      */
     private static FormRange asWorkedOut(NumericTerm term, InputReading read) {
         if (term instanceof NumericTerm.ProductOf product) {
             Function<NumericTerm, FormRange> factor = each -> asWorkedOut(each, read);
             return combined(BinOp.MUL, of(product.one(), factor), of(product.other(), factor));
         }
+        if (aTotal(term)) {
+            return null;
+        }
         return read.quantities().answersFor(term) ? endsOf(term, read) : null;
+    }
+
+    /**
+     * Whether {@code term} is what the values a container holds add up to. The ends of its place
+     * are those its type holds the total to once it is worked out, and a total is worked out
+     * exactly before that, so they say nothing of the number it comes to: the exact total of
+     * many numbers of a type is past the ends of the type on some runs. A count is not one, and
+     * comes to no more than a container holds.
+     */
+    private static boolean aTotal(NumericTerm term) {
+        return switch (term) {
+            case NumericTerm.TakenOver over -> over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+            case NumericTerm.TakenOf of -> of.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+            default -> false;
+        };
     }
 
     /**

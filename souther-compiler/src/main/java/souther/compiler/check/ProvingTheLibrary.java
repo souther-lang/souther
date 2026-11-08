@@ -5,16 +5,19 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.proof.AppliedClosures;
+import souther.compiler.proof.AskedOnTheWay;
 import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.Lemma;
 import souther.compiler.proof.Library;
 import souther.compiler.proof.LibraryProver;
+import souther.compiler.proof.LibraryTerm;
 import souther.compiler.proof.Proof;
 import souther.compiler.proof.Slot;
 import souther.compiler.proof.Unproved;
 import souther.compiler.proof.WalksFromASeed;
 import souther.compiler.proof.WhatAStatementSurvives;
 import souther.compiler.proof.WhatItAccumulates;
+import souther.compiler.proof.OnTheWay;
 import souther.compiler.proof.WhereTheElementsCameFrom;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ArgumentsStand;
@@ -30,6 +33,7 @@ import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -114,14 +118,31 @@ final class ProvingTheLibrary implements LibraryProofs {
         }
         Library library = new LibraryUnderProof(stdlib, facts, this::forAProof, this::builtFrom,
                 this::relationsOf);
+        Set<ValueName.Stdlib.Operation> walks = readThrough(stdlib, facts);
+        this.prover = new LibraryProver(library, walks);
+        this.elements = new WhereTheElementsCameFrom(library, walks);
+        this.accumulated = new WhatItAccumulates(library, walks);
+    }
+
+    @Override
+    public Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation, LibraryTerm body) {
+        return prover.typesOf(operation, body);
+    }
+
+    @Override
+    public OnTheWay onTheWay(AskedOnTheWay asked) {
+        return prover.onTheWay(asked);
+    }
+
+    /** The operations of {@code stdlib} a proof reads the body of where it is called: the walks it
+     *  writes over another walk. */
+    static Set<ValueName.Stdlib.Operation> readThrough(Stdlib stdlib, BoundOperationFacts facts) {
         Set<ValueName.Stdlib.Operation> walks = new LinkedHashSet<>(WalksFromASeed.of(stdlib,
                 AppliedClosures.of(stdlib, Combinators.kernelsIn(stdlib),
                         operation -> Combinators.listing(stdlib, facts, operation),
                         Combinators.signaturesOf(stdlib))).keySet());
         walks.remove(stdlib.walk().operation());
-        this.prover = new LibraryProver(library, walks);
-        this.elements = new WhereTheElementsCameFrom(library, walks);
-        this.accumulated = new WhatItAccumulates(library, walks);
+        return walks;
     }
 
     /**
@@ -470,16 +491,8 @@ final class ProvingTheLibrary implements LibraryProofs {
     /** How a side of {@code operation} is settled, as a proof reads it. */
     private Library.Settled forAProof(ValueName.Stdlib.Operation operation,
                                       OperationLaw.Observed observed) {
-        BoundOperationFacts.Settled settling = stdlib.helpers().containsKey(operation)
+        return LibraryUnderProof.asAProofTakesIt(stdlib.helpers().containsKey(operation)
                 ? settle(operation, observed)
-                : kernels.getOrDefault(operation, Map.of()).get(observed);
-        return switch (settling) {
-            case null -> null;
-            case BoundOperationFacts.Settled.ByALaw(var law, var _) ->
-                    new Library.Settled.ByALaw(ByPlace.law(law, DeclaredArgument::position));
-            case BoundOperationFacts.Settled.Unsaid(Unsayable why) -> new Library.Settled.Unsaid(why);
-            case BoundOperationFacts.Settled.Open(var _, Unproved why) ->
-                    new Library.Settled.Open(why);
-        };
+                : kernels.getOrDefault(operation, Map.of()).get(observed));
     }
 }

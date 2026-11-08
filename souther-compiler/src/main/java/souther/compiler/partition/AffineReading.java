@@ -1766,10 +1766,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
-             * What {@code node} comes to where it is a field of what a walk carrying a record
-             * answers, read as that field's own walk ({@link SeededWalk#ofTheField}): its seed and
-             * the total of what its step adds ({@link InputNumber#ofAWalkAdding}). Null where it is
-             * no such field.
+             * What {@code node} comes to where it is a part of what a walk carrying a record or a
+             * tuple answers, read as that part's own walk ({@link SeededWalk#ofThePart}): its seed
+             * and the total of what its step adds ({@link InputNumber#ofAWalkAdding}). Null where
+             * it is no such part.
              *
              * <p>A run works out every field at every step, whichever the comparison reads: making
              * the record, which ends no run where its clauses govern nothing, and each field's
@@ -1777,16 +1777,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * any of that is not told, not every operation is.
              */
             private LinearForm<NumericTerm> aFieldOfAWalk(Core node, InputReads at) {
-                Core.FieldAccess access = switch (Core.withoutStanding(node)) {
-                    case Core.FieldAccess one -> one;
-                    case Core.FieldProjection projection -> projection.lastAccess();
-                    default -> null;
-                };
-                Denotation whole = access == null ? null : at.standing(access.target(),
+                SeededWalk.Taken taken = SeededWalk.Part.taken(node);
+                Denotation whole = taken == null ? null : at.standing(taken.whole(),
                         ruleSource.symbols(), ruleSource.newtypes());
                 SeededWalk walk = whole == null ? null : SeededWalk.of(whole.value(), closure ->
                         Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
-                SeededWalk read = walk == null ? null : walk.ofTheField(access.field());
+                SeededWalk read = walk == null ? null : walk.ofThePart(taken);
                 InputNumber.SeedAndAdded field = read == null ? null
                         : InputNumber.ofAWalkAdding(read, inputs, whole.at(), ruleSource);
                 if (field == null) {
@@ -1802,8 +1798,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return answer;
                 }
                 for (Core.FieldValue each : stepped.values()) {
-                    SeededWalk other = each.field().equals(access.field()) ? read
-                            : walk.ofTheField(each.field());
+                    SeededWalk.Part part = new SeededWalk.Part.Field(each.field());
+                    SeededWalk other = part.equals(taken.part()) ? read
+                            : walk.ofThePart(new SeededWalk.Taken(taken.whole(), part,
+                                    each.value().type()));
                     InputNumber.SeedAndAdded added = other == read ? field : other == null ? null
                             : InputNumber.ofAWalkAdding(other, inputs, whole.at(), ruleSource);
                     if (added == null || !toldTheWalk(node, at, whole.value(), walk.step(), other,

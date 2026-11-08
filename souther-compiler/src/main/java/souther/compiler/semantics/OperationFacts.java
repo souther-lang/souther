@@ -583,6 +583,8 @@ public final class OperationFacts {
             about("List", "max", new OperationFact.AnswersAnElementOf(at(0))),
             about("List", "min", new OperationFact.AnswersAnElementOf(at(0))),
             about("List", "get", new OperationFact.AnswersAnElementOf(at(1))),
+            // A value filed under the key asked for, which is one of the values the map holds.
+            about("Map", "get", new OperationFact.AnswersAnElementOf(at(1))),
 
             // Two of them, either or both.
             about("List", "append", lemma(law(AnswerAspect.EMPTINESS,
