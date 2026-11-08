@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.diag.Localizable;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.numeric.Count;
@@ -804,6 +805,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     public String operator(DomainPoint point) {
         Criterion criterion = demand(point).criterion();
         return criterion == null ? null : criterion.operator();
+    }
+
+    /** How one point relates a row's value to what it is against, as the catalog's phrase, or null
+     *  where none is owed. */
+    public Localizable asked(DomainPoint point) {
+        Criterion criterion = demand(point).criterion();
+        return criterion == null ? null
+                : Localizable.of(criterion.askedAs(), criterion.written(cut.of()));
     }
 
     /** What that point is against, or null where none is owed. */

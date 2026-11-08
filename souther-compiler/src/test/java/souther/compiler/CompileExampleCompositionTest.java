@@ -10,9 +10,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An {@code example} on a {@code >->} composition: the stages run in order, and a case that leaves
@@ -433,9 +431,7 @@ class CompileExampleCompositionTest {
                   | (2) -> 4
                 """);
         assertEquals("E1902", e.diagnostic().code());
-        String hint = String.valueOf(souther.compiler.diag.msg.MessageValues
-                .of(e.diagnostic().notes().get(0).said()).values().iterator().next());
-        assertTrue(hint.contains("helper"), hint);
-        assertFalse(hint.contains("injected"), hint);
+        assertInstanceOf(ExampleMessage.WhatAnExampleRuns.class,
+                e.diagnostic().notes().get(0).said(), e.getMessage());
     }
 }

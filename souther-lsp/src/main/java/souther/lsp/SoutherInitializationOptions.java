@@ -58,8 +58,8 @@ record SoutherInitializationOptions(Adequacy.Level adequacy, List<String> unread
         }
         if (!souther.isObject()) {
             return new SoutherInitializationOptions(Adequacy.Level.OFF, List.of(
-                    "initializationOptions.souther is " + souther + ", which is not an object;"
-                            + " none of it was read"));
+                    "initializationOptions.souther is " + souther + ", but it must be an object."
+                            + " All of it is ignored."));
         }
         List<String> unread = new ArrayList<>();
         Adequacy.Level adequacy = Adequacy.Level.OFF;
@@ -81,8 +81,8 @@ record SoutherInitializationOptions(Adequacy.Level adequacy, List<String> unread
                 }
             };
             allowed.ifPresent(values -> unread.add("initializationOptions.souther."
-                    + extension.member() + " is " + written + ", which is none of " + values
-                    + "; it is read as unset"));
+                    + extension.member() + " is " + written + ", but it must be one of " + values
+                    + ". It is ignored, as if it were not set."));
         }
         return new SoutherInitializationOptions(adequacy, unread);
     }

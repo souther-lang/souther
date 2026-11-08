@@ -26,6 +26,9 @@ class WhatAnEnsuresClauseSaysIsShownPerCaseTest {
 
     private final Analyzer analyzer = new Analyzer();
 
+    /** How the hover on a behavior starts to say which of its results no rule is written for. */
+    private static final String NO_RULE = "No `ensures` rule applies";
+
     private static final String SRC = """
             module demo exposing ( Id, Found, Missing, findIt )
 
@@ -102,7 +105,8 @@ class WhatAnEnsuresClauseSaysIsShownPerCaseTest {
         Optional<Hover> hover = hover(source, 6, 10);
 
         assertTrue(hover.isPresent());
-        assertTrue(hover.get().contents().contains("Nothing is stated about `Missing`"),
+        assertTrue(hover.get().contents().contains(NO_RULE)
+                        && hover.get().contents().contains("returns `Missing`"),
                 hover.get().contents());
     }
 
@@ -111,8 +115,7 @@ class WhatAnEnsuresClauseSaysIsShownPerCaseTest {
         Optional<Hover> hover = hover(SRC, 6, 10);
 
         assertTrue(hover.isPresent());
-        assertFalse(hover.get().contents().contains("Nothing is stated about"),
-                hover.get().contents());
+        assertFalse(hover.get().contents().contains(NO_RULE), hover.get().contents());
     }
 
     /**
@@ -143,8 +146,7 @@ class WhatAnEnsuresClauseSaysIsShownPerCaseTest {
         Optional<Hover> hover = hover(source, 9, 20);
 
         assertTrue(hover.isPresent());
-        assertTrue(hover.get().contents().contains("What the check reads of this"),
-                hover.get().contents());
+        assertTrue(hover.get().contents().contains("**derivable**"), hover.get().contents());
     }
 
     /**
@@ -165,8 +167,7 @@ class WhatAnEnsuresClauseSaysIsShownPerCaseTest {
         Optional<Hover> hover = hover(source, 13, 11);
 
         assertTrue(hover.isPresent());
-        assertFalse(hover.get().contents().contains("Nothing is stated about"),
-                hover.get().contents());
+        assertFalse(hover.get().contents().contains(NO_RULE), hover.get().contents());
     }
 
     /**
@@ -196,7 +197,8 @@ class WhatAnEnsuresClauseSaysIsShownPerCaseTest {
         Optional<Hover> hover = hover(source, 6, 9);
 
         assertTrue(hover.isPresent());
-        assertTrue(hover.get().contents().contains("Nothing is stated about `Missing`"),
+        assertTrue(hover.get().contents().contains(NO_RULE)
+                        && hover.get().contents().contains("returns `Missing`"),
                 hover.get().contents());
     }
 

@@ -16,6 +16,12 @@ import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
+import souther.compiler.diag.LabeledRegion;
+import souther.compiler.diag.Localizable;
+import souther.compiler.diag.Located;
+import souther.compiler.diag.Note;
+import souther.compiler.diag.msg.DeadBranchMessage.ThePositionStopsShortOfIt;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmCensus;
 import souther.compiler.query.Bodies;
@@ -88,12 +94,6 @@ class AnArmNothingReachesIsNotOwedARowTest {
 
     private static String reportOn(String model) throws Exception {
         return examples(model).out();
-    }
-
-    /** What the command prints about the model where the report is not: the warnings, and the
-     *  hints under them. */
-    private static String warnedOn(String model) throws Exception {
-        return examples(model).err();
     }
 
     /**
@@ -211,8 +211,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * author the branch asks for a value the position plainly holds.
      */
     @Test
-    void aBranchBetweenTheValuesARuleNamesIsToldWhichValuesThoseAre() throws Exception {
-        String report = warnedOn("""
+    void aBranchBetweenTheValuesARuleNamesIsToldWhichValuesThoseAre() {
+        List<Message> proofs = deadBranchProofs("""
                 module example.odd
 
                 data Low
@@ -227,16 +227,16 @@ class AnArmNothingReachesIsNotOwedARowTest {
                     | "one" : (Odd(1)) -> High
                 """);
 
-        assertTrue(report.contains("`c` holds one of 1, 3, 7, so the values this branch is"
-                        + " written for are not values it can hold"),
-                () -> "the values the rule names, and not where they run between:\n" + report);
+        assertTrue(proofs.contains(new ThePositionStopsShortOfIt("c",
+                        Localizable.of("values.one.of", "1, 3, 7"))),
+                () -> "the values the rule names, and not where they run between: " + proofs);
     }
 
     /** The same of strings, each written as the literal that denotes it: a quote and a backslash
      *  in a value are escaped where the value is named. */
     @Test
-    void theStringsARuleNamesAreWrittenAsTheirLiterals() throws Exception {
-        String report = warnedOn("""
+    void theStringsARuleNamesAreWrittenAsTheirLiterals() {
+        List<Message> proofs = deadBranchProofs("""
                 module example.quoted
 
                 data Low
@@ -251,8 +251,22 @@ class AnArmNothingReachesIsNotOwedARowTest {
                     | "one" : (Code("a\\"b")) -> High
                 """);
 
-        assertTrue(report.contains("`c` holds one of \"a\\\"b\", \"c\\\\d\""),
-                () -> "each value as the literal it is read back from:\n" + report);
+        assertTrue(proofs.contains(new ThePositionStopsShortOfIt("c",
+                        Localizable.of("values.one.of", "\"a\\\"b\", \"c\\\\d\""))),
+                () -> "each value as the literal it is read back from: " + proofs);
+    }
+
+    /** What each warning about a dead branch gives as its proof, as the messages it is said by. */
+    private static List<Message> deadBranchProofs(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation.warnings().stream()
+                .map(Located::diagnostic)
+                .filter(d -> "E1327".equals(d.code()))
+                .flatMap(d -> Stream.concat(d.notes().stream().map(Note::said),
+                        d.secondary().stream().map(LabeledRegion::said)))
+                .toList();
     }
 
     // --- the cases behind such an arm -------------------------------------------------------------

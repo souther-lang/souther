@@ -90,10 +90,9 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
         // owed both rules. What was one line is the pair at one position.
         assertEquals(4, rulesNotRead(TWO_INVARIANTS).size(), () -> withoutALine(TWO_INVARIANTS));
         assertEquals(2, ruleIdsNotRead(TWO_INVARIANTS).size(), () -> withoutALine(TWO_INVARIANTS));
-        assertTrue(namesRule(human(TWO_INVARIANTS), "invariant R (first)"),
-                human(TWO_INVARIANTS));
-        assertTrue(namesRule(human(TWO_INVARIANTS), "invariant R (second)"),
-                human(TWO_INVARIANTS));
+        String report = human(TWO_INVARIANTS);
+        assertTrue(namesRule(report, "invariant R (first)"), report);
+        assertTrue(namesRule(report, "invariant R (second)"), report);
     }
 
     /**
@@ -119,8 +118,9 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
     @Test
     void twoEnsuresClausesWithNoLineAreTwoFindings() {
         assertEquals(2, ruleIdsNotRead(TWO_ENSURES).size(), () -> withoutALine(TWO_ENSURES));
-        assertTrue(namesRule(human(TWO_ENSURES), "ensures f (low)"), human(TWO_ENSURES));
-        assertTrue(namesRule(human(TWO_ENSURES), "ensures f (high)"), human(TWO_ENSURES));
+        String report = human(TWO_ENSURES);
+        assertTrue(namesRule(report, "ensures f (low)"), report);
+        assertTrue(namesRule(report, "ensures f (high)"), report);
     }
 
     /**
@@ -171,11 +171,12 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
         List<PartitionEvidence.NotRead> said = rulesNotRead(model);
 
         assertEquals(1, said.size(), () -> withoutALine(model));
-        assertTrue(human(model).contains("not read: comparison@"), human(model));
-        assertTrue(human(model).lines()
+        String report = human(model);
+        assertTrue(report.contains("not read: comparison@"), report);
+        assertTrue(report.lines()
                         .filter(line -> line.contains("not read:"))
                         .noneMatch(line -> line.contains("Int.clamp")),
-                human(model));
+                report);
     }
 
     /**
