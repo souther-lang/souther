@@ -27,6 +27,8 @@ import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.StoodInAnswer;
+import souther.compiler.partition.StoppedAtAConstruction;
+import souther.compiler.execute.RefusedConstruction;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -1413,8 +1415,49 @@ public final class GeneratedRows {
      */
     static String beside(String category, Generator.UnresolvedCombination left,
                          SourceRendering rendering, PublishedRuleHandle.WhereARuleIs places) {
+        List<String> more = new ArrayList<>();
         String also = alsoShort(left.alsoShort(), rendering, places);
-        return also.isEmpty() ? category : category + ", and " + also;
+        if (!also.isEmpty()) {
+            more.add(also);
+        }
+        if (!left.stoppedAt().isEmpty()) {
+            more.add(stoppedAt(left.stoppedAt(), rendering));
+        }
+        return more.isEmpty() ? category : category + ", and " + String.join(", and ", more);
+    }
+
+    /**
+     * Where the runs of the rows composed stopped: each construction, and the clause of its type's
+     * invariant that did not hold there.
+     *
+     * <p>Each of them and not the first. Rows of different values may stop at different
+     * constructions, and every one is an input the model has not decided about.
+     */
+    private static String stoppedAt(List<StoppedAtAConstruction> stops,
+                                    SourceRendering rendering) {
+        List<String> each = new ArrayList<>();
+        for (StoppedAtAConstruction stop : stops) {
+            RefusedConstruction refused = stop.refused();
+            PublishedRuleHandle clause = refused.clauseName()
+                    .<PublishedRuleHandle>map(name -> new PublishedRuleHandle.NamedInvariant(
+                            refused.clauseType(), name))
+                    .orElseGet(() -> new PublishedRuleHandle.NumberedInvariant(
+                            refused.clauseType(), refused.ordinal() + 1));
+            each.add("the construction " + constructionAt(stop, rendering) + ", where "
+                    + RuleHandleProse.said(clause, rendering, null) + " did not hold");
+        }
+        return "the runs stopped at " + String.join(" and at ", each);
+    }
+
+    /** Where a construction a run stopped at is written, as far as its run said. */
+    private static String constructionAt(StoppedAtAConstruction stop, SourceRendering rendering) {
+        RefusedConstruction refused = stop.refused();
+        if (!refused.placed()) {
+            return "in `" + refused.siteModule() + "`";
+        }
+        String numbers = refused.line() + ":" + refused.column();
+        return stop.source().map(source -> "at " + rendering.names().nameOf(source) + ":" + numbers)
+                .orElseGet(() -> "at " + numbers + " of `" + refused.siteModule() + "`");
     }
 
     /**

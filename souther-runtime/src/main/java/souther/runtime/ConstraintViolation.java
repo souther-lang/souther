@@ -26,13 +26,33 @@ public final class ConstraintViolation extends RuntimeException {
      *  for, which have a message and no constraint (a division by zero, a number past its range). */
     private final transient @Nullable ConstraintFailure failure;
 
+    /** The construction that was refused, where this is a refused construction whose place the
+     *  generated code knew; none otherwise. */
+    private final transient @Nullable ConstructionSite site;
+
     public ConstraintViolation(String message) {
-        this(message, null);
+        this(message, null, null);
     }
 
-    private ConstraintViolation(String message, @Nullable ConstraintFailure failure) {
+    private ConstraintViolation(String message, @Nullable ConstraintFailure failure,
+                                @Nullable ConstructionSite site) {
         super(message);
         this.failure = failure;
+        this.site = site;
+    }
+
+    /**
+     * Where a construction stands in the source: the module whose code wrote it, and the line and
+     * column it starts at, both counted from one.
+     */
+    public record ConstructionSite(String module, int line, int column) {}
+
+    /**
+     * The construction that was refused, or none where this ends a run some other way or the code
+     * that refused it was not told where it stands.
+     */
+    public @Nullable ConstructionSite site() {
+        return site;
     }
 
     /**
@@ -54,7 +74,7 @@ public final class ConstraintViolation extends RuntimeException {
      * third origin is written, an overload it forgot would be an origin that aborts some other way.
      */
     public static ConstraintViolation notHeld(ConstraintFailure failure) {
-        return new ConstraintViolation(failure.toString(), failure);
+        return new ConstraintViolation(failure.toString(), failure, null);
     }
 
     /**
@@ -70,12 +90,25 @@ public final class ConstraintViolation extends RuntimeException {
      * abort is what happens on one side of it.
      */
     public static Object orThrow(Result<?, ?> r) {
+        return refused(r, null);
+    }
+
+    /**
+     * The same, for a construction written at {@code line} and {@code column} of {@code module}'s
+     * source: what a generated body calls, so the abort says which construction it was. A line of
+     * nought is a construction the code generator had no place for, and the abort names none.
+     */
+    public static Object orThrow(Result<?, ?> r, String module, int line, int column) {
+        return refused(r, line > 0 ? new ConstructionSite(module, line, column) : null);
+    }
+
+    private static Object refused(Result<?, ?> r, @Nullable ConstructionSite site) {
         if (r instanceof Result.Ok<?, ?> ok) {
             return ok.value();
         }
         Object failed = ((Result.Err<?, ?>) r).error();
         if (failed instanceof ConstraintFailure broken) {
-            throw notHeld(broken);
+            throw new ConstraintViolation(broken.toString(), broken, site);
         }
         // Nothing generated reaches here: the only results handed over are `__construct`'s. Said
         // rather than cast, because a cast would report a caller this was not written for as a

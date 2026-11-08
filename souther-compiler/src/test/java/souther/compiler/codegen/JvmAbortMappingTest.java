@@ -245,7 +245,8 @@ class JvmAbortMappingTest {
      */
     @Test
     void invariantNotHeldAbortsAsTheClassJvmAbortMappingNames() {
-        InvariantFailure failure = InvariantFailure.unnamed("demo", "Positive");
+        InvariantFailure failure = InvariantFailure.unnamed("demo", "Positive", "demo", "Positive",
+                0);
 
         assertThrows(JvmAbortMapping.representationOf(AbortKind.INVARIANT_NOT_HELD),
                 () -> { throw ConstraintViolation.notHeld(failure); });

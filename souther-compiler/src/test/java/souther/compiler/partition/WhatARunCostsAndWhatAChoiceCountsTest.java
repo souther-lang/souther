@@ -333,7 +333,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
     /** Rows applied and not recorded, which answer as {@code answer} says of the row's value. */
     private static Generator.Trial answering(LongFunction<AnswerObservation> answer) {
         return row -> new Generator.ObservedRun(new Generator.Watched.NoAccount(),
-                answer.apply(Long.parseLong(text(row.inputs()))));
+                answer.apply(Long.parseLong(text(row.inputs()))), Optional.empty());
     }
 
     private static String text(List<FixtureTemplate> inputs) {
@@ -385,7 +385,8 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         public Generator.ObservedRun run(RowToRun row) {
             made.add("run " + row.inputs().getFirst().text());
             return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(numbering)),
-                    running.apply(Long.parseLong(row.inputs().getFirst().text())));
+                    running.apply(Long.parseLong(row.inputs().getFirst().text())),
+                    Optional.empty());
         }
 
         @Override

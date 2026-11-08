@@ -161,10 +161,12 @@ final class Descriptors {
     static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String);
     /** The failure side of {@code __construct}: which clause of which type did not hold. */
     static final ClassDesc CD_InvariantFailure = ClassDesc.of("souther.runtime.InvariantFailure");
-    static final MethodTypeDesc MTD_failureOf =
-            MethodTypeDesc.of(CD_InvariantFailure, CD_String, CD_String, CD_String);
-    static final MethodTypeDesc MTD_failureUnnamed =
-            MethodTypeDesc.of(CD_InvariantFailure, CD_String, CD_String);
+    static final ClassDesc CD_InvariantFailureDeclared =
+            ClassDesc.of("souther.runtime.InvariantFailure$Declared");
+    static final MethodTypeDesc MTD_failureOf = MethodTypeDesc.of(CD_InvariantFailure, CD_String,
+            CD_String, CD_String, CD_String, CD_String, ConstantDescs.CD_int);
+    static final MethodTypeDesc MTD_failureUnnamed = MethodTypeDesc.of(CD_InvariantFailure,
+            CD_String, CD_String, CD_String, CD_String, ConstantDescs.CD_int);
     /** {@code clause()}: the failing clause's name, or null where it was declared without one. */
     static final MethodTypeDesc MTD_failureClause = MethodTypeDesc.of(CD_String);
     /** {@code meta()}: the rejecting type, and the clause where it has a name. */
@@ -299,6 +301,9 @@ final class Descriptors {
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
     static final MethodTypeDesc MTD_apply = MethodTypeDesc.of(CD_Object, CD_Object);
     static final MethodTypeDesc MTD_orThrow = MethodTypeDesc.of(CD_Object, CD_Result);
+    /** {@code orThrow(Result, module, line, column)}: the same, naming the construction. */
+    static final MethodTypeDesc MTD_orThrowAt = MethodTypeDesc.of(CD_Object, CD_Result, CD_String,
+            ConstantDescs.CD_int, ConstantDescs.CD_int);
     static final ClassDesc CD_StringBuilder = ClassDesc.of("java.lang.StringBuilder");
     static final MethodTypeDesc MTD_SB_appendString =
             MethodTypeDesc.of(CD_StringBuilder, CD_String);
@@ -529,6 +534,10 @@ final class Descriptors {
     /** The same helper with the failing clause's name captured ahead of the two SAM arguments. */
     static final MethodTypeDesc MTD_invariantFailureNamed =
             MethodTypeDesc.of(CD_RResult, CD_String, CD_Object, CD_RPath);
+    /** The invariant's helper, with which clause it is captured beside the name: the declaration's
+     *  module, the declaration, and the clause's place among its clauses. */
+    static final MethodTypeDesc MTD_invariantFailureOfAClause = MethodTypeDesc.of(CD_RResult,
+            CD_String, CD_String, CD_String, ConstantDescs.CD_int, CD_Object, CD_RPath);
     static final MethodTypeDesc MTD_Rfail4 =
             MethodTypeDesc.of(CD_RResult, CD_RPath, CD_String, CD_String, CD_Map);
     static final MethodTypeDesc MTD_Rencode_variant =

@@ -463,10 +463,16 @@ public final class Generator {
      *             own words; these are a second thing that happened, and a reader shown them
      *             instead would be told the rule and never told that a figure stopped the search.
      *             So a reader of one of these writes both, and neither is dropped for the other
+     * @param stoppedAt the constructions the rows composed here were run and stopped at, because an
+     *             invariant clause did not hold: beside the reason as {@code alsoShort} is. Each is
+     *             an input the model has not decided about, which is what an author takes to
+     *             whoever decides it, and the reason alone does not tell it from a search that ran
+     *             out
      */
     public record UnresolvedCombination(List<String> classes, Reason reason, String detail,
                                         Optional<String> said,
-                                        SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
+                                        SequencedMap<TermPath, StringOfferShortfall> alsoShort,
+                                        List<StoppedAtAConstruction> stoppedAt) {
 
         public enum Reason {
             /**
@@ -980,11 +986,24 @@ public final class Generator {
             alsoShort = java.util.Collections.unmodifiableSequencedMap(
                     new LinkedHashMap<>(alsoShort));
             said = said == null ? Optional.empty() : said;
+            stoppedAt = List.copyOf(stoppedAt);
+        }
+
+        public UnresolvedCombination(List<String> classes, Reason reason, String detail,
+                                     Optional<String> said,
+                                     SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
+            this(classes, reason, detail, said, alsoShort, List.of());
         }
 
         public UnresolvedCombination(List<String> classes, Reason reason, String detail,
                                      Optional<String> said) {
             this(classes, reason, detail, said, new LinkedHashMap<>());
+        }
+
+        /** The same, with the constructions the rows composed for it stopped at. */
+        UnresolvedCombination stoppingAt(Collection<StoppedAtAConstruction> constructions) {
+            return new UnresolvedCombination(classes, reason, detail, said, alsoShort,
+                    List.copyOf(constructions));
         }
 
         public UnresolvedCombination(List<String> classes, Reason reason) {
@@ -1430,7 +1449,7 @@ public final class Generator {
             }
             ObservedRun run = trial.run(row);
             ObservedRun now = new ObservedRun(heldOnce(sawAlike, run.watched()),
-                    heldOnce(answeredAlike, run.answer()));
+                    heldOnce(answeredAlike, run.answer()), run.refused());
             ran.put(written, now);
             return now;
         }
@@ -1483,17 +1502,21 @@ public final class Generator {
      *
      * @param watched where it went, or that nothing can say
      * @param answer  what it answered, or that it answered nothing
+     * @param refused the construction it stopped at, where it stopped at one
      */
-    public record ObservedRun(Watched watched, AnswerObservation answer) {
+    public record ObservedRun(Watched watched, AnswerObservation answer,
+                              Optional<StoppedAtAConstruction> refused) {
 
         public ObservedRun {
             Objects.requireNonNull(watched, "a run says where it went, or that nothing can say");
             Objects.requireNonNull(answer, "a run says what it answered, or that it answered nothing");
+            Objects.requireNonNull(refused, "a run says whether a construction stopped it");
         }
 
         /** A row nothing ran: nothing can say where it went, and it answered nothing. */
         public static ObservedRun nothingRan() {
-            return new ObservedRun(new Watched.NotRun(), new AnswerObservation.NotAnswered());
+            return new ObservedRun(new Watched.NotRun(), new AnswerObservation.NotAnswered(),
+                    Optional.empty());
         }
     }
 
@@ -3577,7 +3600,8 @@ public final class Generator {
             Runs runs = new Runs();
             if (read.restOfTheBlock().isEmpty()
                     || !(watched(found.row(), runs).orElse(null)
-                            instanceof ObservedRun(Watched.Ran(AlignedObservation seen), var _))) {
+                            instanceof ObservedRun(Watched.Ran(AlignedObservation seen), var _,
+                                    var _))) {
                 // Nothing says how far it got, so nothing is further and no guard is one it
                 // stopped at.
                 return Composed.going(found.row());
@@ -3679,7 +3703,7 @@ public final class Generator {
                                     // then stopped without one, or went past what a run may
                                     // spend, is not a row that answers, wherever it got to first.
                                     case ObservedRun(Watched.Ran(AlignedObservation run),
-                                                     AnswerObservation answer)
+                                                     AnswerObservation answer, var _)
                                             when run.lit(goneOn)
                                             && answer instanceof AnswerObservation.Answered ->
                                             Acceptance.TAKEN;
@@ -3722,7 +3746,8 @@ public final class Generator {
                 }
                 // Taken only where it was seen going on, and a row run once is not run again.
                 if (!(watched(further, runs).orElse(null)
-                        instanceof ObservedRun(Watched.Ran(AlignedObservation now), var _))) {
+                        instanceof ObservedRun(Watched.Ran(AlignedObservation now), var _,
+                                var _))) {
                     throw new IllegalStateException("a row taken for going past a guard is one"
                             + " that was seen doing so: " + further);
                 }
@@ -6626,6 +6651,7 @@ public final class Generator {
                 case WhatTheAlternativesCameTo.Came.PassedOver<ParameterCameToNothing>(
                         SearchShortfall found) -> {
                     return noRowAnswered(label, found, preferring.aRunRanOut(),
+                            preferring.stoppedAt(),
                             where.unrepresented());
                 }
             }
@@ -6904,11 +6930,29 @@ public final class Generator {
      * never composed. Otherwise the rows themselves are what is said, in the word for rows none of
      * which was a witness or in the one for what else was left untried — a fact about the rows
      * this compiler composed, and never that no row reaches the point.
+     *
+     * <p>With the constructions those runs stopped at, whichever word it is. They do not change the
+     * word: a run that stopped at one is a row that did not answer, and another value might have.
      */
     static BoundaryAttempt noRowAnswered(String label, SearchShortfall found, boolean aRunRanOut,
+                                         Set<StoppedAtAConstruction> stoppedAt,
                                          CompositionAccount unrepresented) {
-        return leftUntried(label, found, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+        BoundaryAttempt came = leftUntried(label, found,
+                UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 aRunRanOut ? NO_ROW_ANSWERED_A_RUN_RAN_OUT : NO_ROW_ANSWERED, unrepresented);
+        if (stoppedAt.isEmpty()) {
+            return came;
+        }
+        return switch (came) {
+            case BoundaryAttempt.Stopped(var why, var met, var account) ->
+                    new BoundaryAttempt.Stopped(why.stoppingAt(stoppedAt), met, account);
+            case BoundaryAttempt.Unexhausted(var why, var met, var account) ->
+                    new BoundaryAttempt.Unexhausted(why.stoppingAt(stoppedAt), met, account);
+            case BoundaryAttempt.Unresolved(var why, var account) ->
+                    new BoundaryAttempt.Unresolved(why.stoppingAt(stoppedAt), account);
+            default -> throw new IllegalStateException(
+                    "a point no row answered at comes to no row, and this is " + came);
+        };
     }
 
     /**
@@ -10822,6 +10866,8 @@ public final class Generator {
         private int answering;
         /** Whether a row that met the requirement was run and went past what a run may spend. */
         private boolean aRunRanOut;
+        /** The constructions rows that met the requirement were run and stopped at, each once. */
+        private final Set<StoppedAtAConstruction> stoppedAt = new LinkedHashSet<>();
         /** Whether the walk was stopped for handing more rows than it may. */
         private boolean stoppedAtItsFigure;
         /** How many rows a walk has handed here, ranked or not. */
@@ -10902,6 +10948,11 @@ public final class Generator {
             return aRunRanOut;
         }
 
+        @Override
+        public Set<StoppedAtAConstruction> stoppedAt() {
+            return Collections.unmodifiableSet(stoppedAt);
+        }
+
         /**
          * Whether the walk handed more rows than {@link #HANDED_THE_CHOICE} allows and was
          * stopped, which leaves the rows past it untried.
@@ -10935,6 +10986,7 @@ public final class Generator {
             // says what the run comes to where it answers, and nothing of whether it does.
             if (!(ran.answer() instanceof AnswerObservation.Answered)) {
                 aRunRanOut |= ran.answer() instanceof AnswerObservation.RanOut;
+                ran.refused().ifPresent(stoppedAt::add);
                 return Acceptance.PASSED;
             }
             // A row the judge refuses is none of the rows ranked: the figure on those is a figure
@@ -11056,6 +11108,13 @@ public final class Generator {
 
         /** Whether a run of a row went past what a run may spend. */
         boolean aRunRanOut();
+
+        /**
+         * The constructions runs of rows stopped at because an invariant clause did not hold, each
+         * once: what an author is shown where no row came to an answer, since each is an input the
+         * model has not decided about.
+         */
+        Set<StoppedAtAConstruction> stoppedAt();
     }
 
     /**
@@ -11125,6 +11184,12 @@ public final class Generator {
         @Override
         public boolean aRunRanOut() {
             return false;
+        }
+
+        /** None: what this keeps of a row is whether the judge took it, and nothing of a run. */
+        @Override
+        public Set<StoppedAtAConstruction> stoppedAt() {
+            return Set.of();
         }
     }
 

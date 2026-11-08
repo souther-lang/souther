@@ -4,6 +4,7 @@ import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.PhysicalPos;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorAnswers;
@@ -487,7 +488,7 @@ final class BodyGen {
                     emitFieldValues(flds, nd.values());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     invoke(ctx.construction(nd.typeName()));
-                    code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
+                    refusedAt(nd);
                     returnValue();
                 }
                 // None of these answers with one of its parts, so what it answers is computed as a
@@ -1184,7 +1185,9 @@ final class BodyGen {
                 // ConstraintViolation. orThrow returns Object, so narrow it back to the value type.
                 emitFieldValues(flds, nd.values());
                 emitLine(nd);   // re-pin: a field init may have moved the line off the construction
-                finishInvariantConstruct(built, cdType);
+                invoke(ctx.construction(built));
+                refusedAt(nd);
+                code.checkcast(cdType);
                 return;
             }
             MethodTypeDesc ctor = MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds));
@@ -1327,13 +1330,17 @@ final class BodyGen {
             }
         }
 
-        /** Emits the checked-construction tail — the entry the type offers ({@code __construct(fields)
-         * -> Result}), {@code orThrow} (yield, or abort on invariant violation), and a narrowing cast
-         * — with the field values already on the stack. */
-        private void finishInvariantConstruct(TypeSymbol.AtModule built, ClassDesc cdType) {
-            invoke(ctx.construction(built));
-            code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
-            code.checkcast(cdType);
+        /**
+         * Emits {@code orThrow} over the {@code Result} a checked construction left on the stack:
+         * the value, or an abort naming {@code nd} by the line and column it is written at in this
+         * module's source. A construction with no place in that source names none.
+         */
+        private void refusedAt(Core.Construct nd) {
+            PhysicalPos sits = ctx.sits(nd.pos());
+            code.loadConstant(ctx.module());
+            code.loadConstant(sits == null ? 0 : sits.line());
+            code.loadConstant(sits == null ? 0 : sits.column());
+            code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrowAt);
         }
 
         // --- the surface Intrinsics drives to emit a shipped primitive (ADR-0028) ---

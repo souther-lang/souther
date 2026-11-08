@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.execute.RefusedConstruction;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
@@ -29,6 +30,8 @@ import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Limits;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.runtime.ConstraintViolation;
+import souther.runtime.InvariantFailure;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -116,7 +119,8 @@ public final class RowTrial {
                     public Optional<AnswerObservation> runReplacing(Rewriting asked) {
                         Intervention.begin(asked);
                         try {
-                            return applied(ready.applying(), ready.over(), steps, ready.reading());
+                            return applied(ready.applying(), ready.over(), steps, ready.reading())
+                                    .map(Applied::answer);
                         } finally {
                             Intervention.end();
                         }
@@ -193,13 +197,15 @@ public final class RowTrial {
         return switch (probes) {
             case ProbeImage.Uninstrumented _ ->
                     applied(ready.applying(), ready.over(), steps, ready.reading())
-                            .map(answer -> new RowTrials.Ran(new RunRecord.NoAccount(), answer));
+                            .map(came -> new RowTrials.Ran(new RunRecord.NoAccount(),
+                                    came.answer(), came.refused()));
             case ProbeImage.Instrumented(NumberingIdentity numbering, var _, var _) -> {
                 Probe.begin(numbering);
                 try {
                     yield applied(ready.applying(), ready.over(), steps, ready.reading())
-                            .map(answer -> new RowTrials.Ran(
-                                    new RunRecord.Recorded(Probe.snapshot()), answer));
+                            .map(came -> new RowTrials.Ran(
+                                    new RunRecord.Recorded(Probe.snapshot()), came.answer(),
+                                    came.refused()));
                 } finally {
                     // On every way out, including one nothing here catches. A recording left
                     // installed is where the next reader on this thread would start.
@@ -354,10 +360,12 @@ public final class RowTrial {
      * Applies the behavior, and says what it answered — or that it was not applied at all, which is
      * the empty answer.
      *
-     * <p>A run that aborts still went where it went, so what stopped it is dropped: nothing here is
-     * judging the row, and a generator has no expectation for it to have failed against. It answered
-     * nothing, and that is what it is said to have answered. What is not a run at all is the
-     * implementation being out of reach.
+     * <p>A run that aborts still went where it went, and nothing here is judging the row: a generator
+     * has no expectation for it to have failed against. It answered nothing, and that is what it is
+     * said to have answered. Where what stopped it was a construction its type's invariant refused,
+     * that construction is said beside the answer, for a reader that has to tell an author which
+     * input the model has not decided about. What is not a run at all is the implementation being
+     * out of reach.
      *
      * <p>The answer is read once the budget is let go, as a written row's is: reading it walks what
      * the run built, every node walked would be a counted step, and a run charged for being read
@@ -366,9 +374,8 @@ public final class RowTrial {
      * <p>The budget is let go on every way out, a worker being something the next row would
      * otherwise start inside of.
      */
-    private static Optional<AnswerObservation> applied(Answerer.Applying applying,
-                                                       List<Handed> over, EvaluationPolicy steps,
-                                                       AnswerReading reading) {
+    private static Optional<Applied> applied(Answerer.Applying applying, List<Handed> over,
+                                             EvaluationPolicy steps, AnswerReading reading) {
         Object answered;
         EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
         try {
@@ -391,14 +398,43 @@ public final class RowTrial {
                 // Except that a run that went past what a run may spend did not stop of its own
                 // accord: given more it might answer, so it is said to have run out rather than to
                 // have answered nothing.
-                return Optional.of(RunLimits.reached(e)
-                        ? new AnswerObservation.RanOut(RunLimits.figureOf(e, steps))
-                        : new AnswerObservation.NotAnswered());
+                if (RunLimits.reached(e)) {
+                    return Optional.of(new Applied(
+                            new AnswerObservation.RanOut(RunLimits.figureOf(e, steps)),
+                            Optional.empty()));
+                }
+                return Optional.of(new Applied(new AnswerObservation.NotAnswered(),
+                        refusedConstruction(e)));
             }
         } finally {
             EvaluationContext.end();
         }
-        return Optional.of(reading.read(answered));
+        return Optional.of(new Applied(reading.read(answered), Optional.empty()));
+    }
+
+    /** What a run answered, and the construction it stopped at where it stopped at one. */
+    private record Applied(AnswerObservation answer, Optional<RefusedConstruction> refused) {}
+
+    /**
+     * The construction {@code stopped} ended at, where what ended it was an invariant clause
+     * refusing one: the {@link ConstraintViolation} a generated body throws from {@code orThrow},
+     * wherever among the causes the application wrapped it.
+     */
+    private static Optional<RefusedConstruction> refusedConstruction(InvocationFailure stopped) {
+        for (Throwable cause = stopped.getCause(); cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolation violation) {
+                if (!(violation.failure() instanceof InvariantFailure failed)) {
+                    return Optional.empty();
+                }
+                ConstraintViolation.ConstructionSite site = violation.site();
+                return Optional.of(new RefusedConstruction(failed.declared().module(),
+                        failed.declared().type(), Optional.ofNullable(failed.clause()),
+                        failed.declared().ordinal(),
+                        site == null ? failed.module() : site.module(),
+                        site == null ? 0 : site.line(), site == null ? 0 : site.column()));
+            }
+        }
+        return Optional.empty();
     }
 
     private RowTrial() {}

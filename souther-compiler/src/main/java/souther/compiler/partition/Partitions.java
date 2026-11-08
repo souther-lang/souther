@@ -3308,6 +3308,18 @@ public final class Partitions {
         // start. This pass runs only where both of those have already failed, and a position keeping
         // a value from the last search there is a value nothing will ever be tried at.
         inReserve(view, reading, within, ordinarily.values()).forEach(base::add);
+        // A value holding elements is displaced by one more of them than the least its rules let
+        // it hold, as a number is by one: a list offered empty is next offered with one element.
+        // Exactly that many, so a set whose element type has too few values is offered nothing
+        // here rather than a set short of the count.
+        FieldDomains.Held held = limits.held();
+        DeclaredBounds.CountRange counts = DeclaredBounds.countsHeld(view, reading, held);
+        if (!counts.empty() && counts.least() < counts.most()
+                && WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled spelled) {
+            base.addAll(Witnesses.ofSize(view, counts.least() + 1, ElementsKeptApart.heldBy(held),
+                            reading, Set.of())
+                    .map(bare -> RepresentativeSource.under(spelled.names(), bare)));
+        }
         // On the order the rules were read on, so a date is displaced by a day as a whole number is
         // by one, and only where a value of its own counts — the same values that step as elements.
         DeclaredBounds.Range declared = countedOrder(view, reading);

@@ -5267,8 +5267,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * short of ({@link GeneratedRows#beside}). Changed with those two and never apart from them.
      */
     static List<Object> shownOnThePage(Generator.UnresolvedCombination why) {
-        return why.said().isPresent() ? List.of(why.said().get(), why.alsoShort())
-                : List.of(why.reason(), why.subject(), why.alsoShort());
+        return why.said().isPresent()
+                ? List.of(why.said().get(), why.alsoShort(), why.stoppedAt())
+                : List.of(why.reason(), why.subject(), why.alsoShort(), why.stoppedAt());
     }
 
     /**

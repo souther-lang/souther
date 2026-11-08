@@ -113,8 +113,9 @@ class EveryOperationSaysWhetherItsWorkGrowsWithWhatItIsHandedTest {
         String abort = "an abort that names what failed by the names the source wrote";
         FIXED.put("ConstraintViolation.notHeld(ConstraintFailure)", abort);
         FIXED.put("ConstraintViolation.orThrow(Result)", abort);
-        FIXED.put("InvariantFailure.of(String, String, String)", abort);
-        FIXED.put("InvariantFailure.unnamed(String, String)", abort);
+        FIXED.put("ConstraintViolation.orThrow(Result, String, int, int)", abort);
+        FIXED.put("InvariantFailure.of(String, String, String, String, String, int)", abort);
+        FIXED.put("InvariantFailure.unnamed(String, String, String, String, int)", abort);
         FIXED.put("UnreachableReached.reached(String)", abort);
         FIXED.put("Patterns.read(Lookup, String, Class, String[])",
                 "a pattern's machine made once for a class, from the image the compiler wrote into it");
