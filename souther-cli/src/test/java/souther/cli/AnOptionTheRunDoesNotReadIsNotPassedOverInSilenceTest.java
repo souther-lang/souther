@@ -4,11 +4,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import souther.cli.CliProcess.Ran;
+import souther.compiler.diag.Messages;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -346,8 +349,9 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
                 "--format", "json", "--color", "always", "--lang", "ja");
 
         assertEquals(2, said.code(), said.err());
-        assertTrue(said.err().contains("`--color`"), said.err());
-        assertFalse(said.err().contains("is not read with"), said.err());
+        assertTrue(said.err().contains(
+                        Messages.get("cli.option.unread", Locale.JAPANESE, "--color", "--format json")),
+                said.err());
     }
 
     // --- the value the option does not have --------------------------------------------------------
@@ -478,7 +482,22 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
 
         assertEquals(2, said.code(), said.err());
         assertTrue(said.err().contains("`--format`"), said.err());
-        assertFalse(said.err().contains("is not read with"), said.err());
+        Pattern unread = sayingAnythingAs("cli.option.unread");
+        // The control: the pattern finds the refusal however it is filled, so its absence below
+        // is the refusal's and not the pattern's.
+        assertTrue(unread.matcher(Messages.get("cli.option.unread", Locale.ENGLISH, "--a", "--b c"))
+                .find());
+        assertFalse(unread.matcher(said.err()).find(), said.err());
+    }
+
+    /** The catalog's English entry as any sentence it can print, each of its arguments standing for
+     *  any text: what tells this refusal apart whatever it is filled with. */
+    private static Pattern sayingAnythingAs(String key) {
+        List<String> own = new ArrayList<>();
+        for (String part : Messages.get(key, Locale.ENGLISH).split("\\{\\d+}", -1)) {
+            own.add(Pattern.quote(part));
+        }
+        return Pattern.compile(String.join(".+?", own));
     }
 
     // --- the two that may not be written together -------------------------------------------------

@@ -155,9 +155,9 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
         assertTrue(report.contains("borders 1"), report);
         assertFalse(report.contains("nothing here could build a representative"), report);
 
-        assertTrue(offered(UNDER_WHAT_A_SEQUENCE_HOLDS)
-                        .contains("Cart { items = [Item { inner = Inner { a = -1, b = 0 } }] }"),
-                offered(UNDER_WHAT_A_SEQUENCE_HOLDS));
+        String offered = offered(UNDER_WHAT_A_SEQUENCE_HOLDS);
+        assertTrue(offered.contains("Cart { items = [Item { inner = Inner { a = -1, b = 0 } }] }"),
+                offered);
     }
 
     /** What {@code --generate --boundaries} offers for the model, which is where a point that is

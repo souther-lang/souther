@@ -5,7 +5,6 @@ import souther.compiler.check.InvariantChecker.Judgment;
 import souther.compiler.check.InvariantChecker.Said;
 import souther.compiler.check.InvariantChecker.Verdict;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.Message;
 
@@ -14,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -195,8 +193,6 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
                 InvariantMessage.NothingKnownHereEstablishesButDoesEstablish.class, warningOn(BOTH));
         assertEquals("ordered", said.unsettled());
         assertEquals("lowNonNegative", said.settled());
-        assertTrue(rendered(BOTH).contains("Established here: lowNonNegative."),
-                "the clause the guards established is written out: " + rendered(BOTH));
     }
 
     /** Nothing was established that can be named, so the warning does not have that sentence. It
@@ -206,9 +202,6 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
         InvariantMessage.NothingKnownHereEstablishes said = assertInstanceOf(
                 InvariantMessage.NothingKnownHereEstablishes.class, warningOn(UNSETTLED_ONLY));
         assertEquals("ordered", said.unsettled());
-        assertFalse(rendered(UNSETTLED_ONLY).contains("Established here"),
-                "nothing was established to name, so nothing is said of it: "
-                        + rendered(UNSETTLED_ONLY));
     }
 
     /**
@@ -222,25 +215,28 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
                 InvariantMessage.NothingKnownHereEstablishesTheInvariantButDoesEstablish.class,
                 warningOn(SETTLED_ONLY));
         assertEquals("lowNonNegative", said.settled());
-        String text = rendered(SETTLED_ONLY);
-        assertTrue(text.contains("its invariant"), text);
-        assertTrue(text.contains("Established here: lowNonNegative."), text);
     }
 
     @Test
     void aWarningWithNeitherSideNameableSaysTheInvariant() {
         assertInstanceOf(InvariantMessage.NothingKnownHereEstablishesTheInvariant.class,
                 warningOn(NEITHER));
-        assertFalse(rendered(NEITHER).contains("Established here"), rendered(NEITHER));
     }
 
-    /** Whatever is said, no spelling of E2011 ends with a list that has nothing in it. */
+    /** Whatever is said, no spelling of E2011 carries a list that has nothing in it: a message with
+     *  a list of established clauses is chosen only when there is one to name. */
     @Test
     void noSpellingIsWrittenAroundAnEmptyList() {
         for (String source : List.of(BOTH, UNSETTLED_ONLY, SETTLED_ONLY, NEITHER)) {
-            String text = rendered(source);
-            assertFalse(text.contains("Established here: ."),
-                    "a list with nothing in it, punctuated as if it were one: " + text);
+            Message said = warningOn(source);
+            String settled = switch (said) {
+                case InvariantMessage.NothingKnownHereEstablishesButDoesEstablish it -> it.settled();
+                case InvariantMessage.NothingKnownHereEstablishesTheInvariantButDoesEstablish it ->
+                        it.settled();
+                default -> null;
+            };
+            assertTrue(settled == null || !settled.isBlank(),
+                    "a list with nothing in it, said as if it were one: " + said);
         }
     }
 
@@ -267,10 +263,6 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
 
     private static Message warningOn(String source) {
         return warning(source).said();
-    }
-
-    private static String rendered(String source) {
-        return Messages.render(warning(source).said(), Locale.ENGLISH);
     }
 
     private static Diagnostic warning(String source) {

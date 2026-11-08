@@ -104,7 +104,8 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
         assertTrue(report.contains("every run stops in a.pay + b.pay + c.pay where a.pay + b.pay"
                 + " + c.pay is at least 9223372036854775808"), report);
         assertFalse(report.contains("in a.pay + b.pay where"), report);
-        assertTrue(measured(SUM).contains("in a.pay + b.pay where"), measured(SUM));
+        String sum = measured(SUM);
+        assertTrue(sum.contains("in a.pay + b.pay where"), sum);
     }
 
     /** Two elements are one addition, which the total is as well. */
@@ -117,8 +118,9 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
      *  what the comparisons above leave out of it. */
     @Test
     void theSumWrittenOutIsShownToStopWhereItsFirstAdditionPassesTheType() {
-        assertTrue(measured(SUM).contains("every run stops in a.pay + b.pay where a.pay + b.pay"
-                + " is at least 9223372036854775808"), measured(SUM));
+        String sum = measured(SUM);
+        assertTrue(sum.contains("every run stops in a.pay + b.pay where a.pay + b.pay"
+                + " is at least 9223372036854775808"), sum);
     }
 
     @Test

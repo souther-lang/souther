@@ -5,9 +5,14 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Located;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.Primary;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsAFoldOutOfSightFromItsFirstStep;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsAFoldOutOfSightFromStepsOnTheSeed;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsTheFoldFromItsFirstStep;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsTheFoldFromStepsOnTheSeed;
+import souther.compiler.diag.msg.ExampleMessage.WriteARowAtThatInput;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
@@ -16,7 +21,6 @@ import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -141,22 +145,17 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         List<Located> warnings = rewriteWarnings(compilation);
 
         assertEquals(List.of(
-                        "No row of `total` would come out differently if this fold stopped after"
-                                + " its first element.",
-                        "No row of `total` would come out differently if each step of this fold"
-                                + " were handed the seed in place of what the step before it"
-                                + " answered."),
-                warnings.stream()
-                        .map(each -> Messages.render(each.diagnostic().said(), Locale.ENGLISH))
-                        .toList());
+                        new NoRowTellsTheFoldFromItsFirstStep("total"),
+                        new NoRowTellsTheFoldFromStepsOnTheSeed("total")),
+                warnings.stream().map(each -> each.diagnostic().said()).toList());
         for (Located each : warnings) {
             Primary.InSource at =
                     assertInstanceOf(Primary.InSource.class, each.diagnostic().primary());
             assertEquals(5, WhereItSits.in(SUM, at.place().region()).start().line(),
                     "the line of the fold");
             assertTrue(each.diagnostic().notes().stream()
-                            .map(n -> Messages.render(n.said(), Locale.ENGLISH))
-                            .anyMatch(n -> n.startsWith("Write a row at ([")),
+                            .anyMatch(n -> n.said() instanceof WriteARowAtThatInput row
+                                    && row.input().startsWith("([")),
                     () -> "and the row to write: " + each.diagnostic().notes());
         }
     }
@@ -181,14 +180,18 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                 """);
 
         assertEquals(List.of(
-                        "No row of `doubled` would come out differently if a fold of"
-                                + " `souther.list.map`, which this build holds no source of,"
-                                + " stopped after its first element.",
-                        "No row of `doubled` would come out differently if each step of a fold of"
-                                + " `souther.list.map`, which this build holds no source of, were"
-                                + " handed the seed in place of what the step before it answered."),
+                        "the first step of a fold in souther.list.map, at doubled",
+                        "steps on the seed of a fold in souther.list.map, at doubled"),
                 rewriteWarnings(compilation).stream()
-                        .map(each -> Messages.render(each.diagnostic().said(), Locale.ENGLISH))
+                        .map(each -> switch (each.diagnostic().said()) {
+                            case NoRowTellsAFoldOutOfSightFromItsFirstStep it ->
+                                    "the first step of a fold in " + it.definition() + ", at "
+                                            + it.behavior();
+                            case NoRowTellsAFoldOutOfSightFromStepsOnTheSeed it ->
+                                    "steps on the seed of a fold in " + it.definition() + ", at "
+                                            + it.behavior();
+                            case Message other -> other.toString();
+                        })
                         .toList());
     }
 

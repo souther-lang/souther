@@ -1,6 +1,7 @@
 package souther.compiler.diag.msg;
 
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Localizable;
 
 /**
  * What an author is told about a branch the model's own rules make dead.
@@ -46,9 +47,11 @@ public sealed interface DeadBranchMessage extends Message {
     record ThisCallMadeTheCopyTheProofIsAbout(String called) implements DeadBranchMessage,
             Supporting {}
 
-    /** The values it is written for are not values the position can hold. */
-    record ThePositionStopsShortOfIt(String position, String admits) implements DeadBranchMessage,
-            Supporting {}
+    /** The values it is written for are not values the position can hold. {@code admits} is a
+     *  phrase of the catalog's, since how a set of values is said is a sentence's and not a
+     *  number's. */
+    record ThePositionStopsShortOfIt(String position, Localizable admits)
+            implements DeadBranchMessage, Supporting {}
 
     /** Every case the arm names is one the rules refuse where it is matched on. */
     record EveryCaseItIsWrittenForIsRefused(String position, String cases)

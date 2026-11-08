@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.Localizable;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
@@ -15,7 +16,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * One of the lines a statement of several relations draws, read in one case of where the statement
@@ -106,24 +106,56 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides, CasesWor
      */
     public String said(List<TermPath> readAt) {
         List<String> said = new ArrayList<>();
+        for (CaseSaid each : casesSaid(readAt)) {
+            said.add(each.at() + (each.is() ? " is " : " is not ") + String.join(" or ", each.values()));
+        }
+        return said.isEmpty() ? null : String.join(" and ", said);
+    }
+
+    /**
+     * The same cases as a phrase of the catalog's, for a diagnostic told in the reader's language:
+     * the words joining the cases are a sentence's, and the cases are what the model writes.
+     */
+    public Localizable phrase(List<TermPath> readAt) {
+        Localizable said = null;
+        for (CaseSaid each : casesSaid(readAt)) {
+            Object values = each.values().getFirst();
+            for (String next : each.values().subList(1, each.values().size())) {
+                values = Localizable.of("reading.or", values, next);
+            }
+            Localizable one = Localizable.of(each.is() ? "reading.is" : "reading.is.not",
+                    each.at(), values);
+            said = said == null ? one : Localizable.of("reading.and", said, one);
+        }
+        return said;
+    }
+
+    /** One case the line decides in: a position, whether it is or is not one of the values, and
+     *  the values as the model writes them. */
+    private record CaseSaid(String at, boolean is, List<String> values) {}
+
+    /** The cases {@link #said} and {@link #phrase} say, read once for both. */
+    private List<CaseSaid> casesSaid(List<TermPath> readAt) {
+        List<CaseSaid> said = new ArrayList<>();
         CasesHeldTo.of(decides).forEach((at, held) -> {
             switch (held) {
                 case CasesHeldTo.Held.OneOf(var cases) -> {
                     if (!at.admits(cases) || readAt.stream()
                             .noneMatch(each -> each.isAtOrUnder(at.refine(cases)))) {
-                        said.add(at + " is " + spelled(cases));
+                        said.add(new CaseSaid(at.toString(), true, spelled(cases)));
                     }
                 }
-                case CasesHeldTo.Held.NoneOf(var cases) -> said.add(at + " is not "
-                        + spelled(cases));
-                case CasesHeldTo.Held.ATruth(var holds) -> said.add(at + " is " + holds);
+                case CasesHeldTo.Held.NoneOf(var cases) ->
+                        said.add(new CaseSaid(at.toString(), false, spelled(cases)));
+                case CasesHeldTo.Held.ATruth(var holds) ->
+                        said.add(new CaseSaid(at.toString(), true, List.of(String.valueOf(holds))));
             }
         });
-        return said.isEmpty() ? null : String.join(" and ", said);
+        return said;
     }
 
-    private static String spelled(CasesLeft cases) {
-        return cases.atoms().stream().map(Refinement::spelled).collect(Collectors.joining(" or "));
+    private static List<String> spelled(CasesLeft cases) {
+        return cases.atoms().stream().map(Refinement::spelled).toList();
     }
 
     /** Whether a row is somewhere the line decides, or what kept that from being read. */

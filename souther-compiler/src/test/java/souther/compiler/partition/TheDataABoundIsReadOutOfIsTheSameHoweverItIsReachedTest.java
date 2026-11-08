@@ -168,9 +168,9 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
     @Test
     void aBoundNamedByALetIsReadOutOfTheDataItIsAFieldOf() {
         String named = "{ let bound = l.lowerBound\n        if bound <= m then 2 else 1 }";
-        assertEquals(placesInTheDocument(helperOver(WRITTEN, TWO_LIMITS)),
-                placesInTheDocument(helperOver(named, TWO_LIMITS)));
-        assertEquals(2, placesInTheDocument(helperOver(named, TWO_LIMITS)).size());
+        Set<String> placesOfNamed = placesInTheDocument(helperOver(named, TWO_LIMITS));
+        assertEquals(placesInTheDocument(helperOver(WRITTEN, TWO_LIMITS)), placesOfNamed);
+        assertEquals(2, placesOfNamed.size());
         // The same points are owed, wherever in the source each form puts the comparison.
         assertEquals(owedAtTheBound(reportOf(helperOver(WRITTEN, TWO_LIMITS))).size(),
                 owedAtTheBound(reportOf(helperOver(named, TWO_LIMITS))).size());
@@ -202,7 +202,8 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
                 .replace("Limit { lowerBound = 100 }", "Limit { label = \"aaaa\" }")
                 .replace("let second: Limit = Limit { label = \"aaaa\" }",
                         "let second: Limit = Limit { label = \"bbbb\" }");
-        assertEquals(2, placesInTheDocument(source).size(), placesInTheDocument(source).toString());
+        Set<String> places = placesInTheDocument(source);
+        assertEquals(2, places.size(), places.toString());
     }
 
     /** A bound folded to a number and then given a name is read out of what it was folded from, as
@@ -216,11 +217,13 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
                         "let second: Limit = Limit { label = \"bbbb\" }");
         String named = labelled.replace("if String.length(l.label) <= m then 2 else 1",
                 "{ let bound = String.length(l.label)\n        if bound <= m then 2 else 1 }");
-        assertEquals(2, placesInTheDocument(named).size(), placesInTheDocument(named).toString());
+        Set<String> placesOfNamed = placesInTheDocument(named);
+        assertEquals(2, placesOfNamed.size(), placesOfNamed.toString());
         String twice = labelled.replace("if String.length(l.label) <= m then 2 else 1",
                 "{ let size = String.length(l.label)\n        let bound = size + 1\n"
                         + "        if bound <= m then 2 else 1 }");
-        assertEquals(2, placesInTheDocument(twice).size(), placesInTheDocument(twice).toString());
+        Set<String> placesOfTwice = placesInTheDocument(twice);
+        assertEquals(2, placesOfTwice.size(), placesOfTwice.toString());
     }
 
     /** A table of the bounds themselves: the number is an element of the table it was taken from. */
@@ -247,7 +250,8 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
                     | (N { v = 101 }, true) -> 2
                     | (N { v = 98 }, true) -> 1
                 """;
-        assertEquals(2, placesInTheDocument(source).size(), placesInTheDocument(source).toString());
+        Set<String> places = placesInTheDocument(source);
+        assertEquals(2, places.size(), places.toString());
     }
 
     /** What is in a folded expression and takes no part in its number is no data of the bound. */
@@ -263,7 +267,8 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
                 .replace("if String.length(l.label) <= m then 2 else 1",
                         "if String.length({ let idle = third.label\n        l.label }) <= m"
                                 + " then 2 else 1");
-        assertEquals(2, placesInTheDocument(idle).size(), placesInTheDocument(idle).toString());
+        Set<String> places = placesInTheDocument(idle);
+        assertEquals(2, places.size(), places.toString());
     }
 
     /** A number handed to a helper is read out of what the caller read it out of: a field of a

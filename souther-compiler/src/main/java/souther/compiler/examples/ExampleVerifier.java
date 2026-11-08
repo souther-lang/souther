@@ -37,7 +37,9 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.diag.msg.Supporting;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
@@ -1241,8 +1243,7 @@ public final class ExampleVerifier {
         }
         return Diagnostic.at(ex.pos())
                 .say(new ExampleMessage.TheTargetCannotBeEvaluated(name))
-                .hint(new ExampleMessage.WhatAnExampleRuns(
-                        "it is a helper `let`, and this module declares no behavior of that name"))
+                .hint(new ExampleMessage.WhatAnExampleRuns())
                 .build();
     }
 
@@ -2437,8 +2438,8 @@ public final class ExampleVerifier {
             // Nothing this module can name says what it answers, which is not a missing fake. A
             // dependency reaches here only after the check accepted the clause that named it, so a
             // signature that is not here is a module that did not build far enough to have one.
-            return notRead(dependency, row.pos(), fakeMissingDiag(target, req, row, "`" + depName
-                    + "` has no signature to build a stand-in against"));
+            return notRead(dependency, row.pos(), fakeMissingDiag(target, req, row,
+                    new ExampleMessage.TheDependencyHasNoSignature(depName)));
         }
         BoundaryOutput outType = depSig.out();
         // What stands in, and where it was written, is ExampleProvisioning's; building the value it
@@ -2467,12 +2468,9 @@ public final class ExampleVerifier {
             }
             case ExampleProvisioning.Standin.InTheModule inTheModule ->
                     tableStandin(fixtures, inTheModule.table(), dependency, depSig);
-            case ExampleProvisioning.Standin.Nothing _ -> {
-                String spelt = spelling(dependency);
-                yield notRead(dependency, row.pos(), fakeMissingDiag(target, req, row,
-                        "add `with " + spelt + " = ...` on the row, or a `fake " + spelt
-                                + "` table"));
-            }
+            case ExampleProvisioning.Standin.Nothing _ ->
+                    notRead(dependency, row.pos(), fakeMissingDiag(target, req, row,
+                            new ExampleMessage.WriteAFakeOnTheRowOrInTheModule(spelling(dependency))));
             // Saying nothing, as a row reaching a table that would not build says nothing: what is
             // wrong is wrong about what the module wrote and is said where the blocks are. A row
             // told a stand-in is missing here would be pointed at a requirement it wrote two
@@ -2517,8 +2515,8 @@ public final class ExampleVerifier {
      * a composition takes the requirements of its stages — the stage that wants it is named, so the
      * author is not left to walk the composition to find out which one.
      */
-    private Diagnostic fakeMissingDiag(String target, BehaviorRequirement req, Hir.ExampleRow row,
-                                       String detail) {
+    private <M extends Message & Supporting> Diagnostic fakeMissingDiag(
+            String target, BehaviorRequirement req, Hir.ExampleRow row, M detail) {
         List<String> stages = new ArrayList<>();
         for (String requester : req.requiredBy()) {
             if (!requester.equals(target)) {
@@ -2532,7 +2530,7 @@ public final class ExampleVerifier {
                 : Diagnostic.at(row.pos())
                         .say(new ExampleMessage.ADependencyReachedThroughHasNoFake(target,
                                 req.dependency().name(), String.join(", ", stages)));
-        return d.hint(new ExampleMessage.WriteAFakeLikeThis(detail)).build();
+        return d.hint(detail).build();
     }
 
     /** What the module's table stands the dependency in with, and what this row's report says the
