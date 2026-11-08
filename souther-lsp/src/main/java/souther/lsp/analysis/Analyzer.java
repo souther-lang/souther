@@ -3055,16 +3055,16 @@ public final class Analyzer {
     /**
      * What the check reads of each rule, in the terms an author acts on.
      *
-     * <p>What the check reads is not what the run-time check holds. Every rule is held when the
-     * behavior answers, whatever this says; what this says is how much of the relation is written in
-     * a form the check can carry.
+     * <p>What the check reads is not what the run-time check holds, and says nothing of where that
+     * runs ({@code EnsuresEnforcement}); what this says is how much of the relation is written in a
+     * form the check can carry.
      */
     private String ruleContents(List<RuleDischarge> rules) {
         StringBuilder out = new StringBuilder(
-                "**What the compiler can use where this behavior is called**\n\nEvery rule is"
-                        + " checked when the behavior returns, whatever this says of it. This shows"
-                        + " how much of each rule the compiler can use to prove things about the"
-                        + " code that calls the behavior.\n");
+                "**What the compiler can use where this behavior is called**\n\nThis shows how"
+                        + " much of each rule the compiler can use to prove things about the code"
+                        + " that calls the behavior. It does not say where a rule is checked at run"
+                        + " time, which depends on where the behavior is implemented and called.\n");
         for (RuleDischarge rule : rules) {
             String about = rule.rule().selector() == null ? ""
                     : "`" + rule.rule().selector().name() + "`: ";
@@ -3097,9 +3097,9 @@ public final class Analyzer {
     private String rulePart(RequiredPart part) {
         return switch (part) {
             case RequiredPart.Routed it -> ruleRoute(weakest(it));
-            case RequiredPart.OutsideTheFragment it -> "**runtime only** — it is checked when the"
-                    + " behavior returns, but the compiler cannot use it to prove anything about"
-                    + " the code that calls the behavior, because " + saidOf(it.why());
+            case RequiredPart.OutsideTheFragment it -> "**runtime only** — the compiler cannot use"
+                    + " it to prove anything about the code that calls the behavior, because "
+                    + saidOf(it.why());
         };
     }
 
@@ -3120,7 +3120,8 @@ public final class Analyzer {
     private String saidOf(FragmentReason why) {
         return switch (why) {
             case FragmentReason.ItCallsAnOperation it -> "it calls `" + it.operation()
-                    + "`, and the compiler has no rules for what `" + it.operation() + "` returns";
+                    + "`, and the compiler can read its result only as a value, not as a term it"
+                    + " can compare or reason about";
             case FragmentReason.ItsShapeIsNotRead _ ->
                     "the compiler does not analyze a condition written in this form";
         };

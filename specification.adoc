@@ -2850,7 +2850,7 @@ A rule is classified as a data's clause is (<<invariant-discharge-capability>>),
 
 A rule has one answer, shaped as a data's conjunct's is (<<invariant-discharge-capability>>) — every part of it to be established, any route of a part to establish that part — and it is given at the one place the rule is written.
 
-The classification says nothing about whether the rule is enforced. Every rule holds when the behavior answers, whatever this says of it; what it says is how much of the relation is written in a form the checker reads — `+derivable+` a relation the numeric domain reasons over, `+exact match+` a term it can name and compare and nothing weaker, `+always holds+` and `+never holds+` a rule that settles without the answer, `+runtime only+` nothing it can represent.
+The classification says nothing about whether or where the rule is checked at run time. That is decided by where the behavior is implemented and called: a behavior with a body here is checked where it answers, and an injected one where its answer crosses into generated code, so one only the application's own Java calls is checked nowhere here. What the classification says is how much of the relation is written in a form the checker reads — `+derivable+` a relation the numeric domain reasons over, `+exact match+` a term it can name and compare and nothing weaker, `+always holds+` and `+never holds+` a rule that settles without the answer, `+runtime only+` nothing it can represent.
 
 The rule is read as it is written. An operation whose meaning the language defines stands as that operation, as a data's clause is read (<<invariant-discharge-representation>>), so a rule naming one is classified by what the language says of it and not by the algorithm it is emitted as.
 
