@@ -18,6 +18,7 @@ import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.numeric.ExactAnswer;
@@ -186,6 +187,9 @@ public sealed interface ElementValue {
 
         /** Whether the flag at {@code field} is set, or null where the element holds none there. */
         Boolean flag(ElementProjection field);
+
+        /** The string at {@code field}, or null where the element holds none there. */
+        String text(ElementProjection field);
 
         /**
          * Which case the value at {@code subject} is, as the test of whether it is one of the cases
@@ -465,6 +469,19 @@ public sealed interface ElementValue {
         if (whenHolds.equals(otherwise)) {
             return whenHolds;
         }
+        // A test is held the way it is stated, and its denial as the test with the answers the
+        // other way round: `if code /= "A" then 0 else v` is `if code == "A" then v else 0`.
+        Test stated = switch (test) {
+            case Test.Written(var place, var written, boolean equal) when !equal ->
+                    new Test.Written(place, written, true);
+            case Test.Compared(var form, Rel relation)
+                    when relation == Rel.LT || relation == Rel.LE || relation == Rel.NE ->
+                    new Test.Compared(form, relation.denied());
+            case Test.Flag _, Test.Written _, Test.Compared _, PositionTest _ -> null;
+        };
+        if (stated != null) {
+            return choosing(stated, otherwise, whenHolds);
+        }
         Boolean decided = test.decided();
         return decided == null ? new Choose(test, whenHolds, otherwise)
                 : decided ? whenHolds : otherwise;
@@ -529,7 +546,7 @@ public sealed interface ElementValue {
      * row and not by any value the element holds — and two elements holding the same values may
      * take different answers.
      */
-    sealed interface Test permits Test.Flag, Test.Compared, PositionTest {
+    sealed interface Test permits Test.Flag, Test.Compared, Test.Written, PositionTest {
 
         /** The flag at {@code place} is set. */
         record Flag(ElementProjection place) implements Test {
@@ -562,6 +579,24 @@ public sealed interface ElementValue {
         }
 
         /**
+         * The string at {@code place} is the one {@code written} where {@code equal}, and is not
+         * where it is not: equal as the language's {@code ==} is, the same scalar values in the
+         * same order.
+         */
+        record Written(ElementProjection place, String written, boolean equal) implements Test {
+
+            public Written {
+                Objects.requireNonNull(place, "a string stands somewhere");
+                Objects.requireNonNull(written, "a string is compared with one written out");
+            }
+
+            @Override
+            public String toString() {
+                return place + (equal ? " == " : " /= ") + CstLexer.literalOf(written);
+            }
+        }
+
+        /**
          * {@code form} set against nought by {@code relation}, scaled so the weight of the field
          * whose spelling sorts first is one, the relation turned where that took a negative scale;
          * or null where the exact arithmetic cannot hold it. {@code 10 < price},
@@ -588,6 +623,7 @@ public sealed interface ElementValue {
         default Set<ElementProjection> reads() {
             return switch (this) {
                 case Flag flag -> Set.of(flag.place());
+                case Written written -> Set.of(written.place());
                 case Compared compared -> compared.form().coefs().keySet();
                 case PositionTest _ -> Set.of();
             };
@@ -604,7 +640,7 @@ public sealed interface ElementValue {
          */
         default Boolean decided() {
             return switch (this) {
-                case Flag _ -> null;
+                case Flag _, Written _ -> null;
                 case Compared(var form, Rel relation) -> form.coefs().isEmpty()
                         ? relation.holds(form.constant().signum()) : null;
                 case PositionTest test -> test.holdsOfEveryPosition() ? Boolean.TRUE
@@ -621,6 +657,11 @@ public sealed interface ElementValue {
                 case Flag flag -> {
                     Boolean set = element.flag(flag.place());
                     yield set == null ? null : ExactAnswer.held(set);
+                }
+                case Written written -> {
+                    String text = element.text(written.place());
+                    yield text == null ? null
+                            : ExactAnswer.held(text.equals(written.written()) == written.equal());
                 }
                 case Compared(var form, Rel relation) -> {
                     ExactAnswer<ExactRatio> value = new Affine(form).at(element);
@@ -1103,6 +1144,11 @@ public sealed interface ElementValue {
 
         @Override
         public Boolean flag(ElementProjection field) {
+            return null;
+        }
+
+        @Override
+        public String text(ElementProjection field) {
             return null;
         }
 
@@ -1835,7 +1881,33 @@ public sealed interface ElementValue {
                 return new Test.Flag(flag);
             }
             PositionTest test = positionTestOf(condition);
-            return test != null ? test : comparedOf(condition);
+            if (test != null) {
+                return test;
+            }
+            Test.Compared compared = comparedOf(condition);
+            return compared != null ? compared : writtenOf(condition);
+        }
+
+        /**
+         * The test that the string at a place of the element is, or is not, one written out, which
+         * {@code condition} is — or null where it is none.
+         */
+        private Test.Written writtenOf(Core condition) {
+            if (!(followed(condition) instanceof Core.Binary binary)) {
+                return null;
+            }
+            Comparison compared = Comparison.of(binary).orElse(null);
+            Rel relation = compared == null ? null : compared.claim().statedRelation();
+            if (relation != Rel.EQ && relation != Rel.NE) {
+                return null;
+            }
+            Core left = followed(compared.left());
+            Core.Str written = left instanceof Core.Str str ? str
+                    : followed(compared.right()) instanceof Core.Str other ? other : null;
+            ElementProjection place = written == null ? null
+                    : placeOf(written == left ? compared.right() : compared.left(), held);
+            return place == null ? null
+                    : new Test.Written(place, written.value(), relation == Rel.EQ);
         }
 
         /**

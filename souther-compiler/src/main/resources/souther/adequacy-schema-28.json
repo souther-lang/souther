@@ -1902,6 +1902,39 @@
         },
         {
           "type": "object",
+          "description": "The choice between two by the string at a place of the element: `whenHolds` where the string at `place` is `value`, the same scalar values in the same order, and `otherwise` elsewhere — or, where `equal` is false, `whenHolds` where it is not.",
+          "required": [
+            "kind",
+            "place",
+            "value",
+            "equal",
+            "whenHolds",
+            "otherwise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "written"
+            },
+            "place": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "equal": {
+              "type": "boolean"
+            },
+            "whenHolds": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "otherwise": {
+              "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "The position times a number made of the element, and a number beside it: `perPosition` for each step of where the element stands in the container it was walked from, counted from nought in the order the row writes them, plus `base`. Two elements holding the same values come to different numbers.",
           "required": [
             "kind",

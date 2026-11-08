@@ -695,10 +695,10 @@ public final class InputNumber {
                 selected.kept().stream().allMatch(ElementValue.Test::readsThePosition)
                         ? overTheRunWalkedBy(measured, listed, selected.kept(), inputs, source)
                         : null;
-        return walked != null ? walked
-                : overWhatIsKept(measured.operation(), measured.takenAs(), selected,
-                        new ElementValue.Affine(LinearForm.atom(new ElementProjection(List.of()))),
-                        null, inputs, source);
+        ElementValue itself = walked != null ? null : selected.itself(source);
+        return walked != null ? walked : itself == null ? null
+                : overWhatIsKept(measured.operation(), measured.takenAs(), selected, itself,
+                        selected.itsType(), inputs, source);
     }
 
     /**
@@ -857,11 +857,16 @@ public final class InputNumber {
         if (selected == null) {
             return null;
         }
-        Type of = each != null ? each
+        // What was computed of an element kept is of what a walk beneath answered, where a filter
+        // is of that, and is no number of the answer's element.
+        if (computed != null && selected.through() != null) {
+            return null;
+        }
+        Type of = each != null ? each : selected.itsType() != null ? selected.itsType()
                 : Type.elementOf(Core.withoutStanding(selected.list().value()).type());
-        ElementValue kept = keptBy(selected.kept(), computed != null ? computed
-                : new ElementValue.Affine(LinearForm.atom(new ElementProjection(List.of()))));
-        return of == null ? null : new KeptOfAList(selected.list(), kept, of);
+        ElementValue itself = computed != null ? computed : selected.itself(source);
+        return of == null || itself == null ? null
+                : new KeptOfAList(selected.list(), keptBy(selected.kept(), itself), of);
     }
 
     /** One take or drop: which side of the index it keeps, the index, and the list it is of. */
@@ -876,8 +881,39 @@ public final class InputNumber {
      *             it stands in {@code list}: the first position kept, then the one past the last,
      *             each only where it keeps something less than the whole; and the one test no
      *             position passes where nothing is left
+     * @param through what an element kept is of the element of {@code list}, where a filter is of
+     *                what a walk answered; null where it is that element
      */
-    private record Selection(Denotation list, List<ElementValue.Test> kept) {}
+    private record Selection(Denotation list, List<ElementValue.Test> kept, Through through) {
+
+        /**
+         * What {@code closure}, handed an element this keeps on {@code parameter}, computes of
+         * the element of {@link #list} — or null where it is not read. As the closure is written
+         * where it is handed the element itself.
+         */
+        ElementValue computedBy(BindingId parameter, Core closure, Map<BindingId, Core> held,
+                                RuleReadingSource source, ElementValue.ElementsAt elements) {
+            return through == null
+                    ? ElementValue.read(new ElementAnswer(parameter, closure, null), held, source,
+                            elements)
+                    : ElementValue.read(new ElementAnswer(through.element(), closure, null),
+                            through.heldWith(parameter), source, elements);
+        }
+
+        /** What an element this keeps is, of the element of {@link #list}. */
+        ElementValue itself(RuleReadingSource source) {
+            return through == null
+                    ? new ElementValue.Affine(LinearForm.atom(new ElementProjection(List.of())))
+                    : ElementValue.read(new ElementAnswer(through.element(), through.value(),
+                            null), through.held(), source, null);
+        }
+
+        /** What an element this keeps stands as, or null where it is the element of
+         *  {@link #list}. */
+        Type itsType() {
+            return through == null ? null : through.value().type();
+        }
+    }
 
     /**
      * The list {@code container} holds some of the elements of by tests of what each holds, and
@@ -890,30 +926,91 @@ public final class InputNumber {
      * every element is still an occurrence of the run. Where one kept stands among the others kept
      * is not where it stood in the list under, so nothing reading the position is read through it.
      */
-    private record KeptByWhatItHolds(Denotation list, List<ElementValue.Test> tests) {}
+    private record KeptByWhatItHolds(Denotation list, List<ElementValue.Test> tests,
+                                     Through through) {}
+
+    /**
+     * What the elements a selection keeps are, where it crossed a walk answering one value for
+     * each element under a filter: {@code filter(p, map(f, xs))} keeps {@code f(x)} for each
+     * {@code x} of {@code xs} that {@code p(f(x))} holds of, which is {@code map(f, filter(p ∘ f,
+     * xs))}. Read as the closures are written, under names: each closure's parameter on the way
+     * stands for what the walk beneath it answered.
+     *
+     * @param element the binding an element of the list under arrives on
+     * @param value   what an element the selection keeps is, read of {@code element}
+     * @param held    what each binding of the body holds, and what each parameter on the way
+     *                stands for
+     */
+    record Through(BindingId element, Core value, Map<BindingId, Core> held) {
+
+        /** What each binding holds, with {@code parameter} standing for {@link #value} too. */
+        Map<BindingId, Core> heldWith(BindingId parameter) {
+            Map<BindingId, Core> all = new LinkedHashMap<>(held);
+            all.put(parameter, value);
+            return all;
+        }
+    }
 
     private static KeptByWhatItHolds keptByWhatItHolds(Denotation container,
                                                        RuleReadingSource source) {
-        List<ElementValue.Test> tests = new ArrayList<>();
+        // The predicates as written, read once every walk on the way is crossed, and the
+        // parameters that stand for the element where the descent now is.
+        List<ElementAnswer> predicates = new ArrayList<>();
+        List<BindingId> here = new ArrayList<>();
+        Map<BindingId, Core> crossed = new LinkedHashMap<>();
+        Core value = null;
         Denotation under = container;
         while (true) {
             InputReads where = under.at();
-            ElementBindings.PiecesOfEachElement pieces = ElementBindings.piecesOfEachElement(
-                    under.value(), closure -> Core.withoutStanding(where.denotes(closure,
-                            source.symbols(), source.newtypes()).value()) instanceof Core.Block block
-                            ? block : null);
-            if (pieces == null || pieces.piece() != PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS) {
-                return new KeptByWhatItHolds(under, List.copyOf(tests));
+            Function<Core, Core.Block> blockOf = closure -> Core.withoutStanding(where.denotes(
+                    closure, source.symbols(), source.newtypes()).value())
+                    instanceof Core.Block block ? block : null;
+            ElementBindings.PiecesOfEachElement pieces =
+                    ElementBindings.piecesOfEachElement(under.value(), blockOf);
+            if (pieces != null && pieces.piece() == PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS) {
+                if (pieces.element().binding() == null) {
+                    return null;
+                }
+                predicates.add(new ElementAnswer(pieces.element().binding(),
+                        pieces.step().body(), null));
+                here.add(pieces.element().binding());
+                under = where.denotes(pieces.walked(), source.symbols(), source.newtypes());
+                continue;
             }
-            ElementValue.Test test = pieces.element().binding() == null ? null
-                    : ElementValue.testOf(new ElementAnswer(pieces.element().binding(),
-                            pieces.step().body(), null), where.heldByTheBody(), source);
+            // Under a filter, a walk answering one value for each element in the order handed:
+            // what the filter tested is what the walk answered. The position it may be handed is
+            // no name the closures are read with, so an answer reading it is read nowhere.
+            ElementBindings.StepOnEachElement step = predicates.isEmpty() ? null
+                    : ElementBindings.stepAnsweredOnEachElement(under.value(), blockOf);
+            ElementAnswer answer = step == null || step.element().binding() == null ? null
+                    : where.answerAt(step.element().binding());
+            if (answer == null || !answersInTheOrderHanded(under.value())) {
+                break;
+            }
+            for (BindingId above : here) {
+                crossed.put(above, answer.body());
+            }
+            value = value != null ? value : answer.body();
+            here = new ArrayList<>(List.of(answer.parameter()));
+            under = where.denotes(step.walked(), source.symbols(), source.newtypes());
+        }
+        Map<BindingId, Core> held = new LinkedHashMap<>(container.at().heldByTheBody());
+        held.putAll(crossed);
+        Through through = value == null ? null : new Through(here.getFirst(), value,
+                Map.copyOf(held));
+        List<ElementValue.Test> tests = new ArrayList<>();
+        for (ElementAnswer predicate : predicates) {
+            // A predicate above a walk is about what the walk answered, which its parameter
+            // stands for; one beneath every walk is about the element as it is.
+            ElementAnswer read = crossed.containsKey(predicate.parameter())
+                    ? new ElementAnswer(through.element(), predicate.body(), null) : predicate;
+            ElementValue.Test test = ElementValue.testOf(read, held, source);
             if (test == null) {
                 return null;
             }
             tests.add(test);
-            under = where.denotes(pieces.walked(), source.symbols(), source.newtypes());
         }
+        return new KeptByWhatItHolds(under, List.copyOf(tests), through);
     }
 
     /** The take or drop {@code met} is, or null where it is neither or its count is no whole
@@ -963,7 +1060,7 @@ public final class InputNumber {
         }
         List<ElementValue.Test> kept = new ArrayList<>(filtered.tests());
         if (cuts.isEmpty()) {
-            return kept.isEmpty() ? null : new Selection(under, kept);
+            return kept.isEmpty() ? null : new Selection(under, kept, filtered.through());
         }
         long from = 0;
         Long before = null;
@@ -988,7 +1085,7 @@ public final class InputNumber {
                 kept.add(positionTest(Rel.LT, before));
             }
         }
-        return new Selection(under, kept);
+        return new Selection(under, kept, filtered.through());
     }
 
     private static ElementValue.PositionTest positionTest(Rel relation, long against) {
@@ -1073,7 +1170,14 @@ public final class InputNumber {
         // put end to end where several do.
         ElementValue computed;
         Type each;
-        if (answered != null) {
+        if (some != null && some.through() != null) {
+            // Handed what a walk beneath answered, the closure computes it of the element under.
+            boolean summed = measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+            computed = closure == null || !summed ? null
+                    : some.computedBy(element, closure.body(), where.heldByTheBody(), source,
+                            new ElementValue.ElementsAt(at, where.declared()));
+            each = closure == null ? null : closure.body().type();
+        } else if (answered != null) {
             computed = new ElementValue.Affine(LinearForm.atom(answered));
             each = inputs.typeAt(answered.from(at), source);
         } else {
@@ -1162,9 +1266,13 @@ public final class InputNumber {
         Map<BindingId, Core> held = reads.heldByTheBody();
         ElementValue.ElementsAt elements =
                 new ElementValue.ElementsAt(at, container.at().declared());
-        ElementValue.Added step = ElementValue.addedTo(
-                new ElementAnswer(element, walk.step().body(), null), walk.accumulator().binding(),
-                held, source, elements);
+        // Handed what a walk beneath a filter answered, the step adds it of the element under.
+        Through through = kept == null ? null : kept.through();
+        ElementValue.Added step = ElementValue.addedTo(through == null
+                        ? new ElementAnswer(element, walk.step().body(), null)
+                        : new ElementAnswer(through.element(), walk.step().body(), null),
+                walk.accumulator().binding(), through == null ? held : through.heldWith(element),
+                source, elements);
         ElementValue.Affine seed = affine(ElementValue.read(
                 new ElementAnswer(element, walk.seed(), null), held, source, elements));
         if (step == null || seed == null || !seed.form().coefs().isEmpty()

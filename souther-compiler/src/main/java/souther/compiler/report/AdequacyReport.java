@@ -7750,6 +7750,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         into.put("relation", compared.relation().written());
                         elementComputation(into.putObject("whenHolds"), it.whenHolds());
                     }
+                    case ElementValue.Test.Written written -> {
+                        into.put("kind", "written");
+                        into.put("place", written.place().spelled());
+                        into.put("value", written.written());
+                        into.put("equal", written.equal());
+                        elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                    }
                     case ElementValue.PositionTest test -> {
                         into.put("kind", "position");
                         if (test.divisor() != ElementValue.PositionTest.THE_POSITION_ITSELF) {
