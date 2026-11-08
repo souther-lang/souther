@@ -33,6 +33,8 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -204,5 +206,67 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
         assertTrue(whole(read, List.of(asked(read, read.total(), 0)), 1)
                         .admitsNone(read.measuring().region()),
                 "where nought is asked, it does");
+    }
+
+    /**
+     * Totals of two places of each element: an element moved at the first place keeps what it
+     * was moved to while it is moved at the second, though it starts from a value it answers
+     * alike to that holds something else at the first.
+     */
+    @Test
+    void anElementMovedAtOnePlaceKeepsItWhileItIsMovedAtAnother() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module g
+
+                data Line = { a: Int, q: Int }
+                data Ok
+
+                behavior counted : (ys: List<Line>) -> Ok
+                """), ModulePath.EMPTY);
+        String module = compilation.modules().get(0);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
+        InputDomain input = InputDomain.of(compilation.db().ask(
+                        new Bodies.DeclaredSignatures(module)).value().get("counted"), reading,
+                TypeCardinality.Counts.workedOutIn(reading), Membership.none());
+        Quantities measuring = input.quantities(rules);
+        TermPath ys = TermPath.of("ys");
+        ValueName.Stdlib sum = ValueName.Stdlib.operation("List", "sum");
+        NumericTerm ofA = NumericTerm.TakenOver.of(sum, new RunSource.ProjectedOccurrences(
+                ys.element().then("a")), Type.INT, rules.inners(), rules.symbols());
+        NumericTerm ofQ = NumericTerm.TakenOver.of(sum, new RunSource.ProjectedOccurrences(
+                ys.element().then("q")), Type.INT, rules.inners(), rules.symbols());
+        Type lines = input.typeAt(ys, rules);
+        ContainerAsAWhole whole = ContainerAsAWhole.of(ys, TypeView.of(lines, rules.inners(),
+                        rules.symbols(), rules.kinds(), rules.sums()), List.of(),
+                List.of(new ContainerAsAWhole.ATotal(ofA, new NumericSet.At(Count.of(0)),
+                                Count.of(0), measuring.ordersOf(ofA)),
+                        new ContainerAsAWhole.ATotal(ofQ, new NumericSet.At(Count.of(2)),
+                                Count.of(2), measuring.ordersOf(ofQ))),
+                Map.of(), new NumericSet.At(Count.of(2)), measuring, measuring.region(), reading);
+        assertNotNull(whole);
+        ContainerAsAWhole.Fixed fixed = whole.at(whole.choices().each().getFirst());
+        ObservedValue nought = element(0, 0);
+        ObservedValue five = element(5, 0);
+        // the first starts from nought or five, alike to the statements; the second from one
+        List<ObservedValue> values = fixed.spread(List.of(nought, element(1, 0)),
+                List.of(List.of(nought, five), List.of(element(1, 0))), 0, _ -> List.of(),
+                _ -> NumericDomain.Bounds.OPEN);
+        assertNotNull(values, "two elements come to nought at a and two at q");
+        long a = 0;
+        long q = 0;
+        for (ObservedValue each : values) {
+            Map<String, ObservedValue> fields = ((ObservedValue.Constructed) each).fields();
+            a += ((ObservedValue.Integer) fields.get("a")).value();
+            q += ((ObservedValue.Integer) fields.get("q")).value();
+        }
+        assertEquals(0, a, "what the elements come to at a, read back: " + values);
+        assertEquals(2, q, "what they come to at q, read back: " + values);
+    }
+
+    private static ObservedValue element(long a, long q) {
+        return new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("g", "Line")),
+                Map.of("a", new ObservedValue.Integer(a), "q", new ObservedValue.Integer(q)));
     }
 }

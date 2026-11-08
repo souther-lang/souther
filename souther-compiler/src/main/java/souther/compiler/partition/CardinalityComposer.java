@@ -635,7 +635,8 @@ final class CardinalityComposer {
                     BorderQuantity.Observation row = readingOf.apply(List.of(value));
                     every.add(value, i -> ofAnElement.get(i).apply(row), asked.size());
                 }
-                Groups<ObservedValue> kept = every.keptBy(asked);                groups = kept;
+                Groups<ObservedValue> kept = every.keptBy(asked);
+                groups = kept;
                 capacity = g -> keptApartByItsRules ? kept.values().get(g).size()
                         : Integer.MAX_VALUE;
                 drawing = share -> kept.drawn(share, keptApartByItsRules);
@@ -1858,6 +1859,10 @@ final class CardinalityComposer {
          *  beside} says; null where that could not be worked out. */
         List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside);
 
+        /** How many totals in a row {@code total} is tried at for an element of whole numbers to
+         *  stand where this puts it ({@link AStatementAtARow#remaindersOf}). */
+        int remaindersOf(NumericTerm total);
+
         /** The places an element turns over at, where its values are ordered and not counted, with
          *  the positions beside it where {@code beside} says; null where that could not be worked
          *  out. */
@@ -1938,6 +1943,11 @@ final class CardinalityComposer {
             @Override
             public List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside) {
                 return perElement.turnsAt(element, beside);
+            }
+
+            @Override
+            public int remaindersOf(NumericTerm total) {
+                return perElement.remaindersOf(total);
             }
 
             @Override
@@ -2033,6 +2043,12 @@ final class CardinalityComposer {
             public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container,
                                                          Quantity.TheValue under) {
                 return AStatementAtARow.TurnsOn.THE_ELEMENT;
+            }
+
+            /** A value asked at an element reads no total. */
+            @Override
+            public int remaindersOf(NumericTerm total) {
+                return 1;
             }
 
             /** Where standing in the set turns over, which the set says

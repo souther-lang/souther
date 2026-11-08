@@ -56,8 +56,8 @@ import java.util.function.Function;
  */
 final class ContainerAsAWhole {
 
-    /** How many values of each run between the turns a total nothing asks is tried at. */
-    private static final int VALUES_OF_EACH_RUN =
+    /** The most values of each run between the turns a total nothing asks is tried at. */
+    private static final int MOST_VALUES_OF_EACH_RUN =
             CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT.maximum();
 
     private static final int MOST_ELEMENTS =
@@ -250,16 +250,21 @@ final class ContainerAsAWhole {
                     new TermRealizations.Remainder.Exhausted());
         }
         List<ExactRatio> turns = new ArrayList<>();
+        // As many values of each run as an element of whole numbers needs for every remainder of
+        // the total a statement puts it on the line at ({@link AStatementAtARow#remaindersOf}),
+        // up to the figure.
+        int remainders = 1;
         for (CardinalityComposer.Asked one : asked) {
             List<ExactRatio> where = one.turnsAt(term, beside);
             if (where != null) {
                 turns.addAll(where);
             }
+            remainders = Math.max(remainders, one.remaindersOf(term));
         }
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         List<Place> places = CardinalityComposer.valuesAlong(carrier, run, turns,
-                VALUES_OF_EACH_RUN, UsualPlaces.of(term, carrier, reading.today()), unheld,
-                unnamed);
+                Math.min(remainders, MOST_VALUES_OF_EACH_RUN),
+                UsualPlaces.of(term, carrier, reading.today()), unheld, unnamed);
         TermRealizations.Remainder rest = unnamed.isEmpty()
                 ? new TermRealizations.Remainder.StoppedAt(
                         CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT)
@@ -520,6 +525,10 @@ final class ContainerAsAWhole {
             if (owed == null) {
                 return null;
             }
+            // The places already moved, which a start taken at a later place keeps where they
+            // were moved to: a value an element answers alike to is one start, and taken whole at
+            // the second place it would put the first place back where it was listed.
+            List<List<TermPath.Step>> moved = new ArrayList<>();
             for (Owed one : owed.values()) {
                 List<TermPath.Step> steps = stepsInside(one.place());
                 NumericDomain.Bounds leftByTheRegion = region.apply(one.place());
@@ -532,8 +541,17 @@ final class ContainerAsAWhole {
                 List<List<Start>> startsOf = new ArrayList<>();
                 for (int each = 0; each < out.size(); each++) {
                     List<Start> starts = new ArrayList<>();
-                    for (ObservedValue start : alike == null || alike.get(each) == null
+                    for (ObservedValue listed : alike == null || alike.get(each) == null
                             ? List.of(out.get(each)) : alike.get(each)) {
+                        ObservedValue start = listed;
+                        for (List<TermPath.Step> before : moved) {
+                            ObservedValue there = valueAt(out.get(each), before);
+                            start = start == null || there == null ? null
+                                    : placedAt(start, before, there);
+                        }
+                        if (start == null) {
+                            continue;
+                        }
                         BigInteger value = wholeAt(start, steps, one.carrier());
                         if (value != null) {
                             starts.add(new Start(start, value, where == null
@@ -575,13 +593,14 @@ final class ContainerAsAWhole {
                     return null;
                 }
                 for (int each = 0; each < at.length; each++) {
-                    ObservedValue moved = placedAt(out.get(each), steps,
+                    ObservedValue shifted = placedAt(out.get(each), steps,
                             one.carrier().valueOf(Count.of(new BigDecimal(at[each]))));
-                    if (moved == null) {
+                    if (shifted == null) {
                         return null;
                     }
-                    out.set(each, moved);
+                    out.set(each, shifted);
                 }
+                moved.add(steps);
             }
             return comeToEvery(out) ? out : null;
         }
@@ -702,10 +721,8 @@ final class ContainerAsAWhole {
         return new BigInteger[] {low, high};
     }
 
-    /** The whole number {@code element} holds {@code steps} inside it, or null where it holds none
-     *  there. */
-    private static BigInteger wholeAt(ObservedValue element, List<TermPath.Step> steps,
-                                      Carrier carrier) {
+    /** What {@code element} holds {@code steps} inside it, or null where it holds nothing there. */
+    private static ObservedValue valueAt(ObservedValue element, List<TermPath.Step> steps) {
         ObservedValue at = element;
         for (TermPath.Step step : steps) {
             if (!(at instanceof ObservedValue.Constructed record)
@@ -714,6 +731,14 @@ final class ContainerAsAWhole {
             }
             at = record.field(name);
         }
+        return at;
+    }
+
+    /** The whole number {@code element} holds {@code steps} inside it, or null where it holds none
+     *  there. */
+    private static BigInteger wholeAt(ObservedValue element, List<TermPath.Step> steps,
+                                      Carrier carrier) {
+        ObservedValue at = valueAt(element, steps);
         Place place = at == null ? null : carrier.placeOf(at);
         if (!(place instanceof Count count)) {
             return null;

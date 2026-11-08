@@ -32,6 +32,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Recognizer;
 import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1935,6 +1936,35 @@ final class AStatementAtARow {
             return new Answer.CouldNotTell(unread);
         }
         return every ? Answer.HOLDS : Answer.FAILS;
+    }
+
+    /**
+     * How many totals in a row {@code total} is tried at for an element of whole numbers to stand
+     * where a relation this reads puts it: where a relation weighs an element's number {@code w}
+     * times the total, the element comes to the line only at a total of one remainder by
+     * {@code w}, so as many totals in a row are one of each. One where no relation reads the total
+     * beside an element's number at a whole multiple of it.
+     */
+    int remaindersOf(NumericTerm total) {
+        int out = 1;
+        for (OneRelation each : relations.values()) {
+            if (!(each instanceof OneRelation.OfAForm(LinearQuantity _,
+                    LinearForm<NumericTerm> form, Rel _))
+                    || !(form.coefs().get(total) instanceof ExactRatio weight)) {
+                continue;
+            }
+            for (Map.Entry<NumericTerm, ExactRatio> other : form.coefs().entrySet()) {
+                if (other.getKey() instanceof NumericTerm.ValueOf value
+                        && value.position().insideAContainer()
+                        && other.getValue().dividedBy(weight).orNull() instanceof ExactRatio apart
+                        && apart.isWhole()
+                        && apart.floor().orNull() instanceof BigInteger whole
+                        && whole.abs().bitLength() < Integer.SIZE - 1) {
+                    out = Math.max(out, whole.abs().intValue());
+                }
+            }
+        }
+        return out;
     }
 
     /**
