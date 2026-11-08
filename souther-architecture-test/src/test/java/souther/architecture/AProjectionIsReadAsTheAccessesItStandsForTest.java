@@ -618,6 +618,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "numeric/LinearForm;", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/AffineReading$1", "aFieldOfAWalk", "(" + core + reads + ")L" + c
                 + "numeric/LinearForm;", Reading.ONE_ACCESS, ONE);
+        row(out, c + "partition/AffineReading$1", "rangeOfAPath", "(" + core + "L" + c
+                + "partition/FormRange;)L" + c + "partition/FormRange;", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/ComparisonAssessment", "written",
                 "(" + core + ")Ljava/lang/String;", Reading.NAMES,
                 "spells a side of a comparison for a report, a projection as the accesses it"

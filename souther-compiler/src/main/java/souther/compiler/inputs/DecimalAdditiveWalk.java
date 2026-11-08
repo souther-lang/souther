@@ -7,11 +7,11 @@ import java.util.Objects;
 /**
  * A walk over a list of the input that adds a part of each element to the answer so far, or takes
  * it away, from a seed the program writes: {@code List.fold((acc, n) -> Decimal.add(acc,
- * n.gross.value), 0.0m, notes)}. A part is a path of the element, or {@code factors} paths of it
- * multiplied. Its answer is the seed and {@code added}, the total of the parts as the relation
- * names its terms; a run
- * works it out one step per element, a product and a sum or a difference, and each can stop it
- * for want of room. A total of what a closure makes of each element ({@code List.sum(List.map(l
+ * n.gross.value), 0.0m, notes)}. A part is paths of the element added, taken away and multiplied,
+ * a product on the way multiplying at most {@code factors} of them. Its answer is the seed and
+ * {@code added}, the total of the parts as the relation names its terms; a run works it out one
+ * step per element, each operation of the part and the sum or difference with the answer so far,
+ * and each can stop it for want of room. A total of what a closure makes of each element ({@code List.sum(List.map(l
  * -> Decimal.multiply(l.price, l.qty), lines))}) is the same walk from nought: the library adds
  * the parts up exactly, at the scale the walk ends at.
  *
@@ -35,7 +35,8 @@ import java.util.Objects;
  * @param seed    the decimal the walk starts from, at the scale the program writes it
  * @param added   what the walk adds to the seed, over the terms of a row: the total it adds up, or
  *                that total taken away
- * @param factors how many paths of an element each part multiplies, one where it is a path alone
+ * @param factors the most paths of an element any product on the way to a part multiplies, one
+ *                where none is multiplied
  */
 public record DecimalAdditiveWalk(BigDecimal seed, DecimalOperation.Formed added, int factors)
         implements DecimalWork {

@@ -506,13 +506,31 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether the stopped expression is a quotient and where the operator's"
                             + " own account says it answers, so that its operands are told with"
                             + " the rest"),
-            new Held("souther.compiler.partition.AddedOfEachElement.ofTheStep",
-                    "asks whether a walk's step is the answer so far with a part of the element"
-                            + " added or taken away, as it is written: an operation not written is"
-                            + " one no run can stop at"),
+            new Held("souther.compiler.partition.AddedOfEachElement.partOf",
+                    "reads what a step or a closure works out of each element as the tree of"
+                            + " operations it is written as: an operation not written is one no"
+                            + " run can stop at, and one written is one a run works out"),
+            new Held("souther.compiler.partition.AddedOfEachElement.Worked#op",
+                    "the operation a step works out of two parts of an element, held in the"
+                            + " order it is written"),
+            new Held("souther.compiler.partition.AddedOfEachElement.Worked.<init>",
+                    "refuses an operation of an element's part that is no sum, difference or"
+                            + " product"),
+            new Held("souther.compiler.partition.AddedOfEachElement.Worked.op",
+                    "hands out the operation a step works out of two parts"),
+            new Held("souther.compiler.partition.AddedOfEachElement.ofAJoin",
+                    "makes what the walk joining two maps works out of each entry: the answer so"
+                            + " far plus a product"),
+            new Held("souther.compiler.partition.AddedOfEachElement.addsTo",
+                    "asks whether the answer so far is added along sums and differences from"
+                            + " the top, and taken from nothing"),
             new Held("souther.compiler.partition.AddedOfEachElement.factorsOf",
-                    "asks whether an expression is paths of the one element multiplied and"
-                            + " nothing else, so that the product is worked out as it is written"),
+                    "counts the paths a product on the way multiplies, a sum or a difference"
+                            + " being at the greater of its operands' scales"),
+            new Held("souther.compiler.partition.AddedOfEachElement.Checker.checked",
+                    "works out what each operation of an element's part comes to from what its"
+                            + " operands do, and asks whether a sum with the answer so far from"
+                            + " nought is the total"),
             new Held("souther.compiler.inputs.WrittenOperation.operandsOf",
                     "asks whether an expression is one sum, difference or product of whole numbers"
                             + " or decimals, by the operator or the library's operation"),

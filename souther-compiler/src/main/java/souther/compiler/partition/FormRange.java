@@ -236,6 +236,13 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         return least == null ? null : new FormRange(least, greatest);
     }
 
+    /** The numbers this holds that lie no further out than {@code min} and {@code max}, each
+     *  read as the number it is at whether it is reached or not; an end that is no number
+     *  narrows nothing. */
+    FormRange narrowedTo(Endpoint min, Endpoint max) {
+        return new FormRange(tighter(least, min, true), tighter(greatest, max, false));
+    }
+
     /** Whether every number this holds lies from {@code least} to {@code greatest}. */
     boolean liesWithin(BigInteger leastAllowed, BigInteger greatestAllowed) {
         return least.compareTo(ExactRatio.of(leastAllowed)) >= 0

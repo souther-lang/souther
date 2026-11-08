@@ -145,6 +145,41 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
     }
 
     /**
+     * What each element adds may be fields of it added or taken one from another, by the
+     * operator or the library's operation, in a closure or a step, either way round the answer so
+     * far is added to. Each such operation is at the greater of its operands' scales, so the walk
+     * is the same walk as one adding a field. A closure that reads a name for its part is not
+     * read.
+     */
+    @Test
+    void anElementsPartOfSeveralFieldsIsTheSameWalk() {
+        String inputs = "lines: List<Line>, c: Amount";
+        for (String[] each : List.of(
+                new String[] {"List.sum({1·price + 1·qty + 0 | lines[*]})",
+                        "List.sum(List.map(l -> Decimal.add(l.price.value, l.qty.value), lines))"},
+                new String[] {"List.sum({1·price + -1·qty + 0 | lines[*]})",
+                        "List.sum(List.map(l -> Decimal.subtract(l.price.value, l.qty.value),"
+                                + " lines))"},
+                new String[] {"List.sum({1·price + -1·qty + 0 | lines[*]})",
+                        "List.fold((acc, l) -> Decimal.add(acc, Decimal.subtract(l.price.value,"
+                                + " l.qty.value)), 0.0m, lines)"},
+                new String[] {"List.sum({1·price + -1·qty + 0 | lines[*]})",
+                        "List.fold((acc, l) -> acc + l.price.value - l.qty.value, 0.0m, lines)"},
+                new String[] {"List.sum({1·price + 1·qty + 0 | lines[*]})",
+                        "List.fold((acc, l) -> Decimal.add(Decimal.add(acc, l.price.value),"
+                                + " l.qty.value), 0.0m, lines)"})) {
+            String report = report(inputs, "Decimal.compare(%s, c.value) <= 0".formatted(each[1]));
+            assertEquals(Set.of(each[0], "c"), related(report), () -> each[1] + report);
+        }
+        String named = report(inputs, """
+                Decimal.compare(List.sum(List.map(l -> {
+                        let d = Decimal.subtract(l.price.value, l.qty.value)
+                        d
+                    }, lines)), c.value) <= 0""");
+        assertEquals(Set.of(), related(named), named);
+    }
+
+    /**
      * Two totals of one list, added, are named by the comparison as the one total of what each
      * element comes to. The operations read the two, which a row holds by the list it is built
      * with and not as terms of its own, and a row of one element writes what the one total takes.

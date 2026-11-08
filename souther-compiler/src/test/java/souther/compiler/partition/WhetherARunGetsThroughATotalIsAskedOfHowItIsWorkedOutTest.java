@@ -648,4 +648,40 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
         assertEquals(Set.of("List.sum(ns)", "gross"), related(ofInts), ofInts);
         assertFalse(ofInts.contains("every run stops"), ofInts);
     }
+
+    /**
+     * What each element adds may be two of its fields, one taken from the other, and each
+     * operation that works it out is one a run can stop at, in the order it is written. Over
+     * fields at nought or more {@code p - q} is within the type, so a total of it and a walk from
+     * nought adding it are read. From ten, {@code acc + (p - q)} still is on a row of one element,
+     * while {@code acc + p - q} works out {@code 10 + p} first, which passes the type where
+     * {@code p} is the greatest {@code Int}. Over every {@code Int} the difference from ten stops
+     * where the total does not. A closure that reads a name for its part is not read.
+     */
+    @Test
+    void anElementsPartOfTwoFieldsIsWorkedOutInTheOrderItIsWritten() {
+        String declarations = NAT + "\ndata Two = { p: Nat, q: Nat }\n" + UNUSED
+                + "\ndata AnyTwo = { p: Unused, q: Unused }";
+        String total = "List.sum({1·p + -1·q + 0 | ls[*]})";
+        for (String body : List.of(
+                "List.sum(List.map(l -> l.p.value - l.q.value, ls)) <= c",
+                "List.sum(List.map(l -> Int.subtract(l.p.value, l.q.value), ls)) <= c",
+                "List.fold((acc, l) -> acc + l.p.value - l.q.value, 0, ls) <= c",
+                "List.fold((acc, l) -> acc + (l.p.value - l.q.value), 0, ls) <= c")) {
+            String report = report("ls: List<Two>, c: Int", declarations, body);
+            assertEquals(Set.of(total, "c"), related(report), () -> body + report);
+        }
+        String fromTen = report("ls: List<Two>, c: Int", declarations,
+                "List.fold((acc, l) -> acc + (l.p.value - l.q.value), 10, ls) <= c");
+        assertTrue(related(fromTen).contains("c"), fromTen);
+        for (String body : List.of(
+                "List.fold((acc, l) -> acc + l.p.value - l.q.value, 10, ls) <= c",
+                "List.sum(List.map(l -> { let d = l.p.value - l.q.value\n d }, ls)) <= c")) {
+            String report = report("ls: List<Two>, c: Int", declarations, body);
+            assertEquals(Set.of(), related(report), () -> body + report);
+        }
+        String overEveryInt = report("ls: List<AnyTwo>, c: Int", declarations,
+                "List.fold((acc, l) -> acc + (l.p.value - l.q.value), 10, ls) <= c");
+        assertEquals(Set.of(), related(overEveryInt), overEveryInt);
+    }
 }

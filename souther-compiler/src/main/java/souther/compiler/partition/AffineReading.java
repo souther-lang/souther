@@ -1122,26 +1122,31 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // a binding of one of them is answered for here.
                     // A total of what a closure makes of each element is told as a walk from
                     // nought: the library adds the decimals up exactly, at the scale such a walk
-                    // ends at. An Int total of products is told with what the products make of
-                    // each element left to the running totals.
+                    // ends at. An Int total is told as the one operation it is, where what the
+                    // closure works out of each element gets through; where it is shown to only
+                    // on a row of one element, what it works out is left to the running totals.
                     if (!NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, numbers,
                             ofTheInput, at)) {
                         NumericTerm total = addedAsItIs(numbers);
                         Core.Block closure = total == null ? null : theClosureOfASum(node);
                         AddedOfEachElement each = closure == null ? null
-                                : AddedOfEachElement.ofTheTotal(total);
-                        if (each == null || !each.equals(AddedOfEachElement.ofAClosure(closure,
-                                ruleSource.symbols()))
-                                || !preparedWithoutAStop(node, at, closure, node)) {
+                                : AddedOfEachElement.ofAClosure(closure, ruleSource.symbols());
+                        if (each == null || !preparedWithoutAStop(node, at, closure, node)) {
                             told.exact = false;
                         } else if (Core.withoutStanding(node).type() == Type.DECIMAL) {
                             told.walksAddingDecimals(numbers, BigDecimal.ZERO,
                                     asTheRelationNamesIt(total), each.factors());
-                        } else if (total instanceof NumericTerm.TakenOver && each.factors() >= 2) {
-                            tellAnIntTotal(node, numbers, List.of());
-                            told.partials.add(total);
-                        } else {
+                        } else if (!(total instanceof NumericTerm.TakenOver)) {
                             told.exact = false;
+                        } else {
+                            switch (throughOverWholeNumbers(each, BigInteger.ZERO)) {
+                                case EVERY_ROW -> tellAnIntTotal(node, numbers, List.of());
+                                case A_ROW_OF_ONE_ELEMENT -> {
+                                    tellAnIntTotal(node, numbers, List.of());
+                                    told.partials.add(total);
+                                }
+                                case NOT_SHOWN -> told.exact = false;
+                            }
                         }
                     }
                     told.readByATerm(node);
@@ -1685,7 +1690,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 NumericTerm total = addedAsItIs(walk.added());
                 AddedOfEachElement each = total == null ? null : joinsTwoMaps(total)
-                        ? AddedOfEachElement.ofTheTotal(total) : addedByTheStep(seeded, total);
+                        ? AddedOfEachElement.ofAJoin()
+                        : AddedOfEachElement.ofTheStep(seeded, ruleSource.symbols());
                 if (seeded.step().body().type() == Type.DECIMAL) {
                     BigDecimal seed = aDecimalWrittenOut(seeded.seed());
                     if (seed == null || each == null) {
@@ -1695,19 +1701,59 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             each.factors());
                     return true;
                 }
-                if (!(Core.withoutStanding(seeded.seed()) instanceof Core.Int)) {
+                if (!(Core.withoutStanding(seeded.seed()) instanceof Core.Int seed)) {
                     return false;
                 }
                 if (addsAWrittenWholeNumber(seeded)) {
                     tellAnIntTotal(node, answer, List.of());
                     return true;
                 }
-                if (each != null) {
+                if (each != null && throughOverWholeNumbers(each, BigInteger.valueOf(seed.value()))
+                        != AddedOfEachElement.Through.NOT_SHOWN) {
                     tellAnIntTotal(node, answer, List.of());
                     told.partials.add(total);
                     return true;
                 }
                 return false;
+            }
+
+            /**
+             * How far what {@code each} works out of an element gets through from {@code seed}
+             * within the ends of an {@code Int} ({@link AddedOfEachElement#overWholeNumbers}),
+             * each path of the element coming to what {@link #rangeOfAPath} answers.
+             */
+            private AddedOfEachElement.Through throughOverWholeNumbers(
+                    AddedOfEachElement each, BigInteger seed) {
+                if (!(WhereAnOperatorAnswers.ofATotal(Type.INT)
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held)) {
+                    return AddedOfEachElement.Through.NOT_SHOWN;
+                }
+                FormRange ofTheType = new FormRange(ExactRatio.of(held.least()),
+                        ExactRatio.of(held.greatest()));
+                return each.overWholeNumbers(seed, path -> rangeOfAPath(path, ofTheType),
+                        held.least(), held.greatest());
+            }
+
+            /**
+             * The numbers {@code path}, a path of an element over whole numbers, comes to: within
+             * {@code ofTheType}, and within where the rules of the type it is the value of stop it
+             * ({@link DeclaredBounds#of}) where it is the value a newtype wraps.
+             */
+            private FormRange rangeOfAPath(Core path, FormRange ofTheType) {
+                Core.FieldAccess access = switch (Core.withoutStanding(path)) {
+                    case Core.FieldAccess one -> one;
+                    case Core.FieldProjection projection -> projection.lastAccess();
+                    default -> null;
+                };
+                if (access == null || !"value".equals(access.field())
+                        || !(Core.withoutStanding(access.target()).type() instanceof Type.Ref)) {
+                    return ofTheType;
+                }
+                DeclaredBounds.Range rules = DeclaredBounds.of(
+                        TypeView.asWritten(Core.withoutStanding(access.target()).type(),
+                                symbols(), declarations().kinds(), declarations().sums()),
+                        ofTheInput.ruleReading());
+                return rules == null ? ofTheType : ofTheType.narrowedTo(rules.min(), rules.max());
             }
 
             /**
@@ -1777,18 +1823,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
-             * What {@code walk} adds of each element where its step adds to the answer so far, or
-             * takes from it, what {@code total} adds up of the element and works out nothing else
-             * ({@link AddedOfEachElement}); null otherwise.
-             */
-            private AddedOfEachElement addedByTheStep(SeededWalk walk, NumericTerm total) {
-                AddedOfEachElement each = AddedOfEachElement.ofTheTotal(total);
-                return walk != null && each != null
-                        && each.equals(AddedOfEachElement.ofTheStep(walk, ruleSource.symbols()))
-                        ? each : null;
-            }
-
-            /**
              * {@code total} as the form of the comparison names it: the totals of one run over a
              * type with no ends are read as the one total of what each element comes to
              * ({@link TotalsOfOneRun#addedUp}), so a total of what is taken away is that total of
@@ -1820,9 +1854,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /**
              * The total of a container that {@code added} is, at the weight one, where it adds up
-             * a part of each element written as a path of it or a product of paths, or is the
-             * walk joining two maps ({@link AddedOfEachElement#ofTheTotal}) — or null where it
-             * adds anything beside that.
+             * a number of each element, or is the walk joining two maps
+             * ({@link AddedOfEachElement#addsUpEachElement}) — or null where it adds anything
+             * beside that.
              */
             private static NumericTerm addedAsItIs(LinearForm<NumericTerm> added) {
                 if (added.coefs().size() != 1 || !added.constant().isZero()) {
@@ -1830,7 +1864,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 Map.Entry<NumericTerm, ExactRatio> only = added.coefs().entrySet().iterator().next();
                 return ExactRatio.ONE.equals(only.getValue())
-                        && AddedOfEachElement.ofTheTotal(only.getKey()) != null
+                        && AddedOfEachElement.addsUpEachElement(only.getKey())
                         ? only.getKey() : null;
             }
 
@@ -2328,8 +2362,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /**
-         * Tells a walk adding {@code added} to {@code seed}, a part of each element multiplying
-         * {@code factors} paths of it ({@link DecimalAdditiveWalk}), as what {@code answer} is
+         * Tells a walk adding {@code added} to {@code seed}, a product on the way to the part of
+         * each element multiplying at most {@code factors} paths of it
+         * ({@link DecimalAdditiveWalk}), as what {@code answer} is
          * worked out by. The walk is worked out of the seed and the input alone.
          */
         void walksAddingDecimals(LinearForm<NumericTerm> answer, BigDecimal seed,
