@@ -199,11 +199,11 @@ final class ContainersAddingUp {
                                 Set.of(CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR)),
                         null);
             }
-            // Each way is tried with the fields it holds still at each of the values it holds them
-            // at, until one writes the total.
+            // Each way is tried with the fields it holds still at the values it holds them at for
+            // this total, until one writes it.
             return throughEach(ways, way -> {
-                List<FieldSolved> settled = way.settledIn(within);
-                if (settled.isEmpty()) {
+                FieldSolved solved = way.settledIn(within, answer);
+                if (solved == null) {
                     // A field held still at no value the region leaves it is a way this did not
                     // try, which is not the region leaving the total no row.
                     return new TermRealizations.Realization.Unexhausted(
@@ -211,9 +211,9 @@ final class ContainersAddingUp {
                                     CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL)),
                             "no value held the other fields of the elements still");
                 }
-                return throughEach(settled, solved -> walkedInPartWhereHeldStill(solved,
-                        composedThrough(solved, answer, container, keptApart, orders, within,
-                                reading, alsoHolding, alsoAddingUp, inside)));
+                return walkedInPartWhereHeldStill(solved, composedThrough(solved, answer,
+                        container, keptApart, orders, within, reading, alsoHolding,
+                        alsoAddingUp, inside));
             });
         }
         return composedThrough(null, answer, container, keptApart, orders, within, reading,
@@ -950,75 +950,138 @@ final class ContainersAddingUp {
 
         /**
          * This way with the fields it fixes at values {@code within} leaves each of them, and the
-         * weight and constant worked out at those values, once for each way of fixing them —
-         * none where the region leaves some fixed field no value, or none that leaves the field
-         * solved for in the sum.
+         * weight and constant worked out at those values — or null where the region leaves some
+         * fixed field no value, or none that leaves the field solved for in the sum.
          *
-         * <p>First at one where the region holds it, since then the field solved for is weighed by
-         * what the products weigh it by and nothing else, or otherwise at the whole number nearest
-         * one the region leaves; then at each end of the region's run that is a whole number. A
-         * total one element comes to over fields added or taken away is then written wherever the
-         * fields' runs reach it: with the field of the widest run solved for and the rest at their
-         * ends, what is left for it to come to lies within its run. A way that takes the field
-         * solved for out of every product it is in, as nought may, is no way of solving for it.
+         * <p>Where every product is of one field — a form of several fields added or taken away —
+         * the values are worked out of {@code total} ({@link FieldsHeldForATotal}): the fields
+         * held then add what leaves the field solved for to make up the rest within its run, for
+         * as few elements as do. That is every total the fields' runs reach, which is what the
+         * reading of such a total says it takes.
+         *
+         * <p>A product of fields is held at one where the region holds it, since then the field
+         * solved for is weighed by what the products weigh it by and nothing else, or otherwise at
+         * the whole number nearest one the region leaves; that is the value the reading of such a
+         * total takes the rest at. A way that takes the field solved for out of every product it
+         * is in, as nought may, is no way of solving for it.
          */
-        List<FieldSolved> settledIn(SearchRegion within) {
+        FieldSolved settledIn(SearchRegion within, Place total) {
             if (fixing == null) {
-                return List.of(this);
+                return this;
             }
-            List<Map<ElementProjection, ExactRatio>> ways = new ArrayList<>();
-            ways.add(new LinkedHashMap<>());
+            Map<ElementProjection, NumericDomain.Bounds> runs = new LinkedHashMap<>();
             for (ElementProjection other : fixing.at().keySet()) {
                 if (!(within.projectionOf(new NumericTerm.ValueOf(other.from(fixing.elements())))
                         instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held))) {
-                    return List.of();
+                    return null;
                 }
-                List<ExactRatio> values = heldAt(held == null ? NumericDomain.Bounds.OPEN : held);
-                if (values.isEmpty()) {
-                    return List.of();
-                }
-                List<Map<ElementProjection, ExactRatio>> wider = new ArrayList<>();
-                for (Map<ElementProjection, ExactRatio> way : ways) {
-                    for (ExactRatio value : values) {
-                        Map<ElementProjection, ExactRatio> at = new LinkedHashMap<>(way);
-                        at.put(other, value);
-                        wider.add(at);
-                    }
-                }
-                ways = wider;
+                runs.put(other, held == null ? NumericDomain.Bounds.OPEN : held);
             }
-            List<FieldSolved> out = new ArrayList<>();
-            for (Map<ElementProjection, ExactRatio> at : ways) {
-                LinearForm<ElementProjection> left =
-                        ElementValue.solvedThrough(fixing.products(), fixing.free(), at);
-                ExactRatio weighs = left == null ? null : left.coefs().get(fixing.free());
-                if (weighs != null && !weighs.isZero()) {
-                    out.add(new FieldSolved(field, carrier, weighs, left.constant(), ofOneCase,
-                            kept, ofTheCase, new Fixing(fixing.products(), fixing.free(),
-                                    fixing.elements(), at)));
-                }
+            Map<ElementProjection, ExactRatio> at = fixing.products().coefs().keySet().stream()
+                    .allMatch(each -> each.rounding() == null && each.fields().size() == 1)
+                    ? heldForTheTotal(runs, within, total) : heldAtOne(runs);
+            if (at == null) {
+                return null;
             }
-            return out;
+            LinearForm<ElementProjection> left =
+                    ElementValue.solvedThrough(fixing.products(), fixing.free(), at);
+            ExactRatio weighs = left == null ? null : left.coefs().get(fixing.free());
+            if (weighs == null || weighs.isZero()) {
+                return null;
+            }
+            return new FieldSolved(field, carrier, weighs, left.constant(), ofOneCase, kept,
+                    ofTheCase, new Fixing(fixing.products(), fixing.free(), fixing.elements(), at));
         }
 
-        /** The values a field held still is held at where {@code left} is its run: one, or the
-         *  whole number nearest it that is not nought, then each end that is a whole number the
-         *  run holds, each once. */
-        private static List<ExactRatio> heldAt(NumericDomain.Bounds left) {
-            List<ExactRatio> out = new ArrayList<>();
-            ExactRatio one = nearestOne(left);
-            if (one != null) {
-                out.add(one);
+        /** Each field of {@code runs} at one, or the whole number nearest it its run holds — or
+         *  null where some run holds none. */
+        private static Map<ElementProjection, ExactRatio> heldAtOne(
+                Map<ElementProjection, NumericDomain.Bounds> runs) {
+            Map<ElementProjection, ExactRatio> at = new LinkedHashMap<>();
+            for (Map.Entry<ElementProjection, NumericDomain.Bounds> each : runs.entrySet()) {
+                ExactRatio value = nearestOne(each.getValue());
+                if (value == null) {
+                    return null;
+                }
+                at.put(each.getKey(), value);
             }
-            for (boolean lower : new boolean[] {true, false}) {
-                Endpoint end = lower ? left.min() : left.max();
-                BigInteger whole = end == null ? null : end.wholeAdmitted(lower);
-                ExactRatio at = whole == null ? null : ExactRatio.of(whole);
-                if (at != null && left.admits(at) && !out.contains(at)) {
-                    out.add(at);
+            return at;
+        }
+
+        /**
+         * The fields of {@code runs}, each held at one value in every element, where they are
+         * fields of a form added up to {@code total} with the field solved for, whose run
+         * {@code within} says ({@link FieldsHeldForATotal#heldFor}) — or null where no values do.
+         */
+        private Map<ElementProjection, ExactRatio> heldForTheTotal(
+                Map<ElementProjection, NumericDomain.Bounds> runs, SearchRegion within,
+                Place total) {
+            if (!(total instanceof Count count)
+                    || !(within.projectionOf(new NumericTerm.ValueOf(field))
+                            instanceof NumericDomain.FormProjection.Within(
+                                    NumericDomain.Bounds freeRun))) {
+                return null;
+            }
+            Map<ElementProjection, FieldsHeldForATotal.Field> held = new LinkedHashMap<>();
+            for (Map.Entry<ElementProjection, NumericDomain.Bounds> each : runs.entrySet()) {
+                FieldsHeldForATotal.Field one = weighed(fixing.products(), each.getKey(),
+                        each.getValue(), carrier);
+                if (one == null) {
+                    return null;
+                }
+                held.put(each.getKey(), one);
+            }
+            FieldsHeldForATotal.Field free = weighed(fixing.products(), fixing.free(),
+                    freeRun == null ? NumericDomain.Bounds.OPEN : freeRun, carrier);
+            Map<ElementProjection, ExactRatio> at = free == null ? null
+                    : FieldsHeldForATotal.heldFor(held, free, fixing.products().constant(),
+                            count.exactly(), carrier.spacing() == Granularity.DISCRETE,
+                            value -> DecimalOperation.writtenForARow(value)
+                                    instanceof ExactAnswer.Held<Optional<BigDecimal>>(var written)
+                                    && written.isPresent());
+            // An end left out on an order with no step beside it is taken as it stands; a value
+            // held there is no value of the run, and the way is not taken.
+            if (at != null) {
+                for (Map.Entry<ElementProjection, ExactRatio> each : at.entrySet()) {
+                    if (!runs.get(each.getKey()).admits(each.getValue())) {
+                        return null;
+                    }
                 }
             }
-            return out;
+            return at;
+        }
+
+        /**
+         * {@code field} of {@code products}, at its weight there and between the ends of
+         * {@code run} a value of the field may stand at on {@code carrier}
+         * ({@link Ends#inward}) — an end left out with no value beside it taken as it stands.
+         * Null where it weighs nothing, or an end is at no number.
+         */
+        private static FieldsHeldForATotal.Field weighed(
+                LinearForm<ElementValue.Monomial> products, ElementProjection field,
+                NumericDomain.Bounds run, Carrier carrier) {
+            ExactRatio weight = products.coefs().get(ElementValue.Monomial.of(Set.of(field)));
+            if (weight == null || weight.isZero()) {
+                return null;
+            }
+            ExactRatio least = run.min() == null ? null : endAt(run.min(), true, carrier);
+            ExactRatio greatest = run.max() == null ? null : endAt(run.max(), false, carrier);
+            if ((run.min() != null && least == null) || (run.max() != null && greatest == null)
+                    || (least != null && greatest != null && least.compareTo(greatest) > 0)) {
+                return null;
+            }
+            return new FieldsHeldForATotal.Field(weight, least, greatest);
+        }
+
+        /** The value at or inside {@code end} a field on {@code carrier} may stand at, from
+         *  below where {@code lower}; the end as it stands where the order names none beside
+         *  it. */
+        private static ExactRatio endAt(Endpoint end, boolean lower, Carrier carrier) {
+            Count inside = Ends.inward(end, carrier, lower);
+            if (inside != null) {
+                return inside.exactly();
+            }
+            return end.at() instanceof Count count ? count.exactly() : null;
         }
 
         /** One where {@code left} holds it, and otherwise the whole number nearest it that

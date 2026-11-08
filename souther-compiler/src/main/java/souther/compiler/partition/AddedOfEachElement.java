@@ -435,6 +435,13 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                     return new Named(read.binding());
                 }
             }
+            // A negation is an operation and stops a run where it passes the type, as nought less
+            // the number does: the least whole number has no negation.
+            if (bare instanceof Core.Neg negated) {
+                Part operand = partOf(negated.operand());
+                return operand == null ? null
+                        : new Worked(BinOp.SUB, new Written(BigDecimal.ZERO), operand);
+            }
             BigDecimal written = writtenOut(bare);
             if (written != null) {
                 return new Written(written);
@@ -474,10 +481,6 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
             return switch (Core.withoutStanding(e)) {
                 case Core.Int written -> BigDecimal.valueOf(written.value());
                 case Core.Decimal written -> written.value();
-                case Core.Neg negated -> {
-                    BigDecimal inside = writtenOut(negated.operand());
-                    yield inside == null ? null : inside.negate();
-                }
                 default -> null;
             };
         }

@@ -310,11 +310,11 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
     }
 
     /**
-     * Held at one value in every element, a field of a product of two values that are two or
-     * three makes the total a multiple of the value it is held at: even with it at two, a multiple
-     * of three with it at three. Thirteen is neither, and is a total such a list comes to all the
-     * same — two times two and three times three. So the point beside the line at fourteen is said
-     * as one the search walked some of the containers for, and not as one no container comes to.
+     * Held at one value in every element — two, the whole number nearest one its declaration
+     * leaves — a field of a product of two values that are two or three makes the total even.
+     * Thirteen is not, and is a total such a list comes to all the same — two times two and three
+     * times three. So the point beside the line at fourteen is said as one the search walked some
+     * of the containers for, and not as one no container comes to.
      */
     @Test
     void aPointTheFieldsHeldStillDoNotReachIsNoPointNothingReaches() {
@@ -329,22 +329,6 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
         assertFalse(thirteen.contains("no value can stand there"), thirteen);
     }
 
-    /**
-     * A field held still is held at one, or the whole number nearest it its declaration leaves,
-     * and at each end of what the declaration leaves it: nine, three times three, is written with
-     * the field at three, which a field held only at two does not reach.
-     */
-    @Test
-    void aFieldHeldStillIsHeldAtEachEndOfItsRunAsWell() {
-        String model = HELD_STILL.replace("data Line", "data P = Int\n    invariant value >= 2"
-                + " && value <= 3\ndata Line").formatted("P", "x.p.value", 10);
-        String report = report(measured(model));
-        String nine = report.lines().filter(line -> line.contains("List.sum({1·p·q + 0 | xs[*]})")
-                && line.contains(": = 9")).findFirst().orElse("");
-        assertFalse(nine.contains("the containers whose elements differ"), report);
-        String rows = rowsOf(measured(model));
-        assertTrue(rows.contains("q = Q(3)"), rows);
-    }
 
     private static final String PARENTHESISED = """
             module p

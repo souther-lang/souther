@@ -46,6 +46,8 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
     private static final AddedOfEachElement.Part SO_FAR = new AddedOfEachElement.SoFar();
     private static final AddedOfEachElement.Part THREE =
             new AddedOfEachElement.Written(BigDecimal.valueOf(3));
+    private static final AddedOfEachElement.Part NOUGHT =
+            new AddedOfEachElement.Written(BigDecimal.ZERO);
     private static final BindingId D = new BindingId(new BindingOwner.OfValue("w1", "m"), 0);
     private static final AddedOfEachElement.Part NAMED_D = new AddedOfEachElement.Named(D);
     private static final List<long[]> RANGES = List.of(
@@ -295,6 +297,11 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
         }
         for (AddedOfEachElement.Part part : parts(2, List.of(PATH_P, PATH_Q, SO_FAR, THREE))) {
             addIfAStep(out, List.of(), part);
+        }
+        // A negation is held as nought less the number, and asked as any difference is.
+        for (AddedOfEachElement.Part part : parts(1, List.of(PATH_P, PATH_Q, SO_FAR))) {
+            addIfAStep(out, List.of(), worked(BinOp.SUB, NOUGHT, part));
+            addIfAStep(out, List.of(), worked(BinOp.ADD, SO_FAR, worked(BinOp.SUB, NOUGHT, part)));
         }
         for (AddedOfEachElement.Part value : parts(2, List.of(PATH_P, PATH_Q, THREE))) {
             List<AddedOfEachElement.Bound> bound = List.of(new AddedOfEachElement.Bound(D, value));
