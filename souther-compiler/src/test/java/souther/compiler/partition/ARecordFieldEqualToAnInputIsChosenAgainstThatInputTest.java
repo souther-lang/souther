@@ -136,13 +136,13 @@ class ARecordFieldEqualToAnInputIsChosenAgainstThatInputTest {
 
     /**
      * A number taken of an input stands at a place on the order its answer is measured on, and is
-     * not what the input holds: the year of a date is no date. A row is not written holding the
-     * one as the other, so a statement reading the date is not read as failing of it; it is not
-     * read, and the report says the elements chosen for the count are some and not all of them.
+     * not what the input holds: the year of a date is no date. So the elements are chosen against
+     * the year where it was fixed, read as that number and never written as the date, and the date
+     * is written by its own term: rows are composed on each side of the line, and run as examples
+     * they answer what they say.
      */
     @Test
-    void aNumberTakenOfAnInputIsNotWrittenAsTheInputItIsTakenOf() {
-        String notRead = "writes some of the elements chosen for how many of them meet a statement";
+    void aNumberTakenOfAnInputIsReadWhereItWasFixedAndNotWrittenAsTheInput() {
         for (String model : List.of("""
                 module example.popular
 
@@ -161,9 +161,34 @@ class ARecordFieldEqualToAnInputIsChosenAgainstThatInputTest {
                     List.length(List.filter(x -> x.weight == Date.year(d), xs)) >= 3
                 """)) {
             Compilation compilation = measured(model);
-            assertTrue(report(compilation).contains(notRead), () -> report(compilation));
+            List<Long> meeting = new ArrayList<>();
+            StringBuilder examples = new StringBuilder("\nexample popular\n");
+            int named = 0;
+            for (List<String> row : Adequacy.offeredFor(compilation.db(),
+                            OfferingRequest.overTheModule("example.popular"))
+                    .rowsByBehavior().getOrDefault("popular", List.of()).stream()
+                    .map(each -> each.inputs().stream().map(FixtureTemplate::text).toList())
+                    .toList()) {
+                Matcher year = YEAR.matcher(row.get(1));
+                assertTrue(year.find(), () -> "a date this reads the year of: " + row);
+                long held = NUMBER.matcher(row.get(0)).results()
+                        .filter(each -> each.group(1).equals(year.group(1))).count();
+                meeting.add(held);
+                examples.append("    | \"row ").append(named++).append("\" : (")
+                        .append(String.join(", ", row)).append(") -> ").append(held >= 3)
+                        .append("\n");
+            }
+            assertTrue(meeting.containsAll(List.of(2L, 3L)), meeting::toString);
+            Compilation run = measured(model + examples);
+            assertEquals(List.of(), unmetOf(run), () -> report(run));
         }
     }
+
+    /** The year a date is written with. */
+    private static final Pattern YEAR = Pattern.compile("(-?\\d{4,})-\\d\\d-\\d\\d");
+
+    /** A whole number a list is written holding, alone or as a field. */
+    private static final Pattern NUMBER = Pattern.compile("(?<![\\w-])(-?\\d+)(?![\\w-])");
 
     private static String examples(List<Row> rows) {
         StringBuilder written = new StringBuilder("\nexample popular\n");

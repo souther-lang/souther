@@ -12,6 +12,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -64,6 +65,11 @@ class AJoinIsReadAsWhatItIsAtTheRowTest {
     private static BorderQuantity.Observation row(List<Entry> agreed, List<Entry> prices) {
         return new BorderQuantity.Observation() {
             @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
+
+            @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
                 throw new AssertionError("a join is read entry by entry: " + path);
             }
@@ -87,6 +93,11 @@ class AJoinIsReadAsWhatItIsAtTheRowTest {
     /** An entry of the map at {@code map}, read at its key and at its value. */
     private static BorderQuantity.Observation entryOf(TermPath map, Entry entry) {
         return new BorderQuantity.Observation() {
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
+
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
                 if (path.equals(map.key())) {

@@ -182,18 +182,42 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.ACountHandedOn#<clinit>()V",
                     "how far a count handed on is looked for, which the composer says as that"
                             + " figure where none was found below it"),
-            Map.entry("souther.compiler.partition.CardinalityComposer#compose("
-                            + "Lsouther/compiler/types/Type;Ljava/util/List;Ljava/util/List;"
-                            + "Ljava/util/List;Ljava/util/SequencedMap;"
-                            + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
-                            + "Ljava/util/List;Lsouther/compiler/inputs/Quantities;"
+            // The numbers of a container as a whole a count is composed against: each figure is
+            // handed over as the remainder of the numbers it is tried at, which the composing
+            // says in what it comes back with.
+            Map.entry("souther.compiler.partition.ContainerAsAWhole#<clinit>()V",
+                    "how many values of each run a total is tried at, how many elements a"
+                            + " container is composed with, how many runs of what its elements"
+                            + " can come to are kept, and how many values an element is tried"
+                            + " moved to"),
+            Map.entry("souther.compiler.partition.ContainerAsAWhole#choices()"
+                            + "Lsouther/compiler/partition/TermRealizations$Together;",
+                    "puts the most elements a container is composed with in what the choices"
+                            + " fell short of, where holding the container to it took a number"
+                            + " of the whole away"),
+            Map.entry("souther.compiler.partition.ContainerAsAWhole$Sized#spread("
+                            + "Ljava/util/List;Ljava/util/List;ILjava/util/function/Function;"
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;)"
+                            + "Ljava/util/List;",
+                    "stops at the runs kept of what the elements can come to, or at the values"
+                            + " an element is tried moved to, and puts that figure in the set it is"
+                            + " handed"),
+            Map.entry("souther.compiler.partition.ContainerAsAWhole#turningOn("
+                            + "Lsouther/compiler/inputs/NumericTerm;Ljava/util/List;"
+                            + "Ljava/util/Map;Lsouther/compiler/inputs/Quantities;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
-                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
-                    "stops at a size or at the containers offered, and hands the figure over in"
-                            + " the shortfall it comes back with"),
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "stops at the values of each run tried and hands the figure over as what is"
+                            + " left of them"),
+            Map.entry("souther.compiler.partition.ContainerAsAWhole#sizes("
+                            + "Lsouther/compiler/check/DeclaredBounds$CountRange;"
+                            + "Lsouther/compiler/partition/NumericSet;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "stops at the most elements a container is composed with and hands the"
+                            + " figure over as what is left of the sizes"),
             Map.entry("souther.compiler.partition.CardinalityComposer#amongItsValues("
-                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Ljava/util/SequencedMap;Lsouther/compiler/inputs/TermPath;"
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/TypeView;"
@@ -207,34 +231,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the values an element is chosen among, at a size, at the sharings"
                             + " looked at or at the containers offered, and hands the figure over"
                             + " in the shortfall it comes back with"),
-            // Counts composed against the total of their container: each figure is read where the
-            // search it bounds is, and said under its own name in what the composing comes back
-            // with.
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer#<clinit>()V",
-                    "how many elements a container is composed with, how many containers are"
-                            + " offered, how many ways of sharing its elements out are looked at"
-                            + " and how many totals each is tried at"),
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition#run()"
-                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
-                    "says the sizes walked to the end and the values an element is listed at in"
-                            + " what it comes back with"),
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
-                            + "#totalsIn(Lsouther/compiler/partition/TotalsASharingCanComeTo"
-                            + "$Interval;)Ljava/util/List;",
-                    "stops at the totals tried for a sharing, and puts that figure in what it"
-                            + " comes back with"),
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
-                            + "#walk(Ljava/util/List;)V",
-                    "stops at the ways of sharing out looked at, every one that was not dropped,"
-                            + " whole or part, and puts the figure in what it comes back with"),
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
-                            + "#offer(Ljava/util/List;)Z",
-                    "stops at the containers offered, and puts the figure in what it comes back"
-                            + " with"),
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer$Composition"
-                            + "#walkTheElements()Z",
-                    "says the values of an element that were not all listed in what it comes back"
-                            + " with"),
             Map.entry("souther.compiler.partition.CardinalityComposer$UnderEachValue#of("
                             + "ILjava/util/function/IntFunction;Ljava/util/function/Function;"
                             + "Lsouther/compiler/inputs/TermPath;"

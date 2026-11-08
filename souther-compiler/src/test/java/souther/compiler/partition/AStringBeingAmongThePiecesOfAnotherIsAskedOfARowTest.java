@@ -10,6 +10,7 @@ import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
@@ -208,6 +209,11 @@ class AStringBeingAmongThePiecesOfAnotherIsAskedOfARowTest {
     private static AStatementAtARow.Answer answered(Proposition stated,
                                                     Map<TermPath, ObservationAtPoint> walked) {
         return AStatementAtARow.of(stated, "f", null).at(new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

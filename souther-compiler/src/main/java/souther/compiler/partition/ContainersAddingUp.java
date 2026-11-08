@@ -442,10 +442,20 @@ final class ContainersAddingUp {
         // would be the widest answer there is out of rules that admit none.
         DeclaredBounds.CountRange howMany =
                 howMany(view, target.writeRoot(), within, reading, alsoHolding);
-        if (howMany == null
-                || !(within.projectionOf(new NumericTerm.ValueOf(occurring))
-                        instanceof NumericDomain.FormProjection.Within(
-                                NumericDomain.Bounds runs))) {
+        if (howMany == null) {
+            return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+        }
+        // Where its occurrences are asked as an element's, which is asked of a container holding
+        // one: where they run nowhere, no element can be, and the container of none is the one
+        // container left, which comes to what a walk over none does.
+        NumericDomain.Bounds runs;
+        if (within.projectionOf(new NumericTerm.ValueOf(occurring))
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held)) {
+            runs = held;
+        } else if (howMany.least() == 0) {
+            runs = NumericDomain.Bounds.OPEN;
+            howMany = new DeclaredBounds.CountRange(0, 0);
+        } else {
             return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
         }
         Ends ends = Ends.of(runs == null ? NumericDomain.Bounds.OPEN : runs, elements);
@@ -1564,8 +1574,8 @@ final class ContainersAddingUp {
     }
 
     /** The number the rules count this container by, or null where nothing counts it. */
-    private static NumericTerm.FromOnePosition countTaken(TypeView container, TermPath root,
-                                                          RuleReadingContext reading) {
+    static NumericTerm.FromOnePosition countTaken(TypeView container, TermPath root,
+                                                  RuleReadingContext reading) {
         ValueName.Stdlib counts =
                 NumericMeasures.takenOf(container.declared(), reading.source().inners());
         return counts == null ? null

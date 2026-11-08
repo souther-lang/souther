@@ -13,6 +13,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
@@ -150,6 +151,11 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
         return new AnObservationOfAForm() {
 
             @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
+
+            @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
                 assertEquals(TermPath.of("lines"), path, "read at the container the count is of");
                 return WalkResult.reached(new ObservationAtPoint.Value(observed));
@@ -165,6 +171,11 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
     /** A row whose only readable place is the run, holding what {@code observed} came to. */
     private static BorderQuantity.Observation run(ObservedValue observed) {
         return new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

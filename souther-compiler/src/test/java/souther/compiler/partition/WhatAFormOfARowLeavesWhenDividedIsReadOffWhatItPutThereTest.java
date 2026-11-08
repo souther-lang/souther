@@ -20,6 +20,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.ReadAs;
@@ -195,6 +196,11 @@ class WhatAFormOfARowLeavesWhenDividedIsReadOffWhatItPutThereTest {
     private static BorderQuantity.Observation row(Map<TermPath, ObservationAtPoint> wrote) {
         Map<TermPath, ObservationAtPoint> at = new LinkedHashMap<>(wrote);
         return new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

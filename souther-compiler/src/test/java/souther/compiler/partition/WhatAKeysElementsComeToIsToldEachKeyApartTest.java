@@ -13,6 +13,7 @@ import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -93,6 +94,11 @@ class WhatAKeysElementsComeToIsToldEachKeyApartTest {
 
     /** One list of postings, read with the posting at {@code chosen} chosen. */
     private record Postings(List<Posting> each, int chosen) implements BorderQuantity.Observation {
+
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return null;
+        }
 
         @Override
         public WalkResult<ObservationAtPoint> at(TermPath path) {

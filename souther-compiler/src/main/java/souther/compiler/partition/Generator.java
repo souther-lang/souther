@@ -810,7 +810,8 @@ public final class Generator {
                              CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                              CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
-                             TOTALS_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
+                             TOTALS_A_COUNT_IS_TRIED_AT, RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO,
+                             VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED, COUNTS_OF_KEYS_TRIED,
                              VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
@@ -5446,7 +5447,7 @@ public final class Generator {
             // for the other, so it writes neither and says the parameter cannot be written — which
             // is what every other thing it cannot do here answers with.
             if (writing.write(axis.path(), values.written())
-                    == LocationWrites.Written.CONFLICTING
+                    instanceof LocationWrites.Written.Conflicting
                     || !moves.put(axis.path(), values.written())) {
                 return null;
             }
@@ -6318,6 +6319,16 @@ public final class Generator {
     }
 
     /**
+     * Whether {@code target} is a value placed inside an element of some container: the element
+     * itself or a number of it.
+     */
+    private static boolean insideAnElement(RealizationTarget target) {
+        return target instanceof RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term)
+                && term instanceof NumericTerm.ValueOf value
+                && value.position().insideAContainer();
+    }
+
+    /**
      * {@link #probeFixing}, along a way whose demands of several ways are written as they stand.
      *
      * @param byCounts whether every container a quantifier that is the whole of a statement is
@@ -6437,11 +6448,18 @@ public final class Generator {
                             && (narrowedStrictlyUnder(rowIs, at)
                                     || truthAskedStrictlyUnder(truthsWritten, at))
                             ? sizesOf(edge.values()) : null;
-            if ((holds != null ? decided.size(at, holds) : decided.write(at, edge.values()))
-                    != LocationWrites.Written.FIRST) {
-                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
-                        where.unrepresented());
+            switch (holds != null ? decided.size(at, holds) : decided.write(at, edge.values())) {
+                case LocationWrites.Written.First _ -> { }
+                case LocationWrites.Written.Again _ -> {
+                    return new BoundaryAttempt.Unresolved(new UnresolvedCombination(
+                            List.of(label), UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                            where.unrepresented());
+                }
+                case LocationWrites.Written.Conflicting conflict -> {
+                    return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
+                            UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, conflict.said()),
+                            where.unrepresented());
+                }
             }
             if (edge.settledAt() != null) {
                 settled.put(at, edge.settledAt());
@@ -7459,11 +7477,13 @@ public final class Generator {
             cuts.add(countedOf(cut.demand()).isPresent()
                     && byCounts.contains(containerOf(cut.demand())) ? asACount(cut) : cut);
         }
-        // And a number of the item inside an element of such a container is where some element
-        // stands, which the container is composed holding — its elements are not written alike,
-        // so there is no every element for it to be the value of.
+        // And a number of the item inside an element of a container is where some element stands:
+        // the item is read at one element, and the others are what the container holds beside
+        // it. Where the container is composed element by element — for its counts, or for a
+        // number of it as a whole — the value goes in with it ({@link #writtenAmong}); elsewhere
+        // it is written where it stands, which every element holding it answers.
         for (RealizationTarget each : fixing.keySet()) {
-            if (insideAnElementOf(each, byCounts)) {
+            if (insideAnElement(each)) {
                 someElement.add(each);
             }
         }
@@ -7778,7 +7798,7 @@ public final class Generator {
                     !asked.contains(new Level.OfTheQuantity(ExactRatio.ZERO)), looking)) {
                 case NumericWitness.Standing.Found beside -> {
                     for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
-                        if (placed.term().subjectPath().insideAContainer()) {
+                        if (!count.standsBeside(placed.term())) {
                             continue;
                         }
                         RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
@@ -9430,8 +9450,7 @@ public final class Generator {
                     counted = new ArrayList<>();
                     for (souther.compiler.observe.ObservedValue value : values) {
                         switch (kept.perElement().at(new CardinalityComposer.AnElementRead(
-                                kept.position(), occurrences.subjectPath(), Map.of(),
-                                List.of(value)))) {
+                                kept.position(), occurrences.subjectPath(), List.of(value)))) {
                             case AStatementAtARow.Answer.Holds _ -> counted.add(value);
                             case AStatementAtARow.Answer.Fails _ -> { }
                             case AStatementAtARow.Answer.CouldNotTell(Set<ReadingGap> why) ->
@@ -9623,6 +9642,12 @@ public final class Generator {
                     : WalkResult.couldNotWalk();
         }
 
+        /** Nothing is fixed beside an element read whole: the element is all it holds. */
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return null;
+        }
+
         @Override
         public WalkResult<List<BorderQuantity.Observation>> eachElementOf(TermPath of) {
             return of.equals(container) ? WalkResult.reached(List.of(this))
@@ -9719,8 +9744,10 @@ public final class Generator {
      * which is counted for the value of another location. Every other group is composed out
      * of its own numbers and the way's region, which is what it is handed.
      *
-     * <p>Not a number inside a container. A value placed at an element is some element standing
-     * there, and fixed in the region it would be every element.
+     * <p>Not a number of an element. A value placed at an element is some element standing there,
+     * and fixed in the region it would be every element. What another container comes to is one
+     * number of the row and is fixed ({@link NumbersOfTheWhole#oneNumberOfTheRow}); what the
+     * container composed here comes to is the composing's to fix.
      *
      * <p>And with the elements of a container written at {@code at} held to what every element of
      * it is to meet, where a condition on the way says so ({@link ElementBound}).
@@ -9746,7 +9773,8 @@ public final class Generator {
                 Map<NumericTerm, Place> fixed = new LinkedHashMap<>();
                 standing.forEach((target, place) -> {
                     if (target instanceof RealizationTarget.OfANumber number
-                            && !number.term().subjectPath().insideAContainer()) {
+                            && NumbersOfTheWhole.oneNumberOfTheRow(number.term())
+                            && !NumbersOfTheWhole.ofAWholeWrittenAt(number.term(), at)) {
                         fixed.put(number.term(), place);
                     }
                 });
@@ -9901,9 +9929,11 @@ public final class Generator {
      * and a position inside it are one location and are two entries here, which leaves them where
      * they were: nothing composes those together, and {@link LocationWrites} is what says so.
      *
-     * <p>But for one: a container composed for how many of its elements meet something chooses its
-     * elements, so a value some element of it is to stand at goes in with the counts
-     * ({@link CardinalityComposer}).
+     * <p>But for a container composed element by element. One composed for how many of its elements
+     * meet something, or with a number of it as a whole asked beside — how many it holds, what its
+     * elements come to — chooses its elements, so a value some element of it is to stand at goes
+     * in with them ({@link CardinalityComposer}). Whether one value answers the group gathered so
+     * is the realizer's ({@link TermRealizations#jointRealizationOf}).
      *
      * <p>The numbers as the sets they are asked for out of, which a point of a border and a class
      * both are: the arrangement is the same either way, and reading it twice would be two answers
@@ -9926,9 +9956,9 @@ public final class Generator {
     }
 
     /**
-     * The element of each container {@code with} composes for how many of its elements meet
-     * something, or for a statement they meet together, and where that container is written.
-     * Empty where there is neither among them, which is every row of a model that counts nothing.
+     * The element of each container {@code with} composes element by element — for how many of its
+     * elements meet something, for a statement they meet together, or for what they come to — and
+     * where that container is written. Empty where there is none among them.
      */
     private static Map<TermPath, TermPath> countedAmong(Collection<RealizationTarget> with) {
         Map<TermPath, TermPath> out = Map.of();
@@ -9936,7 +9966,8 @@ public final class Generator {
             TermPath container = switch (each) {
                 case RealizationTarget.ACount count -> count.count().container();
                 case RealizationTarget.ElementsMeetingTogether together -> together.container();
-                case RealizationTarget.OfANumber _ -> null;
+                case RealizationTarget.OfANumber number ->
+                        NumbersOfTheWhole.containerOf(number.term());
             };
             if (container != null) {
                 if (out.isEmpty()) {
@@ -9950,12 +9981,13 @@ public final class Generator {
 
     /**
      * Where {@code target} is written: its own root, or where it is a value some element of a
-     * container composed for how many of its elements meet something is to stand at
-     * ({@link #countedAmong}), that container's.
+     * container composed element by element is to stand at ({@link #countedAmong}), that
+     * container's.
      *
      * <p>Some element and not every one. A value placed for every element of a container to meet
-     * something is a value of each, and composing the container for its counts chooses elements
-     * that value does not hold of; it is a second write of the location, said where it is.
+     * something is a value of each, and composing the container element by element chooses
+     * elements that value does not hold of; it is a second write of the location, said where it
+     * is.
      *
      * @param someElement the numbers some element is to stand at, which a condition that some
      *                    element meets something placed
@@ -12337,14 +12369,13 @@ public final class Generator {
                     if (cls.selects() == null && !inThatValue
                             && (holds != null ? decided.size(path, holds)
                                     : decided.write(path, offered))
-                                    == LocationWrites.Written.CONFLICTING) {
+                                    instanceof LocationWrites.Written.Conflicting conflict) {
                         // Two of this row's classes are of one location and offer different values
                         // for it. Taking either leaves the other's class unanswered while the row
                         // is offered as covering it, so neither is taken.
                         return RowComposed.Failed.ofTheRow(new Attempt(null,
                                 UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
-                                Optional.of("`" + path
-                                        + "` would have to hold two values at once")));
+                                Optional.of(conflict.said())));
                     }
                 }
                 // Not a value but how one is arrived at: the walk below builds one at this position,
@@ -12407,11 +12438,10 @@ public final class Generator {
         for (Map.Entry<TermPath, List<FixtureTemplate>> each : together.entrySet()) {
             if (decided.at(each.getKey()) == null && required.at(each.getKey()) == null
                     && decided.write(each.getKey(), each.getValue())
-                            != LocationWrites.Written.FIRST) {
+                            instanceof LocationWrites.Written.Conflicting conflict) {
                 return RowComposed.Failed.ofTheRow(new Attempt(null,
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        each.getKey().toString(), Optional.of("`" + each.getKey()
-                                + "` would have to hold two values at once")));
+                        each.getKey().toString(), Optional.of(conflict.said())));
             }
         }
         TruthsAsked truthsAsked = holding.reaching() == null ? TruthsAsked.NONE

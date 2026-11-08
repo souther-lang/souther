@@ -16,7 +16,6 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.UnheldNumber;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -256,6 +255,18 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         record NotWorkedOut(UnheldNumber why) implements Least {}
     }
 
+    /** Whether {@code term} stands beside every element of the counted container alike
+     *  ({@link NumbersOfTheWhole#standsBeside}). */
+    boolean standsBeside(NumericTerm term) {
+        return NumbersOfTheWhole.standsBeside(term, container);
+    }
+
+    /** The numbers the statement reads that stand beside every element alike ({@link
+     *  #standsBeside}). */
+    List<NumericTerm> numbersBeside() {
+        return numbers().stream().filter(this::standsBeside).toList();
+    }
+
     /**
      * Places for every number the statement reads beside an element, chosen together, and where
      * {@code oneMeets}, together with an element that meets the statement.
@@ -274,18 +285,20 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      */
     NumericWitness.Standing placesBeside(SearchRegion within, boolean oneMeets,
                                          WitnessSearch looking) {
-        Set<NumericTerm> beside = new LinkedHashSet<>();
-        for (NumericTerm term : numbers()) {
-            if (!term.subjectPath().insideAContainer() && term.atOnePosition() != null) {
-                beside.add(term);
-            }
-        }
+        // A number of the counted container as a whole — how many it holds, what its elements come
+        // to — is no number beside an element: it is what the elements chosen make it, and the
+        // composing fixes it before it chooses them ({@link ContainerAsAWhole}).
+        Set<NumericTerm> beside = new LinkedHashSet<>(numbersBeside());
         SearchRegion region = within;
         if (oneMeets && anElementMeeting.isPresent()) {
             for (TakenConstraint each : anElementMeeting.get()) {
                 region = each.narrowing(region);
+                // The number of the element meeting it, and those beside it; none of the counted
+                // container as a whole.
                 for (NumericTerm term : each.terms()) {
-                    if (term.atOnePosition() != null) {
+                    if (!NumbersOfTheWhole.ofTheWhole(term, container)
+                            && (term.atOnePosition() != null
+                                    || NumbersOfTheWhole.oneNumberOfTheRow(term))) {
                         beside.add(term);
                     }
                 }
@@ -294,13 +307,7 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         // In the one order of the terms: the search tries so many values and no more, so which
         // number it places first is part of its answer, and a form holds its terms in no order
         // that means anything.
-        List<NumericTerm.FromOnePosition> placed = new ArrayList<>();
-        for (NumericTerm term : NumericTerms.inOrder(beside)) {
-            if (!placed.contains(term.atOnePosition())) {
-                placed.add(term.atOnePosition());
-            }
-        }
-        return NumericWitness.of(region, placed, on::get, looking);
+        return NumericWitness.of(region, NumericTerms.inOrder(beside), on::get, looking);
     }
 
     /**
