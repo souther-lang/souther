@@ -1308,7 +1308,8 @@ final class Pullback {
         return new OperatorsAnswer(
                 answered == null ? Optional.empty()
                         : Optional.of(pulled(answered).proposition()),
-                told[0].unsaidGroups, told[0].unsaidElsewhere, told[0].obligations);
+                told[0].unsaidGroups, told[0].unsaidElsewhere, told[0].obligations,
+                told[0].afterTheFirst);
     }
 
     /**
@@ -1667,13 +1668,48 @@ final class Pullback {
             } else {
                 Core.forEachChild(e, child -> {
                     operated.stepsNames = under.apply(child);
-                    leaveUnsaidWhatMayEndARunUnder(child, reads,
-                            Core.withoutStanding(child) instanceof Core.Block block
-                                    ? boundInside(e, block, reads, bound) : bound);
+                    Bound inside = Core.withoutStanding(child) instanceof Core.Block block
+                            ? boundInside(e, block, reads, bound) : bound;
+                    if (walk != null && Core.withoutStanding(child) == walk.step()) {
+                        leaveUnsaidUnderEachApplicationOf(walk, child, reads, inside);
+                    } else {
+                        leaveUnsaidWhatMayEndARunUnder(child, reads, inside);
+                    }
                 });
             }
         } finally {
             operated.stepsNames = around;
+        }
+    }
+
+    /**
+     * {@link #leaveUnsaidWhatMayEndARunUnder} {@code step}, the step of {@code walk} written at it,
+     * on the applications a run makes of it: the first, handed the seed for what the walk
+     * carries, with the rest of the run; and every one as the step stands, owed only of a run
+     * walking more than one element ({@link AfterTheFirst}).
+     *
+     * <p>A run walking one element makes the first application and no other, so what the step may
+     * stop it on is what the step works out of the seed and that element: {@code acc + i.price}
+     * from {@code 0} is {@code i.price}, an {@code Int} wherever the element is one. What it
+     * carries into a later application is made of the elements before, and a run reaching one is
+     * a run walking more. That is what the applications before the one a comparison is reached in
+     * are to a reader, and it is told the two the same way.
+     */
+    private void leaveUnsaidUnderEachApplicationOf(SeededWalk walk, Core step, InputReads reads,
+                                                   Bound bound) {
+        leaveUnsaidWhatMayEndARunUnder(step, reads.handing(walk.accumulator().binding(),
+                new Denotation(walk.seed(), reads), read.rules().newtypes()), bound);
+        Operators first = operated;
+        Operators rest = first.ofTheApplicationsAfterTheFirst();
+        operated = rest;
+        try {
+            leaveUnsaidWhatMayEndARunUnder(step, reads, bound);
+        } finally {
+            operated = first;
+        }
+        OperatorsAnswer afterIt = rest.leftUnsaid();
+        if (!afterIt.leavesNothingUnsaid()) {
+            first.afterTheFirst.add(new AfterTheFirst(walk.container(), reads, afterIt));
         }
     }
 
@@ -1797,8 +1833,11 @@ final class Pullback {
      * its own account says it answers: an operator whose number an {@code Int} holds, a rounding
      * whose whole number its type holds ({@link RoundedToAWholeNumber#whereTheRoundedNumberIsHeld}),
      * an operation that ends a run only where the form it is handed has no place
-     * ({@link AffineForms#whereAFormItIsHandedAnswers}) — and the number it comes to, before it is
-     * held to anything, lies there whatever its operands are ({@link #exactRangeOf}).
+     * ({@link AffineForms#whereAFormItIsHandedAnswers}), a total held to its type once it is added
+     * up exactly ({@link GetsPast.WhereTheTotalFits}) — and the number it comes to, before it is
+     * held to anything, lies there whatever its operands are ({@link #exactRangeOf}). A total of
+     * what an element meets is a count, which comes to no more than a list holds: it is an
+     * {@code Int} on every run.
      *
      * <p>Of {@code e} alone. What its operands work out stops a run or not as each of them says,
      * and is asked of each: {@code Int.floorMod(m - k, 12) + 1} adds within an {@code Int}
@@ -1821,6 +1860,11 @@ final class Pullback {
         }
         if (!(here instanceof Core.PreservedCall call)) {
             return null;
+        }
+        if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
+                instanceof GetsPast.WhereTheTotalFits) {
+            return WhereAnOperatorAnswers.ofATotal(call.type())
+                    instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held ? held : null;
         }
         return writtenRounding(call, reads) != null
                 ? RoundedToAWholeNumber.whereTheRoundedNumberIsHeld(call.type(),
@@ -7919,12 +7963,37 @@ final class Pullback {
         private Set<TermPath> unsaidAt = new LinkedHashSet<>();
         private boolean unsaidElsewhere;
         private final List<StopObligation> obligations = new ArrayList<>();
+        private final List<AfterTheFirst> afterTheFirst = new ArrayList<>();
         private final Map<Core, InputReads> readsAt = new IdentityHashMap<>();
         private Core within;
         private Core leftOut;
 
         Operators() {
             unsaidGroups.add(unsaidAt);
+        }
+
+        /**
+         * The operators of the applications of a step after the first, as this has told of them:
+         * the same operators told and the same closures applied to nothing, read in the same tree,
+         * with nothing yet left unsaid or owed.
+         */
+        Operators ofTheApplicationsAfterTheFirst() {
+            Operators out = new Operators();
+            out.told.addAll(told);
+            out.nodes.addAll(nodes);
+            out.toldOn.putAll(toldOn);
+            out.application = application;
+            out.neverApplied.addAll(neverApplied);
+            out.stepsNames = stepsNames;
+            out.within = within;
+            out.leftOut = leftOut;
+            return out;
+        }
+
+        /** What is left unsaid and owed here, with nothing told of where an operator answers. */
+        OperatorsAnswer leftUnsaid() {
+            return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidElsewhere,
+                    obligations, afterTheFirst);
         }
 
         /** What has been told so far, which is the same only while nothing more has. */
@@ -8038,13 +8107,32 @@ final class Pullback {
      *                        number of a place, or on operands no form says
      */
     record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
-                           boolean unsaidElsewhere, List<StopObligation> obligations) {
+                           boolean unsaidElsewhere, List<StopObligation> obligations,
+                           List<AfterTheFirst> afterTheFirst) {
 
         OperatorsAnswer {
             unsaidAt = unsaidAt.stream().filter(each -> !each.isEmpty()).map(Set::copyOf).toList();
             obligations = List.copyOf(obligations);
+            afterTheFirst = List.copyOf(afterTheFirst);
+        }
+
+        /** Whether nothing here may stop a run that nothing says of. */
+        boolean leavesNothingUnsaid() {
+            return unsaidAt.isEmpty() && !unsaidElsewhere && obligations.isEmpty()
+                    && afterTheFirst.isEmpty();
         }
     }
+
+    /**
+     * What the applications of a walk's step after the first may stop a run on, which a run walking
+     * one element makes none of: the first is handed the seed for what the walk carries, and is
+     * read with the rest of the run ({@link #leaveUnsaidUnderEachApplicationOf}).
+     *
+     * @param container what the walk walks, as {@code reads} has the names
+     * @param workedOut what the applications after the first leave unsaid, told nothing of where
+     *                  each answers
+     */
+    record AfterTheFirst(Core container, InputReads reads, OperatorsAnswer workedOut) {}
 
     /**
      * An operator a run may stop at, whose owner says where it answers: wherever the collection
@@ -8207,6 +8295,16 @@ final class Pullback {
                         RoundedToAWholeNumber.heldBetween(way, run.least(), run.greatest());
             };
             if (held instanceof ConstantComparison.Settled settled && settled.holds()) {
+                continue;
+            }
+            // Nor of one whose form comes only to numbers where it answers, over what each of its
+            // numbers says it lies between: it answers on every run, as an operation is said to
+            // that comes to where it answers whatever its operands are (comesToWhereItAnswers).
+            // Twice how many elements meet something is an Int however many do.
+            if (over instanceof Answers.AsAnOperator(var _,
+                    WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))
+                    && FormRange.ofNumbers(form, read, _ -> null) instanceof FormRange range
+                    && range.liesWithin(least, greatest)) {
                 continue;
             }
             if (held != null && form.coefs().isEmpty()) {
@@ -11199,13 +11297,26 @@ final class Pullback {
         Denotation walked = call.at().standing(walk.container(), read.rules().symbols(),
                 read.rules().newtypes());
         DecisionSubject.AnAnswer list = answerWhoseEveryElementIsHeldBy(walked);
+        Denotation over = walked;
+        if (list == null) {
+            // A walk over what a walk answered for each element of a list is a walk over those
+            // elements, the step read through what was answered of each, as a total of what was
+            // answered is (sumOverTheWalk).
+            ElementBindings.StepOnEachElement beneath =
+                    ElementBindings.stepAnsweredOnEachElement(walked.value(), blocksAt(walked));
+            if (beneath != null) {
+                over = walked.at().standing(beneath.walked(), read.rules().symbols(),
+                        read.rules().newtypes());
+                list = answerWhoseEveryElementIsHeldBy(over);
+            }
+        }
         ExactRatio seed = sides().constant(walk.seed(), call.at());
         if (seed == null) {
             return null;
         }
         ValueName.Stdlib summing = ValueName.Stdlib.operation("List", "sum");
         LinearForm<Quantity> added = list == null ? null
-                : addedOverTheElementsOfAnAnswer(walk, list, walked, call.at(), summing);
+                : addedOverTheElementsOfAnAnswer(walk, list, over, call.at(), summing);
         if (added == null) {
             // What the step adds of each element as a walk over the input's elements reads it:
             // a choice on the element, over what filters, takes and drops keep.

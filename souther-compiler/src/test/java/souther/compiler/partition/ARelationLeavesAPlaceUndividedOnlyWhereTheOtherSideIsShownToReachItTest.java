@@ -515,9 +515,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * before it run the closure whole: here each divides by {@code p} past the comparison, and
      * one at nought stops the run before the next element is handed over. A run with one element
      * makes no application before, so where the way lets the list hold one, the relation is
-     * reached at every value. Where the way asks for two, or the walk is of a list the input is
-     * not read as, the applications before are owed, and a division by a number the relation
-     * reads may stop them. A stop before the comparison in its own application is owed whatever
+     * reached at every value — and where the walk is of the list reversed, which holds one where
+     * the list does. Where the way asks for two, the applications before are owed, and a
+     * division by a number the relation reads may stop them. A stop before the comparison in its own application is owed whatever
      * the list holds: {@code p} is not shown reached at every value, and {@code r}, held against
      * {@code p}, is not shown to be reached by it at every value.
      */
@@ -535,7 +535,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(related, leftIn(model.formatted(walk.formatted("xs")), "4:32"));
         assertEquals(notReached, leftIn(model.formatted(
                 "List.length(xs) >= 2 && " + walk.formatted("xs")), "4:56"));
-        assertEquals(notReached, leftIn(model.formatted(walk.formatted("List.reverse(xs)")),
+        assertEquals(related, leftIn(model.formatted(walk.formatted("List.reverse(xs)")),
                 "4:32"));
         assertEquals(Map.of("xs[*].p", NOT_REACHED, "xs[*].r", NOT_SHOWN), leftIn(model.formatted(
                 "List.any(i -> i.q / i.p >= 0 && i.p >= i.r, xs)"), "4:50"));

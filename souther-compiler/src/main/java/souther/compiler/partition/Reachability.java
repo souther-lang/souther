@@ -333,8 +333,8 @@ public sealed interface Reachability {
      * @param owed            the operators that run may stop at whose owner says where they
      *                        answer, each owed a proof some run gets past it
      *                        ({@link DemandReading.Answered#owed})
-     * @param before          what the applications of a closure before the one the border is
-     *                        reached in work out ({@link DemandReading.Answered#before})
+     * @param before          what the applications a run walking one element does not make work
+     *                        out ({@link DemandReading.Answered#before})
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,

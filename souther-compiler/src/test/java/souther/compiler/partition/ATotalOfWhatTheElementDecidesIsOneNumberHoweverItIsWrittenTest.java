@@ -48,7 +48,8 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
             }
             """;
 
-    /** What each of {@code judged} leaves unread, by the behavior's name. */
+    /** What each of {@code judged} leaves unread, by the behavior's name: of the total, and of
+     *  the rule past it. */
     private static Map<String, List<String>> unread(Map<String, String> judged) {
         StringBuilder source = new StringBuilder(DECLARATIONS);
         judged.forEach((name, rule) -> source.append(JUDGED.formatted(name, rule)));
@@ -62,14 +63,63 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
                 .map(each -> each.diagnostic().code()).toList(), "the models under test compile");
         Map<String, List<String>> out = new LinkedHashMap<>();
         judged.keySet().forEach(name -> out.put(name, evidence.get(name).notRead().stream()
-                .filter(each -> !OF_THE_RULE_PAST_IT.contains(each.at()))
-                .map(each -> each.at() + "=" + each.reason()).toList()));
+                .map(each -> each.at() + "=" + each.reason()).sorted().toList()));
         return out;
     }
 
-    /** The places the rule past the total reads, which a run gets to only past the total. */
-    private static final List<String> OF_THE_RULE_PAST_IT =
-            List.of("items[*].code", "prices.known[key]");
+    /** What {@code unread} says of the places the rule past the total reads, which a run gets to
+     *  only past the total. */
+    private static List<String> ofTheRulePastIt(List<String> unread) {
+        return unread.stream().filter(each -> each.startsWith("items[*].code=")
+                || each.startsWith("prices.known[key]=")).toList();
+    }
+
+    /**
+     * The rule past a total is reached as it is past {@code List.sum} of the prices, however the
+     * total is written: a fold adding in its step, a total of a choice, a count by a filter, by a
+     * sum or by a fold. A run walking one element gets past each of them at every value the rule
+     * reads — the step applied once, to the seed — and a count is an {@code Int} however many
+     * elements meet. A step that stops on the code the rule reads is no such total, written as a
+     * fold or as a sum of what each element answers.
+     */
+    @Test
+    void theRulePastATotalIsReachedHoweverTheTotalIsWritten() {
+        Map<String, String> judged = new LinkedHashMap<>();
+        judged.put("summed", "List.sum(List.map(i -> i.price, items)) >= 0");
+        judged.put("folded", "List.fold((acc, i) -> acc + i.price, 0, items) >= 0");
+        judged.put("aChoiceSummed",
+                "List.sum(List.map(i -> if i.active then i.price else 0, items)) >= 0");
+        judged.put("aChoiceInTheStep", "List.fold((acc, i) -> "
+                + "if i.active then acc + i.price else acc, 0, items) >= 0");
+        judged.put("aComparisonSummed",
+                "List.sum(List.map(i -> if i.price > 10 then i.price else 0, items)) >= 0");
+        judged.put("counted", "List.length(List.filter(i -> i.active, items)) >= 1");
+        judged.put("countedBySumming",
+                "List.sum(List.map(i -> if i.active then 1 else 0, items)) >= 1");
+        judged.put("countedInTheStep", "List.fold((acc, i) -> "
+                + "if i.active then acc + 1 else acc, 0, items) >= 1");
+        judged.put("countedByAFold", "List.fold((acc, i) -> acc + 1, 0, items) >= 1");
+        judged.put("stoppingOnTheCodeInTheStep", "List.fold((acc, i) -> "
+                + "acc + Int.floorMod(10, String.length(i.code)), 0, items) >= 0");
+        judged.put("stoppingOnTheCodeSummed", "List.sum(List.map(i -> "
+                + "Int.floorMod(10, String.length(i.code)), items)) >= 0");
+        Map<String, List<String>> unread = unread(judged);
+
+        List<String> oracle = ofTheRulePastIt(unread.get("summed"));
+        assertEquals(List.of("items[*].code=" + UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
+                "prices.known[key]=" + UndividedPosition.Reason.RULE_RELATING_TWO_VALUES), oracle);
+        for (String way : List.of("folded", "aChoiceSummed", "aChoiceInTheStep",
+                "aComparisonSummed", "counted", "countedBySumming", "countedInTheStep",
+                "countedByAFold")) {
+            assertEquals(oracle, ofTheRulePastIt(unread.get(way)), way);
+        }
+        for (String control : List.of("stoppingOnTheCodeInTheStep", "stoppingOnTheCodeSummed")) {
+            assertTrue(ofTheRulePastIt(unread.get(control)).stream().noneMatch(each ->
+                            each.equals("items[*].code="
+                                    + UndividedPosition.Reason.RULE_RELATING_TWO_VALUES)),
+                    control + " " + unread.get(control));
+        }
+    }
 
     @Test
     void aTotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWritten() {
@@ -174,6 +224,11 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
                 "List.sum(List.map(i -> if i.price > 10 then 2 * i.price else 0, items)) >= 0");
         judged.put("doubledOfWhatAWalkAnsweredFiltered", "List.sum(List.map(p -> 2 * p, "
                 + "List.filter(p -> p > 10, List.map(i -> i.price, items)))) >= 0");
+        judged.put("doubled", "List.sum(List.map(i -> 2 * i.price, items)) >= 0");
+        judged.put("doubledOfWhatAWalkAnswered", "List.sum(List.map(p -> 2 * p, "
+                + "List.map(i -> i.price, items))) >= 0");
+        judged.put("aFoldDoublingWhatAWalkAnswered", "List.fold((acc, p) -> acc + 2 * p, 0, "
+                + "List.map(i -> i.price, items)) >= 0");
         judged.put("byTheCode",
                 "List.sum(List.map(i -> if i.code == \"A\" then i.price else 0, items)) >= 0");
         judged.put("byTheCodeFiltered", "List.sum(List.map(i -> i.price, "
@@ -205,6 +260,7 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
                         "aFilterOfWhatAWalkAnswered",
                         "aFoldOfWhatAWalkAnsweredFiltered"),
                 "doubledChosen", List.of("doubledOfWhatAWalkAnsweredFiltered"),
+                "doubled", List.of("doubledOfWhatAWalkAnswered", "aFoldDoublingWhatAWalkAnswered"),
                 "byTheCode", List.of("byTheCodeFiltered", "byAnotherCode"),
                 "countedByTheCode", List.of("countedByTheCodeSummed"),
                 "chosenTwice", List.of("filteredTwice"),
@@ -219,6 +275,94 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
                             each.startsWith("items[*].price=")),
                     control + " " + unread.get(control));
         }
+    }
+
+    /**
+     * A count of the elements meeting a test is met by the element the rule past it reads only
+     * where the test reads nothing the rule reads. A list of one element whose price passes ten
+     * reaches a rule over the price at no price of ten or less, and a list of one whose flag is
+     * set reaches it at every price.
+     */
+    @Test
+    void anElementMeetingWhatIsCountedIsTheOneTheRuleReadsOnlyApartFromWhatTheRuleReads() {
+        String declarations = """
+                module probe
+
+                data Item = { code: String, price: Int, active: Bool }
+                data Prices = { cap: Int }
+                """;
+        String judged = """
+
+                behavior %1$s : (items: List<Item>, prices: Prices) -> Bool
+                let %1$s (items, prices) = {
+                    List.length(items) <= 1
+                        && List.fold((acc, i) -> if %2$s then acc + 1 else acc, 0, items) >= 1
+                        && List.all(i -> i.price <= prices.cap, items)
+                }
+                """;
+        Map<String, String> tests = Map.of("byThePrice", "i.price > 10", "byTheFlag", "i.active");
+        StringBuilder source = new StringBuilder(declarations);
+        tests.forEach((name, test) -> source.append(judged.formatted(name, test)));
+        Compilation compilation = Compilation.ofSource(source.toString(), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        Map<String, PartitionEvidence> evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value();
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the models under test compile");
+        String reached = "items[*].price=" + UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
+        Map<String, List<String>> unread = new LinkedHashMap<>();
+        tests.keySet().forEach(name -> unread.put(name, evidence.get(name).notRead().stream()
+                .map(each -> each.at() + "=" + each.reason()).toList()));
+        assertTrue(unread.get("byTheFlag").contains(reached), unread.toString());
+        assertTrue(unread.get("byThePrice").stream().noneMatch(reached::equals),
+                unread.toString());
+    }
+
+    /**
+     * A total of numbers the elements hold is past an {@code Int} on some runs, where a count is
+     * not: two elements priced at the cap add up past one where the cap is past half of one, and
+     * a rule past their total is not reached there. Two elements counted are two however they are
+     * priced.
+     */
+    @Test
+    void aTotalOfWhatTheElementsHoldIsNoIntOnEveryRunWhereACountIs() {
+        String declarations = """
+                module probe
+
+                data Item = { code: String, price: Int, active: Bool }
+                data Prices = { cap: Int, other: Int }
+                """;
+        String judged = """
+
+                behavior %1$s : (items: List<Item>, prices: Prices) -> Bool
+                let %1$s (items, prices) = {
+                    List.length(items) == 2
+                        && List.all(i -> i.price == prices.cap, items)
+                        && %2$s >= 0
+                        && prices.cap <= prices.other
+                }
+                """;
+        Map<String, String> totals = Map.of(
+                "priced", "List.sum(List.map(i -> i.price, items))",
+                "counted", "List.sum(List.map(i -> if i.active then 1 else 0, items))");
+        StringBuilder source = new StringBuilder(declarations);
+        totals.forEach((name, total) -> source.append(judged.formatted(name, total)));
+        Compilation compilation = Compilation.ofSource(source.toString(), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        Map<String, PartitionEvidence> evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value();
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the models under test compile");
+        String notReached = "prices.cap="
+                + UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE;
+        Map<String, List<String>> unread = new LinkedHashMap<>();
+        totals.keySet().forEach(name -> unread.put(name, evidence.get(name).notRead().stream()
+                .map(each -> each.at() + "=" + each.reason()).toList()));
+        assertTrue(unread.get("priced").contains(notReached), unread.toString());
+        assertTrue(unread.get("counted").stream().noneMatch(notReached::equals),
+                unread.toString());
     }
 
     /** A choice by a comparison, and one by a string written out, is written in the report as the

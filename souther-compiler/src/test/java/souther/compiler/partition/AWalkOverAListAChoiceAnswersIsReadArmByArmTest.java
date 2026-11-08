@@ -92,10 +92,9 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
 
     /**
      * The witness a join is shown to fit on holds as few contacts as the way lets it: a guard
-     * asking for two at least leaves one of two, which fits. One asking for as many as a list
-     * holds leaves that many, and two codes keeping them all join past what a list holds. A guard
-     * asking anything else of how many there are leaves no list cut down to so few a row of the
-     * way.
+     * asking for two at least leaves one of two, which fits, and one asking for three at most
+     * leaves one, which fits as well. One asking for as many as a list holds, at least or
+     * exactly, leaves that many, and two codes keeping them all join past what a list holds.
      */
     @Test
     void theWitnessAJoinFitsOnHoldsAsFewAsTheWayLetsIt() {
@@ -107,9 +106,14 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
                 "[ lead.code, lead.code ]");
         assertEquals(List.of("contacts[*].code", "lead.code"), notReachedAtEveryValue(full),
                 () -> full.notRead().toString());
+        PartitionEvidence exactly = screened(
+                "guard List.length(contacts) == 2147483647 else NoMatch",
+                "[ lead.code, lead.code ]");
+        assertEquals(List.of("contacts[*].code", "lead.code"), notReachedAtEveryValue(exactly),
+                () -> exactly.notRead().toString());
         PartitionEvidence atMost = screened("guard List.length(contacts) <= 3 else NoMatch",
                 "[ lead.code ]");
-        assertEquals(List.of("contacts[*].code", "lead.code"), notReachedAtEveryValue(atMost),
+        assertEquals(List.of(), notReachedAtEveryValue(atMost),
                 () -> atMost.notRead().toString());
     }
 

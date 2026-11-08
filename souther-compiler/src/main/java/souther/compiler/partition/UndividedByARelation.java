@@ -4486,15 +4486,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private record ConversionOfAString(List<TermPath> places, CaseMapping conversion) {}
 
     /**
-     * Every container of the input walked by a call applying a closure the relation is reached in,
-     * where each such call applies its closure from the first element one after another, so that
-     * a witness holding one element in each makes no application before — or empty where one
-     * does not, or walks what is at no position of the input and is not shown to hold no more
-     * than one element.
+     * The containers of the input a witness holds to one element so that each call applying a
+     * closure one element after another — the closure the relation is reached in, and the step of
+     * a walk on the way — walks no more than one, and makes none of the applications a run of one
+     * does not ({@link DemandReading.PriorApplications}). Or empty where some call is not shown to
+     * apply its closure from the first element one after another, or walks a container not shown
+     * to hold one at most with those held to one.
      *
-     * <p>A container built of what is written alone, such as the one case of a sum a helper
-     * picks a list out of, holds one element at most on every run, and no witness need hold it to
-     * one: the application the relation is reached in is the only one.
+     * <p>What a call walks holds one at most where the collections of the input it is built of
+     * each hold one ({@link ContainerSizesUnderAWitness#mostHeld}): a collection of the input
+     * itself, a filter of one, and a container built of what is written alone, which holds one
+     * on every run and asks the witness for nothing.
      */
     private static Optional<Set<TermPath>> walkedByTheApplicationsBefore(
             DemandReading.Answered past, InputReading read) {
@@ -4504,14 +4506,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return Optional.empty();
             }
             for (DemandReading.PriorApplications.WalkedOver each : prior.walked().get()) {
-                if (each.reads().pathOf(each.container(), read.rules().newtypes())
-                        instanceof PathResolution.At(TermPath collection)) {
-                    out.add(collection);
-                } else if (!ContainerSizesUnderAWitness
-                        .mostHeldWhateverTheInputHolds(each.container())
-                        .map(most -> most.compareTo(BigInteger.ONE) <= 0).orElse(false)) {
+                Set<TermPath> heldToOne = new LinkedHashSet<>();
+                Optional<BigInteger> most = ContainerSizesUnderAWitness.mostHeld(each.container(),
+                        node -> {
+                            if (each.reads().pathOf(node, read.rules().newtypes())
+                                    instanceof PathResolution.At(TermPath collection)) {
+                                heldToOne.add(collection);
+                                return Optional.of(BigInteger.ONE);
+                            }
+                            return Optional.empty();
+                        });
+                if (!most.map(held -> held.compareTo(BigInteger.ONE) <= 0).orElse(false)) {
                     return Optional.empty();
                 }
+                out.addAll(heldToOne);
             }
         }
         return Optional.of(out);
@@ -4774,6 +4782,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             asked.add(collection);
             BigInteger asked = ofOne ? BigInteger.ONE : BigInteger.ZERO;
+            BigInteger atMost = null;
             for (OnAWay each : conditions) {
                 // A statement turning on no position the way names may turn on anything,
                 // the collection and what is in it as well.
@@ -4795,11 +4804,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     asked = asked.max(BigInteger.ONE);
                     continue;
                 }
-                Optional<BigInteger> least = holdsAtLeast(each, collection, read);
-                if (least.isEmpty()) {
+                // That some element meets what is asked, where an element can be written to meet
+                // it reading nothing the relation reads, asks the collection for one: the one at
+                // hand where the relation reads one, written to meet it as well.
+                if (each.bySome() != null && collection.equals(each.elementsOf())
+                        && metByAnElementApartFrom(each, reads, conditions, region, read)) {
+                    asked = asked.max(BigInteger.ONE);
+                    continue;
+                }
+                Optional<HowManyAsked> held = howManyAsked(each, collection, read);
+                if (held.isEmpty()) {
                     return Optional.empty();
                 }
-                asked = asked.max(least.get());
+                asked = asked.max(held.get().least());
+                if (held.get().most() != null) {
+                    atMost = atMost == null ? held.get().most() : atMost.min(held.get().most());
+                }
             }
             boolean aTotal = false;
             boolean asManyAsItCounts = false;
@@ -4856,6 +4876,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         : up.add(BigInteger.ONE);
             }
             BigInteger witness = fewest.max(asked).max(inside);
+            // A statement holding the collection to at most some number is one the witness
+            // meets only holding no more.
+            if (atMost != null && witness.compareTo(atMost) > 0) {
+                return Optional.empty();
+            }
             if (held.max() != null) {
                 if (!(held.max().at() instanceof Count most)
                         || most.exactly().compareTo(ExactRatio.of(witness)) < 0) {
@@ -5023,16 +5048,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The fewest elements {@code statement} asks the collection at {@code collection} to hold,
-     * where all it asks is that: a number of them held at least, said of how many it holds and of
-     * nothing else. Nothing where it asks anything else of it.
+     * How many elements a statement of how many a collection holds asks it to hold: no fewer than
+     * {@code least}, and no more than {@code most} where that is not null.
      */
-    private static Optional<BigInteger> holdsAtLeast(OnAWay statement, TermPath collection,
-                                                     InputReading read) {
+    private record HowManyAsked(BigInteger least, BigInteger most) {}
+
+    /**
+     * How many elements {@code statement} asks the collection at {@code collection} to hold,
+     * where all it asks is that: said of how many it holds and of nothing else, at least some
+     * number, at most one, or exactly one. Nothing where it asks anything else of it.
+     */
+    private static Optional<HowManyAsked> howManyAsked(OnAWay statement, TermPath collection,
+                                                       InputReading read) {
         if (!statement.positions().equals(Set.of(collection))
                 || !(statement.relation()
                         instanceof TakenConstraint.Affine(var form, var rel, var _))
-                || (rel != Rel.GE && rel != Rel.GT) || form.coefs().size() != 1) {
+                || form.coefs().size() != 1) {
             return Optional.empty();
         }
         RuleReadingSource rules = read.rules();
@@ -5041,14 +5072,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
                         collection, type, rules.inners(), rules.symbols());
         ExactRatio weight = count == null ? null : form.coefs().get(count);
-        if (weight == null || weight.signum() <= 0
+        if (weight == null || weight.signum() == 0
                 || !(form.constant().negated().dividedBy(weight)
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio bound))
-                || !(bound.ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger up))) {
+                || !(bound.ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger up))
+                || !(bound.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger down))) {
             return Optional.empty();
         }
-        boolean strict = rel == Rel.GT && bound.isWhole();
-        return Optional.of((strict ? up.add(BigInteger.ONE) : up).max(BigInteger.ZERO));
+        // How many it holds stands to the bound as the statement says, turned where the count is
+        // weighed below nought.
+        Rel asked = weight.signum() > 0 ? rel : rel.turned();
+        boolean whole = bound.isWhole();
+        return switch (asked) {
+            case GE -> Optional.of(new HowManyAsked(up.max(BigInteger.ZERO), null));
+            case GT -> Optional.of(new HowManyAsked(
+                    (whole ? up.add(BigInteger.ONE) : up).max(BigInteger.ZERO), null));
+            case LE -> Optional.of(new HowManyAsked(BigInteger.ZERO, down));
+            case LT -> Optional.of(new HowManyAsked(BigInteger.ZERO,
+                    whole ? down.subtract(BigInteger.ONE) : down));
+            case EQ -> whole ? Optional.of(new HowManyAsked(up.max(BigInteger.ZERO), up))
+                    : Optional.empty();
+            case NE -> Optional.empty();
+        };
     }
 
     /**
@@ -6337,9 +6382,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * Whether an element of the container {@code statement} asks some element of can be written
      * to meet what it asks, apart from every other element: one way of meeting it asks only ends
-     * on numbers of that element, no rule of the container or of a value around it reads those
-     * numbers, and a value of each is shown inside its ends. An element's own rules hold it to
-     * nothing outside it.
+     * on numbers of that element and truths of it, no rule of the container or of a value around
+     * it reads those numbers or names those truths, and a value of each number is shown inside
+     * its ends. An element's own rules hold it to nothing outside it, and a truth no rule names
+     * is written either way.
      *
      * <p>And only where nothing else on the way asks anything of the container's elements: what
      * every element meets is met by the one written beside the others as well, which is not asked
@@ -6347,6 +6393,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean metByAnotherElement(OnAWay statement, List<OnAWay> conditions,
                                                SearchRegion region, InputReading read) {
+        return metByAnElementApartFrom(statement, List.of(), conditions, region, read);
+    }
+
+    /**
+     * The same, by an element the way of meeting it reads nothing of {@code apartFrom} in: the
+     * element at hand, where what is read of it there is those places, meets the statement too.
+     */
+    private static boolean metByAnElementApartFrom(OnAWay statement, List<TermPath> apartFrom,
+                                                   List<OnAWay> conditions, SearchRegion region,
+                                                   InputReading read) {
         TermPath container = statement.elementsOf();
         for (OnAWay other : conditions) {
             if (container.equals(other.elementsOf()) && other.bySome() == null) {
@@ -6362,12 +6418,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         for (List<RowDemand.OfAnElement> way : statement.bySome().ways()) {
-            Map<NumericTerm.FromOnePosition, NumericDomain.Bounds> ends = endsAsked(way, container);
+            List<RowDemand.OfAnElement> ofItsNumbers = new ArrayList<>();
+            boolean truthsWritten = true;
+            for (RowDemand.OfAnElement each : way) {
+                if (each instanceof RowDemand.ATruth(TermPath at, var _)) {
+                    truthsWritten &= at.isAtOrUnder(container.element())
+                            && namedDownTo(at, deepest, read, null) == Named.NOT
+                            && apartFrom.stream().noneMatch(at::bearsOn);
+                } else {
+                    ofItsNumbers.add(each);
+                }
+            }
+            Map<NumericTerm.FromOnePosition, NumericDomain.Bounds> ends =
+                    truthsWritten ? endsAsked(ofItsNumbers, container) : null;
             if (ends != null && ends.entrySet().stream().allMatch(each ->
                     aValueIsShownInside(each.getKey(), each.getValue(), ends.size() == 1,
                             deepest, region, read)
                     && (!apart.found || !keptApartBeside(container,
-                            each.getKey().subjectPath(), read)))) {
+                            each.getKey().subjectPath(), read))
+                    && each.getKey().placesReadOff().stream().noneMatch(place ->
+                            apartFrom.stream().anyMatch(place::bearsOn)))) {
                 return true;
             }
         }

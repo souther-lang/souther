@@ -85,6 +85,7 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                         "List.fold((acc, x) -> acc + 1, 0, ROWS)"),
                 List.of("List.sum(List.map(.quantity, ROWS))",
                         "List.fold((acc, x) -> acc + x.quantity, 0, ROWS)",
+                        "List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))",
                         "List.fold((acc, x) -> acc + x.quantity, 0, List.sortBy(.sku, ROWS))",
                         "List.sum(List.map(.quantity, List.sortBy(.sku, ROWS)))",
                         "List.sum(List.map(x -> x, List.map(.quantity, ROWS)))",
@@ -143,8 +144,8 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
     }
 
     /**
-     * Shapes neither side reads: a sum over what a closure puts end to end, a fold over a map, or
-     * a reordering of the numbers a fold adds.
+     * Shapes neither side reads: a sum over what a closure puts end to end, or a reordering of
+     * the numbers a fold adds.
      */
     private static List<String> unread() {
         return List.of(
@@ -153,7 +154,6 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 // A reversal between the selections puts their positions in another list.
                 "List.sum(List.take(1, List.reverse(List.drop(1, NUMS))))",
                 "List.sum(List.flatMap(i -> [i.quantity], ROWS))",
-                "List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))",
                 "List.fold((acc, x) -> acc + x, 0,"
                         + " List.sortBy(x -> x, List.map(.quantity, ROWS)))");
     }

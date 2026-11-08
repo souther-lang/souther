@@ -1925,6 +1925,15 @@ public sealed interface NumericTerm
             return source.subjectPath();
         }
 
+        /** The places the run's values are read off: what a computation of each element reads of
+         *  it ({@link RunSource.ComputedOccurrences#placesReadOff}), and otherwise every place a
+         *  move puts. */
+        @Override
+        public List<TermPath> placesReadOff() {
+            return source instanceof RunSource.ComputedOccurrences computed
+                    ? computed.placesReadOff() : NumericTerm.super.placesReadOff();
+        }
+
         @Override
         public String toString() {
             return operation.qualified() + "(" + source + ")";

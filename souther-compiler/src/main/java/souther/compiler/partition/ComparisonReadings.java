@@ -674,7 +674,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         return upTo.after(new DemandReading.PriorApplications(
                 walkedOneAfterAnother(first.entered(), reads),
-                new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed())));
+                new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed(),
+                        before.before())));
     }
 
     /**

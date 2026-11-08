@@ -881,8 +881,8 @@ public final class InputNumber {
      *             it stands in {@code list}: the first position kept, then the one past the last,
      *             each only where it keeps something less than the whole; and the one test no
      *             position passes where nothing is left
-     * @param through what an element kept is of the element of {@code list}, where a filter is of
-     *                what a walk answered; null where it is that element
+     * @param through what an element kept is of the element of {@code list}, where it is what a
+     *                walk answered; null where it is that element
      */
     private record Selection(Denotation list, List<ElementValue.Test> kept, Through through) {
 
@@ -931,10 +931,11 @@ public final class InputNumber {
 
     /**
      * What the elements a selection keeps are, where it crossed a walk answering one value for
-     * each element under a filter: {@code filter(p, map(f, xs))} keeps {@code f(x)} for each
-     * {@code x} of {@code xs} that {@code p(f(x))} holds of, which is {@code map(f, filter(p ∘ f,
-     * xs))}. Read as the closures are written, under names: each closure's parameter on the way
-     * stands for what the walk beneath it answered.
+     * each element: {@code filter(p, map(f, xs))} keeps {@code f(x)} for each {@code x} of
+     * {@code xs} that {@code p(f(x))} holds of, which is {@code map(f, filter(p ∘ f, xs))}, and
+     * {@code map(f, xs)} keeps {@code f(x)} for every one. Read as the closures are written,
+     * under names: each closure's parameter on the way stands for what the walk beneath it
+     * answered.
      *
      * @param element the binding an element of the list under arrives on
      * @param value   what an element the selection keeps is, read of {@code element}
@@ -977,11 +978,12 @@ public final class InputNumber {
                 under = where.denotes(pieces.walked(), source.symbols(), source.newtypes());
                 continue;
             }
-            // Under a filter, a walk answering one value for each element in the order handed:
-            // what the filter tested is what the walk answered. The position it may be handed is
-            // no name the closures are read with, so an answer reading it is read nowhere.
-            ElementBindings.StepOnEachElement step = predicates.isEmpty() ? null
-                    : ElementBindings.stepAnsweredOnEachElement(under.value(), blockOf);
+            // A walk answering one value for each element in the order handed: what a filter
+            // above tested, and what is computed of an element kept, is what the walk answered.
+            // The position it may be handed is no name the closures are read with, so an answer
+            // reading it is read nowhere.
+            ElementBindings.StepOnEachElement step =
+                    ElementBindings.stepAnsweredOnEachElement(under.value(), blockOf);
             ElementAnswer answer = step == null || step.element().binding() == null ? null
                     : where.answerAt(step.element().binding());
             if (answer == null || !answersInTheOrderHanded(under.value())) {
@@ -1031,7 +1033,10 @@ public final class InputNumber {
 
     /**
      * The filters, takes and drops {@code met} is stacked of, as tests of the element and of its
-     * position in the list under all of them — or null where it is none.
+     * position in the list under all of them, and the walks crossed on the way — or null where it
+     * is none of them. A walk alone keeps every element, and what it keeps is what it answered
+     * ({@link Through}): {@code map(g, map(f, xs))} is {@code g ∘ f} of each element of
+     * {@code xs}.
      *
      * <p>The filters outside every take and drop ({@link #keptByWhatItHolds}): a filter keeps an
      * element by what it holds wherever it stands, and a take or drop outside one would count the
@@ -1060,7 +1065,8 @@ public final class InputNumber {
         }
         List<ElementValue.Test> kept = new ArrayList<>(filtered.tests());
         if (cuts.isEmpty()) {
-            return kept.isEmpty() ? null : new Selection(under, kept, filtered.through());
+            return kept.isEmpty() && filtered.through() == null ? null
+                    : new Selection(under, kept, filtered.through());
         }
         long from = 0;
         Long before = null;
