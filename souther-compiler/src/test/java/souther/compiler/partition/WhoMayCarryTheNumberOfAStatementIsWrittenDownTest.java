@@ -68,11 +68,11 @@ class WhoMayCarryTheNumberOfAStatementIsWrittenDownTest {
                             + " assigned"));
 
     private static final List<Licence> MAY_MAKE_AN_INVARIANTS = List.of(
-            new Licence("souther.compiler.check.ConjunctStatements.reach",
-                    "the one walk that takes a declaration's conjunct apart into the things it"
-                            + " states, which is where a statement is recognised. Numbered where an"
-                            + " end or a hand-over is written down instead, the number would say"
-                            + " which of the outcomes this was rather than which of the statements"));
+            new Licence("souther.compiler.check.ConjunctStatements.of",
+                    "the one place the statements the walk of a declaration's conjunct arrives at"
+                            + " are numbered, once they are all recognised. Numbered where an end"
+                            + " or a hand-over is written down instead, the number would say which"
+                            + " of the outcomes this was rather than which of the statements"));
 
     /**
      * Only the reading that took a part apart names one of its statements.

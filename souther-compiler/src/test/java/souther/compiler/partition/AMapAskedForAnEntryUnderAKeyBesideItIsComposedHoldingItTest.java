@@ -82,6 +82,24 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
                 chosen.fields().get("rates").text());
     }
 
+    /** A lookup whose value is bounded has the entry hold a number inside the bound, which the
+     *  value's own type may bound as well. */
+    @Test
+    void aLookupBoundingTheValueFoundHasTheEntryHoldANumberInsideTheBound() {
+        assertEquals("[(CurrencyCode(\"AAA\"), ConversionRate(5m))]",
+                composed(table(BASE_THEN_RATES, "baseAtRate(base, rates)",
+                        atRate("Decimal.compare(r.value, 5.0m) >= 0")))
+                        .fields().get("rates").text());
+        assertEquals("[(CurrencyCode(\"AAA\"), ConversionRate(6m))]",
+                composed(table(BASE_THEN_RATES, "baseAtRate(base, rates)",
+                        atRate("Decimal.compare(r.value, 5.0m) > 0")))
+                        .fields().get("rates").text());
+        assertEquals("[(CurrencyCode(\"AAA\"), ConversionRate(5m))]",
+                composed(table(BASE_THEN_RATES, "baseAtRate(base, rates)",
+                        atRate("Decimal.compare(r.value, 5.0m) <= 0")))
+                        .fields().get("rates").text());
+    }
+
     @Test
     void theKeyIsChosenFirstWhicheverFieldIsWrittenFirst() {
         Partitions.FieldsChosen chosen = composed(table(RATES_THEN_BASE, "baseAtRate(base, rates)",

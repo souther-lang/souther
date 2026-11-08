@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
-import java.math.BigDecimal;
+import souther.compiler.numeric.NumericDomain;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -18,7 +19,7 @@ import java.util.Optional;
  *                      of the one entry some entry is — the one holding the element placed in it,
  *                      where one is
  * @param keysEachFiled the values a map is to file an entry under, each asked of an entry of its
- *                      own over whatever value the rules admit, or the value the rules name
+ *                      own over whatever value the rules admit, or the values they name
  * @param keysKeptOut   the values no key of the map is equal to
  */
 record ContainerContents(List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
@@ -34,17 +35,18 @@ record ContainerContents(List<FixtureTemplate> holding, List<FixtureTemplate> ke
     }
 
     /**
-     * A key a map is to file an entry under, and the number the rules say the value under it is.
+     * A key a map is to file an entry under, and the numbers the rules say the value under it is
+     * among.
      *
      * @param key     the key
-     * @param valueIs the number the value filed under it is to be; empty where any value the rules
-     *                admit will do
+     * @param valueIn the numbers the value filed under it is to be among; empty where any value
+     *                the rules admit will do
      */
-    record KeyAsked(FixtureTemplate key, Optional<BigDecimal> valueIs) {
+    record KeyAsked(FixtureTemplate key, Optional<NumericDomain.Bounds> valueIn) {
 
         KeyAsked {
             Objects.requireNonNull(key, "a key is asked for");
-            Objects.requireNonNull(valueIs, "a number asked of the value under it, or none");
+            Objects.requireNonNull(valueIn, "the numbers asked of the value under it, or none");
         }
     }
 }

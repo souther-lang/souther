@@ -13029,9 +13029,18 @@ public final class Generator {
         }
         Map<TermPath, FixtureTemplate> last = composing.lastBuilt() == null ? Map.of()
                 : composing.lastBuilt();
+        Map<TermPath, Set<TermPath>> differ = new LinkedHashMap<>();
         for (RowDemand.OneValueAtBoth each : composing.here().alongside()) {
             FixtureTemplate built = last.get(each.one());
             if (built == null) {
+                // Nothing was built, so there is no value to be apart from: the two positions are
+                // offered values that differ from one another, below.
+                if (!each.same()) {
+                    differ.computeIfAbsent(each.one(), _ -> new LinkedHashSet<>())
+                            .add(each.other());
+                    differ.computeIfAbsent(each.other(), _ -> new LinkedHashSet<>())
+                            .add(each.one());
+                }
                 continue;
             }
             if (each.same()) {
@@ -13058,6 +13067,35 @@ public final class Generator {
             if (!others.isEmpty()) {
                 out.put(each.getKey(), others);
                 added = true;
+            }
+        }
+        // Positions held apart from one another with nothing built to be apart from: each takes the
+        // first value that is none of those it is held apart from and none that a position it
+        // differs from has taken.
+        Map<TermPath, FixtureTemplate> taken = new LinkedHashMap<>();
+        for (Map.Entry<TermPath, Set<TermPath>> each : differ.entrySet()) {
+            Type type = typeOf(composing.plan().at(each.getKey()));
+            if (type == null || decided.containsKey(each.getKey())) {
+                continue;
+            }
+            Set<String> excluded = new LinkedHashSet<>(
+                    apartFrom.getOrDefault(each.getKey(), Set.of()));
+            for (TermPath other : each.getValue()) {
+                FixtureTemplate theirs = taken.get(other);
+                if (theirs != null) {
+                    excluded.add(theirs.text());
+                }
+            }
+            Proposals values = Witnesses.distinctValuesOf(type, excluded.size() + 1,
+                    subject.ruleReading(), Set.of());
+            found.met(values.met());
+            for (FixtureTemplate value : values.values()) {
+                if (!excluded.contains(value.text())) {
+                    taken.put(each.getKey(), value);
+                    out.put(each.getKey(), List.of(value));
+                    added = true;
+                    break;
+                }
             }
         }
         return added ? out : null;

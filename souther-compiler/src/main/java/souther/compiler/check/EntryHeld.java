@@ -2,10 +2,11 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.semantics.MapPart;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
@@ -14,6 +15,7 @@ import souther.compiler.types.ValueName;
 import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,9 +33,9 @@ import java.util.function.Function;
  * <p>Two forms are read: a membership test of the map's keys, as the library's laws say one is
  * ({@code Map.containsKey(key, map)}, {@code List.contains(key, Map.keys(map))}), and the lookup
  * {@code Map.get(key, map)} followed through {@code Option.map} and {@code Option.withDefault} to a
- * comparison of the value found with a written number, absent counting as false. Anything else
- * about the value found leaves the rule unread, since a builder told only that an entry exists
- * would build maps the rule refuses.
+ * comparison of the value found with a written number ({@code ==}, {@code <}, {@code <=},
+ * {@code >}, {@code >=}), absent counting as false. Anything else about the value found leaves the
+ * rule unread, since a builder told only that an entry exists would build maps the rule refuses.
  *
  * <p>A fact about the key and the map together, which is what makes it a rule of the value they are
  * fields of and not of either: the map may hold any entries, and which of them the rule asks for
@@ -54,16 +56,16 @@ public final class EntryHeld {
      *
      * @param container what the map is written as
      * @param key       what the key is written as
-     * @param valueIs   the number the value under the key is to be, or null where the rule asks
-     *                  nothing of it
+     * @param valueIn   the numbers the value under the key is to be one of, as a range (one number
+     *                  being the range of that number), or null where the rule asks nothing of it
      */
-    public record Stated(Core container, Core key, BigDecimal valueIs) {}
+    public record Stated(Core container, Core key, NumericDomain.Bounds valueIn) {}
 
     /**
      * What a rule asks of the map at {@code container}: the place standing at the key, and the
-     * number the value under it is to be, or null where nothing is asked of the value.
+     * numbers the value under it is to be one of, or null where nothing is asked of the value.
      */
-    public record Requirement(RuleKey key, BigDecimal valueIs) {}
+    public record Requirement(RuleKey key, NumericDomain.Bounds valueIn) {}
 
     /**
      * {@code clause} read as asking a map for an entry, or null where it asks nothing of the kind.
@@ -149,12 +151,14 @@ public final class EntryHeld {
                 && Core.withoutStanding(args.getFirst()) instanceof Core.Block block
                 && block.params().size() == 1
                 && lookup(args.get(1)) instanceof AnOperationApplied(var _, var lookedUp)) {
-            BigDecimal is = valueIs(block.body(), block.params().getFirst().binding(), followed);
+            NumericDomain.Bounds is =
+                    valueIn(block.body(), block.params().getFirst().binding(), followed);
             return is == null ? null : new Stated(lookedUp.get(1), lookedUp.get(0), is);
         }
         // The lookup matched on directly, the present arm stating what the value is.
         if (lookup(scrutinee) instanceof AnOperationApplied(var _, var lookedUp)) {
-            BigDecimal is = valueIs(present.body(), payload.binder().binding(), followed);
+            NumericDomain.Bounds is =
+                    valueIn(present.body(), payload.binder().binding(), followed);
             return is == null ? null : new Stated(lookedUp.get(1), lookedUp.get(0), is);
         }
         return null;
@@ -167,34 +171,37 @@ public final class EntryHeld {
     }
 
     /**
-     * The number {@code statement} says the value bound to {@code value} is, or null where it says
-     * anything else of it.
+     * The numbers {@code statement} says the value bound to {@code value} is one of, or null where
+     * it says anything else of it.
+     *
+     * <p>A comparison of the value with a written number, in either order, or the comparison of two
+     * decimals written as the sign of their difference against nought. Not {@code !=}: the numbers
+     * it leaves are not one range.
      */
-    private static BigDecimal valueIs(Core statement, BindingId value,
-                                      Function<Core, Core> followed) {
-        if (!(Core.withoutStanding(statement) instanceof Core.Binary same)
-                || same.op() != BinOp.EQ) {
+    private static NumericDomain.Bounds valueIn(Core statement, BindingId value,
+                                                Function<Core, Core> followed) {
+        StatedComparison stated = Core.withoutStanding(statement) instanceof Core.Binary compares
+                ? StatedComparison.of(compares, true) : null;
+        if (stated == null) {
             return null;
         }
-        Core left = Core.withoutStanding(same.left());
-        Core right = Core.withoutStanding(same.right());
-        // A comparison of the two numbers that answers nought, as an equality of decimals is written.
-        if (AnOperationApplied.of(left) instanceof AnOperationApplied(var operation, var args)
+        // The sign of the difference of two numbers against nought, as a comparison of decimals is
+        // written: it compares the two numbers the way it compares its answer with nought.
+        if (AnOperationApplied.of(Core.withoutStanding(stated.left()))
+                instanceof AnOperationApplied(var operation, var args)
                 && operation.equals(COMPARE) && args.size() == 2
-                && right instanceof Core.Int nought && nought.value() == 0) {
-            BigDecimal first = writtenNumber(args.get(1), followed);
-            BigDecimal second = writtenNumber(args.get(0), followed);
-            if (isTheValue(args.get(0), value) && first != null) {
-                return first;
-            }
-            return isTheValue(args.get(1), value) ? second : null;
+                && Core.withoutStanding(stated.right()) instanceof Core.Int nought
+                && nought.value() == 0) {
+            stated = new StatedComparison(stated.claim(), args.get(0), args.get(1),
+                    stated.reading());
         }
-        BigDecimal written = writtenNumber(right, followed);
-        if (isTheValue(left, value) && written != null) {
-            return written;
-        }
-        written = writtenNumber(left, followed);
-        return isTheValue(right, value) ? written : null;
+        StatedComparison.Numbered<Boolean> aboutTheValue =
+                stated.at(side -> isTheValue(side, value) ? Boolean.TRUE : null);
+        BigDecimal written = aboutTheValue == null ? null
+                : writtenNumber(aboutTheValue.other(), followed);
+        OrderedInterval left = written == null ? null
+                : OrderedInterval.leftBy(aboutTheValue.claim().statedRelation(), Count.of(written));
+        return left == null ? null : new NumericDomain.Bounds(left.low(), left.high());
     }
 
     /** Whether {@code e} is the value bound to {@code value}, or the value a name wraps. */
@@ -282,7 +289,7 @@ public final class EntryHeld {
             RuleKey key = stated == null ? null : rules.fieldAt(stated.key());
             if (where != null && key != null) {
                 out.computeIfAbsent(where, _ -> new ArrayList<>())
-                        .add(new Requirement(key, stated.valueIs()));
+                        .add(new Requirement(key, stated.valueIn()));
                 builtFor.computeIfAbsent(where, _ -> new ArrayList<>()).add(one);
             } else if (where != null) {
                 notKept.add(where);
@@ -332,8 +339,8 @@ public final class EntryHeld {
                         source.sums()).shape() instanceof Shape.Mapping(Type _, Type value))) {
             return false;
         }
-        for (Requirement each : requirements) {
-            if (each.valueIs() != null && !valueTypeAdmits(value, each.valueIs(), named, world)) {
+        for (NumericDomain.Bounds asked : valuesAsked(requirements).values()) {
+            if (numberIn(value, asked, named, world) == null) {
                 return false;
             }
         }
@@ -387,25 +394,110 @@ public final class EntryHeld {
      * <p>The one answer to what the builders of a record can keep, which is what a rule must be
      * for a reading to call it read: a rule the builders cannot keep is a rule left to the decoder
      * that runs it. The map and every key are fields of the record, since the builders choose a
-     * record's fields one at a time and a key is chosen before the map it is a key of; and one
-     * key is not asked for two numbers, since no map holds two values under it.
+     * record's fields one at a time and a key is chosen before the map it is a key of; and the
+     * rules asking about one key leave some number to the value under it, since no map holds two
+     * values under a key.
      */
     private static boolean buildable(RuleKey map, List<Requirement> requirements) {
         if (map.steps().size() != 1) {
             return false;
         }
-        Map<RuleKey, BigDecimal> valueUnder = new HashMap<>();
         for (Requirement each : requirements) {
             if (each.key().steps().size() != 1 || each.key().equals(map)) {
                 return false;
             }
-            if (each.valueIs() != null) {
-                BigDecimal had = valueUnder.putIfAbsent(each.key(), each.valueIs());
-                if (had != null && had.compareTo(each.valueIs()) != 0) {
-                    return false;
-                }
+        }
+        return valuesAsked(requirements).values().stream()
+                .allMatch(NumericDomain.Bounds::holdsAValue);
+    }
+
+    /**
+     * The numbers every rule asking about a key leaves the value under it, by the key, for the
+     * keys some rule asks anything of the value of.
+     *
+     * <p>A conjunction of what the rules ask: the range the rules leave together, which holds no
+     * number where they contradict one another.
+     */
+    public static Map<RuleKey, NumericDomain.Bounds> valuesAsked(List<Requirement> requirements) {
+        Map<RuleKey, NumericDomain.Bounds> out = new LinkedHashMap<>();
+        for (Requirement each : requirements) {
+            if (each.valueIn() != null) {
+                out.merge(each.key(), each.valueIn(), NumericDomain.Bounds::meet);
             }
         }
-        return true;
+        return out;
+    }
+
+    /**
+     * Whether no value is among both {@code one} and {@code other}: two keys asked these of their
+     * values are two entries, since one entry holds one value.
+     */
+    public static boolean leaveNoNumberInCommon(NumericDomain.Bounds one,
+                                                NumericDomain.Bounds other) {
+        return !one.meet(other).holdsAValue();
+    }
+
+    /**
+     * A number among {@code asked} that a value of {@code type} can be, or null where there is
+     * none this finds.
+     *
+     * <p>Chosen among the numbers a range is entered by: its ends, a step inside each end, and the
+     * middle. Each is held to the type's own rules ({@link #valueTypeAdmits}), so a number the
+     * type refuses is never the answer, and to the carrier's grain, so a whole-number type is
+     * offered whole numbers only. A type whose rules leave a gap in the range that none of those
+     * numbers is outside of is answered null, which says nothing is known and not that no number
+     * will do.
+     *
+     * @param within the record being read, where one is given ({@link #valueTypeAdmits})
+     */
+    public static BigDecimal numberIn(Type type, NumericDomain.Bounds asked,
+                                      TypeSymbol.AtModule within, RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        DeclaredBounds.Range own = DeclaredBounds.of(view, reading);
+        NumericDomain.Bounds room = own == null ? asked
+                : asked.meet(new NumericDomain.Bounds(own.min(), own.max()));
+        if (!room.holdsAValue()) {
+            return null;
+        }
+        boolean whole = view.shape() instanceof Shape.Scalar(Type.Prim prim)
+                && prim == Type.Prim.INT;
+        for (Count each : entering(room, whole)) {
+            if (room.admits(each) && valueTypeAdmits(type, each.at(), within, reading)) {
+                return each.at();
+            }
+        }
+        return null;
+    }
+
+    /** The numbers a range is entered by, nearest the ends first. */
+    private static List<Count> entering(NumericDomain.Bounds room, boolean whole) {
+        Count low = room.min() != null && room.min().at() instanceof Count count ? count : null;
+        Count high = room.max() != null && room.max().at() instanceof Count count ? count : null;
+        List<Count> out = new ArrayList<>();
+        out.add(low);
+        out.add(high);
+        out.add(low == null ? null : low.plus(1));
+        out.add(high == null ? null : high.minus(1));
+        out.add(low == null || high == null ? null : midway(low, high));
+        if (low == null && high == null) {
+            out.add(Count.of(0));
+            out.add(Count.of(1));
+        }
+        return out.stream().filter(each -> each != null && (!whole || each.exactly().isWhole()))
+                .distinct().toList();
+    }
+
+    /** The count halfway between two, or null where no count is. */
+    private static Count midway(Count low, Count high) {
+        if (!(low.exactly().plus(high.exactly()) instanceof ExactAnswer.Held<ExactRatio> sum)
+                || !(sum.value().times(ExactRatio.of(BigInteger.ONE, BigInteger.TWO))
+                        instanceof ExactAnswer.Held<ExactRatio> half)
+                || !(Count.written(half.value())
+                        instanceof ExactAnswer.Held<Optional<Count>> count)) {
+            return null;
+        }
+        return count.value().orElse(null);
     }
 }

@@ -7,7 +7,6 @@ import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeReachName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -182,54 +181,6 @@ final class PlanComposer {
             }
             key = composed.values().getFirst();
         }
-        // A key the rules ask the entry to be filed under is a value of another position, and one
-        // entry is filed under one key.
-        // What the rules say the value under that key is, from every demand on the key: one entry
-        // is one value, so two numbers asked of it are no map.
-        BigDecimal valueIs = null;
-        for (ContainerContents.KeyAsked asked : keysHeld) {
-            if (key != null && !key.text().equals(asked.key().text())) {
-                return Proposals.NONE.meeting(met);
-            }
-            key = asked.key();
-            BigDecimal number = asked.valueIs().orElse(null);
-            if (!agree(valueIs, number)) {
-                return Proposals.NONE.meeting(met);
-            }
-            valueIs = valueIs == null ? number : valueIs;
-        }
-        List<Witnesses.Filed> eachFiled = new ArrayList<>();
-        if (container instanceof Shape.Mapping mapping) {
-            for (ContainerContents.KeyAsked asked : keysEachFiled) {
-                BigDecimal number = asked.valueIs().orElse(null);
-                if (key != null && key.text().equals(asked.key().text())) {
-                    if (!agree(valueIs, number)) {
-                        return Proposals.NONE.meeting(met);
-                    }
-                    valueIs = valueIs == null ? number : valueIs;
-                    continue;
-                }
-                FixtureTemplate value = null;
-                if (number != null) {
-                    value = Partitions.valueFiledAs(mapping.value(), number, reading);
-                    if (value == null) {
-                        return Proposals.NONE.meeting(met);
-                    }
-                    holdingOnce(holding, value);
-                }
-                eachFiled.add(new Witnesses.Filed(asked.key(), value));
-            }
-            if (valueIs != null) {
-                FixtureTemplate value =
-                        Partitions.valueFiledAs(mapping.value(), valueIs, reading);
-                if (value == null
-                        || (element != null && !element.text().equals(value.text()))) {
-                    return Proposals.NONE.meeting(met);
-                }
-                element = value;
-                holdingOnce(holding, value);
-            }
-        }
         Proposals collection = switch (container) {
             case Shape.Sequence carrier -> {
                 // Every element is the one composed, and elements kept apart — a set's, or a
@@ -240,27 +191,28 @@ final class PlanComposer {
                 if (plan.eachOf() && !apart.isEmpty() && plan.holds().least() > 1) {
                     yield Proposals.NONE;
                 }
-                if (key != null || !keysEachFiled.isEmpty()) {
+                if (key != null || !keysHeld.isEmpty() || !keysEachFiled.isEmpty()) {
                     throw new IllegalStateException("a plan put a key on what a list or a set"
                             + " holds, which files nothing under one: " + plan.at());
                 }
                 yield Witnesses.holding(carrier, apart, holding, keptOut, plan.holds(), reading);
             }
-            case Shape.Mapping carrier -> Witnesses.holding(carrier, holding, keptOut,
-                    key == null ? null : new Witnesses.Filed(key, element), eachFiled,
-                    keysKeptOut, plan.holds(), reading);
+            case Shape.Mapping carrier -> {
+                EntriesAsked entries =
+                        EntriesAsked.of(carrier, key, element, keysHeld, keysEachFiled, reading);
+                if (entries == null) {
+                    yield Proposals.NONE;
+                }
+                entries.written().forEach(value -> holdingOnce(holding, value));
+                yield Witnesses.holding(carrier, holding, keptOut, entries.placed(),
+                        entries.others(), keysKeptOut, plan.holds(), reading);
+            }
         };
         met = met.and(collection.met());
         // A name this module cannot write leaves no value to write.
         return collection.isEmpty() ? Proposals.NONE.meeting(met)
                 : Proposals.ofNullable(WornNames.under(plan.worn(),
                         collection.values().getFirst(), ruleSource)).meeting(met);
-    }
-
-    /** Whether two numbers asked of the value under one key can both be met: none was asked by
-     *  either, or they are the one number. */
-    private static boolean agree(BigDecimal one, BigDecimal other) {
-        return one == null || other == null || one.compareTo(other) == 0;
     }
 
     /** {@code value} among {@code holding}, once. */

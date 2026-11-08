@@ -160,6 +160,91 @@ class AMemberARuleNeedsIsComposedIntoItsContainerTest {
         assertEquals(List.of(), whatNothingCouldShow(byAMatch("Decimal", "1.0m")));
     }
 
+    /** Helpers that ask the rate under a key to compare with a written number, and a table of
+     *  rates under currencies whose keys are {@code %s}; the rules follow. */
+    private static final String BY_KEYS = "module probe\n\n" + DEALS + """
+
+            let at (key: CurrencyCode, rates: Map<CurrencyCode, Decimal>, n: Decimal): Bool =
+                Map.get(key, rates)
+                    |> Option.map(r -> Decimal.compare(r, n) == 0)
+                    |> Option.withDefault(false)
+
+            let above (key: CurrencyCode, rates: Map<CurrencyCode, Decimal>, n: Decimal): Bool =
+                Map.get(key, rates)
+                    |> Option.map(r -> Decimal.compare(r, n) > 0)
+                    |> Option.withDefault(false)
+
+            let below (key: CurrencyCode, rates: Map<CurrencyCode, Decimal>, n: Decimal): Bool =
+                Map.get(key, rates)
+                    |> Option.map(r -> Decimal.compare(r, n) < 0)
+                    |> Option.withDefault(false)
+
+            data RateTable = { %s, rates: Map<CurrencyCode, Decimal> }
+            %s
+            """ + BODY.formatted("", "", "");
+
+    private static String byKeys(String keys, String... rules) {
+        return BY_KEYS.formatted(keys, String.join("\n", rules));
+    }
+
+    @Test
+    void twoEntriesOneRuleAsksOfOneMapAreComposedWhenTheirNumbersDiffer() {
+        assertEquals(List.of(), whatNothingCouldShow(byKeys(
+                "base: CurrencyCode, quote: CurrencyCode",
+                "    invariant both = at(base, rates, 1.0m) && at(quote, rates, 2.0m)")));
+    }
+
+    @Test
+    void twoEntriesTwoRulesAskOfOneMapAreComposedWhenTheirNumbersDiffer() {
+        assertEquals(List.of(), whatNothingCouldShow(byKeys(
+                "base: CurrencyCode, quote: CurrencyCode",
+                "    invariant a = at(base, rates, 1.0m)",
+                "    invariant b = at(quote, rates, 2.0m)")));
+    }
+
+    @Test
+    void twoEntriesAskedTheSameNumberAreComposedAsOneOrTwo() {
+        assertEquals(List.of(), whatNothingCouldShow(byKeys(
+                "base: CurrencyCode, quote: CurrencyCode",
+                "    invariant a = at(base, rates, 1.0m)",
+                "    invariant b = at(quote, rates, 1.0m)")));
+    }
+
+    @Test
+    void severalEntriesAskedDifferentNumbersAreEachComposedApartFromTheOthers() {
+        assertEquals(List.of(), whatNothingCouldShow(byKeys(
+                "a: CurrencyCode, b: CurrencyCode, c: CurrencyCode",
+                "    invariant x = at(a, rates, 1.0m) && at(b, rates, 2.0m)",
+                "    invariant y = at(c, rates, 3.0m)")));
+    }
+
+    @Test
+    void aRateAskedToBeAboveANumberIsComposedAsANumberAboveIt() {
+        assertEquals(List.of(), whatNothingCouldShow(byKeys("base: CurrencyCode",
+                "    invariant a = above(base, rates, 5.0m)")));
+    }
+
+    @Test
+    void aRateAskedToBeBelowANumberIsComposedAsANumberBelowIt() {
+        assertEquals(List.of(), whatNothingCouldShow(byKeys("base: CurrencyCode",
+                "    invariant a = below(base, rates, 5.0m)")));
+    }
+
+    @Test
+    void aRateAskedForAboveOneNumberAndBelowAnotherIsComposedBetweenThem() {
+        assertEquals(List.of(), whatNothingCouldShow(byKeys("base: CurrencyCode",
+                "    invariant a = above(base, rates, 5.0m)",
+                "    invariant b = below(base, rates, 6.0m)")));
+    }
+
+    @Test
+    void ratesAskedForAboveAndBelowOneNumberOfOneKeyLeaveItsPointsOpen() {
+        List<String> open = whatNothingCouldShow(byKeys("base: CurrencyCode",
+                "    invariant a = above(base, rates, 6.0m)",
+                "    invariant b = below(base, rates, 5.0m)"));
+        assertTrue(open.stream().anyMatch(line -> line.contains("the ON point")), open::toString);
+    }
+
     @Test
     void aRateNoValueOfItsTypeCanBeIsLeftOpenAndNotComposedAsAnother() {
         List<String> open = whatNothingCouldShow(byAHelper("ConversionRate", "0.0m"));

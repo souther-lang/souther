@@ -77,9 +77,20 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
     }
 
     @Test
-    void aLookupThatOnlyBoundsTheValueFoundStaysUnanswered() {
+    void aLookupThatBoundsTheValueFoundIsReadAtTheKeyAndTheMap() {
+        for (String bound : List.of(">= 0", "> 0", "<= 0", "< 0")) {
+            String model = table(BASE_THEN_RATES, "baseAtRate(base, rates)",
+                    lookup("Decimal.compare(r.value, 1.0m) " + bound));
+
+            assertEquals(Map.of("n.base", List.of(), "n.rates", List.of()),
+                    unansweredAtTheFields(model), bound);
+        }
+    }
+
+    @Test
+    void aLookupThatOnlyKeepsTheValueFoundAwayFromANumberStaysUnanswered() {
         String model = table(BASE_THEN_RATES, "baseAtRate(base, rates)",
-                lookup("Decimal.compare(r.value, 1.0m) >= 0"));
+                lookup("Bool.not(Decimal.compare(r.value, 1.0m) == 0)"));
 
         Map<String, List<String>> left = unansweredAtTheFields(model);
 

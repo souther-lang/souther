@@ -4,9 +4,9 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ElementsTaken;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -81,8 +81,9 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
      * That the container at {@code container} holds the value at {@code value}, or holds nothing
      * equal to it — as an element, or as a key where {@code ofTheKey}.
      *
-     * @param valueIs the number the value filed under the key is to be, where the key is held and
-     *               the rules say what the entry is; empty where nothing is asked of the value
+     * @param valueIn the numbers the value filed under the key is to be among, where the key is
+     *               held and the rules say what the entry is; empty where nothing is asked of the
+     *               value
      * @param around the quantifier the demand on the container is asked under, where it is asked
      *               of a container inside an element: for each element of a container asked about
      *               every element, the demand is asked once more, and under one asking some element
@@ -90,14 +91,14 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
      *               element names no container further in ({@link RowDemand.WithinIt})
      */
     record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey,
-                 Optional<BigDecimal> valueIs, Optional<Around> around) {
+                 Optional<NumericDomain.Bounds> valueIn, Optional<Around> around) {
 
         Asked {
             Objects.requireNonNull(container, "what is asked is asked of some container");
             Objects.requireNonNull(value, "a container is asked about the value at some position");
-            Objects.requireNonNull(valueIs, "a number asked of the value under a key, or none");
+            Objects.requireNonNull(valueIn, "numbers asked of the value under a key, or none");
             Objects.requireNonNull(around, "asked under a quantifier or under none");
-            if (valueIs.isPresent() && !(holding && ofTheKey)) {
+            if (valueIn.isPresent() && !(holding && ofTheKey)) {
                 throw new IllegalArgumentException(
                         "only a key held has a value filed under it that is asked after");
             }
@@ -247,16 +248,23 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
     /**
      * The same, with {@code more} asked of containers beside — what the rules of the values a row
      * holds ask of them ({@link MeasuredInput#membersTheRulesNeed}), which every row a way is
-     * written as is held to as well. One asked already is asked once.
+     * written as is held to as well, and the positions it holds apart. One asked already is asked
+     * once.
      */
-    ContentsAsked and(List<Asked> more) {
+    ContentsAsked and(ContentsAsked more) {
         List<Asked> out = new ArrayList<>(asked);
-        for (Asked each : more) {
+        for (Asked each : more.asked) {
             if (!out.contains(each)) {
                 out.add(each);
             }
         }
-        return new ContentsAsked(out, related, reads);
+        List<RowDemand.OneValueAtBoth> apart = new ArrayList<>(related);
+        for (RowDemand.OneValueAtBoth each : more.related) {
+            if (!apart.contains(each)) {
+                apart.add(each);
+            }
+        }
+        return new ContentsAsked(out, apart, reads);
     }
 
     /**
@@ -430,7 +438,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 List<Asked> under = new ArrayList<>();
                 for (Asked each : asked.asked()) {
                     under.add(new Asked(at.get(each.container()), at.get(each.value()),
-                            each.holding(), each.ofTheKey(), each.valueIs(),
+                            each.holding(), each.ofTheKey(), each.valueIn(),
                             each.around().map(around ->
                                     new Around(at.get(around.container()), around.some(),
                                             around.from(), around.below()))));
@@ -719,9 +727,11 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             alongside = List.copyOf(alongside);
         }
 
-        /** Whether some position of this parameter is held apart from a value built elsewhere. */
+        /** Whether some position of this parameter is held apart from a value built elsewhere, or
+         *  from another position of this parameter. */
         boolean holdsSomethingApart() {
-            return heldTo.stream().anyMatch(each -> !each.same());
+            return heldTo.stream().anyMatch(each -> !each.same())
+                    || alongside.stream().anyMatch(each -> !each.same());
         }
 
         /**
@@ -784,7 +794,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                     return null;
                 }
                 if (each.ofTheKey() && each.holding()) {
-                    keysHeld.add(new ContainerContents.KeyAsked(value, each.valueIs()));
+                    keysHeld.add(new ContainerContents.KeyAsked(value, each.valueIn()));
                 } else {
                     (each.ofTheKey() ? keysKeptOut : (each.holding() ? holding : keptOut))
                             .add(value);
@@ -797,7 +807,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 }
                 if (asked.ofTheKey() && asked.holding()) {
                     (asked.askedOfThePlan() ? keysHeld : keysEachFiled).add(
-                            new ContainerContents.KeyAsked(each.value(), asked.valueIs()));
+                            new ContainerContents.KeyAsked(each.value(), asked.valueIn()));
                 } else {
                     (asked.ofTheKey() ? keysKeptOut : (asked.holding() ? holding : keptOut))
                             .add(each.value());

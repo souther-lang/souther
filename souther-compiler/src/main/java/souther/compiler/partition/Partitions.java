@@ -2477,8 +2477,8 @@ public final class Partitions {
         for (List<EntryHeld.Requirement> inOneMap : asked.values()) {
             for (EntryHeld.Requirement one : inOneMap) {
                 for (EntryHeld.Requirement other : inOneMap) {
-                    if (one.valueIs() != null && other.valueIs() != null
-                            && one.valueIs().compareTo(other.valueIs()) != 0) {
+                    if (one.valueIn() != null && other.valueIn() != null
+                            && EntryHeld.leaveNoNumberInCommon(one.valueIn(), other.valueIn())) {
                         apart.computeIfAbsent(one.key().steps().getFirst(),
                                 _ -> new LinkedHashSet<>()).add(other.key().steps().getFirst());
                     }
@@ -2517,13 +2517,14 @@ public final class Partitions {
             return Proposals.NONE;
         }
         List<Witnesses.Filed> entries = new ArrayList<>();
+        Map<RuleKey, NumericDomain.Bounds> ranges = EntryHeld.valuesAsked(asked);
         for (EntryHeld.Requirement each : asked) {
             FixtureTemplate key = chosen.get(each.key().steps().getFirst());
             // A number the value's type admits and can be written as: a value written under a name
             // is a value of the type only if its rules let it be.
-            FixtureTemplate value = each.valueIs() == null ? null
-                    : valueFiledAs(map.value(), each.valueIs(), reading);
-            if (key == null || (each.valueIs() != null && value == null)) {
+            NumericDomain.Bounds range = ranges.get(each.key());
+            FixtureTemplate value = range == null ? null : valueFiledAs(map.value(), range, reading);
+            if (key == null || (range != null && value == null)) {
                 return Proposals.NONE;
             }
             entries.add(new Witnesses.Filed(key, value));
@@ -2867,18 +2868,18 @@ public final class Partitions {
     }
 
     /**
-     * {@code number} written as the value a map of {@code valueType} files under a key the rules
-     * name it for, or null where the type's rules leave the number out or the position cannot
-     * write it.
+     * A number among {@code asked} written as the value a map of {@code valueType} files under a
+     * key the rules name the numbers of it for, or null where no number of the range is a value of
+     * the type that the position can write.
      *
      * <p>The one way an entry's value is written, for a map built field by field and for one
      * composed into its container: a number the value's type refuses is no value of the type, and
      * a map holding it is one the rules refuse.
      */
-    static FixtureTemplate valueFiledAs(Type valueType, BigDecimal number,
+    static FixtureTemplate valueFiledAs(Type valueType, NumericDomain.Bounds asked,
                                         RuleReadingContext reading) {
-        return EntryHeld.valueTypeAdmits(valueType, number, null, reading)
-                ? writtenNumberAt(valueType, number, reading) : null;
+        BigDecimal number = EntryHeld.numberIn(valueType, asked, null, reading);
+        return number == null ? null : writtenNumberAt(valueType, number, reading);
     }
 
     /** {@code number} written as a value of {@code type}, or null where the position holds no

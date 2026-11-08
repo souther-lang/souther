@@ -9,6 +9,9 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeKey;
 
 import java.math.BigDecimal;
@@ -344,7 +347,9 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
         return new ClauseRead(new RuleKey(List.of(container)),
                 ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
                 Optional.of(new ClauseRead.Member(new RuleKey(List.of(lookedFor)), true,
-                        Optional.ofNullable(is))));
+                        Optional.ofNullable(is).map(number -> new NumericDomain.Bounds(
+                                Endpoint.inclusive(Count.of(number)),
+                                Endpoint.inclusive(Count.of(number)))))));
     }
 
     private static ClauseRead lookedUpMember(String... steps) {

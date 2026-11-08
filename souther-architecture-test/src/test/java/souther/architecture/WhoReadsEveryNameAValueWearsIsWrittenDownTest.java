@@ -126,6 +126,11 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "RecordRules;Ljava/util/List;"
                             + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT + ")Z",
                     THE_POSITION),
+            row(CHECK + "EntryHeld", "numberIn",
+                    "(" + TYPE + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT
+                            + ")Ljava/math/BigDecimal;",
+                    THE_POSITION),
             row(CHECK + "EntryHeld", "valueTypeAdmits",
                     "(" + TYPE + "Ljava/math/BigDecimal;"
                             + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT + ")Z",

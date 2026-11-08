@@ -115,7 +115,7 @@ public final class InvariantStatements {
         Denotations inside = at;
         for (ClauseExpr.Scoped each : reached.crossed()) {
             Core.LetIn binding = each.binding();
-            given.put(binding.binder().binding(), Clauses.substituted(binding.value(), given));
+            Clauses.entering(given, binding);
             if (terms != null) {
                 inside = terms.inside(binding, inside);
             }
@@ -156,9 +156,7 @@ public final class InvariantStatements {
         }
         // A lookup in a map followed to a statement about what it found: stated as the entry the
         // rule asks the map for, which no operation the representation kept standing says.
-        EntryHeld.Stated entry = reached.said().positive()
-                ? EntryHeld.read(Clauses.substituted(reached.said().of(), given), core -> core)
-                : null;
+        EntryHeld.Stated entry = Clauses.entryStated(reached.said(), given);
         if (entry != null) {
             return new InvariantStatement.HoldsAnEntry(reached.statement(), entry);
         }
