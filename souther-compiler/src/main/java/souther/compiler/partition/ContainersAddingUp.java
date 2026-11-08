@@ -556,12 +556,6 @@ final class ContainersAddingUp {
     }
 
     /**
-     * The way a total is solved through at one count of the elements, and the ways down an
-     * element is built by under it.
-     */
-    private record AtACount(FieldSolved solved, Ways ways) {}
-
-    /**
      * The way a total is solved through and the ways down an element is built by, at each count
      * of the elements.
      *
@@ -616,19 +610,29 @@ final class ContainersAddingUp {
                     reading, planning);
         }
 
+        /** Whether the way holds fields still, at values each count is asked for. */
+        boolean holdsFieldsStill() {
+            return planning != null;
+        }
+
         /**
-         * The way and the ways down at {@code many} elements — or null where none is written at
-         * that count, said in {@code left}: no values held the fields still, the values held are
-         * not ones the elements can hold beside what else they are asked, or nothing builds an
-         * element holding them.
+         * The way the total is solved through at {@code many} elements — or null where no values
+         * held the fields still at that count, or where the total is of what the elements hold.
          */
-        AtACount at(int many, WhatWasLeft left) {
+        FieldSolved solvedAt(int many) {
+            return planning == null ? solved : solved.settledIn(runs, total, many);
+        }
+
+        /**
+         * The ways down an element is built by under {@code settled}, the way at some count — or
+         * null where none is written under it, said in {@code left}: the values held are not ones
+         * the elements can hold beside what else they are asked, or nothing builds an element
+         * holding them. Asked only once a count is split, so that a count no split comes of
+         * plans nothing.
+         */
+        Ways waysUnder(FieldSolved settled, WhatWasLeft left) {
             if (planning == null) {
-                return new AtACount(solved, last);
-            }
-            FieldSolved settled = solved.settledIn(runs, total, many);
-            if (settled == null) {
-                return null;
+                return last;
             }
             Map<ElementProjection, ExactRatio> values =
                     settled.fixing() == null ? Map.of() : settled.fixing().at();
@@ -648,8 +652,7 @@ final class ContainersAddingUp {
                 byValues.put(values, ways);
             }
             return ways.filter(planned -> !planned.narrowingBeyondTheFirst()
-                            && !planned.filled().isEmpty())
-                    .map(planned -> new AtACount(settled, planned)).orElse(null);
+                    && !planned.filled().isEmpty()).orElse(null);
         }
 
         /** What the ways planned found, said where nothing was composed. */
@@ -1497,11 +1500,10 @@ final class ContainersAddingUp {
             // could not be worked out is said whichever of the others turns the count away.
             List<BigDecimal> alsoTotals = otherTotalsOver(many);
             BigDecimal total = makings.total();
-            AtACount at = makings.planned().at(many, left);
-            if (at == null) {
+            FieldSolved solved = makings.planned().solvedAt(many);
+            if (solved == null && makings.planned().holdsFieldsStill()) {
                 return Taken.AND_MORE;
             }
-            FieldSolved solved = at.solved();
             int carrying = solved == null ? many : solved.carrying(many);
             // The elements that carry no share stand at the start and are one of the values each
             // could hold; where every element is to be apart from every other, those alike are
@@ -1564,7 +1566,11 @@ final class ContainersAddingUp {
                         if (!spreadTheRest(alsoTotals, many, how, sharesOfTheRest)) {
                             continue;
                         }
-                        if (asFarAs(containers(written, sharesOfTheRest, at.ways()), offered, left)
+                        Ways ways = makings.planned().waysUnder(solved, left);
+                        if (ways == null) {
+                            return Taken.AND_MORE;
+                        }
+                        if (asFarAs(containers(written, sharesOfTheRest, ways), offered, left)
                                 == Traversal.STOPPED) {
                             return Taken.AND_DONE;
                         }

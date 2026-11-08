@@ -9177,23 +9177,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericTerm.TakenOf count = type == null ? null
                 : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
                         container, type, rules.inners(), rules.symbols());
-        NumericDomain.Bounds run = count == null ? null : region.wholeRunOf(count);
-        if (run == null) {
-            return null;
-        }
-        // Held to none, the container is written with no element, so nothing of an element
-        // holds a count back; and what a rule reading inside the elements says of none is
-        // asked of the rules that read it.
-        if (run.max() != null && run.max().wholeAdmitted(false) instanceof BigInteger fewer
-                && fewer.signum() <= 0) {
-            return run.holdsAValue() && noneIsRead(container, read) ? run : null;
-        }
         List<TermPath> entry = read.domain().entryOf(container, rules);
         KeptApart apart = new KeptApart();
         for (TermPath part : entry) {
             if (namedDownTo(part, container.steps().size(), read, null, apart) != Named.NOT) {
-                return null;
+                return heldToNone(count, container, read, region);
             }
+        }
+        NumericDomain.Bounds run = count == null ? null : region.wholeRunOf(count);
+        if (run == null) {
+            return null;
         }
         int most;
         if (!anElementShown && !entry.stream().allMatch(part ->
@@ -10238,6 +10231,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** A reading written in the rules of the value at {@code root}. */
     private record Written(TermPath root, ClauseRead reading) {}
+
+    /**
+     * The run of {@code count}, how many {@code container} holds, where the region holds it to
+     * none — or null where it may hold one or more, or a rule reading it may want an element
+     * ({@link #noneIsRead}). Held to none, the container is written with no element, so nothing
+     * of an element holds a count back, and its element, which stands nowhere, is not asked.
+     */
+    private static NumericDomain.Bounds heldToNone(NumericTerm.TakenOf count, TermPath container,
+                                                   InputReading read, SearchRegion region) {
+        NumericDomain.Bounds run = count == null ? null : region.wholeRunOf(count);
+        return run != null && run.holdsAValue() && run.max() != null
+                && run.max().wholeAdmitted(false) instanceof BigInteger most
+                && most.signum() <= 0 && noneIsRead(container, read) ? run : null;
+    }
 
     /**
      * Whether {@code container}, held to no element, is one its rules leave written with none:
