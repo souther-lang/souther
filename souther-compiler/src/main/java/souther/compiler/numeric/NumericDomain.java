@@ -122,6 +122,8 @@ public final class NumericDomain<A> {
     private FormReach<A> reach;
     private Systems<A> systems;
     private ProjectionCertification certification;
+    private Reduction<A> reduction;
+    private boolean reductionWorkedOut;
     private Boolean noRow;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, NumberSpace> spaces,
@@ -379,12 +381,18 @@ public final class NumericDomain<A> {
      *               ({@link NumberSpace#spacedOnly}), which is a thing said and not a default.
      */
     public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
-        NumericDomain<A> knowing = knowing(f.coefs().keySet(), spaces);
+        return assuming(f.coefs(), f.constant(), rel, spaces);
+    }
+
+    /** The domain with {@code Σ coefs·atom + constant rel 0} taken in. */
+    private NumericDomain<A> assuming(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
+                                      Map<A, NumberSpace> spaces) {
+        NumericDomain<A> knowing = knowing(coefs.keySet(), spaces);
         if (knowing.readARuleNothingSatisfies) {
             return knowing;
         }
         AffineConstraint.Read<A> read = AffineConstraint.of(
-                f.coefs(), f.constant(), rel, knowing::spacingOf);
+                coefs, constant, rel, knowing::spacingOf);
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
@@ -808,20 +816,53 @@ public final class NumericDomain<A> {
         if (!withRules) {
             return false;   // asked of the box and its differences alone, which no equality adds to
         }
-        // The same goal written over the positions the equalities leave free, where the rules hold
-        // equalities over several positions: a query takes one rule as its premise, and in that
-        // writing the premise it needs is the one it is given.
-        List<AffineConstraint.Equality<A>> equalities = new ArrayList<>();
-        for (AffineConstraint<A> rule : rules()) {
-            if (rule instanceof AffineConstraint.Equality<A> equality) {
-                equalities.add(equality);
-            }
+        return provenOverThePositionsTheEqualitiesLeaveFree(coefs, f.constant(), rel);
+    }
+
+    /**
+     * What the rules, written over the positions their equalities leave free, prove of the same
+     * goal written so: a query takes one rule as its premise, and written over the free positions
+     * the premise it needs is the one it is given.
+     *
+     * <p>A further way to prove a goal and never a second account of what the rules leave. The
+     * reduced rules follow from the rules and say less ({@link ReducedRules}), so what they prove is
+     * proven, and what they do not says nothing. The ranges, the closed differences, the certificate
+     * and whether anything is left at all are the rules' own and are asked of them alone: this is
+     * asked of by {@link #entails} after they have not proved the goal, and by nothing else.
+     */
+    private boolean provenOverThePositionsTheEqualitiesLeaveFree(Map<A, ExactRatio> coefs,
+                                                                 ExactRatio constant, Rel rel) {
+        Reduction<A> reduced = reduction();
+        if (reduced == null) {
+            return false;
         }
-        EqualityElimination.Goal<A> freed = equalities.isEmpty() ? null
-                : EqualityElimination.through(equalities,
-                        new EqualityElimination.Goal<>(coefs, f.constant()), order);
+        if (reduced.rules().contradicted() || reduced.over().isBottom()) {
+            return true;   // nothing satisfies the equalities, or what follows from them
+        }
+        ReducedRules.Goal<A> freed = reduced.rules().put(new ReducedRules.Goal<>(coefs, constant));
         return freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)
-                && entailsOver(freed.coefs(), freed.constant(), rel, withRules);
+                && reduced.over().entailsOver(freed.coefs(), freed.constant(), rel, true);
+    }
+
+    /** The rules over the positions their equalities leave free, and what they leave. */
+    private record Reduction<A>(ReducedRules<A> rules, NumericDomain<A> over) {}
+
+    /** The reduction of these rules, worked out when first asked for and kept — or null where
+     *  there is nothing to reduce. */
+    private Reduction<A> reduction() {
+        if (!reductionWorkedOut) {
+            ReducedRules<A> rules = ReducedRules.of(rules(), order);
+            if (rules != null) {
+                NumericDomain<A> over = new NumericDomain<>(StatedRules.none(), spaces, false,
+                        order, closedStates, null, null);
+                for (ReducedRules.Rule<A> each : rules.rules()) {
+                    over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
+                }
+                reduction = new Reduction<>(rules, over);
+            }
+            reductionWorkedOut = true;
+        }
+        return reduction;
     }
 
     private boolean entailsOver(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
