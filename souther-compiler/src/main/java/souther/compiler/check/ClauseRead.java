@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -52,11 +53,17 @@ public record ClauseRead(RuleKey at, Kind kind, RuleKey run, Optional<Member> me
      * @param lookedFor the place of the value whose value the container is to hold
      * @param asAKey    whether it is to hold it as a key, as a map holds what {@code Map.get} and
      *                  {@code Map.containsKey} look up, rather than as an element
+     * @param valueIs   for a key of a map, the number the clause says the value under it is to
+     *                  be; empty where it says nothing of the value found
      */
-    public record Member(RuleKey lookedFor, boolean asAKey) {
+    public record Member(RuleKey lookedFor, boolean asAKey, Optional<BigDecimal> valueIs) {
 
         public Member {
             Objects.requireNonNull(lookedFor, "a member is looked for at some place");
+            Objects.requireNonNull(valueIs, "a number the value is to be, or none");
+            if (valueIs.isPresent() && !asAKey) {
+                throw new IllegalArgumentException("only a key of a map has a value under it");
+            }
         }
     }
 

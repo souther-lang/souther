@@ -366,7 +366,7 @@ public final class MeasuredInput {
                 ClauseRead.Member member = read.member().orElseThrow();
                 out.add(new ContentsAsked.Asked(root.at().then(read.at().steps()),
                         root.at().then(member.lookedFor().steps()), true, member.asAKey(),
-                        around));
+                        member.valueIs(), around));
             }
         }
         return List.copyOf(out);

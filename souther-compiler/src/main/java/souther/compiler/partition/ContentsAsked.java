@@ -6,6 +6,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -80,6 +81,8 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
      * That the container at {@code container} holds the value at {@code value}, or holds nothing
      * equal to it — as an element, or as a key where {@code ofTheKey}.
      *
+     * @param valueIs the number the value filed under the key is to be, where the key is held and
+     *               the rules say what the entry is; empty where nothing is asked of the value
      * @param around the quantifier the demand on the container is asked under, where it is asked
      *               of a container inside an element: for each element of a container asked about
      *               every element, the demand is asked once more, and under one asking some element
@@ -87,12 +90,23 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
      *               element names no container further in ({@link RowDemand.WithinIt})
      */
     record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey,
-                 Optional<Around> around) {
+                 Optional<BigDecimal> valueIs, Optional<Around> around) {
 
         Asked {
             Objects.requireNonNull(container, "what is asked is asked of some container");
             Objects.requireNonNull(value, "a container is asked about the value at some position");
+            Objects.requireNonNull(valueIs, "a number asked of the value under a key, or none");
             Objects.requireNonNull(around, "asked under a quantifier or under none");
+            if (valueIs.isPresent() && !(holding && ofTheKey)) {
+                throw new IllegalArgumentException(
+                        "only a key held has a value filed under it that is asked after");
+            }
+        }
+
+        /** A demand that asks nothing of the value filed under a key. */
+        Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey,
+              Optional<Around> around) {
+            this(container, value, holding, ofTheKey, Optional.empty(), around);
         }
 
         /**
@@ -270,13 +284,17 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         for (RowDemand.OfAnElement one : ofTheElement) {
             switch (one) {
                 case RowDemand.SameAs(TermPath value) when some ->
-                        into.add(new Asked(container, value, true, false, around));
+                        into.add(new Asked(container, value, true, false, Optional.empty(),
+                                around));
                 case RowDemand.DifferentFrom(TermPath value) when !some ->
-                        into.add(new Asked(container, value, false, false, around));
+                        into.add(new Asked(container, value, false, false, Optional.empty(),
+                                around));
                 case RowDemand.KeyedAs(TermPath value) when some ->
-                        into.add(new Asked(container, value, true, true, around));
+                        into.add(new Asked(container, value, true, true, Optional.empty(),
+                                around));
                 case RowDemand.NotKeyedAs(TermPath value) when !some ->
-                        into.add(new Asked(container, value, false, true, around));
+                        into.add(new Asked(container, value, false, true, Optional.empty(),
+                                around));
                 case RowDemand.WithinIt(TermPath inner, boolean innerSome, var asked) ->
                         asked(inner, innerSome, List.of(asked), withThis, into);
                 case RowDemand.SameAs _, RowDemand.DifferentFrom _, RowDemand.KeyedAs _,
@@ -412,7 +430,8 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 List<Asked> under = new ArrayList<>();
                 for (Asked each : asked.asked()) {
                     under.add(new Asked(at.get(each.container()), at.get(each.value()),
-                            each.holding(), each.ofTheKey(), each.around().map(around ->
+                            each.holding(), each.ofTheKey(), each.valueIs(),
+                            each.around().map(around ->
                                     new Around(at.get(around.container()), around.some(),
                                             around.from(), around.below()))));
                 }
@@ -753,8 +772,8 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                                      Function<TermPath, FixtureTemplate> valueAt) {
             List<FixtureTemplate> holding = new ArrayList<>();
             List<FixtureTemplate> keptOut = new ArrayList<>();
-            List<FixtureTemplate> keysHeld = new ArrayList<>();
-            List<FixtureTemplate> keysEachFiled = new ArrayList<>();
+            List<ContainerContents.KeyAsked> keysHeld = new ArrayList<>();
+            List<ContainerContents.KeyAsked> keysEachFiled = new ArrayList<>();
             List<FixtureTemplate> keysKeptOut = new ArrayList<>();
             for (Asked each : within) {
                 if (!each.container().equals(container)) {
@@ -764,19 +783,25 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 if (value == null) {
                     return null;
                 }
-                (each.ofTheKey() ? (each.holding() ? keysHeld : keysKeptOut)
-                        : (each.holding() ? holding : keptOut)).add(value);
+                if (each.ofTheKey() && each.holding()) {
+                    keysHeld.add(new ContainerContents.KeyAsked(value, each.valueIs()));
+                } else {
+                    (each.ofTheKey() ? keysKeptOut : (each.holding() ? holding : keptOut))
+                            .add(value);
+                }
             }
             for (Given each : given) {
                 Asked asked = each.asked();
                 if (!asked.container().equals(container)) {
                     continue;
                 }
-                List<FixtureTemplate> into = asked.ofTheKey()
-                        ? (!asked.holding() ? keysKeptOut
-                                : asked.askedOfThePlan() ? keysHeld : keysEachFiled)
-                        : (asked.holding() ? holding : keptOut);
-                into.add(each.value());
+                if (asked.ofTheKey() && asked.holding()) {
+                    (asked.askedOfThePlan() ? keysHeld : keysEachFiled).add(
+                            new ContainerContents.KeyAsked(each.value(), asked.valueIs()));
+                } else {
+                    (asked.ofTheKey() ? keysKeptOut : (asked.holding() ? holding : keptOut))
+                            .add(each.value());
+                }
             }
             return new ContainerContents(holding, keptOut, keysHeld, keysEachFiled, keysKeptOut);
         }

@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A container a rule needs to hold a member of the same value is composed holding it, and a value
@@ -22,12 +24,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * currency there too, since the base was the first value a currency is written as. So the point
  * was left open over a row the model has: two deals in one currency and a table rating another.
  *
- * <p>The rule is read where the declaration publishes it ({@code ClauseRead.Member}), and what is
- * composed is the member and not anything a rule asks of it: a lookup whose rule holds the value
- * found to something asks that of a value this writes as its type's rules leave it. The deals
- * are cases of a sum whose fields every case spreads, which is what crm's opportunities are: what
- * is asked of a field under one case is asked of the elements of that case, and an element of the
- * other case holds nothing there.
+ * <p>The rule is read where the declaration publishes it ({@code ClauseRead.Member}), the member
+ * and the number the rule holds the value found under it to. A rate is composed as that number,
+ * whichever value its type offers first, and a number its type refuses leaves the point open
+ * rather than composing another value. The deals are cases of a sum whose fields every case
+ * spreads, which is what crm's opportunities are: what is asked of a field under one case is
+ * asked of the elements of that case, and an element of the other case holds nothing there.
  */
 class AMemberARuleNeedsIsComposedIntoItsContainerTest {
 
@@ -87,6 +89,84 @@ class AMemberARuleNeedsIsComposedIntoItsContainerTest {
     @Test
     void aMemberTheWayAsksForBesideOneItIsToHoldNoneOfIsAnotherValue() {
         assertEquals(List.of(), whatNothingCouldShow(ASKED_ON_THE_WAY));
+    }
+
+    /** The table's rule through a helper, which asks the rate under the base to be a written
+     *  number. {@code %s} are the type of a rate, and the number asked. */
+    private static final String RULED_BY_A_HELPER = "module probe\n\n" + DEALS + """
+
+            data ConversionRate = Decimal
+                invariant value > 0.0m
+
+            data RateTable = { base: CurrencyCode, rates: Map<CurrencyCode, %s> }
+                invariant baseIsUnity = baseAtOne(base, rates)
+
+            let baseAtOne (base: CurrencyCode, rates: Map<CurrencyCode, %s>): Bool =
+                Map.get(base, rates)
+                    |> Option.map(r -> Decimal.compare(r%s, %s) == 0)
+                    |> Option.withDefault(false)
+
+            """ + BODY.formatted("", "", "");
+
+    /** The same rule written out as a match on the lookup. */
+    private static final String RULED_BY_A_MATCH = "module probe\n\n" + DEALS + """
+
+            data ConversionRate = Decimal
+                invariant value > 0.0m
+
+            data RateTable = { base: CurrencyCode, rates: Map<CurrencyCode, %s> }
+                invariant baseIsUnity = match Map.get(base, rates) with
+                    | Some r -> Decimal.compare(r%s, %s) == 0
+                    | None -> false
+
+            """ + BODY.formatted("", "", "");
+
+    private static String byAHelper(String rate, String asked) {
+        return RULED_BY_A_HELPER.formatted(rate, rate, valueOf(rate), asked);
+    }
+
+    private static String byAMatch(String rate, String asked) {
+        return RULED_BY_A_MATCH.formatted(rate, valueOf(rate), asked);
+    }
+
+    /** What a rate is read as a number by: a name wrapping a decimal is read through its field. */
+    private static String valueOf(String rate) {
+        return rate.equals("Decimal") ? "" : ".value";
+    }
+
+    @Test
+    void aRateASimpleTypeIsAskedToBeOneIsComposedHoldingIt() {
+        assertEquals(List.of(), whatNothingCouldShow(byAHelper("Decimal", "1.0m")));
+    }
+
+    @Test
+    void aRateASimpleTypeIsAskedToBeNoughtIsComposedHoldingIt() {
+        assertEquals(List.of(), whatNothingCouldShow(byAHelper("Decimal", "0.0m")));
+    }
+
+    @Test
+    void aRateAPositiveTypeIsAskedToBeOneIsComposedHoldingIt() {
+        assertEquals(List.of(), whatNothingCouldShow(byAHelper("ConversionRate", "1.0m")));
+    }
+
+    @Test
+    void aRateAPositiveTypeIsAskedToBeAnotherNumberIsComposedHoldingIt() {
+        assertEquals(List.of(), whatNothingCouldShow(byAHelper("ConversionRate", "2.5m")));
+    }
+
+    @Test
+    void aRateAskedForByAMatchIsComposedAsOneAskedForByAHelper() {
+        assertEquals(List.of(), whatNothingCouldShow(byAMatch("ConversionRate", "2.5m")));
+        assertEquals(List.of(), whatNothingCouldShow(byAMatch("Decimal", "1.0m")));
+    }
+
+    @Test
+    void aRateNoValueOfItsTypeCanBeIsLeftOpenAndNotComposedAsAnother() {
+        List<String> open = whatNothingCouldShow(byAHelper("ConversionRate", "0.0m"));
+        assertFalse(open.isEmpty(), "no value a rate can be meets the rule, so the points are open");
+        assertTrue(open.stream().anyMatch(line -> line.contains("the ON point")));
+        assertTrue(open.stream().anyMatch(line -> line.contains("the OFF point")));
+        assertTrue(open.stream().anyMatch(line -> line.contains("the OUT point")));
     }
 
     /** The points nothing could show a row can be written at. */

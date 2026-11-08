@@ -12,6 +12,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -495,12 +496,13 @@ final class Clauses {
          */
         void readsOf(Core clause) {
             walk(clause);
+            EntryHeld.Stated entry = entryStated(clause);
             for (Lookup each : lookups) {
                 if (WhatAClauseNeeds.aMemberFound(clause, each.lookup())) {
                     bindings.add(each.container().root());
                     reads.add(new ClauseRead(keyOf(each.container()),
                             ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
-                            memberLookedUp(each.lookup())));
+                            memberLookedUp(each.lookup(), entry)));
                 } else {
                     read(each.container(), ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
                 }
@@ -510,6 +512,24 @@ final class Clauses {
                         ? ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART
                         : ClauseRead.Kind.EACH_ELEMENTS_RUN, new RuleKey(each.run()));
             }
+        }
+
+        /**
+         * What {@code clause} asks of a map beside a key, read through the names it binds to the
+         * parts of what it says, or null where it asks nothing of the kind.
+         */
+        private static EntryHeld.Stated entryStated(Core clause) {
+            Map<BindingId, Core> given = new HashMap<>();
+            Core body = clause;
+            while (Core.withoutStanding(body) instanceof Core.LetIn let
+                    && let.binder().binding() != null) {
+                given.put(let.binder().binding(), let.value());
+                body = let.body();
+            }
+            return EntryHeld.read(body, core ->
+                    Core.withoutStanding(core) instanceof Core.Read read
+                            && given.containsKey(read.binding())
+                            ? given.get(read.binding()) : core);
         }
 
         private void walk(Core e) {
@@ -571,9 +591,10 @@ final class Clauses {
 
         /**
          * The member {@code lookup} looks for, where what it looks for is a place of the value:
-         * a key of a map for a lookup in one, an element otherwise.
+         * a key of a map for a lookup in one, an element otherwise, and for a key the number
+         * {@code entry} says the value under it is to be where it is an entry of this lookup.
          */
-        private Optional<ClauseRead.Member> memberLookedUp(Core lookup) {
+        private Optional<ClauseRead.Member> memberLookedUp(Core lookup, EntryHeld.Stated entry) {
             if (!(AnOperationApplied.of(lookup) instanceof AnOperationApplied(var operation,
                     List<Core> args)) || args.isEmpty()) {
                 return Optional.empty();
@@ -581,8 +602,15 @@ final class Clauses {
             Location lookedFor = locationOf(args.getFirst());
             boolean asAKey = operation.equals(ValueName.Stdlib.operation("Map", "get"))
                     || operation.equals(ValueName.Stdlib.operation("Map", "containsKey"));
-            return lookedFor == null ? Optional.empty()
-                    : Optional.of(new ClauseRead.Member(keyOf(lookedFor), asAKey));
+            if (lookedFor == null) {
+                return Optional.empty();
+            }
+            Optional<BigDecimal> valueIs = asAKey && entry != null && entry.valueIs() != null
+                    && lookedFor.equals(locationOf(entry.key()))
+                    && locationOf(args.get(1)) != null
+                    && locationOf(args.get(1)).equals(locationOf(entry.container()))
+                    ? Optional.of(entry.valueIs()) : Optional.empty();
+            return Optional.of(new ClauseRead.Member(keyOf(lookedFor), asAKey, valueIs));
         }
 
         /** What the rules of the value call the place {@code at}. */

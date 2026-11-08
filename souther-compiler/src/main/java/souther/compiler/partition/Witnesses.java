@@ -891,11 +891,12 @@ final class Witnesses {
      * about. Every other entry is keyed apart from it, since a map holds one entry under a key.
      *
      * <p>{@code eachFiled} are keys each asked of an entry of its own, over whatever value the
-     * rules admit. A key among them that is {@code filed}'s, or another of them, is one entry.
+     * rules admit, or over the value of {@code holding} it names. A key among them that is
+     * {@code filed}'s, or another of them, is one entry.
      */
     static Proposals holding(Shape.Mapping map,
                              List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                             Filed filed, List<FixtureTemplate> eachFiled,
+                             Filed filed, List<Filed> eachFiled,
                              List<FixtureTemplate> keysKeptOut,
                              DeclaredBounds.CountRange holds,
                              RuleReadingContext reading) {
@@ -908,12 +909,12 @@ final class Witnesses {
         if (filed != null) {
             filedKeys.add(filed.key().text());
         }
-        List<FixtureTemplate> apart = new ArrayList<>();
-        for (FixtureTemplate each : eachFiled) {
-            if (out.contains(each.text())) {
+        List<Filed> apart = new ArrayList<>();
+        for (Filed each : eachFiled) {
+            if (out.contains(each.key().text())) {
                 return Proposals.NONE;
             }
-            if (filedKeys.add(each.text())) {
+            if (filedKeys.add(each.key().text())) {
                 apart.add(each);
             }
         }
@@ -971,13 +972,37 @@ final class Witnesses {
         if (others.size() < needed) {
             return Proposals.NONE.meeting(met);
         }
+        // A key asked over a named value is filed under the value of that name, wherever the values
+        // put it; the others take what is left in the order they came.
+        FixtureTemplate[] filedUnder = new FixtureTemplate[values.size()];
+        if (under >= 0) {
+            filedUnder[under] = filed.key();
+        }
+        List<FixtureTemplate> unnamed = new ArrayList<>();
+        for (Filed each : apart) {
+            if (each.value() == null) {
+                unnamed.add(each.key());
+                continue;
+            }
+            int at = -1;
+            for (int i = 0; i < values.size() && at < 0; i++) {
+                if (filedUnder[i] == null && values.get(i).text().equals(each.value().text())) {
+                    at = i;
+                }
+            }
+            if (at < 0) {
+                return Proposals.NONE.meeting(met);
+            }
+            filedUnder[at] = each.key();
+        }
+        unnamed.addAll(others);
         List<FixtureTemplate> entries = new ArrayList<>();
-        int nextApart = 0;
         int next = 0;
         for (int i = 0; i < values.size(); i++) {
-            FixtureTemplate key = i == under ? filed.key()
-                    : nextApart < apart.size() ? apart.get(nextApart++) : others.get(next++);
-            entries.add(FixtureTemplate.entry(key, values.get(i)));
+            if (filedUnder[i] == null) {
+                filedUnder[i] = unnamed.get(next++);
+            }
+            entries.add(FixtureTemplate.entry(filedUnder[i], values.get(i)));
         }
         return Proposals.of(List.of(FixtureTemplate.collection(entries))).meeting(met);
     }

@@ -96,7 +96,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     private static List<String> keysEachFiled(ContentsAsked.Here here) {
         ContainerContents contents = here.contentsOf(SHELF, _ -> null);
         assertNotNull(contents, "nothing is read off the shelf's own parameter");
-        return contents.keysEachFiled().stream().map(FixtureTemplate::text).toList();
+        return contents.keysEachFiled().stream().map(each -> each.key().text()).toList();
     }
 
     @Test
@@ -289,7 +289,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
 
         assertNotNull(contents);
         assertEquals(List.of("\"a\""), contents.keysEachFiled().stream()
-                .map(FixtureTemplate::text).toList());
+                .map(each -> each.key().text()).toList());
         assertEquals(List.of("\"b\""), contents.keysKeptOut().stream()
                 .map(FixtureTemplate::text).toList());
     }
@@ -314,7 +314,8 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
 
     private static FixtureTemplate built(List<FixtureTemplate> eachFiled,
                                          List<FixtureTemplate> keptOut, int most) {
-        Proposals built = Witnesses.holding(map(), List.of(), List.of(), null, eachFiled, keptOut,
+        Proposals built = Witnesses.holding(map(), List.of(), List.of(), null,
+                eachFiled.stream().map(key -> new Witnesses.Filed(key, null)).toList(), keptOut,
                 new DeclaredBounds.CountRange(0, most), READING);
         return built.isEmpty() ? null : built.values().getFirst();
     }
@@ -328,6 +329,30 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         FixtureTemplate both = built(List.of(a, b, a), List.of(), Integer.MAX_VALUE);
         assertNotNull(both);
         assertEquals("[(\"a\", \"x\"), (\"b\", \"x\")]", both.text());
+    }
+
+    /**
+     * A key asked over a named value is filed under that value wherever the values put it, and a
+     * key asked over none takes what is left; the entries asked for differently are all kept.
+     */
+    @Test
+    void aKeyAskedOverANamedValueIsFiledUnderItAndEveryEntryIsKept() {
+        FixtureTemplate a = FixtureTemplate.string("a");
+        FixtureTemplate b = FixtureTemplate.string("b");
+        FixtureTemplate c = FixtureTemplate.string("c");
+        FixtureTemplate p = FixtureTemplate.string("p");
+        FixtureTemplate q = FixtureTemplate.string("q");
+
+        Proposals built = Witnesses.holding(map(), List.of(q, p), List.of(), null,
+                List.of(new Witnesses.Filed(a, p), new Witnesses.Filed(b, q),
+                        new Witnesses.Filed(c, null)),
+                List.of(), new DeclaredBounds.CountRange(0, Integer.MAX_VALUE), READING);
+
+        assertFalse(built.isEmpty());
+        String map = built.values().getFirst().text();
+        assertTrue(map.contains("(\"a\", \"p\")"), map);
+        assertTrue(map.contains("(\"b\", \"q\")"), map);
+        assertTrue(map.contains("(\"c\", "), map);
     }
 
     /** More keys than the rules leave room for, or a key kept out, is no map. */

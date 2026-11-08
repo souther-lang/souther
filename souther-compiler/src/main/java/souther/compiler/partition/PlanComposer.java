@@ -7,6 +7,7 @@ import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeReachName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -133,8 +134,8 @@ final class PlanComposer {
                                   RuleReadingContext reading) {
         List<FixtureTemplate> holding = new ArrayList<>();
         List<FixtureTemplate> keptOut = List.of();
-        List<FixtureTemplate> keysHeld = List.of();
-        List<FixtureTemplate> keysEachFiled = List.of();
+        List<ContainerContents.KeyAsked> keysHeld = List.of();
+        List<ContainerContents.KeyAsked> keysEachFiled = List.of();
         List<FixtureTemplate> keysKeptOut = List.of();
         CompositionShortfall met = CompositionShortfall.NONE;
         FixtureTemplate element = null;
@@ -183,11 +184,51 @@ final class PlanComposer {
         }
         // A key the rules ask the entry to be filed under is a value of another position, and one
         // entry is filed under one key.
-        for (FixtureTemplate asked : keysHeld) {
-            if (key != null && !key.text().equals(asked.text())) {
+        // What the rules say the value under that key is, from every demand on the key: one entry
+        // is one value, so two numbers asked of it are no map.
+        BigDecimal valueIs = null;
+        for (ContainerContents.KeyAsked asked : keysHeld) {
+            if (key != null && !key.text().equals(asked.key().text())) {
                 return Proposals.NONE.meeting(met);
             }
-            key = asked;
+            key = asked.key();
+            BigDecimal number = asked.valueIs().orElse(null);
+            if (!agree(valueIs, number)) {
+                return Proposals.NONE.meeting(met);
+            }
+            valueIs = valueIs == null ? number : valueIs;
+        }
+        List<Witnesses.Filed> eachFiled = new ArrayList<>();
+        if (container instanceof Shape.Mapping mapping) {
+            for (ContainerContents.KeyAsked asked : keysEachFiled) {
+                BigDecimal number = asked.valueIs().orElse(null);
+                if (key != null && key.text().equals(asked.key().text())) {
+                    if (!agree(valueIs, number)) {
+                        return Proposals.NONE.meeting(met);
+                    }
+                    valueIs = valueIs == null ? number : valueIs;
+                    continue;
+                }
+                FixtureTemplate value = null;
+                if (number != null) {
+                    value = Partitions.valueFiledAs(mapping.value(), number, reading);
+                    if (value == null) {
+                        return Proposals.NONE.meeting(met);
+                    }
+                    holdingOnce(holding, value);
+                }
+                eachFiled.add(new Witnesses.Filed(asked.key(), value));
+            }
+            if (valueIs != null) {
+                FixtureTemplate value =
+                        Partitions.valueFiledAs(mapping.value(), valueIs, reading);
+                if (value == null
+                        || (element != null && !element.text().equals(value.text()))) {
+                    return Proposals.NONE.meeting(met);
+                }
+                element = value;
+                holdingOnce(holding, value);
+            }
         }
         Proposals collection = switch (container) {
             case Shape.Sequence carrier -> {
@@ -206,7 +247,7 @@ final class PlanComposer {
                 yield Witnesses.holding(carrier, apart, holding, keptOut, plan.holds(), reading);
             }
             case Shape.Mapping carrier -> Witnesses.holding(carrier, holding, keptOut,
-                    key == null ? null : new Witnesses.Filed(key, element), keysEachFiled,
+                    key == null ? null : new Witnesses.Filed(key, element), eachFiled,
                     keysKeptOut, plan.holds(), reading);
         };
         met = met.and(collection.met());
@@ -214,6 +255,19 @@ final class PlanComposer {
         return collection.isEmpty() ? Proposals.NONE.meeting(met)
                 : Proposals.ofNullable(WornNames.under(plan.worn(),
                         collection.values().getFirst(), ruleSource)).meeting(met);
+    }
+
+    /** Whether two numbers asked of the value under one key can both be met: none was asked by
+     *  either, or they are the one number. */
+    private static boolean agree(BigDecimal one, BigDecimal other) {
+        return one == null || other == null || one.compareTo(other) == 0;
+    }
+
+    /** {@code value} among {@code holding}, once. */
+    private static void holdingOnce(List<FixtureTemplate> holding, FixtureTemplate value) {
+        if (holding.stream().noneMatch(each -> each.text().equals(value.text()))) {
+            holding.add(value);
+        }
     }
 
     /** One record of the plan, out of whatever the caller has at the positions under it. */

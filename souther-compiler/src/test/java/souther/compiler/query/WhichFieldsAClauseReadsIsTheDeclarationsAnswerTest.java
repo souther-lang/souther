@@ -11,6 +11,7 @@ import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -172,7 +173,7 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                 """);
         assertEquals(List.of(
                         Set.of(values("key"), neededKey("table", "key")),
-                        Set.of(values("key"), neededKey("table", "key")),
+                        Set.of(values("key"), neededKey("table", "key", BigDecimal.ONE)),
                         Set.of(values("key"), lookedUpMember("other")),
                         Set.of(values("key"), lookedUpMember("tags"), howMany("tags")),
                         Set.of(values("key"), neededKey("table", "key"), neededMember("tags"))),
@@ -335,9 +336,15 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
     /** A member the clause needs the map at {@code container} to hold as a key: the value at the
      *  place {@code lookedFor}. */
     private static ClauseRead neededKey(String container, String lookedFor) {
+        return neededKey(container, lookedFor, null);
+    }
+
+    /** The same, where the clause also says the value under the key is the number {@code is}. */
+    private static ClauseRead neededKey(String container, String lookedFor, BigDecimal is) {
         return new ClauseRead(new RuleKey(List.of(container)),
                 ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
-                Optional.of(new ClauseRead.Member(new RuleKey(List.of(lookedFor)), true)));
+                Optional.of(new ClauseRead.Member(new RuleKey(List.of(lookedFor)), true,
+                        Optional.ofNullable(is))));
     }
 
     private static ClauseRead lookedUpMember(String... steps) {

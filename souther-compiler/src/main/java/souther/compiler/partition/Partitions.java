@@ -2521,10 +2521,8 @@ public final class Partitions {
             FixtureTemplate key = chosen.get(each.key().steps().getFirst());
             // A number the value's type admits and can be written as: a value written under a name
             // is a value of the type only if its rules let it be.
-            FixtureTemplate value = each.valueIs() == null
-                    || !EntryHeld.valueTypeAdmits(map.value(), each.valueIs(), null, reading)
-                    ? null
-                    : writtenNumberAt(map.value(), each.valueIs(), reading);
+            FixtureTemplate value = each.valueIs() == null ? null
+                    : valueFiledAs(map.value(), each.valueIs(), reading);
             if (key == null || (each.valueIs() != null && value == null)) {
                 return Proposals.NONE;
             }
@@ -2866,6 +2864,21 @@ public final class Partitions {
             sums = nextSums;
         }
         return reached;
+    }
+
+    /**
+     * {@code number} written as the value a map of {@code valueType} files under a key the rules
+     * name it for, or null where the type's rules leave the number out or the position cannot
+     * write it.
+     *
+     * <p>The one way an entry's value is written, for a map built field by field and for one
+     * composed into its container: a number the value's type refuses is no value of the type, and
+     * a map holding it is one the rules refuse.
+     */
+    static FixtureTemplate valueFiledAs(Type valueType, BigDecimal number,
+                                        RuleReadingContext reading) {
+        return EntryHeld.valueTypeAdmits(valueType, number, null, reading)
+                ? writtenNumberAt(valueType, number, reading) : null;
     }
 
     /** {@code number} written as a value of {@code type}, or null where the position holds no
