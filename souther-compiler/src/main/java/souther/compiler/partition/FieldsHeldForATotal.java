@@ -1,12 +1,11 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.DecimalOperation;
+import souther.compiler.inputs.DecimalPoints;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -150,8 +149,9 @@ final class FieldsHeldForATotal {
     /**
      * The values from {@code from} to {@code to} a share is tried at: on an order that steps,
      * the whole numbers at the ends, or nought where neither end has one; on one that does not,
-     * the ends a row can be written at, or the least past {@code from} written at the most places
-     * a row is, where that is within the run.
+     * the ends a row can be written at, or the decimal a row is built at inside the run nearest
+     * {@code from} ({@link DecimalPoints#within}), which is where the values of a run are chosen
+     * when a relation is read.
      */
     private static List<ExactRatio> valuesBetween(ExactRatio from, ExactRatio to, boolean whole,
                                                   Predicate<ExactRatio> writable) {
@@ -177,11 +177,10 @@ final class FieldsHeldForATotal {
                 out.add(each);
             }
         }
-        if (out.isEmpty() && from != null && from.asDecimal(RoundingMode.CEILING,
-                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT)
-                instanceof ExactAnswer.Held<BigDecimal>(BigDecimal up)) {
-            ExactRatio inside = ExactRatio.of(up);
-            if (within(inside, from, to) && writable.test(inside)) {
+        if (out.isEmpty() && from != null) {
+            ExactRatio inside = DecimalPoints.within(ExactCut.inclusive(from),
+                    to == null ? null : ExactCut.inclusive(to), true);
+            if (inside != null && writable.test(inside)) {
                 out.add(inside);
             }
         }

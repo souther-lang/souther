@@ -81,22 +81,53 @@ class ATotalOfFieldsTakenOneFromAnotherIsWrittenWhereverTheFieldsReachItTest {
      */
     @Test
     void theEndsOfASumOfTwoFieldsOfDecimalsAreWritten() {
-        for (String[] each : List.of(new String[] {"1.6m", ">= 0", "1.6"},
-                new String[] {"0.4m", "<= 0", "0.4"})) {
-            Generator.GenerationResult offered = offeredFor(DECIMALS.formatted(each[0], each[1]));
-            List<BigDecimal> written = new ArrayList<>();
-            for (Generator.GeneratedRow row : offered.rows()) {
-                Matcher element = FRACTIONS.matcher(row.inputs().getFirst().text());
-                while (element.find()) {
-                    written.add(new BigDecimal(element.group(1))
-                            .add(new BigDecimal(element.group(2))));
-                }
+        assertDecimalsWrittenAt(DECIMALS.formatted("1.6m", ">= 0"), "1.6", "0.2");
+        assertDecimalsWrittenAt(DECIMALS.formatted("0.4m", "<= 0"), "0.4", "0.2");
+    }
+
+    /**
+     * Fields between two and eight tenths, both ends left out, come to one: the field held still
+     * is held at the decimal a row is built at inside its run nearest the end, and not at an end
+     * no value of the run stands at.
+     */
+    @Test
+    void aSumOfTwoFieldsOfDecimalsWithTheirEndsLeftOutIsWritten() {
+        assertDecimalsWrittenAt(DECIMALS
+                .replace("value >= 0.2m && value <= 0.8m", "value > 0.2m && value < 0.8m")
+                .formatted("1.0m", ">= 0"), "1", "0.2");
+    }
+
+    private static final String DECIMAL_TOTAL = "List.sum({1·p + 1·q + 0 | b.ls[*]})";
+
+    /**
+     * That a row is offered for the point of the total at {@code at} in {@code model}, and that
+     * every row offered for it comes to {@code at} with each field past {@code above}, unless it
+     * is written there.
+     */
+    private static void assertDecimalsWrittenAt(String model, String at, String above) {
+        Generator.GenerationResult offered = offeredFor(model);
+        BigDecimal point = new BigDecimal(at);
+        boolean written = false;
+        for (Generator.GeneratedRow row : offered.rows()) {
+            boolean forThePoint = row.purposes().stream().anyMatch(purpose ->
+                    purpose instanceof Generator.Purpose.ForAPoint each
+                            && each.label().equals(DECIMAL_TOTAL + " = " + at));
+            if (!forThePoint) {
+                continue;
             }
-            assertTrue(written.stream().anyMatch(sum -> sum.compareTo(new BigDecimal(each[2])) == 0),
-                    () -> each[2] + " is written by no row: " + offered.rows().stream()
-                            .map(row -> row.inputs().getFirst().text()).toList() + " "
-                            + offered.unresolved());
+            Matcher element = FRACTIONS.matcher(row.inputs().getFirst().text());
+            BigDecimal sum = BigDecimal.ZERO;
+            while (element.find()) {
+                BigDecimal p = new BigDecimal(element.group(1));
+                BigDecimal q = new BigDecimal(element.group(2));
+                assertTrue(p.compareTo(new BigDecimal(above)) >= 0
+                        && q.compareTo(new BigDecimal(above)) >= 0, row.inputs().getFirst()::text);
+                sum = sum.add(p).add(q);
+            }
+            assertEquals(0, sum.compareTo(point), row.inputs().getFirst()::text);
+            written = true;
         }
+        assertTrue(written, () -> at + " is written by no row: " + offered.unresolved());
     }
 
     /**

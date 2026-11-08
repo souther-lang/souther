@@ -11,6 +11,7 @@ import souther.compiler.check.TypeView;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DecimalOperation;
+import souther.compiler.inputs.DecimalPoints;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
@@ -25,6 +26,7 @@ import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -1033,29 +1035,18 @@ final class ContainersAddingUp {
             }
             FieldsHeldForATotal.Field free = weighed(fixing.products(), fixing.free(),
                     freeRun == null ? NumericDomain.Bounds.OPEN : freeRun, carrier);
-            Map<ElementProjection, ExactRatio> at = free == null ? null
-                    : FieldsHeldForATotal.heldFor(held, free, fixing.products().constant(),
-                            count.exactly(), carrier.spacing() == Granularity.DISCRETE,
-                            value -> DecimalOperation.writtenForARow(value)
-                                    instanceof ExactAnswer.Held<Optional<BigDecimal>>(var written)
-                                    && written.isPresent());
-            // An end left out on an order with no step beside it is taken as it stands; a value
-            // held there is no value of the run, and the way is not taken.
-            if (at != null) {
-                for (Map.Entry<ElementProjection, ExactRatio> each : at.entrySet()) {
-                    if (!runs.get(each.getKey()).admits(each.getValue())) {
-                        return null;
-                    }
-                }
-            }
-            return at;
+            return free == null ? null : FieldsHeldForATotal.heldFor(held, free,
+                    fixing.products().constant(), count.exactly(),
+                    carrier.spacing() == Granularity.DISCRETE,
+                    value -> DecimalOperation.writtenForARow(value)
+                            instanceof ExactAnswer.Held<Optional<BigDecimal>>(var written)
+                            && written.isPresent());
         }
 
         /**
-         * {@code field} of {@code products}, at its weight there and between the ends of
-         * {@code run} a value of the field may stand at on {@code carrier}
-         * ({@link Ends#inward}) — an end left out with no value beside it taken as it stands.
-         * Null where it weighs nothing, or an end is at no number.
+         * {@code field} of {@code products}, at its weight there and between the values of
+         * {@code run} nearest its ends a field on {@code carrier} may stand at — or null where it
+         * weighs nothing, or the run names no such value at an end.
          */
         private static FieldsHeldForATotal.Field weighed(
                 LinearForm<ElementValue.Monomial> products, ElementProjection field,
@@ -1064,8 +1055,8 @@ final class ContainersAddingUp {
             if (weight == null || weight.isZero()) {
                 return null;
             }
-            ExactRatio least = run.min() == null ? null : endAt(run.min(), true, carrier);
-            ExactRatio greatest = run.max() == null ? null : endAt(run.max(), false, carrier);
+            ExactRatio least = run.min() == null ? null : standingAt(run, true, carrier);
+            ExactRatio greatest = run.max() == null ? null : standingAt(run, false, carrier);
             if ((run.min() != null && least == null) || (run.max() != null && greatest == null)
                     || (least != null && greatest != null && least.compareTo(greatest) > 0)) {
                 return null;
@@ -1073,15 +1064,31 @@ final class ContainersAddingUp {
             return new FieldsHeldForATotal.Field(weight, least, greatest);
         }
 
-        /** The value at or inside {@code end} a field on {@code carrier} may stand at, from
-         *  below where {@code lower}; the end as it stands where the order names none beside
-         *  it. */
-        private static ExactRatio endAt(Endpoint end, boolean lower, Carrier carrier) {
+        /**
+         * The value of {@code run} nearest its lower end, or its upper where not {@code lower},
+         * a field on {@code carrier} may stand at: the end where it is held; on an order that
+         * steps, the value beside a left-out end ({@link Ends#inward}); on one that does not, the
+         * decimal a row is built at inside the run nearest it ({@link DecimalPoints#within}),
+         * which is where the values of a run are chosen when a relation is read. Null where there
+         * is none.
+         */
+        private static ExactRatio standingAt(NumericDomain.Bounds run, boolean lower,
+                                             Carrier carrier) {
+            Endpoint end = lower ? run.min() : run.max();
             Count inside = Ends.inward(end, carrier, lower);
             if (inside != null) {
                 return inside.exactly();
             }
-            return end.at() instanceof Count count ? count.exactly() : null;
+            Endpoint other = lower ? run.max() : run.min();
+            ExactCut near = cutAt(end);
+            return near == null || (other != null && cutAt(other) == null) ? null
+                    : DecimalPoints.within(near, other == null ? null : cutAt(other), lower);
+        }
+
+        /** {@code end} as a cut of exact numbers, or null where it is at no number. */
+        private static ExactCut cutAt(Endpoint end) {
+            return end.at() instanceof Count count
+                    ? new ExactCut(count.exactly(), end.inclusive()) : null;
         }
 
         /** One where {@code left} holds it, and otherwise the whole number nearest it that

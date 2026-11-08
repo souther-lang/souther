@@ -1137,18 +1137,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         } else if (Core.withoutStanding(node).type() == Type.DECIMAL) {
                             told.walksAddingDecimals(numbers, BigDecimal.ZERO,
                                     asTheRelationNamesIt(total), each.scaleOfEveryPart());
-                        } else if (!(total instanceof NumericTerm.TakenOver)) {
+                        } else if (!(total instanceof NumericTerm.TakenOver)
+                                || !tellAnIntTotalThrough(throughOverWholeNumbers(each,
+                                        BigInteger.ZERO, closure.params().getFirst().binding(),
+                                        total), node, numbers, total)) {
                             told.exact = false;
-                        } else {
-                            switch (throughOverWholeNumbers(each, BigInteger.ZERO,
-                                    closure.params().getFirst().binding(), total)) {
-                                case EVERY_ROW -> tellAnIntTotal(node, numbers, List.of());
-                                case A_ROW_OF_ONE_ELEMENT -> {
-                                    tellAnIntTotal(node, numbers, List.of());
-                                    told.partials.add(total);
-                                }
-                                case NOT_SHOWN -> told.exact = false;
-                            }
                         }
                     }
                     told.readByATerm(node);
@@ -1712,19 +1705,27 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     tellAnIntTotal(node, answer, List.of());
                     return true;
                 }
-                AddedOfEachElement.Through through = each == null
-                        ? AddedOfEachElement.Through.NOT_SHOWN
-                        : throughOverWholeNumbers(each, BigInteger.valueOf(seed.value()),
-                                seeded.element().binding(), total);
-                switch (through) {
-                    case EVERY_ROW -> tellAnIntTotal(node, answer, List.of());
-                    case A_ROW_OF_ONE_ELEMENT -> {
-                        tellAnIntTotal(node, answer, List.of());
-                        told.partials.add(total);
-                    }
-                    case NOT_SHOWN -> {
-                        return false;
-                    }
+                return each != null && tellAnIntTotalThrough(throughOverWholeNumbers(each,
+                        BigInteger.valueOf(seed.value()), seeded.element().binding(), total),
+                        node, answer, total);
+            }
+
+            /**
+             * Tells the total {@code answer} that {@code node} holds to {@code Int}, as far as what
+             * each element works out is shown to get through ({@code through}): on every row, or
+             * on a row of one element, where the rest is left to the running totals of
+             * {@code total} ({@link UndividedByARelation.Working#partials}). False where it is not
+             * shown, and nothing is told.
+             */
+            private boolean tellAnIntTotalThrough(AddedOfEachElement.Through through, Core node,
+                                                  LinearForm<NumericTerm> answer,
+                                                  NumericTerm total) {
+                if (through == AddedOfEachElement.Through.NOT_SHOWN) {
+                    return false;
+                }
+                tellAnIntTotal(node, answer, List.of());
+                if (through == AddedOfEachElement.Through.A_ROW_OF_ONE_ELEMENT) {
+                    told.partials.add(total);
                 }
                 return true;
             }
