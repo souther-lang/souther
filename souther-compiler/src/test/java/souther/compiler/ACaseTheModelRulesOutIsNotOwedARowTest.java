@@ -486,7 +486,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     /** The report a build reads, which is where a claim and a measure are put together. */
     private static String reportOn(String source) {
         return souther.compiler.report.AdequacyReport.of(measured(source))
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static PartitionEvidence partitionOf(String source) {
@@ -835,7 +835,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     @Test
     void everyRowTheGeneratorOffersCompiles() {
         String offered = GeneratedRows.of(measured(RULED_OUT), "example.probe", "pick",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
 
         assertTrue(offered.contains("(Pending)"), offered);
         assertFalse(offered.contains("(Off)"), offered);

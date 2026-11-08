@@ -134,7 +134,7 @@ final class ConformanceSnapshot {
         // Every module and every behavior, which is what the command does when it is told no
         // narrower.
         return "// --generate" + System.lineSeparator()
-                + GeneratedRows.of(analysed.compilation(), null, null, rendering).text();
+                + GeneratedRows.of(analysed.compilation(), null, null, rendering).textInEnglish();
     }
 
     /**

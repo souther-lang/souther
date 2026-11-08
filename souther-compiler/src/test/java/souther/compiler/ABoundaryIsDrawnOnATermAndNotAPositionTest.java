@@ -158,7 +158,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
      */
     @Test
     void noneOfThemIsReportedAsAPositionNothingDivides() {
-        String human = AdequacyReport.of(compiled(MODEL)).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = AdequacyReport.of(compiled(MODEL)).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         List<String> said = human.lines().map(String::strip)
                 .filter(line -> line.startsWith("· not derivable:")).toList();
 

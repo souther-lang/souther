@@ -117,7 +117,7 @@ class ADeniedConditionIsDecidedByTheConditionsInsideItTest {
             assertEquals(1, uncoveredRulesOf(measured, "denied"),
                     () -> guarded + ": the rule taken where a holds no n and b does");
             String offered = GeneratedRows.of(measured, measured.modules().get(0), "denied",
-                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
             assertTrue(offered.contains("| (0, [], [0]) -> <?>"), () -> guarded + ": " + offered);
             assertEquals(0, uncoveredRulesOf(measured, "deniedAll"),
                     () -> guarded + ": a row for each way, and each placed at its rule");

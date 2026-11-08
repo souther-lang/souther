@@ -500,7 +500,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String rows = GeneratedRows.of(compilation, "example.named", "gate",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
 
         assertFalse(rows.contains("would have to hold two values at once"), rows);
         assertFalse(rows.contains("no row for"), rows);
@@ -617,7 +617,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String rows = GeneratedRows.of(compilation, "example.named", "gate",
-                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
             assertFalse(rows.contains("would have to hold two values at once"), rows);
         }
     }

@@ -33,7 +33,7 @@ class AComparisonThatCannotRunIsNotShownDividedNoWayTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     @Test

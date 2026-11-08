@@ -3170,6 +3170,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     // --- rendering --------------------------------------------------------------------------------
 
+    /** The report a person reads, in the catalog's base language ({@link #human}). */
+    public String humanInEnglish(SourceRendering rendering) {
+        return human(rendering, Messages.BASE_LANGUAGE);
+    }
+
     /**
      * The report as a person reads it, with the sources under the names {@code rendering} gives them.
      *
@@ -3182,19 +3187,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>And in the language {@code language} names, which the caller resolved for this reader. The
      * words are the catalog's; which lines are said, and in which order, is not a question of the
      * language ({@link Page#IN_THE_BASE_WORDING}).
-     */
-    public String humanInEnglish(SourceRendering rendering) {
-        return human(rendering, Messages.BASE_LANGUAGE);
-    }
-
-    /** BRIDGE-1464: callers move to {@link #humanInEnglish}. */
-    public String human(SourceRendering rendering) {
-        return humanInEnglish(rendering);
-    }
-
-    /**
-     * The same report with its prose in {@code language}, which the caller resolved for this
-     * reader.
      */
     public String human(SourceRendering rendering, Locale language) {
         Page page = new Page(rendering, language);

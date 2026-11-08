@@ -34,7 +34,7 @@ class AStringChosenByCasesIsComparedAsTheCaseTakenTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The lines read, each once: a line the choice's condition draws is said again under the

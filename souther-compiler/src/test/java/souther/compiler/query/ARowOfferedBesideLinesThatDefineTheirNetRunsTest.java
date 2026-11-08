@@ -79,7 +79,7 @@ class ARowOfferedBesideLinesThatDefineTheirNetRunsTest {
             offered.append(GeneratedRows.of(
                     Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule(module)),
                     Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                    compilation.db()).text());
+                    compilation.db()).textInEnglish());
         }
         assertFalse(offered.isEmpty(), "rows are offered for the comparison against the total");
 

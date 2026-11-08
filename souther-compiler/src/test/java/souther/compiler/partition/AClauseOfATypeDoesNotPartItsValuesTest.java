@@ -88,7 +88,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
 
                 example take
                     | "one" : (R { lo = 1, hi = 1 }) -> Yes
-                """)).human(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                """)).humanInEnglish(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         org.junit.jupiter.api.Assertions.assertTrue(block.contains("example.same"), block);
     }

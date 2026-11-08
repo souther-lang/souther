@@ -182,7 +182,7 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
             assertEquals(2, copies.size(), "a copy of ok in each copy of first, one on each arm"
                     + " of pick's if: " + helper);
         }
-        String text = report.human(SourceRendering.namedByIdentity(compilation.texts()));
+        String text = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> told = text.lines().filter(line -> line.contains("case expansion")).toList();
         assertFalse(told.isEmpty(), text);
         for (String line : told) {

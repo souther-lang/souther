@@ -499,7 +499,7 @@ class EveryFindingHasAGenerationDispositionTest {
         Compilation compilation = compiled(NARROWED);
 
         String block = GeneratedRows.of(compilation, "example.narrowed", "held",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertTrue(block.contains("in `held`"),
                 "what the reading this asked about came to, named as its own: " + block);
@@ -930,7 +930,7 @@ class EveryFindingHasAGenerationDispositionTest {
                                 Adequacy.Generated.RowsForCases.NOTHING,
                                 List.of(), List.of())), null)),
                 Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE),
-                compiled(KIND).db()).text();
+                compiled(KIND).db()).textInEnglish();
     }
 
     /** A run asked for nothing that came to a reason about itself, which is what a stopped
@@ -1008,7 +1008,7 @@ class EveryFindingHasAGenerationDispositionTest {
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
                                 "example.block")),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
 
         assertTrue(block.contains("nothing offers a row for `case Off`"),
                 "the arm nothing offers a row for is named: " + block);

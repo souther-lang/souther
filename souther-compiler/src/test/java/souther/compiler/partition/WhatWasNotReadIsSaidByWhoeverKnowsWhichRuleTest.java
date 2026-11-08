@@ -131,7 +131,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     }
 
     private static String human(String model) {
-        return report(model).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return report(model).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static AdequacyReport report(String model) {

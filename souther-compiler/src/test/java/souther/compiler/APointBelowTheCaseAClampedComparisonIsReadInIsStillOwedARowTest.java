@@ -53,7 +53,7 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The border is drawn on the length, at 2, and its OUT class is owed and not refuted. */

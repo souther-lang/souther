@@ -255,7 +255,7 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
     }
 
     private static String page(Compilation compilation) {
-        return reported(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        return reported(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String json(Compilation compilation) {

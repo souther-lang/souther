@@ -113,6 +113,6 @@ class AContainerIsWrittenForItsLengthAndItsTotalTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.ledger")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 }

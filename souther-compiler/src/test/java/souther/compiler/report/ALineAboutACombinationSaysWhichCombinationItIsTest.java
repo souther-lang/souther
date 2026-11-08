@@ -315,7 +315,7 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
         List<AdequacyReport.UnobservedChoices> sets = behavior.unobserved().stream()
                 .flatMap(each -> each.choices().stream()).toList();
 
-        String page = report.human(SourceRendering.namedByIdentity(compilation.texts()));
+        String page = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(sets.size(), blocksOf(page).size(), page);
 
         JsonNode document = JsonMapper.builder().build().readTree(
@@ -368,7 +368,7 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
             }
         }
         assertTrue(several > 0, "a combination alone in its set");
-        String page = report.human(SourceRendering.namedByIdentity(compilation.texts()));
+        String page = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(several, linesSaying(page, "either"), page);
         assertEquals(several, linesSaying(page, "or"), page);
     }
@@ -405,7 +405,7 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
         assertTrue(group.choices().getFirst().fixed().stream().allMatch(Objects::isNull),
                 "which names no factor");
 
-        String page = report.human(SourceRendering.namedByIdentity(compilation.texts()));
+        String page = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> lines = page.lines().toList();
         int header = lines.indexOf("      decided together:");
         assertTrue(header >= 0, page);
@@ -484,7 +484,7 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
 
         Compilation compilation = measured(OPERATION);
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Pattern arm = Pattern.compile("reached at (\\d+:\\d+)\\) in withDefault@(\\d+:\\d+)");
         Set<String> shown = new HashSet<>();
         for (Set<String> block : blocksOf(page)) {

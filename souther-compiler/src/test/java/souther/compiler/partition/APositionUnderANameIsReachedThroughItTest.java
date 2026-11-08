@@ -123,7 +123,7 @@ class APositionUnderANameIsReachedThroughItTest {
     @Test
     void aRowOfferedForThePositionIsWrittenUnderTheName() {
         String rows = GeneratedRows.of(measured(FLAGS), "demo", "wrapped",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
 
         assertTrue(rows.contains("(SlotN(Slot { flag = false }))"), rows);
     }
@@ -146,7 +146,7 @@ class APositionUnderANameIsReachedThroughItTest {
         assertTrue(lines(compilation, "wrapped").size() >= 4);
 
         String rows = GeneratedRows.of(compilation, "demo", "wrapped",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         assertTrue(rows.contains("(PairN(Pair { low = N(9), high = N(10) }))"), rows);
     }
 }

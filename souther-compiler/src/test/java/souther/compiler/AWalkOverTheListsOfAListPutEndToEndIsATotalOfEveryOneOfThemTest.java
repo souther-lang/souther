@@ -488,13 +488,13 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
 
     private static String rowsOf(String model) {
         return GeneratedRows.of(compiled(model), null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     private static String report(String model) {
         Compilation compilation = compiled(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Each model compiled and measured once for the class: some are asked for their report and

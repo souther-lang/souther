@@ -202,7 +202,7 @@ class ACountHeldAgainstANumberOfTheInputIsComposedOnEverySideOfItTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String text = GeneratedRows.of(compilation, "probe", null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
         List<Row> out = new ArrayList<>();
         Matcher row = Pattern.compile("\\(\\[([^\\]]*)\\]((?:,\\s*-?\\d+)+)\\)\\s*->").matcher(text);
         while (row.find()) {

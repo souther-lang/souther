@@ -99,7 +99,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                                 Adequacy.Generated.RowsForRules.NOTHING,
                                 Adequacy.Generated.RowsForCases.NOTHING,
                                 List.of(), List.of())), null)),
-                Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE), COMPILED.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE), COMPILED.db()).textInEnglish();
     }
 
     /** A run asked for nothing, which is what a reason about the run alone is written against. */

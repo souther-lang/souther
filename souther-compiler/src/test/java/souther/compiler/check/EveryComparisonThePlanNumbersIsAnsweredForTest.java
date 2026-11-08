@@ -66,7 +66,7 @@ class EveryComparisonThePlanNumbersIsAnsweredForTest {
             Compilation compilation = Compilation.ofSource(COMPARISONS, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
-            AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+            AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         } finally {
             InvariantChecker.GAVE_UP = null;
         }

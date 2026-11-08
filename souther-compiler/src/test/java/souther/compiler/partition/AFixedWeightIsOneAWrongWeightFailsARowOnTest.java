@@ -120,7 +120,7 @@ class AFixedWeightIsOneAWrongWeightFailsARowOnTest {
     }
 
     private static String reportOf(Compilation model) {
-        return AdequacyReport.of(model).human(SourceRendering.namedByIdentity(model.texts()));
+        return AdequacyReport.of(model).humanInEnglish(SourceRendering.namedByIdentity(model.texts()));
     }
 
     @Test

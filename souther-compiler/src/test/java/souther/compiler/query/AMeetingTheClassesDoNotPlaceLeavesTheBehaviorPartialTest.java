@@ -86,7 +86,7 @@ class AMeetingTheClassesDoNotPlaceLeavesTheBehaviorPartialTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(),
                 () -> AdequacyReport.of(compilation)
-                        .human(SourceRendering.namedByIdentity(compilation.texts())));
+                        .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())));
         List<AdequacyReport.BehaviorReport> behaviors =
                 AdequacyReport.of(compilation).modules().getFirst().behaviors();
         assertEquals(1, behaviors.size(), "one behavior in the model");

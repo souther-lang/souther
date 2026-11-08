@@ -315,13 +315,13 @@ class EveryLineBesideABorderIsAskedForInTheRunAfterItsPointsTest {
     private static String block(String model) {
         Compilation measured = measured(model);
         return GeneratedRows.of(measured, "example.region", null,
-                SourceRendering.namedByIdentity(measured.texts())).text();
+                SourceRendering.namedByIdentity(measured.texts())).textInEnglish();
     }
 
     private static String report(String model) {
         Compilation measured = measured(model);
         return AdequacyReport.of(measured)
-                .human(SourceRendering.namedByIdentity(measured.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(measured.texts()));
     }
 
     /** Each model measured once, however many times its block and its report are read. */

@@ -76,6 +76,6 @@ class AConditionThatAsksSeveralThingsIsOneColumnTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), "the model compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

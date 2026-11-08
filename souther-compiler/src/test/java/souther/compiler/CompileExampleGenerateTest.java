@@ -98,7 +98,7 @@ class CompileExampleGenerateTest {
                 OfferingRequest.overTheModule(module));
         assertNotNull(offering, "the model under test compiles");
         return GeneratedRows.of(offering, Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 
     private static Map<String, Adequacy.Filling> generated(String source) {
@@ -1179,7 +1179,7 @@ class CompileExampleGenerateTest {
         Compilation compilation = Compilation.ofSources(List.of(model, companion),
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        String block = GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).text();
+        String block = GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertEquals(declared, block.lines()
                         .filter(line -> line.startsWith("example "))

@@ -159,7 +159,7 @@ class ALineBesideOneIsNamedForTheLineAndNotForOneReadingOfItTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), "the model compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static List<String> besides(String report) {

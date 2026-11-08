@@ -878,7 +878,7 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                     () -> "a row is composed for every point of " + compared + ": " + item);
         }
         String origin = drawn.path("origin").asString();
-        String rows = GeneratedRows.of(compilation, "probe", null, rendering).text();
+        String rows = GeneratedRows.of(compilation, "probe", null, rendering).textInEnglish();
         StringBuilder examples = new StringBuilder("\nexample f\n");
         List<String> said = new ArrayList<>();
         StringBuilder row = null;

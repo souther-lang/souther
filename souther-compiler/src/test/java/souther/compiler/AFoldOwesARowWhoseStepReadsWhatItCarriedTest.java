@@ -126,7 +126,7 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("repro.total")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         List<RowsOfABlock.Row> rows = RowsOfABlock.of(block);
         assertEquals(1, rows.size(), () -> "one row: " + block);
@@ -343,7 +343,7 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("repro.held")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         List<RowsOfABlock.Row> rows = RowsOfABlock.of(block);
         // Stopping after one step parts from the fold where the second element is read before the
@@ -926,7 +926,7 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
 
     private static String page(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static List<String> rewriteLines(Compilation compilation) {

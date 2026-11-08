@@ -428,7 +428,7 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         CompositionBudget figure = CompositionBudget.READINGS_OF_ONE_CONDITION;
         assertFalse(human.contains("stopped at " + InEnglish.said(figure.countsSaid()) +" (" + figure.name() + ", "

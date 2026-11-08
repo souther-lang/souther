@@ -99,7 +99,7 @@ class TheRowsMadeForAStringInsideAnotherHoldTheRelationWhereTheyAreSaidToTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String block = GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         List<Made> out = new ArrayList<>();
         Matcher found = ROW.matcher(block);
         while (found.find()) {

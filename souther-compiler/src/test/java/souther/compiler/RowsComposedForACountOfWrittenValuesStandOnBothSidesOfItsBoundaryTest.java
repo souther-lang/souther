@@ -79,7 +79,7 @@ class RowsComposedForACountOfWrittenValuesStandOnBothSidesOfItsBoundaryTest {
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         Set<Integer> above = aboveNoughtInEachRow(block);
         assertTrue(above.containsAll(Set.of(2, 3, 4)),

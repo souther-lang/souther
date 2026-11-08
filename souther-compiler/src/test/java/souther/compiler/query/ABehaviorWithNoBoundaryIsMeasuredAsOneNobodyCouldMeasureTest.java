@@ -268,7 +268,7 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
     @Test
     void theLineSaysWhichOfTheWaysItHasNoNumber() {
         String text = AdequacyReport.of(measured())
-                .human(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
         assertEquals("not measured (this behavior's signature could not be read)",
                 signatureLineOf(text, "issue"),
                 () -> "a name in its own declaration resolved to nothing:\n" + text);

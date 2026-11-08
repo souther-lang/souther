@@ -326,7 +326,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
 
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
                 () -> "the account asks what the rows reach of this position and nothing read"
-                        + " them: " + report.human(SourceRendering.namedByIdentity(compilation.texts())));
+                        + " them: " + report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     /**
@@ -345,11 +345,11 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         AdequacyReport measured = reportOf(A_BODY_THAT_FORKS_NOWHERE, Adequacy.Level.ALL);
         AdequacyReport witness = reportOf(A_BODY_THAT_FORKS_NOWHERE, Adequacy.Level.WITNESS);
 
-        String human = measured.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = measured.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, measured.adequacy(), human);
         assertTrue(human.contains("branch      not applicable (this body owes no arm)"), human);
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, witness.adequacy(),
-                witness.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                witness.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(witness.whatKeepsTheVerdictOpen().stream()
                         .allMatch(WhatStrictRefusesIsWhatTheRowsDoNotCoverTest::readsTheRuns),
                 () -> "and the arms are not what holds it open: "
@@ -369,7 +369,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         AdequacyReport witness = reportOf(AN_ARM_AND_A_COVERED_SIGNATURE, Adequacy.Level.WITNESS);
 
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, witness.adequacy(),
-                witness.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                witness.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertEquals(List.of(), witness.adequacyGaps().stream()
                         .filter(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED).toList(),
                 "and not by naming a gap in a measure nobody made");
@@ -391,7 +391,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         AdequacyReport witness = reportOf(ONLY_WAITING, Adequacy.Level.WITNESS);
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, witness.adequacy(),
-                witness.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                witness.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
     /** A line an invariant drew is measured wherever the rows ran, so a row missing at it is a gap
@@ -401,7 +401,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         for (Adequacy.Level level : List.of(Adequacy.Level.WITNESS, Adequacy.Level.ALL)) {
             AdequacyReport report = reportOf(WAITING_AND_UNCOVERED, level);
             assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, report.adequacy(),
-                    report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                    report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
             assertEquals(List.of(Adequacy.Kind.BOUNDARY_UNMET),
                     report.adequacyGaps().stream().map(Adequacy.Finding::kind).toList(),
                     "at " + level);
@@ -423,10 +423,10 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
 
         assertTrue(armsNotAsked.adequacyGaps().stream()
                         .noneMatch(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED),
-                armsNotAsked.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                armsNotAsked.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(armsAsked.adequacyGaps().stream()
                         .anyMatch(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED),
-                armsAsked.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                armsAsked.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
     /**
@@ -445,7 +445,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         for (Adequacy.Level level : List.of(Adequacy.Level.WITNESS, Adequacy.Level.ALL)) {
             AdequacyReport report = reportOf(COMPOSED, level);
 
-            String human = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+            String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
             assertFalse(human.contains("the arms were not measured"), human);
             assertTrue(report.whatKeepsTheVerdictOpen().stream()
                             .allMatch(WhatStrictRefusesIsWhatTheRowsDoNotCoverTest::readsTheRuns),
@@ -455,7 +455,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
                 reportOf(COMPOSED, Adequacy.Level.ALL).adequacy(),
                 reportOf(COMPOSED, Adequacy.Level.ALL)
-                        .human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                        .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
     /**
@@ -589,11 +589,11 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         AdequacyReport uncovered = whole.only(null, "submit");
 
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, whole.adequacy(),
-                whole.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                whole.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, covered.adequacy(),
-                covered.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                covered.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, uncovered.adequacy(),
-                uncovered.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                uncovered.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
     /** One module holding both of the models above, so that filtering has something to filter. */

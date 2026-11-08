@@ -137,7 +137,7 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
                 new Subject.AtAnInput("record", 1), Set.copyOf(rows)), ReaderDisposition.of(open));
 
         SourceRendering rendering = SourceRendering.namedByIdentity(SourceLayouts.NONE);
-        String human = report.human(rendering);
+        String human = report.humanInEnglish(rendering);
         assertTrue(human.contains("in #2 specified 1/2"), human);
         assertTrue(human.contains("input #2 of record — rows with a case this cannot read: "
                         + rows.getFirst().shown(rendering.names().nameOf(rows.getFirst().source()))

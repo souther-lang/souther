@@ -134,7 +134,7 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
     void thePageSaysHowManyRewritesTheRowsTellApart() {
         Compilation compilation = compiled(NOTHING_HELD);
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         // Three: the arm answering what the item holds written as the arms answering nothing, which
         // are one rewrite since the two do the same, and each of those written as the first. Not
@@ -202,7 +202,7 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
                 """;
         Compilation compilation = compiled(doubled);
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(List.of(
                         "! no row would come out differently if the body always answered what"
                                 + " `doubled zero` answers",
@@ -229,7 +229,7 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.doubled")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
         List<RowsOfABlock.Row> rows = RowsOfABlock.of(block);
         assertTrue(rows.stream().anyMatch(
                         row -> row.isFor("the body answering what doubled zero answers"))

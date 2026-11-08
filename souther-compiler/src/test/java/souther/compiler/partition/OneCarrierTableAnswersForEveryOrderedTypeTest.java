@@ -454,14 +454,14 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "openOnBothSidesDense",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         assertTrue(dense.contains("1 < x < 2"), dense);
         assertFalse(dense.contains("nothing here writes a value whose value is in this range"),
                 "a decimal lies between two decimals a whole apart: " + dense);
 
         String moment = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "openOnBothSidesMoment",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         assertFalse(moment.contains("2026-08-01T00:00:01 < x < 2026-08-01T00:00:02"),
                 "nothing lies strictly between two adjacent moments, so the two rules part them"
                         + " in one place and there is no class between: " + moment);
@@ -516,12 +516,12 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         Compilation compilation = model();
 
         String dense = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.matrix", "singledDense", SourceRendering.namedByIdentity(compilation.texts())).text();
+                compilation, "example.matrix", "singledDense", SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         assertTrue(rowFor(dense, "x: /= 0, 1 at x").contains("(TwoDecimals(0.5m)"),
                 "a decimal lies between the two singled out: " + dense);
 
         String moment = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.matrix", "singledMoment", SourceRendering.namedByIdentity(compilation.texts())).text();
+                compilation, "example.matrix", "singledMoment", SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         assertFalse(moment.contains(": /= 2026-08-01T00:00:00, 2026-08-01T00:00:01"),
                 "the position holds nothing but the two singled out, so nothing is left to be"
                         + " a class: " + moment);
@@ -593,7 +593,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         for (String behavior : List.of("twoLinesDense", "twoLinesMoment")) {
             Compilation compilation = model();
             String block = souther.compiler.report.GeneratedRows.of(
-                    compilation, "example.matrix", behavior, SourceRendering.namedByIdentity(compilation.texts())).text();
+                    compilation, "example.matrix", behavior, SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
             assertFalse(block.contains("no value of this range can be written"),
                     behavior + ": the range between the two lines holds a value: " + block);

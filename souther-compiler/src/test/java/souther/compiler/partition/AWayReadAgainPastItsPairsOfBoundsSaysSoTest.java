@@ -73,7 +73,7 @@ class AWayReadAgainPastItsPairsOfBoundsSaysSoTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors());
         List<String> aboutX = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip)
                 .filter(line -> line.startsWith("· not read") && line.endsWith("about `x`"))
                 .toList();

@@ -138,7 +138,7 @@ class ARuleTheBlockHadNoRoomForIsStillWeighedTest {
     private static String blockUnder(int rowLimit) {
         Compilation compiled = compiled(rowLimit);
         return GeneratedRows.of(compiled, "example.narrow", null,
-                SourceRendering.namedByIdentity(compiled.texts())).text();
+                SourceRendering.namedByIdentity(compiled.texts())).textInEnglish();
     }
 
     private static Compilation compiled(int rowLimit) {

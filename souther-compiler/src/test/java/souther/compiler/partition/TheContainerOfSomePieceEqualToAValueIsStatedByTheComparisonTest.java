@@ -32,7 +32,7 @@ class TheContainerOfSomePieceEqualToAValueIsStatedByTheComparisonTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).filter(line -> line.startsWith("· not read: fork"))
                 .distinct().toList();
     }

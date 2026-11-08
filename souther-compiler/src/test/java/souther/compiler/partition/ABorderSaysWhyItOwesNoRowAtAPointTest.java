@@ -1089,7 +1089,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
 
         // And the block an author reads says nothing about them, because nothing is owed there.
         String block = souther.compiler.report.GeneratedRows.of(
-                compiled(BOTH_SIDES), "example.owed", "cmp", SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                compiled(BOTH_SIDES), "example.owed", "cmp", SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
         assertFalse(block.contains("p.a < p.b"), block);
         assertFalse(block.contains("p.a > p.b"), block);
     }

@@ -136,7 +136,7 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.codes")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
         List<String> values = new ArrayList<>();
         Matcher found = value.matcher(offered);
         while (found.find()) {
@@ -170,7 +170,7 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
     private static String report(String condition, String declarations, String rows) {
         Compilation compilation = measured(model(condition, declarations) + rows);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static final String SOME_CODE = conditionOf("matches", Quantifier.SOME, "all");
@@ -361,7 +361,7 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), "the model compiles");
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertFalse(report.contains("is divided by"), report);
         assertTrue(report.contains("not read: fork"), report);
     }
@@ -510,7 +510,7 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
         Function<String, String> reported = condition -> {
             Compilation compilation = measured(WITH_A_NUMBER.formatted(condition));
             return AdequacyReport.of(compilation)
-                    .human(SourceRendering.namedByIdentity(compilation.texts()))
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                     .replaceAll("predicate@\\d+:\\d+", "predicate")
                     .replaceAll("`list\\.s: [^`]*`", "`list.s: the rule`")
                     .lines()

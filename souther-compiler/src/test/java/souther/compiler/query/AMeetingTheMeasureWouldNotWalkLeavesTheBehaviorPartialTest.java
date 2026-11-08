@@ -154,7 +154,7 @@ class AMeetingTheMeasureWouldNotWalkLeavesTheBehaviorPartialTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(),
                 () -> AdequacyReport.of(compilation)
-                        .human(SourceRendering.namedByIdentity(compilation.texts())));
+                        .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())));
         return compilation;
     }
 }

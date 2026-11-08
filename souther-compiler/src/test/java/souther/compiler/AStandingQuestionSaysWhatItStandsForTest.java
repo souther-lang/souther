@@ -53,7 +53,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     private static String reportOf(String source) {
-        return measured(source).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return measured(source).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** What the document says stopped the one question of {@code source}. */

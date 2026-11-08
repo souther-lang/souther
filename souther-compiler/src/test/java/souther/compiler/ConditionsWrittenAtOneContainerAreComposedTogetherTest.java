@@ -448,6 +448,6 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
     private static String report(Compilation compilation) {
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

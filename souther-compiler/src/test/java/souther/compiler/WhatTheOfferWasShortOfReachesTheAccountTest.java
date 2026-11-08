@@ -384,7 +384,7 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
     private static String human(String model) {
         Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String json(String model) {

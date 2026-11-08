@@ -79,7 +79,7 @@ class ATotalOverTheCasesOfASumIsNotReadWhereTheCasesCannotAnswerAnAmountTest {
         compilation.answerEverything();
         assertEquals("[]", compilation.errors().toString(), source);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** The model as the other test has it, which the changes below are measured against. */

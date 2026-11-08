@@ -106,7 +106,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     private static String report(String body, String after) {
         Compilation compilation = compiled(body, after);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String guarded(String condition) {
@@ -332,7 +332,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     private static void assertOwesTheSame(String kept, String writtenOut, String after) {
         Compilation compilation = compiled(guarded(kept), after);
         String counted = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertFalse(counted.contains("not read"), counted);
         Set<String> owed = owedOfEveryRule(compilation, theGuard(kept, after));
         assertTrue(owed.stream().anyMatch(each -> each.startsWith("guard ")),
@@ -430,7 +430,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("read as f/#xs [xs[*] > 0] - k: = 0"), report);
         List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
         assertTrue(unread.stream()

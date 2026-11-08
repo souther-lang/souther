@@ -86,7 +86,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                 """), 1);
 
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(page.contains("a row that tells the rewrite apart may exist past it"), page);
     }
@@ -233,7 +233,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 
-        List<String> lines = report.human(rendering).lines().map(String::strip).toList();
+        List<String> lines = report.humanInEnglish(rendering).lines().map(String::strip).toList();
 
         List<String> undecided = lines.stream()
                 .filter(line -> line.startsWith("? not decided whether a row would come out"))

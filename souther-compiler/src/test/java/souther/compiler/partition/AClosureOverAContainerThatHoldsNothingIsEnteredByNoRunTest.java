@@ -179,7 +179,7 @@ class AClosureOverAContainerThatHoldsNothingIsEnteredByNoRunTest {
     private static List<String> report(String parameters, String body) {
         Compilation compilation = compiled(parameters, body);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
     }
 

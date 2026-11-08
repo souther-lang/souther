@@ -103,7 +103,7 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
                                 compilation.modules().get(0))),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
     }
 
     /** A fresh compilation, measured once, for a caller asking more than one question of it. */
@@ -273,7 +273,7 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
                     | "A C" : (A, C) -> 110
                 """);
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         String block = blockOf(compilation);
 
         assertTrue(report.contains("undecided whether a row is in `B` at"),

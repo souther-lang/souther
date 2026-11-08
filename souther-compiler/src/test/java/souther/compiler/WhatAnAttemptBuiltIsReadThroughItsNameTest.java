@@ -104,7 +104,7 @@ class WhatAnAttemptBuiltIsReadThroughItsNameTest {
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("demo")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         assertTrue(block.contains("x <= 10") && block.contains("(10)"), block);
         assertTrue(block.contains("10 < x") && block.contains("(11)"), block);

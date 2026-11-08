@@ -231,7 +231,7 @@ class AContainerOfValuesPastAFigureIsSaidToBeStoppedThereTest {
     @Test
     void theDecisionRuleSaysTheFigureItWasComposedWithout() {
         String human = AdequacyReport.of(measured(MODEL.formatted(PAST, "List<Huge>",
-                "List.length"))).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                "List.length"))).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertTrue(human.contains("not composed against: a condition on positions this compiler"
                 + " stopped looking at (how many elements a proposed collection holds)"), human);

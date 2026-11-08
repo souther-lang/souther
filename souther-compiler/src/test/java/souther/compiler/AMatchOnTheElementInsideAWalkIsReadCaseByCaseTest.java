@@ -461,7 +461,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
 
     private static String rowsOf(Compilation compilation) {
         return GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     private static String report(String model) {
@@ -480,7 +480,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
     private static String report(Compilation compilation) {
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Each model measured once for the class: some are asked for their report and for their

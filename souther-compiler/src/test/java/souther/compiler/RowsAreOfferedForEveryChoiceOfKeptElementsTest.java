@@ -69,7 +69,7 @@ class RowsAreOfferedForEveryChoiceOfKeptElementsTest {
         String offered = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule(compilation.modules().get(0))),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         Set<List<Boolean>> kept = new HashSet<>();
         offered.lines().filter(line -> line.startsWith("    | ")).forEach(row -> {

@@ -1340,7 +1340,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
         }
 
         String human() {
-            return AdequacyReport.of(compilation).human(
+            return AdequacyReport.of(compilation).humanInEnglish(
                     SourceRendering.namedByIdentity(compilation.texts()));
         }
 

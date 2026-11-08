@@ -162,6 +162,6 @@ class ARecursiveInputOwesRowsWhereTheBodyReadsItTest {
         compilation.answerEverything();
         assertEquals(0, compilation.errors().size(), "the model compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

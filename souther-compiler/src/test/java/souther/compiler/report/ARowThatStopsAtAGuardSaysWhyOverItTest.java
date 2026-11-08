@@ -83,7 +83,7 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), "the model under test compiles");
         return GeneratedRows.of(compilation, null, null,
-                new SourceRendering(id -> "settle.sou", compilation.texts())).text();
+                new SourceRendering(id -> "settle.sou", compilation.texts())).textInEnglish();
     }
 
     /** Every comment over the row offered for {@code name}. */

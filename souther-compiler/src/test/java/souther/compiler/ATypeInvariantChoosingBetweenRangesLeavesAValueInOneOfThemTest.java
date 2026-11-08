@@ -47,7 +47,7 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return GeneratedRows.of(compilation, "example.gap", "f",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     private static List<String> codesFor(String type, String invariant) {
@@ -105,7 +105,7 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();        return GeneratedRows.of(compilation, "example.gap", "f",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     /** A choice of ranges above a sum whose case {@code A} states {@code CASE} of the shared

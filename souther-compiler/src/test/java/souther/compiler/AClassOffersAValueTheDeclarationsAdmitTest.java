@@ -54,7 +54,7 @@ class AClassOffersAValueTheDeclarationsAdmitTest {
                 OfferingRequest.overTheModule("example.away"));
         assertNotNull(offering, "the model under test compiles");
         return GeneratedRows.of(offering, Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 
     /** The class away from the value the body singled out is offered a row, and the row builds. */

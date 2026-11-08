@@ -283,7 +283,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
             String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                             souther.compiler.query.OfferingRequest.overTheModule(module)),
-                    Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                    Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
             assertFalse(written.contains("example "),
                     module + " offers a row that may already be written: " + written);
             // Either word, because the two models get here differently: one has rows nothing read
@@ -345,7 +345,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                 .get("take").arms().unmet().isEmpty(), "an arm nothing goes through");
         assertFalse(GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(module)),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text().isEmpty(),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish().isEmpty(),
                 "and rows offered for them");
     }
 }

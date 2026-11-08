@@ -162,7 +162,7 @@ class ARunIsOverEveryOccurrenceOfThePathItIsReadFromTest {
     }
 
     private static String report() {
-        return AdequacyReport.of(measured()).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return AdequacyReport.of(measured()).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static Compilation measured() {

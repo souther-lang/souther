@@ -61,7 +61,7 @@ class AStopAtAFigureACompilationMaySetIsToldAtThatFigureTest {
             assertEquals(budget.declared(), budget.maximum(), "told where none is in force");
 
             String said = AdequacyReport.of(compilation)
-                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
             List<String> stops = said.lines()
                     .filter(each -> each.contains(budget.name() + ",")).toList();
             assertFalse(stops.isEmpty(), () -> budget + " is said where it stopped: " + said);

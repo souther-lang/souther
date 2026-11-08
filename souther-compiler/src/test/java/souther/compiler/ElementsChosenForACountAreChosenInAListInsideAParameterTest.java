@@ -119,7 +119,7 @@ class ElementsChosenForACountAreChosenInAListInsideAParameterTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Every point is offered a row, inside the parameter as at it. */

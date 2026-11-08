@@ -64,7 +64,7 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
     }
 
     private static String humanOf(String source) {
-        return reportOf(source).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return reportOf(source).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static JsonNode partitionOf(String source) {

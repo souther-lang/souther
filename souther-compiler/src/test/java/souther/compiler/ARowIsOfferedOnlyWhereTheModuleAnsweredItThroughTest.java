@@ -146,7 +146,7 @@ class ARowIsOfferedOnlyWhereTheModuleAnsweredItThroughTest {
                         .map(each -> String.valueOf(each.diagnostic().code())).toList(),
                 "the model under test compiles");
         String block = GeneratedRows.of(compilation, compilation.modules().get(0), "decides",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         return block.lines().map(String::trim).filter(line -> line.startsWith("| ")).toList();
     }
 }

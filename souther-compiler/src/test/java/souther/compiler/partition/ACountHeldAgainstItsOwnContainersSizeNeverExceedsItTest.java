@@ -151,7 +151,7 @@ class ACountHeldAgainstItsOwnContainersSizeNeverExceedsItTest {
         Compilation compilation = measured(model(
                 "List.length(priced) == List.length(deals) + 1", ""));
         String said = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertEquals(List.of(), pointsOf("List.length(priced) == List.length(deals) + 1"));
         assertTrue(said.contains("draws its line outside what the quantity it cuts ever holds"),

@@ -167,7 +167,7 @@ class AChoiceIsWhereAnAuthorGoesAndNotTheClauseAroundItTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip)
                 .toList();
     }

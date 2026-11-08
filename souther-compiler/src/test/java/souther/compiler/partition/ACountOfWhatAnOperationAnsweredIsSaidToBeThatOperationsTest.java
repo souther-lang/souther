@@ -53,7 +53,7 @@ class ACountOfWhatAnOperationAnsweredIsSaidToBeThatOperationsTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        String report = AdequacyReport.of(compilation).human(
+        String report = AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("how many code points of a class what " + operation
                 + " answers holds"), report);

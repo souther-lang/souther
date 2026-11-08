@@ -368,7 +368,7 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
                 .flatMap(d -> Stream.concat(d.notes().stream().map(Note::said),
                         d.secondary().stream().map(LabeledRegion::said)))
                 .toList();
-        return new Measured(report.human(SourceRendering.namedByIdentity(compilation.texts())),
+        return new Measured(report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())),
                 report.adequacy(), proofs);
     }
 

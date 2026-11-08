@@ -112,6 +112,6 @@ class ASumOfSeveralNumbersThatOneValueSettlesIsPartedAtThatValueTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code().toString()).toList());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

@@ -44,7 +44,7 @@ class ACaseTheOutputDoesNotHaveIsNoCaseARowExpectsTest {
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 
-        String human = report.human(rendering);
+        String human = report.humanInEnglish(rendering);
         assertTrue(human.contains("out specified 1/2  observed 1/2  verified 1/2\n"), human);
         assertTrue(human.contains("! no row expects `Warm`"), human);
 

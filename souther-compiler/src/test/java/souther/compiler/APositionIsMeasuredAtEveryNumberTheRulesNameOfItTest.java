@@ -86,7 +86,7 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
 
     private static String blockOf(String behavior) {
         Compilation compilation = measured();
-        String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        String human = AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         StringBuilder block = new StringBuilder();
         boolean inside = false;
         for (String line : human.split("\n", -1)) {

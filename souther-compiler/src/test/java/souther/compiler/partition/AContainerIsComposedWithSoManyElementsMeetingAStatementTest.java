@@ -448,7 +448,7 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String rows = GeneratedRows.of(compilation, "probe", null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
         List<List<String>> out = new ArrayList<>();
         Matcher written = Pattern.compile("\\[([^\\]]*)\\]").matcher(rows);
         while (written.find()) {

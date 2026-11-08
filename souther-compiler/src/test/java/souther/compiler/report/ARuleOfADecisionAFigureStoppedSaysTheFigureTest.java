@@ -117,7 +117,7 @@ class ARuleOfADecisionAFigureStoppedSaysTheFigureTest {
 
     /** The page of a report, which is built once per compilation and read twice. */
     private static String human(AdequacyReport report) {
-        return report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** The lines the page says a rule of the decision nothing could show a row for in. */

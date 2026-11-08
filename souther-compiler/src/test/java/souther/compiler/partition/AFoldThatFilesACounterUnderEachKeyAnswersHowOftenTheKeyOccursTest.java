@@ -1369,7 +1369,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The lines saying a place is not read, each as the report writes it but for where the

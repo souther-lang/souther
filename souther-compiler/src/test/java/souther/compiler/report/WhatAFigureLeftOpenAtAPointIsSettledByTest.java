@@ -58,7 +58,7 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
     }
 
     private static String human(AdequacyReport report) {
-        return report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** What keeps it open is the region past four, and what is said of it is what to write. */
@@ -190,7 +190,7 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         List<String> points = pointsOfComparisons(human);
         assertEquals(2, points.size(), human);
@@ -207,7 +207,7 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
     void theComparisonIsNamedByThePlaceItIsWrittenAt() {
         Compilation compilation = measuredHelperTwoBehaviorsRead();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         List<String> points = pointsOfComparisons(human);
         assertEquals(2, points.size(), human);

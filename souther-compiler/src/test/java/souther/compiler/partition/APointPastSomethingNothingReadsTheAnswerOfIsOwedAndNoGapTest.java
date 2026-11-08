@@ -43,7 +43,7 @@ class APointPastSomethingNothingReadsTheAnswerOfIsOwedAndNoGapTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** What the report says of the border's points no row is at, a line each. */
@@ -98,7 +98,7 @@ class APointPastSomethingNothingReadsTheAnswerOfIsOwedAndNoGapTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(List.of(
                 "! no row is at the ON point (comparison@7:13)",
                 "! no row is at the OFF point (comparison@7:13)"),

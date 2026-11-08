@@ -137,11 +137,6 @@ public final class GeneratedRows {
         public String textInEnglish() {
             return text(Messages.BASE_LANGUAGE);
         }
-
-        /** BRIDGE-1464: callers move to {@link #textInEnglish}. */
-        public String text() {
-            return textInEnglish();
-        }
     }
 
     /**

@@ -49,7 +49,7 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static List<String> said(String report) {

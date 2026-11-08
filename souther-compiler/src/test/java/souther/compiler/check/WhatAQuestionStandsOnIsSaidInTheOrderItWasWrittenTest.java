@@ -106,7 +106,7 @@ class WhatAQuestionStandsOnIsSaidInTheOrderItWasWrittenTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip)
                 .filter(each -> each.contains("not accounted for:"))
                 .map(each -> each.substring(each.lastIndexOf(": ") + 2))

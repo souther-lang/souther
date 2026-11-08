@@ -189,7 +189,7 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
         compilation.answerEverything();
         assertEquals(0, compilation.errors().size(), () -> "the source compiles: " + model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()))
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .replaceAll("\\d+:\\d+", "");
     }
 

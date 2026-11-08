@@ -167,6 +167,6 @@ class ADeclarationsPointIsWrittenFromTheDeclarationTest {
     }
 
     private static String report() {
-        return measured().human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return measured().humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 }

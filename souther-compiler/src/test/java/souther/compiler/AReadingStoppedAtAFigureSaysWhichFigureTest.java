@@ -85,7 +85,7 @@ class AReadingStoppedAtAFigureSaysWhichFigureTest {
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 
-        String human = report.human(rendering);
+        String human = report.humanInEnglish(rendering);
         String said = ", stopped at " + InEnglish.said(figure.countsSaid()) +" (" + figure.name() + ", "
                 + figure.maximum() + ")";
         List<String> lines = human.lines()

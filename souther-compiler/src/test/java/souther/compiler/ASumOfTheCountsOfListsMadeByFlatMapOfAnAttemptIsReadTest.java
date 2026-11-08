@@ -97,7 +97,7 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static List<String> notRead(String report) {
@@ -237,7 +237,7 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(notRead(report).stream().anyMatch(line -> line.contains("fork@")), report);
         assertTrue(report.contains("measurement: partial"), report);
     }

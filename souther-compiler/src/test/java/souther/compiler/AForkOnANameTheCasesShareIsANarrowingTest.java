@@ -260,14 +260,14 @@ class AForkOnANameTheCasesShareIsANarrowingTest {
 
     private static String report() {
         Compilation c = measured();
-        return AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
+        return AdequacyReport.of(c).humanInEnglish(SourceRendering.namedByIdentity(c.texts()));
     }
 
     private static String offered() {
         Compilation c = measured();
         return GeneratedRows.of(
                 Adequacy.offeredFor(c.db(), OfferingRequest.overTheModule("probe.shared")),
-                Map.of(), SourceRendering.namedByIdentity(c.texts()), c.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(c.texts()), c.db()).textInEnglish();
     }
 
     /** The model measured once for every question here: each asks of the one measurement, and
