@@ -1797,37 +1797,52 @@ final class Predicates {
      */
     private Known whatTheAnswersSayOfWhatTheyWereMadeOf(Known k, LinearForm<FactSubject> form) {
         Deque<FactSubject> asked = new ArrayDeque<>(form.coefs().keySet());
+        asked.removeIf(atom -> !readsBackToItsArguments(atom));
+        if (asked.isEmpty()) {
+            return k;
+        }
         Set<FactSubject> seen = new HashSet<>();
         Known out = k;
-        while (!asked.isEmpty() && !out.reachesNothing()) {
+        while (!asked.isEmpty()) {
             FactSubject atom = asked.pop();
-            if (!seen.add(atom)) {
+            if (!seen.add(atom) || !readsBackToItsArguments(atom)) {
                 continue;
             }
+            Known before = out;
             if (terms.knowledgeOf(atom).computation()
                     instanceof AtomKnowledge.Computation.Reduction(var walk, FactSubject walked)) {
                 out = awayFromWhereNoneLeavesIt(out, atom, walk, walked, asked);
-                continue;
+            } else {
+                Derivation.HoldsSomethingWhere.Holding law = lawOfTheSize(atom);
+                Boolean something = out.numbers().entails(
+                        LinearForm.atomMinusConstant(atom, ExactRatio.ONE), Rel.GE) ? Boolean.TRUE
+                        : out.numbers().entails(LinearForm.atom(atom), Rel.LE) ? Boolean.FALSE
+                        : null;
+                List<NumericConstraint> certain = something == null ? List.of()
+                        : LawOverAtoms.certain(law, something);
+                if (certain == null) {
+                    return out.reachingNothing();
+                }
+                for (NumericConstraint each : certain) {
+                    out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
+                            terms.spacesOf(each.form()));
+                    asked.addAll(each.form().coefs().keySet());
+                }
             }
-            Derivation.HoldsSomethingWhere.Holding law = lawOfTheSize(atom);
-            Boolean something = law == null ? null
-                    : out.numbers().entails(LinearForm.atomMinusConstant(atom, ExactRatio.ONE),
-                            Rel.GE) ? Boolean.TRUE
-                    : out.numbers().entails(LinearForm.atom(atom), Rel.LE) ? Boolean.FALSE : null;
-            if (something == null) {
-                continue;
-            }
-            List<NumericConstraint> certain = LawOverAtoms.certain(law, something);
-            if (certain == null) {
-                return out.reachingNothing();
-            }
-            for (NumericConstraint each : certain) {
-                out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
-                        terms.spacesOf(each.form()));
-                asked.addAll(each.form().coefs().keySet());
+            // Only a path that was given something new can have been left with no way through.
+            if (out != before && out.reachesNothing()) {
+                return out;
             }
         }
         return out;
+    }
+
+    /** Whether what the path puts on {@code atom} says something of what it was made of: a walk
+     *  over a container, or a size whose operation holds something by a law. */
+    private boolean readsBackToItsArguments(FactSubject atom) {
+        return terms.knowledgeOf(atom).computation()
+                instanceof AtomKnowledge.Computation.Reduction(var _, FactSubject walked)
+                ? walked != null : lawOfTheSize(atom) != null;
     }
 
     /** {@code k}, with the container {@code atom} was walked over holding something where the path

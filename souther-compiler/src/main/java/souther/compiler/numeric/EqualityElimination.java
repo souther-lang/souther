@@ -1,6 +1,8 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,9 +49,16 @@ final class EqualityElimination<A> {
      */
     static <A> Goal<A> through(List<AffineConstraint.Equality<A>> equalities, Goal<A> goal,
                                CanonicalOrder<A> order) {
+        List<AffineConstraint.Equality<A>> joined =
+                joinedTo(goal.coefs().keySet(), equalities, order);
+        // What the domain holds exactly already is a difference of two positions: a goal joined
+        // to nothing else is asked of it as it stands.
+        if (joined.stream().noneMatch(EqualityElimination::beyondADifference)) {
+            return null;
+        }
         EqualityElimination<A> elimination =
                 new EqualityElimination<>(order, goal.coefs().keySet());
-        for (AffineConstraint.Equality<A> each : equalities) {
+        for (AffineConstraint.Equality<A> each : joined) {
             if (!elimination.take(each)) {
                 return null;
             }
@@ -61,6 +70,39 @@ final class EqualityElimination<A> {
         boolean asItWas = out != null && out.coefs().equals(goal.coefs())
                 && out.constant().equals(goal.constant());
         return out == null || asItWas ? null : out;
+    }
+
+    /** Whether {@code equality} is over more than two positions, or weighs one of them by other
+     *  than one: the shape of equality the difference bounds do not hold exactly. */
+    private static <A> boolean beyondADifference(AffineConstraint.Equality<A> equality) {
+        Map<A, ExactRatio> weights = equality.form().coefs();
+        return weights.size() > 2 || weights.values().stream()
+                .anyMatch(weight -> !weight.abs().equals(ExactRatio.ONE));
+    }
+
+    /**
+     * The equalities that name a position of the goal, or a position another of them names that
+     * does: an equality over positions the goal never reaches cannot change how it is written.
+     */
+    private static <A> List<AffineConstraint.Equality<A>> joinedTo(
+            Set<A> reached, List<AffineConstraint.Equality<A>> equalities, CanonicalOrder<A> order) {
+        Set<A> positions = new HashSet<>(reached);
+        List<AffineConstraint.Equality<A>> joined = new ArrayList<>();
+        List<AffineConstraint.Equality<A>> rest = new ArrayList<>(equalities);
+        for (boolean grew = true; grew; ) {
+            grew = false;
+            for (var each = rest.iterator(); each.hasNext(); ) {
+                AffineConstraint.Equality<A> equality = each.next();
+                List<A> named = equality.form().atomsIn(order);
+                if (!Collections.disjoint(positions, named)) {
+                    positions.addAll(named);
+                    joined.add(equality);
+                    each.remove();
+                    grew = true;
+                }
+            }
+        }
+        return joined;
     }
 
     /** Solves {@code equality} for one position, after putting the ones already solved in terms of

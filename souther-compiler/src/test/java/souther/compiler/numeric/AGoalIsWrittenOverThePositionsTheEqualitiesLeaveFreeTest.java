@@ -89,7 +89,8 @@ class AGoalIsWrittenOverThePositionsTheEqualitiesLeaveFreeTest {
     @Test
     void theConstantsAreCarriedAlong() {
         EqualityElimination.Goal<String> freed = through(
-                List.of(equality(weighing("x", 1, "a", -1), 2), equality(weighing("y", 1, "a", -1), 5)),
+                List.of(equality(weighing("x", 1, "a", -1, "b", -1), 2),
+                        equality(weighing("y", 1, "a", -1, "b", -1), 5)),
                 goal(weighing("y", 1, "x", -1), -3));
 
         assertEquals(Map.of(), freed.coefs());
@@ -97,9 +98,31 @@ class AGoalIsWrittenOverThePositionsTheEqualitiesLeaveFreeTest {
     }
 
     @Test
+    void equalitiesThatAreOnlyDifferencesAreLeftToTheDomainThatHoldsThemExactly() {
+        assertNull(through(
+                List.of(equality(weighing("x", 1, "a", -1), 2), equality(weighing("y", 1, "a", -1), 5)),
+                goal(weighing("y", 1, "x", -1), -3)));
+    }
+
+    @Test
     void aGoalNoEqualityWeighsIsLeftAsItWas() {
         assertNull(through(List.of(X_IS_A_AND_B), goal(weighing("c", 1, "d", -1), 0)));
         assertNull(through(List.of(), goal(weighing("x", 1), 0)));
+    }
+
+    @Test
+    void anEqualityJoinedToTheGoalThroughAnotherIsSolvedAndOneNothingJoinsIsNot() {
+        AffineConstraint.Equality<String> y_is_c = equality(weighing("y", 1, "c", -1), 0);
+        AffineConstraint.Equality<String> c_is_a_and_b = equality(weighing("c", 1, "a", -1, "b", -1), 0);
+        AffineConstraint.Equality<String> apart = equality(weighing("e", 1, "f", -1), 7);
+
+        EqualityElimination.Goal<String> freed = through(
+                List.of(apart, X_IS_A_AND_B, y_is_c, c_is_a_and_b),
+                goal(weighing("x", 1, "y", -1), 0));
+
+        assertEquals(Map.of(), freed.coefs());
+        assertEquals(num(0), freed.constant());
+        assertNull(through(List.of(apart), goal(weighing("x", 1, "y", -1), 0)));
     }
 
     @Test

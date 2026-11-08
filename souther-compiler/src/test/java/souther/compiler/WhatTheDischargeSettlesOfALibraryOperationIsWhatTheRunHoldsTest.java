@@ -199,17 +199,22 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
                 owed.add(String.valueOf(each.diagnostic().values().get("data")));
             }
         }
-        // A row refused is a violation the discharge is sure of, and the module is not built.
+        // A row refused is a violation the discharge is sure of, and the module is not built; one
+        // without any is built from the checking just done, which a second compile would repeat.
         List<Row> built = rows.stream().filter(each -> !refused.contains(each.data())).toList();
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module(built)),
-                getClass().getClassLoader());
+        BytesClassLoader loader = new BytesClassLoader(refused.isEmpty() ? compilation.classes()
+                : Compiler.compile(module(built)), getClass().getClassLoader());
+        List<Object> decoded = new ArrayList<>();
+        for (Map<String, Object> input : inputs) {
+            decoded.add(Codecs.decoded(loader, "demo.In", input));
+        }
         Set<String> broke = new LinkedHashSet<>();
         for (Row row : built) {
             Object behavior = Emitted.behavior(loader, "demo", "f" + row.id())
                     .getConstructor().newInstance();
-            for (Map<String, Object> input : inputs) {
+            for (Object input : decoded) {
                 try {
-                    Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", input));
+                    Codecs.apply(behavior, input);
                 } catch (Throwable thrown) {
                     // An operation that aborts, such as a slice out of range, is not the invariant
                     // breaking; it names the data when it is.
