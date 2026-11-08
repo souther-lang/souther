@@ -9,6 +9,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.OnOneElement;
@@ -17,6 +18,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
@@ -174,6 +176,11 @@ class AnElementComesRoundToTheClassItsCongruenceLeavesAtTheRowTest {
     /** A row holding {@code a} and {@code days}. */
     private static BorderQuantity.Observation row(long a, long days) {
         return new BorderQuantity.Observation() {
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
+
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
                 return switch (path.toString()) {

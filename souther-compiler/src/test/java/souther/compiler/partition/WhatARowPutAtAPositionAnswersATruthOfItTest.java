@@ -2,9 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
@@ -82,6 +84,11 @@ class WhatARowPutAtAPositionAnswersATruthOfItTest {
     private static AStatementAtARow.Answer at(Proposition stated,
                                               Map<TermPath, ObservedValue> wrote) {
         return AStatementAtARow.of(stated, "f", null).at(new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

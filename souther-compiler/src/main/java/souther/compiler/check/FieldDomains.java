@@ -10,6 +10,7 @@ import souther.compiler.inputs.RuleSite;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumberSpace;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedRuns;
@@ -49,6 +50,7 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -1155,6 +1157,7 @@ public final class FieldDomains {
      * from.
      */
     public <B> Carried<B> constraintsOver(Function<NumberAt<RuleKey>, B> named,
+                                          Function<TotalSpokenOf, B> totals,
                                           Function<Object, B> otherwise,
                                           CanonicalOrder<B> order) {
         Map<FactSubject, NumberAt<RuleKey>> where = new LinkedHashMap<>();
@@ -1173,9 +1176,27 @@ public final class FieldDomains {
                 at(where, atom, NumberAt.valueOf(path));
             }
         });
+        // And a total of a container this value names, under the name the caller gives the number
+        // it is, where it gives one: the term a body reading the same total holds, so what the
+        // rules say of it reaches whoever asks about that term. A name some other subject has
+        // already is left to `otherwise`, which keeps two subjects two — two writings of one
+        // total the rules did not see as one are then related by nothing, which is wider and never
+        // wrong.
+        Set<B> taken = new HashSet<>();
+        where.values().forEach(claim -> taken.add(named.apply(claim)));
+        Map<FactSubject, B> asTotals = new HashMap<>();
+        for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+            TotalSpokenOf total = where.containsKey(atom) ? null : totalOf(atom.identity());
+            B name = total == null ? null : totals.apply(total);
+            if (name != null && taken.add(name)) {
+                asTotals.put(atom, name);
+            }
+        }
         InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
             NumberAt<RuleKey> claim = where.get(atom);
-            return claim == null ? otherwise.apply(atom) : named.apply(claim);
+            B total = claim == null ? asTotals.get(atom) : null;
+            return claim != null ? named.apply(claim) : total != null ? total
+                    : otherwise.apply(atom);
         });
         // Spelled, because what a caller does with these is name a place to a reader. The
         // names themselves belong to the value whose rules these are, and a caller holding the
@@ -2726,6 +2747,57 @@ public final class FieldDomains {
             java.util.Objects.requireNonNull(by, "a count is of some operation");
         }
     }
+
+    /**
+     * A number an operation accumulates over what is made of each element of a container of this
+     * value, such as {@code List.sum(List.map(.amount, fs))}: a number of the container as a whole,
+     * which no field of an element and no count of it says.
+     *
+     * <p>Said as what the rule wrote and not as the number a body would read: which number that is
+     * — a taking of the container, or a run over a place of its elements or over what is computed
+     * of each — is the input's reading to settle, and it settles it in one place for a rule and a
+     * body alike ({@link #constraintsOver}).
+     *
+     * @param container what this value calls the container
+     * @param each      what each element adds, as a form of the fields read off it; the element
+     *                  itself where those are none. Fields of the element and not a name of this
+     *                  value: what an element holds is a value with a declaration of its own, and
+     *                  none of this value's rules is written at a name inside it
+     */
+    public record TotalSpokenOf(RuleKey container, ValueName operation,
+                                LinearForm<List<String>> each) {
+
+        public TotalSpokenOf {
+            Objects.requireNonNull(container, "a total is of some container");
+            Objects.requireNonNull(operation, "taken by some operation");
+            Objects.requireNonNull(each, "of something made of each element");
+        }
+    }
+
+    /**
+     * The total {@code call} is, or null where it is none: an operation that accumulates what a
+     * container holds, called on a place of this value or on what a closure of one parameter
+     * makes of each element of one ({@code List.map}), where that is a form of the element's
+     * fields.
+     */
+    private TotalSpokenOf totalOf(Term call) {
+        ValueName operation = call.calledOperation();
+        if (operation == null || call.parts().size() != 1
+                || DefaultBoundOperationFacts.get().accumulates(operation) == null) {
+            return null;
+        }
+        Term walked = call.parts().getFirst();
+        LinearForm<List<String>> each = LinearForm.atom(List.of());
+        if (EACH_ELEMENT_MAPPED.equals(walked.calledOperation()) && walked.parts().size() == 2) {
+            each = walked.parts().getFirst().formAClosureOfOneAnswers();
+            walked = walked.parts().getLast();
+        }
+        RuleKey container = each == null ? null : namedBy.get(FactSubject.of(walked));
+        return container == null ? null : new TotalSpokenOf(container, operation, each);
+    }
+
+    /** The operation that hands on what a closure answers of each element of a list. */
+    private static final ValueName EACH_ELEMENT_MAPPED = ValueName.Stdlib.operation("List", "map");
 
     /** The atom of a count this reading may not have, which is what every lookup of one wants. */
     private static FactSubject atomOf(Counted counted) {

@@ -134,6 +134,8 @@
         "containers_a_count_is_offered",
         "shares_a_count_is_tried_at",
         "totals_a_count_is_tried_at",
+        "runs_a_counts_elements_can_come_to",
+        "values_an_element_is_moved_to_tried",
         "counts_of_keys_tried",
         "values_an_element_is_chosen_among",
         "ways_down_to_a_total_tried",

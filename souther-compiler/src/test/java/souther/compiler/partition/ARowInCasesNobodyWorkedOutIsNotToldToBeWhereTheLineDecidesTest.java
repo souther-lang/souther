@@ -4,10 +4,12 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
@@ -80,6 +82,11 @@ class ARowInCasesNobodyWorkedOutIsNotToldToBeWhereTheLineDecidesTest {
                                                Map<TermPath, ObservationAtPoint> walked) {
         return new WhereAPartDecides.AskedOfRows(AStatementAtARow.of(decides, "f", null),
                 Optional.empty(), workedOut).at(new AnObservationOfAForm() {
+
+                    @Override
+                    public Place fixedAt(NumericTerm term) {
+                        return null;
+                    }
 
                     @Override
                     public WalkResult<ObservationAtPoint> at(TermPath path) {

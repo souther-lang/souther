@@ -761,6 +761,78 @@ public final class InputNumber {
     }
 
     /**
+     * What {@code term} comes to as the totals of the places it adds up and how many elements
+     * there are, where it adds up a form of the places of each element: the total of
+     * {@code c + Σ wᵢ·pᵢ} over {@code n} elements is {@code Σ wᵢ·(the total of pᵢ) + c·n}. Null
+     * where it is no such total, where a part has no term, or where it is the total of one place
+     * itself, which is already the term for it.
+     *
+     * <p>What the numbers come to and nothing about where a run of them stops. A run adding twice
+     * each amount and one adding the amounts stop at different rows on a number too large to
+     * hold; where both answer, they answer this, and where a run stops is read where runs are
+     * ({@link RunReach}). The term made for each total is the one a body reading it holds
+     * ({@link #overThePlace}, {@link #howManyStandAt}), so a rule bounding one of them bounds what
+     * a body asks of the other.
+     */
+    static LinearForm<NumericTerm> whatItAddsUp(NumericTerm term, InputDomain inputs,
+                                                RuleReadingSource source) {
+        if (!(term instanceof NumericTerm.TakenOver over)
+                || !(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
+                || !(over.source() instanceof RunSource.ComputedOccurrences(
+                        TermPath elements, ElementValue.Affine(var form), _,
+                        RunSource.TraversalOrder order))
+                || order != null) {
+            return null;
+        }
+        LinearForm<NumericTerm> out = LinearForm.constant(ExactRatio.ZERO);
+        for (Map.Entry<ElementProjection, ExactRatio> part : form.coefs().entrySet()) {
+            NumericTerm ofThePlace = overThePlace(over.operation(),
+                    part.getKey().from(elements), inputs, source);
+            out = ofThePlace == null ? null
+                    : out.plus(LinearForm.weighing(ofThePlace, part.getValue())).orNull();
+            if (out == null) {
+                return null;
+            }
+        }
+        if (!form.constant().isZero()) {
+            NumericTerm howMany = howManyStandAt(elements, inputs, source);
+            out = howMany == null ? null
+                    : out.plus(LinearForm.weighing(howMany, form.constant())).orNull();
+        }
+        return out == null || out.equals(LinearForm.atom(term)) ? null : out;
+    }
+
+    /**
+     * The term for the total {@code total} is of, or null where it is no one term: made where a
+     * body's total of the same computation over the same elements is made
+     * ({@link #overTheElements}), so the rule and the body reading one number hold one term.
+     */
+    static NumericTerm totalOf(TotalOfTheElements total, InputDomain inputs,
+                               RuleReadingSource source) {
+        TakenAs takenAs = DefaultBoundOperationFacts.get().takenAs(total.operation());
+        // What each computed value stands as: what the places it reads stand as, where that is
+        // one type with the names it is written under taken off. A form of places of two types —
+        // whole numbers and decimals — stands as neither, and no type of the rule says which.
+        Type each = null;
+        for (ElementProjection read : total.each().reads()) {
+            Type at = inputs.typeAt(read.from(total.elements()), source);
+            if (at == null || (each != null && !TypeOps.base(each, source.inners())
+                    .equals(TypeOps.base(at, source.inners())))) {
+                return null;
+            }
+            each = at;
+        }
+        LinearForm<NumericTerm> form = takenAs == null || each == null ? null
+                : overTheElements(total.operation(), takenAs, total.elements(), total.each(),
+                        each, null, inputs, source);
+        if (form == null || !form.constant().isZero() || form.coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
+        return only.getValue().equals(ExactRatio.ONE) ? only.getKey() : null;
+    }
+
+    /**
      * What {@code operation} takes over every occurrence of {@code under}: the taking of the
      * container whose elements those are, where they are one container's elements themselves, and
      * the run over them otherwise — or null where they are no one run.

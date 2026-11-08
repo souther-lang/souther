@@ -2478,6 +2478,23 @@ public sealed interface BorderQuantity
         WalkResult<java.util.List<ObservedValue>> everyValueAt(TermPath path);
 
         /**
+         * Where this reading holds {@code term} without any value of the row standing for it, or
+         * null where it holds no such number and the term is read off what the row wrote.
+         *
+         * <p>A number of the row fixed beside the elements a container is being composed out of:
+         * an input outside every container, or what another container comes to, which a row of the
+         * composed container alone does not hold. Answered of the term and not of a place, because
+         * what another container comes to stands at no place a value could be written at — only a
+         * container of elements coming to it would say it, and that container is composed
+         * elsewhere.
+         *
+         * <p>No default. A reading that wraps another hands this on or answers it, and one that
+         * forgot to would read every number fixed beside the elements as what the row wrote, which
+         * is nothing.
+         */
+        Place fixedAt(NumericTerm term);
+
+        /**
          * What the sides of the comparison the line being read was drawn from came to on this
          * row's run, on each visit kept in the order of the visits — or empty where no run of the
          * row was watched, which is no run that went elsewhere.

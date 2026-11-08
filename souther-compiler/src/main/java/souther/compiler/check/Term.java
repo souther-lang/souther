@@ -2,6 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.cst.CstLexer;
 import souther.compiler.hash.SaysWhatStandsForIt;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -696,6 +699,55 @@ final class Term {
     /** The operation this term is a call of, or null where it is no call. */
     ValueName calledOperation() {
         return shape == Shape.CALLED ? (ValueName) of : null;
+    }
+
+    /**
+     * What a closure of one parameter answers of what it is handed, as a form of the fields it
+     * reads off it — the value itself where the fields are none — or null where this is no such
+     * closure, or what it answers is no such form.
+     *
+     * <p>Read off how the closure was built: its parameter is the one bound nearest it, and the
+     * fields read off a bound value are one chain ({@link Interner#on}), so {@code .a.b} and
+     * {@code x -> x.a.b} come back as the same two fields.
+     */
+    LinearForm<List<String>> formAClosureOfOneAnswers() {
+        if (shape != Shape.CLOSURE || !Integer.valueOf(1).equals(of)) {
+            return null;
+        }
+        return parts.getFirst().formOfWhatIsHanded();
+    }
+
+    /** {@link #formAClosureOfOneAnswers} of the body of the closure. */
+    private LinearForm<List<String>> formOfWhatIsHanded() {
+        return switch (shape) {
+            case BOUND -> new At(0, 0).equals(of) ? LinearForm.atom(List.of()) : null;
+            case ON -> parts.getFirst().shape == Shape.BOUND
+                    && new At(0, 0).equals(parts.getFirst().of)
+                    ? LinearForm.atom(fields().names()) : null;
+            case INT -> LinearForm.constant(ExactRatio.of((Long) of));
+            case DECIMAL -> LinearForm.constant(ExactRatio.of((BigDecimal) of));
+            case NEG -> {
+                LinearForm<List<String>> operand = parts.getFirst().formOfWhatIsHanded();
+                yield operand == null ? null : operand.negate();
+            }
+            case OP -> {
+                LinearForm<List<String>> left = parts.get(0).formOfWhatIsHanded();
+                LinearForm<List<String>> right = parts.get(1).formOfWhatIsHanded();
+                if (left == null || right == null) {
+                    yield null;
+                }
+                ExactAnswer<LinearForm<List<String>>> out = switch ((BinOp) of) {
+                    case ADD -> left.plus(right);
+                    case SUB -> left.minus(right);
+                    case MUL -> left.coefs().isEmpty() ? right.times(left.constant())
+                            : right.coefs().isEmpty() ? left.times(right.constant()) : null;
+                    default -> null;
+                };
+                yield out instanceof ExactAnswer.Held<LinearForm<List<String>>>(var held)
+                        ? held : null;
+            }
+            default -> null;
+        };
     }
 
     /** The text this term is written as, or null where it is no written text. */

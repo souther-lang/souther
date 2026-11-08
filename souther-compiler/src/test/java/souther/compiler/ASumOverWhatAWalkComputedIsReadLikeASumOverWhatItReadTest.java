@@ -482,12 +482,17 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertTrue(totals.contains(7L), () -> "the point just off it: " + totals);
     }
 
-    /** A point no whole number of the field reaches is said as a point nothing was written for. */
+    /**
+     * A point no whole number of the field reaches is shown to have no row: the total of twice
+     * each number is twice the total of the numbers, which is no odd number — and said so where it
+     * is shown, never as a search that stopped short of one.
+     */
     @Test
-    void aTotalNoElementComesToIsNotSaidToBeOneNoRowComesTo() {
+    void aTotalNoElementComesToIsShownToHaveNoRow() {
         String rows = rowsOf(model("a.q * 2", 4));
-        assertTrue(rows.contains("no row for `List.sum({2·q + 0 | xs[*]}) = 3`"), rows);
-        assertTrue(rows.contains("untried"), rows);
+        assertTrue(rows.contains("no row for `List.sum({2·q + 0 | xs[*]}) = 3` in `decide`: no"
+                + " value can stand here"), rows);
+        assertFalse(rows.contains("untried"), rows);
         assertEquals(3, totalsOf(rows, 2, 0).size(),
                 () -> "the other three points have rows: " + rows);
     }
