@@ -34,6 +34,26 @@ public sealed interface RunSource {
     TermPath subjectPath();
 
     /**
+     * Where a walk over these values stands: the container walked, which may hold none of them —
+     * what a walk over none comes to is the value it starts from — and the outermost of them for
+     * the occurrences inside several. The root for the nodes of a tree, which stand in no
+     * container.
+     *
+     * <p>Not {@link #subjectPath}, which is where the values are read from, inside the container.
+     */
+    default TermPath standsAt() {
+        return switch (this) {
+            case ProjectedOccurrences projected ->
+                    projected.subjectPath().containersHoldingIt().getLast();
+            case FlattenedOccurrences flattened ->
+                    flattened.subjectPath().containersHoldingIt().getFirst();
+            case ComputedOccurrences computed -> computed.elements().containersHoldingIt().getLast();
+            case JoinedOccurrences joined -> joined.elements().containersHoldingIt().getLast();
+            case ReachableNodes _, SearchedLine _ -> subjectPath();
+        };
+    }
+
+    /**
      * The places whose every occurrence is a value the run is read across: the place it is read
      * from and, for a join, the map it is joined to — each a place inside the containers it
      * stands in. None for the nodes of a tree, which stand in no container and are found by

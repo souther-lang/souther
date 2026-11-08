@@ -387,6 +387,13 @@ public sealed interface NumericTerm
             return DefaultBoundOperationFacts.get().takenAs(operation, arguments);
         }
 
+        /** The container at {@link #position()}, where what is taken of it is what its elements
+         *  add up to. How many it holds is a number of its own and starts from no walk. */
+        @Override
+        public TermPath walkedOver() {
+            return takenAs() instanceof TakenAs.TheSumOfWhatItHolds ? position() : null;
+        }
+
         /** By the operation, the value it takes its number of and what it was given beside it,
          *  which is what makes two of these one term. */
         @Override
@@ -1300,6 +1307,13 @@ public sealed interface NumericTerm
             return run.subjectPath();
         }
 
+        /** The outermost container the run walks ({@link RunSource#standsAt}): a key is among none
+         *  of the values of a run of none, which is nought. */
+        @Override
+        public TermPath walkedOver() {
+            return run.standsAt();
+        }
+
         /** The same number read from where {@code moved} puts the run and the key — or null where
          *  that is no run of every occurrence, or the key stands inside a container. */
         @Override
@@ -1934,6 +1948,14 @@ public sealed interface NumericTerm
                     ? computed.placesReadOff() : NumericTerm.super.placesReadOff();
         }
 
+        /** The container the run walks ({@link RunSource#standsAt}), where it walks one: the nodes
+         *  of a tree stand in none. */
+        @Override
+        public TermPath walkedOver() {
+            return source instanceof RunSource.ReachableNodes
+                    || source instanceof RunSource.SearchedLine ? null : source.standsAt();
+        }
+
         @Override
         public String toString() {
             return operation.qualified() + "(" + source + ")";
@@ -2308,6 +2330,34 @@ public sealed interface NumericTerm
      * reading one as the other is what this type exists to stop.
      */
     TermPath subjectPath();
+
+    /**
+     * Where this number stands: the place whose containers hold an element wherever the number is
+     * a number, which is what a question about it assumes of the row.
+     *
+     * <p>Not {@link #subjectPath}, which is where a reader is sent. A number read off a position
+     * stands at the position, and the two are one place. A number a walk over the elements of a
+     * container comes to stands where the container does: it is a number of the container of none
+     * as well, the value the walk starts from, so asking about it assumes nothing of what the
+     * container holds. Asked at the place its values are read from, every question about a total
+     * would be one about a container holding something, and the container of none would be no row
+     * of it.
+     */
+    default TermPath standsAt() {
+        TermPath walked = walkedOver();
+        return walked != null ? walked : subjectPath();
+    }
+
+    /**
+     * The container this number is what a walk over the elements of comes to — what they add up
+     * to, how many of them are one value — or null where it is no such number.
+     *
+     * <p>Such a number is the value the walk starts from where the container holds none, and a
+     * question about it is asked of the container holding something and of it holding none.
+     */
+    default TermPath walkedOver() {
+        return null;
+    }
 
     /**
      * The same number, of the value standing where {@code moved} puts each place it is read from —

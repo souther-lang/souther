@@ -176,10 +176,9 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
             demands.put(count, AskedAt.oneNumberOf(NumbersAskedFor.of(LevelRegion.point(
                     new Level.OfTheQuantity(ExactRatio.of(asked[i])))), Count.of(asked[i])));
         }
-        return CardinalityComposer.compose(new Type.ListOf(Type.INT), List.of(), counts, List.of(),
-                demands,
-                null,
-                List.of(), measuring, measuring.region(), read.reading());
+        return CardinalityComposer.compose(new Type.ListOf(Type.INT), List.of(),
+                counts.getFirst().count().container(), counts, List.of(), demands, null,
+                List.of(), List.of(), measuring, measuring.region(), read.reading());
     }
 
     /** The input of {@link #SOURCE}, read: its numbers, its rules and its container. */

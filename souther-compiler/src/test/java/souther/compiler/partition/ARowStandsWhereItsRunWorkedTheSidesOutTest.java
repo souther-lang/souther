@@ -7,8 +7,10 @@ import souther.compiler.coverage.Numberings;
 import souther.compiler.coverage.RecordedVisit;
 import souther.compiler.coverage.SeenComparison;
 import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
@@ -151,6 +153,11 @@ class ARowStandsWhereItsRunWorkedTheSidesOutTest {
     /** A row read for its run and for no value it wrote. */
     private record Unwalked(Optional<BorderQuantity.SidesOnARun> compared)
             implements BorderQuantity.Observation {
+
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return null;
+        }
 
         @Override
         public WalkResult<ObservationAtPoint> at(TermPath path) {

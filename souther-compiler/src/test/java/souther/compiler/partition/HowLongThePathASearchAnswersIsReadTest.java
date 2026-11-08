@@ -29,6 +29,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -254,6 +255,11 @@ class HowLongThePathASearchAnswersIsReadTest {
     /** A row writing {@code tree} at the root and {@code value} at the value searched for. */
     private static BorderQuantity.Observation row(ObservedValue tree, ObservedValue value) {
         return new BorderQuantity.Observation() {
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
+
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
                 if (path.equals(T) && tree != null) {

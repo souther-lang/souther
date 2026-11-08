@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -134,6 +136,11 @@ final class ElementValues {
             return within.everyValueAt(path);
         }
 
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return within.fixedAt(term);
+        }
+
         /** This one, as the one element of the outer container; the rest as the row holds, each
          *  read the same way. */
         @Override
@@ -183,6 +190,12 @@ final class ElementValues {
         public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
             TermPath inside = inside(path);
             return inside == null ? WalkResult.couldNotWalk() : within.everyValueAt(inside);
+        }
+
+        /** Nothing is fixed beside a part read alone: the part is all it holds. */
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return null;
         }
 
         /** The elements of a container inside the part, each read the same way. */

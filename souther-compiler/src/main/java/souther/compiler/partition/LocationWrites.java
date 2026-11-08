@@ -6,6 +6,7 @@ import souther.compiler.inputs.TermPath;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What a row being composed has been asked to write at each of its locations.
@@ -26,8 +27,9 @@ import java.util.Map;
  * happen is taking one of them and writing it as though it were the whole: the row then stands
  * where one number said and says nothing about the other, and the point it was composed for is
  * offered half-answered. So an ask that does not agree with what is already here comes back as
- * {@link Written#CONFLICTING}, and a caller says {@code NOTHING_COMPOSES_ONE} — which is what that
- * reason is for: not that the model has no such value, but that this compiler composed none.
+ * {@link Written.Conflicting}, and a caller says {@code NOTHING_COMPOSES_ONE} — which is what that
+ * reason is for: not that the model has no such value, but that this compiler composed none — in
+ * the words the conflict gives, which name the two locations.
  *
  * <p>The same ask twice is one ask. What is held here is what will be written, and asking for what
  * is already going to be written changes nothing about the row.
@@ -35,14 +37,108 @@ import java.util.Map;
 final class LocationWrites {
 
     /** What an ask came to. */
-    enum Written {
+    sealed interface Written {
+
         /** Nothing had been asked for here, and this is what will be written. */
-        FIRST,
+        record First() implements Written {}
+
         /** What is already going to be written is what was asked for. */
-        AGAIN,
-        /** Something else is already going to be written here, and nothing composes the two. */
-        CONFLICTING
+        record Again() implements Written {}
+
+        /**
+         * Something else is already going to be written at this location, and nothing composes
+         * the two.
+         *
+         * <p>Only the pairs that are one location and cannot both be written. A container asked to
+         * hold so many beside a value asked inside it is one more thing the container is built to
+         * hold, and two containers asked to hold so many, one inside the other, are two counts; a
+         * conflict of either kind would be told to a reader as a refusal nothing made.
+         *
+         * @param asked   the ask that was refused
+         * @param already the ask taken before it
+         */
+        record Conflicting(Ask asked, Ask already) implements Written {
+
+            public Conflicting {
+                Objects.requireNonNull(asked, "a conflict is of an ask");
+                Objects.requireNonNull(already, "with one taken before it");
+                boolean refused = switch (asked.what()) {
+                    case A_VALUE -> already.what() == Asked.A_VALUE
+                            ? oneLocation(asked.at(), already.at())
+                            : already.at().isAtOrUnder(asked.at());
+                    case HOW_MANY_IT_HOLDS -> already.what() == Asked.A_VALUE
+                            ? asked.at().isAtOrUnder(already.at())
+                            : asked.at().equals(already.at());
+                };
+                if (!refused) {
+                    throw new IllegalArgumentException(asked + " and " + already
+                            + " are two things a row can be written to hold");
+                }
+            }
+
+            /**
+             * What a reader is told of it: which two places are asked for what, and how they are one
+             * location. A place inside another is said as that, and never as one place asked two
+             * things, which is what a reader would go looking for at the wrong place. And what each
+             * was asked for is said as what it was: a count is no value.
+             */
+            String said() {
+                if (asked.what() == Asked.A_VALUE && already.what() == Asked.A_VALUE) {
+                    if (asked.at().equals(already.at())) {
+                        return "`" + asked.at() + "` would have to hold two values at once";
+                    }
+                    boolean askedInside = asked.at().isAtOrUnder(already.at());
+                    TermPath inner = askedInside ? asked.at() : already.at();
+                    TermPath outer = askedInside ? already.at() : asked.at();
+                    return "`" + inner + "` is inside `" + outer + "`, and each is asked for a"
+                            + " value of its own";
+                }
+                if (asked.what() == Asked.HOW_MANY_IT_HOLDS
+                        && already.what() == Asked.HOW_MANY_IT_HOLDS) {
+                    return "`" + asked.at() + "` is asked to hold two numbers of elements, and no"
+                            + " number is both";
+                }
+                TermPath counted = asked.what() == Asked.HOW_MANY_IT_HOLDS ? asked.at()
+                        : already.at();
+                TermPath valued = asked.what() == Asked.A_VALUE ? asked.at() : already.at();
+                if (counted.equals(valued)) {
+                    return "`" + counted + "` is asked for a value and for how many elements it"
+                            + " holds, and the value already says how many";
+                }
+                return "`" + counted + "` is inside `" + valued + "`, and the value asked at `"
+                        + valued + "` already says how many elements `" + counted + "` holds";
+            }
+        }
+
+        /** What a row was asked to hold at one place. */
+        record Ask(TermPath at, Asked what) {
+
+            public Ask {
+                Objects.requireNonNull(at, "an ask is at a place");
+                Objects.requireNonNull(what, "and is for something");
+            }
+
+            static Ask aValue(TermPath at) {
+                return new Ask(at, Asked.A_VALUE);
+            }
+
+            static Ask howManyItHolds(TermPath at) {
+                return new Ask(at, Asked.HOW_MANY_IT_HOLDS);
+            }
+        }
+
+        /** The two things a place can be asked to hold. */
+        enum Asked {
+            /** A value, written whole. */
+            A_VALUE,
+            /** So many elements, which settles none of them. */
+            HOW_MANY_IT_HOLDS
+        }
     }
+
+    private static final Written FIRST = new Written.First();
+
+    private static final Written AGAIN = new Written.Again();
 
     private final Map<TermPath, List<FixtureTemplate>> written = new LinkedHashMap<>();
 
@@ -81,7 +177,8 @@ final class LocationWrites {
     Written size(TermPath at, DeclaredBounds.CountRange holds) {
         for (TermPath whole : written.keySet()) {
             if (at.isAtOrUnder(whole)) {
-                return Written.CONFLICTING;
+                return new Written.Conflicting(Written.Ask.howManyItHolds(at),
+                        Written.Ask.aValue(whole));
             }
         }
         DeclaredBounds.CountRange already = sized.get(at);
@@ -90,13 +187,14 @@ final class LocationWrites {
                     Math.max(already.least(), holds.least()),
                     Math.min(already.most(), holds.most()));
             if (both.empty()) {
-                return Written.CONFLICTING;
+                return new Written.Conflicting(Written.Ask.howManyItHolds(at),
+                        Written.Ask.howManyItHolds(at));
             }
             sized.put(at, both);
-            return Written.AGAIN;
+            return AGAIN;
         }
         sized.put(at, holds);
-        return Written.FIRST;
+        return FIRST;
     }
 
     /**
@@ -109,22 +207,24 @@ final class LocationWrites {
     Written write(TermPath at, List<FixtureTemplate> values) {
         List<FixtureTemplate> already = written.get(at);
         if (already != null) {
-            return already.equals(values) ? Written.AGAIN : Written.CONFLICTING;
+            return already.equals(values) ? AGAIN
+                    : new Written.Conflicting(Written.Ask.aValue(at), Written.Ask.aValue(at));
         }
         for (TermPath other : written.keySet()) {
             if (oneLocation(at, other)) {
-                return Written.CONFLICTING;
+                return new Written.Conflicting(Written.Ask.aValue(at), Written.Ask.aValue(other));
             }
         }
         // A value written whole at a container asked to hold so many, or at a value around it,
         // would say again how many it holds.
         for (TermPath counted : sized.keySet()) {
             if (counted.isAtOrUnder(at)) {
-                return Written.CONFLICTING;
+                return new Written.Conflicting(Written.Ask.aValue(at),
+                        Written.Ask.howManyItHolds(counted));
             }
         }
         written.put(at, values);
-        return Written.FIRST;
+        return FIRST;
     }
 
     /**

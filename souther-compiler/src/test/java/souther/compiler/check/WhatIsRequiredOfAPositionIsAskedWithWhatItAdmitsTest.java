@@ -345,8 +345,8 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
                         ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         ConstraintState<String> handedOver = domains
-                .constraintsOver(claim -> "at:" + claim, other -> "other:" + other,
-                        CanonicalOrder.asTheyAreSpelled())
+                .constraintsOver(claim -> "at:" + claim, total -> null,
+                        other -> "other:" + other, CanonicalOrder.asTheyAreSpelled())
                 .constraints();
         return ConstraintState.settling(handedOver, "at:" + NumberAt.valueOf(RuleKey.of("y")),
                 new Count(BigDecimal.valueOf(at)),
