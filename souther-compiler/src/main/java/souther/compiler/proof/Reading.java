@@ -165,7 +165,9 @@ final class Reading {
         return out;
     }
 
-    /** The cases {@code part} comes out by, read where {@code reached} holds on the way to it. */
+    /** The cases {@code part} comes out by, read where {@code reached} holds on the way to it.
+     *  What is met inside is told {@code reached}; the cases are not, and a caller whose answer is
+     *  the part's alone, an arm, puts it on them itself. */
     private List<Case> reachedWhere(LawProposition<Value> reached, LibraryTerm part, Frame frame) {
         way.add(reached);
         try {
@@ -261,7 +263,11 @@ final class Reading {
      *
      * <p>The right is read where the operator runs it ({@link BinOp#rightRunsWhenLeftIs}): on
      * every run, or only where the left came out the way that lets it run, which is what holds on
-     * the way to what the right works out. What the two come to together is the same either way.
+     * the way to what the right works out ({@link #met}). It is not put on the cases the two come
+     * to. On a run the left settles, the operator answers the left, and that is a case here as
+     * much as the other: what {@link #operated(BinOp, Value, Value)} makes of the two then comes
+     * to the left whatever the right is, so every case of the left is kept beside every case of
+     * the right, each under what those two cases hold.
      */
     private List<Case> operated(BinOp op, LibraryTerm left, LibraryTerm right, Frame frame) {
         List<Case> out = new ArrayList<>();

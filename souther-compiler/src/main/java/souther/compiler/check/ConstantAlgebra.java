@@ -79,7 +79,8 @@ final class ConstantAlgebra {
         if (!(left instanceof Boolean settled) || runsWhenLeftIs == null) {
             return Optional.empty();
         }
-        return settled != runsWhenLeftIs ? Optional.of(settled) : Optional.empty();
+        return settled.booleanValue() != runsWhenLeftIs.booleanValue() ? Optional.of(settled)
+                : Optional.empty();
     }
 
     /** What {@code op} makes of two constants, or empty where these two do not answer it. */
