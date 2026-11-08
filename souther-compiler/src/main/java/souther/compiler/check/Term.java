@@ -1424,6 +1424,32 @@ final class Term {
         }
 
         /**
+         * {@code closure} with a comparison of its parameter against a whole number written as the
+         * one that stands below the number after it: {@code n > 2} and {@code n >= 3} state the
+         * same thing of whole numbers, and are one term here.
+         *
+         * <p>Only the comparison that is the whole of what the closure answers. A literal is a
+         * whole number only beside a value that is one, which the checker types it as.
+         */
+        Term closureOverWholeNumbers(Term closure) {
+            if (closure.shape != Shape.CLOSURE || !Integer.valueOf(1).equals(closure.of)) {
+                return closure;
+            }
+            Term body = closure.parts.getFirst();
+            boolean denied = body.shape == Shape.NOT;
+            Term stated = denied ? body.parts.getFirst() : body;
+            if (stated.shape != Shape.OP || stated.of != BinOp.LT
+                    || stated.parts.get(0).shape != Shape.INT
+                    || stated.parts.get(1).shape == Shape.INT
+                    || (Long) stated.parts.get(0).of == Long.MAX_VALUE) {
+                return closure;
+            }
+            Term below = of(Shape.OP, BinOp.LT, List.of(stated.parts.get(1),
+                    of(Shape.INT, (Long) stated.parts.get(0).of + 1, List.of())));
+            return closure(1, denied ? below : not(below));
+        }
+
+        /**
          * The closure whose answer {@code closure} denies, or null where it denies none.
          *
          * <p>A comparison is held as the statement it makes or the denial of one

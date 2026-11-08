@@ -802,7 +802,31 @@ public final class NumericDomain<A> {
             // proves about it either. Said before the reading, which would want its spacing.
             return false;
         }
-        return switch (AffineConstraint.of(coefs, f.constant(), rel, this::spacingOf)) {
+        if (entailsOver(coefs, f.constant(), rel, withRules)) {
+            return true;
+        }
+        if (!withRules) {
+            return false;   // asked of the box and its differences alone, which no equality adds to
+        }
+        // The same goal written over the positions the equalities leave free, where the rules hold
+        // equalities over several positions: a query takes one rule as its premise, and in that
+        // writing the premise it needs is the one it is given.
+        List<AffineConstraint.Equality<A>> equalities = new ArrayList<>();
+        for (AffineConstraint<A> rule : rules()) {
+            if (rule instanceof AffineConstraint.Equality<A> equality) {
+                equalities.add(equality);
+            }
+        }
+        EqualityElimination.Goal<A> freed = equalities.isEmpty() ? null
+                : EqualityElimination.through(equalities,
+                        new EqualityElimination.Goal<>(coefs, f.constant()), order);
+        return freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)
+                && entailsOver(freed.coefs(), freed.constant(), rel, withRules);
+    }
+
+    private boolean entailsOver(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
+                                boolean withRules) {
+        return switch (AffineConstraint.of(coefs, constant, rel, this::spacingOf)) {
             case AffineConstraint.Read.HoldsAlways<A> _ -> true;
             case AffineConstraint.Read.HoldsNever<A> _ -> false;
             case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);

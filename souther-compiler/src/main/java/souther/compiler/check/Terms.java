@@ -2403,6 +2403,9 @@ final class Terms {
         if (counted == null || (closure != null && by == null)) {
             return null;
         }
+        if (by != null && aspect == AnswerAspect.TRUTH) {
+            by = interned.closureOverWholeNumbers(by);
+        }
         Term denied = by == null || aspect != AnswerAspect.TRUTH ? null
                 : interned.closureWhoseAnswerThisDenies(by);
         FactSubject atom = named(interned.howManyMeet(counted, denied == null ? by : denied,

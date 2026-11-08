@@ -115,6 +115,21 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     false),
             new Row("Digit(List.length(List.distinctBy(n -> n + 1, xs)) "
                     + "- List.length(List.distinct(xs)))", true),
+            // Above 2 and at least 3 are one statement of whole numbers.
+            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n >= 3, xs)))", false),
+            new Row("Digit(List.length(List.filter(n -> n >= 3, xs)) "
+                    + "- List.length(List.filter(n -> n > 2, xs)))", false),
+            new Row("Digit(List.length(List.filter(n -> n <= 2, xs)) "
+                    + "- List.length(List.filter(n -> n < 3, xs)))", false),
+            new Row("Digit(List.length(xs) - List.length(List.filter(n -> n >= 3, xs)) "
+                    + "- List.length(List.filter(n -> n < 3, xs)))", false),
+            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n >= 2, xs)))", true),
+            // Two equalities between counts say what neither says alone.
+            new Row("Digit(List.length(xs ++ ys) - List.length(ys ++ xs))", false),
+            new Row("Digit(List.length(xs ++ ys) - List.length(List.concat([xs, ys])))", false),
+            new Row("Digit(List.length(xs ++ ys) - List.length(ys ++ xs) - 1)", true),
             // A join is the append it is, however it is written.
             new Row("Digit(List.length(xs ++ xs) - List.length(List.append(xs, xs)))", false),
             new Row("Digit(List.length(List.append(xs, xs)) - List.length(xs ++ xs))", false),
@@ -171,10 +186,11 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     data Digit = Int
                         invariant atLeastNought = value >= 0
 
-                    behavior f : (xs: List<Int>, xss: List<List<Int>>, a: Set<Int>, b: Set<Int>,
-                                  s: String, t: String, x: Int) -> Digit
+                    behavior f : (xs: List<Int>, ys: List<Int>, xss: List<List<Int>>,
+                                  a: Set<Int>, b: Set<Int>, s: String, t: String, x: Int)
+                        -> Digit
                         constructs Digit
-                    let f (xs, xss, a, b, s, t, x) =
+                    let f (xs, ys, xss, a, b, s, t, x) =
                         %s
                     """.formatted(row.body()), "Main");
             compilation.answerEverything();
