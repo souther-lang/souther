@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.semantics.OperationFact;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -25,8 +27,9 @@ public record AnOperationApplied(ValueName operation, List<Core> args) {
     /** {@code e} read as an application of an operation, or null where it applies none. */
     public static AnOperationApplied of(Core e) {
         return switch (Core.withoutStanding(e)) {
-            case Core.PreservedCall kept -> joinedWithNothing(kept) instanceof AnOperationApplied put
-                    ? put : new AnOperationApplied(kept.declared().operation(), kept.args());
+            case Core.PreservedCall kept ->
+                    asTheOperationItAgreesWith(kept) instanceof AnOperationApplied agreed
+                    ? agreed : new AnOperationApplied(kept.declared().operation(), kept.args());
             case Core.Call call when call.fn() instanceof Core.Reached reached ->
                     new AnOperationApplied(reached.denotes(), call.args());
             // The checker types the operator over two strings or two lists and refuses it over
@@ -39,19 +42,23 @@ public record AnOperationApplied(ValueName operation, List<Core> args) {
         };
     }
 
-    private static final ValueName JOIN = ValueName.Stdlib.operation("String", "join");
-    private static final ValueName CONCAT = ValueName.Stdlib.operation("String", "concat");
-
     /**
-     * {@code call} as the application of {@code String.concat} to the strings it joins, where it
-     * joins them with nothing between; null where it is anything else. Nothing standing between
-     * the strings is the strings put end to end, so what is said of either is said of both.
+     * {@code call} as the application of the operation it agrees with where it is given the string
+     * it is, with the arguments that remain; null where it is anything else. What is said of
+     * either is said of both ({@link OperationFact.AgreesWithAnotherWhereItIsGivenText}).
      */
-    static AnOperationApplied joinedWithNothing(Core.PreservedCall call) {
-        return JOIN.equals(call.operation()) && call.args().size() == 2
-                && Core.withoutStanding(call.args().get(0)) instanceof Core.Str separator
-                && separator.value().isEmpty()
-                ? new AnOperationApplied(CONCAT, List.of(call.args().get(1))) : null;
+    static AnOperationApplied asTheOperationItAgreesWith(Core.PreservedCall call) {
+        BoundOperationFact.AgreesWithAnotherWhereItIsGivenText agrees =
+                DefaultBoundOperationFacts.get().agreesWhereItIsGivenText(call.operation());
+        if (agrees == null || agrees.position() >= call.args().size()
+                || !(Core.withoutStanding(call.args().get(agrees.position()))
+                        instanceof Core.Str given)
+                || !given.value().equals(agrees.text())) {
+            return null;
+        }
+        List<Core> remaining = new ArrayList<>(call.args());
+        remaining.remove(agrees.position());
+        return new AnOperationApplied(agrees.other().operation(), remaining);
     }
 
     /** What it passes where {@code which} stands, or null where it passes nothing there. */

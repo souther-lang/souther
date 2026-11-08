@@ -954,6 +954,18 @@ public final class BoundOperationFacts {
         return one(BoundOperationFact.MeansTheSameAsASizeOfNought.class, operation);
     }
 
+    /** What {@code operation} answers where it is given a string at a place: the operation it then
+     *  agrees with, or null where it agrees with none. */
+    public BoundOperationFact.AgreesWithAnotherWhereItIsGivenText agreesWhereItIsGivenText(
+            ValueName operation) {
+        return one(BoundOperationFact.AgreesWithAnotherWhereItIsGivenText.class, operation);
+    }
+
+    /** The operations that agree with another where they are given a string. */
+    public Set<ValueName> agreeWhereTheyAreGivenText() {
+        return ones(BoundOperationFact.AgreesWithAnotherWhereItIsGivenText.class);
+    }
+
     /** The emptiness checks. */
     public Set<ValueName> meansTheSameAsASizeOfNought() {
         return ones(BoundOperationFact.MeansTheSameAsASizeOfNought.class);

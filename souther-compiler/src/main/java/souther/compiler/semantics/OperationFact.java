@@ -829,6 +829,28 @@ public sealed interface OperationFact {
         }
     }
 
+    /**
+     * Where the operation is handed the string {@code text} at {@code position}, it answers what
+     * {@code other} answers on the arguments that remain, in their order.
+     *
+     * <p>Not what the operation does but what a call of it says: {@code String.join("", xs)} and
+     * {@code String.concat(xs)} are one statement, so what is said of either is said of both.
+     * Without it a reader that knows what one says leaves the other unrelated to it, which is an
+     * accident of which one the author reached for.
+     */
+    record AgreesWithAnotherWhereItIsGivenText(souther.compiler.types.ValueName other,
+                                               int position, String text)
+            implements OperationFact {
+
+        public AgreesWithAnotherWhereItIsGivenText {
+            Objects.requireNonNull(other, "this one names the operation it agrees with");
+            Objects.requireNonNull(text, "this one names the string it is given");
+            if (position < 0) {
+                throw new IllegalArgumentException("an argument is at a place from nought");
+            }
+        }
+    }
+
     /** The operation computes a number, and this says which arithmetic and where it answers it. */
     record ComputesANumber(NumericResult<ArgumentRef> result) implements OperationFact {
 

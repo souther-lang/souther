@@ -204,6 +204,7 @@ final class ProvingTheLibrary implements LibraryProofs {
             // A kernel's, which an operation with a body is refused where the facts are bound, or
             // a statement no body here is proved to make.
             case BoundOperationFact.HasALaw _ -> false;
+            case BoundOperationFact.AgreesWithAnotherWhereItIsGivenText _ -> false;
             case BoundOperationFact.HoldsThePiecesOf _ -> false;
             case BoundOperationFact.ListsTheCodePointsOf _ -> false;
             case BoundOperationFact.EveryElementOfItsAnswerIs _ -> false;

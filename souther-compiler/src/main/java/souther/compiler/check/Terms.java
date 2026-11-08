@@ -3817,7 +3817,7 @@ final class Terms {
             // exactly as many as it was given does not change the number, which the discharge table
             // states as a relation between the two values (`Cardinality.SAME`) rather than as
             // something this check happens to follow — so it is an equality identity may read.
-            case Core.PreservedCall c -> AnOperationApplied.joinedWithNothing(c)
+            case Core.PreservedCall c -> AnOperationApplied.asTheOperationItAgreesWith(c)
                     instanceof AnOperationApplied joined
                     ? over(joined.args(), at, bound, depth, leaf,
                             ps -> interned.called(joined.operation(), ps))

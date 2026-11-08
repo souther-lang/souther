@@ -185,6 +185,55 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
     }
 
     /**
+     * Every kernel said to agree with another where it is given a string answers, given it, what
+     * the other answers on the arguments that remain — over the empty value, one that holds
+     * something, and ones whose parts are empty themselves.
+     */
+    @Test
+    void everyKernelAgreeingWithAnotherWhereItIsGivenAStringAnswersWhatItAnswers() throws Exception {
+        Stdlib stdlib = DefaultStdlib.get();
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        StringBuilder source = new StringBuilder("module demo\n\ndata N = { n: Int }\n");
+        List<String> runs = new ArrayList<>();
+        for (ValueName.Stdlib.Operation operation : stdlib.entries().keySet()) {
+            BoundOperationFact.AgreesWithAnotherWhereItIsGivenText agrees =
+                    facts.agreesWhereItIsGivenText(operation);
+            if (agrees == null) {
+                continue;
+            }
+            List<Type> params = stdlib.entry(operation).signature().params();
+            if (params.size() != 2 || agrees.position() != 0
+                    || !new Type.ListOf(Type.STRING).equals(params.get(1))) {
+                throw new IllegalStateException("no arguments but a string and a list of strings"
+                        + " are written here, which " + operation.qualified() + " takes otherwise");
+            }
+            String name = "agrees" + runs.size();
+            source.append("\ndata I").append(name).append(" = { xs: List<String> }\n\nbehavior ")
+                    .append(name).append(" : (i: I").append(name)
+                    .append(") -> N constructs N\nlet ").append(name).append(" (i) = N {\n")
+                    .append("    n = if ").append(operation.qualified()).append("(\"")
+                    .append(agrees.text()).append("\", i.xs) == ")
+                    .append(((ValueName.Stdlib) agrees.other().operation()).qualified())
+                    .append("(i.xs) then 1 else 0\n}\n");
+            runs.add(name);
+        }
+        WhatTheLibraryComputes.Program program =
+                new WhatTheLibraryComputes.Program("demo", source.toString());
+        List<String> wrong = new ArrayList<>();
+        for (String name : runs) {
+            for (List<String> held : List.of(List.<String>of(), List.of("a"), List.of("a", "b"),
+                    List.of("", "x", ""), List.of("", ""))) {
+                Object out = program.answer(name, "I" + name, "N", Map.of("xs", held));
+                if (!Map.of("n", 1L).equals(out)) {
+                    wrong.add(name + " over " + held + " answered " + out);
+                }
+            }
+        }
+        assertEquals(List.of(), wrong, source::toString);
+        assertTrue(!runs.isEmpty(), "no kernel is said to agree with another where it is given text");
+    }
+
+    /**
      * Every number in the list a kernel is said to bound stands where each bound says, against the
      * argument it names, over arguments either side of one another and of nought.
      */

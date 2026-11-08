@@ -432,6 +432,9 @@ public final class OperationFacts {
                     at(0))),
             // And the code points of one, each the number it is.
             about("String", "codePoints", new OperationFact.ListsTheCodePointsOf(at(0))),
+            // Nothing between the strings joined is the strings put end to end.
+            about("String", "join", new OperationFact.AgreesWithAnotherWhereItIsGivenText(
+                    ValueName.Stdlib.operation("String", "concat"), 0, "")),
 
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the

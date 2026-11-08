@@ -274,6 +274,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                            DeclaredArgument closure, PieceOfAnElement piece)
             implements OneAboutAnOperation {}
 
+    /** Where {@code operation} is handed {@code text} at {@code position}, it answers what
+     *  {@code other} answers on the arguments that remain, in their order. */
+    record AgreesWithAnotherWhereItIsGivenText(DeclaredOperation operation,
+                                               DeclaredOperation other, int position, String text)
+            implements OneAboutAnOperation {}
+
     /** The operation's answer holds the elements of {@code source} where {@code closure} holds of
      *  them, and no other. */
     record KeepsTheElementsWhereItHolds(DeclaredOperation operation, DeclaredArgument source,

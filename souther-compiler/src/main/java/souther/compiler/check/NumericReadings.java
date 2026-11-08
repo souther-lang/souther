@@ -195,6 +195,7 @@ final class NumericReadings {
                      BoundOperationFact.IsStatedOverAProjection _,
                      BoundOperationFact.StatesItsPredicateOfEveryElement _,
                      BoundOperationFact.MeansTheSameAsASizeOfNought _,
+                     BoundOperationFact.AgreesWithAnotherWhereItIsGivenText _,
                      BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> { }
             }
         }

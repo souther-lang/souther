@@ -632,6 +632,8 @@ final class OperationFactBinder {
             // declarations are held to each other.
             case OperationFact.MeansTheSameAsASizeOfNought means ->
                     holdSizeEquivalence(stdlib, declaration, means.size());
+            case OperationFact.AgreesWithAnotherWhereItIsGivenText agrees ->
+                    holdAgreement(stdlib, declaration, agrees);
             // Names nothing beyond the operation it is about, so there is nothing about it to hold
             // to a signature beyond the declaration every fact is held to above. What it comes to
             // bound is the fact about that declaration.
@@ -1506,6 +1508,44 @@ final class OperationFactBinder {
         Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
         return CompleteSignature.ofDeclaration(operation, entry.signature().params(),
                 entry.signature().result());
+    }
+
+    /**
+     * Holds an operation said to agree with another where it is given a string to their
+     * signatures: it takes a string at that place, and what remains of its arguments is what the
+     * other takes, answering what the other answers — so a call of the first is a call of the
+     * second.
+     */
+    private static BoundOperationFact.AgreesWithAnotherWhereItIsGivenText holdAgreement(
+            Stdlib stdlib, CompleteSignature declaration,
+            OperationFact.AgreesWithAnotherWhereItIsGivenText agrees) {
+        ValueName operation = declaration.declaring().operation();
+        CompleteSignature other = declaredSignature(stdlib, agrees.other());
+        String name = theLibraryOperation(operation).qualified();
+        if (agrees.position() >= declaration.params().size()
+                || declaration.params().get(agrees.position()) != Type.STRING) {
+            throw new IllegalStateException(name + " is said to agree with "
+                    + theLibraryOperation(agrees.other()).qualified() + " where it is given a"
+                    + " string at argument " + (agrees.position() + 1)
+                    + ", and it takes no string there");
+        }
+        List<Type> remaining = new ArrayList<>(declaration.params());
+        remaining.remove(agrees.position());
+        boolean alike = remaining.size() == other.params().size()
+                && sameShape(declaration.result(), other.result(), new HashMap<>(),
+                        new HashMap<>());
+        for (int at = 0; alike && at < remaining.size(); at++) {
+            alike = sameShape(remaining.get(at), other.params().get(at), new HashMap<>(),
+                    new HashMap<>());
+        }
+        if (!alike) {
+            throw new IllegalStateException(name + " is said to agree with "
+                    + theLibraryOperation(agrees.other()).qualified() + " where it is given a"
+                    + " string, and the arguments that remain and what it answers are not what the"
+                    + " other takes and answers");
+        }
+        return new BoundOperationFact.AgreesWithAnotherWhereItIsGivenText(declaration.declaring(),
+                other.declaring(), agrees.position(), agrees.text());
     }
 
     /**
