@@ -170,14 +170,12 @@ final class ContainersAddingUp {
                                            DemandsInside inside) {
         // What the caller asked inside an element contradicting itself is no way down that did not
         // plan: it is every way down, settled before any of them is tried. Met inside the walk it
-        // was a refusal of one way that the walk had no account of. No element is written, so no
-        // field of one is solved for: what is left is the container of none, which holds no element
-        // to ask it of and which composing the container answers for. A list of lists is refused.
-        boolean nested = orders.term() instanceof NumericTerm.TakenOver taken
-                && taken.source() instanceof RunSource.FlattenedOccurrences;
-        if (inside.contradiction().isPresent()) {
-            return nested ? contradicting(inside) : composedThrough(null, answer, container,
-                    keptApart, orders, within, reading, alsoHolding, alsoAddingUp, inside);
+        // was a refusal of one way that the walk had no account of. No element is written, and the
+        // container of none, which holds no element to ask it of, is what is left.
+        TermRealizations.Realization contradicted = contradicting(inside);
+        if (contradicted != null) {
+            return orTheContainerOfNone(answer, container, keptApart, orders, within, reading,
+                    alsoHolding, alsoAddingUp, inside, contradicted);
         }
         // The lists of a list put end to end: a container inside the elements of another, so an
         // element holds as many occurrences of the number as its own container does and the total is
@@ -185,8 +183,9 @@ final class ContainersAddingUp {
         if (orders.term() instanceof NumericTerm.TakenOver over
                 && over.source() instanceof RunSource.FlattenedOccurrences flat) {
             if (!alsoAddingUp.isEmpty()) {
-                return severalTotalsNotComposed(
-                        "the lists of a list are spread over one total at a time");
+                return orTheContainerOfNone(answer, container, keptApart, orders, within, reading,
+                        alsoHolding, alsoAddingUp, inside, severalTotalsNotComposed(
+                                "the lists of a list are spread over one total at a time"));
             }
             return new NestedContainersAddingUp(flat.subjectPath()).to(answer, container,
                     keptApart, orders, within, reading, alsoHolding, inside);
@@ -194,22 +193,39 @@ final class ContainersAddingUp {
         // A number computed of each element is written by solving for the one field its
         // computation reads, so the elements are chosen on that field's order and stand at its
         // place. A computation this does not solve for is a population this compiler writes none
-        // of, which is not the same as the model admitting no row.
+        // of, which is not the same as the model admitting no row; the container of none holds no
+        // element to work it out of.
         if (FieldSolved.of(orders) instanceof List<FieldSolved> ways) {
             if (ways.isEmpty()) {
-                return new TermRealizations.Realization.Unexhausted(
-                        CompositionShortfall.writing(
+                return orTheContainerOfNone(answer, container, keptApart, orders, within, reading,
+                        alsoHolding, alsoAddingUp, inside,
+                        new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
                                 Set.of(CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR)),
-                        null);
+                                null));
             }
             // Each way is tried until one writes the total; the fields it holds still are held, at
             // each count, at the values they are held at for this total.
             return throughEach(ways, way -> walkedInPartWhereHeldStill(way, composedThrough(way,
                     answer, container, keptApart, orders, within, reading, alsoHolding,
-                    alsoAddingUp, inside)));
+                    alsoAddingUp, inside, null)));
         }
         return composedThrough(null, answer, container, keptApart, orders, within, reading,
-                alsoHolding, alsoAddingUp, inside);
+                alsoHolding, alsoAddingUp, inside, null);
+    }
+
+    /**
+     * The container of none at {@code container}, where no element of it can be written and every
+     * total is nought and its rules leave it holding none — and {@code refused}, what is said of
+     * the elements, where not. Read as composing the container is, of the outermost container a
+     * total of lists of lists is over as well, which holds none of the levels inside it.
+     */
+    static TermRealizations.Realization orTheContainerOfNone(
+            Place answer, Type container, List<List<String>> keptApart, TermOrders orders,
+            SearchRegion within, RuleReadingContext reading, HowManyIsAskedFor alsoHolding,
+            List<AlsoAddingUp> alsoAddingUp, DemandsInside inside,
+            TermRealizations.Realization refused) {
+        return composedThrough(null, answer, container, keptApart, orders, within, reading,
+                alsoHolding, alsoAddingUp, inside, refused);
     }
 
     /**
@@ -377,12 +393,16 @@ final class ContainersAddingUp {
     /**
      * What is written for {@code answer} where the elements are chosen on what {@code solved}
      * solves for, or on the total's own values where it is null.
+     *
+     * @param noElement where no element can be written, what is said where the container of
+     *                  none, which holds none, is not what answers; null where elements are
+     *                  written
      */
     private static TermRealizations.Realization composedThrough(
             FieldSolved solved, Place answer, Type container, List<List<String>> keptApart,
             TermOrders orders, SearchRegion within, RuleReadingContext reading,
             HowManyIsAskedFor alsoHolding, List<AlsoAddingUp> alsoAddingUp,
-            DemandsInside demanded) {
+            DemandsInside demanded, TermRealizations.Realization noElement) {
         DemandsInside inside = demanded;
         // An arm whose case is taken of a place beside the field asks every element to be of it,
         // beside whatever else each is asked to hold.
@@ -400,6 +420,20 @@ final class ContainersAddingUp {
         // Named beside it, the two were free to be about two numbers and this would fill a
         // container found under one path with elements counted on another's order.
         RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
+        // No element can be written: the container of none, which holds no element and asks
+        // nothing of what each would be, is the one left — a list or a set its rules leave
+        // holding none.
+        if (noElement != null) {
+            TypeView none = TypeView.of(container, ruleSource.inners(), ruleSource.symbols(),
+                    ruleSource.kinds(), ruleSource.sums());
+            if (!(answer instanceof Count asked) || !(none.shape() instanceof Shape.Sequence)) {
+                return noElement;
+            }
+            DeclaredBounds.CountRange howMany =
+                    howMany(none, target.writeRoot(), within, reading, alsoHolding);
+            return howMany == null ? noElement : ofNoneAlone(asked, none, howMany, alsoHolding,
+                    alsoAddingUp, ruleSource, CompositionShortfall.NONE, noElement);
+        }
         Carrier elements = solved == null ? orders.answered() : solved.carrier();
         TermPath occurring = solved == null ? occurrences(target) : solved.field();
         if (!(answer instanceof Count total) || elements == null) {
@@ -410,10 +444,6 @@ final class ContainersAddingUp {
         // the type again for any of them is another answer to which names it wears.
         TypeView view = TypeView.of(container, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
-        TermRealizations.Realization contradicted = contradicting(inside);
-        if (contradicted != null && !(view.shape() instanceof Shape.Sequence)) {
-            return contradicted;
-        }
         if (view.shape() instanceof Shape.Mapping map) {
             return aMapHoldingTheTotalInOneEntry(total, map, view, target, occurring, elements,
                     within, reading, alsoHolding, alsoAddingUp, inside);
@@ -432,12 +462,6 @@ final class ContainersAddingUp {
                 howMany(view, target.writeRoot(), within, reading, alsoHolding);
         if (howMany == null) {
             return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
-        }
-        // No element holds what each is asked to: the container of none, which holds no element
-        // to ask it of, is the one left.
-        if (contradicted != null) {
-            return ofNoneAlone(total, view, howMany, alsoHolding, alsoAddingUp, ruleSource,
-                    CompositionShortfall.NONE, contradicted);
         }
         // Where its occurrences are asked as an element's, which is asked of a container holding
         // one: where they run nowhere, no element can be, and the container of none is the one

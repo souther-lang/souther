@@ -323,22 +323,29 @@ final class NestedContainersAddingUp {
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         // A count asks nothing of what the leaves are, so where their values run is no part of it.
+        // Where no leaf, or no element of some level, can be written, the outermost container of
+        // none, which holds none of them, is the one left.
         ContainersAddingUp.Ends ends = null;
         if (!counting) {
             if (!(within.projectionOf(new NumericTerm.ValueOf(run))
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds runs))) {
-                return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+                return ContainersAddingUp.orTheContainerOfNone(answer, container, keptApart,
+                        orders, within, reading, alsoHolding, List.of(), inside,
+                        none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE));
             }
             ends = ContainersAddingUp.Ends.of(runs == null ? NumericDomain.Bounds.OPEN : runs,
                     elements);
             if (ends == null) {
-                return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                return ContainersAddingUp.orTheContainerOfNone(answer, container, keptApart,
+                        orders, within, reading, alsoHolding, List.of(), inside,
+                        none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
             }
         }
         ContainersAddingUp.WhatWasLeft left = new ContainersAddingUp.WhatWasLeft();
         Levels made = levelsOf(container, keptApart, within, reading, alsoHolding, inside, left);
         if (made.refused() != null) {
-            return made.refused();
+            return ContainersAddingUp.orTheContainerOfNone(answer, container, keptApart, orders,
+                    within, reading, alsoHolding, List.of(), inside, made.refused());
         }
         List<Level> levels = made.levels();
         ContainersAddingUp.WhatIsOffered offered = new ContainersAddingUp.WhatIsOffered();

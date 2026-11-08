@@ -180,6 +180,35 @@ class ATotalOfFieldsTakenOneFromAnotherIsWrittenWhereverTheFieldsReachItTest {
         }
     }
 
+    /**
+     * What each element comes to chosen on a flag of it, which no field is solved for: the list of
+     * none still comes to nought, and is written there, with no element to work it out of.
+     */
+    @Test
+    void aListOfNoneIsWrittenForATotalNoFieldOfWhichIsSolvedFor() {
+        String model = """
+                module w1
+                data F = Int
+                    invariant value >= 1 && value <= 3
+                data L = { flag: Bool, p: F, q: F }
+                data One = { ls: List<L> }
+                    invariant List.length(ls) <= 2
+                behavior m : (b: One) -> Bool
+                let m (b) = List.sum(List.map(l -> if l.flag then l.p.value else l.q.value,
+                                              b.ls)) <= 0
+                """;
+        Generator.GenerationResult offered = offeredFor(model);
+        List<String> rows = offered.rows().stream()
+                .filter(row -> row.purposes().stream().anyMatch(purpose ->
+                        purpose instanceof Generator.Purpose.ForAPoint point
+                                && point.label().startsWith("List.sum(")
+                                && point.label().endsWith(" = 0")))
+                .map(row -> row.inputs().getFirst().text()).distinct().toList();
+        assertEquals(List.of("One { ls = [] }"), rows, () -> offered.rows().stream()
+                .map(row -> row.purposes() + " " + row.inputs().getFirst().text()).toList()
+                + " " + offered.unresolved());
+    }
+
     /** The first input of each row offered for the point {@code label} in {@code model}. */
     private static List<String> rowsAt(String model, String label) {
         Generator.GenerationResult offered = offeredFor(model);
