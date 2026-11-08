@@ -5775,8 +5775,8 @@ Reported where an `+invariant+` is written on a unit data (<<invariant-needs-a-v
 
 [,text]
 ----
-`Amount` declares two invariant clauses named `inYen`. `guard ... as ... else` and boundary errors
-refer to a clause by its name, so two clauses cannot share one.
+`Amount` declares two invariant clauses named `inYen`. A construction with `as` (`... as name else ...`)
+and boundary errors refer to a clause by its name, so two clauses cannot share one.
 ----
 
 Reported at the second clause of a name (<<invariant-clause-names-are-distinct>>). An attempted construction answers a clause by name (<<attempt-departures>>) and a decode failure reports one by name; neither can say which of two was meant.
@@ -5786,8 +5786,9 @@ Reported at the second clause of a name (<<invariant-clause-names-are-distinct>>
 
 [,text]
 ----
-`_` cannot name an invariant clause of `Amount`. In `guard ... as ... else`, the clauses without a
-name are handled by `| _ -> ...`, so a clause named `_` could never be handled by its name.
+`_` cannot name an invariant clause of `Amount`. In the `else` of a construction with `as`, the
+clauses without a name are handled by `| _ -> ...`, so a clause named `_` could never be handled by
+its name.
 Hint: Give the clause a name of its own, or leave it unnamed — an unnamed clause is still checked,
 and is handled by `| _ -> ...`.
 ----
@@ -5969,7 +5970,7 @@ A pattern is unaffected by either: `+| Some v+` matches an optional the model wa
 
 [,text]
 ----
-The type of this position is not stated anywhere, and `unreachable` gives no value to
+Nothing here states the type of this position, and `unreachable` gives no value to
 infer it from.
 Hint: Write it where the type is stated: in an arm next to one that returns a value, in a
 field, in a declared return, or in a binding with a type annotation.
@@ -6210,8 +6211,7 @@ Read from the body as it is emitted, so a claim written in a `+let+` this body c
 ----
 No input the model allows reaches this branch, so no example row can go through it.
 Hint: The conditions that lead here cannot all be true at once.
-Hint: Remove the branch, or change the model's rules so that some input reaches it. The
-branch itself is not what rules it out.
+Hint: Remove the branch, or widen what reaches it. The branch itself is not what rules it out.
 ----
 
 Reported at the branch, as a warning (<<a-branch-the-rules-make-dead-is-said-so>>). What makes it dead is said with it: the conditions that lead here and whether each has to be true or false, the values a position can only be when the branch is for values outside them, or the cases the model's rules never let a position be where the arm matches on them.
@@ -6635,7 +6635,7 @@ on nothing can be called by its name.
 
 [,text]
 ----
-`behavior ship` calls itself: ship -> allocate -> ship.
+`behavior ship` leads back to itself: ship -> allocate -> ship.
 Hint: A behavior does not recurse, through calls, `depends on` or `>->` stages. Write the
 recursion as a helper `let`, where it is proven total.
 ----
@@ -7031,8 +7031,8 @@ Not warned about for a case the model's own rules refuse (<<a-case-the-rules-ref
 [,text]
 ----
 No row is at the ON point of the boundary the `guard` sets.
-Hint: A row at the last value inside the boundary is what catches the boundary being one step too far in (for example, `x <= 99` written where `x <= 100` was meant).
-Hint: For submit/cost: = 100.
+Hint: A row at the last value inside the boundary is what catches the boundary being written one step too far out (for example, `x <= 100` written where `x <= 99` was meant).
+Hint: A row at submit/cost: = 100.
 ----
 
 A warning, and one that needs the arms measured where the line was drawn by a fork of the body (<<example-branch-coverage>>): meeting such a line takes reaching the comparison, not writing the value. A line an invariant drew is decided without that. The rule that drew it is named, because the same value can be a border of several and reaching it through one leaves the others unmet.
@@ -7051,7 +7051,7 @@ The fork is named by the construct it was written as — an `+if+`, a `+guard+`,
 No row is at an IN point away from the boundary the `guard` sets.
 Hint: A row well inside the boundary shows that the boundary, and not some other property of
 the value, is what decides the result.
-Hint: For submit/cost: in submit/cost < 100.
+Hint: A row at submit/cost: in submit/cost < 100.
 ----
 
 [[every-obligation-away-from-its-line-has-a-row]]A warning. The same assessment of the same line answers this and <<e1916>>; what differs is which of the four points it is about (<<a-border-has-four-point-roles>>). Which of them a build was held to was a word it wrote, and a caller selecting part of its own account is selecting a budget (<<what-a-build-refuses-over-is-the-account>>).
@@ -7317,8 +7317,7 @@ Told apart from <<e1918>>, which is an arm no row goes through. A row does go th
 
 [,text]
 ----
-No row of `judgeHours` meets one of its decision rules. The conditions of the rule are
-marked in the source.
+No row of `judgeHours` meets one of its decision rules. Its conditions are listed below.
 ----
 
 A warning (<<what-a-build-refuses-over-is-the-account>>). The forks of a body state a decision, whatever each fork is decided by; its rules are the ways through it, each carrying the distinctions that way consulted and what each came out as, with a condition the way never reached left out rather than written as a don't-care. An attempted construction is one of them: whether its invariant held and which departure it took are distinctions a way consults, and a run is placed at the rule whose arm it went through even though this compiler does not read which values of the input each arm is reached by.
@@ -7339,7 +7338,7 @@ Told apart from <<e1918>>, which is an arm the author wrote that no row goes thr
 [,text]
 ----
 No row of `shippingFee` makes one of the combinations of decisions that decide its value.
-The combination is marked in the source.
+The combination is listed below.
 ----
 
 A warning (<<what-a-build-refuses-over-is-the-account>>). Where two values each settled by a decision are consumed into one — the operands of an operator, the arguments of a call that answers one value — the answer is a function of both. A row that leaves either decision at one outcome exercises the two apart, and an implementation that takes the larger of two charges where the model sums them holds against every such row.
@@ -7518,8 +7517,8 @@ Nothing known at this point shows that this clause holds.
 Constructing `Amount` here may violate its invariant: nothing known at this point shows that
 it holds.
 Hint: If inputs for which the construction fails are ones the behavior accepts, that failure
-is a business case: guard the construction, or write it as `guard T(v) as name else ...`,
-which checks the invariant once. If those inputs are not admitted by the model, the relation
+is a business case: guard the construction with `guard`, or attempt it with
+`... as name else ...`, which checks the invariant once. If those inputs are not admitted by the model, the relation
 belongs to a data — declare it as an `invariant` on the input that holds these values,
 introducing such a data where none exists.
 ----
@@ -7558,8 +7557,8 @@ E2013 is the form reading and having nothing to decide, since a type declaring n
 
 [,text]
 ----
-`Amount` declares no invariant, so constructing it with `guard ... as` always succeeds and
-the `else` value is never used.
+`Amount` declares no invariant, so constructing it with `as` always succeeds and the `else`
+value is never used.
 Hint: Construct `Amount` directly, or give it the invariant that decides the branch.
 ----
 
@@ -7568,8 +7567,8 @@ Hint: Construct `Amount` directly, or give it the invariant that decides the bra
 
 [,text]
 ----
-`Rank` declares no invariant, so constructing it with `guard ... as` always succeeds and the
-`else` value is never used.
+`Rank` declares no invariant, so constructing it with `as` always succeeds and the `else` value
+is never used.
 Hint: Construct `Rank` directly, or give it the invariant that decides the branch.
 ----
 
@@ -7618,9 +7617,10 @@ E2018 is arms with nothing to answer for, the departure having no attempted cons
 
 [,text]
 ----
-Each of these arms handles the failure of one invariant clause, but the `guard` does not
-attempt a construction (`guard T(v) as x`), so there is no failure for them to handle.
-Hint: Write the `guard` as `guard T(v) as x else ...`, or give the `else` a single value.
+Each of these arms handles the failure of one invariant clause, but the condition is not a
+construction followed by `as <name>`, so there is no failure for them to handle.
+Hint: Make the condition a construction followed by `as x` (`guard T(v) as x else ...` or
+`if T(v) as x then ... else ...`), or give the `else` a single value.
 ----
 
 E2019 is one clause answered twice:
@@ -7671,9 +7671,10 @@ Emitted when `+| _ -> …+` is written and the type has no clause carrying a nam
 
 [,text]
 ----
-Each of these arms handles the failure of one invariant clause, but the `guard` does not attempt a
-construction (`guard T(v) as x`), so there is no failure for them to handle.
-Hint: Write the `guard` as `guard T(v) as x else ...`, or give the `else` a single value.
+Each of these arms handles the failure of one invariant clause, but the condition is not a
+construction followed by `as <name>`, so there is no failure for them to handle.
+Hint: Make the condition a construction followed by `as x` (`guard T(v) as x else ...` or
+`if T(v) as x then ... else ...`), or give the `else` a single value.
 ----
 
 Emitted when per-clause arms are written on a condition that is not an attempted construction (<<attempt-arms-answer-an-attempt>>). What an arm names is a clause of the type being built, and where nothing is being built there are no clauses for them to name.

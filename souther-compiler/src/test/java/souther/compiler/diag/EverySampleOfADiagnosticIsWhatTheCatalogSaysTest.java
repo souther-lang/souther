@@ -105,17 +105,28 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
     /** The catalog key of every message that reports a rule, by the section its code is named for. */
     private static Map<String, Set<String>> reportedByCode() {
         Map<String, Set<String>> by = new TreeMap<>();
-        Deque<Class<?>> open = new ArrayDeque<>(List.of(Message.class));
-        while (!open.isEmpty()) {
-            Class<?> each = open.pop();
-            if (each.isSealed()) {
-                open.addAll(List.of(each.getPermittedSubclasses()));
-            } else if (each.isRecord() && each.isAnnotationPresent(Code.class)) {
+        for (Class<?> each : messages()) {
+            if (each.isAnnotationPresent(Code.class)) {
                 by.computeIfAbsent(MessageCodes.of(each).name().toLowerCase(Locale.ROOT),
                         _ -> new TreeSet<>()).add(MessageKeys.of(each));
             }
         }
         return by;
+    }
+
+    /** Every message this compiler declares, found by walking what the hierarchy permits. */
+    private static List<Class<?>> messages() {
+        List<Class<?>> found = new ArrayList<>();
+        Deque<Class<?>> open = new ArrayDeque<>(List.of(Message.class));
+        while (!open.isEmpty()) {
+            Class<?> each = open.pop();
+            if (each.isSealed()) {
+                open.addAll(List.of(each.getPermittedSubclasses()));
+            } else if (each.isRecord()) {
+                found.add(each);
+            }
+        }
+        return found;
     }
 
     /** A sentence of a sample, the codes the sample is of, and whether it is the one the sample
@@ -216,8 +227,18 @@ class EverySampleOfADiagnosticIsWhatTheCatalogSaysTest {
                 .getResourceAsStream(CATALOG)) {
             catalog.load(new InputStreamReader(in, StandardCharsets.UTF_8));
         }
+        // A sample shows what a message says. A phrase the catalog drops into a message — a token
+        // category, a reading of a boundary — is not a sentence a sample shows, and filled with any
+        // text it matches nearly any sentence.
+        Set<String> said = new TreeSet<>();
+        for (Class<?> message : messages()) {
+            said.add(MessageKeys.of(message));
+        }
         List<Entry> entries = new ArrayList<>();
         for (String key : catalog.stringPropertyNames()) {
+            if (!said.contains(key)) {
+                continue;
+            }
             String[] own = PLACEHOLDER.split(printed(catalog.getProperty(key)), -1);
             if (String.join("", own).replaceAll("\\s", "").length() < FEWEST_OWN_CHARACTERS) {
                 continue;
