@@ -1936,6 +1936,74 @@ public final class NumericDomain<A> {
             return by.signum() > 0 ? new Bounds(low, high) : new Bounds(high, low);
         }
 
+        /**
+         * Every sum of a value of this and a value of {@code other}, where each is a run as
+         * {@link #wholeRunOf} answers one: the ends added, an end reached where both are, and no
+         * end on a side where either has none. Null where the sum of two ends is no number
+         * written down.
+         *
+         * <p>That holds of runs whose every end is a value taken, or, where the values are dense,
+         * one approached as near as any. It does not of an end left out over whole numbers:
+         * {@code (0, 2]} of whole numbers starts at one, and two such add to {@code (0, 4]},
+         * where no pair of them comes to one. Close such an end to the whole number inside it
+         * first.
+         */
+        public Bounds plus(Bounds other) {
+            Endpoint low = plusEnd(min, other.min);
+            Endpoint high = plusEnd(max, other.max);
+            if ((min != null && other.min != null && low == null)
+                    || (max != null && other.max != null && high == null)) {
+                return null;
+            }
+            return new Bounds(low, high);
+        }
+
+        /**
+         * This run with {@code value} as well, where the two are one run: the value is in it, or
+         * nothing lies between it and an end on {@code spacing}, either side — an end left out at
+         * the value, or, where the values step by one, an end held one step from it. This run
+         * alone otherwise: a run holds every value between its ends, and a value apart from it
+         * with others between makes no run with it.
+         */
+        public Bounds joining(Count value, Granularity spacing) {
+            ExactRatio at = value.exactly();
+            if (admits(at)) {
+                return this;
+            }
+            if (nextTo(min, at, ExactRatio.ONE, spacing)) {
+                return new Bounds(Endpoint.inclusive(value), max);
+            }
+            if (nextTo(max, at, ExactRatio.ONE.negated(), spacing)) {
+                return new Bounds(min, Endpoint.inclusive(value));
+            }
+            return this;
+        }
+
+        /** Whether nothing lies between {@code end} and {@code value} on {@code spacing}, the end
+         *  being {@code step} from it where it is held. */
+        private static boolean nextTo(Endpoint end, ExactRatio value, ExactRatio step,
+                                      Granularity spacing) {
+            if (end == null || !(end.at() instanceof Count count)) {
+                return false;
+            }
+            ExactRatio at = count.exactly();
+            return (!end.inclusive() && at.equals(value))
+                    || (end.inclusive() && spacing == Granularity.DISCRETE
+                            && at.equals(value.plus(step).orNull()));
+        }
+
+        private static Endpoint plusEnd(Endpoint one, Endpoint two) {
+            if (one == null || two == null) {
+                return null;
+            }
+            ExactRatio at = Count.number(one.at()).exactly()
+                    .plus(Count.number(two.at()).exactly()).orNull();
+            return at != null && Count.written(at)
+                    instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> written) && written.isPresent()
+                    ? new Endpoint(written.get(), one.inclusive() && two.inclusive()) : null;
+        }
+
         private static Endpoint timesEnd(Endpoint end, ExactRatio by) {
             if (end == null) {
                 return null;

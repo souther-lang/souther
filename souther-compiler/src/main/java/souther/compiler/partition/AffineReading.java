@@ -24,9 +24,10 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.core.Kernel;
+import souther.compiler.inputs.DecimalAdditiveWalk;
 import souther.compiler.inputs.DecimalOperation;
+import souther.compiler.inputs.DecimalWork;
 import souther.compiler.inputs.Denotation;
-import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.InputDomain;
@@ -40,6 +41,7 @@ import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TotalsOfOneRun;
+import souther.compiler.inputs.WrittenOperation;
 import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhyUnread;
@@ -55,6 +57,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -1074,6 +1077,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         && carried.get(name.binding()) instanceof LinearForm<NumericTerm> so) {
                     return new AffineForms.Leaf.Form<>(so);
                 }
+                LinearForm<NumericTerm> ofAField = aFieldOfAWalk(node, at);
+                if (ofAField != null) {
+                    named.addAll(ofAField.coefs().keySet());
+                    told.readByATerm(node);
+                    return new AffineForms.Leaf.Form<>(ofAField);
+                }
                 // What two numbers of the input come to multiplied, where the arithmetic stopped at
                 // the product itself: one number, whichever factor was written first.
                 if (Core.withoutStanding(node) instanceof Core.Binary
@@ -1111,11 +1120,24 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // where. What may stop one is its owners' to say, and a node they do not say
                     // of is one that may. What each name it reads was given is asked with it, so
                     // a binding of one of them is answered for here.
+                    // A total of what a closure makes of each element is told as a walk from
+                    // nought: the library adds the decimals up exactly, at the scale such a walk
+                    // ends at. An Int total of products is told with what the products make of
+                    // each element left to the running totals.
                     if (!NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, numbers,
                             ofTheInput, at)) {
                         NumericTerm total = addedAsItIs(numbers);
-                        if (total instanceof NumericTerm.TakenOver && sumsProductsOfFields(node,
-                                total)) {
+                        Core.Block closure = total == null ? null : theClosureOfASum(node);
+                        AddedOfEachElement each = closure == null ? null
+                                : AddedOfEachElement.ofTheTotal(total);
+                        if (each == null || !each.equals(AddedOfEachElement.ofAClosure(closure,
+                                ruleSource.symbols()))
+                                || !preparedWithoutAStop(node, at, closure, node)) {
+                            told.exact = false;
+                        } else if (Core.withoutStanding(node).type() == Type.DECIMAL) {
+                            told.walksAddingDecimals(numbers, BigDecimal.ZERO,
+                                    asTheRelationNamesIt(total), each.factors());
+                        } else if (total instanceof NumericTerm.TakenOver && each.factors() >= 2) {
                             tellAnIntTotal(node, numbers, List.of());
                             told.partials.add(total);
                         } else {
@@ -1341,10 +1363,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             @Override
             public Attempt totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at) {
-                if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
-                        || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
-                                instanceof GetsPast.WhereTheTotalFits(int operand))
-                        || operand >= call.args().size()) {
+                if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)) {
+                    return new Attempt.NotApplicable();
+                }
+                // A total of decimals stops where the sum has no room, which is told of the
+                // answers as the library adds them ({@link WhatWasTold#addsUpDecimals}).
+                int operand = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
+                        instanceof GetsPast.WhereTheTotalFits(int list) ? list
+                        : call.type() == Type.DECIMAL
+                        ? WhatARunMayEndFor.theListItAddsUp(call).orElse(-1) : -1;
+                if (operand < 0 || operand >= call.args().size()) {
                     return new Attempt.NotApplicable();
                 }
                 if (!(Core.withoutStanding(call.args().get(operand))
@@ -1525,6 +1553,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private Attempt totalOfApplications(Core.PreservedCall call, int from,
                                                 List<Denotation> made) {
                 LinearForm<NumericTerm> total = LinearForm.constant(ExactRatio.ZERO);
+                List<LinearForm<NumericTerm>> answers = new ArrayList<>();
                 for (Denotation application : made) {
                     Attempt answered = Attempt.ofAPart(AffineForms.outcome(application.value(),
                             application.at(), this));
@@ -1535,10 +1564,18 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             LinearForm<NumericTerm> sum))) {
                         return new Attempt.NotApplicable();
                     }
+                    answers.add(one);
                     total = sum;
                 }
-                tellAnIntTotal(call, total,
-                        IntStream.range(from, told.operations.size()).boxed().toList());
+                if (call.type() == Type.DECIMAL) {
+                    if (!told.addsUpDecimals(made.stream().map(Denotation::value).toList(),
+                            answers, total)) {
+                        told.exact = false;
+                    }
+                } else {
+                    tellAnIntTotal(call, total,
+                            IntStream.range(from, told.operations.size()).boxed().toList());
+                }
                 return new Attempt.Form(total);
             }
 
@@ -1550,7 +1587,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * {@code Int} answer at every element, which a sum holds to the type only at its end.
              * Where every number on the way is shown to lie between nought and the answer
              * ({@link NumbersOnTheWayToATotal}), a run stops only where the answer has no place,
-             * which is told as the one operation it is; otherwise not every operation is told.
+             * which is told as the one operation it is. Otherwise it is told as the walk it is
+             * ({@link #toldTheWalk}), and where it is none told there, not every operation is.
              */
             private LinearForm<NumericTerm> walkAddingOverAContainer(Core node, InputReads at) {
                 InputNumber.SeedAndAdded walk = InputNumber.ofAWalkAdding(node, inputs, at,
@@ -1567,17 +1605,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 LinearForm<NumericTerm> answer = new LinearForm<>(walk.seed(),
                         walk.added().coefs());
                 named.addAll(answer.coefs().keySet());
-                if (NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, answer,
-                        ofTheInput, at)) {
+                SeededWalk seeded = SeededWalk.of(node, closure -> Core.withoutStanding(closure)
+                        instanceof Core.Block block ? block : null);
+                if (Core.withoutStanding(node).type() != Type.DECIMAL
+                        && NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, answer,
+                                ofTheInput, at)) {
                     tellAnIntTotal(node, answer, List.of());
-                } else {
-                    NumericTerm total = addedAsItIs(walk.added());
-                    if (total == null || !onlyAddsTheElement(node, total)) {
-                        told.exact = false;
-                    } else {
-                        tellAnIntTotal(node, answer, List.of());
-                        told.partials.add(total);
-                    }
+                } else if (seeded == null
+                        || !toldTheWalk(node, at, node, seeded.step(), seeded, walk, answer)) {
+                    told.exact = false;
                 }
                 told.readByATerm(node);
                 return answer;
@@ -1622,143 +1658,220 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
-             * Whether {@code node} is a walk from a written number whose step is the answer so
-             * far and what {@code total} adds up of the element, written as that and no more: the
-             * element itself for a total of the elements, the product of fields of it for a
-             * total of products. The reading composes a step as a form, which leaves out the
-             * operations that were written to get to it, and an operation not written is one no
-             * run can stop at.
+             * Whether what a run stops at in working out {@code seeded}, read as {@code walk}
+             * whose answer is {@code answer}, is told; {@code node} works it out by {@code call},
+             * the walk as written, whose step is {@code step}. {@code seeded} is that walk, or a
+             * walk of one field of what it carries. Nothing is told where working {@code node} out
+             * may stop beside the steps ({@link #preparedWithoutAStop}).
+             *
+             * <p>A walk of decimals stops where a step has no room for its digits, which is no
+             * fact of the numbers on the way: it is told as the walk it is
+             * ({@link DecimalAdditiveWalk}) where its step adds or takes away a part of the element
+             * and its seed is written out. The walk joining two maps adds the product of two
+             * numbers of a row, or of one and a nought written at no more places than a row is
+             * built at.
+             *
+             * <p>A walk of whole numbers from a written one stops beside the answer at a running
+             * total. Where each step adds the same written number, every answer so far lies
+             * between the seed and the answer, and the answer is all that is told. Where it adds or
+             * takes away a part of the element and works out nothing else
+             * ({@link AddedOfEachElement}), the running totals are told as such.
              */
-            private static boolean onlyAddsTheElement(Core node, NumericTerm total) {
-                // The walk joining two maps is read only of the one step, which adds the product
-                // as it is written ({@link InputNumber#ofAWalkJoiningTwoMaps}).
-                if (total instanceof NumericTerm.TakenOver over
-                        && over.source() instanceof RunSource.JoinedOccurrences) {
-                    return true;
-                }
-                SeededWalk walk = SeededWalk.of(node, closure -> Core.withoutStanding(closure)
-                        instanceof Core.Block block ? block : null);
-                if (walk == null || !(Core.withoutStanding(walk.seed()) instanceof Core.Int)
-                        || !(Core.withoutStanding(walk.step().body())
-                                instanceof Core.Binary sum) || sum.op() != BinOp.ADD) {
+            private boolean toldTheWalk(Core node, InputReads at, Core call, Core.Block step,
+                                        SeededWalk seeded, InputNumber.SeedAndAdded walk,
+                                        LinearForm<NumericTerm> answer) {
+                if (!preparedWithoutAStop(node, at, step, call)) {
                     return false;
                 }
-                BindingId carried = walk.accumulator().binding();
-                BindingId element = walk.element().binding();
-                return (isRead(sum.left(), carried) && writtenAs(sum.right(), element, total))
-                        || (isRead(sum.right(), carried) && writtenAs(sum.left(), element, total));
-            }
-
-            private static boolean isRead(Core e, BindingId name) {
-                return Core.withoutStanding(e) instanceof Core.Read read
-                        && name.equals(read.binding());
+                NumericTerm total = addedAsItIs(walk.added());
+                AddedOfEachElement each = total == null ? null : joinsTwoMaps(total)
+                        ? AddedOfEachElement.ofTheTotal(total) : addedByTheStep(seeded, total);
+                if (seeded.step().body().type() == Type.DECIMAL) {
+                    BigDecimal seed = aDecimalWrittenOut(seeded.seed());
+                    if (seed == null || each == null) {
+                        return false;
+                    }
+                    told.walksAddingDecimals(answer, seed, asTheRelationNamesIt(total),
+                            each.factors());
+                    return true;
+                }
+                if (!(Core.withoutStanding(seeded.seed()) instanceof Core.Int)) {
+                    return false;
+                }
+                if (addsAWrittenWholeNumber(seeded)) {
+                    tellAnIntTotal(node, answer, List.of());
+                    return true;
+                }
+                if (each != null) {
+                    tellAnIntTotal(node, answer, List.of());
+                    told.partials.add(total);
+                    return true;
+                }
+                return false;
             }
 
             /**
-             * Whether {@code e} is what {@code total} adds up of the element {@code element}, as
-             * it is written: the element, or a product of fields of it.
+             * What {@code node} comes to where it is a field of what a walk carrying a record
+             * answers, read as that field's own walk ({@link SeededWalk#ofTheField}): its seed and
+             * the total of what its step adds ({@link InputNumber#ofAWalkAdding}). Null where it is
+             * no such field.
+             *
+             * <p>A run works out every field at every step, whichever the comparison reads: making
+             * the record, which ends no run where its clauses govern nothing, and each field's
+             * walk, which is one of its own and is told as a walk is ({@link #toldTheWalk}). Where
+             * any of that is not told, not every operation is.
              */
-            private static boolean writtenAs(Core e, BindingId element, NumericTerm total) {
-                return total instanceof NumericTerm.TakenOf ? isRead(e, element)
-                        : multipliesFieldsOf(e, element);
-            }
-
-            /** Whether {@code e} is fields of {@code element} multiplied, and nothing else. */
-            private static boolean multipliesFieldsOf(Core e, BindingId element) {
-                Core here = Core.withoutStanding(e);
-                if (here instanceof Core.Binary product && product.op() == BinOp.MUL
-                        && product.type() == Type.INT) {
-                    return multipliesFieldsOf(product.left(), element)
-                            && multipliesFieldsOf(product.right(), element);
+            private LinearForm<NumericTerm> aFieldOfAWalk(Core node, InputReads at) {
+                Core.FieldAccess access = switch (Core.withoutStanding(node)) {
+                    case Core.FieldAccess one -> one;
+                    case Core.FieldProjection projection -> projection.lastAccess();
+                    default -> null;
+                };
+                Denotation whole = access == null ? null : at.standing(access.target(),
+                        ruleSource.symbols(), ruleSource.newtypes());
+                SeededWalk walk = whole == null ? null : SeededWalk.of(whole.value(), closure ->
+                        Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
+                SeededWalk read = walk == null ? null : walk.ofTheField(access.field());
+                InputNumber.SeedAndAdded field = read == null ? null
+                        : InputNumber.ofAWalkAdding(read, inputs, whole.at(), ruleSource);
+                if (field == null) {
+                    return null;
                 }
-                while (true) {
-                    switch (here) {
-                        case Core.Read read -> {
-                            return element.equals(read.binding());
-                        }
-                        case Core.FieldAccess access -> here = Core.withoutStanding(access.target());
-                        case Core.FieldProjection projection ->
-                                here = Core.withoutStanding(projection.base());
-                        default -> {
-                            return false;
-                        }
+                LinearForm<NumericTerm> answer = new LinearForm<>(field.seed(),
+                        field.added().coefs());
+                if (!(Core.withoutStanding(walk.seed()) instanceof Core.Construct seeded)
+                        || !(Core.withoutStanding(walk.step().body())
+                                instanceof Core.Construct stepped)
+                        || !makingEndsNoRun(seeded) || !makingEndsNoRun(stepped)) {
+                    told.exact = false;
+                    return answer;
+                }
+                for (Core.FieldValue each : stepped.values()) {
+                    SeededWalk other = each.field().equals(access.field()) ? read
+                            : walk.ofTheField(each.field());
+                    InputNumber.SeedAndAdded added = other == read ? field : other == null ? null
+                            : InputNumber.ofAWalkAdding(other, inputs, whole.at(), ruleSource);
+                    if (added == null || !toldTheWalk(node, at, whole.value(), walk.step(), other,
+                            added, other == read ? answer
+                                    : new LinearForm<>(added.seed(), added.added().coefs()))) {
+                        told.exact = false;
                     }
                 }
+                return answer;
+            }
+
+            /** Whether {@code walk}'s step is the answer so far plus a whole number written out. */
+            private boolean addsAWrittenWholeNumber(SeededWalk walk) {
+                List<Core> sum = WrittenOperation.operandsOf(walk.step().body(), BinOp.ADD,
+                        ruleSource.symbols());
+                BindingId carried = walk.accumulator().binding();
+                return sum != null && ((isTheAnswerSoFar(sum.get(0), carried)
+                        && Core.withoutStanding(sum.get(1)) instanceof Core.Int)
+                        || (isTheAnswerSoFar(sum.get(1), carried)
+                                && Core.withoutStanding(sum.get(0)) instanceof Core.Int));
+            }
+
+            private static boolean isTheAnswerSoFar(Core e, BindingId carried) {
+                return Core.withoutStanding(e) instanceof Core.Read read
+                        && carried.equals(read.binding());
             }
 
             /**
-             * The total of a container's elements that {@code added} is, where a walk adds each
-             * element as it stands, or the product of fields of it, and nothing else — or null
-             * where it adds anything beside that. Nothing is then worked out of an element before
-             * it is added, so the one thing a run can stop at besides the answer is a running
-             * total.
+             * What {@code walk} adds of each element where its step adds to the answer so far, or
+             * takes from it, what {@code total} adds up of the element and works out nothing else
+             * ({@link AddedOfEachElement}); null otherwise.
+             */
+            private AddedOfEachElement addedByTheStep(SeededWalk walk, NumericTerm total) {
+                AddedOfEachElement each = AddedOfEachElement.ofTheTotal(total);
+                return walk != null && each != null
+                        && each.equals(AddedOfEachElement.ofTheStep(walk, ruleSource.symbols()))
+                        ? each : null;
+            }
+
+            /**
+             * {@code total} as the form of the comparison names it: the totals of one run over a
+             * type with no ends are read as the one total of what each element comes to
+             * ({@link TotalsOfOneRun#addedUp}), so a total of what is taken away is that total of
+             * what is taken, weighed by minus one. A row holds the terms of that form.
+             */
+            private LinearForm<NumericTerm> asTheRelationNamesIt(NumericTerm total) {
+                return TotalsOfOneRun.addedUp(new LinearForm<>(ExactRatio.ZERO,
+                        Map.of(total, ExactRatio.ONE)), inputs, ruleSource);
+            }
+
+            /** The decimal {@code e} is written as, at the scale it is written, or null where it
+             *  is no decimal written out. */
+            private static BigDecimal aDecimalWrittenOut(Core e) {
+                return switch (Core.withoutStanding(e)) {
+                    case Core.Decimal written -> written.value();
+                    case Core.Neg negated when Core.withoutStanding(negated.operand())
+                            instanceof Core.Decimal written -> written.value().negate();
+                    default -> null;
+                };
+            }
+
+            /** Whether {@code total} is the walk joining two maps, whose step is read where the
+             *  total is ({@link InputNumber#ofAWalkJoiningTwoMaps}) and is asked nothing again. */
+            private static boolean joinsTwoMaps(NumericTerm total) {
+                return total instanceof NumericTerm.TakenOver over
+                        && over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                        && over.source() instanceof RunSource.JoinedOccurrences;
+            }
+
+            /**
+             * The total of a container that {@code added} is, at the weight one, where it adds up
+             * a part of each element written as a path of it or a product of paths, or is the
+             * walk joining two maps ({@link AddedOfEachElement#ofTheTotal}) — or null where it
+             * adds anything beside that.
              */
             private static NumericTerm addedAsItIs(LinearForm<NumericTerm> added) {
                 if (added.coefs().size() != 1 || !added.constant().isZero()) {
                     return null;
                 }
                 Map.Entry<NumericTerm, ExactRatio> only = added.coefs().entrySet().iterator().next();
-                return ExactRatio.ONE.equals(only.getValue()) && isATotalOfProductsOrElements(
-                        only.getKey()) ? only.getKey() : null;
-            }
-
-            /** Whether {@code term} adds up the elements of a container, or one product of fields
-             *  of each element at the weight one. */
-            private static boolean isATotalOfProductsOrElements(NumericTerm term) {
-                return switch (term) {
-                    case NumericTerm.TakenOf taken ->
-                            taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
-                    case NumericTerm.TakenOver over -> aProductOfFieldsPerElement(over);
-                    default -> false;
-                };
-            }
-
-            /** Whether {@code over} adds up, over the elements of a container, one product of at
-             *  least two fields of each at the weight one. */
-            private static boolean aProductOfFieldsPerElement(NumericTerm.TakenOver over) {
-                if (over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
-                        && over.source() instanceof RunSource.JoinedOccurrences) {
-                    return true;
-                }
-                if (!(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
-                        || !(over.source() instanceof RunSource.ComputedOccurrences computed)
-                        || !(computed.computation() instanceof ElementValue.Multilinear product)
-                        || !product.form().constant().isZero()
-                        || product.form().coefs().size() != 1) {
-                    return false;
-                }
-                Map.Entry<ElementValue.Monomial, ExactRatio> only =
-                        product.form().coefs().entrySet().iterator().next();
-                return ExactRatio.ONE.equals(only.getValue()) && only.getKey().rounding() == null
-                        && only.getKey().fields().size() >= 2;
+                return ExactRatio.ONE.equals(only.getValue())
+                        && AddedOfEachElement.ofTheTotal(only.getKey()) != null
+                        ? only.getKey() : null;
             }
 
             /**
-             * Whether {@code node} is the total of a closure's answers over a container, the
-             * closure a product of fields of the element and nothing else, as {@code total} is
-             * read: {@code List.sum(List.map(l -> l.price * l.qty, lines))}.
+             * The closure whose answers {@code node} adds up, where it is the total of what a
+             * closure written at a call makes of each element of a container:
+             * {@code List.sum(List.map(l -> l.price * l.qty, lines))}. Null otherwise.
              */
-            private static boolean sumsProductsOfFields(Core node, NumericTerm total) {
-                if (!aProductOfFieldsPerElement((NumericTerm.TakenOver) total)
-                        || !(Core.withoutStanding(node) instanceof Core.PreservedCall sum)
+            private static Core.Block theClosureOfASum(Core node) {
+                if (!(Core.withoutStanding(node) instanceof Core.PreservedCall sum)
                         || sum.args().size() != 1
                         || !(Core.withoutStanding(sum.args().getFirst())
                                 instanceof Core.PreservedCall map)) {
-                    return false;
+                    return null;
                 }
                 BuiltFrom<DeclaredArgument> built =
                         DefaultBoundOperationFacts.get().buildsItsResultFrom(map.operation());
                 DeclaredArgument mapped = built == null ? null : built.mapsEachElementOf();
                 int over = mapped == null ? -1 : CallArguments.positionOf(mapped, map.operation());
                 if (over < 0 || over >= map.args().size() || map.args().size() != 2) {
-                    return false;
+                    return null;
                 }
-                Core closure = Core.withoutStanding(map.args().get(1 - over));
-                return closure instanceof Core.Block block && block.params().size() == 1
-                        && block.params().getFirst() != null
-                        && block.params().getFirst().binding() != null
-                        && multipliesFieldsOf(block.body(),
-                                block.params().getFirst().binding());
+                return Core.withoutStanding(map.args().get(1 - over)) instanceof Core.Block closure
+                        ? closure : null;
+            }
+
+            /**
+             * Whether working {@code node} out ends no run apart from what a total told of it
+             * answers for: the body of {@code step}, the closure whose every application the total
+             * tells, and {@code total}, the call working the total out, whose own stops the total
+             * tells. Everything else is asked of what a run works out to reach a value
+             * ({@link WorkedOutToReachIt}): the container and the seed as written and what each
+             * name in them was given, a closure applied on the way to the container, and the
+             * calls the total is reached through. Which elements a walk is handed and what it
+             * starts from are read through those, but that says nothing of whether working them
+             * out gets there.
+             */
+            private boolean preparedWithoutAStop(Core node, InputReads at, Core.Block step,
+                                                 Core total) {
+                return reached.besideWhatWasRestated(List.of(step), total)
+                        .endsNoRun(new Denotation(node, at));
             }
 
             /**
@@ -1940,8 +2053,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final Set<UndividedByARelation.IntOperation> toldOnce = new HashSet<>();
         /** The node each of {@link #operations} was told at, by where it is among them. */
         private final List<Core> at = new ArrayList<>();
-        /** The operations of decimals, in the order they were told. */
-        private final List<DecimalOperation> decimals = new ArrayList<>();
+        /** The operations and walks of decimals, in the order they were told. */
+        private final List<DecimalWork> decimals = new ArrayList<>();
         /** Where in {@link #decimals} the operation a form is the result of is, by the form. */
         private final Map<LinearForm<NumericTerm>, Integer> resultOf = new IdentityHashMap<>();
         /** The forms that are a place of the input read as it is, a number a row is built with. */
@@ -2054,7 +2167,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 add(apart.at.get(i), apart.operations.get(i).shifted(ofWholeNumbers));
             }
             int ofDecimals = decimals.size();
-            for (DecimalOperation each : apart.decimals) {
+            for (DecimalWork each : apart.decimals) {
                 decimals.add(each.shifted(ofDecimals));
             }
             apart.resultOf.forEach((form, where) -> resultOf.put(form, where + ofDecimals));
@@ -2211,6 +2324,66 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 decimals.add(told);
             }
             resultOf.put(result, at);
+            return true;
+        }
+
+        /**
+         * Tells a walk adding {@code added} to {@code seed}, a part of each element multiplying
+         * {@code factors} paths of it ({@link DecimalAdditiveWalk}), as what {@code answer} is
+         * worked out by. The walk is worked out of the seed and the input alone.
+         */
+        void walksAddingDecimals(LinearForm<NumericTerm> answer, BigDecimal seed,
+                                 LinearForm<NumericTerm> added, int factors) {
+            DecimalAdditiveWalk told = new DecimalAdditiveWalk(seed, new DecimalOperation.Formed(
+                    new LinkedHashMap<Object, ExactRatio>(added.coefs()), added.constant()),
+                    factors);
+            int at = decimals.indexOf(told);
+            if (at < 0) {
+                at = decimals.size();
+                decimals.add(told);
+            }
+            resultOf.put(answer, at);
+        }
+
+        /**
+         * Tells the total the library works out of {@code answers}, the numbers {@code nodes}
+         * compose to, as what {@code total} is worked out by; false where an answer's scale is not
+         * known, and nothing is told. The library adds the decimals up exactly from nought and
+         * writes the total at the greatest of their scales and nought's, which is the number and
+         * the scale a sum from a written nought adding them one at a time comes to: so it is told
+         * as those sums, worked out after what each answer was worked out of.
+         */
+        boolean addsUpDecimals(List<Core> nodes, List<LinearForm<NumericTerm>> answers,
+                               LinearForm<NumericTerm> total) {
+            List<DecimalOperation.Operand> added = new ArrayList<>();
+            for (int i = 0; i < nodes.size(); i++) {
+                DecimalOperation.Operand each = operandOf(nodes.get(i), answers.get(i));
+                if (each == null) {
+                    return false;
+                }
+                added.add(each);
+            }
+            DecimalOperation.Operand so = new DecimalOperation.Written(BigDecimal.ZERO);
+            Integer last = null;
+            for (DecimalOperation.Operand each : added) {
+                List<Integer> after = new ArrayList<>();
+                for (DecimalOperation.Operand operand : List.of(so, each)) {
+                    if (operand instanceof DecimalOperation.Worked worked) {
+                        after.add(worked.operation());
+                        after.addAll(decimals.get(worked.operation()).after());
+                    }
+                }
+                DecimalOperation sum = new DecimalOperation(BinOp.ADD, List.of(so, each), after);
+                last = decimals.indexOf(sum);
+                if (last < 0) {
+                    last = decimals.size();
+                    decimals.add(sum);
+                }
+                so = new DecimalOperation.Worked(last);
+            }
+            if (last != null) {
+                resultOf.put(total, last);
+            }
             return true;
         }
 

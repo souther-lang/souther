@@ -1072,6 +1072,62 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A total of numbers held at minus one or less is nought for a list of none and every value
+     * from minus one down for a list of one, so it takes every value from nought down, as a total
+     * of numbers held at nought or more takes every value from nought up. Every gross has a total
+     * on either side of it below nought, and none above.
+     */
+    @Test
+    void aTotalOfNumbersBelowNoughtTakesNoughtAsOneAboveItDoes() {
+        String below = "data Neg = Int invariant value <= -1";
+        String body = "gross >= List.sum(List.map(n -> n.value, ns))";
+        assertEquals(Map.of("List.sum(ns[*])", RELATES),
+                leftAt("gross: Int, ns: List<Neg>", below, body, 27));
+        assertEquals(List.of("gross: x < 0", "gross: 0 <= x"),
+                classesAt("gross: Int, ns: List<Neg>", below, body, "gross"));
+    }
+
+    private static final String FIELDS_ADDED ="List.sum(List.map(n -> n.a.value + n.b.value, ns))";
+
+    private static final String THE_FIELDS_ADDED = "List.sum({1·a + 1·b + 0 | ns[*]})";
+
+    /**
+     * A total of two fields of each element takes what one element's fields add to, and nought
+     * for a list of none, once and not once a field. Fields of one or more add to two or more, so
+     * no list comes to one: the total reaches nought and every value from two, and a gross of one
+     * has no total on its far side that the rest are shown to reach. Fields of nought or more add
+     * to every value from nought, and the gross is divided as it is beside a total of one field.
+     */
+    @Test
+    void aTotalOfFieldsTakesNoughtOnceWhereTheListMayHoldNone() {
+        String inputs = "gross: Int, ns: List<N>";
+        String body = "gross >= " + FIELDS_ADDED;
+        String fromOne = "data Pos = Int invariant value >= 1\ndata N = { a: Pos, b: Pos }";
+        assertEquals(Map.of(THE_FIELDS_ADDED, RELATES, "gross", NOT_SHOWN),
+                left(inputs, fromOne, body, atThe(">=", fromOne, inputs, body)));
+        String fromNought = "data Nat = Int invariant value >= 0\ndata N = { a: Nat, b: Nat }";
+        assertEquals(Map.of(THE_FIELDS_ADDED, RELATES),
+                left(inputs, fromNought, body, atThe(">=", fromNought, inputs, body)));
+        assertEquals(List.of("gross: x <= -1", "gross: -1 < x"),
+                classesAt(inputs, fromNought, body, "gross"));
+    }
+
+    /**
+     * Every sum of a value of each field is one element's only where nothing ties the fields to
+     * one another. Two fields held equal add to an even number and nothing else, which the run of
+     * each field says nothing of, so the gross beside such a total is not shown to be reached.
+     */
+    @Test
+    void aTotalOfFieldsIsEverySumOfThemOnlyWhereNoRuleTiesThem() {
+        String inputs = "gross: Int, ns: List<N>";
+        String body = "gross >= " + FIELDS_ADDED;
+        String tied = "data Nat = Int invariant value >= 0\n"
+                + "data N = { a: Nat, b: Nat } invariant a.value == b.value";
+        assertEquals(Map.of(THE_FIELDS_ADDED, RELATES, "gross", NOT_SHOWN),
+                left(inputs, tied, body, atThe(">=", tied, inputs, body)));
+    }
+
+    /**
      * Held at nought or more beside the terms it is compared with, a total of amounts is at nought
      * only where the list is empty or every element is, and there the relation holds whatever the
      * others are. That is a line on a number taken over a run, which is no position: it parts the

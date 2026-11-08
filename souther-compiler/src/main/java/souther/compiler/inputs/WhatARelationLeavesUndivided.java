@@ -237,7 +237,7 @@ public final class WhatARelationLeavesUndivided {
      * a number is not in {@code standing}, no row is shown to stand at a value of it, and the
      * sum is not told. {@code standing} is there exactly where that is what was told.
      */
-    public record Operations(List<IntSum> sums, List<DecimalOperation> decimals, Told told,
+    public record Operations(List<IntSum> sums, List<DecimalWork> decimals, Told told,
                              Map<Object, ExactRatio> standing) {
 
         /** Nothing said of the program. */
@@ -255,7 +255,7 @@ public final class WhatARelationLeavesUndivided {
         }
 
         /** The operations of whole numbers and decimals, over the terms of the relation alone. */
-        public Operations(List<IntSum> sums, List<DecimalOperation> decimals, Told told) {
+        public Operations(List<IntSum> sums, List<DecimalWork> decimals, Told told) {
             this(sums, decimals, told, Map.of());
         }
 

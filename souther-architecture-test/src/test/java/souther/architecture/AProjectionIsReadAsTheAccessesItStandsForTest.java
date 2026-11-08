@@ -616,6 +616,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                         + " as the accesses it stands for, the last of them holding the rest");
         row(out, c + "partition/Pullback", "aFieldOfAWalk", "(" + core + reads + ")L" + c
                 + "numeric/LinearForm;", Reading.ONE_ACCESS, ONE);
+        row(out, c + "partition/AffineReading$1", "aFieldOfAWalk", "(" + core + reads + ")L" + c
+                + "numeric/LinearForm;", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/ComparisonAssessment", "written",
                 "(" + core + ")Ljava/lang/String;", Reading.NAMES,
                 "spells a side of a comparison for a report, a projection as the accesses it"
@@ -739,10 +741,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "L" + c + "inputs/InputReads;Ljava/util/Set;)V", Reading.STRUCTURE,
                 "records each name read whose value is a bound value, going down to its parts: a"
                         + " projection is no name read, and its base is its one part");
-        row(out, c + "partition/AffineReading$1", "multipliesFieldsOf",
+        row(out, c + "partition/AddedOfEachElement", "isAPathInside",
                 "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
-                "asks whether an expression is fields of one name multiplied: a projection's one"
-                        + " part is its base, down to the name");
+                "asks whether an expression is one name or fields of it one inside another: a"
+                        + " projection's one part is its base, down to the name");
         row(out, c + "inputs/InputNumber", "namedIn", "(" + core + "Ljava/util/Map;)V",
                 Reading.STRUCTURE,
                 "records each name a node binds, going down to its parts: a projection binds none"
