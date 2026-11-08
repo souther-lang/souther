@@ -22,7 +22,11 @@ import souther.compiler.types.TypeSymbol;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,9 +54,16 @@ import java.util.function.Function;
  * <p><b>Then the elements are moved to come to it.</b> The elements a sharing draws are the values
  * they were listed at, and a total of them is whatever those come to. Each is moved at every place
  * a total adds up, once for each place to the one number every total of it asks, inside the run of
- * that place its answers hold over — between the numbers that place turns over at — until the
- * elements come to what was fixed ({@link Fixed#spread}). What comes of that is read back against
- * every total fixed, and read again whole before it is offered, as every container is.
+ * that place it answers alike over and the region leaves it, its other numbers held to the runs
+ * they answer alike over and moved with it where a rule ties them to it ({@link Sized#spread}).
+ * Which values reach the number is worked out exactly over those runs, so a total the elements can
+ * come to is one they are moved to.
+ *
+ * <p><b>And asked of the region before it is offered.</b> A container is the region's to admit,
+ * the container of none as much as any: with how many it holds and every number of the whole
+ * standing, the region is asked of each element ({@link Sized#admits}), and what it refuses —
+ * a class, a hole, a rule tying one field of an element to another or to a total — is no
+ * container offered. Read again whole before it is offered, as every container is.
  */
 final class ContainerAsAWhole {
 
@@ -62,6 +73,24 @@ final class ContainerAsAWhole {
 
     private static final int MOST_ELEMENTS =
             CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
+
+    private static final int MOST_RUNS =
+            CompositionBudget.RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO.maximum();
+
+    private static final int MOST_VALUES_MOVED_TO =
+            CompositionBudget.VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED.maximum();
+
+    /** How many more values the elements of one container may be tried moved to, and whether
+     *  the figure left some untried. */
+    private static final class Tries {
+
+        private int left;
+        private boolean cut;
+
+        private Tries(int left) {
+            this.left = left;
+        }
+    }
 
     /**
      * A total the row asks of the container, and the numbers it is tried at.
@@ -110,14 +139,19 @@ final class ContainerAsAWhole {
     /** Whether a statement reads how many the container holds, which then stands beside an
      *  element as the totals do. */
     private final boolean sizeIsRead;
+    /** The orders the numbers inside an element are written on, which an element is asked of the
+     *  region at. */
+    private final Quantities measuring;
 
     private ContainerAsAWhole(TermPath container, List<OneNumber> numbers, List<ATotal> asked,
-                              NumericTerm.FromOnePosition counted, boolean sizeIsRead) {
+                              NumericTerm.FromOnePosition counted, boolean sizeIsRead,
+                              Quantities measuring) {
         this.container = container;
         this.numbers = List.copyOf(numbers);
         this.asked = List.copyOf(asked);
         this.counted = counted;
         this.sizeIsRead = sizeIsRead;
+        this.measuring = measuring;
     }
 
     /** Whether nothing of the container as a whole is fixed, which is every count that reads only
@@ -198,7 +232,7 @@ final class ContainerAsAWhole {
                     ContainersAddingUp.howMany(view, container, within, reading, null), size)));
         }
         return new ContainerAsAWhole(container, new ArrayList<>(out.values()), totals, counted,
-                howManyIsRead);
+                howManyIsRead, measuring);
     }
 
     /**
@@ -226,7 +260,7 @@ final class ContainerAsAWhole {
      * between — all of them inside what the region leaves it. A statement whose turn reads an
      * element as well turns nowhere the total alone says, and adds no place. Nowhere where the
      * region leaves the total nowhere: the container of none is no choice of these, and is looked
-     * at apart from them ({@link CardinalityComposer}).
+     * at apart from them ({@link #ofNone}).
      */
     private static TermRealizations.Tried turningOn(NumericTerm term,
                                                     List<CardinalityComposer.Asked> asked,
@@ -290,8 +324,7 @@ final class ContainerAsAWhole {
      * How many the container may hold: what {@code left} leaves, of the counts the row asks for
      * where it asks ({@code size}), from one up to the most a count composes it with. Nothing where
      * the rules leave no count at all; stopped at that most where they leave more. Not none: the
-     * container of none is looked at apart from every choice of the whole
-     * ({@link CardinalityComposer}).
+     * container of none is looked at apart from every choice of the whole ({@link #ofNone}).
      */
     private static TermRealizations.Tried sizes(DeclaredBounds.CountRange left, NumericSet size) {
         if (left == null || left.empty()) {
@@ -309,48 +342,6 @@ final class ContainerAsAWhole {
                 ? new TermRealizations.Remainder.StoppedAt(
                         CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH)
                 : new TermRealizations.Remainder.Exhausted());
-    }
-
-    /**
-     * Whether the container of none is one the row and the region leave: every total the row asks
-     * holds nought, which is what adding up nothing comes to; and the region leaves how many it
-     * holds at nought and every total of the whole at nought.
-     *
-     * <p>Three answers of the region kept three. Where fixing those is what shows the region
-     * leaves nothing, the rules refuse the container of none and it is no container. Where the
-     * region was shown to leave nothing before anything was fixed, it says nothing of the
-     * container of none — an element held to a number no element can be leaves every row of an
-     * element nothing, and the container of none holds no element — so it is still one, and the
-     * row written of it is read against the rules where every row is. And where neither, it is
-     * one.
-     */
-    boolean admitsNone(SearchRegion within) {
-        for (ATotal each : asked) {
-            if (!each.asked().holds(Count.of(0), each.on())) {
-                return false;
-            }
-        }
-        Map<NumericTerm, Place> none = new LinkedHashMap<>();
-        for (OneNumber one : numbers) {
-            if (one.added() != null) {
-                none.put(one.term(), Count.of(0));
-            }
-        }
-        return leaves(within, none, 0);
-    }
-
-    /**
-     * Whether the region leaves something with {@code fixed} standing and the container holding
-     * {@code held} elements — true where it was shown to leave nothing before either was fixed,
-     * which says nothing of these ({@link #admitsNone}).
-     */
-    private boolean leaves(SearchRegion within, Map<NumericTerm, Place> fixed, int held) {
-        Map<NumericTerm, Place> standing = new LinkedHashMap<>(fixed);
-        if (counted != null) {
-            standing.put(counted, Count.of(held));
-        }
-        return standing.isEmpty() || within.emptiness().isPresent()
-                || within.given(standing).emptiness().isEmpty();
     }
 
     /**
@@ -391,6 +382,30 @@ final class ContainerAsAWhole {
     }
 
     /**
+     * The numbers of the whole the container of none comes to — nought for every total, which is
+     * what adding up nothing comes to, and none held — or null where the row asks a total that
+     * nought is not.
+     *
+     * <p>Apart from {@link #choices}: no element is drawn for it, so no number of the whole is
+     * chosen for one to answer by, and what it comes to is read off it. Whether the region leaves
+     * it is asked as of every container ({@link Sized#admits}).
+     */
+    Fixed ofNone() {
+        for (ATotal each : asked) {
+            if (!each.asked().holds(Count.of(0), each.on())) {
+                return null;
+            }
+        }
+        Map<NumericTerm, Place> fixed = new LinkedHashMap<>();
+        for (OneNumber one : numbers) {
+            if (one.added() != null || sizeIsRead) {
+                fixed.put(one.term(), Count.of(0));
+            }
+        }
+        return new Fixed(fixed, 0);
+    }
+
+    /**
      * The numbers of the container as a whole at one choice of each, and how many elements it
      * holds where that is fixed.
      */
@@ -407,6 +422,11 @@ final class ContainerAsAWhole {
         /** How many the container holds, or null where that is not fixed. */
         Integer many() {
             return many;
+        }
+
+        /** Whether a total is fixed, which the elements are then moved to come to. */
+        boolean movesTheElements() {
+            return numbers.stream().anyMatch(one -> one.added() != null);
         }
 
         /**
@@ -431,12 +451,16 @@ final class ContainerAsAWhole {
         }
 
         /**
-         * Whether the region leaves a container of {@code held} elements coming to these numbers:
-         * where a rule relates a total to how many add up to it, a size it refuses is one no
-         * elements are drawn for.
+         * A container of {@code held} elements coming to these numbers, in {@code within}: the
+         * region with how many it holds and every number fixed standing, which the elements are
+         * moved in and each container is asked of.
          */
-        boolean standsIn(SearchRegion within, int held) {
-            return leaves(within, fixed, held);
+        Sized holding(SearchRegion within, int held) {
+            Map<NumericTerm, Place> standing = new LinkedHashMap<>(fixed);
+            if (counted != null) {
+                standing.put(counted, Count.of(held));
+            }
+            return new Sized(this, standing.isEmpty() ? within : within.given(standing), held);
         }
 
         /**
@@ -492,120 +516,6 @@ final class ContainerAsAWhole {
         }
 
         /**
-         * {@code drawn} with each element moved at every place a total adds up, inside the run of
-         * that place it was listed in, so that the elements come to every total fixed — or null
-         * where they do not.
-         *
-         * <p>Once for each place, to the one number every total of it asks there
-         * ({@link #owedAtEachPlace}): moved once for each total, the second of two totals of one
-         * place would undo the first. And read back before it is handed over, so what comes back
-         * comes to every total fixed or is nothing.
-         *
-         * <p>An element may start from any value it answers alike to, which {@code alike} lists
-         * for it: the values of a group answer every statement the same, and the run one of them
-         * stands in may reach where another's does not. Each starts from one whose run goes
-         * furthest up, and as many as the total needs from one whose run goes furthest down — the
-         * {@code variant}-th of those that go as far, since the values of a group are alike to the
-         * statements and not to the type, which may tie a place no statement reads to the number
-         * moved.
-         *
-         * @param alike   for each element drawn, the values it answers alike to, or null where it
-         *                is to start from where it was drawn
-         * @param variant which of the starts going as far each element takes
-         * @param turns  where each place a total adds up turns over, with every number of the
-         *               whole standing where it is fixed; null at a place where that could not be
-         *               worked out, which leaves the elements where they were listed
-         * @param region what the rules leave each such place, null where they leave it nothing
-         */
-        List<ObservedValue> spread(List<ObservedValue> drawn, List<List<ObservedValue>> alike,
-                                   int variant, Function<TermPath, List<ExactRatio>> turns,
-                                   Function<TermPath, NumericDomain.Bounds> region) {
-            List<ObservedValue> out = new ArrayList<>(drawn);
-            Map<TermPath, Owed> owed = owedAtEachPlace(out.size());
-            if (owed == null) {
-                return null;
-            }
-            // The places already moved, which a start taken at a later place keeps where they
-            // were moved to: a value an element answers alike to is one start, and taken whole at
-            // the second place it would put the first place back where it was listed.
-            List<List<TermPath.Step>> moved = new ArrayList<>();
-            for (Owed one : owed.values()) {
-                List<TermPath.Step> steps = stepsInside(one.place());
-                NumericDomain.Bounds leftByTheRegion = region.apply(one.place());
-                if (steps == null || leftByTheRegion == null) {
-                    return null;
-                }
-                BigInteger target = one.target();
-                List<ExactRatio> where = turns.apply(one.place());
-                WholeNumbersLeft left = WholeNumbersLeft.of(leftByTheRegion);
-                List<List<Start>> startsOf = new ArrayList<>();
-                for (int each = 0; each < out.size(); each++) {
-                    List<Start> starts = new ArrayList<>();
-                    for (ObservedValue listed : alike == null || alike.get(each) == null
-                            ? List.of(out.get(each)) : alike.get(each)) {
-                        ObservedValue start = listed;
-                        for (List<TermPath.Step> before : moved) {
-                            ObservedValue there = valueAt(out.get(each), before);
-                            start = start == null || there == null ? null
-                                    : placedAt(start, before, there);
-                        }
-                        if (start == null) {
-                            continue;
-                        }
-                        BigInteger value = wholeAt(start, steps, one.carrier());
-                        if (value != null) {
-                            starts.add(new Start(start, value, where == null
-                                    ? new BigInteger[] {value, value}
-                                    : runOf(value, where, left)));
-                        }
-                    }
-                    if (starts.isEmpty()) {
-                        return null;
-                    }
-                    startsOf.add(starts);
-                }
-                // Each element from a start whose run reaches furthest up, and then, element by
-                // element while the least they can come to is still above the total, from one
-                // reaching furthest down. Which way the total is owed is asked of the starts
-                // taken: asked of the values drawn, it is a way a start taken after may reverse.
-                Start[] taken = new Start[out.size()];
-                for (int each = 0; each < taken.length; each++) {
-                    taken[each] = furthest(startsOf.get(each), 1, variant);
-                }
-                for (int each = 0; each < taken.length && aboveIt(least(taken), target); each++) {
-                    taken[each] = furthest(startsOf.get(each), -1, variant);
-                }
-                BigInteger[] at = new BigInteger[taken.length];
-                BigInteger delta = target;
-                for (int each = 0; each < taken.length; each++) {
-                    out.set(each, taken[each].value());
-                    at[each] = taken[each].at();
-                    delta = delta.subtract(at[each]);
-                }
-                for (int each = 0; each < at.length && delta.signum() != 0; each++) {
-                    BigInteger edge = taken[each].run()[delta.signum() > 0 ? 1 : 0];
-                    BigInteger reach = edge == null ? delta : edge.subtract(at[each]);
-                    BigInteger step = delta.signum() > 0 ? delta.min(reach) : delta.max(reach);
-                    at[each] = at[each].add(step);
-                    delta = delta.subtract(step);
-                }
-                if (delta.signum() != 0) {
-                    return null;
-                }
-                for (int each = 0; each < at.length; each++) {
-                    ObservedValue shifted = placedAt(out.get(each), steps,
-                            one.carrier().valueOf(Count.of(new BigDecimal(at[each]))));
-                    if (shifted == null) {
-                        return null;
-                    }
-                    out.set(each, shifted);
-                }
-                moved.add(steps);
-            }
-            return comeToEvery(out) ? out : null;
-        }
-
-        /**
          * What the numbers at the place {@code one} adds up are to come to across {@code held}
          * elements for it to stand at {@code total}: the total less what the elements add beside
          * their numbers, over the weight — or null where that is no whole number.
@@ -621,60 +531,596 @@ final class ContainerAsAWhole {
     }
 
     /**
-     * Whether {@code run} reaches further than {@code than} the way {@code owing} says: up where
-     * it is above nought, down where it is below, and neither where nothing is owed. An open end
-     * reaches furthest.
+     * A container of so many elements coming to the numbers of one {@link Fixed}, and the region
+     * with those standing: what the elements are moved in, and what every container of them is
+     * asked of before it is offered.
      */
-    private static boolean further(BigInteger[] run, BigInteger[] than, int owing) {
-        if (owing == 0) {
+    final class Sized {
+
+        private final Fixed fixed;
+        private final SearchRegion region;
+        private final int held;
+        /** What the region answers of each element, kept for the containers that hold it again. */
+        private final Map<ObservedValue, Boolean> admitted = new HashMap<>();
+
+        private Sized(Fixed fixed, SearchRegion region, int held) {
+            this.fixed = fixed;
+            this.region = region;
+            this.held = held;
+        }
+
+        /** Whether the region leaves a container of so many coming to these numbers: where a rule
+         *  relates a total to how many add up to it, a size it refuses is one no elements are
+         *  drawn for. */
+        boolean leavesSomething() {
+            return region.emptiness().isEmpty();
+        }
+
+        /**
+         * Whether {@code elements} are a container the row and the region leave: as many as this
+         * holds, coming to every total fixed, each element one the region leaves with its numbers
+         * standing beside these, and no two alike at a place {@code apart} keeps them apart at.
+         *
+         * <p>The one question every container is offered on, the container of none's included —
+         * what any reading on the way did not see, a class or a hole or a rule tying a number of
+         * an element to another, the region answers here.
+         *
+         * @param parts where inside an element the numbers the region is asked at stand
+         * @param apart the fields the elements are kept apart at, the whole element for a set
+         */
+        boolean admits(List<ObservedValue> elements, List<TermPath> parts,
+                       List<List<String>> apart) {
+            if (elements.size() != held || !fixed.comeToEvery(elements) || !leavesSomething()) {
+                return false;
+            }
+            for (ObservedValue each : elements) {
+                Boolean left = admitted.get(each);
+                if (left == null) {
+                    left = region.given(numbersOf(each, parts, null)).emptiness().isEmpty();
+                    admitted.put(each, left);
+                }
+                if (!left) {
+                    return false;
+                }
+            }
+            return keptApart(elements, apart);
+        }
+
+        /**
+         * {@code drawn} with each element moved at every place a total adds up, so that the
+         * elements come to every total fixed — or null where no values of the runs they are moved
+         * in come to it.
+         *
+         * <p>Once for each place, to the one number every total of it asks there
+         * ({@link Fixed#owedAtEachPlace}): moved once for each total, the second of two totals of
+         * one place would undo the first.
+         *
+         * <p>An element may start from any value it answers alike to, which {@code alike} lists
+         * for it: the values of a group answer every statement the same, and the run one of them
+         * stands in may reach where another's does not. Each start is moved inside the run of the
+         * place it answers alike over and the region leaves it, with its other numbers held to
+         * theirs ({@link #optionOf}). What the elements can come to over all of those is worked
+         * out run by run ({@link #reachOf}), and the elements are moved from the last back to come
+         * to the number owed, each to the value of its run nearest where it started that leaves the
+         * ones before it a number they can come to, and what a rule ties to it moved with it.
+         * {@code variant} is which start an element tries first, since the values of a group are
+         * alike to the statements and not to everything the region knows of them.
+         *
+         * @param alike   for each element drawn, the values it answers alike to, or null where it
+         *                is to start from where it was drawn
+         * @param turns   where each place a total adds up turns over, with every number of the
+         *                whole standing where it is fixed; null at a place where that could not be
+         *                worked out, which leaves the elements where they were listed
+         * @param parts   where inside an element the numbers the region is asked at stand
+         * @param apart   the fields the elements are kept apart at, the whole element for a set,
+         *                which no element is moved to hold what another holds at
+         */
+        List<ObservedValue> spread(List<ObservedValue> drawn, List<List<ObservedValue>> alike,
+                                   int variant, Function<TermPath, List<ExactRatio>> turns,
+                                   List<TermPath> parts, List<List<String>> apart,
+                                   Set<CompositionBudget> refused,
+                                   Set<CompositionRepertoire> unnamed) {
+            List<ObservedValue> out = new ArrayList<>(drawn);
+            Map<TermPath, Owed> owed = fixed.owedAtEachPlace(out.size());
+            if (owed == null) {
+                return null;
+            }
+            // The places already moved, which a start taken at a later place keeps where they
+            // were moved to: a value an element answers alike to is one start, and taken whole at
+            // the second place it would put the first place back where it was listed.
+            List<TermPath> moved = new ArrayList<>();
+            for (Owed one : owed.values()) {
+                List<TermPath.Step> steps = stepsInside(one.place());
+                if (steps == null) {
+                    return null;
+                }
+                List<List<Option>> options = new ArrayList<>();
+                for (int each = 0; each < out.size(); each++) {
+                    List<Option> of = new ArrayList<>();
+                    for (ObservedValue listed : alike == null || alike.get(each) == null
+                            ? List.of(out.get(each)) : alike.get(each)) {
+                        ObservedValue start = listed;
+                        for (TermPath before : moved) {
+                            List<TermPath.Step> there = stepsInside(before);
+                            ObservedValue held = valueAt(out.get(each), there);
+                            start = start == null || held == null ? null
+                                    : placedAt(start, there, held);
+                        }
+                        Option option = start == null ? null
+                                : optionOf(start, one, steps, turns, parts, moved);
+                        if (option != null) {
+                            of.add(option);
+                        }
+                    }
+                    if (of.isEmpty()) {
+                        return null;
+                    }
+                    options.add(of);
+                }
+                List<List<Span>> reach = reachOf(options);
+                if (reach == null) {
+                    refused.add(CompositionBudget.RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO);
+                    return null;
+                }
+                if (!Span.anyHolds(reach.getLast(), one.target())) {
+                    return null;
+                }
+                ObservedValue[] placed = new ObservedValue[out.size()];
+                Tries tries = new Tries(MOST_VALUES_MOVED_TO * (out.size() + 1));
+                // The runs said the number is reached, and only what they do not know of — a
+                // hole, a class, a number the region ties to it left none, an element kept apart
+                // from another — turns every value away: some of the ways were walked, or the
+                // figure stopped the walk.
+                if (!placing(out.size() - 1, one.target(), options, reach, variant, one, turns,
+                        parts, moved, apart, placed, tries)) {
+                    if (tries.cut) {
+                        refused.add(CompositionBudget.VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED);
+                    } else {
+                        unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
+                    }
+                    return null;
+                }
+                out = new ArrayList<>(Arrays.asList(placed));
+                moved.add(one.place());
+            }
+            return out;
+        }
+
+        /**
+         * {@code start} as an element moved at the place {@code one} adds up: the whole number it
+         * holds there, the run it may be moved in, and the region it is moved in.
+         *
+         * <p>Every number of an element answers every statement alike inside the run between the
+         * nearest numbers its place turns over at, so each of them may be moved inside its own run
+         * and the element answers as it did ({@link ContainerAsAWhole#runsOf}). The region is
+         * asked of the element with each held to its run and the rest standing — what it holds
+         * elsewhere, and the places already moved — and the run of the place moved is what the
+         * region leaves it there, inside its own. A number a rule ties to the one moved is moved
+         * with it ({@link #realized}). Null where the region leaves the place nothing so, which is
+         * no start.
+         */
+        private Option optionOf(ObservedValue start, Owed one, List<TermPath.Step> steps,
+                                Function<TermPath, List<ExactRatio>> turns, List<TermPath> parts,
+                                List<TermPath> moved) {
+            BigInteger at = wholeAt(start, steps, one.carrier());
+            if (at == null) {
+                return null;
+            }
+            SearchRegion around = heldToItsRuns(start, one.place(), turns, parts, moved);
+            if (around == null) {
+                return null;
+            }
+            WholeNumbersLeft left = leftAt(around, one.place());
+            if (left == WholeNumbersLeft.NONE) {
+                return null;
+            }
+            List<ExactRatio> where = turns.apply(one.place());
+            // An end no whole number is read at leaves the element where it is.
+            Span run = where == null || left == null ? new Span(at, at) : runOf(at, where, left);
+            return run.isEmpty() ? null : new Option(start, at, run, around);
+        }
+
+        /**
+         * The region with {@code start} in it: each whole number of it but the one at
+         * {@code place} held to the run it answers alike over, and every other number, and the
+         * places already {@code moved}, standing — or null where the region leaves that nothing.
+         */
+        private SearchRegion heldToItsRuns(ObservedValue start, TermPath place,
+                                           Function<TermPath, List<ExactRatio>> turns,
+                                           List<TermPath> parts, List<TermPath> moved) {
+            Map<NumericTerm, Place> standing = new LinkedHashMap<>();
+            Map<NumericTerm.ValueOf, Span> runs = new LinkedHashMap<>();
+            for (TermPath part : parts) {
+                if (part.equals(place)) {
+                    continue;
+                }
+                Span run = moved.contains(part) ? null : runsOf(start, part, turns);
+                if (run == null) {
+                    standing.putAll(numbersOf(start, List.of(part), null));
+                } else {
+                    runs.put(new NumericTerm.ValueOf(part), run);
+                }
+            }
+            SearchRegion out = standing.isEmpty() ? region : region.given(standing);
+            for (Map.Entry<NumericTerm.ValueOf, Span> each : runs.entrySet()) {
+                out = within(out, each.getKey(), each.getValue());
+            }
+            return out.emptiness().isPresent() ? null : out;
+        }
+
+        /**
+         * The start of {@code option} with the number at {@code one}'s place moved to {@code to},
+         * and each other whole number of it held to its run moved, where a rule ties it to that
+         * one, to the value nearest where it was that the region leaves it with the ones before it
+         * standing — or null where the region leaves one of them none.
+         */
+        private ObservedValue realized(Option option, BigInteger to, Owed one,
+                                       Function<TermPath, List<ExactRatio>> turns,
+                                       List<TermPath> parts, List<TermPath> moved, Tries tries) {
+            ObservedValue out = placedAt(option.start(), stepsInside(one.place()),
+                    one.carrier().valueOf(Count.of(new BigDecimal(to))));
+            SearchRegion here = option.around().given(new NumericTerm.ValueOf(one.place()),
+                    Count.of(new BigDecimal(to)));
+            for (TermPath part : parts) {
+                if (out == null) {
+                    return null;
+                }
+                Span run = part.equals(one.place()) || moved.contains(part) ? null
+                        : runsOf(out, part, turns);
+                if (run == null) {
+                    continue;
+                }
+                NumericTerm.ValueOf term = new NumericTerm.ValueOf(part);
+                Carrier carrier = wholeCarrierAt(part);
+                BigInteger was = wholeAt(out, stepsInside(part), carrier);
+                WholeNumbersLeft left = leftAt(here, part);
+                Span span = left == null || left == WholeNumbersLeft.NONE ? null
+                        : run.meeting(new Span(left.least(), left.most()));
+                BigInteger at = span == null || span.isEmpty() ? null
+                        : nearestHeld(span, was, here, term, tries);
+                if (at == null) {
+                    return null;
+                }
+                Place placed = Count.of(new BigDecimal(at));
+                out = placedAt(out, stepsInside(part), carrier.valueOf(placed));
+                here = here.given(term, placed);
+            }
+            return out;
+        }
+
+        /**
+         * Whether the elements up to the {@code each}-th can be moved to come to {@code left},
+         * each placed in {@code placed} where they can: the {@code each}-th to a value of its run
+         * that leaves the rest a number they can come to ({@code reach}), with what a rule ties to
+         * that value moved with it ({@link #realized}) and kept apart from the elements after it
+         * where {@code apart} keeps them apart — the value nearest where it started first, of the
+         * first start from the {@code variant}-th, and the next one where the elements before it
+         * cannot then be placed. No more values are tried in all than {@code tries} holds.
+         */
+        private boolean placing(int each, BigInteger left, List<List<Option>> options,
+                                List<List<Span>> reach, int variant, Owed one,
+                                Function<TermPath, List<ExactRatio>> turns, List<TermPath> parts,
+                                List<TermPath> moved, List<List<String>> apart,
+                                ObservedValue[] placed, Tries tries) {
+            if (each < 0) {
+                return true;
+            }
+            List<ObservedValue> after = Arrays.asList(placed).subList(each + 1, placed.length);
+            List<Option> of = options.get(each);
+            NumericTerm.ValueOf term = new NumericTerm.ValueOf(one.place());
+            for (int start = 0; start < of.size(); start++) {
+                Option option = of.get((start + variant) % of.size());
+                for (BigInteger at : candidates(option, reach.get(each), left, term, tries)) {
+                    if (tries.left-- <= 0) {
+                        tries.cut = true;
+                        return false;
+                    }
+                    ObservedValue element = realized(option, at, one, turns, parts, moved,
+                            tries);
+                    if (element == null || !keptApartFrom(element, after, apart)) {
+                        continue;
+                    }
+                    placed[each] = element;
+                    if (placing(each - 1, left.subtract(at), options, reach, variant, one, turns,
+                            parts, moved, apart, placed, tries)) {
+                        return true;
+                    }
+                }
+            }
             return false;
         }
-        BigInteger end = run[owing > 0 ? 1 : 0];
-        BigInteger other = than[owing > 0 ? 1 : 0];
-        if (other == null) {
-            return false;
+
+        /**
+         * The whole numbers of {@code option}'s run that leave {@code left} less them a number the
+         * elements before it can come to, and that the region neither holds apart nor puts
+         * outside the class of the place: nearest where it started first, and no more of them
+         * than the figure ({@link CompositionBudget#VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED}), which
+         * {@code tries} is told of where it leaves some out.
+         */
+        private static List<BigInteger> candidates(Option option, List<Span> before,
+                                                   BigInteger left, NumericTerm.ValueOf term,
+                                                   Tries tries) {
+            List<BigInteger> out = new ArrayList<>();
+            for (Span reached : before) {
+                Span here = option.run().meeting(reached.subtractedFrom(left));
+                if (here.isEmpty()) {
+                    continue;
+                }
+                BigInteger nearest = here.nearest(option.at());
+                out.addAll(heldNear(here, nearest, option.around(), term, tries).stream()
+                        .filter(at -> !out.contains(at)).toList());
+            }
+            out.sort(Comparator.comparing(at -> at.subtract(option.at()).abs()));
+            if (out.size() > MOST_VALUES_MOVED_TO) {
+                tries.cut = true;
+            }
+            return out.subList(0, Math.min(out.size(), MOST_VALUES_MOVED_TO));
         }
-        return end == null || (owing > 0 ? end.compareTo(other) > 0 : end.compareTo(other) < 0);
+
+        /**
+         * The whole numbers of {@code span} no further from {@code nearest} than the figure that
+         * {@code around} neither holds apart nor puts outside the class of the place, nearest
+         * first; {@code tries} is told where the span holds more past them.
+         */
+        private static List<BigInteger> heldNear(Span span, BigInteger nearest,
+                                                 SearchRegion around, NumericTerm.ValueOf term,
+                                                 Tries tries) {
+            List<BigInteger> out = new ArrayList<>();
+            for (int step = 0; step <= MOST_VALUES_MOVED_TO; step++) {
+                for (BigInteger at : step == 0 ? List.of(nearest) : List.of(
+                        nearest.subtract(BigInteger.valueOf(step)),
+                        nearest.add(BigInteger.valueOf(step)))) {
+                    if (span.holds(at) && heldAt(around, term, at)) {
+                        out.add(at);
+                    }
+                }
+            }
+            BigInteger past = BigInteger.valueOf(MOST_VALUES_MOVED_TO + 1L);
+            if (span.holds(nearest.subtract(past)) || span.holds(nearest.add(past))) {
+                tries.cut = true;
+            }
+            return out;
+        }
+
+        /** Whether {@code around} neither holds {@code term} apart from {@code at} nor puts
+         *  {@code at} outside its class. */
+        private static boolean heldAt(SearchRegion around, NumericTerm.ValueOf term,
+                                      BigInteger at) {
+            return !around.apartAt(term).has(Count.of(new BigDecimal(at)))
+                    && around.classAt(term).holds(at);
+        }
+
+        /** The whole number of {@code span} nearest {@code from} that {@code around} neither
+         *  holds apart nor puts outside the class of the place, looked for no further than the
+         *  figure past the nearest ({@link #heldNear}). */
+        private static BigInteger nearestHeld(Span span, BigInteger from, SearchRegion around,
+                                              NumericTerm.ValueOf term, Tries tries) {
+            List<BigInteger> held = heldNear(span, span.nearest(from), around, term, tries);
+            return held.isEmpty() ? null : held.getFirst();
+        }
+
+        /**
+         * What the first so many of {@code options} can come to, for each count of them from none
+         * on, as runs of whole numbers apart from one another — or null where the runs kept would
+         * be more than the figure.
+         */
+        private static List<List<Span>> reachOf(List<List<Option>> options) {
+            List<List<Span>> out = new ArrayList<>();
+            out.add(List.of(new Span(BigInteger.ZERO, BigInteger.ZERO)));
+            for (List<Option> each : options) {
+                List<Span> next = new ArrayList<>();
+                for (Span had : out.getLast()) {
+                    for (Option option : each) {
+                        next.add(had.plus(option.run()));
+                    }
+                }
+                List<Span> joined = Span.joined(next);
+                if (joined.size() > MOST_RUNS) {
+                    return null;
+                }
+                out.add(joined);
+            }
+            return out;
+        }
     }
 
     /** What the numbers at {@code place}, written on {@code carrier}, are to come to across the
      *  elements. */
     private record Owed(TermPath place, Carrier carrier, BigInteger target) {}
 
-    /** A value an element may start from, the whole number it holds where it is moved, and the
-     *  run it may be moved inside. */
-    private record Start(ObservedValue value, BigInteger at, BigInteger[] run) {}
+    /**
+     * A value an element may start from, the whole number it holds where it is moved, the run it
+     * may be moved in, and the region with its other numbers standing, which says where inside
+     * the run it is held apart or of another class.
+     */
+    private record Option(ObservedValue start, BigInteger at, Span run, SearchRegion around) {}
 
-    /** The {@code variant}-th of the starts whose run reaches furthest {@code way}. */
-    private static Start furthest(List<Start> starts, int way, int variant) {
-        List<Start> out = new ArrayList<>();
-        for (Start each : starts) {
-            if (out.isEmpty() || further(each.run(), out.getFirst().run(), way)) {
-                out.clear();
-                out.add(each);
-            } else if (!further(out.getFirst().run(), each.run(), way)) {
-                out.add(each);
-            }
+    /**
+     * The whole numbers from {@code low} to {@code high}, either end open where it is null: empty
+     * where both are numbers and the first is past the second.
+     */
+    private record Span(BigInteger low, BigInteger high) {
+
+        /** Lowest first, an open low end before every other. */
+        private static final Comparator<Span> BY_LOW = (one, other) -> one.low == null
+                ? (other.low == null ? 0 : -1)
+                : other.low == null ? 1 : one.low.compareTo(other.low);
+
+        boolean isEmpty() {
+            return low != null && high != null && low.compareTo(high) > 0;
         }
-        return out.get(variant % out.size());
+
+        boolean holds(BigInteger at) {
+            return (low == null || low.compareTo(at) <= 0) && (high == null || high.compareTo(at) >= 0);
+        }
+
+        /** Every sum of a number of this and a number of {@code other}. */
+        Span plus(Span other) {
+            return new Span(low == null || other.low == null ? null : low.add(other.low),
+                    high == null || other.high == null ? null : high.add(other.high));
+        }
+
+        /** The numbers {@code from} less a number of this comes to. */
+        Span subtractedFrom(BigInteger from) {
+            return new Span(high == null ? null : from.subtract(high),
+                    low == null ? null : from.subtract(low));
+        }
+
+        /** The numbers of both. */
+        Span meeting(Span other) {
+            BigInteger least = low == null ? other.low
+                    : other.low == null ? low : low.max(other.low);
+            BigInteger most = high == null ? other.high
+                    : other.high == null ? high : high.min(other.high);
+            return new Span(least, most);
+        }
+
+        /** The number of this nearest {@code at}; not asked of an empty one. */
+        BigInteger nearest(BigInteger at) {
+            if (low != null && at.compareTo(low) < 0) {
+                return low;
+            }
+            return high != null && at.compareTo(high) > 0 ? high : at;
+        }
+
+        /** Whether some span of {@code spans} holds {@code at}. */
+        static boolean anyHolds(List<Span> spans, BigInteger at) {
+            return spans.stream().anyMatch(each -> each.holds(at));
+        }
+
+        /** {@code spans} less the empty ones, those that meet or touch put together, lowest
+         *  first. */
+        static List<Span> joined(List<Span> spans) {
+            List<Span> sorted = new ArrayList<>(spans.stream().filter(each -> !each.isEmpty())
+                    .toList());
+            sorted.sort(BY_LOW);
+            List<Span> out = new ArrayList<>();
+            for (Span each : sorted) {
+                Span last = out.isEmpty() ? null : out.getLast();
+                if (last != null && (last.high == null || each.low == null
+                        || each.low.compareTo(last.high.add(BigInteger.ONE)) <= 0)) {
+                    out.set(out.size() - 1, new Span(last.low, last.high == null
+                            || each.high == null ? null : last.high.max(each.high)));
+                } else {
+                    out.add(each);
+                }
+            }
+            return out;
+        }
     }
 
-    /** The least the elements from {@code taken} can come to, or null where some run is open
-     *  below. */
-    private static BigInteger least(Start[] taken) {
-        BigInteger out = BigInteger.ZERO;
-        for (Start each : taken) {
-            if (each.run()[0] == null) {
-                return null;
+    /**
+     * The numbers {@code element} holds at {@code parts}, each as the place the region names it
+     * at, but the one at {@code except} where that is not null. A part the element holds nothing
+     * at, or holds no place of its order at, is left unsaid.
+     */
+    private Map<NumericTerm, Place> numbersOf(ObservedValue element, List<TermPath> parts,
+                                              TermPath except) {
+        Map<NumericTerm, Place> out = new LinkedHashMap<>();
+        for (TermPath part : parts) {
+            List<TermPath.Step> steps = part.equals(except) ? null : stepsInside(part);
+            ObservedValue value = steps == null ? null : valueAt(element, steps);
+            NumericTerm.ValueOf term = new NumericTerm.ValueOf(part);
+            TermOrders orders = value == null ? null : measuring.ordersOf(term);
+            Carrier carrier = orders == null ? null : orders.observed();
+            Place place = carrier == null ? null : carrier.placeOf(value);
+            if (place != null) {
+                out.put(term, place);
             }
-            out = out.add(each.run()[0]);
         }
         return out;
     }
 
-    /** Whether {@code least} is above {@code target}; an open end is no end above it. */
-    private static boolean aboveIt(BigInteger least, BigInteger target) {
-        return least != null && least.compareTo(target) > 0;
+    /**
+     * The whole numbers the number {@code element} holds at {@code part} answers every statement
+     * alike over — between the nearest numbers {@code turns} says the place turns over at — or
+     * null where it is no whole number, or where it turns could not be worked out, which leaves it
+     * where it stands.
+     */
+    private Span runsOf(ObservedValue element, TermPath part,
+                        Function<TermPath, List<ExactRatio>> turns) {
+        Carrier carrier = wholeCarrierAt(part);
+        List<TermPath.Step> steps = carrier == null ? null : stepsInside(part);
+        BigInteger at = steps == null ? null : wholeAt(element, steps, carrier);
+        List<ExactRatio> where = at == null ? null : turns.apply(part);
+        return where == null ? null : runOf(at, where, WholeNumbersLeft.EVERY);
+    }
+
+    /** The order the numbers at {@code part} are written on, where it counts in whole numbers. */
+    private Carrier wholeCarrierAt(TermPath part) {
+        TermOrders orders = measuring.ordersOf(new NumericTerm.ValueOf(part));
+        Carrier carrier = orders == null ? null : orders.observed();
+        return carrier != null && carrier.countsInWholeNumbers() ? carrier : null;
+    }
+
+    /** {@code region} with {@code term} held inside {@code run}; an end the region cannot carry is
+     *  left open, which leaves it wider and never narrower than what holds. */
+    private static SearchRegion within(SearchRegion region, NumericTerm.ValueOf term, Span run) {
+        if (run.low() != null && run.low().equals(run.high())) {
+            return region.given(term, Count.of(new BigDecimal(run.low())));
+        }
+        SearchRegion out = region;
+        if (run.low() != null && out.assuming(new LinearForm<>(ExactRatio.of(
+                        run.low().negate()), Map.of(term, ExactRatio.ONE)), Rel.GE)
+                instanceof SearchRegion.Assumption.Taken(SearchRegion taken)) {
+            out = taken;
+        }
+        if (run.high() != null && out.assuming(new LinearForm<>(ExactRatio.of(
+                        run.high().negate()), Map.of(term, ExactRatio.ONE)), Rel.LE)
+                instanceof SearchRegion.Assumption.Taken(SearchRegion taken)) {
+            out = taken;
+        }
+        return out;
+    }
+
+    /** The whole numbers {@code region} leaves the number at {@code place}: every one where it
+     *  says nothing, {@link WholeNumbersLeft#NONE} where it leaves nothing, and null where an end
+     *  of what it leaves is no number. */
+    private static WholeNumbersLeft leftAt(SearchRegion region, TermPath place) {
+        return switch (region.projectionOf(new NumericTerm.ValueOf(place))) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) ->
+                    bounds == null ? WholeNumbersLeft.EVERY : WholeNumbersLeft.of(bounds);
+            case NumericDomain.FormProjection.NothingIsLeft _ -> WholeNumbersLeft.NONE;
+            case null -> WholeNumbersLeft.EVERY;
+        };
+    }
+
+    /** Whether no two of {@code elements} hold one value at any of the fields of {@code apart}. */
+    private static boolean keptApart(List<ObservedValue> elements, List<List<String>> apart) {
+        for (List<String> fields : apart) {
+            Set<ObservedValue> seen = new HashSet<>();
+            for (ObservedValue each : elements) {
+                ObservedValue at = atFields(each, fields);
+                if (at != null && !seen.add(at)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code element} holds what none of {@code others} holds at each of the fields of
+     *  {@code apart}. */
+    private static boolean keptApartFrom(ObservedValue element, List<ObservedValue> others,
+                                         List<List<String>> apart) {
+        for (List<String> fields : apart) {
+            ObservedValue at = atFields(element, fields);
+            for (ObservedValue other : others) {
+                if (at != null && at.equals(atFields(other, fields))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** What {@code element} holds at {@code fields}, or null where it holds nothing there. */
+    private static ObservedValue atFields(ObservedValue element, List<String> fields) {
+        ObservedValue at = element;
+        for (String field : fields) {
+            at = at instanceof ObservedValue.Constructed record ? record.field(field) : null;
+        }
+        return at;
     }
 
     /** The steps from an element of the container to {@code place}, or null where it is not
@@ -697,17 +1143,16 @@ final class ContainerAsAWhole {
     /**
      * The whole numbers {@code at} can be moved to and still answer as it does: between the
      * nearest number its place turns over at on either side, or at that number where it stands on
-     * one, and inside what the rules leave the place. An end that is null is open.
+     * one, and inside {@code left}.
      */
-    private static BigInteger[] runOf(BigInteger at, List<ExactRatio> turns,
-                                      WholeNumbersLeft left) {
+    private static Span runOf(BigInteger at, List<ExactRatio> turns, WholeNumbersLeft left) {
         ExactRatio here = ExactRatio.of(new BigDecimal(at));
         BigInteger low = left.least();
         BigInteger high = left.most();
         for (ExactRatio turn : turns) {
             int side = turn.compareTo(here);
             if (side == 0) {
-                return new BigInteger[] {at, at};
+                return new Span(at, at);
             }
             if (side < 0 && turn.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger down)) {
                 BigInteger above = down.add(BigInteger.ONE);
@@ -718,7 +1163,7 @@ final class ContainerAsAWhole {
                 high = high == null || below.compareTo(high) < 0 ? below : high;
             }
         }
-        return new BigInteger[] {low, high};
+        return new Span(low, high);
     }
 
     /** What {@code element} holds {@code steps} inside it, or null where it holds nothing there. */

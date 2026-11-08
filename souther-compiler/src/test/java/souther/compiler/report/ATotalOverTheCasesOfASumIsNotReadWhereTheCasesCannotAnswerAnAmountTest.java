@@ -19,8 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The control is the model of {@link ATotalOverTheCasesOfASumIsReadWhereTheCaseAnswersAnAmountTest}:
  * both cases answer a {@code Yen}, the list may hold one, and the numbers of the input are read as
- * related to the total. Each test changes one thing that takes a value the total would otherwise
- * be shown to reach, and that reading must go.
+ * related to the total. A case no value can be written for takes away every value the total would
+ * be shown to reach, and the reading goes; a list that can only be empty leaves the total the one
+ * value a list of none comes to, and every point of the comparison stands.
  */
 class ATotalOverTheCasesOfASumIsNotReadWhereTheCasesCannotAnswerAnAmountTest {
 
@@ -103,11 +104,17 @@ class ATotalOverTheCasesOfASumIsNotReadWhereTheCasesCannotAnswerAnAmountTest {
                 .map(each -> each.diagnostic().code().toString()).toList());
     }
 
-    /** A list that can only be empty has no element to answer an amount, and the total is nought. */
+    /**
+     * A list that can only be empty has no element to answer an amount, and the total is nought:
+     * the list of none comes to it, so a row stands at each point of the comparison — the limit at
+     * nought, below it, above it — and none is refused for want of a total.
+     */
     @Test
-    void aListThatCanOnlyBeEmptyIsNoRunOfAnAmount() {
+    void aListThatCanOnlyBeEmptyComesToNoughtAtEveryPointOfTheComparison() {
         String report = report(model("Yen", "", "List.length(value) <= 0"));
 
-        assertFalse(report.contains(RELATES), report);
+        assertFalse(report.contains("no row can stand at the"), report);
+        assertTrue(report.contains("undecided whether a row is at the ON point (comparison"),
+                report);
     }
 }

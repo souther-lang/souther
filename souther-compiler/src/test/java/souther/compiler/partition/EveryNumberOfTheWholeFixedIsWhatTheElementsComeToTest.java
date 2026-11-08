@@ -17,6 +17,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RunSource;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
@@ -25,7 +26,6 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
@@ -38,11 +38,11 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -110,6 +110,17 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
         return whole;
     }
 
+    /** {@code drawn} moved to come to what {@code fixed} fixes, in {@code region}, each element of
+     *  {@code xs} a whole number: the turns {@code turns} part the runs. */
+    private static List<ObservedValue> spread(Read read, ContainerAsAWhole.Fixed fixed,
+                                              SearchRegion region, List<ObservedValue> drawn,
+                                              List<List<ObservedValue>> alike, int variant,
+                                              List<ExactRatio> turns) {
+        return fixed.holding(region, drawn.size()).spread(drawn, alike, variant, _ -> turns,
+                List.of(read.xs().element()), List.of(), EnumSet.noneOf(CompositionBudget.class),
+                EnumSet.noneOf(CompositionRepertoire.class));
+    }
+
     private static long totalOf(List<ObservedValue> values, long eachAdds) {
         long out = 0;
         for (ObservedValue each : values) {
@@ -150,8 +161,8 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
             long second = Count.number(at.get(read.totalOfEachAndOne())).at().longValueExact();
             boolean agree = second == first + 2;
             assertEquals(agree, fixed.comesTogetherIn(2), chosen::toString);
-            List<ObservedValue> values = fixed.spread(drawn, null, 0, _ -> List.of(),
-                    _ -> NumericDomain.Bounds.OPEN);
+            List<ObservedValue> values = spread(read, fixed, read.measuring().region(), drawn,
+                    null, 0, List.of());
             if (agree) {
                 assertNotNull(values, chosen::toString);
                 assertEquals(first, totalOf(values, 0), "the first total, read back");
@@ -173,8 +184,57 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
         Read read = read();
         ContainerAsAWhole whole = whole(read, List.of(asked(read, read.total(), 5)), 2);
         ContainerAsAWhole.Fixed fixed = whole.at(whole.choices().each().getFirst());
-        assertNull(fixed.spread(List.of(new ObservedValue.Integer(0),
-                        new ObservedValue.Integer(0)), null, 0, _ -> List.of(), _ -> null));
+        NumericTerm.ValueOf number = new NumericTerm.ValueOf(read.xs().element());
+        SearchRegion nothing = read.measuring().region()
+                .assuming(new LinearForm<>(ExactRatio.of(-10), Map.of(number, ExactRatio.ONE)),
+                        Rel.GT).taken()
+                .assuming(LinearForm.atom(number), Rel.LT).taken();
+        assertNull(spread(read, fixed, nothing, List.of(new ObservedValue.Integer(0),
+                new ObservedValue.Integer(0)), null, 0, List.of()));
+    }
+
+    /**
+     * A total the elements reach only from a start between the furthest ones is reached from it:
+     * one element coming to five, alike to the statements at nought, five and ten, each a place
+     * they turn at, is five — whichever of the three it tries first.
+     */
+    @Test
+    void aTotalOnlyAStartBetweenTheFurthestReachesIsReachedFromIt() {
+        Read read = read();
+        ContainerAsAWhole whole = whole(read, List.of(asked(read, read.total(), 5)), 1);
+        ContainerAsAWhole.Fixed fixed = whole.at(whole.choices().each().getFirst());
+        List<ObservedValue> alike = List.of(new ObservedValue.Integer(0),
+                new ObservedValue.Integer(5), new ObservedValue.Integer(10));
+        List<ExactRatio> turns = List.of(ExactRatio.ZERO, ExactRatio.of(5), ExactRatio.of(10));
+        for (int variant = 0; variant < alike.size(); variant++) {
+            assertEquals(List.of(new ObservedValue.Integer(5)), spread(read, fixed,
+                    read.measuring().region(), List.of(alike.get(variant)), List.of(alike),
+                    variant, turns), "tried first from " + alike.get(variant));
+        }
+    }
+
+    /**
+     * Elements kept apart are moved to come to a total still apart: two numbers drawn at minus
+     * one and nought, coming to nought, are not both moved to nought — the last moved where it
+     * started leaves the first nothing but the value it holds, and is moved on.
+     */
+    @Test
+    void elementsKeptApartAreMovedToComeToATotalStillApart() {
+        Read read = read();
+        ContainerAsAWhole whole = whole(read, List.of(asked(read, read.total(), 0)), 2);
+        ContainerAsAWhole.Fixed fixed = whole.at(whole.choices().each().getFirst());
+        List<ObservedValue> drawn = List.of(new ObservedValue.Integer(-1),
+                new ObservedValue.Integer(0));
+        List<ObservedValue> together = spread(read, fixed, read.measuring().region(), drawn,
+                null, 0, List.of());
+        assertNotNull(together, "the control: alike, they come to nought");
+        List<ObservedValue> apart = fixed.holding(read.measuring().region(), 2).spread(drawn, null,
+                0, _ -> List.of(), List.of(read.xs().element()), List.of(List.of()),
+                EnumSet.noneOf(CompositionBudget.class),
+                EnumSet.noneOf(CompositionRepertoire.class));
+        assertNotNull(apart, "two numbers apart come to nought");
+        assertEquals(0, totalOf(apart, 0), "what they come to, read back: " + apart);
+        assertTrue(!apart.get(0).equals(apart.get(1)), "and they are apart: " + apart);
     }
 
     /**
@@ -201,11 +261,12 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
         assertInstanceOf(AStatementAtARow.Answer.Fails.class, atOrAboveHalf.at(
                         CardinalityComposer.withNumbersBeside(alone, fixed.beside(Map.of()))),
                 "read with the total fixed at a hundred");
-        assertFalse(whole.admitsNone(read.measuring().region()),
-                "and the container of none does not come to a hundred");
-        assertTrue(whole(read, List.of(asked(read, read.total(), 0)), 1)
-                        .admitsNone(read.measuring().region()),
-                "where nought is asked, it does");
+        assertNull(whole.ofNone(), "and the container of none does not come to a hundred");
+        ContainerAsAWhole.Fixed none = whole(read, List.of(asked(read, read.total(), 0)), 1)
+                .ofNone();
+        assertNotNull(none, "where nought is asked, it does");
+        assertTrue(none.holding(read.measuring().region(), 0).admits(List.of(), List.of(),
+                List.of()), "and the region leaves it");
     }
 
     /**
@@ -250,9 +311,12 @@ class EveryNumberOfTheWholeFixedIsWhatTheElementsComeToTest {
         ObservedValue nought = element(0, 0);
         ObservedValue five = element(5, 0);
         // the first starts from nought or five, alike to the statements; the second from one
-        List<ObservedValue> values = fixed.spread(List.of(nought, element(1, 0)),
+        List<ObservedValue> values = fixed.holding(measuring.region(), 2).spread(
+                List.of(nought, element(1, 0)),
                 List.of(List.of(nought, five), List.of(element(1, 0))), 0, _ -> List.of(),
-                _ -> NumericDomain.Bounds.OPEN);
+                List.of(ys.element().then("a"), ys.element().then("q")), List.of(),
+                EnumSet.noneOf(CompositionBudget.class),
+                EnumSet.noneOf(CompositionRepertoire.class));
         assertNotNull(values, "two elements come to nought at a and two at q");
         long a = 0;
         long q = 0;

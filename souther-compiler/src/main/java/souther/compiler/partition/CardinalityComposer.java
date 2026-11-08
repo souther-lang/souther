@@ -557,11 +557,11 @@ final class CardinalityComposer {
                     + " come to it");
         }
         // The container of none needs no element and no choice of those numbers — what it comes
-        // to is read off it — so it is looked at first and apart from both, where the row and the
-        // region leave it ({@link ContainerAsAWhole#admitsNone}): where the region leaves an
-        // element nothing, it is still a container.
-        if ((size == null || size.holds(Count.of(0), Carrier.WHOLE))
-                && whole.admitsNone(within)) {
+        // to is read off it — so it is looked at first and apart from both, and offered where the
+        // row and the region leave it, as every container is ({@link ContainerAsAWhole#ofNone}).
+        ContainerAsAWhole.Fixed ofNone = whole.ofNone();
+        if ((size == null || size.holds(Count.of(0), Carrier.WHOLE)) && ofNone != null
+                && ofNone.holding(within, 0).admits(List.of(), List.of(), List.of())) {
             writtenIfAsked(List.of(), standing.read(withNumbersBeside(
                             ElementValues.holding(container, reading, sourceType, List.of()),
                             outside)),
@@ -574,23 +574,32 @@ final class CardinalityComposer {
         // the choices not tried are no more than the ones tried, and what stopped them is nothing.
         boolean anElementCanBe = false;
         for (List<Place> chosen : choices.each()) {
-            ContainerAsAWhole.Fixed fixed = whole.isEmpty() ? null : whole.at(chosen);
-            Map<NumericTerm, Place> beside = fixed == null ? outside : fixed.beside(outside);
+            ContainerAsAWhole.Fixed fixed = whole.at(chosen);
+            Map<NumericTerm, Place> beside = fixed.beside(outside);
+            // Where inside an element the numbers are that values are listed at, which is where
+            // an element is asked of the region at ({@link ContainerAsAWhole.Sized#admits}).
+            Set<TermPath> listedAt = new LinkedHashSet<>();
             // Where the different values at a place are counted, the values that place is chosen
             // at are as many as a container has elements, and the elements are listed holding one
             // of them there at a time: which value a group is under is apart from what it holds
             // ({@link UnderEachValue}), and listed against every value of the other parts, those
             // values would fill the listing in place of the others'.
-            BiFunction<TermPath, TypeView, List<ObservedValue>> numbers = (at, part) ->
-                    numbersAt(at, OfTheType.of(part, reading), asked, apartAt, measuring, within,
-                            beside, keptApartByItsRules ? MOST_ELEMENTS : 1, unheld, unnamed,
-                            reading.today());
+            BiFunction<TermPath, TypeView, List<ObservedValue>> numbers = (at, part) -> {
+                listedAt.add(at);
+                return numbersAt(at, OfTheType.of(part, reading), asked, apartAt, measuring,
+                        within, beside, keptApartByItsRules ? MOST_ELEMENTS : 1, unheld, unnamed,
+                        reading.today());
+            };
             ListedByValue byValue = listedByValue(container, holding.element(), reading, apartAt,
-                    numbers, (at, part) -> numbersAt(at, OfTheType.manyOf(part, reading), asked,
-                            apartAt, measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
-                            reading.today()));
+                    numbers, (at, part) -> {
+                        listedAt.add(at);
+                        return numbersAt(at, OfTheType.manyOf(part, reading), asked, apartAt,
+                                measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
+                                reading.today());
+                    });
+            List<TermPath> parts = List.copyOf(listedAt);
             if (byValue == null || (apartAt != null && byValue.values().isEmpty())) {
-                if (fixed == null && built.isEmpty()) {
+                if (whole.isEmpty() && built.isEmpty()) {
                     return byValue == null
                             ? notChosen("an element of `" + container + "` has a part whose"
                                     + " values are neither one of so many nor numbers the"
@@ -614,9 +623,8 @@ final class CardinalityComposer {
             // What a group of elements answers is read with the numbers of the whole standing
             // where they are fixed ({@link ContainerAsAWhole.Fixed#beside}): what it answers in
             // any container coming to them, and not what the group alone comes to.
-            Function<List<ObservedValue>, BorderQuantity.Observation> readingOf = fixed == null
-                    ? holdingThem
-                    : group -> standing.read(withNumbersBeside(
+            Function<List<ObservedValue>, BorderQuantity.Observation> readingOf =
+                    group -> standing.read(withNumbersBeside(
                             ofTheElement.holding(sourceType, group), beside));
             // Where the different values at a place are counted, what is shared out is the
             // elements holding one value there together, each group with a value of its own: how
@@ -676,8 +684,12 @@ final class CardinalityComposer {
                 // Nor where the totals fixed ask two things of one place for so many elements, or
                 // the region leaves so many nothing coming to them: no elements meet both, which
                 // is said before any is drawn.
-                if (fixed != null && ((fixed.many() != null && elements != fixed.many())
-                        || !fixed.comesTogetherIn(elements) || !fixed.standsIn(within, elements))) {
+                if ((fixed.many() != null && elements != fixed.many())
+                        || !fixed.comesTogetherIn(elements)) {
+                    continue;
+                }
+                ContainerAsAWhole.Sized sized = fixed.holding(within, elements);
+                if (!sized.leavesSomething()) {
                     continue;
                 }
                 boolean walkedThem = sharing.each(elements, share -> {
@@ -690,30 +702,41 @@ final class CardinalityComposer {
                         return true;
                     }
                     // And moved to come to every total fixed, inside the runs they answer over,
-                    // from each way of starting them that reaches as far: the values of a group
-                    // are alike to the statements and not to the type, which may tie a place no
-                    // statement reads to the number moved, so a container of each way is offered
-                    // and the rows that are run say which stand.
-                    List<List<ObservedValue>> starts = fixed == null ? null : alike.apply(share);
+                    // from each start they answer alike to: the values of a group are alike to
+                    // the statements and not to everything the region knows of them, so a
+                    // container from each start an element tries first is asked of the region,
+                    // and offered where it leaves it.
+                    List<List<ObservedValue>> starts =
+                            fixed.movesTheElements() ? alike.apply(share) : null;
                     int ways = 1;
                     for (List<ObservedValue> each : starts == null ? List.<List<ObservedValue>>of()
                             : starts) {
                         ways = Math.max(ways, each.size());
                     }
-                    if (ways > 1) {
-                        unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
-                    }
-                    for (int variant = 0; variant < Math.min(ways, MOST_OFFERED)
+                    Set<List<ObservedValue>> offered = new HashSet<>();
+                    boolean turnedAway = false;
+                    int variant = 0;
+                    for (; variant < Math.min(ways, MOST_OFFERED)
                             && built.size() < MOST_OFFERED; variant++) {
-                        List<ObservedValue> values = fixed == null ? drawn
-                                : fixed.spread(drawn, starts, variant,
-                                        place -> turnsOf(place, asked, beside),
-                                        place -> runOf(place, within));
-                        if (values != null) {
+                        List<ObservedValue> values = !fixed.movesTheElements() ? drawn
+                                : sized.spread(drawn, starts, variant,
+                                        place -> turnsOf(place, asked, beside), parts,
+                                        apartByItsRules, refused, unnamed);
+                        if (values == null || !offered.add(values)) {
+                            continue;
+                        }
+                        if (sized.admits(values, parts, apartByItsRules)) {
                             writtenIfAsked(values, holdingThem.apply(values), asked, container,
                                     sharing.holdsTogether(), together, standing, built, refused,
                                     unnamed, unheld);
+                        } else {
+                            turnedAway = true;
                         }
+                    }
+                    // A container the region turned away from one start, where some starts were
+                    // never tried first, is one of the ways not walked.
+                    if (turnedAway && variant < ways) {
+                        unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
                     }
                     return true;
                 });
@@ -814,20 +837,6 @@ final class CardinalityComposer {
             out.addAll(where);
         }
         return out;
-    }
-
-    /**
-     * What the region leaves the number at {@code place}: every number where it says nothing, and
-     * null where it leaves nothing — which is no run to move an element inside, and not every
-     * number.
-     */
-    private static NumericDomain.Bounds runOf(TermPath place, SearchRegion within) {
-        return switch (within.projectionOf(new NumericTerm.ValueOf(place))) {
-            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
-                    held == null ? NumericDomain.Bounds.OPEN : held;
-            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
-            case null -> NumericDomain.Bounds.OPEN;
-        };
     }
 
     /**
