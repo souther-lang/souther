@@ -7005,7 +7005,7 @@ Emitted when a row's evaluation reaches an `+unreachable+` (<<unreachable>>). Th
 
 [,text]
 ----
-No row expects `Waiting`, so nothing shows that `submit` ever returns it.
+No example row expects `Waiting`, so the examples do not check whether `submit` returns it.
 Hint: Write a row whose expected value is a `Waiting`, or remove the case from the
 signature.
 ----
@@ -7017,7 +7017,7 @@ A warning, off unless the build asks for it (<<example-adequacy>>). Emitted at t
 
 [,text]
 ----
-No row passes `Overseas` to `submit` as input #1, so that case is never tried.
+No row passes `Overseas` to `submit` as input #1, so the examples never try that case.
 ----
 
 The same warning for an input position that is a sum. Covering every case an input can be is the mechanised half of asking whether the behavior is total (<<match>>).
@@ -7030,7 +7030,7 @@ Not warned about for a case the model's own rules refuse (<<a-case-the-rules-ref
 [,text]
 ----
 No row is at the ON point of the boundary the `guard` sets.
-Hint: A row at the last value inside the boundary is what catches the boundary being one step too far in (for example, `<=` written as `<`).
+Hint: A row at the last value inside the boundary is what catches the boundary being one step too far in (for example, `x <= 99` written where `x <= 100` was meant).
 Hint: For submit/cost: = 100.
 ----
 
@@ -7374,7 +7374,7 @@ Told apart from <<e1931>>, which is a class of one position no row is in. A row 
 
 [,text]
 ----
-No row of `f` would give a different result if `-2 * x + y = 0` were written as `-3 * x + y = 0`.
+No example row of `f` distinguishes the boundary `-2 * x + y = 0` from the nearby boundary `-3 * x + y = 0`.
   hint: Write a row with the input x = 1, y = 3. The two give different results there.
 ----
 
