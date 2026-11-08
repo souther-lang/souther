@@ -1071,7 +1071,23 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
     }
 
-    private static final String FIELDS_ADDED = "List.sum(List.map(n -> n.a.value + n.b.value, ns))";
+    /**
+     * A total of numbers held at minus one or less is nought for a list of none and every value
+     * from minus one down for a list of one, so it takes every value from nought down, as a total
+     * of numbers held at nought or more takes every value from nought up. Every gross has a total
+     * on either side of it below nought, and none above.
+     */
+    @Test
+    void aTotalOfNumbersBelowNoughtTakesNoughtAsOneAboveItDoes() {
+        String below = "data Neg = Int invariant value <= -1";
+        String body = "gross >= List.sum(List.map(n -> n.value, ns))";
+        assertEquals(Map.of("List.sum(ns[*])", RELATES),
+                leftAt("gross: Int, ns: List<Neg>", below, body, 27));
+        assertEquals(List.of("gross: x < 0", "gross: 0 <= x"),
+                classesAt("gross: Int, ns: List<Neg>", below, body, "gross"));
+    }
+
+    private static final String FIELDS_ADDED ="List.sum(List.map(n -> n.a.value + n.b.value, ns))";
 
     private static final String THE_FIELDS_ADDED = "List.sum({1·a + 1·b + 0 | ns[*]})";
 

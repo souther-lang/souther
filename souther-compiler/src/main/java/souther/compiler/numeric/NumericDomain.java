@@ -1958,6 +1958,40 @@ public final class NumericDomain<A> {
             return new Bounds(low, high);
         }
 
+        /**
+         * This run with {@code value} as well, where the two are one run: the value is in it, or
+         * nothing lies between it and an end on {@code spacing}, either side — an end left out at
+         * the value, or, where the values step by one, an end held one step from it. This run
+         * alone otherwise: a run holds every value between its ends, and a value apart from it
+         * with others between makes no run with it.
+         */
+        public Bounds joining(Count value, Granularity spacing) {
+            ExactRatio at = value.exactly();
+            if (admits(at)) {
+                return this;
+            }
+            if (nextTo(min, at, ExactRatio.ONE, spacing)) {
+                return new Bounds(Endpoint.inclusive(value), max);
+            }
+            if (nextTo(max, at, ExactRatio.ONE.negated(), spacing)) {
+                return new Bounds(min, Endpoint.inclusive(value));
+            }
+            return this;
+        }
+
+        /** Whether nothing lies between {@code end} and {@code value} on {@code spacing}, the end
+         *  being {@code step} from it where it is held. */
+        private static boolean nextTo(Endpoint end, ExactRatio value, ExactRatio step,
+                                      Granularity spacing) {
+            if (end == null || !(end.at() instanceof Count count)) {
+                return false;
+            }
+            ExactRatio at = count.exactly();
+            return (!end.inclusive() && at.equals(value))
+                    || (end.inclusive() && spacing == Granularity.DISCRETE
+                            && at.equals(value.plus(step).orNull()));
+        }
+
         private static Endpoint plusEnd(Endpoint one, Endpoint two) {
             if (one == null || two == null) {
                 return null;

@@ -9251,19 +9251,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         };
     }
 
-    /** {@code run} with nought, where nought is in it or it starts just past nought on
-     *  {@code carrier} — and {@code run} alone otherwise. */
+    /** {@code run} with nought, the total of a container holding none, where the two are one run
+     *  on {@code carrier}: on either side of nought ({@link NumericDomain.Bounds#joining}). */
     private static NumericDomain.Bounds withNought(NumericDomain.Bounds run, Carrier carrier) {
-        Endpoint least = run.min();
-        if (run.admits(ExactRatio.ZERO) || least == null || !(least.at() instanceof Count from)) {
-            return run;
-        }
-        ExactRatio at = from.exactly();
-        boolean justPast = (at.isZero() && !least.inclusive())
-                || (carrier.spacingBetweenValues() == Granularity.DISCRETE
-                        && at.equals(ExactRatio.ONE) && least.inclusive());
-        return justPast ? new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO), run.max())
-                : run;
+        return run.joining(Count.ZERO, carrier.spacingBetweenValues());
     }
 
     /**
