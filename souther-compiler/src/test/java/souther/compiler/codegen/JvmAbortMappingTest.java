@@ -232,7 +232,7 @@ class JvmAbortMappingTest {
     @Test
     void unreachableAbortsAsTheClassJvmAbortMappingNames() {
         assertThrows(JvmAbortMapping.representationOf(AbortKind.UNREACHABLE_REACHED),
-                () -> UnreachableReached.reached("never"));
+                () -> UnreachableReached.reached("never", "m", 1, 1));
     }
 
     /**
@@ -245,7 +245,8 @@ class JvmAbortMappingTest {
      */
     @Test
     void invariantNotHeldAbortsAsTheClassJvmAbortMappingNames() {
-        InvariantFailure failure = InvariantFailure.unnamed("demo", "Positive");
+        InvariantFailure failure = InvariantFailure.unnamed("demo", "Positive", "demo", "Positive",
+                0);
 
         assertThrows(JvmAbortMapping.representationOf(AbortKind.INVARIANT_NOT_HELD),
                 () -> { throw ConstraintViolation.notHeld(failure); });

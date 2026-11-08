@@ -22,6 +22,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -153,7 +154,7 @@ class ARowNothingRanFillsNoCombinationTest {
         List<Generator.GeneratedRow> aborted = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.ObservedRun(new Generator.Watched.NoAccount(),
-                        new AnswerObservation.NotAnswered()),
+                        new AnswerObservation.NotAnswered(), Optional.empty()),
                 List.of(), List.of(), every, Budgets.generation()).rows();
         List<Generator.GeneratedRow> notRun = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),

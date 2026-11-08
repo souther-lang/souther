@@ -67,6 +67,19 @@ public enum RuleHandleSurface {
      */
     SYNTHESIS_SHORTFALL_RULE("/$defs/decision/properties/obligations/items/properties"
             + "/synthesisShortfalls/items/properties/causes/items/properties/rule", "rule",
+            Carries.THE_HANDLE_ALONE),
+
+    /**
+     * The rule a run of a row stopped at: the invariant clause a construction was refused by, or
+     * the {@code ensures} the answer did not keep.
+     *
+     * <p>Written where the search the run was of is, beside the word it came back with — a search
+     * of a decision rule that composed nothing, or a search for a row the reading of a rule asked
+     * for — through the one definition both publish. The input that stopped the run is one the
+     * model has not decided about, and what an author takes to whoever decides it is which rule
+     * refused it.
+     */
+    RUN_STOPPED_RULE("/$defs/runsStopped/items/properties/rule", "rule",
             Carries.THE_HANDLE_ALONE);
 
     private final String schemaPath;

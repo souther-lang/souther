@@ -19,6 +19,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -165,7 +166,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      *  any place at all and answer. */
     private static Generator.ObservedRun missed(Model model) {
         return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(model.numbering())),
-                new AnswerObservation.NotAnswered());
+                new AnswerObservation.NotAnswered(), Optional.empty());
     }
 
     /** What the search made of the one combination named by {@code classes}. */

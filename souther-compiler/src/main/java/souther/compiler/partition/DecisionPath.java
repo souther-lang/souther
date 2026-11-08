@@ -43,6 +43,23 @@ final class DecisionPath {
 
     private final List<Consulted> consulted;
 
+    private final List<PassedConstruction> passed;
+
+    /** What this path is as a way: the rule, and the constructions in no order. */
+    private final Way way;
+
+    /**
+     * What tells two paths apart: the rule they are, and the constructions they go through taken
+     * together in no order. Its own value so that what a path is compared by and what a register
+     * of ways is keyed by are one definition.
+     */
+    record Way(DecisionRule rule, Set<PassedConstruction> passed) {
+
+        Way {
+            passed = Set.copyOf(passed);
+        }
+    }
+
     /**
      * The rule this path is, made once.
      *
@@ -63,7 +80,18 @@ final class DecisionPath {
      * {@link #and} asks of the rule in place of looking through the list.
      */
     DecisionPath(List<Consulted> consulted) {
+        this(consulted, List.of());
+    }
+
+    /**
+     * The same, going through {@code passed} as well: the constructions on the way, each once, in
+     * the order the way met them. They are no columns, so the rule is the conditions alone; and
+     * they are what a run along the path has to get past, so two paths are one only where they go
+     * through the same ones.
+     */
+    DecisionPath(List<Consulted> consulted, List<PassedConstruction> passed) {
         this.consulted = List.copyOf(consulted);
+        this.passed = List.copyOf(new LinkedHashSet<>(passed));
         Map<DecisionCondition, DecidedCondition> vector = new LinkedHashMap<>();
         for (Consulted each : this.consulted) {
             if (vector.put(each.answer().condition(), each.answer()) != null) {
@@ -72,11 +100,38 @@ final class DecisionPath {
             }
         }
         this.rule = new DecisionRule(vector);
+        this.way = new Way(rule, Set.copyOf(this.passed));
+    }
+
+    /** What this path is as a way ({@link Way}). */
+    Way way() {
+        return way;
     }
 
     /** The conditions this path consulted, in the order it met them. */
     List<Consulted> consulted() {
         return consulted;
+    }
+
+    /** The constructions this path goes through, in the order it met them. */
+    List<PassedConstruction> passed() {
+        return passed;
+    }
+
+    /** The same path, going through {@code construction} as well. */
+    DecisionPath passing(PassedConstruction construction) {
+        List<PassedConstruction> more = new ArrayList<>(passed);
+        more.add(construction);
+        return new DecisionPath(consulted, more);
+    }
+
+    /** Everything a row composed along this path has to satisfy of the input: what each condition
+     *  consulted states, and what getting past each construction does. */
+    List<OnTheWay> stated() {
+        List<OnTheWay> out = new ArrayList<>();
+        consulted.forEach(each -> out.addAll(each.states()));
+        passed.forEach(each -> out.addAll(each.states()));
+        return out;
     }
 
     /**
@@ -178,15 +233,19 @@ final class DecisionPath {
      * the same distinctions and got the same answers are one rule whatever order they met them in,
      * and holding them apart by that order would count what the reading did rather than what the
      * body does.
+     *
+     * <p>And the constructions it goes through, taken together in no order for the same reason.
+     * They are no part of the rule, and two ways of one rule through different constructions ask
+     * different things of a row.
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof DecisionPath that && rule.equals(that.rule);
+        return other instanceof DecisionPath that && way.equals(that.way);
     }
 
     @Override
     public int hashCode() {
-        return rule.hashCode();
+        return way.hashCode();
     }
 
     /**
@@ -446,7 +505,10 @@ final class DecisionPath {
                 out.set(already, out.get(already).again(added));
             }
         }
-        return new DecisionPath(out);
+        // And every construction either goes through: a run along both gets past each of them.
+        List<PassedConstruction> through = new ArrayList<>(passed);
+        through.addAll(more.passed);
+        return new DecisionPath(out, through);
     }
 
     /**
@@ -461,7 +523,7 @@ final class DecisionPath {
             out.add(new Consulted(each.answer(), each.seen().stream().map(seen).toList(),
                     each.states(), each.said(), each.cases()));
         }
-        return new DecisionPath(out);
+        return new DecisionPath(out, passed);
     }
 
     /** Where this path consulted {@code condition}, or -1 where it never did. */

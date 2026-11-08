@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.execute.RunStop;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumberRegion;
@@ -87,7 +88,12 @@ final class ValuesOfAType {
                 return List.of(NumberRegion.of(List.of(belowNought)),
                         NumberRegion.of(List.of(fromFive)),
                         NumberRegion.of(List.of(belowNought, fromFive)));
-            });
+            },
+            // A place is at a line from one, so of the numbers offered a component only one is a
+            // line, and a line is never varied alone: these vary each component on its own.
+            RunStop.Site.class, _ -> List.of(new RunStop.Site("a", 1, 1),
+                    new RunStop.Site("b", 1, 1), new RunStop.Site("a", 2, 1),
+                    new RunStop.Site("a", 1, 2)));
 
     /**
      * The words a string component is offered.

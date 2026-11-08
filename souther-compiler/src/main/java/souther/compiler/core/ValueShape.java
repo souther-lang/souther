@@ -73,13 +73,22 @@ public record ValueShape(TypeSymbol.AtModule name, List<Field> fields, List<Inva
      * constraints a clause is, is the checker's answer about that clause, and a second list matched
      * to this one by position would be two answers kept in step by nothing but their order. It says
      * nothing about the form the data was declared in, as nothing here does.
+     *
+     * <p>{@code declaredOn} and {@code ordinal} are which clause it is, named or not: the declaration
+     * that wrote it and its place among that declaration's clauses. A data spreading another's
+     * clauses holds them under the one that wrote them, so the place in {@link
+     * ValueShape#invariants()} is not it.
      */
     public record Invariant(Optional<String> name, Core condition,
-                            ConstraintProjection projection) {
+                            ConstraintProjection projection, TypeSymbol.AtModule declaredOn,
+                            int ordinal) {
 
         public Invariant {
             if (condition == null) {
                 throw new IllegalArgumentException("a clause is something that has to hold");
+            }
+            if (declaredOn == null) {
+                throw new IllegalArgumentException("a clause is written on some declaration");
             }
             if (projection == null) {
                 throw new IllegalArgumentException(

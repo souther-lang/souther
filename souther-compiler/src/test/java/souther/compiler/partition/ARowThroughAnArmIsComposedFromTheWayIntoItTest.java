@@ -25,6 +25,7 @@ import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -168,7 +169,8 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
         FillResult watched = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everywhere),
-                        new AnswerObservation.Answered(new ObservedValue.Integer(0))),
+                        new AnswerObservation.Answered(new ObservedValue.Integer(0)),
+                        Optional.empty()),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertEquals(1, watched.rows().size(),

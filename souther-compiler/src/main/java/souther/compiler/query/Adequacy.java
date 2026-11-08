@@ -6,11 +6,17 @@ import souther.compiler.carrier.Membership;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
+import souther.compiler.execute.RunStop;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.check.Prepared;
+import souther.compiler.check.Clause;
+import souther.compiler.check.ClauseName;
+import souther.compiler.diag.PhysicalPos;
+import souther.compiler.partition.ClauseOfAConstruction;
+import souther.compiler.partition.PassedConstruction;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.partition.CountWitnesses;
 import souther.compiler.partition.ReachWitnesses;
@@ -178,6 +184,7 @@ import souther.compiler.partition.RewriteSearch;
 import souther.compiler.partition.InteractionCells;
 import souther.compiler.partition.RowRegion;
 import souther.compiler.partition.StatementsOfAnInput;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
@@ -1221,7 +1228,8 @@ public final class Adequacy {
      * What a search for a row of {@code behavior}'s inputs is made of ({@link RowSearch}): the
      * reading of the inputs, the values the model names at each parameter's type, what each row
      * written for the behavior took, the boundary that builds a value, and a run of a row that
-     * says whether it went through one of the places a comparison is recorded at.
+     * says whether it went through one of the places a comparison is recorded at, and where it
+     * stopped where it answered nothing.
      *
      * <p>Asked below any division of the behavior: of what it takes, the values the model names,
      * the classes the compile produced and a run on them, and of nothing a division reads. A
@@ -1282,10 +1290,16 @@ public final class Adequacy {
                     inputs -> applying.prepare(inputs.stream().map(FixtureTemplate::value)
                                     .toList(), List.of())
                             .flatMap(RowTrials.Prepared::run)
-                            .filter(ran -> ran.answer() instanceof AnswerObservation.Answered)
-                            .map(ran -> ran.recorded() instanceof RunRecord.Recorded(var seen)
-                                    && wentThrough(numbering.align(seen), reaching))
-                            .orElse(false));
+                            .map(ran -> ran.answer() instanceof AnswerObservation.Answered
+                                    ? RowSearch.Run.stoppedNowhere(
+                                            ran.recorded() instanceof RunRecord.Recorded(var seen)
+                                                    && wentThrough(numbering.align(seen),
+                                                            reaching))
+                                    // A run that answered nothing is no witness, and where it
+                                    // stopped is said beside what it was tried for.
+                                    : new RowSearch.Run(false,
+                                            ran.stopped().map(stop -> whereItStopped(db, stop))))
+                            .orElseGet(() -> RowSearch.Run.stoppedNowhere(false)));
         }
 
         /** Whether the run {@code seen} is had some place of {@code reaching} come out either
@@ -7753,6 +7767,60 @@ public final class Adequacy {
     }
 
     /**
+     * Where a run of a row stopped, with the source of this compilation the module it names is
+     * written in: the one way every reader of a run builds it, so a stop a witness search met and
+     * one a row search met name one place alike.
+     */
+    static WhereARunStopped whereItStopped(Db db, RunStop stop) {
+        return new WhereARunStopped(stop,
+                stop.writtenIn().map(module -> Compilation.sourceIdOf(db, module)));
+    }
+
+    /**
+     * Where every run along a way stops at one of {@code stoppedAt}, said as a run that stopped
+     * there says it: one place for each clause the proof keeps, the construction by the module
+     * whose text it is written in and its line and column there where this compilation holds that
+     * text laid out, and by no place where it does not; the clause by the declaration that wrote
+     * it.
+     *
+     * <p>The clauses the proof needs, and none of the others the construction is held to: each
+     * clause is gone through by the way on its own, and the least proof keeps only the ones the
+     * inputs of the way break. An invariant that was not reached names no clause and no place a
+     * run stops at: it states nothing of the input, so no proof needs it, and a proof cut short at
+     * a figure that keeps it says no clause it was held to.
+     */
+    public static List<WhereARunStopped> whereRunsStopAt(Db db,
+                                                         List<PassedConstruction> stoppedAt) {
+        TheTextsThisCompileHolds texts = new TheTextsThisCompileHolds(db);
+        List<WhereARunStopped> out = new ArrayList<>();
+        for (PassedConstruction each : stoppedAt) {
+            switch (each.clause()) {
+                case ClauseOfAConstruction.NotReached _ -> { }
+                case ClauseOfAConstruction.Held(Clause.Ref clause) -> {
+                    TypeSymbol.AtModule declared = clause.id().declaredOn();
+                    RunStop stop = new RunStop.AtAConstruction(declared.module(), declared.name(),
+                            clause.name().map(ClauseName::value), clause.id().ordinal(),
+                            siteOf(texts, each.at()));
+                    out.add(whereItStopped(db, stop));
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** Where {@code place} is written, where this compilation holds its text laid out and knows
+     *  the module it is: none otherwise, and never another module in its stead. */
+    private static Optional<RunStop.Site> siteOf(TheTextsThisCompileHolds texts, SourcePos place) {
+        if (place == null) {
+            return Optional.empty();
+        }
+        Optional<String> module = texts.moduleOf(place.quotedFrom());
+        PhysicalPos sits = module.isEmpty() ? null : texts.resolve(place);
+        return sits == null ? Optional.empty()
+                : Optional.of(new RunStop.Site(module.get(), sits.line(), sits.column()));
+    }
+
+    /**
      * A way to run one behavior's composed rows, said in the generator's words.
      *
      * <p>Two seams and one adaptation, the way the check that a value can be built already is. What
@@ -7813,7 +7881,7 @@ public final class Adequacy {
                             case RunRecord.Recorded(var seen) ->
                                     new Generator.Watched.Ran(numbering.align(seen));
                             case RunRecord.NoAccount _ -> new Generator.Watched.NoAccount();
-                        }, ran.answer()))
+                        }, ran.answer(), ran.stopped().map(stop -> whereItStopped(db, stop))))
                         .orElseGet(Generator.ObservedRun::nothingRan);
             }
 

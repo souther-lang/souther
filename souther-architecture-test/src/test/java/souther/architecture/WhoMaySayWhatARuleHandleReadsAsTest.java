@@ -109,7 +109,11 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             // And the same block saying which rule gave the offer no value, which is the same
             // reader meeting the same rule: told that a search was short of what the rules leave
             // and not told which rule, they have every rule of the position to look at.
-            ROWS + "#gaveNothing");
+            ROWS + "#gaveNothing",
+            // And the rule a run of a row composed there stopped at, beside the same word: told
+            // that no row was run to an answer and not which rule refused it, a reader has every
+            // construction and ensures of the body to look at.
+            ROWS + "#onePlaceStoppedAt");
 
     /**
      * And every class that writes one into the document, which is one.
@@ -128,6 +132,9 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             REPORT + "#caseExpansionRow",
             REPORT + "#finding",
             REPORT + "#obligations",
+            // The rule a run of a row stopped at, beside the combination no row was found for: the
+            // same rule the human lines name through the rendering.
+            REPORT + "#runsStopped",
             INSIDE_THE_PARTITION_IN_THE_DOCUMENT.spelt(),
             PARTITION_IN_THE_DOCUMENT.spelt());
 
