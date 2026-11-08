@@ -5,8 +5,11 @@ import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.CodePointClass;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -739,6 +742,66 @@ final class Term {
     }
 
     /**
+     * The whole numbers a closure of one parameter answers true of, where it compares its parameter
+     * to whole numbers written out, joined and denied as it likes — or null where it is anything
+     * else.
+     */
+    WholeNumberRuns wholeNumbersItAnswersTrueOf() {
+        return shape == Shape.CLOSURE && Integer.valueOf(1).equals(of)
+                ? parts.getFirst().runsOfAStatement() : null;
+    }
+
+    private boolean isTheParameter() {
+        return shape == Shape.BOUND && new At(0, 0).equals(of);
+    }
+
+    private Long writtenWholeNumber() {
+        return shape == Shape.INT ? (Long) of : null;
+    }
+
+    private WholeNumberRuns runsOfAStatement() {
+        return switch (shape) {
+            case BOOL -> (Boolean) of ? WholeNumberRuns.EVERY : WholeNumberRuns.NONE;
+            case NOT -> {
+                WholeNumberRuns denied = parts.getFirst().runsOfAStatement();
+                yield denied == null ? null : denied.others();
+            }
+            case EQ -> {
+                Long number = parts.get(0).isTheParameter() ? parts.get(1).writtenWholeNumber()
+                        : parts.get(1).isTheParameter() ? parts.get(0).writtenWholeNumber() : null;
+                yield number == null ? null
+                        : WholeNumberRuns.standing(Rel.EQ, ExactRatio.of(number));
+            }
+            case CHOICE -> {
+                WholeNumberRuns when = parts.get(0).runsOfAStatement();
+                WholeNumberRuns then = parts.get(1).runsOfAStatement();
+                WholeNumberRuns otherwise = parts.get(2).runsOfAStatement();
+                yield when == null || then == null || otherwise == null ? null
+                        : when.and(then).or(when.others().and(otherwise));
+            }
+            case OP -> {
+                if (of == BinOp.LT) {
+                    Term left = parts.get(0);
+                    Term right = parts.get(1);
+                    if (left.isTheParameter() && right.writtenWholeNumber() != null) {
+                        yield WholeNumberRuns.standing(Rel.LT,
+                                ExactRatio.of(right.writtenWholeNumber()));
+                    }
+                    yield right.isTheParameter() && left.writtenWholeNumber() != null
+                            ? WholeNumberRuns.standing(Rel.GT,
+                                    ExactRatio.of(left.writtenWholeNumber())) : null;
+                }
+                ConditionJoin join = ConditionJoin.of((BinOp) of).orElse(null);
+                WholeNumberRuns left = join == null ? null : parts.get(0).runsOfAStatement();
+                WholeNumberRuns right = join == null ? null : parts.get(1).runsOfAStatement();
+                yield left == null || right == null ? null
+                        : join == ConditionJoin.BOTH ? left.and(right) : left.or(right);
+            }
+            default -> null;
+        };
+    }
+
+    /**
      * What a closure of one parameter answers of what it is handed, as a form of the fields it
      * reads off it — the value itself where the fields are none — or null where this is no such
      * closure, or what it answers is no such form.
@@ -1424,29 +1487,42 @@ final class Term {
         }
 
         /**
-         * {@code closure} with a comparison of its parameter against a whole number written as the
-         * one that stands below the number after it: {@code n > 2} and {@code n >= 3} state the
-         * same thing of whole numbers, and are one term here.
-         *
-         * <p>Only the comparison that is the whole of what the closure answers. A literal is a
-         * whole number only beside a value that is one, which the checker types it as.
+         * The closure of one parameter that answers true of exactly {@code runs}, written the one
+         * way: the runs one after another as a choice, each as the parameter being its one number,
+         * or not below its first and below the number after its last. {@code n > 2},
+         * {@code n >= 3} and {@code n > 2 && n > 1} are one term. Null where a number of the runs
+         * is past what a number written in a program is.
          */
-        Term closureOverWholeNumbers(Term closure) {
-            if (closure.shape != Shape.CLOSURE || !Integer.valueOf(1).equals(closure.of)) {
-                return closure;
+        Term closureAnswering(WholeNumberRuns runs) {
+            Term parameter = bound(0, 0);
+            Term body = null;
+            for (WholeNumberRuns.Run run : runs.runs()) {
+                Term in = written(true);
+                if (run.isOneNumber()) {
+                    if (run.from().bitLength() > Long.SIZE - 1) {
+                        return null;
+                    }
+                    in = of(Shape.EQ, null, List.of(parameter, written(run.from().longValue())));
+                } else {
+                    if (run.from() != null) {
+                        if (run.from().bitLength() > Long.SIZE - 1) {
+                            return null;
+                        }
+                        in = not(of(Shape.OP, BinOp.LT,
+                                List.of(parameter, written(run.from().longValue()))));
+                    }
+                    if (run.to() != null) {
+                        if (run.to().bitLength() > Long.SIZE - 2) {
+                            return null;
+                        }
+                        Term below = of(Shape.OP, BinOp.LT,
+                                List.of(parameter, written(run.to().longValue() + 1)));
+                        in = run.from() == null ? below : choice(in, below, written(false));
+                    }
+                }
+                body = body == null ? in : choice(body, written(true), in);
             }
-            Term body = closure.parts.getFirst();
-            boolean denied = body.shape == Shape.NOT;
-            Term stated = denied ? body.parts.getFirst() : body;
-            if (stated.shape != Shape.OP || stated.of != BinOp.LT
-                    || stated.parts.get(0).shape != Shape.INT
-                    || stated.parts.get(1).shape == Shape.INT
-                    || (Long) stated.parts.get(0).of == Long.MAX_VALUE) {
-                return closure;
-            }
-            Term below = of(Shape.OP, BinOp.LT, List.of(stated.parts.get(1),
-                    of(Shape.INT, (Long) stated.parts.get(0).of + 1, List.of())));
-            return closure(1, denied ? below : not(below));
+            return closure(1, body == null ? written(false) : body);
         }
 
         /**

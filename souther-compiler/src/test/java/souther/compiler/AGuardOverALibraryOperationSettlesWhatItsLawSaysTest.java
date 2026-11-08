@@ -130,6 +130,51 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             new Row("Digit(List.length(xs ++ ys) - List.length(ys ++ xs))", false),
             new Row("Digit(List.length(xs ++ ys) - List.length(List.concat([xs, ys])))", false),
             new Row("Digit(List.length(xs ++ ys) - List.length(ys ++ xs) - 1)", true),
+            // What a statement over whole numbers holds of is the statement: the same set is one
+            // count, a set inside another is no more, two that share nothing are no more together
+            // than there are, and two that are every number between them are no fewer.
+            new Row("Digit(List.length(List.filter(n -> n > 2 && n > 1, xs)) "
+                    + "- List.length(List.filter(n -> n > 2, xs)))", false),
+            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n > 2 && n > 1, xs)))", false),
+            new Row("Digit(List.length(List.filter(n -> n > 1, xs)) "
+                    + "- List.length(List.filter(n -> n > 2, xs)))", false),
+            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n > 1, xs)))", true),
+            new Row("Digit(List.length(List.filter(n -> n > 2 || n > 1, xs)) "
+                    + "- List.length(List.filter(n -> n > 2, xs)))", false),
+            new Row("if List.any(n -> n > 2, xs) && List.any(n -> n < 2, xs) then "
+                    + "Digit(List.length(xs) - 2) else Digit(0)", false),
+            new Row("if List.any(n -> n > 2, xs) && List.any(n -> n < 4, xs) then "
+                    + "Digit(List.length(xs) - 2) else Digit(0)", true),
+            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
+                    + "+ List.length(List.filter(n -> n < 5, xs)) - List.length(xs))", false),
+            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
+                    + "+ List.length(List.filter(n -> n < 2, xs)) - List.length(xs))", true),
+            new Row("Digit(List.length(List.filter(n -> n > 2 && n < 8, xs)) "
+                    + "+ List.length(List.filter(n -> n <= 2 || n >= 8, xs)) - List.length(xs))",
+                    false),
+            new Row("Digit(List.length(xs) - List.length(List.filter(n -> n > 2 && n < 8, xs)) "
+                    + "- List.length(List.filter(n -> n <= 2 || n >= 8, xs)))", false),
+            new Row("Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n <= 1, xs)))", false),
+            new Row("Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) "
+                    + "- List.length(List.filter(n -> n <= 3, xs)))", true),
+            // A fold that spells out a library operation is that operation's value.
+            new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n, 0, xs))", false),
+            new Row("Digit(List.fold((acc, n) -> acc + n, 0, xs) - List.sum(xs))", false),
+            new Row("Digit(List.sum(xs) - List.fold((acc, n) -> n + acc, 0, xs))", false),
+            new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n, 1, xs))", true),
+            new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n + 1, 0, xs))", true),
+            new Row("Digit(List.product(xs) - List.fold((acc, n) -> acc * n, 1, xs))", false),
+            new Row("Digit(List.product(xs) - List.fold((acc, n) -> acc * n, 2, xs))", true),
+            new Row("Digit(List.length(xs) - List.fold((acc, n) -> acc + 1, 0, xs))", false),
+            new Row("Digit(List.fold((acc, n) -> 1 + acc, 0, xs) - List.length(xs))", false),
+            new Row("Digit(List.length(xs) - List.fold((acc, n) -> acc + 2, 0, xs))", true),
+            new Row("if List.fold((acc, n) -> acc + n, 0, xs) > 0 then "
+                    + "Digit(List.length(xs) - 1) else Digit(0)", false),
+            new Row("if List.fold((acc, n) -> acc + 1, 0, xs) >= 2 then "
+                    + "Digit(List.length(xs) - 2) else Digit(0)", false),
             // A join is the append it is, however it is written.
             new Row("Digit(List.length(xs ++ xs) - List.length(List.append(xs, xs)))", false),
             new Row("Digit(List.length(List.append(xs, xs)) - List.length(xs ++ xs))", false),
@@ -152,8 +197,6 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "+ List.length(List.filter(n -> n <= 2, xs)) - List.length(xs))", false),
             new Row("Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) "
                     + "- List.length(List.filter(n -> n <= 2, xs)))", false),
-            new Row("Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) "
-                    + "- List.length(List.filter(n -> n <= 1, xs)))", true),
             // A walk over none answers where it started, so an answer away from there is one over
             // something, whatever the step.
             new Row("if List.sum(xs) >= 3 then Digit(List.length(xs) - 1) else Digit(0)", false),

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A sum written over the positions the equalities leave free, where the rules hold equalities over
@@ -32,10 +33,12 @@ final class EqualityElimination<A> {
     private record Solved<A>(A pivot, Map<A, ExactRatio> rest, ExactRatio at) {}
 
     private final CanonicalOrder<A> order;
+    private final Set<A> inTheGoal;
     private final List<Solved<A>> solved = new ArrayList<>();
 
-    private EqualityElimination(CanonicalOrder<A> order) {
+    private EqualityElimination(CanonicalOrder<A> order, Set<A> inTheGoal) {
         this.order = order;
+        this.inTheGoal = inTheGoal;
     }
 
     /**
@@ -44,7 +47,8 @@ final class EqualityElimination<A> {
      */
     static <A> Goal<A> through(List<AffineConstraint.Equality<A>> equalities, Goal<A> goal,
                                CanonicalOrder<A> order) {
-        EqualityElimination<A> elimination = new EqualityElimination<>(order);
+        EqualityElimination<A> elimination =
+                new EqualityElimination<>(order, goal.coefs().keySet());
         for (AffineConstraint.Equality<A> each : equalities) {
             if (!elimination.take(each)) {
                 return null;
@@ -162,8 +166,19 @@ final class EqualityElimination<A> {
         return new Goal<>(coefs, constant);
     }
 
-    /** What {@code weights} weigh, in the one order the domain walks its positions in. */
+    /**
+     * What {@code weights} weigh, in the one order the domain walks its positions in, with the
+     * ones the goal names after the rest. An equality is solved for the last of its positions, so
+     * the goal's are the ones put in terms of the others: the rules the goal is then asked
+     * against are written in the positions the goal named, and still speak of the ones left.
+     */
     private List<Map.Entry<A, ExactRatio>> walked(Map<A, ExactRatio> weights) {
-        return order.walking(weights.entrySet(), Map.Entry::getKey);
+        List<Map.Entry<A, ExactRatio>> out = new ArrayList<>();
+        List<Map.Entry<A, ExactRatio>> named = new ArrayList<>();
+        for (Map.Entry<A, ExactRatio> each : order.walking(weights.entrySet(), Map.Entry::getKey)) {
+            (inTheGoal.contains(each.getKey()) ? named : out).add(each);
+        }
+        out.addAll(named);
+        return out;
     }
 }

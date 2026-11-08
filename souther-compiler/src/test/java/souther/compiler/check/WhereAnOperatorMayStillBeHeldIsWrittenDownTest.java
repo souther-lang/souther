@@ -671,10 +671,17 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " nothing the source holds, because a statement stands nowhere"),
             new Held("souther.compiler.check.Term.Interner.AsTerms.below",
                     "the one order a term is written in, which the claim exchanged the sides for"),
-            new Held("souther.compiler.check.Term.Interner.closureOverWholeNumbers",
-                    "reads the one statement a comparison is held as, the order of a value below a"
-                            + " whole number, and writes it against the number after: above 2 and"
+            new Held("souther.compiler.check.Term.Interner.closureAnswering",
+                    "writes the statement that holds of a set of whole numbers the one way, as the"
+                            + " order of a value below a whole number and the equality: above 2 and"
                             + " at least 3 are one statement of whole numbers"),
+            new Held("souther.compiler.check.Accumulations.spelledOut",
+                    "reads whether a fold adds what it is handed from nought, multiplies it from"
+                            + " one, or adds one to what it has: the step that is a library"
+                            + " operation written out"),
+            new Held("souther.compiler.check.Term.runsOfAStatement",
+                    "reads which whole numbers a statement holds of, from the order of a value"
+                            + " below a whole number, the equality, and what joins and denies them"),
             new Held("souther.compiler.check.Terms.repeating",
                     "writes the multiplication a repeated accumulation comes to"),
             new Held("souther.compiler.semantics.OperationFacts.declared",

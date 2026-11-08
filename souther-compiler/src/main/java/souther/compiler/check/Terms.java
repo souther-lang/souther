@@ -20,6 +20,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -30,8 +31,10 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -357,9 +360,11 @@ final class Terms {
      */
     List<NumericConstraint> carriedBy(java.util.Collection<FactSubject> from) {
         List<NumericConstraint> out = new ArrayList<>();
-        for (FactSubject atom : reachedFrom(from)) {
+        Set<FactSubject> reached = reachedFrom(from);
+        for (FactSubject atom : reached) {
             out.addAll(knowledgeOf(atom).intrinsic());
         }
+        out.addAll(relationsAmongCounts(reached));
         return out;
     }
 
@@ -1395,6 +1400,13 @@ final class Terms {
         Derivation made;
         if (computed != null) {
             made = recipeFor(computed.meaning(), computed.at());
+        } else if (asOperator(e) instanceof Core.PreservedCall spelling
+                && Accumulations.spelledOut(spelling) instanceof Accumulations.Spelled spelled
+                && spelled.what() != null) {
+            refusingGuarantees(atom, guarantees);
+            recordingAccumulation(atom,
+                    new Accumulations.Accumulating(spelled.what(), spelled.container()), e, at);
+            return;
         } else if (asOperator(e) instanceof Core.PreservedCall call
                 && Reductions.reducing(call, at) instanceof Reductions.Reducing walk) {
             refusingGuarantees(atom, guarantees);
@@ -2297,6 +2309,11 @@ final class Terms {
     /** The atom of the size {@code e} takes of a container this can name, or null where it takes
      * none or names none. */
     FactSubject sizeAtomOf(Core e, Denotations at) {
+        if (Core.withoutStanding(e) instanceof Core.PreservedCall call
+                && Accumulations.spelledOut(call) instanceof Accumulations.Spelled spelled
+                && spelled.what() == null) {
+            return sizeOfWhatItHolds(spelled.container(), at);
+        }
         Core container = DischargeRules.sizeArgOf(e);
         return container == null ? null
                 : sizeAtomFor(((Core.PreservedCall) e).operation(), container, at);
@@ -2403,24 +2420,132 @@ final class Terms {
         if (counted == null || (closure != null && by == null)) {
             return null;
         }
-        if (by != null && aspect == AnswerAspect.TRUTH) {
-            by = interned.closureOverWholeNumbers(by);
+        // Of a statement over whole numbers, the count of the set it holds of or of the numbers it
+        // leaves, whichever the order puts first: the count of the other is how many there are
+        // less this one. Of any other statement, the one that denies another is counted as that.
+        WholeNumberRuns runs = by == null || aspect != AnswerAspect.TRUTH ? null
+                : by.wholeNumbersItAnswersTrueOf();
+        Term counting = by;
+        boolean denies = false;
+        if (runs != null) {
+            WholeNumberRuns left = runs.others();
+            boolean leftFirst = firstOf(left, runs);
+            Term written = interned.closureAnswering(leftFirst ? left : runs);
+            if (written == null) {
+                runs = null;
+            } else {
+                denies = leftFirst;
+                runs = leftFirst ? left : runs;
+                counting = written;
+            }
         }
-        Term denied = by == null || aspect != AnswerAspect.TRUTH ? null
-                : interned.closureWhoseAnswerThisDenies(by);
-        FactSubject atom = named(interned.howManyMeet(counted, denied == null ? by : denied,
-                aspect), Carrier.WHOLE);
+        if (runs == null) {
+            Term denied = by == null || aspect != AnswerAspect.TRUTH ? null
+                    : interned.closureWhoseAnswerThisDenies(by);
+            denies = denied != null;
+            counting = denies ? denied : by;
+        }
+        FactSubject atom = named(interned.howManyMeet(counted, counting, aspect), Carrier.WHOLE);
         if (atom == null) {
             return null;
         }
+        FactSubject all = sizeOfWhatItHolds(container, at);
         if (firstFiledFrom(atom, readOff(container, closure, at))) {
             carrying(atom, amongTheElements(atom, container, at));
         }
-        if (denied == null) {
+        if (runs != null) {
+            wholeNumberCounts.putIfAbsent(atom, new CountOfWholeNumbers(counted, runs, all));
+        }
+        if (!denies) {
             return LinearForm.atom(atom);
         }
-        FactSubject all = sizeOfWhatItHolds(container, at);
         return all == null ? null : LinearForm.atom(all).minus(LinearForm.atom(atom)).orNull();
+    }
+
+    /**
+     * Whether {@code one} comes before {@code other} in the one order of sets of whole numbers,
+     * which is by where the runs begin, then where they end, then how many there are. Of a set
+     * and the numbers it leaves exactly one does, and a count is named by that one.
+     */
+    private static boolean firstOf(WholeNumberRuns one, WholeNumberRuns other) {
+        List<WholeNumberRuns.Run> mine = one.runs();
+        List<WholeNumberRuns.Run> theirs = other.runs();
+        for (int i = 0; i < Math.min(mine.size(), theirs.size()); i++) {
+            int byStart = compareEnds(mine.get(i).from(), theirs.get(i).from(), -1);
+            if (byStart != 0) {
+                return byStart < 0;
+            }
+            int byEnd = compareEnds(mine.get(i).to(), theirs.get(i).to(), 1);
+            if (byEnd != 0) {
+                return byEnd < 0;
+            }
+        }
+        return mine.size() < theirs.size();
+    }
+
+    /** Two ends in order, an end that is null being past every number on the side {@code nullIs}. */
+    private static int compareEnds(BigInteger one, BigInteger other, int nullIs) {
+        if (one == null || other == null) {
+            return one == other ? 0 : (one == null ? nullIs : -nullIs);
+        }
+        return one.compareTo(other);
+    }
+
+    /** What a count of the elements that fall in a set of whole numbers is a count of: the
+     *  container as named, the set, and how many the container holds. */
+    private record CountOfWholeNumbers(Term container, WholeNumberRuns runs, FactSubject all) {}
+
+    /** The counts named so far that are of a set of whole numbers, by the atom that counts. */
+    private final Map<FactSubject, CountOfWholeNumbers> wholeNumberCounts = new HashMap<>();
+
+    /**
+     * How the counts among {@code atoms} of the elements of one container that fall in sets of
+     * whole numbers stand to each other: no more than the count of a set it is inside, no more
+     * than how many there are together with the count of a set it shares nothing with, and no
+     * fewer than how many there are together with the count of a set that with it is every number.
+     *
+     * <p>Worked out of the atoms a question reaches and not filed against either of two counts,
+     * for the reason what an atom carries is the same whenever it is asked: which other counts
+     * have been named by the time one is, is the order the program was read in.
+     */
+    List<NumericConstraint> relationsAmongCounts(Collection<FactSubject> atoms) {
+        List<FactSubject> counts = new ArrayList<>();
+        for (FactSubject atom : atoms) {
+            if (wholeNumberCounts.containsKey(atom)) {
+                counts.add(atom);
+            }
+        }
+        List<NumericConstraint> out = new ArrayList<>();
+        for (int i = 0; i < counts.size(); i++) {
+            for (int j = i + 1; j < counts.size(); j++) {
+                relationBetween(counts.get(i), counts.get(j), out);
+            }
+        }
+        return out;
+    }
+
+    private void relationBetween(FactSubject one, FactSubject other,
+                                 List<NumericConstraint> out) {
+        CountOfWholeNumbers here = wholeNumberCounts.get(one);
+        CountOfWholeNumbers there = wholeNumberCounts.get(other);
+        if (!here.container().equals(there.container())) {
+            return;
+        }
+        if (here.runs().and(there.runs().others()).isNone()) {
+            out.add(new NumericConstraint(LinearForm.difference(one, other), Rel.LE));
+        }
+        if (there.runs().and(here.runs().others()).isNone()) {
+            out.add(new NumericConstraint(LinearForm.difference(other, one), Rel.LE));
+        }
+        LinearForm<FactSubject> both = LinearForm.atom(one).plus(LinearForm.atom(other)).orNull();
+        LinearForm<FactSubject> together = here.all() == null || both == null ? null
+                : both.minus(LinearForm.atom(here.all())).orNull();
+        if (together != null && here.runs().and(there.runs()).isNone()) {
+            out.add(new NumericConstraint(together, Rel.LE));
+        }
+        if (together != null && here.runs().or(there.runs()).isEvery()) {
+            out.add(new NumericConstraint(together, Rel.GE));
+        }
     }
 
     /**
@@ -3545,8 +3670,23 @@ final class Terms {
             // exactly as many as it was given does not change the number, which the discharge table
             // states as a relation between the two values (`Cardinality.SAME`) rather than as
             // something this check happens to follow — so it is an equality identity may read.
-            case Core.PreservedCall c -> over(sizedOver(c, leaf), at, bound, depth, leaf,
-                    ps -> interned.called(c.operation(), ps));
+            case Core.PreservedCall c -> {
+                // A fold that spells out a library operation is that operation's value.
+                Accumulations.Spelled spelled = Accumulations.spelledOut(c);
+                if (spelled == null) {
+                    yield over(sizedOver(c, leaf), at, bound, depth, leaf,
+                            ps -> interned.called(c.operation(), ps));
+                }
+                ValueName operation = spelled.what() != null ? spelled.operation()
+                        : NumericMeasures.takenOf(Core.withoutStanding(spelled.container()).type(),
+                                newtypeInners());
+                List<Core> over = spelled.what() != null ? List.of(spelled.container())
+                        : List.of(DischargeRules.sizeSource(spelled.container()));
+                yield operation == null
+                        ? ranOut(raw, leaf, new Naming.Opaque(Naming.Reason.NOTHING_IS_ANSWERED))
+                        : over(over, at, bound, depth, leaf,
+                                ps -> interned.called(operation, ps));
+            }
             case Core.Call c -> switch (c.fn()) {
                 case Core.Reached reached -> switch (answersOf(reached.denotes())) {
                     case Naming.OfAName.AnswersNothing none ->

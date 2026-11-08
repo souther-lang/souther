@@ -64,6 +64,10 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
             "List.sum(xs) >= 3",
             "List.sum(xs) > 0",
             "List.fold((acc, n) -> acc + n, 5, xs) > 5",
+            "List.fold((acc, n) -> acc + 1, 0, xs) >= 2",
+            "List.any(n -> n > 2, xs) && List.any(n -> n < 2, xs)",
+            "List.all(n -> n > 2 || n < 1, xs)",
+            "List.length(List.filter(n -> n > 1 && n < 4, xs)) >= 1",
             "List.length(List.flatMap(n -> [n, n], xs)) >= 2",
             "Set.size(Set.fromList(xs)) >= 2");
 
@@ -71,6 +75,9 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
             "List.length(xs)",
             "List.length(List.filter(n -> n > 2, xs))",
             "List.length(List.filter(n -> n <= 2, xs))",
+            "List.length(List.filter(n -> n > 1 && n < 4, xs))",
+            "List.length(List.filter(n -> n > 2 || n < 1, xs))",
+            "List.fold((acc, n) -> acc + 1, 0, xs)",
             "List.length(List.distinct(xs))",
             "List.length(List.distinctBy(n -> n, xs))",
             "Set.size(a)",
