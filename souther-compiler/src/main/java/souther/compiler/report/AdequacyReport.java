@@ -9483,12 +9483,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /** The definition a construct of the model was written in, and where in it, where this
      *  rendering can say. */
-    private static String writtenIn(ModelOccurrence construct, WhereAPartIs parts,
-                                    Page page, SourceId declaredIn) {
-        return page.say(writtenInSaid(construct, parts, page, declaredIn));
-    }
-
-    /** The same as a message, for a place that is told apart by what it says. */
     private static Message writtenInSaid(ModelOccurrence construct, WhereAPartIs parts,
                                          Page page, SourceId declaredIn) {
         return new ReportMessage.Then(new ReportMessage.Verbatim(

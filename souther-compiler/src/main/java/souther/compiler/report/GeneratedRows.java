@@ -559,11 +559,6 @@ public final class GeneratedRows {
         }
 
         /** The same, with a name marked as the words it is, as a note under a block says it. */
-        String quoted(Page page) {
-            return page.say(quoted());
-        }
-
-        /** The same as a message, for a line that is told apart by what it says. */
         Message quoted() {
             Message said = name.isPresent() ? new GeneratedRowsMessage.Quoted(words) : words;
             return place.<Message>map(at -> new GeneratedRowsMessage.Placed(said, at))
