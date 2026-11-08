@@ -133,8 +133,11 @@ final class Reasons {
 
     /** The same as a message, for a sentence that carries the budgets as a value. */
     static Message budgets(CanonicalSelection<CompositionBudget> budgets) {
-        return listedOf(budgets.written().stream()
-                .<Message>map(each -> new ReportMessage.Verbatim(each.counts())).toList());
+        List<Message> counted = new ArrayList<>();
+        for (CompositionBudget each : budgets.written()) {
+            counted.add(each.countsSaid());
+        }
+        return listedOf(counted);
     }
 
     /** Messages said one after the other in a list, as one message. */

@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.SourceLayouts;
+import souther.compiler.report.InEnglish;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -879,23 +880,27 @@ class EveryFindingHasAGenerationDispositionTest {
     void eachReasonSaysWhatIsMissingHereRatherThanWhatCannotExist() {
         assertEquals("a row is steered into an arm by the decisions that hold on the way there, and"
                         + " the fork this arm is of is one nothing could name a position for",
-                GenerationOutcome.NotSupported.Reason.NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED.said());
+                InEnglish.said(
+                        GenerationOutcome.NotSupported.Reason.NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED.told()));
         assertEquals("the ways into this arm run past what one reading of the body holds at once,"
                         + " so the reading stopped short of it rather than saying what steers a row"
                         + " there",
-                GenerationOutcome.NotSupported.Reason.MORE_WAYS_IN_THAN_THE_READING_HOLDS.said());
+                InEnglish.said(GenerationOutcome.NotSupported.Reason
+                        .MORE_WAYS_IN_THAN_THE_READING_HOLDS.told()));
         // Nothing about the rows composed: one of them may answer with the case once it runs, so
         // what is missing is a search aimed at the case and not a row that reaches it.
         assertEquals("rows here are composed for what the input positions divide into and not for"
                         + " the case they answer with, so which of them answers with it is what"
                         + " their runs say",
-                GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());
+                InEnglish.said(
+                        GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.told()));
         // A case whose parameter no axis was derived at has its cases in the declaration and in no
         // partition, so what is missing is a derivation and not the classes. Said as there being
         // none, the sentence is about the model again — the thing the other two stopped doing.
         assertEquals("no axis was derived at the position this case belongs to, so no classes were"
                         + " derived there to compose a row from",
-                GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION.said());
+                InEnglish.said(
+                        GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION.told()));
     }
 
     @Test

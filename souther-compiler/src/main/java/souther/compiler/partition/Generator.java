@@ -81,7 +81,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -471,11 +470,6 @@ public final class Generator {
                                         Optional<SearchMessage> told,
                                         SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
 
-        // BRIDGE-1464: callers move to told
-        public Optional<String> said() {
-            return told.map(each -> Messages.render(each, Locale.ENGLISH));
-        }
-
         /**
          * The components, with what the class said in its English words.
          *
@@ -487,7 +481,7 @@ public final class Generator {
         public String toString() {
             return "UnresolvedCombination[classes=" + classes + ", reason=" + reason
                     + ", detail=" + detail + ", said="
-                    + told.map(each -> Messages.render(each, Locale.ENGLISH))
+                    + told.map(each -> Messages.render(each, Messages.BASE_LANGUAGE))
                     + ", alsoShort=" + alsoShort + "]";
         }
 
@@ -1186,9 +1180,9 @@ public final class Generator {
         Built build(int parameter, FixtureTemplate candidate);
 
         /** Whether the candidate was refused, for a caller that has nothing to do with what it is. */
-        default Optional<String> refuse(int parameter, FixtureTemplate candidate) {
+        default Optional<SearchMessage> refuse(int parameter, FixtureTemplate candidate) {
             return build(parameter, candidate) instanceof Built.Refused refused
-                    ? Optional.of(refused.why()) : Optional.empty();
+                    ? Optional.of(refused.told()) : Optional.empty();
         }
 
         /**
@@ -1247,7 +1241,8 @@ public final class Generator {
          */
         static CandidateCheck refusing(Refusal said) {
             return (parameter, candidate) -> said.at(parameter, candidate)
-                    .<Built>map(Built.Refused::new).orElseGet(Built.NothingBuiltIt::new);
+                    .<Built>map(Built.Refused::inItsOwnWords)
+                    .orElseGet(Built.NothingBuiltIt::new);
         }
 
         /** Which candidates are refused, and why. */
@@ -1267,14 +1262,10 @@ public final class Generator {
             /** It did not, and why. Never a claim that no value of the shape can be built. */
             record Refused(SearchMessage told) implements Built {
 
-                // BRIDGE-1464: callers move to the canonical constructor
-                public Refused(String why) {
-                    this(new SearchMessage.RefusedInItsOwnWords(why));
-                }
-
-                // BRIDGE-1464: callers move to told
-                public String why() {
-                    return Messages.render(told, Locale.ENGLISH);
+                /** Refused for {@code why}, which is what whoever refused it said and is told as
+                 *  it was said. */
+                public static Refused inItsOwnWords(String why) {
+                    return new Refused(new SearchMessage.RefusedInItsOwnWords(why));
                 }
             }
 

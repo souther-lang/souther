@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.report.InEnglish;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -39,7 +40,7 @@ class WhatAQuestionStandsOnIsSaidInTheOrderItWasWrittenTest {
      *  it. What the figure stood at is the run's, so the sentence is asked up to its name. */
     private static final String COSTLY = "read to the end, and the values the rules about this"
             + " position leave between them are more than this compiler will work out, stopped at "
-            + WorkFigure.ADMITTED_VALUES_ONE_MACHINE.counts() + " ("
+            + InEnglish.said(WorkFigure.ADMITTED_VALUES_ONE_MACHINE.countsSaid()) + " ("
             + WorkFigure.ADMITTED_VALUES_ONE_MACHINE.name() + ", ";
 
     /** And about the form nothing takes apart. */

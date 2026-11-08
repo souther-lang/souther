@@ -4,7 +4,6 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.msg.SearchMessage;
 
-import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -107,9 +106,10 @@ public record BorderObligationId(AuthoredLine line, Optional<Level> at) {
         return line.toldWithoutAPlace();
     }
 
-    // BRIDGE-1464: callers move to toldWithoutAPlace
+    /** The same in the catalog's base language, for a text no reader's language changes: a
+     *  diagnostic's argument, and a field of a document a consumer matches on. */
     public String saidWithoutAPlace() {
-        return Messages.render(toldWithoutAPlace(), Locale.ENGLISH);
+        return Messages.render(toldWithoutAPlace(), Messages.BASE_LANGUAGE);
     }
 
     /**
@@ -129,11 +129,6 @@ public record BorderObligationId(AuthoredLine line, Optional<Level> at) {
             case RuleRef.Written written ->
                     new SearchMessage.TheRuleInTheBehavior(handle, written.behavior());
         });
-    }
-
-    // BRIDGE-1464: callers move to toldAfter
-    public String saidAfter(String handle) {
-        return Messages.render(toldAfter(handle), Locale.ENGLISH);
     }
 
     /** The declaration this line is owed to, where a declaration's clause drew it. */

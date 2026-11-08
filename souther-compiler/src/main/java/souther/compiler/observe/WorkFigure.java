@@ -1,10 +1,8 @@
 package souther.compiler.observe;
 
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.SearchMessage;
 
-import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -125,11 +123,6 @@ public enum WorkFigure {
     /** What it counts, in whichever language a report is written. */
     public Message countsSaid() {
         return counted;
-    }
-
-    // BRIDGE-1464: callers move to countsSaid
-    public String counts() {
-        return Messages.render(counted, Locale.ENGLISH);
     }
 
     /** This figure, as it stood at {@code most}. */

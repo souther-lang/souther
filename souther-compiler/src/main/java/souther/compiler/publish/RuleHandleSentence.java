@@ -44,7 +44,8 @@ final class RuleHandleSentence {
         return switch (sentence) {
             case PublishedSentence.Words it -> it.said();
             case PublishedSentence.AroundAHandle it ->
-                    it.before() + said(it.handle(), sources, sectionSource, language) + it.after();
+                    Messages.render(it.around().with(
+                            said(it.handle(), sources, sectionSource, language)), language);
         };
     }
 

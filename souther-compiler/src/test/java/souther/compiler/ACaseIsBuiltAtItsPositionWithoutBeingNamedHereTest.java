@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
+import souther.compiler.report.InEnglish;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -84,7 +85,7 @@ class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
         assertEquals(List.of(
                         "`domain` does not expose `BusinessClosure`, so nothing here can name it",
                         "`domain` does not expose `Dismissal`, so nothing here can name it"),
-                filled.unresolved().stream().map(u -> u.why().said().orElseThrow()).toList(),
+                filled.unresolved().stream().map(u -> InEnglish.said(u.why().told().orElseThrow())).toList(),
                 "each case of the position that has no name here says so");
     }
 }

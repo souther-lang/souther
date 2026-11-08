@@ -9,6 +9,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.diag.Messages;
 import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
@@ -500,8 +501,7 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
                     PublishedSentence.AroundAHandle.alone(handle);
             // The declarations that took the end in, said the way the line itself says them. The
             // handle underneath is the bound's, which is what this origin cites.
-            case NarrowedOrigin n -> new PublishedSentence.AroundAHandle(
-                    "", handle, n.authoredLine().narrowing());
+            case NarrowedOrigin n -> n.authoredLine().around(handle);
         };
     }
 
@@ -587,9 +587,12 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
         return authoredLine().toldWithoutAPlace();
     }
 
-    // BRIDGE-1464: callers move to toldWithoutAPlace
+    /**
+     * The same in the catalog's base language, for a text no reader's language changes: an
+     * exception's message, and a field of a document a consumer matches on.
+     */
     default String saidWithoutAPlace() {
-        return authoredLine().saidWithoutAPlace();
+        return Messages.render(toldWithoutAPlace(), Messages.BASE_LANGUAGE);
     }
 
     /**

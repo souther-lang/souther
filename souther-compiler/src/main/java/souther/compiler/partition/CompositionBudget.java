@@ -1,12 +1,10 @@
 package souther.compiler.partition;
 
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 
-import java.util.Locale;
 
 /**
  * A figure this compiler holds a piece of its own work to.
@@ -943,11 +941,6 @@ public enum CompositionBudget {
                     new SearchMessage.ElementsASideIsSearchedOver();
             case NUMBERS_A_SIDE_IS_BALANCED_FROM -> new SearchMessage.NumbersASideIsBalancedFrom();
         };
-    }
-
-    // BRIDGE-1464: callers move to countsSaid
-    public String counts() {
-        return Messages.render(countsSaid(), Locale.ENGLISH);
     }
 
     /**

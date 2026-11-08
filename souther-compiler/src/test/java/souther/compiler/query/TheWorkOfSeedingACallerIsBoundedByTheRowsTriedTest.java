@@ -59,7 +59,7 @@ class TheWorkOfSeedingACallerIsBoundedByTheRowsTriedTest {
         AtomicInteger built = new AtomicInteger();
         Generator.CandidateCheck check = (_, _) -> {
             built.incrementAndGet();
-            return refuseAll ? new Generator.CandidateCheck.Built.Refused("no")
+            return refuseAll ? Generator.CandidateCheck.Built.Refused.inItsOwnWords("no")
                     : new Generator.CandidateCheck.Built.NothingBuiltIt();
         };
         List<Generator.GeneratedRow> rows = CallExampleSeeds.rowsFor(db, "repro.bound",

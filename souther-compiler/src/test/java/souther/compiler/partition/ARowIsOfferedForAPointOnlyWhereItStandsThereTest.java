@@ -135,7 +135,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                         first.add(candidate.text());
                     }
                     if (parameter != 0) {
-                        return new Generator.CandidateCheck.Built.Refused("the model refuses it");
+                        return Generator.CandidateCheck.Built.Refused.inItsOwnWords("the model refuses it");
                     }
                     // The first candidate stands away from the point and the other stands on it, so
                     // this parameter refuses one and succeeds all the same. Said of each candidate

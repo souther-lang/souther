@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.report.InEnglish;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.BlockReason;
@@ -3059,7 +3060,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     @Test
     void aRelationShownNothingOfAWayPastTheFigureSaysTheFigureStoppedIt() {
-        String figure = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.counts();
+        String figure = InEnglish.said(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.countsSaid());
         String inputs = "x1: Int, x2: Int, x3: Int, x4: Int, x5: Int, y: Int";
         String body = "if (x1 >= 0 || x1 <= -5) && (x2 >= 0 || x2 <= -5) && (x3 >= 0 || x3 <= -5)"
                 + " && (x4 >= 0 || x4 <= -5) && (x5 >= 0 || x5 <= -5)"

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.msg.SearchMessage;
+import souther.compiler.report.InEnglish;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
 
@@ -334,6 +335,7 @@ class WhatTheAlternativesCameToTest {
 
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 published.why().reason());
-        assertEquals(Optional.of("the value built cannot be written"), published.why().said());
+        assertEquals(Optional.of("the value built cannot be written"),
+                InEnglish.said(published.why().told()));
     }
 }

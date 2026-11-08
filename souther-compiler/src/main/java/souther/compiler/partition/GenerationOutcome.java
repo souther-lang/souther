@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.SearchMessage;
 
@@ -8,7 +7,6 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.SequencedSet;
 
 /**
@@ -152,11 +150,6 @@ public sealed interface GenerationOutcome {
             public Message told() {
                 return told;
             }
-
-            // BRIDGE-1464: callers move to told
-            public String said() {
-                return Messages.render(told, Locale.ENGLISH);
-            }
         }
     }
 
@@ -271,11 +264,6 @@ public sealed interface GenerationOutcome {
             /** The reason as a report writes it, in whichever language the report is written. */
             public Message told() {
                 return told;
-            }
-
-            // BRIDGE-1464: callers move to told
-            public String said() {
-                return Messages.render(told, Locale.ENGLISH);
             }
         }
     }

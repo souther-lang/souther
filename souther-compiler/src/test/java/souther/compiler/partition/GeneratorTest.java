@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.TestDay;
+import souther.compiler.report.InEnglish;
 import souther.compiler.carrier.Lookup;
 import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.carrier.Membership;
@@ -386,7 +387,8 @@ class GeneratorTest {
                 only.why().reason(),
                 "a value this could not compose, not one that cannot exist");
         assertEquals(Optional.of("nothing here writes a value whose value is in this range"),
-                only.why().said(), "the sentence the class recorded, and not one made up here");
+                InEnglish.said(only.why().told()),
+                "the sentence the class recorded, and not one made up here");
     }
 
     /**

@@ -2,14 +2,14 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.meaning.WrittenLine;
+import souther.compiler.publish.PublishedRuleHandle;
+import souther.compiler.publish.PublishedSentence;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
@@ -174,11 +174,6 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
         });
     }
 
-    // BRIDGE-1464: callers move to toldWithoutAPlace
-    public String saidWithoutAPlace() {
-        return Messages.render(toldWithoutAPlace(), Locale.ENGLISH);
-    }
-
     /**
      * The same about a rule a reader is calling something else.
      *
@@ -191,21 +186,17 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
                 : new SearchMessage.RuleWithin(rule, named(narrowedWithin));
     }
 
-    // BRIDGE-1464: callers move to told
-    public String said(String rule) {
-        return Messages.render(told(new SearchMessage.TheRuleCited(rule)), Locale.ENGLISH);
-    }
-
     /**
-     * What this reading adds after the rule, which is nothing where no declaration took an end in.
+     * The sentence this reading says {@code handle} in, which is the handle alone where no
+     * declaration took an end in.
      *
-     * <p>The words on their own, for a reader putting them after a handle it renders itself. A rule
-     * has one spelling and it is not this one's to write, so what is offered here is the rest of the
-     * sentence rather than the whole of it.
+     * <p>The sentence and not its words: the handle is put into it by whoever renders handles. A
+     * rule has one spelling and it is not this one's to write.
      */
-    // BRIDGE-1464: callers move to told
-    public String narrowing() {
-        return narrowedWithin.isEmpty() ? "" : " within " + naming(narrowedWithin);
+    public PublishedSentence.AroundAHandle around(PublishedRuleHandle handle) {
+        return narrowedWithin.isEmpty() ? PublishedSentence.AroundAHandle.alone(handle)
+                : new PublishedSentence.AroundAHandle(handle,
+                        new PublishedSentence.Around.Within(named(narrowedWithin)));
     }
 
     /**
@@ -234,11 +225,6 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
             rest = new SearchMessage.OrElse(written.get(i), rest);
         }
         return rest;
-    }
-
-    // BRIDGE-1464: callers move to named
-    public static String naming(List<TypeSymbol.AtModule> declarations) {
-        return Messages.render(named(declarations), Locale.ENGLISH);
     }
 
     /**

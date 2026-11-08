@@ -2392,15 +2392,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             byDeclaration.computeIfAbsent(each.finding().named(), _ -> new ArrayList<>())
                     .add(each.finding());
         }
-        byDeclaration.forEach((declaration, findings) -> {
-            out.append("  ").append(declaration).append(NEW_LINE);
+        byDeclaration.forEach((_, findings) -> {
+            out.append("  ").append(page.say(findings.getFirst().subject().told()))
+                    .append(NEW_LINE);
             for (Adequacy.Finding f : findings) {
                 if (f.about() instanceof About.APointOfADeclaredBorder(var owed)) {
                     // What the point asks, in its own words. A point against the line names a value
                     // and a point beside it names a run, and a sentence that wrote `=` for both said
                     // a run was one value.
                     marked(out, f, page, new ReportMessage.NoRowIsAtThe(
-                            pointOf(owed, owed.debt().id().saidWithoutAPlace())));
+                            pointOf(owed, page.say(owed.debt().id().toldWithoutAPlace()))));
                 }
             }
         });
@@ -3978,7 +3979,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // the same block and beside the questions, because both are the difference between the two
         // numbers — what differs is that this one is answered.
         for (BorderObligationPointAssessment point : owed.refuted()) {
-            noted(out, page, cannotBeWritten(new ReportMessage.PointOfALine(point.role().name(), "",
+            noted(out, page, cannotBeWritten(new ReportMessage.PointOfALine(point.role().name(),
+                    new ReportMessage.Nothing(),
                     RuleHandleProse.said(point.describe(places), page.rendering(),
                             page.language(), declaredIn))));
             readings(out, apart, point,_ -> true, at -> whatWasTried(
@@ -3988,7 +3990,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         for (BorderObligationPointAssessment point : owed.undecided()) {
             for (Message said : undecidedBecause(point.owed().disposition(),
-                    new ReportMessage.PointOfALine(point.role().name(), "",
+                    new ReportMessage.PointOfALine(point.role().name(), new ReportMessage.Nothing(),
                             RuleHandleProse.said(point.describe(places), page.rendering(),
                             page.language(), declaredIn)),
                     page)) {
@@ -4088,7 +4090,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 if (left.owedToTheReading()) {
                     DomainPoint at = left.point().point();
                     noted(out, page, new ReportMessage.NoPointIsOwed(
-                            line.border().roleOf(at).name(), line.border().whichSide(at),
+                            line.border().roleOf(at).name(), line.border().sideOf(at),
                             line.label(),
                             RuleHandleProse.said(line.describe(places), page.rendering(),
                                     page.language(), declaredIn),
@@ -5418,7 +5420,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * short of ({@link GeneratedRows#beside}). Changed with those two and never apart from them.
      */
     static List<Object> shownOnThePage(Generator.UnresolvedCombination why) {
-        return why.said().isPresent() ? List.of(why.said().get(), why.alsoShort())
+        return why.told().isPresent() ? List.of(why.told().get(), why.alsoShort())
                 : List.of(why.reason(), why.subject(), why.alsoShort());
     }
 
@@ -6318,10 +6320,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.MoreWaysThanAreRead _ -> new ReportMessage.MoreWaysThanAreTaken();
             // The same kind: read, in a path's words, and stopped at a figure.
             case WhyNotTaken.MoreAlternativesThanAreTried(Figure stoppedAt) ->
-                    new ReportMessage.MoreAlternativesThanAreTried(stoppedAt.counts());
+                    new ReportMessage.MoreAlternativesThanAreTried(stoppedAt.countsSaid());
             // The same kind: read, and taken apart into choices past a figure.
             case WhyNotTaken.MoreChoicesThanAreWrittenOut(CompositionBudget figure) ->
-                    new ReportMessage.MoreChoicesThanAreWrittenOut(figure.counts());
+                    new ReportMessage.MoreChoicesThanAreWrittenOut(figure.countsSaid());
         };
     }
 
@@ -6424,7 +6426,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * alone would drop the one part an author can act on.
      */
     private static String saidOrWhy(Generator.UnresolvedCombination why, Page page) {
-        return why.said().orElseGet(() -> page.say(whyUnresolved(why)));
+        return why.told().map(page::say).orElseGet(() -> page.say(whyUnresolved(why)));
     }
 
     /** The category a search came back with, where the class it was about said nothing itself. */
@@ -10391,7 +10393,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 return owed.getFirst().subject().named();
             }
             return found.isEmpty()
-                    ? AuthoredLine.naming(owners) : found.getFirst().finding().named();
+                    ? Page.inTheDocument(AuthoredLine.named(owners))
+                    : found.getFirst().finding().named();
         }
     }
 
@@ -10650,8 +10653,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case About.ARuleNothingClassified(var it) -> words(it.at());
             // The rule, by the handle a reader finds it with: it stops some runs at no position,
             // so the rule is all there is to name.
-            case About.ARuleThatMayStopARun(var it) -> new PublishedSentence.AroundAHandle("",
-                    PublishedRuleHandle.of(handle(it.cited(), places), places), "");
+            case About.ARuleThatMayStopARun(var it) -> PublishedSentence.AroundAHandle.alone(
+                    PublishedRuleHandle.of(handle(it.cited(), places), places));
             // The position and not a number measured of it: which of this position's rules went
             // unread is a fact about the location, and the measures on it are as many as the rules
             // name numbers there.
@@ -10668,8 +10671,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The handle, and what tells this rule from another beside it: two arms of one clause
             // may name the same case, so the words alone joined two questions into one row.
             case About.AQuestionNothingAnswered(var asked) -> new PublishedSentence.AroundAHandle(
-                    "", PublishedRuleHandle.of(handle(asked.cited(), places), places),
-                    " — " + Page.inTheDocument(asked(asked.asked(), subjectOf(asked))));
+                    PublishedRuleHandle.of(handle(asked.cited(), places), places),
+                    new PublishedSentence.Around.ThenAsked(
+                            asked(asked.asked(), subjectOf(asked))));
             case About.ACaseNoRowAppliesItTo(var input, var missing, var _) ->
                     words(missing.name() + " (in " + inputSaid(input.at()) + ")");
             // The point and the line, and no quantity: a body's line is owed once wherever it is
@@ -11134,7 +11138,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // of its points apart is the line and where on it the point is.
             case Subject.AtAPoint it -> {
                 String rule = switch (it.point().line().provenance()) {
-                    case RuleRef.Named _ -> it.point().line().saidWithoutAPlace();
+                    case RuleRef.Named _ -> page.say(it.point().line().toldWithoutAPlace());
                     case RuleRef.Written _ -> {
                         PublishedRuleHandle handle = writtenPoints.get(it.point());
                         if (handle == null) {
@@ -11142,8 +11146,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     + " sent to by where the rule is, and no assessment of this"
                                     + " one said where: " + it.point());
                         }
-                        yield it.point().line().saidAfter(RuleHandleProse.said(handle,
-                                page.rendering(), page.language(), null));
+                        yield page.say(it.point().line().toldAfter(RuleHandleProse.said(handle,
+                                page.rendering(), page.language(), null)));
                     }
                 };
                 yield rule
@@ -11355,7 +11359,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /** One figure as a line says it: what it counts, then its name and what it stood at. */
     private static Message figureSaid(Figure figure) {
-        return new ReportMessage.FigureSaid(figure.counts(), figure.name(), figure.most());
+        return new ReportMessage.FigureSaid(figure.countsSaid(), figure.name(), figure.most());
     }
 
     /**

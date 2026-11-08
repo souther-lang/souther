@@ -248,10 +248,10 @@ public sealed interface ReportMessage extends Message {
     record NoRowFixesTheWeight(String position, String into) implements ReportMessage, Prose {}
 
     /** A point of a line some rule drew, by its role, which side of the line, and the rule. */
-    record PointOfALine(String role, String side, String rule) implements ReportMessage, Prose {}
+    record PointOfALine(String role, Message side, String rule) implements ReportMessage, Prose {}
 
     /** A point of a declaration's line, said on the quantity the declaration wrote. */
-    record DeclaredPointAt(String role, String side, String said, String rule)
+    record DeclaredPointAt(String role, Message side, String said, String rule)
             implements ReportMessage, Prose {}
 
     /** A point of a declaration's line that has no quantity in the declaration's words. */
@@ -280,10 +280,10 @@ public sealed interface ReportMessage extends Message {
     record ThePointIsAnsweredNotAtEveryReading(String role, String rule)
             implements ReportMessage, Prose {}
 
-    record NoPointIsOwed(String role, String side, String line, String rule, Message why)
+    record NoPointIsOwed(String role, Message side, String line, String rule, Message why)
             implements ReportMessage, Prose {}
 
-    record NoPointOfTheRuleIsOwed(String role, String side, String rule, Message why)
+    record NoPointOfTheRuleIsOwed(String role, Message side, String rule, Message why)
             implements ReportMessage, Prose {}
 
     record NoPointExists(String role, String line, String rule, Message why)
@@ -345,8 +345,23 @@ public sealed interface ReportMessage extends Message {
 
     // --- more joining ---
 
-    /** A part said with nothing of its own around it. */
+    /** A part that is code or a name, said as it is written and in no language's words. */
     record Verbatim(String said) implements ReportMessage, Prose {}
+
+    /** Where else a point of a declaration's line was settled, said after the line. */
+    record SettledElsewhere(Message where) implements ReportMessage, Prose {}
+
+    /** Two places a point was settled at besides its line. */
+    record SettledAtBoth(Message first, Message rest) implements ReportMessage, Prose {}
+
+    /** A place the values stop at, on the declaration's own quantity. */
+    record WhereTheValuesStopAt(String at) implements ReportMessage, Prose {}
+
+    /** A line a point was settled up to. */
+    record UpToTheLine(Message line) implements ReportMessage, Prose {}
+
+    /** A rule, and what was asked of it that nothing answered. */
+    record RuleThenAsked(String rule, Message asked) implements ReportMessage, Prose {}
 
     record ListedSaid(Message first, Message rest) implements ReportMessage, Prose {}
 
@@ -439,7 +454,7 @@ public sealed interface ReportMessage extends Message {
 
     // --- a figure of this compiler's ---
 
-    record FigureSaid(String counts, String name, String most) implements ReportMessage, Prose {}
+    record FigureSaid(Message counts, String name, String most) implements ReportMessage, Prose {}
 
     record StoppedAt(Message figures) implements ReportMessage, Prose {}
 
@@ -1002,9 +1017,9 @@ public sealed interface ReportMessage extends Message {
 
     record MoreWaysThanAreTaken() implements ReportMessage, Prose {}
 
-    record MoreAlternativesThanAreTried(String figure) implements ReportMessage, Prose {}
+    record MoreAlternativesThanAreTried(Message figure) implements ReportMessage, Prose {}
 
-    record MoreChoicesThanAreWrittenOut(String figure) implements ReportMessage, Prose {}
+    record MoreChoicesThanAreWrittenOut(Message figure) implements ReportMessage, Prose {}
 
     // --- why the meaning of a condition was not read ---
 

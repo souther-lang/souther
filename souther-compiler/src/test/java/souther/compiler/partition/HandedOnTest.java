@@ -84,7 +84,7 @@ class HandedOnTest {
     @Test
     void aRefusedValueHandsOnNothing() {
         assertInstanceOf(HandedOn.Came.Refused.class,
-                handedOn(new Generator.CandidateCheck.Built.Refused("no"),
+                handedOn(Generator.CandidateCheck.Built.Refused.inItsOwnWords("no"),
                         Map.of(LEVEL, FixtureTemplate.integer(1))));
     }
 

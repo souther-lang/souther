@@ -1120,7 +1120,7 @@ public final class GeneratedRows {
                 case GenerationOutcome.NotSupported none -> none.reasons().forEach(why ->
                         say(out, saidOf, Owed.by(each.finding()), page, on -> on.say(
                                 openingFor(why, called(each.finding(), db, module, on, places)
-                                        .quoted(on), behavior, why.said()))));
+                                        .quoted(on), behavior, on.say(why.told())))));
                 // Said rather than passed over, because the report counts this coordinate among
                 // what is missing and no row is offered for it. Left out, an author reads a gap
                 // above and no account of why nothing was written for it; the account is that the
@@ -1339,8 +1339,8 @@ public final class GeneratedRows {
      */
     private static String saidOf(Generator.UnresolvedCombination left, Page page,
                                  PublishedRuleHandle.WhereARuleIs places) {
-        return beside(left.said().orElseGet(() -> page.say(why(left.reason()))), left, page,
-                places);
+        return beside(left.told().map(page::say).orElseGet(() -> page.say(why(left.reason()))),
+                left, page, places);
     }
 
     /**
@@ -1359,7 +1359,7 @@ public final class GeneratedRows {
     }
 
     private static Object sentenceOrWord(Generator.UnresolvedCombination why) {
-        return why.said().<Object>map(sentence -> sentence).orElse(why.reason());
+        return why.told().<Object>map(sentence -> sentence).orElse(why.reason());
     }
 
     /**

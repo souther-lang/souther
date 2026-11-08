@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.msg.SearchMessage;
+import souther.compiler.report.InEnglish;
 
 import java.util.Optional;
 import java.util.Set;
@@ -39,7 +40,8 @@ class WhatAWalkFoundIsSaidOfThePointAndNeverInItsPlaceTest {
 
         assertEquals(LABEL, why.subject(), "the point is what no row was found for");
         assertNull(why.detail(), "and no position stands in for it");
-        assertEquals(Optional.of(FOUND), why.said(), "what the walk found is what the point said");
+        assertEquals(Optional.of(FOUND), InEnglish.said(why.told()),
+                "what the walk found is what the point said");
     }
 
     /** A walk that wrote some of a population, and said where it was short. */
@@ -51,7 +53,8 @@ class WhatAWalkFoundIsSaidOfThePointAndNeverInItsPlaceTest {
 
         assertEquals(LABEL, why.subject(), "the point is what no row was found for");
         assertNull(why.detail(), "and no position stands in for it");
-        assertEquals(Optional.of(FOUND), why.said(), "what the walk found is what the point said");
+        assertEquals(Optional.of(FOUND), InEnglish.said(why.told()),
+                "what the walk found is what the point said");
     }
 
     /** What an edge that offered nothing comes to at {@link #LABEL}, as the account reads it. */
