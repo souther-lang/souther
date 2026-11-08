@@ -1,14 +1,17 @@
 package souther.compiler.report;
 
-import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.ReportMessage;
 import souther.compiler.observe.RowRef;
 import souther.compiler.query.ReplacementAsWritten;
 import souther.compiler.query.ReplacementEvidence;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
- * What the reports written in one language call a rewrite of a body.
+ * What a report calls a rewrite of a body.
  *
  * <p>Words that tell one rewrite from every other of the same body, or they say nothing a reader can
  * act on: an arm by the arm and the arm it answers as, in the words {@link ArmVocabulary} has for
@@ -17,20 +20,22 @@ import java.util.Optional;
  * line under a measure and a row composed for it are two places one rewrite is met, and two
  * spellings of it would read as two rewrites.
  *
+ * <p>The messages and not their words, which are the catalog's in the reader's language. An arm's
+ * label is the language's own spelling of the arm and is the same in every one.
+ *
  * <p>No place. Where a rewrite of an arm is shown is the finding's to say, and a reader puts it
  * beside these words where its sentence wants it; a fork this build holds no source of has none,
  * and is said by the definition that wrote it instead ({@link #outOfSight}).
  */
-public final class RewriteVocabulary {
+final class RewriteVocabulary {
 
     /**
      * Where the fork of a rewrite this build holds no source of is, as far as this build can say:
      * the definition that wrote it ({@link ReplacementAsWritten.OfAnArm#writtenBy}), as a reader of
      * {@code module} names a definition of another module.
      */
-    public static String outOfSight(ReplacementAsWritten.OfAnArm rewrite, String module) {
-        return "in a fork of `" + rewrite.writtenBy().saidIn(module)
-                + "` this build holds no source of";
+    static Message outOfSight(ReplacementAsWritten.OfAnArm rewrite, String module) {
+        return new ReportMessage.InAForkOutOfSight(rewrite.writtenBy().saidIn(module));
     }
 
     /**
@@ -38,8 +43,8 @@ public final class RewriteVocabulary {
      * the definition that wrote it, as {@link #outOfSight(ReplacementAsWritten.OfAnArm, String)}
      * says a fork's.
      */
-    public static String outOfSight(ReplacementAsWritten.OfAWalk rewrite, String module) {
-        return "in `" + rewrite.writtenBy().saidIn(module) + "` this build holds no source of";
+    static Message outOfSight(ReplacementAsWritten.OfAWalk rewrite, String module) {
+        return new ReportMessage.InADefinitionOutOfSight(rewrite.writtenBy().saidIn(module));
     }
 
     /**
@@ -50,29 +55,38 @@ public final class RewriteVocabulary {
      * definition this build holds no source of has no line to give, and one made up would send a
      * reader to code that is not there. They tell the lines apart and are not where to look.
      */
-    public static String apart(Optional<ReplacementEvidence.ToldApartBy> by) {
-        return by.map(it -> " (construct " + it.construct()
-                + (it.lowered() == 0 ? "" : ", lowered " + it.lowered())
-                + it.arms().map(arms -> ", arm " + arms.part() + " as " + arms.with())
-                        .orElse("") + ")").orElse("");
+    static Message apart(Optional<ReplacementEvidence.ToldApartBy> by) {
+        return by.<Message>map(it -> {
+            List<Message> parts = new ArrayList<>();
+            parts.add(new ReportMessage.AtTheConstruct(Integer.toString(it.construct())));
+            if (it.lowered() != 0) {
+                parts.add(new ReportMessage.Lowered(Integer.toString(it.lowered())));
+            }
+            it.arms().ifPresent(arms -> parts.add(new ReportMessage.ArmAs(
+                    String.valueOf(arms.part()), String.valueOf(arms.with()))));
+            Message said = parts.getLast();
+            for (int i = parts.size() - 2; i >= 0; i--) {
+                said = new ReportMessage.PartsOfOne(parts.get(i), said);
+            }
+            return new ReportMessage.Bracketed(said);
+        }).orElse(new ReportMessage.Nothing());
     }
 
     /** What {@code rewrite} has the fold do, as the end of a sentence about the fold. */
-    public static String walked(ReplacementAsWritten.OfAWalk rewrite) {
+    static Message walked(ReplacementAsWritten.OfAWalk rewrite) {
         return switch (rewrite.replacement().how()) {
-            case STOPS_AFTER_ONE_STEP -> "stopped after its first element";
-            case STEPS_FROM_THE_SEED ->
-                    "handed each step the seed in place of what the step before it answered";
+            case STOPS_AFTER_ONE_STEP -> new ReportMessage.StoppedAfterItsFirstElement();
+            case STEPS_FROM_THE_SEED -> new ReportMessage.HandedEachStepTheSeed();
         };
     }
 
     /** The word for the arm {@code rewrite} rewrites. */
-    public static String rewritten(ReplacementAsWritten.OfAnArm rewrite) {
+    static String rewritten(ReplacementAsWritten.OfAnArm rewrite) {
         return ArmVocabulary.label(rewrite.replacement().fork().kind(), rewrite.arm());
     }
 
     /** The word for the arm {@code rewrite} has it answer as. */
-    public static String answeredAs(ReplacementAsWritten.OfAnArm rewrite) {
+    static String answeredAs(ReplacementAsWritten.OfAnArm rewrite) {
         return ArmVocabulary.label(rewrite.replacement().fork().kind(), rewrite.sibling());
     }
 
@@ -80,25 +94,24 @@ public final class RewriteVocabulary {
      * The row that came to the value {@code rewrite} has the body answer, in the words a report
      * names a row in.
      */
-    public static String answeredBy(ReplacementAsWritten.ByOneAnswer rewrite,
-                                    SourceRendering rendering) {
+    static String answeredBy(ReplacementAsWritten.ByOneAnswer rewrite, Page page) {
         RowRef row = rewrite.replacement().answeredBy();
-        return row.shown(rendering.names().nameOf(row.source()));
+        return AdequacyReport.rowShown(row, page);
     }
 
     /**
      * Short words for {@code rewrite}, which a row composed for it may be named by: the arm and
      * the arm it answers as, or the row whose value the body answers.
      */
-    public static String label(ReplacementAsWritten rewrite, SourceRendering rendering) {
+    static Message label(ReplacementAsWritten rewrite, Page page) {
         return switch (rewrite) {
             case ReplacementAsWritten.OfAnArm arm ->
-                    rewritten(arm) + " answering as " + answeredAs(arm);
+                    new ReportMessage.AnArmAnsweringAs(rewritten(arm), answeredAs(arm));
             case ReplacementAsWritten.ByOneAnswer one ->
-                    "the body answering what " + answeredBy(one, rendering) + " answers";
+                    new ReportMessage.TheBodyAnsweringWhatARowAnswers(answeredBy(one, page));
             case ReplacementAsWritten.OfAWalk walk -> switch (walk.replacement().how()) {
-                case STOPS_AFTER_ONE_STEP -> "the fold stopping after its first element";
-                case STEPS_FROM_THE_SEED -> "each step of the fold handed the seed";
+                case STOPS_AFTER_ONE_STEP -> new ReportMessage.TheFoldStoppingAfterItsFirstElement();
+                case STEPS_FROM_THE_SEED -> new ReportMessage.EachStepOfTheFoldHandedTheSeed();
             };
         };
     }

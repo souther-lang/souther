@@ -639,9 +639,11 @@ public final class Main {
             if (assessable) {
                 SourceRendering rendering =
                         new SourceRendering(read.names(), compilation.texts());
+                // The page in the language the reader named, and the document in the one a
+                // consumer parses whatever was named.
                 String rendered = render.json()
                         ? report.json(rendering) + System.lineSeparator()
-                        : report.human(rendering);
+                        : report.human(rendering, render.locale());
                 out.print(rendered);
                 // After the report, because the rows are what to do about what the report just said.
                 // Beside it rather than in it where the report is JSON: the rows are source, and
@@ -651,7 +653,8 @@ public final class Main {
                     // command's compile has because the report it writes is measured over them. A
                     // row is offered for a meeting of the body's decisions no row makes, and
                     // nothing can say a meeting was missed of a run that recorded nothing.
-                    String rows = GeneratedRows.of(compilation, rendering, offered).text();
+                    String rows = GeneratedRows.of(compilation, rendering, offered)
+                            .text(render.locale());
                     (render.json() ? err : out).print(rows);
                 }
             }

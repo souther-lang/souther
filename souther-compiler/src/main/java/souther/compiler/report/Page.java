@@ -19,21 +19,13 @@ import java.util.Objects;
  *
  * <p>A document for a machine is not written against this. It writes the same strings whatever
  * language was named, because a consumer parses them, and where it says a sentence it says it in
- * {@link #DOCUMENT_LANGUAGE}.
+ * {@link Messages#BASE_LANGUAGE}: the language the schema's descriptions are written in, and what a
+ * consumer written against an earlier document matches on.
  *
  * @param rendering what each source is called and how it is laid out
  * @param language  the language the prose of the page is written in
  */
 record Page(SourceRendering rendering, Locale language) {
-
-    /**
-     * The language a document says a sentence in, whichever one the reader named.
-     *
-     * <p>English, because it is what the schema's descriptions are written in and what a consumer
-     * written against an earlier document matches on. It is also the language the catalog is
-     * written from, so it is the one every other entry is a translation of.
-     */
-    static final Locale DOCUMENT_LANGUAGE = Locale.ENGLISH;
 
     /**
      * Two prose lines are the same line, and in which order prose lines are said, as the catalog's
@@ -51,6 +43,17 @@ record Page(SourceRendering rendering, Locale language) {
         Objects.requireNonNull(language, "a page is written in a language");
     }
 
+    /** This page with its prose in the base language, which is what two lines are told apart in. */
+    Page base() {
+        return language.equals(Messages.BASE_LANGUAGE)
+                ? this : new Page(rendering, Messages.BASE_LANGUAGE);
+    }
+
+    /** {@code message} as a document writes it, which is in {@link Messages#BASE_LANGUAGE}. */
+    static String inTheDocument(Message message) {
+        return Messages.render(message, Messages.BASE_LANGUAGE);
+    }
+
     /** {@code message} in the language of this page. */
     String say(Message message) {
         return Messages.render(message, language);
@@ -62,6 +65,6 @@ record Page(SourceRendering rendering, Locale language) {
      * <p>Its wording in the base language: see {@link #IN_THE_BASE_WORDING}.
      */
     static String sameness(Message message) {
-        return Messages.render(message, DOCUMENT_LANGUAGE);
+        return Messages.render(message, Messages.BASE_LANGUAGE);
     }
 }

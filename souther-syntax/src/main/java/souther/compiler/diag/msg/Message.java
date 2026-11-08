@@ -37,8 +37,8 @@ package souther.compiler.diag.msg;
  * messages rather than one entry that selects between two sentences.
  */
 public sealed interface Message permits ArithmeticMessage, AttemptMessage, BehaviorMessage,
-        DataMessage, DeadBranchMessage, DeclarationMessage, ExampleMessage,
+        DataMessage, DeadBranchMessage, DeclarationMessage, ExampleMessage, GeneratedRowsMessage,
         HelperMessage, ImportMessage,
         InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage, NameMessage, ParseMessage,
-        ReasonMessage, TypeMessage, UnreachableMessage, WrittenAtMessage {
+        ReasonMessage, ReportMessage, TypeMessage, UnreachableMessage, WrittenAtMessage {
 }

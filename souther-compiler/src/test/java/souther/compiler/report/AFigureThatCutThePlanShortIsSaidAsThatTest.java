@@ -26,7 +26,7 @@ class AFigureThatCutThePlanShortIsSaidAsThatTest {
     @Test
     void aCutPlanIsNotSaidAsAStop() {
         String said = Reasons.met(new CameToNothing(word(), CompositionShortfall.NONE,
-                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
+                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)), InEnglish.PAGE);
 
         assertFalse(said.contains("stopped at"), said);
         assertTrue(said.startsWith("this compiler's plan of the value was limited by "), said);
@@ -37,7 +37,7 @@ class AFigureThatCutThePlanShortIsSaidAsThatTest {
     void aStopAndACutPlanAreBothSaid() {
         String said = Reasons.met(new CameToNothing(word(),
                 CompositionShortfall.of(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)),
-                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
+                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)), InEnglish.PAGE);
 
         assertTrue(said.startsWith("this compiler stopped at "), said);
         assertTrue(said.contains(", and this compiler's plan of the value was limited by "), said);

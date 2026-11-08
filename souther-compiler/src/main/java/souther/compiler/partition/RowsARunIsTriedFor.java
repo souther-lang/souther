@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.ReportMessage;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
@@ -83,21 +85,19 @@ public final class RowsARunIsTriedFor {
      * #values} sit in no comma of their own, so a population stays one item in the
      * comma-separated list of populations it is read among.
      */
-    public static String sizes() {
-        return "the containers the comparison names each holding the same number of elements from"
-                + " 0 to " + MOST_ELEMENTS + " with element values left to their types and then"
-                + BESIDE;
+    public static Message sizes() {
+        return new ReportMessage.ContainersOfEverySize(Integer.toString(MOST_ELEMENTS));
     }
 
-    /** What is said of the rows made beside the rows the candidates ran. */
-    private static final String BESIDE = " rows beside those with an element put in a list or"
-            + " changed for one a row of the module ran or a whole number moved by one";
-
     /** What is said of the whole numbers outside a container a candidate is written for. */
-    public static String values() {
-        return "the whole numbers it names outside a container all at one of {"
-                + VALUES.stream().map(String::valueOf).collect(Collectors.joining(", ")) + "} and"
-                + " then" + BESIDE;
+    public static Message values() {
+        return new ReportMessage.WholeNumbersAtOneOf(
+                VALUES.stream().map(String::valueOf).collect(Collectors.joining(", ")));
+    }
+
+    /** Both of the above, which is what a run tried at sizes and values was written with. */
+    public static Message sizesAndValues() {
+        return new ReportMessage.SizesAndValues(sizes(), values());
     }
 
     /**
@@ -106,9 +106,8 @@ public final class RowsARunIsTriedFor {
      * as what is left out, since it is read after "writes some of" and an "other than" there reads
      * as the rows this compiler does write.
      */
-    public static String population(String candidates) {
-        return "the rows whose run works out a number at the item (written with " + candidates
-                + ")";
+    public static Message population(Message candidates) {
+        return new ReportMessage.TheRowsWhoseRunWorksOutANumber(candidates);
     }
 
     /** Every candidate for {@code goal}, in the order they are tried, none of them empty. */

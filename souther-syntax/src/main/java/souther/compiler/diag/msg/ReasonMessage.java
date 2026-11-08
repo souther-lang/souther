@@ -94,4 +94,33 @@ public sealed interface ReasonMessage extends Message {
     record WhatTheUnreadBodyDividesIsUnknown() implements ReasonMessage, Prose {}
 
     record NoPartitionAxisWasDerivedAtAnyPosition() implements ReasonMessage, Prose {}
+
+    // --- what a measurement could not read, by what it is about ---
+
+    record NothingWasObservedFor(String subject) implements ReasonMessage, Prose {}
+
+    record NoRowsWereReadFrom(String subject) implements ReasonMessage, Prose {}
+
+    record TheClassesWouldNotLink(String subject) implements ReasonMessage, Prose {}
+
+    record ARowDidNotComeBack(String subject) implements ReasonMessage, Prose {}
+
+    record ARowWasStoppedByALimit(String subject) implements ReasonMessage, Prose {}
+
+    record ARowWasNotRunAgainstWhatAnswersIt(String subject) implements ReasonMessage, Prose {}
+
+    record TheClassesForArmCoverageCouldNotBeMade(String subject)
+            implements ReasonMessage, Prose {}
+
+    record NoImplementationWasMadeFor(String subject) implements ReasonMessage, Prose {}
+
+    record AValueCouldNotBeRead(String subject) implements ReasonMessage, Prose {}
+
+    record TheObservationWasStoppedByALimit(String subject) implements ReasonMessage, Prose {}
+
+    record AValueHasNoRepresentation(String subject) implements ReasonMessage, Prose {}
+
+    record AValueNeedsMoreRoom(String subject) implements ReasonMessage, Prose {}
+
+    record AValueOutsideWhatWasShown(String subject) implements ReasonMessage, Prose {}
 }

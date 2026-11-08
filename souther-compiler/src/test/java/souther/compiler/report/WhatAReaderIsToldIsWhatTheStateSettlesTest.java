@@ -3,6 +3,7 @@ package souther.compiler.report;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
@@ -156,9 +157,9 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
             };
             assertEquals(each.provesInfeasible(), said != null, () -> each + " is a proof");
             if (said != null) {
-                assertEquals(said[0], AdequacyReport.whyUnresolved(
-                        new Generator.UnresolvedCombination(List.of("x"), each)), each.name());
-                assertEquals(said[1], GeneratedRows.why(each), each.name());
+                assertEquals(said[0], InEnglish.said(AdequacyReport.whyUnresolved(
+                        new Generator.UnresolvedCombination(List.of("x"), each))), each.name());
+                assertEquals(said[1], InEnglish.said(GeneratedRows.why(each)), each.name());
             }
         }
         for (NotOwedReason each : NotOwedReason.values()) {
@@ -166,7 +167,7 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
                 case NO_VALUE_CAN_STAND_THERE -> "excluded — no value can stand there";
                 case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
                         "this order names no value there, so the point cannot be written";
-            }, AdequacyReport.whyNotOwed(each), each.name());
+            }, InEnglish.said(AdequacyReport.whyNotOwed(each)), each.name());
         }
         for (RepairShortfall.Barrier each : RepairShortfall.Barrier.values()) {
             String said = switch (each) {
@@ -175,7 +176,7 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
                      THE_ROW_ALREADY_DOES_ALL_OF_IT -> null;
             };
             if (said != null) {
-                assertEquals(said, GeneratedRows.why(each), each.name());
+                assertEquals(said, InEnglish.said(GeneratedRows.why(each)), each.name());
             }
         }
         for (RuleRequirement.Excluded each : excludedByReading()) {
@@ -197,7 +198,7 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
                                 + " that way";
                 case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
                         throw new AssertionError("said in the words the composings came back with");
-            }, AdequacyReport.readOff(each), each.getClass().getSimpleName());
+            }, InEnglish.said(AdequacyReport.readOff(each)), each.getClass().getSimpleName());
         }
     }
 
@@ -225,6 +226,12 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
     private static TakenConstraint.Affine onX(long constant, Rel rel) {
         return new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(constant),
                 Map.of(new NumericTerm.ValueOf(TermPath.of("x")), ExactRatio.ONE)), rel);
+    }
+
+    /** The same of a sentence as the base catalog words it, which is what {@link NoValue#CAN} is
+     *  the opening of. */
+    private static void assertSays(Claim claim, Message said, Object of) {
+        assertSays(claim, InEnglish.said(said), of);
     }
 
     private static void assertSays(Claim claim, String said, Object of) {

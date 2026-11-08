@@ -15,6 +15,7 @@ import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -112,7 +113,8 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
                         + written);
         String said = RuleHandleProse.said(
                 PublishedRuleHandle.of(written, page.rulePlace()),
-                new SourceRendering(SourceNameResolver.identity(), SourceLayouts.NONE), null);
+                new SourceRendering(SourceNameResolver.identity(), SourceLayouts.NONE),
+                Locale.ENGLISH, null);
         assertTrue(said.startsWith("comparison@"),
                 () -> "what the rule is and where it is written: " + said);
     }

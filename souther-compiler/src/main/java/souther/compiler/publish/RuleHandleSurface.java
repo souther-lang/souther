@@ -1,5 +1,6 @@
 package souther.compiler.publish;
 
+import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.source.SourceId;
 
@@ -106,7 +107,8 @@ public enum RuleHandleSurface {
             throw new IllegalStateException(
                     "this field writes a sentence with a handle in it: " + this);
         }
-        into.node().put(here(into), RuleHandleSentence.said(handle, sources, sectionSource));
+        into.node().put(here(into), RuleHandleSentence.said(handle, sources, sectionSource,
+                Messages.BASE_LANGUAGE));
     }
 
     /**

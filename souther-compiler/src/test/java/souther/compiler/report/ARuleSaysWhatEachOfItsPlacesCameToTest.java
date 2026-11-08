@@ -94,13 +94,15 @@ class ARuleSaysWhatEachOfItsPlacesCameToTest {
     /** The page counts a rule once, where its answer is, with what left each of its places none. */
     @Test
     void thePageSaysWhatLeftEachPlaceNoRow() {
-        AdequacyReport.Said first = new AdequacyReport.Said(4, 0, "one reason");
-        AdequacyReport.Said second = new AdequacyReport.Said(5, 0, "another reason");
+        AdequacyReport.Said first = new AdequacyReport.Said(4, 0, "one reason", "one reason");
+        AdequacyReport.Said second =
+                new AdequacyReport.Said(5, 0, "another reason", "another reason");
 
-        assertEquals(new AdequacyReport.Said(4, 0, "one reason; another reason"),
-                AdequacyReport.everyReason(List.of(first, second)),
+        assertEquals(new AdequacyReport.Said(4, 0, "one reason; another reason",
+                        "one reason; another reason"),
+                AdequacyReport.everyReason(List.of(first, second), InEnglish.PAGE),
                 "both reasons, counted where the first is");
-        assertEquals(first, AdequacyReport.everyReason(List.of(first, first)),
+        assertEquals(first, AdequacyReport.everyReason(List.of(first, first), InEnglish.PAGE),
                 "and a reason two places share is said once");
     }
 

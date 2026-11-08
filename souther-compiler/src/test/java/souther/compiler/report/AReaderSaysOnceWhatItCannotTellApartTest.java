@@ -2,8 +2,6 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceLayouts;
-import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
@@ -80,12 +78,13 @@ class AReaderSaysOnceWhatItCannotTellApartTest {
         String said = AdequacyReport.nothingToTry(
                 List.of(came("nothing stood in", "one position", ELEMENTS),
                         came("nothing stood in", "another position", CHARACTERS)),
-                SourceRendering.namedByIdentity(SourceLayouts.NONE), cited -> null).text();
+                InEnglish.PAGE, cited -> null).text();
 
         assertEquals(1, said.split("nothing stood in", -1).length - 1,
                 () -> "the page cannot tell these two apart: " + said);
         assertTrue(said.startsWith(Reasons.met(CompositionShortfall.of(Set.of(ELEMENTS,
-                        CHARACTERS)))), () -> "and the clause opens on both figures: " + said);
+                        CHARACTERS)), InEnglish.PAGE)),
+                () -> "and the clause opens on both figures: " + said);
     }
 
     /**

@@ -113,8 +113,8 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
         assertTrue(said.contains("way 1 past it: the value built at `request.level` cannot be"
                         + " written"),
                 () -> "the word the search for the way came to: " + said);
-        assertFalse(said.contains(GeneratedRows.why(
-                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE)),
+        assertFalse(said.contains(InEnglish.said(GeneratedRows.why(
+                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE))),
                 () -> "and not the model's word: " + said);
     }
 

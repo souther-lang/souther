@@ -175,6 +175,16 @@ public final class Messages {
     }
 
     /**
+     * The language the catalog is written from, of which every other shipped catalog is a
+     * translation.
+     *
+     * <p>Not a reader's language. It is what a text no reader's choice may change is written in —
+     * a document a consumer parses — and the wording two lines of prose are told apart and ordered
+     * by, so that which lines a page says does not turn on how a translation happens to word them.
+     */
+    public static final Locale BASE_LANGUAGE = Locale.ENGLISH;
+
+    /**
      * The locale when none is chosen: English, the one the shipped documents are written in.
      *
      * <p>Not callable from outside. It is the tail of the resolution above and nothing else: it

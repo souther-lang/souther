@@ -17,6 +17,7 @@ import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -229,7 +230,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                                             compilation.db(), cited)),
                                     new souther.compiler.diag.SourceRendering(
                                             souther.compiler.source.SourceId::value,
-                                            compilation.texts()), null));
+                                            compilation.texts()), Locale.ENGLISH, null));
                 }
             }
             if (partition.pairs().counted() instanceof Measurement.Complete<?>
