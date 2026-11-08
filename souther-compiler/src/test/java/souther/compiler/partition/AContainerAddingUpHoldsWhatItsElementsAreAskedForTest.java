@@ -195,9 +195,33 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
                         "the share and the value cannot both stand at one position").why());
     }
 
+    /**
+     * A list of none comes to nought, and holds no element to ask anything of: where what is asked
+     * inside cannot be one element, it is still written for a total of nought, and for no other.
+     */
+    @Test
+    void whereNoElementCanHoldWhatIsAskedTheListOfNoneComesToNought() {
+        RuleReadingSource rules = RuleReadings.ofSource(MODEL);
+        DemandsInside inside = new DemandsInside(
+                Map.of(ELEMENT.then("method").refine(toLeaf("Card")).then("issuer"),
+                        List.of(FixtureTemplate.string("x"))),
+                Requirements.NONE.and(ELEMENT.then("method"), toLeaf("Cash")));
+        assertEquals(List.of("[]"), assertInstanceOf(TermRealizations.Realization.Built.class,
+                realizing(rules, inside, Count.of(0)), "a list of none comes to nought")
+                .values().stream().map(FixtureTemplate::text).toList());
+        assertInstanceOf(TermRealizations.Realization.None.class,
+                realizing(rules, inside, Count.of(1)), "and to nothing else");
+    }
+
     /** What filling the entries to a total of one came to, with {@code inside} asked of each. */
     private static TermRealizations.Realization realizing(RuleReadingSource rules,
                                                           DemandsInside inside) {
+        return realizing(rules, inside, Count.of(1));
+    }
+
+    /** What filling the entries to {@code answer} came to, with {@code inside} asked of each. */
+    private static TermRealizations.Realization realizing(RuleReadingSource rules,
+                                                          DemandsInside inside, Count answer) {
         Symbols symbols = rules.symbols();
         NumericTerm.TakenOver total = NumericTerm.TakenOver.of(
                 ValueName.Stdlib.operation("List", "sum"),
@@ -207,7 +231,7 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
         TermOrders orders = TermOrdersFixtures.at(total, named("Amount"), symbols);
         assertNotNull(orders.answered(), "and the order it answers on is the amounts'");
 
-        return ContainersAddingUp.to(Count.of(1), new Type.ListOf(named("Entry")), List.of(),
+        return ContainersAddingUp.to(answer, new Type.ListOf(named("Entry")), List.of(),
                 orders, NothingTheRulesSay.REGION,
                 RuleReadingContext.unshared(rules, POLICY, TestDay.TODAY), inside);
     }

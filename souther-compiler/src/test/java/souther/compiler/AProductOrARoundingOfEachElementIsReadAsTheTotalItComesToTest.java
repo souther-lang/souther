@@ -310,23 +310,25 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
     }
 
     /**
-     * Held at one value in every element, both fields of a product of two values that are two or
-     * three come to even totals only, and nine — three times three — is a total such a list comes
-     * to all the same. So the point beside the line at ten is said as one the search walked some
+     * Held at one value in every element — two, the whole number nearest one its declaration
+     * leaves — a field of a product of two values that are two or three makes the total even.
+     * Thirteen is not, and is a total such a list comes to all the same — two times two and three
+     * times three. So the point beside the line at fourteen is said as one the search walked some
      * of the containers for, and not as one no container comes to.
      */
     @Test
     void aPointTheFieldsHeldStillDoNotReachIsNoPointNothingReaches() {
         String model = HELD_STILL.replace("data Line", "data P = Int\n    invariant value >= 2"
-                + " && value <= 3\ndata Line").formatted("P", "x.p.value", 10);
+                + " && value <= 3\ndata Line").formatted("P", "x.p.value", 14);
         String report = report(measured(model));
-        assertTrue(report.contains("List.sum({1·p·q + 0 | xs[*]}): = 9 — "), report);
-        String nine = report.lines().filter(line -> line.contains(": = 9 — ")).findFirst()
+        assertTrue(report.contains("List.sum({1·p·q + 0 | xs[*]}): = 13 — "), report);
+        String thirteen = report.lines().filter(line -> line.contains(": = 13 — ")).findFirst()
                 .orElseThrow();
-        assertTrue(nine.contains("the containers whose elements differ at a field the computed"
-                + " number reads besides the one solved for"), nine);
-        assertFalse(nine.contains("no value can stand there"), nine);
+        assertTrue(thirteen.contains("the containers whose elements differ at a field the computed"
+                + " number reads besides the one solved for"), thirteen);
+        assertFalse(thirteen.contains("no value can stand there"), thirteen);
     }
+
 
     private static final String PARENTHESISED = """
             module p
