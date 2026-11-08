@@ -50,6 +50,9 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     /** What a walk adds to its seed: the term {@code "t"}, the total the row holds. */
     private static final Formed ADDING_T = new Formed(Map.of("t", ExactRatio.ONE), ExactRatio.ZERO);
 
+    /** The scale a path of an element is at, furthest from nought: a part that reads one. */
+    private static final long A_PATH = DecimalOperation.PLACES_A_ROW_IS_BUILT_AT;
+
     /** The numbers a row is built with, from both ends of the places it is built at and between,
      *  as the builder writes them. */
     private static final List<BigDecimal> ELEMENTS = Stream.of(
@@ -109,7 +112,7 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     void aWalkShownToCompleteGetsThroughEveryStepOnEveryListARowIsBuiltWith() {
         for (BigDecimal seed : List.of(BigDecimal.ZERO, new BigDecimal("0.0"),
                 new BigDecimal("-1.5"), ELEMENTS.get(0), ELEMENTS.get(1))) {
-            DecimalAdditiveWalk walk = new DecimalAdditiveWalk(seed, ADDING_T, 1);
+            DecimalAdditiveWalk walk = new DecimalAdditiveWalk(seed, ADDING_T, A_PATH);
             for (List<BigDecimal> elements : listsOfElements()) {
                 if (DecimalOperation.allCompleteAt(List.of(walk), totalOf(elements))) {
                     assertNotNull(walked(seed, elements), () -> seed + " " + elements);
@@ -127,7 +130,8 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
      */
     @Test
     void aWalkOfProductsShownToCompleteGetsThroughEveryStep() {
-        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(new BigDecimal("0.0"), ADDING_T, 2);
+        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(new BigDecimal("0.0"), ADDING_T,
+                2 * A_PATH);
         boolean anyShown = false;
         for (List<BigDecimal> prices : listsOfElements()) {
             List<BigDecimal> parts = new ArrayList<>();
@@ -149,7 +153,7 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
      */
     @Test
     void aWalkFromASeedAtAScaleNoRoomIsShownForIsNoRow() {
-        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(NOUGHT_AT_THE_FLOOR, ADDING_T, 1);
+        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(NOUGHT_AT_THE_FLOOR, ADDING_T, A_PATH);
         List<BigDecimal> elements = List.of(ELEMENTS.get(0), ELEMENTS.get(0).negate());
         assertNotNull(ExactDecimals.sumWhereThereIsRoom(NOUGHT_AT_THE_FLOOR, BigDecimal.ZERO));
         assertNull(walked(NOUGHT_AT_THE_FLOOR, elements));
@@ -163,7 +167,7 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
      */
     @Test
     void aWalkIsAskedOfTheListTheRowIsBuiltWith() {
-        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(BigDecimal.ZERO, ADDING_T, 1);
+        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(BigDecimal.ZERO, ADDING_T, A_PATH);
         assertTrue(DecimalOperation.allCompleteAt(List.of(walk), Map.of("s", ExactRatio.ONE)));
         assertFalse(DecimalOperation.allCompleteAt(List.of(walk), Map.of("t", ExactRatio.of(
                 new BigDecimal(BigInteger.ONE, DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1)))));
@@ -176,7 +180,7 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
      */
     @Test
     void whatIsWorkedOutOfAWalkIsAskedAsWhatIsWorkedOutOfATotal() {
-        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(new BigDecimal("0.0"), ADDING_T, 1);
+        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(new BigDecimal("0.0"), ADDING_T, A_PATH);
         Map<Object, ExactRatio> total = totalOf(List.of(new BigDecimal("2.5")));
         DecimalOperation timesFour = new DecimalOperation(BinOp.MUL,
                 List.of(new Worked(0), new Written(FOUR)), List.of(0));

@@ -162,6 +162,21 @@ public sealed interface NumericTerm
             return new ValueOf(moved.put(position));
         }
 
+        /** The position's hash, as a record of one component folds it. Written out because a
+         *  value at a place is hashed far more often than it is made, and a record's own hash goes
+         *  through a method handle. */
+        @Override
+        public int hashCode() {
+            return position.hashCode();
+        }
+
+        /** The same position, asked in the code for the reason the hash is. */
+        @Override
+        public boolean equals(Object other) {
+            return other == this
+                    || (other instanceof ValueOf value && position.equals(value.position));
+        }
+
         @Override
         public String toString() {
             return position.toString();
