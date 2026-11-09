@@ -188,6 +188,17 @@ final class Term {
          * closure.
          */
         SUM_OF_SIZES(Payload.none()),
+        /**
+         * What the elements of a list come to when the accumulation the payload names is carried
+         * over all of them, over the list.
+         *
+         * <p>Not the call. A library sum answers an {@code Int} where its total is one and ends the
+         * run where it is not, so the call's value is a number of its type; this is the exact
+         * number, which the call answers wherever it answers. Held apart, a sum of the elements of
+         * two lists is the exact sums added whether or not either list's own sum is a number the
+         * type holds.
+         */
+        EXACT_TOTAL(Payload.of(ValueName.class)),
         /** How many of the code points of a string are in a class, over the string. */
         CODE_POINTS(Payload.of(CodePointClass.class));
 
@@ -1083,6 +1094,8 @@ final class Term {
                     joined(sb.append("howManyDifferent(").append(of).append(", "), ", ")
                             .append(')');
             case SUM_OF_SIZES -> joined(sb.append("sumOfSizes("), ", ").append(')');
+            case EXACT_TOTAL -> sb.append("exact ").append(((ValueName) of).name()).append('(')
+                    .append(parts.get(0).rendered()).append(')');
             case CODE_POINTS -> sb.append("codePoints(").append(parts.get(0).rendered())
                     .append(", ").append(of).append(')');
         }
@@ -1505,6 +1518,12 @@ final class Term {
          *  {@code closure} is null, and otherwise what it answers of each. */
         Term sumOfSizes(Term container, Term closure) {
             return of(Shape.SUM_OF_SIZES, null, ofEach(container, closure));
+        }
+
+        /** What {@code operation}, a sum or a product, comes to over all of the elements of
+         *  {@code list}, as the exact number and not as the answer of a call. */
+        Term exactTotal(ValueName operation, Term list) {
+            return of(Shape.EXACT_TOTAL, operation, List.of(list));
         }
 
         /** How many of the code points of {@code string} are in {@code counted}. */

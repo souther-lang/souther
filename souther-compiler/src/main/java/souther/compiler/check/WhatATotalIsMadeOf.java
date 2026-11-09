@@ -8,13 +8,16 @@ import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -24,20 +27,27 @@ import java.util.function.Function;
  *
  * <p>A total is a sum or a product of the elements of a list, and holds the elements and not their
  * order. A library total holds only its answer to the range of its type and not each step on the
- * way, so what a total is of is exact: the number it comes to is the number of the elements and
- * nothing else, and nothing here says whether a run gets as far as answering it.
+ * way, so what it comes to is the exact number of the elements, and a call answers that number
+ * wherever it answers at all.
+ *
+ * <p>Two things are therefore told apart. The call {@code List.sum(xs)} is a number of the type of
+ * its elements, and is related to nothing but the exact total of {@code xs}
+ * ({@link Term.Shape#EXACT_TOTAL}), which is no number of that type where the elements add up to
+ * more than it holds. Every law below is stated of exact totals, so it holds whether or not any
+ * list's own call answers; a call is tied to its list's exact total and carries the range its
+ * type has.
  *
  * <p>One decomposition and one kind of law. A list is taken apart into the leaves its elements are
  * held in: the two sides of an append, the argument of a call that lists every element once, and
  * what an element-wise operation ({@code map}, {@code filter}) makes of each side, since such an
- * operation commutes with both. A total is then the sum or the product of the totals of its
- * leaves. A leaf that is itself split — a filter and the filter of the denial, a take and the drop
- * — is the total of what it is split from, and a map by a line is a line of the total it maps.
- * Every one of them is stated of terms, so it is the same whether the lists were written with
- * {@code ++}, through a name, or as a call.
+ * operation commutes with both. An exact total is the sum or the product of the exact totals of
+ * its leaves. A leaf that is itself split — a filter and the filter of the denial, a take and the
+ * drop — is the exact total of what it is split from, and a map by a line is a line of the exact
+ * total it maps. Every one of them is stated of terms, so it is the same whether the lists were
+ * written with {@code ++}, through a name, or as a call.
  *
- * <p>Nothing is expanded into a form a reader has not been given: the totals of leaves nobody
- * wrote are atoms of their own, with nothing known of them but how they relate.
+ * <p>Nothing is expanded into a form a reader has not been given: the exact totals of leaves
+ * nobody wrote are atoms of their own, with nothing known of them but how they relate.
  */
 final class WhatATotalIsMadeOf {
 
@@ -51,6 +61,13 @@ final class WhatATotalIsMadeOf {
     /** The operation putting the lists of a written list end to end, which an accumulation of
      *  appending does for lists and for strings alike and this reads for lists only. */
     private static final ValueName JOINING_LISTS = ValueName.Stdlib.operation("List", "concat");
+
+    /**
+     * What each list holds the elements of, as the leaves and how often each: a function of the
+     * term, so held once for every term met. Empty where the list holds some leaf more often than
+     * a count can say, which is no answer and is never read as one.
+     */
+    private final Map<Term, Optional<Map<Term, Long>>> leaves = new HashMap<>();
 
     WhatATotalIsMadeOf(Term.Interner interned, BiFunction<Term, FactSubject, FactSubject> named,
                        Function<Term, FactSubject> countNamed) {
@@ -92,25 +109,32 @@ final class WhatATotalIsMadeOf {
     List<NumericConstraint> among(Collection<FactSubject> reached) {
         List<NumericConstraint> out = new ArrayList<>();
         Set<Term> filed = new HashSet<>();
-        Map<Map.Entry<ValueName, Map<Term, Integer>>, FactSubject> over = new HashMap<>();
-        for (FactSubject atom : reached) {
-            Total total = totalOf(atom.identity());
-            if (total == null) {
+        Map<Map.Entry<ValueName, Map<Term, Long>>, FactSubject> over = new HashMap<>();
+        Written written = multiplicationsAmong(reached);
+        for (FactSubject call : reached) {
+            Total total = totalOf(call.identity());
+            Map<Term, Long> held = total == null ? null : leavesOf(total.list());
+            if (held == null) {
                 continue;
             }
-            Map<Term, Integer> leaves = leavesOf(total.list());
+            FactSubject exact = exactTotal(total, total.list(), call);
+            out.add(new NumericConstraint(LinearForm.difference(call, exact), Rel.EQ));
             // Two totals of the same elements are one number, whatever the lists were put
             // together as.
-            FactSubject same = over.putIfAbsent(Map.entry(total.operation(), leaves), atom);
+            FactSubject same = over.putIfAbsent(Map.entry(total.operation(), held), exact);
             if (same != null) {
-                out.add(new NumericConstraint(LinearForm.difference(atom, same), Rel.EQ));
+                out.add(new NumericConstraint(LinearForm.difference(exact, same), Rel.EQ));
             }
-            if (!leaves.equals(Map.of(total.list(), 1))) {
-                equate(atom, atom, total, leaves, reached, out);
+            if (!held.equals(Map.of(total.list(), 1L))) {
+                equate(exact, call, total, held, written, out);
             }
-            for (Term leaf : leaves.keySet()) {
-                if (filed.add(totalTerm(total, leaf))) {
-                    lawsOf(leaf, total, atom, reached, out);
+            // What a law is stated of is a list too, and has laws of its own: the list a filter is
+            // split from is itself a total, and what is mapped by a line is a list of its own.
+            Deque<Term> pending = new ArrayDeque<>(held.keySet());
+            while (!pending.isEmpty()) {
+                Term list = pending.poll();
+                if (filed.add(exactTotal(total, list, call).identity())) {
+                    lawsOf(list, total, call, written, out, pending);
                 }
             }
         }
@@ -125,70 +149,102 @@ final class WhatATotalIsMadeOf {
                 : new Total(operation, how, term.parts().getFirst());
     }
 
-    private Term totalTerm(Total of, Term list) {
-        return interned.called(of.operation(), List.of(list));
+    /** The exact total of {@code list}, of the kind of {@code like}. */
+    private FactSubject exactTotal(Total of, Term list, FactSubject like) {
+        return named.apply(interned.exactTotal(of.operation(), list), like);
     }
 
     // ---- the leaves of a list
 
-    private Map<Term, Integer> leavesOf(Term list) {
-        Map<Term, Integer> into = new LinkedHashMap<>();
-        decompose(list, List.of(), into);
-        return into;
+    /** What {@code list} holds the elements of, or null where that is no count. */
+    private Map<Term, Long> leavesOf(Term list) {
+        Optional<Map<Term, Long>> known = leaves.get(list);
+        if (known == null) {
+            known = Optional.ofNullable(decomposed(list));
+            leaves.put(list, known);
+        }
+        return known.orElse(null);
     }
 
     /**
-     * Adds to {@code into} the leaves {@code list} holds the elements of, each as often as it holds
-     * them, with {@code around} — what is done to each element on the way, outermost first — done
-     * to each.
+     * The leaves of {@code list}, each as often as {@code list} holds it: a leaf's own are the
+     * leaf, the two sides of an append hold theirs together, a call listing every element once
+     * holds what its argument does, and what an element-wise call makes of a list is that call
+     * made of each leaf of it.
      */
-    private void decompose(Term list, List<Around> around, Map<Term, Integer> into) {
+    private Map<Term, Long> decomposed(Term list) {
         if (list.shape() == Term.Shape.EMPTY_LIST) {
-            return;
+            return Map.of();
         }
         ValueName operation = list.calledOperation();
         List<Term> args = list.parts();
-        if (operation != null) {
-            if (facts.putsListsEndToEnd(operation) && args.size() == 2) {
-                decompose(args.get(0), around, into);
-                decompose(args.get(1), around, into);
-                return;
-            }
-            int listed = DefaultBoundOperationFacts.positionOfTheArgumentListedOnce(operation);
-            if (listed >= 0 && listed < args.size()) {
-                decompose(args.get(listed), around, into);
-                return;
-            }
-            BoundOperationFacts.Assembled made = facts.assembles(operation);
-            if (made != null) {
-                List<Around> deeper = new ArrayList<>(around);
-                deeper.add(new Around(operation, args, made.source().position()));
-                decompose(args.get(made.source().position()), deeper, into);
-                return;
-            }
-            if (operation.equals(JOINING_LISTS) && args.getFirst().shape() == Term.Shape.LIST) {
-                args.getFirst().parts().forEach(each -> decompose(each, around, into));
-                return;
-            }
+        if (operation == null) {
+            return Map.of(list, 1L);
         }
-        Term leaf = list;
-        for (int i = around.size() - 1; i >= 0; i--) {
-            leaf = around.get(i).of(leaf, interned);
+        if (facts.putsListsEndToEnd(operation) && args.size() == 2) {
+            return together(args);
         }
-        into.merge(leaf, 1, Integer::sum);
+        int listed = DefaultBoundOperationFacts.positionOfTheArgumentListedOnce(operation);
+        if (listed >= 0 && listed < args.size()) {
+            return leavesOf(args.get(listed));
+        }
+        BoundOperationFacts.Assembled made = facts.assembles(operation);
+        if (made != null) {
+            Around around = new Around(operation, args, made.source().position());
+            Map<Term, Long> inner = leavesOf(args.get(around.source()));
+            if (inner == null) {
+                return null;
+            }
+            Map<Term, Long> out = new LinkedHashMap<>();
+            inner.forEach((leaf, times) -> out.put(around.of(leaf, interned), times));
+            return out;
+        }
+        if (operation.equals(JOINING_LISTS) && args.getFirst().shape() == Term.Shape.LIST) {
+            return together(args.getFirst().parts());
+        }
+        return Map.of(list, 1L);
     }
 
-    // ---- what a total is of what it is made of
+    /** What the leaves of all of {@code lists} come to together, or null where one of them has no
+     *  count or a leaf is held more often than a count can say. */
+    private Map<Term, Long> together(List<Term> lists) {
+        Map<Term, Long> out = new LinkedHashMap<>();
+        for (Term each : lists) {
+            Map<Term, Long> some = leavesOf(each);
+            if (some == null) {
+                return null;
+            }
+            for (Map.Entry<Term, Long> leaf : some.entrySet()) {
+                if (!addTo(out, leaf.getKey(), leaf.getValue())) {
+                    return null;
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Adds {@code times} to what {@code into} holds of {@code leaf}, and answers whether the
+     *  count is one a long holds, which is no change where it is not. */
+    private static boolean addTo(Map<Term, Long> into, Term leaf, long times) {
+        long had = into.getOrDefault(leaf, 0L);
+        if (times > Long.MAX_VALUE - had) {
+            return false;
+        }
+        into.put(leaf, had + times);
+        return true;
+    }
+
+    // ---- what an exact total is of what it is made of
 
     /**
-     * Files that {@code whole}, the total over a list, is what the totals over {@code parts} come
-     * to together: their sum for a sum, and the product written of them for a product.
+     * Files that {@code whole}, the exact total over a list, is what the totals over {@code parts}
+     * come to together: their sum for a sum, and the product written of them for a product.
      */
-    private void equate(FactSubject whole, FactSubject like, Total of, Map<Term, Integer> parts,
-                        Collection<FactSubject> reached, List<NumericConstraint> out) {
+    private void equate(FactSubject whole, FactSubject like, Total of, Map<Term, Long> parts,
+                        Written written, List<NumericConstraint> out) {
         LinearForm<FactSubject> together = switch (of.how().combine()) {
             case ADD -> sumOf(of, parts, like);
-            case MULTIPLY -> productOf(of, parts, like, reached);
+            case MULTIPLY -> productOf(of, parts, like, written);
             case APPEND -> null;
         };
         LinearForm<FactSubject> gap = together == null ? null
@@ -198,11 +254,11 @@ final class WhatATotalIsMadeOf {
         }
     }
 
-    private LinearForm<FactSubject> sumOf(Total of, Map<Term, Integer> parts, FactSubject like) {
+    private LinearForm<FactSubject> sumOf(Total of, Map<Term, Long> parts, FactSubject like) {
         LinearForm<FactSubject> sum = LinearForm.constant(ExactRatio.ZERO);
-        for (Map.Entry<Term, Integer> part : parts.entrySet()) {
-            FactSubject total = named.apply(totalTerm(of, part.getKey()), like);
-            sum = sum.plus(LinearForm.weighing(total, ExactRatio.of(part.getValue()))).orNull();
+        for (Map.Entry<Term, Long> part : parts.entrySet()) {
+            FactSubject exact = exactTotal(of, part.getKey(), like);
+            sum = sum.plus(LinearForm.weighing(exact, ExactRatio.of(part.getValue()))).orNull();
             if (sum == null) {
                 return null;
             }
@@ -211,57 +267,110 @@ final class WhatATotalIsMadeOf {
     }
 
     /**
-     * The product among {@code reached} of totals that hold the elements {@code parts} hold, or
-     * null where nothing written is one. A product is not a line in its factors, so it is found as
-     * the atom a multiplication of them is, in whatever order and grouping it was written.
+     * The product among those written of totals that hold the elements {@code parts} hold, or null
+     * where nothing written is one. A product is not a line in its factors, so it is found as the
+     * atom a multiplication of them is, in whatever order and grouping it was written.
      */
-    private LinearForm<FactSubject> productOf(Total of, Map<Term, Integer> parts, FactSubject like,
-                                              Collection<FactSubject> reached) {
-        Map<Term, Integer> wanted = new LinkedHashMap<>();
-        parts.forEach((part, times) -> leavesOf(part).forEach(
-                (leaf, each) -> wanted.merge(leaf, each * times, Integer::sum)));
-        if (wanted.size() == 1 && wanted.containsValue(1)) {
-            return LinearForm.atom(named.apply(totalTerm(of, wanted.keySet().iterator().next()), like));
-        }
-        for (FactSubject written : reached) {
-            Map<Term, Integer> held = new LinkedHashMap<>();
-            if (written.identity().shape() == Term.Shape.OP
-                    && written.identity().carried() == BinOp.MUL
-                    && multiplied(written.identity(), of.operation(), held)
-                    && held.equals(wanted)) {
-                return LinearForm.atom(written);
+    private LinearForm<FactSubject> productOf(Total of, Map<Term, Long> parts, FactSubject like,
+                                              Written written) {
+        Map<Term, Long> wanted = new LinkedHashMap<>();
+        for (Map.Entry<Term, Long> part : parts.entrySet()) {
+            Map<Term, Long> some = leavesOf(part.getKey());
+            if (some == null) {
+                return null;
+            }
+            for (Map.Entry<Term, Long> leaf : some.entrySet()) {
+                long each = leaf.getValue();
+                long times = part.getValue();
+                if (each > Long.MAX_VALUE / times || !addTo(wanted, leaf.getKey(), each * times)) {
+                    return null;
+                }
             }
         }
-        return null;
+        if (wanted.size() == 1 && wanted.containsValue(1L)) {
+            return LinearForm.atom(exactTotal(of, wanted.keySet().iterator().next(), like));
+        }
+        FactSubject product = written.byWhatItMultiplies().get(Map.entry(of.operation(), wanted));
+        return product == null ? null : LinearForm.atom(product);
     }
 
-    /** Whether {@code term} is a multiplication of totals by {@code operation}, adding to
-     *  {@code into} the leaves of all of them. */
-    private boolean multiplied(Term term, ValueName operation, Map<Term, Integer> into) {
-        if (term.shape() == Term.Shape.OP && term.carried() == BinOp.MUL) {
-            return multiplied(term.parts().get(0), operation, into)
-                    && multiplied(term.parts().get(1), operation, into);
+    /** The multiplications of totals among the atoms a question reaches, by what the totals
+     *  multiplied hold the elements of between them. */
+    private record Written(Map<Map.Entry<ValueName, Map<Term, Long>>, FactSubject> byWhatItMultiplies) {}
+
+    /** What a multiplication of totals by one operation holds the elements of between its
+     *  factors. */
+    private record Multiplied(ValueName operation, Map<Term, Long> leaves) {}
+
+    /** What each term that is a multiplication of totals holds the elements of, once for each
+     *  term: empty where it is no such multiplication or holds some leaf more often than a count
+     *  says. */
+    private final Map<Term, Optional<Multiplied>> multiplications = new HashMap<>();
+
+    private Written multiplicationsAmong(Collection<FactSubject> reached) {
+        Map<Map.Entry<ValueName, Map<Term, Long>>, FactSubject> out = new HashMap<>();
+        for (FactSubject atom : reached) {
+            Term term = atom.identity();
+            Multiplied held = term.shape() == Term.Shape.OP && term.carried() == BinOp.MUL
+                    ? multipliedBy(term).orElse(null) : null;
+            if (held != null) {
+                out.putIfAbsent(Map.entry(held.operation(), held.leaves()), atom);
+            }
         }
-        Total factor = totalOf(term);
-        if (factor == null || !factor.operation().equals(operation)) {
-            return false;
+        return new Written(out);
+    }
+
+    /** What {@code term}, a product of factors, holds the elements of: each factor a total by
+     *  the one operation, and the multiplications among them however they are grouped. */
+    private Optional<Multiplied> multipliedBy(Term term) {
+        Optional<Multiplied> known = multiplications.get(term);
+        if (known == null) {
+            known = Optional.ofNullable(multipliedOf(term));
+            multiplications.put(term, known);
         }
-        leavesOf(factor.list()).forEach((leaf, each) -> into.merge(leaf, each, Integer::sum));
-        return true;
+        return known;
+    }
+
+    private Multiplied multipliedOf(Term term) {
+        List<Term> factors = term.shape() == Term.Shape.OP && term.carried() == BinOp.MUL
+                ? term.parts() : List.of();
+        if (factors.isEmpty()) {
+            Total total = totalOf(term);
+            Map<Term, Long> some = total == null ? null : leavesOf(total.list());
+            return some == null ? null : new Multiplied(total.operation(), some);
+        }
+        Multiplied left = multipliedBy(factors.get(0)).orElse(null);
+        Multiplied right = multipliedBy(factors.get(1)).orElse(null);
+        if (left == null || right == null || !left.operation().equals(right.operation())) {
+            return null;
+        }
+        Map<Term, Long> leaves = new LinkedHashMap<>(left.leaves());
+        for (Map.Entry<Term, Long> leaf : right.leaves().entrySet()) {
+            if (!addTo(leaves, leaf.getKey(), leaf.getValue())) {
+                return null;
+            }
+        }
+        return new Multiplied(left.operation(), leaves);
     }
 
     // ---- what a leaf is of what it is made from
 
-    private void lawsOf(Term leaf, Total of, FactSubject like, Collection<FactSubject> reached,
-                        List<NumericConstraint> out) {
-        Split split = splitOf(leaf);
+    /** Files the laws of {@code list}, and adds to {@code pending} the lists they are stated of. */
+    private void lawsOf(Term list, Total of, FactSubject like, Written written,
+                        List<NumericConstraint> out, Collection<Term> pending) {
+        Split split = splitOf(list);
         if (split != null) {
-            Map<Term, Integer> parts = new LinkedHashMap<>();
-            split.parts().forEach(part -> parts.merge(part, 1, Integer::sum));
-            equate(named.apply(totalTerm(of, split.whole()), like), like, of, parts, reached, out);
+            Map<Term, Long> parts = new LinkedHashMap<>();
+            split.parts().forEach(part -> parts.merge(part, 1L, Long::sum));
+            equate(exactTotal(of, split.whole(), like), like, of, parts, written, out);
+            pending.add(split.whole());
+            pending.addAll(split.parts());
         }
         if (of.how().combine() == Accumulation.Combine.ADD) {
-            scaledBy(leaf, of, like, out);
+            Term inner = scaledBy(list, of, like, out);
+            if (inner != null) {
+                pending.add(inner);
+            }
         }
     }
 
@@ -302,26 +411,27 @@ final class WhatATotalIsMadeOf {
     }
 
     /**
-     * Files that the sum of {@code leaf}, a mapping of a list by a line of the element, is that
-     * line of the sum of the list and as many of its constant as the list holds elements.
+     * Files that the exact sum of {@code leaf}, a mapping of a list by a line of the element, is
+     * that line of the exact sum of the list and as many of its constant as the list holds
+     * elements. Answers the list it maps, or null where {@code leaf} is no such mapping.
      */
-    private void scaledBy(Term leaf, Total of, FactSubject like, List<NumericConstraint> out) {
+    private Term scaledBy(Term leaf, Total of, FactSubject like, List<NumericConstraint> out) {
         ValueName operation = leaf.calledOperation();
         BoundOperationFacts.Assembled made = operation == null ? null : facts.assembles(operation);
         if (made == null || made.piece() != PieceOfAnElement.THE_CLOSURES_ANSWER) {
-            return;
+            return null;
         }
         Term inner = leaf.parts().get(made.source().position());
         LinearForm<List<String>> line =
                 leaf.parts().get(made.closure().position()).formAClosureOfOneAnswers();
         // A form of the element itself: no field of it is read.
         if (line == null || !Set.of(List.of()).containsAll(line.coefs().keySet())) {
-            return;
+            return null;
         }
         ExactRatio slope = line.coefs().getOrDefault(List.of(), ExactRatio.ZERO);
         LinearForm<FactSubject> mapped = LinearForm.constant(ExactRatio.ZERO);
         if (!slope.isZero()) {
-            mapped = LinearForm.weighing(named.apply(totalTerm(of, inner), like), slope);
+            mapped = LinearForm.weighing(exactTotal(of, inner, like), slope);
         }
         if (!line.constant().isZero()) {
             FactSubject howMany = countNamed.apply(
@@ -330,9 +440,10 @@ final class WhatATotalIsMadeOf {
             mapped = mapped.plus(LinearForm.weighing(howMany, line.constant())).orNull();
         }
         LinearForm<FactSubject> gap = mapped == null ? null
-                : LinearForm.atom(named.apply(totalTerm(of, leaf), like)).minus(mapped).orNull();
+                : LinearForm.atom(exactTotal(of, leaf, like)).minus(mapped).orNull();
         if (gap != null) {
             out.add(new NumericConstraint(gap, Rel.EQ));
         }
+        return inner;
     }
 }

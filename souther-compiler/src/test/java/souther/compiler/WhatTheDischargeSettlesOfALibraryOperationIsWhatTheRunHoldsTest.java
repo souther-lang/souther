@@ -185,6 +185,16 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
     private static List<Map<String, Object>> inputsOfTotals(int count) {
         Random random = new Random(3108);
         List<Map<String, Object>> out = new ArrayList<>();
+        // Where a total of a list is a number its type holds and the total of a part of it is not,
+        // and the other way round: the numbers the elements add up to are what a total is of, and
+        // the range of the type is only where a call stops.
+        long most = Long.MAX_VALUE;
+        long least = Long.MIN_VALUE;
+        out.add(Map.of("xs", List.of(most, 1L), "ys", List.of(-1L), "x", 1L));
+        out.add(Map.of("xs", List.of(-1L), "ys", List.of(most, most), "x", 1L));
+        out.add(Map.of("xs", List.of(most, -1L, 1L), "ys", List.of(), "x", 2L));
+        out.add(Map.of("xs", List.of(least, 1L), "ys", List.of(most, 0L), "x", 1L));
+        out.add(Map.of("xs", List.of(most, 2L), "ys", List.of(0L), "x", 1L));
         for (int n = 0; n < count; n++) {
             List<Long> ys = new ArrayList<>();
             for (int each = random.nextInt(5); each > 0; each--) {
@@ -240,6 +250,9 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
         }
         // A row refused is a violation the discharge is sure of, and the module is not built; one
         // without any is built from the checking just done, which a second compile would repeat.
+        // And is one the discharge does not prove, which is what a caller counting what it proved
+        // asks, whether or not anything is built.
+        owed.addAll(refused);
         List<Row> built = rows.stream().filter(each -> !refused.contains(each.data())
                 && !(onlyWhatIsProved && owed.contains(each.data()))).toList();
         if (built.isEmpty()) {
@@ -273,7 +286,6 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
                 }
             }
         }
-        owed.addAll(refused);
         return new Judged(owed, broke);
     }
 
@@ -356,6 +368,20 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
             "List.product(List.filter(n -> n > 2, xs))",
             "List.product(List.filter(n -> n <= 2, xs))",
             "List.product(List.filter(n -> n > 2, xs)) * List.product(List.filter(n -> n <= 2, xs))");
+
+    /** Rows the discharge refuses are owed, so none of them is counted as proved, built or not. */
+    @Test
+    void aRowTheDischargeRefusesIsNeverCountedAsProved() throws Exception {
+        List<Row> rows = List.of(
+                new Row(300_000, "true", true, "List.sum(xs) - (List.sum(xs))", 1),
+                new Row(300_001, "true", true, "List.sum(xs) - (List.sum(xs))", 2));
+        for (boolean onlyWhatIsProved : new boolean[] {false, true}) {
+            Judged judged = judged(rows, inputsOfTotals(3), INPUT_OF_TOTALS, onlyWhatIsProved);
+            assertEquals(Set.of("D300000", "D300001"), judged.owed(),
+                    "a row refused in every input is owed");
+            assertEquals(Set.of(), judged.broke());
+        }
+    }
 
     @Test
     void whatIsProvedOfOneTotalAgainstAnotherHoldsOfEveryInput() throws Exception {

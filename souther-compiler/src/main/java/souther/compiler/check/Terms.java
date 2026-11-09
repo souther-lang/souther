@@ -3177,7 +3177,7 @@ final class Terms {
      *  closure was handed and never read is one no form names. */
     Map<FactSubject, NumberSpace> spacesOfIfNamed(FactSubject atom) {
         Carrier carrier = atomCarriers.get(atom);
-        return carrier == null ? Map.of() : Map.of(atom, carrier.space());
+        return carrier == null ? Map.of() : Map.of(atom, spaceOf(atom, carrier));
     }
 
     private Map<FactSubject, NumberSpace> spacesOfAtoms(Set<FactSubject> atoms) {
@@ -3187,9 +3187,19 @@ final class Terms {
             if (carrier == null) {
                 throw new IllegalStateException("atom `" + atom.rendered() + "` was not named here");
             }
-            out.put(atom, carrier.space());
+            out.put(atom, spaceOf(atom, carrier));
         }
         return out;
+    }
+
+    /**
+     * What the domain is told of the values of {@code atom}: its carrier's space, except for an
+     * exact total, which is a number the type of the call answering it may not hold and so has
+     * the spacing of the type and no end.
+     */
+    private static NumberSpace spaceOf(FactSubject atom, Carrier carrier) {
+        return atom.identity().shape() == Term.Shape.EXACT_TOTAL
+                ? NumberSpace.spacedOnly(carrier.spacing()) : carrier.space();
     }
 
     /** An expression's canonical key: a location names itself, and everything else is read

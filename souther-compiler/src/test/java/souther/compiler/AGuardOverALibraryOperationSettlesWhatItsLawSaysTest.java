@@ -10,10 +10,13 @@ import souther.compiler.query.Compilation;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.OperationLaw;
 
+import java.math.BigInteger;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -203,6 +206,19 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     true),
             new Row("Digit(List.sum(List.reverse(xs)) - List.product(xs))", true),
             new Row("Digit(List.sum(xs ++ []) - List.sum(xs))", false),
+            // What an exact total is is no number of the type of the call: the sum of xs here is
+            // twice the greatest Int, which no call of it answers, and the run [MAX, MAX] ++
+            // [-MAX] is still one the guard lets through to a violation.
+            new Row("if List.sum(xs ++ ys) == 9223372036854775807 "
+                    + "&& List.sum(ys) == 0 - 9223372036854775807 then Digit(0 - 1) else Digit(0)",
+                    true),
+            new Row("if List.sum(xs ++ ys) == 9223372036854775807 && List.sum(ys) == -1 "
+                    + "then Digit(0 - 1) else Digit(0)", true),
+            new Row("if List.sum(List.map(n -> n * 2, xs)) == 9223372036854775806 "
+                    + "&& List.sum(xs) == 4611686018427387903 then Digit(0 - 1) else Digit(0)",
+                    true),
+            new Row("if List.product(xs ++ ys) == 0 && List.product(ys) == 0 "
+                    + "then Digit(0 - 1) else Digit(0)", true),
             // The same through a name the list was given.
             new Row("{ let zs = xs ++ ys\n Digit(List.sum(zs) - List.sum(xs) - List.sum(ys)) }",
                     false),
@@ -378,33 +394,88 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
     void eachRowIsOwedWhatItsLawLeavesOpen() {
         List<String> wrong = new ArrayList<>();
         for (Row row : ROWS) {
-            Compilation compilation = Compilation.ofSource("""
-                    module demo
-
-                    data Digit = Int
-                        invariant atLeastNought = value >= 0
-
-                    behavior f : (xs: List<Int>, ys: List<Int>, xss: List<List<Int>>,
-                                  a: Set<Int>, b: Set<Int>, ma: Map<String, Int>, mb: Map<String, Int>,
-                                  s: String, t: String, x: Int)
-                        -> Digit
-                        constructs Digit
-                    let f (xs, ys, xss, a, b, ma, mb, s, t, x) =
-                        %s
-                    """.formatted(row.body()), "Main");
-            compilation.answerEverything();
-            List<Located> refused = compilation.errors().stream()
-                    .filter(each -> !"E2010".equals(each.diagnostic().code())).toList();
-            assertTrue(refused.isEmpty(), () -> row.body() + " compiles: " + refused);
-            boolean owed = compilation.errors().size() > refused.size()
-                    || compilation.warnings().stream().anyMatch(each ->
-                    each.diagnostic().severity() == Severity.WARNING
-                            && "E2011".equals(each.diagnostic().code()));
+            boolean owed = owedBy(row.body());
             if (owed != row.owed()) {
                 wrong.add(row.body() + ": owed " + owed + ", expected " + row.owed());
             }
         }
         assertEquals(List.of(), wrong, "each row is owed exactly what its law leaves open");
+    }
+
+    /** Whether the discharge leaves anything owed of a behavior with {@code body}. */
+    private static boolean owedBy(String body) {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Digit = Int
+                    invariant atLeastNought = value >= 0
+
+                behavior f : (xs: List<Int>, ys: List<Int>, xss: List<List<Int>>,
+                              a: Set<Int>, b: Set<Int>, ma: Map<String, Int>, mb: Map<String, Int>,
+                              s: String, t: String, x: Int)
+                    -> Digit
+                    constructs Digit
+                let f (xs, ys, xss, a, b, ma, mb, s, t, x) =
+                    %s
+                """.formatted(body), "Main");
+        compilation.answerEverything();
+        List<Located> refused = compilation.errors().stream()
+                .filter(each -> !"E2010".equals(each.diagnostic().code())).toList();
+        assertTrue(refused.isEmpty(), () -> body + " compiles: " + refused);
+        return compilation.errors().size() > refused.size()
+                || compilation.warnings().stream().anyMatch(each ->
+                each.diagnostic().severity() == Severity.WARNING
+                        && "E2011".equals(each.diagnostic().code()));
+    }
+
+    /** {@code xs} put together with itself {@code times} times over, one name for each step, and
+     *  the sum of what that comes to less {@code 2^times} of the sum of {@code xs} — or, where
+     *  that is more than an {@code Int} is written as, less the sum of the step before twice. */
+    private static String doubled(int times) {
+        StringBuilder body = new StringBuilder("{ let a0 = xs\n");
+        for (int step = 1; step <= times; step++) {
+            body.append("  let a").append(step).append(" = a").append(step - 1).append(" ++ a")
+                    .append(step - 1).append('\n');
+        }
+        body.append("  Digit(List.sum(a").append(times).append(") - ");
+        BigInteger copies = BigInteger.TWO.pow(times);
+        return (copies.bitLength() < Long.SIZE
+                ? body.append(copies).append(" * List.sum(xs)) }")
+                : body.append("List.sum(a").append(times - 1).append(") - List.sum(a")
+                        .append(times - 1).append(")) }")).toString();
+    }
+
+    /** The product of {@code xs} put together with itself {@code times} times over, less the
+     *  product written of as many products of {@code xs}, each step the product before it
+     *  multiplied by itself. */
+    private static String doubledProduct(int times) {
+        StringBuilder body = new StringBuilder("{ let a0 = xs\n  let m0 = List.product(xs)\n");
+        for (int step = 1; step <= times; step++) {
+            body.append("  let a").append(step).append(" = a").append(step - 1).append(" ++ a")
+                    .append(step - 1).append("\n  let m").append(step).append(" = m")
+                    .append(step - 1).append(" * m").append(step - 1).append('\n');
+        }
+        return body.append("  Digit(List.product(a").append(times).append(") - m").append(times)
+                .append(") }").toString();
+    }
+
+    /**
+     * A list put together of itself over and over is a shared term, and so is a product of a
+     * product of itself: taking either apart is as many steps as it has terms and not as many as
+     * it holds elements. Seventy steps hold more elements than any count says, and what holds
+     * more is not read as a count.
+     */
+    @Test
+    void aListPutTogetherOfItselfIsTakenApartOncePerTerm() {
+        assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
+            assertEquals(false, owedBy(doubled(3)), "eight times, which a count says");
+            assertEquals(false, owedBy(doubled(40)), "a count a long holds");
+            assertEquals(true, owedBy(doubled(70)), "more than a count says, so nothing is said");
+            assertEquals(false, owedBy(doubledProduct(3)), "eight times, which a count says");
+            assertEquals(false, owedBy(doubledProduct(40)), "a count a long holds");
+            assertEquals(true, owedBy(doubledProduct(70)),
+                    "more than a count says, so nothing is said");
+        });
     }
 
     /**
