@@ -50,74 +50,56 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
                 """));
     }
 
-    /** The exact size of the insert is used with an equality the input's invariant states, as the
-     *  same arithmetic over an Int is. */
+    /** Where a value is not in a set, the insert of it holds one more, as {@code taken + 1} does of
+     *  a count. So what the invariants and the guards show of the seats kept as a set is what they
+     *  show of the seats kept as a count, whichever way the invariants are declared and whether or
+     *  not the guard on the free seats is there. */
     @Test
-    void anInsertsSizeIsUsedWithAnEqualityTheInputStates() {
-        assertEquals(List.of(), warnings("""
-                module seats
+    void aSetOfSeatsIsReadAsTheCountOfThemIs() {
+        for (boolean guardsFree : new boolean[] {true, false}) {
+            for (boolean balanceFirst : new boolean[] {true, false}) {
+                String balance = "invariant balance = %s + free == cap && free >= 0";
+                String within = "invariant withinCap = %s <= cap";
+                String freeGuard = guardsFree ? "guard s.free > 0 else Full" : "";
+                List<String> asSet = warnings("""
+                        module seats
 
-                data Seats = { taken: Set<Int>, free: Int, cap: Int }
-                    invariant balance = Set.size(taken) + free == cap && free >= 0
-                    invariant withinCap = Set.size(taken) <= cap
+                        data Seats = { taken: Set<Int>, free: Int, cap: Int }
+                            %s
+                            %s
 
-                behavior take : (s: Seats, n: Int) -> Seats | Already | Full
-                    constructs Seats
-                let take (s, n) = {
-                    guard Bool.not(Set.contains(n, s.taken)) else Already
-                    guard s.free > 0 else Full
-                    Seats { ...s, taken = Set.insert(n, s.taken), free = s.free - 1 }
-                }
-                """));
-    }
+                        behavior take : (s: Seats, n: Int) -> Seats | Already | Full
+                            constructs Seats
+                        let take (s, n) = {
+                            guard Bool.not(Set.contains(n, s.taken)) else Already
+                            %s
+                            Seats { ...s, taken = Set.insert(n, s.taken), free = s.free - 1 }
+                        }
+                        """.formatted(
+                        (balanceFirst ? balance : within).formatted("Set.size(taken)"),
+                        (balanceFirst ? within : balance).formatted("Set.size(taken)"),
+                        freeGuard));
+                List<String> asCount = warnings("""
+                        module seats
 
-    @Test
-    void theOrderTheInvariantsAreDeclaredInMakesNoDifference() {
-        assertEquals(List.of(), warnings("""
-                module seats
+                        data Seats = { taken: Int, free: Int, cap: Int }
+                            %s
+                            %s
 
-                data Seats = { taken: Set<Int>, free: Int, cap: Int }
-                    invariant withinCap = Set.size(taken) <= cap
-                    invariant balance = Set.size(taken) + free == cap && free >= 0
-
-                behavior take : (s: Seats, n: Int) -> Seats | Already | Full
-                    constructs Seats
-                let take (s, n) = {
-                    guard Bool.not(Set.contains(n, s.taken)) else Already
-                    guard s.free > 0 else Full
-                    Seats { ...s, taken = Set.insert(n, s.taken), free = s.free - 1 }
-                }
-                """));
-    }
-
-    /** Neither the guard on the free seats nor the one on the value is spare: without the first
-     *  the insert may take the last seat twice over, and without the second it may add nothing. */
-    @Test
-    void theBoundIsNotShownWithoutEitherGuard() {
-        String seats = """
-                module seats
-
-                data Seats = { taken: Set<Int>, free: Int, cap: Int }
-                    invariant balance = Set.size(taken) + free == cap && free >= 0
-                    invariant withinCap = Set.size(taken) <= cap
-
-                """;
-        assertEquals(List.of("E2011"), warnings(seats + """
-                behavior take : (s: Seats, n: Int) -> Seats | Already
-                    constructs Seats
-                let take (s, n) = {
-                    guard Bool.not(Set.contains(n, s.taken)) else Already
-                    Seats { ...s, taken = Set.insert(n, s.taken), free = s.free - 1 }
-                }
-                """));
-        assertEquals(List.of("E2011"), warnings(seats + """
-                behavior take : (s: Seats, n: Int) -> Seats | Full
-                    constructs Seats
-                let take (s, n) = {
-                    guard s.free > 0 else Full
-                    Seats { ...s, taken = Set.insert(n, s.taken), free = s.free - 1 }
-                }
-                """));
+                        behavior take : (s: Seats, n: Int) -> Seats | Full
+                            constructs Seats
+                        let take (s, n) = {
+                            %s
+                            Seats { ...s, taken = s.taken + 1, free = s.free - 1 }
+                        }
+                        """.formatted(
+                        (balanceFirst ? balance : within).formatted("taken"),
+                        (balanceFirst ? within : balance).formatted("taken"),
+                        freeGuard));
+                assertEquals(asCount, asSet, "guardsFree=" + guardsFree + " balanceFirst=" + balanceFirst);
+                assertEquals(guardsFree, asSet.isEmpty(), "the guard on the free seats is not spare");
+            }
+        }
     }
 
     @Test
