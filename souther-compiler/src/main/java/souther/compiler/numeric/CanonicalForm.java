@@ -121,22 +121,16 @@ public final class CanonicalForm<A> {
      */
     public static <A> Normalized<A> of(Map<A, ExactRatio> coefs) {
         // What every weight shares, which is a question about the weights and not about which of
-        // them comes first — see AdditiveImage#divisorOf, where the fold is commutative.
-        boolean weighsNothingSomewhere = false;
-        ExactRatio shared = ExactRatio.ZERO;
-        for (ExactRatio each : coefs.values()) {
-            if (each.isZero()) {
-                weighsNothingSomewhere = true;
-            } else {
-                shared = ExactRatio.gcd(shared, each);
-            }
-        }
+        // them comes first — see AdditiveImage#divisorOf, where the fold is commutative. A weight
+        // of nought divides nothing and is divided by everything, so the positions the form does
+        // not name leave it as it is.
+        ExactRatio shared = AdditiveImage.divisorOf(coefs.values());
         if (shared.isZero()) {
             return new NoTerms<>();
         }
         // Already in lowest terms and naming only positions it weighs, which is nearly every form
         // here: it is its own canonical form, and nothing is built on the way to it.
-        if (!weighsNothingSomewhere && shared.equals(ExactRatio.ONE)) {
+        if (shared.equals(ExactRatio.ONE) && !coefs.containsValue(ExactRatio.ZERO)) {
             return new Scaled<>(new CanonicalForm<>(coefs), shared);
         }
         // The mapping being built, in no order — what a form holds is in none, and one kept here

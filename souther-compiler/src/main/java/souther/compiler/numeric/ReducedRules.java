@@ -22,9 +22,10 @@ import java.util.Map;
  * they use alike, the last in the order the domain walks them ({@link Use}). Chosen by the names,
  * the rules written over what is left differ between two namings of one system, and what a question
  * finds in them with it. What the rules use of a position — how many name it, and in what shape of
- * rule — is the same under any naming, so the names decide only between positions nothing tells
- * apart. The rules come out the same whichever order they were said in, since each equality is
- * solved for the position ranked last of those that none of the others was already solved for.
+ * rule — is the same under any naming and under any writing of a rule, so the names decide only
+ * between positions nothing tells apart. The rules come out the same whichever order they were
+ * said in, since each equality is solved for the position ranked last of those that none of the
+ * others was already solved for.
  *
  * <p>What the reduced rules say is what the rules say, less. Every rule here follows from the
  * rules it was made of, and a goal written as {@link #put} writes it is equal to the goal wherever
@@ -33,10 +34,20 @@ import java.util.Map;
  * where they stop — and that costs what is proved and never whether it is true. So this is asked
  * after the rules as they stand have not proved a goal, and in place of nothing.
  *
- * <p>Arithmetic the exact numbers cannot hold ends the reduction, and the rules stay as they
- * were.
+ * <p>Equalities that share no position are solved apart, each set of them as far as it can be. A
+ * set the exact numbers cannot hold, that the equalities contradict, or whose solving takes more
+ * than {@link #MOST_UPDATES} updates of a weight is left as the equalities it was and costs the
+ * others nothing. A rule that cannot be written over the free positions is left out, which says
+ * less and nothing false.
  */
 final class ReducedRules<A> {
+
+    /**
+     * The most weights solving one set of equalities may update, counted as the work rather than
+     * as the numbers it is done in: the exact numbers stop an arithmetic that cannot be held, and
+     * this stops one that can be held and is too much to do.
+     */
+    static final int MOST_UPDATES = 20_000;
 
     /** A sum and a constant: {@code Σ coefs·position + constant}. */
     record Goal<A>(Map<A, ExactRatio> coefs, ExactRatio constant) {}
@@ -52,6 +63,10 @@ final class ReducedRules<A> {
      * of those as the kind of rule, what the position weighs in it, how many positions it weighs
      * and what it is held to. A position is solved for in preference to one used less, and to one
      * used in other ways.
+     *
+     * <p>An equality and a hole are one rule written either way round ({@code x - 2y = 3} is
+     * {@code -x + 2y = -3}), so what they weigh and are held to is counted by size: the use of a
+     * position does not turn on which of the two writings the rules were given.
      */
     private record Use(int count, String ways) implements Comparable<Use> {
 
@@ -66,7 +81,10 @@ final class ReducedRules<A> {
     private final Map<A, Use> uses = new HashMap<>();
     private final List<Solved<A>> solved = new ArrayList<>();
     private final List<Rule<A>> rules = new ArrayList<>();
-    private boolean contradicted;
+    /** Whether the updates of a weight are counted: while a set of equalities is solved. */
+    private boolean metered;
+    /** How many more weights this set of equalities may update. */
+    private int left;
 
     private ReducedRules(CanonicalOrder<A> order) {
         this.order = order;
@@ -75,7 +93,7 @@ final class ReducedRules<A> {
     /**
      * {@code all} over the positions their equalities leave free, or null where there is nothing
      * to leave free: every equality is one the domain holds exactly already as a difference of two
-     * positions, or the arithmetic could not hold the reduction.
+     * positions, or none of the sets of equalities could be solved.
      */
     static <A> ReducedRules<A> of(List<AffineConstraint<A>> all, CanonicalOrder<A> order) {
         List<AffineConstraint.Equality<A>> equalities = new ArrayList<>();
@@ -89,44 +107,88 @@ final class ReducedRules<A> {
         }
         ReducedRules<A> reduced = new ReducedRules<>(order);
         reduced.uses.putAll(usesIn(all, order));
-        for (AffineConstraint.Equality<A> each : equalities) {
-            if (!reduced.take(each)) {
-                return null;
+        List<AffineConstraint.Equality<A>> unsolved = new ArrayList<>();
+        for (List<AffineConstraint.Equality<A>> set : apart(equalities, order)) {
+            if (!reduced.solve(set)) {
+                unsolved.addAll(set);
             }
+        }
+        reduced.metered = false;
+        if (reduced.solved.isEmpty()) {
+            return null;
         }
         for (AffineConstraint<A> each : all) {
-            // An equality is what the positions were solved from, and says nothing more.
-            if (each instanceof AffineConstraint.Equality<A>) {
-                continue;
+            Rule<A> rule = switch (each) {
+                case AffineConstraint.HalfSpace<A> half -> reduced.rewritten(
+                        reduced.said(half.form()), half.bound().at(),
+                        half.bound().inclusive() ? Rel.LE : Rel.LT);
+                case AffineConstraint.Disequality<A> hole ->
+                        reduced.rewritten(reduced.said(hole.form()), hole.at(), Rel.NE);
+                // An equality that was solved is what the positions were solved from, and says
+                // nothing more; one that was not is a rule as it was.
+                case AffineConstraint.Equality<A> equality -> unsolved.contains(equality)
+                        ? reduced.rewritten(reduced.said(equality.form()), equality.at(), Rel.EQ)
+                        : null;
+            };
+            if (rule != null) {
+                reduced.rules.add(rule);
             }
-            Rule<A> rule = each instanceof AffineConstraint.HalfSpace<A> half
-                    ? reduced.rewritten(reduced.said(half.form()), half.bound().at(),
-                            half.bound().inclusive() ? Rel.LE : Rel.LT)
-                    : reduced.rewritten(
-                            reduced.said(((AffineConstraint.Disequality<A>) each).form()),
-                            ((AffineConstraint.Disequality<A>) each).at(), Rel.NE);
-            if (rule == null) {
-                return null;
-            }
-            reduced.rules.add(rule);
         }
         return reduced;
+    }
+
+    /**
+     * {@code equalities} in the sets that share no position, each in the order it was given: the
+     * positions an equality names are all one set, and so are those of any equality naming one of
+     * them.
+     */
+    private static <A> List<List<AffineConstraint.Equality<A>>> apart(
+            List<AffineConstraint.Equality<A>> equalities, CanonicalOrder<A> order) {
+        Map<A, A> parent = new HashMap<>();
+        for (AffineConstraint.Equality<A> each : equalities) {
+            A first = null;
+            for (A atom : each.form().atomsIn(order)) {
+                parent.putIfAbsent(atom, atom);
+                if (first == null) {
+                    first = atom;
+                } else {
+                    parent.put(root(parent, atom), root(parent, first));
+                }
+            }
+        }
+        Map<A, List<AffineConstraint.Equality<A>>> sets = new LinkedHashMap<>();
+        for (AffineConstraint.Equality<A> each : equalities) {
+            A first = each.form().atomsIn(order).getFirst();
+            sets.computeIfAbsent(root(parent, first), _ -> new ArrayList<>()).add(each);
+        }
+        return List.copyOf(sets.values());
+    }
+
+    private static <A> A root(Map<A, A> parent, A atom) {
+        A at = atom;
+        while (!parent.get(at).equals(at)) {
+            at = parent.get(at);
+        }
+        return at;
     }
 
     /** How {@code all} use each position they name. */
     private static <A> Map<A, Use> usesIn(List<AffineConstraint<A>> all, CanonicalOrder<A> order) {
         Map<A, List<String>> ways = new HashMap<>();
         for (AffineConstraint<A> each : all) {
+            // A bound has a side, which is what it says; a value has none to turn round.
+            boolean sided = each instanceof AffineConstraint.HalfSpace<A>;
             String shape = switch (each) {
                 case AffineConstraint.HalfSpace<A> half ->
                         (half.bound().inclusive() ? "<=" : "<") + half.bound().at();
-                case AffineConstraint.Equality<A> equality -> "=" + equality.at();
-                case AffineConstraint.Disequality<A> hole -> "/=" + hole.at();
+                case AffineConstraint.Equality<A> equality -> "=" + equality.at().abs();
+                case AffineConstraint.Disequality<A> hole -> "/=" + hole.at().abs();
             };
             int named = each.form().atomsIn(order).size();
             for (Map.Entry<A, ExactRatio> entry : each.form().entriesIn(order)) {
+                ExactRatio weight = sided ? entry.getValue() : entry.getValue().abs();
                 ways.computeIfAbsent(entry.getKey(), _ -> new ArrayList<>())
-                        .add(shape + ";" + entry.getValue() + ";" + named);
+                        .add(shape + ";" + weight + ";" + named);
             }
         }
         Map<A, Use> out = new HashMap<>();
@@ -142,11 +204,6 @@ final class ReducedRules<A> {
         return rules;
     }
 
-    /** Whether the equalities say something no value satisfies, as {@code 0 = 1}. */
-    boolean contradicted() {
-        return contradicted;
-    }
-
     /** {@code goal} over the free positions, or null where the arithmetic could not hold it. */
     Goal<A> put(Goal<A> goal) {
         Map<A, ExactRatio> coefs = new LinkedHashMap<>(goal.coefs());
@@ -159,7 +216,7 @@ final class ReducedRules<A> {
             for (Map.Entry<A, ExactRatio> entry : walked(one.rest())) {
                 ExactRatio moved = weight.times(entry.getValue()).orNull();
                 ExactRatio had = coefs.getOrDefault(entry.getKey(), ExactRatio.ZERO);
-                ExactRatio now = moved == null ? null : had.minus(moved).orNull();
+                ExactRatio now = moved == null || spent() ? null : had.minus(moved).orNull();
                 if (now == null) {
                     return null;
                 }
@@ -178,15 +235,56 @@ final class ReducedRules<A> {
         return new Goal<>(coefs, constant);
     }
 
+    /** Whether the weight about to be updated is one too many for the set of equalities being
+     *  solved. */
+    private boolean spent() {
+        return metered && --left < 0;
+    }
+
     /** {@code Σ coefs rel at} over the free positions, or null where the arithmetic could not
      *  hold it. */
     private Rule<A> rewritten(Map<A, ExactRatio> coefs, ExactRatio at, Rel rel) {
         Goal<A> put = put(new Goal<>(coefs, at.negated()));
-        return put == null ? null : new Rule<>(put.coefs(), put.constant(), rel);
+        if (put == null) {
+            return null;
+        }
+        // A value held or held away from has no side to turn round, so it is written the one way:
+        // the position ranked first weighs more than nought.
+        boolean turned = (rel == Rel.EQ || rel == Rel.NE) && !put.coefs().isEmpty()
+                && walked(put.coefs()).getFirst().getValue().signum() < 0;
+        return turned
+                ? new Rule<>(negated(put.coefs()), put.constant().negated(), rel)
+                : new Rule<>(put.coefs(), put.constant(), rel);
+    }
+
+    private static <A> Map<A, ExactRatio> negated(Map<A, ExactRatio> coefs) {
+        Map<A, ExactRatio> out = new LinkedHashMap<>();
+        coefs.forEach((position, weight) -> out.put(position, weight.negated()));
+        return out;
+    }
+
+    /**
+     * Solves {@code set} for one position each, within {@link #MOST_UPDATES} updates — or leaves
+     * what was solved as it was and answers false, where one cannot be held, the set contradicts
+     * itself, or the work is more than that.
+     */
+    private boolean solve(List<AffineConstraint.Equality<A>> set) {
+        List<Solved<A>> before = new ArrayList<>(solved);
+        metered = true;
+        left = MOST_UPDATES;
+        for (AffineConstraint.Equality<A> each : set) {
+            if (!take(each)) {
+                solved.clear();
+                solved.addAll(before);
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Solves {@code equality} for one position, after putting the ones already solved in terms of
-     *  the rest. False where the arithmetic could not hold it. */
+     *  the rest. False where the arithmetic could not hold it, or it says something no value
+     *  satisfies. */
     private boolean take(AffineConstraint.Equality<A> equality) {
         Goal<A> as = put(new Goal<>(said(equality.form()), equality.at().negated()));
         if (as == null) {
@@ -195,15 +293,15 @@ final class ReducedRules<A> {
         List<Map.Entry<A, ExactRatio>> walked = walked(as.coefs());
         if (walked.isEmpty()) {
             // Said already, or said against itself.
-            contradicted |= !as.constant().isZero();
-            return true;
+            return as.constant().isZero();
         }
         Map.Entry<A, ExactRatio> last = walked.getLast();
         A pivot = last.getKey();
         Map<A, ExactRatio> rest = new LinkedHashMap<>();
         for (Map.Entry<A, ExactRatio> entry : walked) {
             if (!entry.getKey().equals(pivot)) {
-                ExactRatio scaled = entry.getValue().dividedBy(last.getValue()).orNull();
+                ExactRatio scaled = spent() ? null
+                        : entry.getValue().dividedBy(last.getValue()).orNull();
                 if (scaled == null) {
                     return false;
                 }
@@ -249,7 +347,7 @@ final class ReducedRules<A> {
         for (Map.Entry<A, ExactRatio> entry : walked(fresh.rest())) {
             ExactRatio moved = weight.times(entry.getValue()).orNull();
             ExactRatio had = rest.getOrDefault(entry.getKey(), ExactRatio.ZERO);
-            ExactRatio now = moved == null ? null : had.minus(moved).orNull();
+            ExactRatio now = moved == null || spent() ? null : had.minus(moved).orNull();
             if (now == null) {
                 return null;
             }

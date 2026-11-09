@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,9 +66,15 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
     }
 
     private static NumericDomain<String> domain(List<Row> rules, String[] names) {
+        return domain(rules, names, Granularity.DISCRETE, Granularity.DISCRETE);
+    }
+
+    /** The first two positions spaced as {@code first}, the other two as {@code second}. */
+    private static NumericDomain<String> domain(List<Row> rules, String[] names, Granularity first,
+                                                Granularity second) {
         Map<String, NumberSpace> spaces = new LinkedHashMap<>();
-        for (String each : names) {
-            spaces.put(each, NumberSpace.spacedOnly(Granularity.DISCRETE));
+        for (int i = 0; i < names.length; i++) {
+            spaces.put(names[i], NumberSpace.spacedOnly(i < 2 ? first : second));
         }
         NumericDomain<String> out = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         for (Row rule : rules) {
@@ -149,6 +156,77 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
         assertTrue(proved > 0, "nothing was proved, so nothing was held to the box");
     }
 
+    /** {@code row} at {@code halves}, each position given in halves: a sum of halves twice over. */
+    private static boolean holdsInHalves(Row row, int[] halves) {
+        long sum = 2L * row.constant();
+        for (Term t : row.terms()) {
+            sum += (long) t.coef() * halves[t.atom()];
+        }
+        return switch (row.rel()) {
+            case GE -> sum >= 0;
+            case LE -> sum <= 0;
+            default -> sum == 0;
+        };
+    }
+
+    /**
+     * Whether some point breaks the goal and satisfies every rule where the first two positions are
+     * whole numbers and the other two are halves of them: a point of what a decimal can be, so a
+     * point found here is a real counterexample and none found says only that this did not find one.
+     */
+    private static boolean breaksWholeAndHalves(List<Row> rules, Row goal) {
+        int[] at = new int[ATOMS];
+        for (at[0] = -BOX; at[0] <= BOX; at[0] += 2) {
+            for (at[1] = -BOX; at[1] <= BOX; at[1] += 2) {
+                for (at[2] = -BOX; at[2] <= BOX; at[2]++) {
+                    for (at[3] = -BOX; at[3] <= BOX; at[3]++) {
+                        if (!holdsInHalves(goal, at) && everyRuleHoldsInHalves(rules, at)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean everyRuleHoldsInHalves(List<Row> rules, int[] halves) {
+        for (Row rule : rules) {
+            if (!holdsInHalves(rule, halves)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Over whole numbers and decimals together a weight that is a fraction comes of solving for a
+     * position, and what the positions solved for carried is not kept; none of it makes a goal
+     * proved that a whole-number-and-half point breaks.
+     */
+    @Test
+    void whatIsProvedOverWholeNumbersAndDecimalsIsBrokenByNoPointOfTheHalves() {
+        Random random = new Random(23);
+        int proved = 0;
+        List<String> wrong = new ArrayList<>();
+        for (int round = 0; round < 120; round++) {
+            List<Row> rules = system(random);
+            NumericDomain<String> domain =
+                    domain(rules, NAMES, Granularity.DISCRETE, Granularity.DENSE);
+            for (int i = 0; i < 10; i++) {
+                Row goal = random(random, 3, false);
+                if (domain.entails(form(goal), goal.rel())) {
+                    proved++;
+                    if (breaksWholeAndHalves(rules, goal)) {
+                        wrong.add(rules + " proves " + goal);
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), wrong);
+        assertTrue(proved > 0, "nothing was proved, so nothing was held to the points");
+    }
+
     /**
      * What the rules leave a position, the certificate, whether anything is left and what the
      * ranges and the closed differences prove are the same before and after the rules were asked
@@ -217,32 +295,34 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
         assertEquals(List.of(), moved);
     }
 
-    /** The equalities said in another order are the same equalities, and are solved the same. */
+    /**
+     * The rules said in another order, and an equality written the other way round ({@code x = 3}
+     * as {@code -x = -3}, which are one equality), are solved the same: the same rules over the
+     * free positions, and a goal written the same.
+     */
     @Test
-    void theOrderTheEqualitiesAreSaidInDoesNotChangeWhatTheyAreSolvedTo() {
+    void theWayTheRulesAreWrittenDoesNotChangeWhatTheEqualitiesAreSolvedTo() {
         Random random = new Random(17);
         CanonicalOrder<String> order = CanonicalOrder.asTheyAreSpelled();
-        for (int round = 0; round < 200; round++) {
-            List<AffineConstraint<String>> equalities = new ArrayList<>();
-            for (int i = 0, count = 1 + random.nextInt(3); i < count; i++) {
-                Row row = random(random, 3, true);
-                if (domain(List.of(row)).rulesRead().isEmpty()) {
-                    continue;
-                }
-                equalities.addAll(domain(List.of(row)).rulesRead());
+        for (int round = 0; round < 300; round++) {
+            List<AffineConstraint<String>> rules = domain(system(random)).rulesRead();
+            ReducedRules<String> one = ReducedRules.of(rules, order);
+            List<AffineConstraint<String>> written = new ArrayList<>();
+            for (AffineConstraint<String> each : rules) {
+                written.add(each instanceof AffineConstraint.Equality<String> equality
+                        && random.nextBoolean()
+                        ? new AffineConstraint.Equality<>(equality.form().negated(),
+                                equality.at().negated())
+                        : each);
             }
-            ReducedRules<String> one = ReducedRules.of(equalities, order);
-            List<AffineConstraint<String>> shuffled = new ArrayList<>(equalities);
-            Collections.shuffle(shuffled, random);
-            ReducedRules<String> other = ReducedRules.of(shuffled, order);
-            assertEquals(one == null, other == null, equalities.toString());
+            Collections.shuffle(written, random);
+            ReducedRules<String> other = ReducedRules.of(written, order);
+            assertEquals(one == null, other == null, rules.toString());
             if (one == null) {
                 continue;
             }
-            assertEquals(one.contradicted(), other.contradicted(), equalities.toString());
-            if (one.contradicted()) {
-                continue;   // what nothing satisfies has no one way of being written
-            }
+            assertEquals(new HashSet<>(one.rules()), new HashSet<>(other.rules()),
+                    rules + " written as " + written);
             for (int i = 0; i < 8; i++) {
                 Row goal = random(random, 3, false);
                 Map<String, ExactRatio> coefs = new LinkedHashMap<>();
@@ -251,7 +331,7 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
                 }
                 ReducedRules.Goal<String> asked =
                         new ReducedRules.Goal<>(coefs, ExactRatio.of(goal.constant()));
-                assertEquals(one.put(asked), other.put(asked), equalities.toString());
+                assertEquals(one.put(asked), other.put(asked), rules.toString());
             }
         }
     }

@@ -836,9 +836,6 @@ public final class NumericDomain<A> {
         if (reduced == null) {
             return false;
         }
-        if (reduced.rules().contradicted() || reduced.over().isBottom()) {
-            return true;   // nothing satisfies the equalities, or what follows from them
-        }
         ReducedRules.Goal<A> freed = reduced.rules().put(new ReducedRules.Goal<>(coefs, constant));
         return freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)
                 && reduced.over().entailsOver(freed.coefs(), freed.constant(), rel, true);
@@ -847,8 +844,15 @@ public final class NumericDomain<A> {
     /** The rules over the positions their equalities leave free, and what they leave. */
     private record Reduction<A>(ReducedRules<A> rules, NumericDomain<A> over) {}
 
-    /** The reduction of these rules, worked out when first asked for and kept — or null where
-     *  there is nothing to reduce. */
+    /**
+     * The reduction of these rules, worked out when first asked for and kept — or null where there
+     * is nothing to reduce, or where what is left leaves nothing.
+     *
+     * <p>Not used where it leaves nothing. That the rules leave nothing is what {@link #isBottom}
+     * says of them, and it is that answer's to give: a path is unreachable when the rules as they
+     * stand show it, and one whose reduction alone found the rules empty would prove everything and
+     * be reached all the same, so {@link #refutes} could say both of a goal and of its denial.
+     */
     private Reduction<A> reduction() {
         if (!reductionWorkedOut) {
             ReducedRules<A> rules = ReducedRules.of(rules(), order);
@@ -858,7 +862,9 @@ public final class NumericDomain<A> {
                 for (ReducedRules.Rule<A> each : rules.rules()) {
                     over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
                 }
-                reduction = new Reduction<>(rules, over);
+                if (!over.isBottom()) {
+                    reduction = new Reduction<>(rules, over);
+                }
             }
             reductionWorkedOut = true;
         }
