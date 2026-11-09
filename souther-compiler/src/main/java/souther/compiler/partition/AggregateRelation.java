@@ -33,6 +33,12 @@ import java.util.function.IntPredicate;
  * {@link #holdsAt}, and whether it can still come to that while some elements are not yet shared
  * out is {@link #mayHoldWith}.
  *
+ * <p>What a composer is asked for, and nothing else's reading of a count beside a size. The line a
+ * relation draws ({@code Cutting}) takes the size as a number of the input to put beside one count,
+ * and the proof that every count of every size is a row ({@code UndividedByARelation}) is asked of
+ * the two sides of a relation: each answers its own question from its own input, so neither is
+ * asked of this.
+ *
  * <p>Of one container only. The size of a container is the count of the elements meeting what every
  * element meets, so a relation over the counts and the size of a single container is a relation
  * over one set of elements; a count of another container's elements, or a number a row writes, is
