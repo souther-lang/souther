@@ -630,7 +630,9 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                 yield new LawProposition.All<>(parts);
             }
             // An entry is a pair, which no statement here names, so what is run is that there are
-            // as many as the map holds.
+            // as many as the map holds. That each is a key with the value filed under it, and
+            // each once, is run beside the operations it is taken of by
+            // TheKernelsAProofOfKeptEntriesTakesFileEachValueUnderItsKeyTest.
             case AppliedClosures.Listing.EveryEntryOf(int argument) ->
                     compared(Rel.EQ, 0, size(ANSWER), size(at(argument)).negate());
             case AppliedClosures.Listing.AtMostOneElementOf(int argument) ->

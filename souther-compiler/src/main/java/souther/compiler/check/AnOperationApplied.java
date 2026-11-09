@@ -67,13 +67,26 @@ public record AnOperationApplied(ValueName operation, List<Core> args) {
         return DefaultBoundOperationFacts.get().putsListsEndToEnd(operation);
     }
 
+    /** The two arguments of a comparison that answers the order of them: the one a positive answer
+     *  names as the greater, and the other. */
+    public record Ordered(Core greater, Core lesser) {}
+
     /**
-     * Whether its answer is a sign that states which of its two arguments is the greater, and
-     * nought that they are equal ({@link BoundOperationFact.StatesTheOrderOfItsArguments}).
+     * The two arguments it is handed, the greater first, where its answer is a sign that states
+     * which of them is the greater and nought that they are equal — or null where it is no such
+     * comparison ({@link BoundOperationFact.StatesTheOrderOfItsArguments}).
+     *
+     * <p>Which of the two a positive answer names is the operation's, and is not the same for all:
+     * {@code compare(a, b)} is positive where {@code a} is the greater and
+     * {@code daysBetween(a, b)} where {@code b} is. A reader that took the two as they were
+     * handed would read the second one the wrong way round.
      */
-    public boolean ordersItsTwoArguments() {
-        return args.size() == 2
-                && DefaultBoundOperationFacts.get().statesTheOrderOfItsArguments(operation) != null;
+    public Ordered ordersItsArguments() {
+        BoundOperationFact.StatesTheOrderOfItsArguments order =
+                DefaultBoundOperationFacts.get().statesTheOrderOfItsArguments(operation);
+        Core greater = order == null ? null : argument(order.greater());
+        Core lesser = order == null ? null : argument(order.lesser());
+        return greater == null || lesser == null ? null : new Ordered(greater, lesser);
     }
 
     /** What an operation that answers a closure's answer on what an option holds is handed. */

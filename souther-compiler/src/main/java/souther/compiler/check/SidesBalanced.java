@@ -120,16 +120,12 @@ public final class SidesBalanced {
      */
     private static List<Core> orderAtNought(Core sign, Core nought) {
         AnOperationApplied applied = AnOperationApplied.of(sign);
-        BoundOperationFact.StatesTheOrderOfItsArguments order = applied == null ? null
-                : DefaultBoundOperationFacts.get().statesTheOrderOfItsArguments(
-                        applied.operation());
-        if (order == null || !(Core.withoutStanding(nought) instanceof Core.Int zero)
+        AnOperationApplied.Ordered ordered = applied == null ? null : applied.ordersItsArguments();
+        if (ordered == null || !(Core.withoutStanding(nought) instanceof Core.Int zero)
                 || zero.value() != 0 || !WhatARunMayEndFor.itself(sign).endsNone()) {
             return null;
         }
-        Core greater = applied.argument(order.greater());
-        Core lesser = applied.argument(order.lesser());
-        return greater == null || lesser == null ? null : List.of(greater, lesser);
+        return List.of(ordered.greater(), ordered.lesser());
     }
 
     /**

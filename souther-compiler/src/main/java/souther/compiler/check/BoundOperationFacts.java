@@ -291,14 +291,17 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * Whether {@code operation} answers the number of an argument as it is: its form is that one
-     * argument once, and nothing is added to it or taken from it. A widening of a whole number to a
-     * decimal, which keeps every place the number has and adds none, is one.
+     * Whether {@code operation} widens a whole number: it answers the number of its argument as it
+     * is — the form is that one argument once, with nothing added to it or taken from it — and the
+     * argument is a whole number. What it answers then holds the places the number has, which are
+     * none past the point; an operation that answered any other kind of number as it is would
+     * keep places this does not say.
      */
-    public boolean answersAnArgumentAsItIs(ValueName operation) {
+    public boolean widensAWholeNumber(ValueName operation) {
         LinearForm<DeclaredArgument> form = answersAFormOfItsArguments(operation);
         return form != null && form.constant().equals(ExactRatio.ZERO) && form.coefs().size() == 1
-                && form.coefs().values().iterator().next().equals(ExactRatio.ONE);
+                && form.coefs().values().iterator().next().equals(ExactRatio.ONE)
+                && Type.INT.equals(form.coefs().keySet().iterator().next().stands());
     }
 
     /** What {@code operation} answers, counted, in what its arguments are counted as — or null
@@ -1204,21 +1207,26 @@ public final class BoundOperationFacts {
     /**
      * The operation that adds up what a container holds from nought, as the library declares
      * ({@link Accumulation.Combine#ADD}): the one a total of numbers over the elements of a list
-     * is filed as. Null where none, or more than one, does.
+     * is filed as.
+     *
+     * <p>One, and refused where the library declares none or more: which of two a total is filed
+     * as would be decided by the order they are read in, and a reader handed none would find out
+     * when it was asked.
      */
     public ValueName.Stdlib totalOf() {
-        ValueName found = null;
+        List<ValueName> adding = new ArrayList<>();
         for (ValueName operation : ones(BoundOperationFact.AccumulatesItsContainer.class)) {
             Accumulation how = accumulation(operation);
             if (how.identity() == Accumulation.Identity.ZERO
                     && how.combine() == Accumulation.Combine.ADD) {
-                if (found != null) {
-                    return null;
-                }
-                found = operation;
+                adding.add(operation);
             }
         }
-        return (ValueName.Stdlib) found;
+        if (adding.size() != 1) {
+            throw new IllegalStateException("a total of numbers is filed as the one operation the"
+                    + " library declares to add up from nought, and it declares " + adding);
+        }
+        return (ValueName.Stdlib) adding.getFirst();
     }
 
     /** What walking {@code operation}'s container comes to, or null where it accumulates nothing. */

@@ -643,8 +643,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  numbers: a division of two of them has as many places as it is asked for. */
             private boolean aDecimalMadeOfWholeNumbers(Core call) {
                 return Core.withoutStanding(call) instanceof Core.PreservedCall kept
-                        && DefaultBoundOperationFacts.get()
-                                .answersAnArgumentAsItIs(kept.operation());
+                        && DefaultBoundOperationFacts.get().widensAWholeNumber(kept.operation());
             }
 
             /**
@@ -1126,7 +1125,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         NumericTerm total = addedAsItIs(numbers);
                         Core.Block closure = total == null ? null : theClosureOfASum(node);
                         AddedOfEachElement each = closure == null ? null
-                                : AddedOfEachElement.ofAClosure(closure, ruleSource.symbols());
+                                : AddedOfEachElement.ofAClosure(closure);
                         if (each == null || !preparedWithoutAStop(node, at, closure, node)) {
                             told.exact = false;
                         } else if (Core.withoutStanding(node).type() == Type.DECIMAL) {
@@ -1683,7 +1682,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 NumericTerm total = addedAsItIs(walk.added());
                 AddedOfEachElement each = total == null ? null : joinsTwoMaps(total)
                         ? AddedOfEachElement.ofAJoin()
-                        : AddedOfEachElement.ofTheStep(seeded, ruleSource.symbols());
+                        : AddedOfEachElement.ofTheStep(seeded);
                 if (seeded.step().body().type() == Type.DECIMAL) {
                     BigDecimal seed = aDecimalWrittenOut(seeded.seed());
                     if (seed == null || each == null) {

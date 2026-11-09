@@ -205,11 +205,14 @@ public final class EntryHeld {
         // The sign of the difference of two numbers against nought, as a comparison of decimals is
         // written: it compares the two numbers the way it compares its answer with nought.
         if (AnOperationApplied.of(Core.withoutStanding(stated.left()))
-                instanceof AnOperationApplied compared && compared.ordersItsTwoArguments()
+                instanceof AnOperationApplied compared
+                && compared.ordersItsArguments() instanceof AnOperationApplied.Ordered ordered
                 && Core.withoutStanding(stated.right()) instanceof Core.Int nought
                 && nought.value() == 0) {
-            stated = new StatedComparison(stated.claim(), compared.args().get(0),
-                    compared.args().get(1), stated.reading());
+            // The sign against nought is the greater against the lesser, whichever of the two
+            // arguments the operation names as the greater.
+            stated = new StatedComparison(stated.claim(), ordered.greater(), ordered.lesser(),
+                    stated.reading());
         }
         StatedComparison.Numbered<List<String>> aboutTheValue =
                 stated.at(side -> placeOfTheValue(side, value, newtypes));
