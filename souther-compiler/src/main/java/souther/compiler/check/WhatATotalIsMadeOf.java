@@ -59,10 +59,6 @@ final class WhatATotalIsMadeOf {
     private final Term.Interner interned;
     private final BoundOperationFacts facts = DefaultBoundOperationFacts.get();
 
-    /** The operation putting the lists of a written list end to end, which an accumulation of
-     *  appending does for lists and for strings alike and this reads for lists only. */
-    private static final ValueName JOINING_LISTS = ValueName.Stdlib.operation("List", "concat");
-
     /**
      * What each list holds the elements of, as the leaves and how often each: a function of the
      * term, so held once for every term met. Empty where the list holds some leaf more often than
@@ -142,6 +138,13 @@ final class WhatATotalIsMadeOf {
         return out;
     }
 
+    /** Whether {@code operation} puts what its container holds end to end, as the library declares
+     *  it. Asked of a call that answers a list, it is the one that joins lists. */
+    private boolean joinsWhatItHolds(ValueName operation) {
+        Accumulation how = facts.accumulation(operation);
+        return how != null && how.combine() == Accumulation.Combine.APPEND;
+    }
+
     private Total totalOf(Term term) {
         ValueName operation = term.calledOperation();
         Accumulation how = operation == null ? null : facts.accumulation(operation);
@@ -200,7 +203,8 @@ final class WhatATotalIsMadeOf {
             inner.forEach((leaf, times) -> out.put(around.of(leaf, interned), times));
             return out;
         }
-        if (operation.equals(JOINING_LISTS) && args.getFirst().shape() == Term.Shape.LIST) {
+        if (joinsWhatItHolds(operation) && args.size() == 1
+                && args.getFirst().shape() == Term.Shape.LIST) {
             return together(args.getFirst().parts());
         }
         return Map.of(list, 1L);

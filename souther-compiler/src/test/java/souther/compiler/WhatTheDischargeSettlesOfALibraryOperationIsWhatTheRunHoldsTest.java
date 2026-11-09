@@ -432,7 +432,7 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
                     }
                 }
             }
-            Judged judged = judged(rows, inputs);
+            Judged judged = judged(rows, inputs, INPUT, true);
             for (Row row : rows) {
                 if (judged.provedAndBroke().contains(row.data())) {
                     unsound.add(row.count() + " - " + row.below());
