@@ -1308,8 +1308,8 @@ final class Pullback {
         return new OperatorsAnswer(
                 answered == null ? Optional.empty()
                         : Optional.of(pulled(answered).proposition()),
-                told[0].unsaidGroups, told[0].unsaidElsewhere, told[0].obligations,
-                told[0].afterTheFirst);
+                told[0].unsaidGroups, told[0].unsaidGroupsHolding, told[0].unsaidElsewhere,
+                told[0].obligations, told[0].afterTheFirst);
     }
 
     /**
@@ -1614,7 +1614,7 @@ final class Pullback {
         boolean told = operated.nodes.contains(e) || operated.nodes.contains(standing);
         GetsPast completion = told ? null : completionOf(e, reads);
         if (!told && !(completion instanceof GetsPast.Always)) {
-            operated.beginGroup();
+            operated.beginGroup(bound == null ? Set.of() : bound.holding());
             boolean[] hasOperands = {false};
             boolean elsewhereBefore = operated.unsaidElsewhere;
             // A quotient or a remainder stops where its divisor is nought, and what it divides is
@@ -1964,14 +1964,55 @@ final class Pullback {
                 }
             }
         }
-        return new Bound(names, standFor);
+        Set<TermPath> holding = new LinkedHashSet<>(outer == null ? Set.of() : outer.holding());
+        TermPath looked = containerLookedUpFor(call, block, reads);
+        if (looked != null) {
+            holding.add(looked);
+        }
+        return new Bound(names, standFor, holding);
     }
 
     /**
-     * The names the closures around a part bind, and the places they stand for, or null where
-     * they stand for nothing this can name.
+     * The map at a place that {@code applied} looks an entry up in and hands what it found to
+     * {@code block}, or null where it is no such call: {@code Option.map} of a closure over
+     * {@code Map.get(key, map)}, which applies the closure only where the map holds the key.
+     *
+     * <p>Only the lookup written as the option the call is handed. An option that comes from a
+     * name, or from a call of a declared function, is not followed, and nothing is said of what
+     * the closure stops on.
      */
-    private record Bound(Set<BindingId> names, Set<TermPath> standFor) {}
+    private TermPath containerLookedUpFor(Core applied, Core.Block block, InputReads reads) {
+        if (!(AnOperationApplied.of(applied) instanceof AnOperationApplied map)
+                || !map.operation().equals(OPTION_MAP) || map.args().size() != 2) {
+            return null;
+        }
+        Core found = null;
+        for (Core arg : map.args()) {
+            if (Core.withoutStanding(arg) == Core.withoutStanding(block)) {
+                continue;
+            }
+            found = arg;
+        }
+        if (found == null
+                || !(AnOperationApplied.of(found) instanceof AnOperationApplied lookup)
+                || !lookup.operation().equals(MAP_GET) || lookup.args().size() != 2) {
+            return null;
+        }
+        return reads.pathOf(lookup.args().get(1), read.rules().newtypes())
+                instanceof PathResolution.At(TermPath container) ? container : null;
+    }
+
+    private static final ValueName.Stdlib.Operation OPTION_MAP =
+            ValueName.Stdlib.operation("Option", "map");
+    private static final ValueName.Stdlib.Operation MAP_GET =
+            ValueName.Stdlib.operation("Map", "get");
+
+    /**
+     * The names the closures around a part bind, and the places they stand for, or null where
+     * they stand for nothing this can name; and the containers a run works the part out only
+     * where each holds an entry, being inside a closure applied to what a lookup in one found.
+     */
+    private record Bound(Set<BindingId> names, Set<TermPath> standFor, Set<TermPath> holding) {}
 
     /** The places {@code operand} reads, as the ones what is worked out over it may stop a run
      *  on: those of the numbers its form is over, or else those it stands at, and no place this
@@ -8016,6 +8057,9 @@ final class Pullback {
          *  stands now ({@link WhatTheStepsNamesHold}). */
         private WhatTheStepsNamesHold stepsNames = WhatTheStepsNamesHold.NOTHING;
         private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
+        /** For each of {@link #unsaidGroups}, the containers its operator is worked out only
+         *  where each holds an entry. */
+        private final List<Set<TermPath>> unsaidGroupsHolding = new ArrayList<>();
         private Set<TermPath> unsaidAt = new LinkedHashSet<>();
         private boolean unsaidElsewhere;
         private final List<StopObligation> obligations = new ArrayList<>();
@@ -8026,6 +8070,7 @@ final class Pullback {
 
         Operators() {
             unsaidGroups.add(unsaidAt);
+            unsaidGroupsHolding.add(Set.of());
         }
 
         /**
@@ -8048,8 +8093,8 @@ final class Pullback {
 
         /** What is left unsaid and owed here, with nothing told of where an operator answers. */
         OperatorsAnswer leftUnsaid() {
-            return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidElsewhere,
-                    obligations, afterTheFirst);
+            return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidGroupsHolding,
+                    unsaidElsewhere, obligations, afterTheFirst);
         }
 
         /** What has been told so far, which is the same only while nothing more has. */
@@ -8097,8 +8142,15 @@ final class Pullback {
         /** What the next operator not said of may stop a run on is one group of places: it ties
          *  them to one another, which what another operator stops a run on does not. */
         void beginGroup() {
+            beginGroup(Set.of());
+        }
+
+        /** The same, of an operator a run works out only where each container of
+         *  {@code reachedOnlyWhereHolding} holds an entry. */
+        void beginGroup(Set<TermPath> reachedOnlyWhereHolding) {
             unsaidAt = new LinkedHashSet<>();
             unsaidGroups.add(unsaidAt);
+            unsaidGroupsHolding.add(Set.copyOf(reachedOnlyWhereHolding));
         }
 
         /** Every place any operator not said of may stop a run on. */
@@ -8163,11 +8215,25 @@ final class Pullback {
      *                        number of a place, or on operands no form says
      */
     record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
+                           List<Set<TermPath>> unsaidReachedOnlyWhereHolding,
                            boolean unsaidElsewhere, List<StopObligation> obligations,
                            List<AfterTheFirst> afterTheFirst) {
 
         OperatorsAnswer {
-            unsaidAt = unsaidAt.stream().filter(each -> !each.isEmpty()).map(Set::copyOf).toList();
+            if (unsaidAt.size() != unsaidReachedOnlyWhereHolding.size()) {
+                throw new IllegalArgumentException("each group of places an operator not said may"
+                        + " stop a run on says where the operator is worked out");
+            }
+            List<Set<TermPath>> kept = new ArrayList<>();
+            List<Set<TermPath>> keptWhere = new ArrayList<>();
+            for (int i = 0; i < unsaidAt.size(); i++) {
+                if (!unsaidAt.get(i).isEmpty()) {
+                    kept.add(Set.copyOf(unsaidAt.get(i)));
+                    keptWhere.add(Set.copyOf(unsaidReachedOnlyWhereHolding.get(i)));
+                }
+            }
+            unsaidAt = List.copyOf(kept);
+            unsaidReachedOnlyWhereHolding = List.copyOf(keptWhere);
             obligations = List.copyOf(obligations);
             afterTheFirst = List.copyOf(afterTheFirst);
         }

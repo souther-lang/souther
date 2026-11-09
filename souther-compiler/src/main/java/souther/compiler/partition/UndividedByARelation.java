@@ -64,6 +64,7 @@ import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.DateTranslation;
@@ -2672,7 +2673,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     OnAWay.PartsLeftAlone.NONE,
                     taken.demand() instanceof RowDemand.ForTheRun run
                             && run.partedStrings().isPresent() ? run : null,
-                    taken.demand() instanceof RowDemand.OnARemainder on ? on : null));
+                    taken.demand() instanceof RowDemand.OnARemainder on ? on : null,
+                    taken.demand() instanceof RowDemand.ForTheRun run ? run.statement() : null));
         });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
@@ -2738,10 +2740,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                   TermPath elementsOf, RowDemand.AnElementMeets bySome,
                   PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces,
-                  RowDemand.OnARemainder onARemainder) {
+                  RowDemand.OnARemainder onARemainder, Proposition statedOfTheRun) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
+
+        OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
+               TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone,
+               RowDemand.ForTheRun ofThePieces, RowDemand.OnARemainder onARemainder) {
+            this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, ofThePieces,
+                    onARemainder, null);
+        }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf) {
@@ -2756,7 +2765,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
             return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts,
-                    ofThePieces, onARemainder);
+                    ofThePieces, onARemainder, statedOfTheRun);
         }
         /** Whether this says nothing of {@code term} because it is a part of a date this leaves
          *  alone. */
@@ -4256,8 +4265,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         ReachWitnesses.Sought sought = witnesses.reached();
         Map<FilingCoordinate, GettingThere> reached = new LinkedHashMap<>();
+        Set<FilingCoordinate> notShown = new LinkedHashSet<>();
         for (FilingCoordinate at : places()) {
             TermPath place = theValueAt(at);
+            if (place != null && !mayStopOnValueAt(place, past, read, region, conditions,
+                    declined, accountedFor)) {
+                continue;
+            }
+            notShown.add(at);
             List<String> written = sought.found()
                     .flatMap(row -> place == null ? Optional.empty() : row.shownAt(place, read))
                     .map(values -> writtenOut(values, place, read)).orElse(null);
@@ -4270,7 +4285,156 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         sought.runsStopped(), sought.stoppedAt()));
             }
         }
-        return shown.mayStopBefore(places(), reached);
+        return notShown.isEmpty() ? shown : shown.mayStopBefore(notShown, reached);
+    }
+
+    /**
+     * Whether a run working out {@code past} may stop on the way to the relation at some value of
+     * the place {@code place}, where {@code past} is already said to stop a run on what the
+     * relation reads ({@link #mayStopOnWhatItReads}).
+     *
+     * <p>A tie of an operator a run works out only inside a closure applied to what a lookup in a
+     * container found ({@link DemandReading.Tie#reachedOnlyWhereHolding}) stops no run where that
+     * container holds nothing. It holds nothing beside every value of {@code place} where the
+     * container is no part of {@code place} and nor inside it, the rules and the way leave it no
+     * entry, and nothing relates it to {@code place}: a row holds any value there, the container
+     * empty, and no such operator is worked out on it. Every other stop is asked as it is
+     * ({@link #mayStopOnWhatItReads}).
+     */
+    private boolean mayStopOnValueAt(TermPath place, DemandReading.Answered past,
+                                     InputReading read, SearchRegion region,
+                                     List<OnAWay> conditions, Optional<Set<String>> declined,
+                                     Set<TermPath> accountedFor) {
+        Set<TermPath> empty = leftEmptyBesideAnyValueAt(place, past, read, region, conditions,
+                declined);
+        if (empty.isEmpty()) {
+            return true;
+        }
+        DemandReading.Answered narrowed = past.withoutTies(tie ->
+                tie.reachedOnlyWhereHolding().stream().anyMatch(empty::contains));
+        return mayStopOnWhatItReads(narrowed, read, region, conditions, declined, accountedFor);
+    }
+
+    /**
+     * The containers a row holds no entry in, beside any value at {@code place}, such that the
+     * way is still met: each is no part of {@code place} and nor inside it, the way declined
+     * nothing that may name it, no rule relates it to {@code place} or to another of them, and
+     * the count the region holds it at reaches nought ({@link #howManyAreHeld}). Nothing, where
+     * the way is not shown met by a row holding one value at every place a container holds the
+     * one {@code place} is at, and those containers none.
+     *
+     * <p>Of those the ties of {@code past} name as the ones an operator is worked out inside
+     * ({@link DemandReading.Tie#reachedOnlyWhereHolding}).
+     */
+    private static Set<TermPath> leftEmptyBesideAnyValueAt(TermPath place,
+                                                           DemandReading.Answered past,
+                                                           InputReading read, SearchRegion region,
+                                                           List<OnAWay> conditions,
+                                                           Optional<Set<String>> declined) {
+        List<TermPath> empty = new ArrayList<>();
+        for (TermPath container : past.reachedOnlyWhereHolding()) {
+            if (container.isAtOrUnder(place) || place.isAtOrUnder(container)
+                    || declined.isEmpty() || declined.get().contains(container.head())
+                    || tiedByARule(container, place, read)
+                    || empty.stream().anyMatch(other -> tiedByARule(container, other, read))
+                    || !fewestHeld(howManyAreHeld(container, read, region))
+                            .equals(Optional.of(BigInteger.ZERO))) {
+                continue;
+            }
+            empty.add(container);
+        }
+        if (empty.isEmpty()) {
+            return Set.of();
+        }
+        for (OnAWay each : conditions) {
+            if (each.statedOfTheRun() != null) {
+                if (!metBy(each.statedOfTheRun(), place, empty, read, region)) {
+                    return Set.of();
+                }
+            } else if (each.positions().isEmpty() || each.positions().stream().anyMatch(at ->
+                    at.bearsOn(place) || tiedByARule(at, place, read)
+                            || empty.stream().anyMatch(at::bearsOn))) {
+                return Set.of();
+            }
+        }
+        return Set.copyOf(empty);
+    }
+
+    /** The fewest elements the container {@code held} bounds the count of holds, or nothing
+     *  where that is not worked out. */
+    private static Optional<BigInteger> fewestHeld(NumericDomain.Bounds held) {
+        if (held == null || !held.holdsAValue()) {
+            return Optional.empty();
+        }
+        if (held.min() == null) {
+            return Optional.of(BigInteger.ZERO);
+        }
+        return held.min().at() instanceof Count least
+                && least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
+                        BigInteger up)
+                ? Optional.of(held.min().inclusive() || !least.exactly().isWhole() ? up
+                        : up.add(BigInteger.ONE))
+                : Optional.empty();
+    }
+
+    /**
+     * Whether {@code statement}, a statement of how many elements meet something or how many a
+     * container holds against a number, holds on a row holding the containers of {@code empty}
+     * empty and one element in each container the one {@code place} is at holds — a row the
+     * relation is reached on, beside any value at {@code place}.
+     *
+     * <p>No element of a container meets what asks some element of an empty container to meet
+     * something, so such a count is nought. Every other number is not worked out, and then
+     * nothing is shown.
+     */
+    private static boolean metBy(Proposition statement, TermPath place, List<TermPath> empty,
+                                 InputReading read, SearchRegion region) {
+        if (!(statement instanceof Proposition.Compared(
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, var _, var _))) {
+            return false;
+        }
+        ExactRatio total = form.constant();
+        for (Map.Entry<Quantity, ExactRatio> term : form.coefs().entrySet()) {
+            ExactRatio value = switch (term.getKey()) {
+                case DecisionAtom.OfTheInput(NumericTerm.TakenOf taken, var _)
+                        when taken.takenAs() instanceof TakenAs.HowManyItHolds
+                        && place.containersHoldingIt().contains(taken.position())
+                        && oneIsHeld(taken.position(), read, region) -> ExactRatio.ONE;
+                case Quantity.HowManyMeet(DecisionSubject.AnInput(TermPath _, var _),
+                                          Proposition each)
+                        when noneMeetsInAnEmpty(each, empty) -> ExactRatio.ZERO;
+                default -> null;
+            };
+            if (value == null
+                    || !(term.getValue().times(value) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio product))
+                    || !(total.plus(product) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio sum))) {
+                return false;
+            }
+            total = sum;
+        }
+        return rel.holds(total.signum()) == holds;
+    }
+
+    /** Whether no element meets {@code statement}, because it asks some element of one of the
+     *  empty containers to meet something. */
+    private static boolean noneMeetsInAnEmpty(Proposition statement, List<TermPath> empty) {
+        return switch (statement) {
+            case Proposition.Some(DecisionSubject.AnInput(TermPath at, var _), var _, boolean holds,
+                                  var _) -> holds && empty.contains(at);
+            case Proposition.All all -> all.parts().stream()
+                    .anyMatch(part -> noneMeetsInAnEmpty(part, empty));
+            default -> false;
+        };
+    }
+
+    /** Whether the region leaves the container at {@code container} holding exactly one. */
+    private static boolean oneIsHeld(TermPath container, InputReading read, SearchRegion region) {
+        NumericDomain.Bounds held = howManyAreHeld(container, read, region);
+        return fewestHeld(held).filter(least -> least.compareTo(BigInteger.ONE) <= 0).isPresent()
+                && (held.max() == null || (held.max().at() instanceof Count most
+                        && most.exactly().compareTo(ExactRatio.ONE) >= 0));
     }
 
     /** Each of {@code values}, held at {@code place}, as the model writes a value of its type —

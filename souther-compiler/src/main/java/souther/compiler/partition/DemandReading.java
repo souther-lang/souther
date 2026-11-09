@@ -58,6 +58,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.IntStream;
 
 /**
  * What one condition coming out one way asks of a row, and nothing about where it stood.
@@ -942,22 +944,37 @@ final class DemandReading {
      * @param places the places the tie names, in the order they were met
      * @param by     what is stated of their numbers, or null where only the places are known — the
      *               numbers an operator not said may stop the run on
+     * @param reachedOnlyWhereHolding the containers the operator is worked out inside a closure
+     *               applied to what a lookup in one found: a run works it out only where each of
+     *               them holds an entry
      */
-    record Tie(Set<TermPath> places, TakenConstraint by) {
+    record Tie(Set<TermPath> places, TakenConstraint by, Set<TermPath> reachedOnlyWhereHolding) {
 
         Tie {
             places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+            reachedOnlyWhereHolding =
+                    Collections.unmodifiableSet(new LinkedHashSet<>(reachedOnlyWhereHolding));
         }
 
         /** The tie a statement of numbers makes, between every place its numbers are read off
          *  ({@link RowDemand#placesReadOff}). */
         static Tie by(TakenConstraint constraint) {
-            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint);
+            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint, Set.of());
+        }
+
+        Tie(Set<TermPath> places, TakenConstraint by) {
+            this(places, by, Set.of());
         }
 
         /** The tie of places an operator not said of may stop the run on. */
         static Tie between(Set<TermPath> places) {
-            return new Tie(places, null);
+            return between(places, Set.of());
+        }
+
+        /** The same, of an operator a run works out only where each container of
+         *  {@code reachedOnlyWhereHolding} holds an entry. */
+        static Tie between(Set<TermPath> places, Set<TermPath> reachedOnlyWhereHolding) {
+            return new Tie(places, null, reachedOnlyWhereHolding);
         }
     }
 
@@ -1061,6 +1078,24 @@ final class DemandReading {
                     unsaid, owed, before);
         }
 
+        /** Every container some tie here, or among what the applications before work out, names
+         *  as one an operator is worked out only where it holds an entry. */
+        Set<TermPath> reachedOnlyWhereHolding() {
+            Set<TermPath> out = new LinkedHashSet<>();
+            tied.forEach(each -> out.addAll(each.reachedOnlyWhereHolding()));
+            before.forEach(each -> out.addAll(each.workedOut().reachedOnlyWhereHolding()));
+            return out;
+        }
+
+        /** The same, without the ties {@code missed} says a run is not stopped by, among what the
+         *  applications before work out as well. */
+        Answered withoutTies(Predicate<Tie> missed) {
+            return new Answered(onTheWay, ofTheRelation,
+                    tied.stream().filter(each -> !missed.test(each)).toList(), unsaid, owed,
+                    before.stream().map(each -> new PriorApplications(each.walked(),
+                            each.workedOut().withoutTies(missed))).toList());
+        }
+
         private static List<TakenConstraint> notAmong(List<TakenConstraint> narrowing,
                                                       Collection<TakenConstraint.Affine> met) {
             return narrowing.stream().filter(each ->
@@ -1130,7 +1165,10 @@ final class DemandReading {
         static Answered leavingUnsaid(Pullback.OperatorsAnswer operators, Core body) {
             return operators.leavesNothingUnsaid() ? NOTHING
                     : new Answered(List.of(),
-                            operators.unsaidAt().stream().map(Tie::between).toList(),
+                            IntStream.range(0, operators.unsaidAt().size())
+                                    .mapToObj(i -> Tie.between(operators.unsaidAt().get(i),
+                                            operators.unsaidReachedOnlyWhereHolding().get(i)))
+                                    .toList(),
                             operators.unsaidElsewhere(),
                             operators.obligations().stream().map(each -> each.readIn(body))
                                     .toList(),
