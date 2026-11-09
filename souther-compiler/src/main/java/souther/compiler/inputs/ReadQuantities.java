@@ -2330,6 +2330,17 @@ final class ReadQuantities implements Quantities {
      */
     private List<StructuralContext> eitherWay(StructuralContext under,
                                               Collection<NumericTerm> terms, boolean[] settled) {
+        List<TermPath> open = openContainers(under, terms);
+        if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
+            settled[0] = false;
+        }
+        return holdingEachWay(under,
+                open.stream().limit(MOST_CONTAINERS_ASKED_BOTH_WAYS).toList());
+    }
+
+    /** The containers a question over {@code terms} walks that {@code under} says nothing of,
+     *  the terms' own first. */
+    private List<TermPath> openContainers(StructuralContext under, Collection<NumericTerm> terms) {
         List<NumericTerm> every = new ArrayList<>(terms);
         every.addAll(fixed.keySet());
         assumed.forEach(each -> every.addAll(each.terms()));
@@ -2340,11 +2351,15 @@ final class ReadQuantities implements Quantities {
                 open.add(walked);
             }
         }
-        if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
-            settled[0] = false;
-        }
+        return List.copyOf(open);
+    }
+
+    /** {@code under} with each of {@code containers} holding something and holding none, in every
+     *  combination. */
+    private static List<StructuralContext> holdingEachWay(StructuralContext under,
+                                                          List<TermPath> containers) {
         List<StructuralContext> out = new ArrayList<>(List.of(under));
-        for (TermPath container : open.stream().limit(MOST_CONTAINERS_ASKED_BOTH_WAYS).toList()) {
+        for (TermPath container : containers) {
             List<StructuralContext> both = new ArrayList<>(out.size() * 2);
             for (StructuralContext each : out) {
                 both.add(each.holding(container));
@@ -2353,6 +2368,49 @@ final class ReadQuantities implements Quantities {
             out = both;
         }
         return out;
+    }
+
+    /**
+     * Which containers an emptiness is asked of each way of holding, one choice after another:
+     * every choice of {@link #MOST_CONTAINERS_ASKED_BOTH_WAYS} of the {@code open} ones where there
+     * are more than that and few enough to choose among, and none of them beyond that.
+     *
+     * <p>An emptiness shown with some containers asked each way and the rest as nothing says of
+     * them is shown, since the rest are asked as wider, so a choice that shows it is enough. Which
+     * containers come first is the order the fixed and the taken-in terms happen to be held in, and
+     * a proof that was there for a container only when it came among the first would be a proof
+     * the order decides; asked of every choice, it is the containers and not their order that does.
+     */
+    private static List<List<TermPath>> choicesOfContainers(List<TermPath> open) {
+        if (open.size() <= MOST_CONTAINERS_ASKED_BOTH_WAYS) {
+            return List.of(open);
+        }
+        if (open.size() > MOST_CONTAINERS_CHOSEN_AMONG) {
+            return List.of(List.of());
+        }
+        List<List<TermPath>> out = new ArrayList<>();
+        int[] at = new int[MOST_CONTAINERS_ASKED_BOTH_WAYS];
+        for (int i = 0; i < at.length; i++) {
+            at[i] = i;
+        }
+        while (true) {
+            List<TermPath> chosen = new ArrayList<>();
+            for (int each : at) {
+                chosen.add(open.get(each));
+            }
+            out.add(chosen);
+            int moved = at.length - 1;
+            while (moved >= 0 && at[moved] == open.size() - at.length + moved) {
+                moved--;
+            }
+            if (moved < 0) {
+                return out;
+            }
+            at[moved]++;
+            for (int i = moved + 1; i < at.length; i++) {
+                at[i] = at[i - 1] + 1;
+            }
+        }
     }
 
     /** The same, for a question that does not ask whether its answer settled. */
@@ -2367,6 +2425,10 @@ final class ReadQuantities implements Quantities {
      * narrow the answer is, and an emptiness so asked is said not to have looked to the end.
      */
     private static final int MOST_CONTAINERS_ASKED_BOTH_WAYS = 3;
+
+    /** How many containers an emptiness is asked of every choice of a few among; more than that
+     *  are asked of none each way, which is a choice no order of them can change. */
+    private static final int MOST_CONTAINERS_CHOSEN_AMONG = 8;
 
     /** What {@code each} answers across {@code contexts} together: the range spanning every one
      *  a value is left in, and nothing left where none is. */
@@ -2834,27 +2896,38 @@ final class ReadQuantities implements Quantities {
         // Asked of every way of holding something or none the containers walked by what was fixed
         // and taken in can be ({@link #eitherWay}), as a sum is asked of its cases: the input is
         // empty only where every one of them is, and the proof is the first one's.
-        Optional<EmptyInput> proof = Optional.empty();
-        for (StructuralContext each : eitherWay(under, List.of(), settled)) {
-            switch (viability(each, null, settled)) {
-                case Viability.ProvedImpossible it -> {
-                    if (proof.isEmpty()) {
-                        proof = Optional.of(new EmptyInput.ProvedByTheDeclarations(it.why()));
+        List<TermPath> open = openContainers(under, List.of());
+        if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
+            settled[0] = false;
+        }
+        for (List<TermPath> chosen : choicesOfContainers(open)) {
+            Optional<EmptyInput> proof = Optional.empty();
+            boolean everyWayRefused = true;
+            for (StructuralContext each : holdingEachWay(under, chosen)) {
+                switch (viability(each, null, settled)) {
+                    case Viability.ProvedImpossible it -> {
+                        if (proof.isEmpty()) {
+                            proof = Optional.of(new EmptyInput.ProvedByTheDeclarations(it.why()));
+                        }
+                    }
+                    // Neither of these is a proof. One says nothing showed the input empty and
+                    // the other says this reading did not look, and a caller that read either as
+                    // "there is a value" would be reading the absence of a proof as one.
+                    case Viability.MayStand _ -> everyWayRefused = false;
+                    case Viability.NotRead _ -> {
+                        settled[0] = false;
+                        everyWayRefused = false;
                     }
                 }
-                // Neither of these is a proof. One says nothing showed the input empty and the
-                // other says this reading did not look, and a caller that read either as "there
-                // is a value" would be reading the absence of a proof as one.
-                case Viability.MayStand _ -> {
-                    return Optional.empty();
-                }
-                case Viability.NotRead _ -> {
-                    settled[0] = false;
-                    return Optional.empty();
+                if (!everyWayRefused) {
+                    break;
                 }
             }
+            if (everyWayRefused && proof.isPresent()) {
+                return proof;
+            }
         }
-        return proof;
+        return Optional.empty();
     }
 
     /**
