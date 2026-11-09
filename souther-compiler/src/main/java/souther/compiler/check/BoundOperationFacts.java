@@ -901,9 +901,28 @@ public final class BoundOperationFacts {
     }
 
     /** What is stated of {@code operation}'s answer beside what other kernels answer, in the
-     *  words of a walk, for the proofs of the library's written operations. */
+     *  words of a walk, for the proofs of the library's written operations
+     *  ({@link #asAProofTakesThem}). */
     List<LawProposition<Slot>> relationsOf(ValueName operation) {
+        return asAProofTakesThem(statedOf(operation));
+    }
+
+    private List<LawProposition<Slot>> statedOf(ValueName operation) {
         return operation == null ? List.of() : relations.getOrDefault(operation, List.of());
+    }
+
+    /**
+     * What a proof takes of {@code relations}: every one but those of sizes alone, which are for
+     * the reader of numbers. A proof takes every relation of every value it meets, and what a
+     * relation names that the proof did not is a value more to take relations of, a few rounds
+     * deep; the laws of those sizes it has already. Every relation a proof is handed goes through
+     * here.
+     */
+    static List<LawProposition<Slot>> asAProofTakesThem(List<LawProposition<Slot>> relations) {
+        return relations.stream()
+                .filter(each -> !(each instanceof LawProposition.Compared<Slot> compared
+                        && compared.ofSizesOnly()))
+                .toList();
     }
 
     /**
@@ -919,8 +938,8 @@ public final class BoundOperationFacts {
                 OperationLaw<DeclaredArgument> law, var _))) {
             return null;
         }
-        return AddsWhatItDoesNotHold.of(operation, law, provedRelationsOf(operation),
-                this::askedWhetherItHolds);
+        return AddsWhatItDoesNotHold.of(operation, law,
+                asAProofTakesThem(provedRelationsOf(operation)), this::askedWhetherItHolds);
     }
 
     /**
@@ -929,7 +948,7 @@ public final class BoundOperationFacts {
      * writes only once its body has proved it.
      */
     public List<LawProposition<Slot>> provedRelationsOf(ValueName operation) {
-        List<LawProposition<Slot>> out = new ArrayList<>(relationsOf(operation));
+        List<LawProposition<Slot>> out = new ArrayList<>(statedOf(operation));
         several.getOrDefault(BoundOperationFact.HasARelatedLemma.class, Map.of())
                 .getOrDefault(operation, List.of())
                 .forEach(each -> out.add(((BoundOperationFact.HasARelatedLemma) each).holds()));

@@ -351,10 +351,7 @@ final class ProvingTheLibrary implements LibraryProofs {
     }
 
     /** What is stated of {@code operation}'s answer beside what others answer, as a proof may take
-     *  it: an axiom of a kernel, and of an operation the library writes only once proved.
-     *  A relation of sizes alone is left to the reader of numbers: a proof takes every relation of
-     *  every value it meets, and what one names that the proof did not is a value more to take
-     *  relations of, a few rounds deep. */
+     *  it: an axiom of a kernel, and of an operation the library writes only once proved. */
     private List<LawProposition<Slot>> relationsOf(ValueName.Stdlib.Operation operation) {
         List<LawProposition<Slot>> out = new ArrayList<>();
         if (!stdlib.helpers().containsKey(operation)) {
@@ -366,9 +363,7 @@ final class ProvingTheLibrary implements LibraryProofs {
                 }
             }
         }
-        out.removeIf(each -> each instanceof LawProposition.Compared<Slot> compared
-                && compared.ofSizesOnly());
-        return out;
+        return BoundOperationFacts.asAProofTakesThem(out);
     }
 
     /** What {@code operation} builds its answer from, as a proof may take it: declared of a kernel,
