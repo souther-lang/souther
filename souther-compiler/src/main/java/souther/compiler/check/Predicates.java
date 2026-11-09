@@ -2094,8 +2094,16 @@ final class Predicates {
                 ? new Piecewise(List.copyOf(cases)) : null;
     }
 
-    /** The most cases a clause is read as: each is one closure of the domain, so the bound is what
-     *  reading a clause case by case may cost, stated once. */
+    /**
+     * The most cases a clause is read as. Each is one closure of the domain, and what a clause
+     * costs is that many of them, no more and no less, so the bound is what reading a clause case
+     * by case may cost, stated once.
+     *
+     * <p>The clauses the library and the corpus make fall in two groups far apart: those of a few
+     * cases up to this many, and those of several times it, which cost several times as much for
+     * a clause. Any bound between leaves both groups as they are; this is the one that reads every
+     * clause of the first and none of the second.
+     */
     private static final int MOST_CASES = 32;
 
     /** An atom of {@code form} or of what {@code given} says, not in {@code done}, recorded as one
