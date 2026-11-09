@@ -2,12 +2,8 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceRendering;
-import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
+import souther.compiler.partition.DecisionRule;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -76,22 +72,8 @@ class AnElementCountedForFailingAMembershipIsComposedTest {
         assertEquals(List.of(), whatNothingCouldShow(length + " - 1 == " + PRICED));
     }
 
-    /** The points nothing could show a row can be written at. */
-    private static List<String> whatNothingCouldShow(String guard) {
-        Compilation compilation = Compilation.ofSource(DEALS.replace("GUARD", guard), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
-        List<String> found = new ArrayList<>();
-        for (String line : page.split("\n")) {
-            if (line.contains("nothing could show a row can be written at")) {
-                found.add(line.trim());
-            }
-        }
-        return found;
+    /** The rules of the decision no search could settle. */
+    private static List<DecisionRule> whatNothingCouldShow(String guard) {
+        return DecisionRulesTheSearchLeftUnsettled.in(DEALS.replace("GUARD", guard), "probe");
     }
 }

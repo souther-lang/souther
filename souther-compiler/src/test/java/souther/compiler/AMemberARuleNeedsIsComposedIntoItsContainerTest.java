@@ -2,12 +2,8 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceRendering;
-import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -356,20 +352,6 @@ class AMemberARuleNeedsIsComposedIntoItsContainerTest {
 
     /** The points nothing could show a row can be written at. */
     private static List<String> whatNothingCouldShow(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
-        List<String> found = new ArrayList<>();
-        for (String line : page.split("\n")) {
-            if (line.contains("nothing could show a row can be written at the ")) {
-                found.add(line.trim());
-            }
-        }
-        return found;
+        return ObligationsNoRowCouldBeWrittenFor.in(model);
     }
 }

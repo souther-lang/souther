@@ -902,22 +902,18 @@ final class Witnesses {
                              RuleReadingContext reading) {
         Set<String> out = new LinkedHashSet<>();
         keysKeptOut.forEach(each -> out.add(each.text()));
-        if (filed != null && out.contains(filed.key().text())) {
+        List<Filed> every = new ArrayList<>();
+        if (filed != null) {
+            every.add(filed);
+        }
+        every.addAll(eachFiled);
+        Map<String, Filed> byKey = Filed.byKey(every);
+        if (byKey == null || byKey.keySet().stream().anyMatch(out::contains)) {
             return Proposals.NONE;
         }
-        Set<String> filedKeys = new LinkedHashSet<>();
-        if (filed != null) {
-            filedKeys.add(filed.key().text());
-        }
-        List<Filed> apart = new ArrayList<>();
-        for (Filed each : eachFiled) {
-            if (out.contains(each.key().text())) {
-                return Proposals.NONE;
-            }
-            if (filedKeys.add(each.key().text())) {
-                apart.add(each);
-            }
-        }
+        Set<String> filedKeys = new LinkedHashSet<>(byKey.keySet());
+        Filed placed = filed == null ? null : byKey.remove(filed.key().text());
+        List<Filed> apart = new ArrayList<>(byKey.values());
         // A key chosen over no value in particular needs an entry to be the key of, so the map holds
         // at least one value for each such key whatever else is asked of it.
         int keyed = filedKeys.size();
@@ -933,17 +929,17 @@ final class Witnesses {
         // Where the value the key is chosen for stands among them, asked of the values rather than
         // assumed from the order they were handed in. Any of them, where none was chosen.
         int under = -1;
-        if (filed != null) {
+        if (placed != null) {
             for (int i = 0; i < values.size() && under < 0; i++) {
-                if (filed.value() == null || values.get(i).text().equals(filed.value().text())) {
+                if (placed.value() == null || values.get(i).text().equals(placed.value().text())) {
                     under = i;
                 }
             }
             if (under < 0) {
-                throw new IllegalStateException(filed.value() == null
+                throw new IllegalStateException(placed.value() == null
                         ? "a key was chosen and the map was built holding no value to file it over"
                         : "a key was chosen for a value the map is not built to hold: "
-                                + filed.value().text());
+                                + placed.value().text());
             }
         }
         // A key no entry may have is one no other entry is filed under either.
@@ -976,7 +972,7 @@ final class Witnesses {
         // put it; the others take what is left in the order they came.
         FixtureTemplate[] filedUnder = new FixtureTemplate[values.size()];
         if (under >= 0) {
-            filedUnder[under] = filed.key();
+            filedUnder[under] = placed.key();
         }
         List<FixtureTemplate> unnamed = new ArrayList<>();
         for (Filed each : apart) {
@@ -1021,15 +1017,9 @@ final class Witnesses {
      */
     static Proposals holdingEntries(Shape.Mapping map, List<Filed> asked,
                                     DeclaredBounds.CountRange holds, RuleReadingContext reading) {
-        Map<String, Filed> byKey = new LinkedHashMap<>();
-        for (Filed each : asked) {
-            Filed had = byKey.get(each.key().text());
-            if (had == null || had.value() == null) {
-                byKey.put(each.key().text(), each);
-            } else if (each.value() != null
-                    && !had.value().text().equals(each.value().text())) {
-                return Proposals.NONE;
-            }
+        Map<String, Filed> byKey = Filed.byKey(asked);
+        if (byKey == null) {
+            return Proposals.NONE;
         }
         int count = Math.max(holds.least(), byKey.size());
         if (count > holds.most()) {
@@ -1093,6 +1083,27 @@ final class Witnesses {
 
         Filed {
             Objects.requireNonNull(key, "a key is filed");
+        }
+
+        /**
+         * What is asked of each key, once: the demands on a key are one entry, a demand naming a
+         * value holding where one naming none asks nothing more. Null where two demands on a key
+         * name different values, which no map holds — the one place a map's entries are made
+         * one by key, so that what a map is built holding and what it is checked against
+         * cannot come apart.
+         */
+        static Map<String, Filed> byKey(List<Filed> asked) {
+            Map<String, Filed> byKey = new LinkedHashMap<>();
+            for (Filed each : asked) {
+                Filed had = byKey.get(each.key().text());
+                if (had == null || had.value() == null) {
+                    byKey.put(each.key().text(), each);
+                } else if (each.value() != null
+                        && !had.value().text().equals(each.value().text())) {
+                    return null;
+                }
+            }
+            return byKey;
         }
     }
 

@@ -355,6 +355,49 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         assertTrue(map.contains("(\"c\", "), map);
     }
 
+    /**
+     * Entries asked under one key are one entry where they name one value or only one names any,
+     * and no map where they name two: a map holding both values is not one the second was asked
+     * of. Held by the one place entries are made one by key, so a map built to hold entries and
+     * a map checked for them cannot disagree.
+     */
+    @Test
+    void aKeyAskedOverTwoValuesIsNoMapAndOverOneIsOneEntry() {
+        FixtureTemplate a = FixtureTemplate.string("a");
+        FixtureTemplate p = FixtureTemplate.string("p");
+        FixtureTemplate q = FixtureTemplate.string("q");
+        Witnesses.Filed overP = new Witnesses.Filed(a, p);
+        Witnesses.Filed overQ = new Witnesses.Filed(a, q);
+        Witnesses.Filed overNone = new Witnesses.Filed(a, null);
+
+        assertTrue(Witnesses.Filed.byKey(List.of(overP, overQ)) == null);
+        assertTrue(Witnesses.Filed.byKey(List.of(overP, overP)).size() == 1);
+        assertEquals(overP, Witnesses.Filed.byKey(List.of(overNone, overP)).get("\"a\""));
+        assertEquals(overP, Witnesses.Filed.byKey(List.of(overP, overNone)).get("\"a\""));
+        assertTrue(holding(List.of(p, q), List.of(overP, overQ)).isEmpty());
+        assertFalse(holding(List.of(p, q), List.of(overP, overP)).isEmpty());
+        assertFalse(holding(List.of(p, q), List.of(overNone, overP)).isEmpty());
+    }
+
+    /** The key an element is filed under is asked one value only, whichever way it is asked. */
+    @Test
+    void theKeyAnElementIsFiledUnderIsAskedOneValueOnly() {
+        FixtureTemplate a = FixtureTemplate.string("a");
+        FixtureTemplate p = FixtureTemplate.string("p");
+        FixtureTemplate q = FixtureTemplate.string("q");
+        DeclaredBounds.CountRange any = new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+
+        assertTrue(Witnesses.holding(map(), List.of(p, q), List.of(), new Witnesses.Filed(a, p),
+                List.of(new Witnesses.Filed(a, q)), List.of(), any, READING).isEmpty());
+        assertFalse(Witnesses.holding(map(), List.of(p, q), List.of(), new Witnesses.Filed(a, p),
+                List.of(new Witnesses.Filed(a, null)), List.of(), any, READING).isEmpty());
+    }
+
+    private static Proposals holding(List<FixtureTemplate> holding, List<Witnesses.Filed> asked) {
+        return Witnesses.holding(map(), holding, List.of(), null, asked, List.of(),
+                new DeclaredBounds.CountRange(0, Integer.MAX_VALUE), READING);
+    }
+
     /** More keys than the rules leave room for, or a key kept out, is no map. */
     @Test
     void keysThatCannotAllStandAreNoMap() {
