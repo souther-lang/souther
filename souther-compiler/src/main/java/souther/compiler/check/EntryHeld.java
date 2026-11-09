@@ -45,12 +45,6 @@ import java.util.function.Function;
  */
 public final class EntryHeld {
 
-    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
-    private static final ValueName.Stdlib.Operation MAP =
-            ValueName.Stdlib.operation("Option", "map");
-    private static final ValueName.Stdlib.Operation COMPARE =
-            ValueName.Stdlib.operation("Decimal", "compare");
-
     private EntryHeld() {}
 
     /**
@@ -149,30 +143,30 @@ public final class EntryHeld {
         }
         Core scrutinee = Core.withoutStanding(followed.apply(Core.withoutStanding(match.scrutinee())));
         // The lookup mapped to a statement about the value, whose answer the present arm hands on.
-        if (AnOperationApplied.of(scrutinee) instanceof AnOperationApplied(var operation, var args)
-                && operation.equals(MAP) && args.size() == 2
+        if (AnOperationApplied.of(scrutinee) instanceof AnOperationApplied applied
+                && applied.mapsAnOption() instanceof AnOperationApplied.Mapped mapped
                 && Core.withoutStanding(present.body()) instanceof Core.Read read
                 && read.binding().equals(payload.binder().binding())
-                && Core.withoutStanding(args.getFirst()) instanceof Core.Block block
+                && Core.withoutStanding(mapped.closure()) instanceof Core.Block block
                 && block.params().size() == 1
-                && lookup(args.get(1)) instanceof AnOperationApplied(var _, var lookedUp)) {
+                && lookup(mapped.option()) instanceof AnOperationApplied.Lookup lookedUp) {
             ValueAsked is = valueIn(block.body(), block.params().getFirst().binding(), followed,
                     newtypes);
-            return is == null ? null : new Stated(lookedUp.get(1), lookedUp.get(0), is);
+            return is == null ? null : new Stated(lookedUp.container(), lookedUp.key(), is);
         }
         // The lookup matched on directly, the present arm stating what the value is.
-        if (lookup(scrutinee) instanceof AnOperationApplied(var _, var lookedUp)) {
+        if (lookup(scrutinee) instanceof AnOperationApplied.Lookup lookedUp) {
             ValueAsked is = valueIn(present.body(), payload.binder().binding(), followed,
                     newtypes);
-            return is == null ? null : new Stated(lookedUp.get(1), lookedUp.get(0), is);
+            return is == null ? null : new Stated(lookedUp.container(), lookedUp.key(), is);
         }
         return null;
     }
 
     /** {@code e} as a lookup in a map, or null where it is not one. */
-    private static AnOperationApplied lookup(Core e) {
-        return AnOperationApplied.of(e) instanceof AnOperationApplied applied
-                && applied.operation().equals(GET) && applied.args().size() == 2 ? applied : null;
+    private static AnOperationApplied.Lookup lookup(Core e) {
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        return applied == null ? null : applied.lookup();
     }
 
     /**
@@ -211,11 +205,13 @@ public final class EntryHeld {
         // The sign of the difference of two numbers against nought, as a comparison of decimals is
         // written: it compares the two numbers the way it compares its answer with nought.
         if (AnOperationApplied.of(Core.withoutStanding(stated.left()))
-                instanceof AnOperationApplied(var operation, var args)
-                && operation.equals(COMPARE) && args.size() == 2
+                instanceof AnOperationApplied compared
+                && compared.ordersItsArguments() instanceof AnOperationApplied.Ordered ordered
                 && Core.withoutStanding(stated.right()) instanceof Core.Int nought
                 && nought.value() == 0) {
-            stated = new StatedComparison(stated.claim(), args.get(0), args.get(1),
+            // The sign against nought is the greater against the lesser, whichever of the two
+            // arguments the operation names as the greater.
+            stated = new StatedComparison(stated.claim(), ordered.greater(), ordered.lesser(),
                     stated.reading());
         }
         StatedComparison.Numbered<List<String>> aboutTheValue =

@@ -44,6 +44,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.UnaryOperator;
@@ -396,6 +397,44 @@ final class OperationFactBinder {
                 holdTheAnswerToAnElementOf(declaration, source);
                 yield new BoundOperationFact.AnswersAnElementOf(operation, source);
             }
+            // An element picked at a place of a list: the place is a whole number, and the answer
+            // an option of an element of the list.
+            case OperationFact.AnswersTheElementAt picked -> {
+                requireAKernel(stdlib, operation, "which element it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of the element of a list at a place");
+                DeclaredArgument list = holdToTheDeclaration(declaration, picked.list(), null,
+                        TypeRequirement.CONTAINER, "what the element is picked from");
+                DeclaredArgument index = holdToTheDeclaration(declaration, picked.index(), null,
+                        TypeRequirement.ANY, "the place the element is picked at");
+                holdTheAnswerToAnElementOf(declaration, list);
+                if (!(list.stands() instanceof Type.ListOf) || !Type.INT.equals(index.stands())) {
+                    throw new IllegalStateException(((ValueName.Stdlib)
+                            declaration.declaring().operation()).qualified() + " picks at "
+                            + Type.show(index.stands()) + " from " + Type.show(list.stands())
+                            + ", which is no whole number and no list");
+                }
+                yield new BoundOperationFact.AnswersTheElementAt(operation, index, list);
+            }
+            // A value a container files under a key: the key is one of the container's keys, and the
+            // answer an option of what it holds.
+            case OperationFact.AnswersTheValueFiledUnder filed -> {
+                requireAKernel(stdlib, operation, "which value it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of the value a container files under a key");
+                DeclaredArgument container = holdToTheDeclaration(declaration, filed.container(),
+                        null, TypeRequirement.CONTAINER, "what files the value");
+                DeclaredArgument key = holdToTheDeclaration(declaration, filed.key(), null,
+                        TypeRequirement.ANY, "the key the value is filed under");
+                holdTheAnswerToAnElementOf(declaration, container);
+                if (!key.stands().equals(Type.keyOf(container.stands()))) {
+                    throw new IllegalStateException(((ValueName.Stdlib)
+                            declaration.declaring().operation()).qualified() + " looks up under "
+                            + Type.show(key.stands()) + ", which is not a key of "
+                            + Type.show(container.stands()));
+                }
+                yield new BoundOperationFact.AnswersTheValueFiledUnder(operation, key, container);
+            }
             // A value found among the elements of a container, and a truth the closure answers.
             case OperationFact.AnswersAnElementWhereTheClosureHolds found -> {
                 requireAKernel(stdlib, operation, "what it finds");
@@ -614,7 +653,30 @@ final class OperationFactBinder {
                         UnaryOperator.identity(), "the same kind of container");
                 holdTheAnswerTo(declaration, value, Type::elementOfAContainer,
                         UnaryOperator.identity(), "a container and one of what it holds");
-                yield new BoundOperationFact.PutsAValueIn(operation, value, into);
+                Optional<DeclaredArgument> under = Optional.empty();
+                if (puts.under().isPresent()) {
+                    DeclaredArgument key = holdToTheDeclaration(declaration, puts.under().get(),
+                            null, TypeRequirement.ANY, "the key the value is put under");
+                    holdTheAnswerTo(declaration, key, Type::keyOf, UnaryOperator.identity(),
+                            "a map and a key of it");
+                    under = Optional.of(key);
+                }
+                yield new BoundOperationFact.PutsAValueIn(operation, value, into, under);
+            }
+            // What is kept of a map's entries is a map, and what keeps them a closure handed the
+            // key and the value.
+            case OperationFact.KeepsTheEntriesWhereItHolds keeps -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "what holds the entries of a map where a closure holds of them");
+                DeclaredArgument source = holdToTheDeclaration(declaration, keeps.source(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "what the entries are kept of");
+                DeclaredArgument closure = holdToTheDeclaration(declaration,
+                        new ArgumentRef.TheClosure(), new ArgumentRef.TheClosure(),
+                        TypeRequirement.CLOSURE, "what decides which are kept");
+                holdTheEntriesTo(declaration, source, closure);
+                yield new BoundOperationFact.KeepsTheEntriesWhereItHolds(operation, source,
+                        closure);
             }
             case OperationFact.ReadsItsContainer reads ->
                     new BoundOperationFact.ReadsItsContainer(operation,
@@ -1242,6 +1304,37 @@ final class OperationFactBinder {
                     declaration.params().get(closure.position())) + " for the elements of "
                     + Type.show(source.stands()) + ", which is not a closure from the elements to"
                     + " a truth");
+        }
+    }
+
+    /**
+     * Holds an operation said to keep the entries of {@code source} where {@code closure} holds of
+     * them to its signature: the closure is handed a key and then the value filed under it, of the
+     * source, and answers a truth, and the answer is a map of the source's own type.
+     *
+     * <p>The key and the value, in that order, are what a reader of the entries applies the closure
+     * to, so a closure that takes them the other way round is not one it can read.
+     */
+    private static void holdTheEntriesTo(CompleteSignature declaration, DeclaredArgument source,
+                                         DeclaredArgument closure) {
+        String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
+        ClosurePositions handed = Combinators.positionsOf(declaration.declaring().operation());
+        if (handed == null || handed.containerArg() != source.position()
+                || handed.closureArg() != closure.position() || handed.keyParam() != 0
+                || handed.elementParam() != 1) {
+            throw new IllegalStateException(name + " is said to keep the entries of argument "
+                    + (source.position() + 1) + ", and its signature hands no closure the key and"
+                    + " then the value of those");
+        }
+        Type key = Type.keyOf(source.stands());
+        Type value = Type.elementOf(source.stands());
+        if (!declaration.result().equals(source.stands())
+                || !(declaration.params().get(closure.position()) instanceof Type.FnOf fn)
+                || !fn.params().equals(List.of(key, value)) || !Type.BOOL.equals(fn.result())) {
+            throw new IllegalStateException(name + " answers " + Type.show(declaration.result())
+                    + " of " + Type.show(source.stands()) + " and is handed "
+                    + Type.show(declaration.params().get(closure.position())) + ", which is not a"
+                    + " map of the same entries and a closure from a key and its value to a truth");
         }
     }
 

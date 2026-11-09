@@ -193,20 +193,22 @@ public final class NumericMeasures {
      * many newtypes as the type is written with: a name wrapped round a list is still a list.
      */
     public static ValueName.Stdlib takenOf(Type type, NewtypeInners inners) {
-        Type carried = TypeOps.base(type, inners);
-        if (carried == Type.STRING) {
-            return ValueName.Stdlib.operation("String", "length");
-        }
-        if (carried instanceof Type.ListOf) {
-            return ValueName.Stdlib.operation("List", "length");
-        }
-        if (carried instanceof Type.SetOf) {
-            return ValueName.Stdlib.operation("Set", "size");
-        }
-        if (carried instanceof Type.MapOf) {
-            return ValueName.Stdlib.operation("Map", "size");
-        }
-        return null;
+        return DefaultBoundOperationFacts.get().countOf(TypeOps.base(type, inners));
+    }
+
+    /** What {@code operation} counts the contents of: a string, a list, a set or a map — or none. */
+    public enum Counts {
+        STRING, LIST, SET, MAP
+    }
+
+    /** What {@code operation} counts the contents of, as the library declares it, or null where it
+     *  counts nothing. */
+    public static Counts counts(ValueName operation) {
+        Type counted = DefaultBoundOperationFacts.get().counted(operation);
+        return counted == Type.STRING ? Counts.STRING
+                : counted instanceof Type.ListOf ? Counts.LIST
+                : counted instanceof Type.SetOf ? Counts.SET
+                : counted instanceof Type.MapOf ? Counts.MAP : null;
     }
 
     private NumericMeasures() {}

@@ -368,6 +368,7 @@ final class Terms {
             out.addAll(knowledgeOf(atom).intrinsic());
         }
         out.addAll(relationsAmongCounts(reached));
+        out.addAll(relationsAmongTotals(reached));
         return out;
     }
 
@@ -1542,6 +1543,15 @@ final class Terms {
                 StepInputFacts.ofTheElement(elements, element, this, reached(step)))));
     }
 
+    /** How the totals of lists stand to each other ({@link WhatATotalIsMadeOf}). */
+    private final WhatATotalIsMadeOf totals = new WhatATotalIsMadeOf(interned,
+            (key, like) -> named(key, carrierOf(like)), key -> named(key, Carrier.WHOLE));
+
+    /** The relations among the totals of lists among {@code atoms}. */
+    List<NumericConstraint> relationsAmongTotals(Collection<FactSubject> atoms) {
+        return totals.among(atoms);
+    }
+
     /** The value an accumulation starts from, as a number — or null where the domain carries no such
      * value. The empty list a {@code List.concat} starts from is a value the library states and this
      * reading has no number for, which is a fact about this reading. */
@@ -2528,10 +2538,14 @@ final class Terms {
     }
 
     /** What {@code container} keeps of what it was handed and by what, where it is the answer of
-     *  an operation declared to keep the elements a closure holds of — and null where it is not. */
+     *  an operation declared to keep the elements a closure holds of, or the entries it holds of
+     *  the key and the value — and null where it is not. */
     private static DischargeRules.KeptWhereItHolds keptBy(Core container) {
-        return Core.withoutStanding(container) instanceof Core.PreservedCall call
-                ? DischargeRules.keptElements(call) : null;
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        DischargeRules.KeptWhereItHolds elements = DischargeRules.keptElements(call);
+        return elements != null ? elements : DischargeRules.keptEntries(call);
     }
 
     /** What a count of the elements that fall in a set of whole numbers is a count of: the
@@ -3167,7 +3181,7 @@ final class Terms {
      *  closure was handed and never read is one no form names. */
     Map<FactSubject, NumberSpace> spacesOfIfNamed(FactSubject atom) {
         Carrier carrier = atomCarriers.get(atom);
-        return carrier == null ? Map.of() : Map.of(atom, carrier.space());
+        return carrier == null ? Map.of() : Map.of(atom, spaceOf(atom, carrier));
     }
 
     private Map<FactSubject, NumberSpace> spacesOfAtoms(Set<FactSubject> atoms) {
@@ -3177,9 +3191,24 @@ final class Terms {
             if (carrier == null) {
                 throw new IllegalStateException("atom `" + atom.rendered() + "` was not named here");
             }
-            out.put(atom, carrier.space());
+            out.put(atom, spaceOf(atom, carrier));
         }
         return out;
+    }
+
+    /**
+     * What the domain is told of the values of {@code atom}: its carrier's space, except for an
+     * exact total, which is a number the type of the call answering it may not hold and so has
+     * the spacing of the type and no end.
+     *
+     * <p>No end is said of it because none is known to the domain, which is less than saying it
+     * has none: an exact total is not unbounded as a claim, and no reader may take it for one. It
+     * is what keeps every law over exact totals true of the totals themselves, whether or not the
+     * call over them answers.
+     */
+    private static NumberSpace spaceOf(FactSubject atom, Carrier carrier) {
+        return atom.identity().shape() == Term.Shape.EXACT_TOTAL
+                ? NumberSpace.spacedOnly(carrier.spacing()) : carrier.space();
     }
 
     /** An expression's canonical key: a location names itself, and everything else is read

@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.HeldClass;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.LinearForm;
@@ -9,7 +10,6 @@ import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.TakenAs;
-import souther.compiler.types.ValueName;
 import souther.compiler.values.ValueSet;
 
 import java.util.Collection;
@@ -151,8 +151,6 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
         return terms.stream().allMatch(ReadRegion::heldFor);
     }
 
-    private static final ValueName.Stdlib LIST_LENGTH = ValueName.Stdlib.operation("List", "length");
-
     /** Whether {@link #runsOnlyNarrowWhenFixed} has been held for this kind of number. */
     private static boolean heldFor(NumericTerm term) {
         if (term instanceof NumericTerm.ValueOf) {
@@ -163,7 +161,8 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
         }
         return taken.takenAs() instanceof TakenAs.TheFloorRemainder
                 || (taken.takenAs() instanceof TakenAs.HowManyItHolds
-                        && LIST_LENGTH.equals(taken.operation()));
+                        && NumericMeasures.counts(taken.operation())
+                        == NumericMeasures.Counts.LIST);
     }
 
     @Override

@@ -179,6 +179,10 @@ final class ProvingTheLibrary implements LibraryProofs {
                     elements.keepsWhereItHolds(operation, keeps.source().position(),
                             keeps.closure().position())
                             instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.KeepsTheEntriesWhereItHolds keeps ->
+                    elements.keepsEntriesWhereItHolds(operation, keeps.source().position(),
+                            keeps.closure().position())
+                            instanceof LibraryProver.Outcome.Proved;
             case BoundOperationFact.HoldsTheElementsByIndex byIndex ->
                     elements.byAnIndex(operation, byIndex.count().position(),
                             byIndex.list().position(), byIndex.kept())
@@ -213,6 +217,8 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.AnswersTheClosureOnWhatItHolds _ -> false;
             case BoundOperationFact.BoundsEachElementOfItsResult _ -> false;
             case BoundOperationFact.AnswersAnElementOf _ -> false;
+            case BoundOperationFact.AnswersTheValueFiledUnder _ -> false;
+            case BoundOperationFact.AnswersTheElementAt _ -> false;
             case BoundOperationFact.HoldsEachWholeNumberInTurn _ -> false;
             case BoundOperationFact.AnswersAnElementWhereTheClosureHolds _ -> false;
             case BoundOperationFact.KeepsWhetherItHoldsACodePointOf _ -> false;

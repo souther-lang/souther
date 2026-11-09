@@ -371,6 +371,9 @@ final class DerivedNumericFacts {
         for (NumericConstraint fact : terms.relationsAmongCounts(reached)) {
             out = out.assume(fact.form(), fact.rel(), terms.spacesOf(fact.form()));
         }
+        for (NumericConstraint fact : terms.relationsAmongTotals(reached)) {
+            out = out.assume(fact.form(), fact.rel(), terms.spacesOf(fact.form()));
+        }
         return new ReadingDomain(out);
     }
 

@@ -1898,11 +1898,9 @@ public sealed interface NumericTerm
          */
         public static TakenOver howManyOf(RunSource source, Type each, NewtypeInners inners,
                                           Symbols symbols) {
-            return of(LENGTH, source, each, inners, symbols);
+            return of(NumericMeasures.takenOf(new Type.ListOf(each), inners), source, each, inners,
+                    symbols);
         }
-
-        private static final ValueName.Stdlib.Operation LENGTH =
-                ValueName.Stdlib.operation("List", "length");
 
         public ValueName.Stdlib operation() {
             return operation;
