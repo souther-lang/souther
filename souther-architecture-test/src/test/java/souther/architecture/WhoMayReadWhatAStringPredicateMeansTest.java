@@ -179,6 +179,18 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     private static final String A_CHARACTER_MATCHED =
             "souther/compiler/partition/Pullback$ALawRead -> " + OWNER;
 
+    /**
+     * The law of a condition read over the counts of its arguments, asking which argument of a
+     * pattern matched against a string is the string.
+     *
+     * <p>Not a reader of what a rule means about a position. What the pattern accepts is the
+     * checker's, carried on the call, and how many code points its strings hold is read off that
+     * meaning where it stands ({@code LengthsOfAPattern}); this asks the table only where the
+     * subject stands, so that the length that is counted is the string's and not the pattern's.
+     */
+    private static final String THE_STRING_A_PATTERN_IS_MATCHED_AGAINST =
+            "souther/compiler/check/LawOverAtoms -> " + OWNER;
+
     private static final String IN_A_DESCRIPTOR = " (in a descriptor)";
 
     private static final List<String> READING_ONE = List.of(
@@ -194,6 +206,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             READS + "$Stated",
             READS + "$Stated#reading()L" + OWNER + "$Reading;",
             READS + "$Stated#subject()Lsouther/compiler/core/Core;",
+            THE_STRING_A_PATTERN_IS_MATCHED_AGAINST,
+            THE_STRING_A_PATTERN_IS_MATCHED_AGAINST + IN_A_DESCRIPTOR,
+            THE_STRING_A_PATTERN_IS_MATCHED_AGAINST + "#of(Lsouther/compiler/core/Kernel;)L"
+                    + OWNER + ";",
+            THE_STRING_A_PATTERN_IS_MATCHED_AGAINST + "#subject()I",
             WHAT_A_RULE_STATES,
             WHAT_A_RULE_STATES + IN_A_DESCRIPTOR,
             WHAT_A_RULE_STATES + "$Reading",
