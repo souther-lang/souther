@@ -63,6 +63,15 @@ final class ReducedRules<A> {
      */
     static final int MOST_WAYS = 256;
 
+    /**
+     * The most equalities of one set the ways of choosing are looked for among. Finding them is a descent one
+     * level for each equality, so this bounds how deep it goes as well as how wide: equalities that
+     * add nothing — each a combination of the others — take a level and no choice, and the ways
+     * counted above would not stop them. Past it no reduction is used, for every naming alike. What
+     * the equalities come to together is read without any descent ({@link EqualitySpan}).
+     */
+    static final int MOST_EQUATIONS = 64;
+
     /** A sum and a constant: {@code Σ coefs·position + constant}. */
     record Goal<A>(Map<A, ExactRatio> coefs, ExactRatio constant) {}
 
@@ -91,20 +100,32 @@ final class ReducedRules<A> {
         }
     }
 
+    private static final Use UNUSED = new Use(0, "");
+
     private final CanonicalOrder<A> order;
     private final Map<A, Use> uses;
-    private final List<Solved<A>> solved = new ArrayList<>();
-    private final List<Rule<A>> rules = new ArrayList<>();
+    private final List<Solved<A>> solved;
+    private final List<Rule<A>> rules;
     /** Whether the updates of a weight are counted: while a set of equalities is solved. */
     private boolean metered;
-    /** Whether each equality is solved for one position only, the last the rules rank. */
-    private boolean alone;
     /** How many more weights this set of equalities may update. */
     private int left;
 
+    /** A reduction being made, whose equalities are solved as it goes. */
     private ReducedRules(CanonicalOrder<A> order, Map<A, Use> uses) {
+        this(order, uses, new ArrayList<>());
+    }
+
+    private ReducedRules(CanonicalOrder<A> order, Map<A, Use> uses, List<Solved<A>> solved) {
+        this(order, uses, solved, List.of());
+    }
+
+    private ReducedRules(CanonicalOrder<A> order, Map<A, Use> uses, List<Solved<A>> solved,
+                         List<Rule<A>> rules) {
         this.order = order;
         this.uses = uses;
+        this.solved = solved;
+        this.rules = rules;
     }
 
     /**
@@ -124,7 +145,8 @@ final class ReducedRules<A> {
      * choosing among the positions the rules use alike, or none where there is nothing to leave
      * free: every equality is one the domain holds exactly already as a difference of two
      * positions, none of the sets of equalities could be solved, or the ways of choosing are more
-     * than {@link #MOST_CHOICES}.
+     * than {@link #MOST_CHOICES}. A set of more equalities than {@link #MOST_EQUATIONS} is left as
+     * the equalities it was.
      */
     static <A> List<ReducedRules<A>> of(List<AffineConstraint<A>> all, CanonicalOrder<A> order) {
         List<AffineConstraint.Equality<A>> equalities = new ArrayList<>();
@@ -161,37 +183,6 @@ final class ReducedRules<A> {
         return out;
     }
 
-    /**
-     * What the equalities of {@code all} come to, solved once for one position each, or null where
-     * none could be solved.
-     *
-     * <p>Not a reduction to write rules over: the positions solved for are the names' choice here,
-     * and what is read of it is only what does not turn on the choice. A sum is a combination of the
-     * equalities exactly when {@link #put} writes it as a constant, and two sums are one the other
-     * scaled exactly when they are written as such, whichever positions were solved for — so those
-     * are asked of this, and never what is left of a sum beside the positions that remain. Every
-     * equality that could not be solved is left out, which says less and nothing false, and no
-     * equality is held to a count of ways: there is only one.
-     */
-    static <A> ReducedRules<A> span(List<AffineConstraint<A>> all, CanonicalOrder<A> order) {
-        List<AffineConstraint.Equality<A>> equalities = new ArrayList<>();
-        for (AffineConstraint<A> each : all) {
-            if (each instanceof AffineConstraint.Equality<A> equality) {
-                equalities.add(equality);
-            }
-        }
-        ReducedRules<A> scratch = new ReducedRules<>(order, usesIn(all, order));
-        scratch.alone = true;
-        ReducedRules<A> out = new ReducedRules<>(order, scratch.uses);
-        for (List<AffineConstraint.Equality<A>> set : apart(equalities, order)) {
-            List<Choice<A>> choices = scratch.choicesFor(set);
-            if (choices != null && choices.size() == 1) {
-                out.solved.addAll(choices.getFirst().solved());
-            }
-        }
-        return out.solved.isEmpty() ? null : out;
-    }
-
     private static <T> List<T> joined(List<T> first, List<T> second) {
         List<T> out = new ArrayList<>(first);
         out.addAll(second);
@@ -200,8 +191,10 @@ final class ReducedRules<A> {
 
     /** The rules written over what {@code choice} leaves free. */
     private ReducedRules<A> written(List<AffineConstraint<A>> all, Choice<A> choice) {
-        ReducedRules<A> reduced = new ReducedRules<>(order, uses);
-        reduced.solved.addAll(choice.solved());
+        // Worked out over a copy that is still being made, and handed on only once it is finished:
+        // what is handed on is read by whoever holds it and is never changed.
+        ReducedRules<A> reduced = new ReducedRules<>(order, uses, new ArrayList<>(choice.solved()));
+        List<Rule<A>> written = new ArrayList<>();
         List<AffineConstraint.Equality<A>> unsolved = choice.unsolved();
         for (AffineConstraint<A> each : all) {
             Rule<A> rule = switch (each) {
@@ -217,10 +210,10 @@ final class ReducedRules<A> {
                         : null;
             };
             if (rule != null) {
-                reduced.rules.add(rule);
+                written.add(rule);
             }
         }
-        return reduced;
+        return new ReducedRules<>(order, uses, List.copyOf(reduced.solved), List.copyOf(written));
     }
 
     /**
@@ -363,6 +356,9 @@ final class ReducedRules<A> {
      * {@link #MOST_WAYS} are tried to find them.
      */
     private List<Choice<A>> choicesFor(List<AffineConstraint.Equality<A>> set) {
+        if (set.size() > MOST_EQUATIONS) {
+            return List.of(new Choice<>(List.of(), set));
+        }
         solved.clear();
         metered = true;
         left = MOST_UPDATES;
@@ -395,10 +391,9 @@ final class ReducedRules<A> {
             return descend(set, index + 1, found, ways);
         }
         if (as != null && !walked.isEmpty()) {
-            Use last = uses.get(walked.getLast().getKey());
+            Use last = useOf(walked.getLast().getKey());
             for (Map.Entry<A, ExactRatio> pivot : walked) {
-                if (uses.get(pivot.getKey()).compareTo(last) != 0
-                        || (alone && pivot != walked.getLast())) {
+                if (useOf(pivot.getKey()).compareTo(last) != 0) {
                     continue;
                 }
                 if (take(as, walked, pivot)) {
@@ -506,7 +501,12 @@ final class ReducedRules<A> {
     private List<Map.Entry<A, ExactRatio>> walked(Map<A, ExactRatio> weights) {
         List<Map.Entry<A, ExactRatio>> ranked =
                 new ArrayList<>(order.walking(weights.entrySet(), Map.Entry::getKey));
-        ranked.sort(Comparator.comparing(each -> uses.get(each.getKey())));
+        ranked.sort(Comparator.comparing(each -> useOf(each.getKey())));
         return ranked;
+    }
+
+    /** How the rules use {@code position}; a position none was ranked for is used as nothing. */
+    private Use useOf(A position) {
+        return uses.getOrDefault(position, UNUSED);
     }
 }

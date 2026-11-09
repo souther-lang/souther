@@ -6,6 +6,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -42,6 +43,22 @@ class ACaseListIsADefinitionOnlyWhereItCoversEveryWayTest {
                         ArgumentsStand.of("n", Rel.GT, "hi"))),
                 answers("n", List.of(ArgumentsStand.of("n", Rel.GE, "lo"),
                         ArgumentsStand.of("n", Rel.LE, "hi"))))), "clamp");
+    }
+
+    /**
+     * A case reached however the arguments stand covers every way, and the relations the cases
+     * beside it are reached under are no part of that: however many there are, they cannot take
+     * it back.
+     */
+    @Test
+    void aCaseReachedUnderNoRelationCoversEveryWayWhateverTheOthersAreReachedUnder() {
+        List<DefinitionCase<String>> cases = new ArrayList<>();
+        cases.add(answers("n", List.of()));
+        for (int i = 0; i < 20; i++) {
+            cases.add(answers("n", List.of(against("n" + i, Rel.LT, i))));
+        }
+
+        assertTrue(DefinitionCase.coverEveryWay(cases));
     }
 
     @Test

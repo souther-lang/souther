@@ -101,6 +101,32 @@ class ASetOfEqualitiesThatCannotBeSolvedCostsTheOthersNothingTest {
     }
 
     /**
+     * A chain whose every equality is solved for one position and no other: a descent of one level
+     * each and a single way. What holds the descent to a depth is the number of equalities in a set,
+     * which the ways counted do not, since an equality that is a combination of the others takes a
+     * level and gives no choice at all.
+     */
+    private static List<AffineConstraint<String>> aChainOfOneWayOfSolvingIt(int length) {
+        List<AffineConstraint<String>> out = new ArrayList<>();
+        for (int i = 0; i < length; i++) {
+            out.add(equality(weighing("p" + i, 1, "p" + (i + 1), -1, "q" + i, -(i + 2)), 0));
+        }
+        return out;
+    }
+
+    @Test
+    void aSetOfNoMoreEqualitiesThanAreLookedThroughHasItsWayOfSolvingIt() {
+        assertEquals(1, ReducedRules.of(
+                aChainOfOneWayOfSolvingIt(ReducedRules.MOST_EQUATIONS), ORDER).size());
+    }
+
+    @Test
+    void aSetOfMoreEqualitiesThanAreLookedThroughIsLeftAsTheEqualitiesItWas() {
+        assertEquals(List.of(), ReducedRules.of(
+                aChainOfOneWayOfSolvingIt(ReducedRules.MOST_EQUATIONS + 1), ORDER));
+    }
+
+    /**
      * The reduction of {@code x = a + b} that solves it for {@code x}, one of the three there are
      * for it: the positions of that equality are used alike.
      */

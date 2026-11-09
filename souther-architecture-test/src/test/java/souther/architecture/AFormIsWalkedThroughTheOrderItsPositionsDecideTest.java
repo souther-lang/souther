@@ -61,11 +61,16 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
             "the form's coefficients go to FormReach#of, which takes them in the one order the"
                     + " positions decide, and what comes back is by hole: which half-space a hole"
                     + " comes to is settled by which side of its value the sum is proved to lie",
-            "souther/compiler/numeric/Reach#largestFirst"
+            "souther/compiler/numeric/ExactRatio#sum(Ljava/util/Collection;)"
+                    + "Lsouther/compiler/numeric/ExactAnswer;",
+            "the terms are met by scale and no partial sum is formed, so the order they arrive in"
+                    + " is not in what it answers",
+            "souther/compiler/numeric/Reach#summedWhole"
                     + "(Ljava/lang/Iterable;Lsouther/compiler/numeric/ExactRatio;"
                     + "Lsouther/compiler/numeric/Reach$Ends;Z)Lsouther/compiler/numeric/ExactCut;",
-            "the terms go into a list that is sorted by the size of each before anything is added,"
-                    + " so the order they came in reaches nothing the sum answers");
+            "the terms go into a list that is summed as one sum, which meets them by scale and"
+                    + " holds no partial sum, so the order they came in reaches nothing the sum"
+                    + " answers");
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 

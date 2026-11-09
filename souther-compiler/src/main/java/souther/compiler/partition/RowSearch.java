@@ -134,32 +134,58 @@ public final class RowSearch {
         return values.subList(0, MOST_VALUES);
     }
 
-    /** Rows taking one value of each parameter, nearest first — every parameter at its first
-     *  before any at its second — and no more than the search tries, with the figure added to
-     *  {@code stopped} where some are left untried. */
+    /**
+     * Rows taking one value of each parameter, nearest first, and no more than the search tries,
+     * with the figure added to {@code stopped} where some are left untried.
+     *
+     * <p>Nearest is how far the values taken are from each parameter's first, added up: the row
+     * of every parameter at its first, then each row with one parameter at its second, and so on a
+     * step at a time. A row that needs one parameter at its fifth value and the others at their
+     * first is among the first rows however many values the others have; taken a parameter at a time
+     * in turn, as many values at the first parameter as there are rows to try would leave the rest
+     * at their firsts, and a parameter the question does not read would decide which of the others
+     * are ever tried.
+     */
     static List<List<Built>> rowsOf(List<List<Built>> each, Set<Figure> stopped) {
         List<List<Built>> out = new ArrayList<>();
-        int[] at = new int[each.size()];
-        while (true) {
-            if (out.size() == MOST_VALUES) {
-                stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+        int farthest = 0;
+        for (List<Built> values : each) {
+            farthest += values.size() - 1;
+        }
+        for (int distance = 0; distance <= farthest; distance++) {
+            if (!rowsAt(each, new int[each.size()], 0, distance, out, stopped)) {
                 break;
             }
+        }
+        return out;
+    }
+
+    /** The rows whose values are {@code distance} from the firsts in all, added to {@code out}
+     *  while there is room for them; false where there was not. */
+    private static boolean rowsAt(List<List<Built>> each, int[] at, int parameter, int distance,
+                                  List<List<Built>> out, Set<Figure> stopped) {
+        if (parameter == at.length) {
+            if (distance != 0) {
+                return true;
+            }
+            if (out.size() == MOST_VALUES) {
+                stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+                return false;
+            }
             List<Built> row = new ArrayList<>();
-            for (int i = 0; i < each.size(); i++) {
+            for (int i = 0; i < at.length; i++) {
                 row.add(each.get(i).get(at[i]));
             }
             out.add(row);
-            int moved = 0;
-            while (moved < at.length && at[moved] + 1 >= each.get(moved).size()) {
-                at[moved] = 0;
-                moved++;
-            }
-            if (moved == at.length) {
-                break;
-            }
-            at[moved]++;
+            return true;
         }
-        return out;
+        int farthest = each.get(parameter).size() - 1;
+        for (int value = 0; value <= Math.min(distance, farthest); value++) {
+            at[parameter] = value;
+            if (!rowsAt(each, at, parameter + 1, distance - value, out, stopped)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

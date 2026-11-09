@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.OccurrenceLineage;
@@ -10,6 +11,7 @@ import souther.compiler.types.TypeSymbol;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -238,8 +240,18 @@ final class ADeclarationsWitness {
      *  or null where none was. */
     private Map<List<String>, Object> found() {
         List<Shape> numbered = new ArrayList<>();
-        for (Shape each : fields) {
-            numbered.add(numbered(each));
+        // The fields the rules read: a value of a field none of them reads changes what no rule
+        // says, so its places are tried at one value and the search is over the places that count.
+        Set<Integer> unread = new HashSet<>();
+        for (int at = 0; at < fields.size(); at++) {
+            int before = slots.size();
+            numbered.add(numbered(fields.get(at)));
+            BindingId field = bindings.get(names.get(at));
+            if (rules.stream().noneMatch(rule -> WhatABodyReads.binding(rule, field))) {
+                for (int slot = before; slot < slots.size(); slot++) {
+                    unread.add(slot);
+                }
+            }
         }
         Map<List<String>, Core> held = new LinkedHashMap<>();
         for (Slot slot : slots) {
@@ -266,7 +278,8 @@ final class ADeclarationsWitness {
                 }
                 tried.addAll(pools.of(slot.type()));
             }
-            candidates.add(tried);
+            candidates.add(unread.contains(slot.at()) && !held.containsKey(slot.place())
+                    ? tried.subList(0, 1) : tried);
         }
         int[] unfolded = new int[rules.size()];
         int[] tried = {0};

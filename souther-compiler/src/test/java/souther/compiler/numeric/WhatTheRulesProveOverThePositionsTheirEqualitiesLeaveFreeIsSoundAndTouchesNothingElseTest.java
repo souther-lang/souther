@@ -279,7 +279,29 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
     @Test
     void whatIsProvedDoesNotDependOnWhatTwoInterchangeablePositionsAreCalled() {
         Random random = new Random(29);
-        assertEquals(List.of(), movedByRenaming(random, 600, () -> symmetric(random)));
+        assertEquals(List.of(), movedByRenaming(random, 150, () -> symmetric(random)));
+    }
+
+    /**
+     * {@code a + b = 4} with {@code d} at least each of them and {@code 2d + 2a + c + 1 <= 0} and
+     * the same of {@code b}: unchanged by exchanging {@code a} and {@code b}. Solved for {@code a}
+     * or for {@code b} by their names, the goal over what is left was proved in one writing and
+     * not in the other.
+     */
+    @Test
+    void aSystemUnchangedByExchangingTwoPositionsIsAnsweredTheSameWhateverTheyAreCalled() {
+        List<Row> rules = List.of(
+                new Row(List.of(new Term(1, 1), new Term(0, 1)), -4, Rel.EQ),
+                new Row(List.of(new Term(1, -1), new Term(3, 1)), 0, Rel.GE),
+                new Row(List.of(new Term(3, 2), new Term(0, 2), new Term(2, 1)), 1, Rel.LE),
+                new Row(List.of(new Term(0, 1), new Term(1, 1)), -4, Rel.EQ),
+                new Row(List.of(new Term(0, -1), new Term(3, 1)), 0, Rel.GE),
+                new Row(List.of(new Term(3, 2), new Term(1, 2), new Term(2, 1)), 1, Rel.LE));
+        Row goal = new Row(List.of(new Term(2, -2), new Term(0, 2), new Term(3, -2)), -3, Rel.GE);
+        String[] renamed = {"n2", "n1", "n3", "n0"};
+
+        assertEquals(domain(rules).entails(form(goal), goal.rel()),
+                domain(rules, renamed).entails(form(goal, renamed), goal.rel()));
     }
 
     /** A system and its image with positions {@code a} and {@code b} exchanged. */

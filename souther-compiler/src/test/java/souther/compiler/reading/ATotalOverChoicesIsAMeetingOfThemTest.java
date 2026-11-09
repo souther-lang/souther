@@ -190,6 +190,27 @@ class ATotalOverChoicesIsAMeetingOfThemTest {
         }
     }
 
+    /**
+     * What a value is followed through to is counted in the names that stand for something else,
+     * and the lets it is written under are none of them: a body under any number of lets that
+     * nothing reads is the same choice as one under none.
+     */
+    @Test
+    void aValueUnderLetsNothingReadsIsTheSameChoiceAsOneUnderNone() {
+        for (int lets : new int[] {0, 7, 12}) {
+            StringBuilder body = new StringBuilder(
+                    "List.sum(List.map(r -> { ");
+            for (int i = 0; i < lets; i++) {
+                body.append("let u").append(i).append(" = r.pay + 0 ");
+            }
+            body.append("if r.days >= 17 then r.pay else 0 }, [ first, second ]))");
+            CoverageRead.Read read = readAll(totalOf(body.toString()), "total");
+
+            assertEquals(List.of(), read.notJoined(), lets + " lets nothing reads");
+            assertEquals(1, read.interactions().size(), lets + " lets nothing reads");
+        }
+    }
+
     /** The decision of a value is the comparison evaluated on each application, as a keeping is. */
     @Test
     void aChoiceOfWhatEachElementIsWorthIsOneDecisionPerApplication() {

@@ -1,7 +1,6 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -105,7 +104,7 @@ public record Reach(ExactCut least, ExactCut most) {
             ExactRatio before = sum;
             sum = weight.times(end.at()).flatMap(before::plus).orNull();
             if (sum == null) {
-                return largestFirst(terms, constant, ends, upper);
+                return summedWhole(terms, constant, ends, upper);
             }
             reached &= end.inclusive();
         }
@@ -113,19 +112,21 @@ public record Reach(ExactCut least, ExactCut most) {
     }
 
     /**
-     * The same sum taken with the largest terms first, where taking them in the order they came in
-     * ran out of what the exact arithmetic holds.
+     * The same sum taken as one sum of every term, where adding them one at a time in the order
+     * they came in ran out of what the exact arithmetic holds.
      *
-     * <p>Which terms come first in the order they are given is the order of the names of the
-     * positions, and whether a running total can be held depends on which terms it has met: a large
-     * term and its opposite taken before a small one cancel, and taken after it do not. So a sum that
-     * could not be held in that order is taken in one that does not depend on the names — by the
-     * size of each term — and is the same sum under any naming of the positions. A sum held in the
-     * order given is the same value in any order, and is answered as it was.
+     * <p>The order they come in is the order of the names of the positions, and whether a running
+     * total can be held depends on which terms it has met: a large term and its opposite taken
+     * before a small one cancel, and taken after it do not. A sum of many is not a run of additions
+     * ({@link ExactRatio#sum}): it meets the terms by scale and holds no partial sum, so its answer
+     * is the terms' and not their order's. A sum held term by term is the same value, so what is
+     * answered is the one sum of the terms under any naming and any order, and is refused only where
+     * a term, or the sum, has no representation.
      */
-    private static <A> ExactCut largestFirst(Iterable<? extends Map.Entry<A, ExactRatio>> terms,
-                                             ExactRatio constant, Ends<A> ends, boolean upper) {
+    private static <A> ExactCut summedWhole(Iterable<? extends Map.Entry<A, ExactRatio>> terms,
+                                            ExactRatio constant, Ends<A> ends, boolean upper) {
         List<ExactRatio> carried = new ArrayList<>();
+        carried.add(constant);
         boolean reached = true;
         for (Map.Entry<A, ExactRatio> each : terms) {
             ExactCut end = ends.weighedBy(each.getKey(), each.getValue().signum(), upper);
@@ -136,15 +137,8 @@ public record Reach(ExactCut least, ExactCut most) {
             carried.add(product);
             reached &= end.inclusive();
         }
-        carried.sort(Comparator.comparing(ExactRatio::abs).reversed());
-        ExactRatio sum = constant;
-        for (ExactRatio each : carried) {
-            sum = sum.plus(each).orNull();
-            if (sum == null) {
-                return null;
-            }
-        }
-        return new ExactCut(sum, reached);
+        ExactRatio sum = ExactRatio.sum(carried).orNull();
+        return sum == null ? null : new ExactCut(sum, reached);
     }
 
     /**
