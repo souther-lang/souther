@@ -58,6 +58,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.IntStream;
 
 /**
  * What one condition coming out one way asks of a row, and nothing about where it stood.
@@ -942,8 +944,9 @@ final class DemandReading {
      * @param places the places the tie names, in the order they were met
      * @param by     what is stated of their numbers, or null where only the places are known — the
      *               numbers an operator not said may stop the run on
+     * @param where  where a run works the operator out, as the closures it is inside of say it
      */
-    record Tie(Set<TermPath> places, TakenConstraint by) {
+    record Tie(Set<TermPath> places, TakenConstraint by, Pullback.WorkedOutWhere where) {
 
         Tie {
             places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
@@ -952,12 +955,22 @@ final class DemandReading {
         /** The tie a statement of numbers makes, between every place its numbers are read off
          *  ({@link RowDemand#placesReadOff}). */
         static Tie by(TakenConstraint constraint) {
-            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint);
+            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint,
+                    Pullback.WorkedOutWhere.ALWAYS);
+        }
+
+        Tie(Set<TermPath> places, TakenConstraint by) {
+            this(places, by, Pullback.WorkedOutWhere.ALWAYS);
         }
 
         /** The tie of places an operator not said of may stop the run on. */
         static Tie between(Set<TermPath> places) {
-            return new Tie(places, null);
+            return between(places, Pullback.WorkedOutWhere.ALWAYS);
+        }
+
+        /** The same, of an operator a run works out where {@code where} says. */
+        static Tie between(Set<TermPath> places, Pullback.WorkedOutWhere where) {
+            return new Tie(places, null, where);
         }
     }
 
@@ -986,10 +999,13 @@ final class DemandReading {
      * @param before    what the applications a run walking one element does not make work out
      *                  ({@link PriorApplications}): until a reader shows a run with none, as much
      *                  the run's as the above
+     * @param relationStands where the relation is worked out, as the closures it stands inside
+     *                  say: what a run needs to get to it. Nowhere in particular for what states
+     *                  nothing of where the relation stands
      */
     record Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
                     List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
-                    List<PriorApplications> before) {
+                    List<PriorApplications> before, Pullback.WorkedOutWhere relationStands) {
 
         static final Answered NOTHING = new Answered(List.of(), List.of(), false);
 
@@ -999,6 +1015,14 @@ final class DemandReading {
             tied = List.copyOf(tied);
             owed = List.copyOf(owed);
             before = List.copyOf(before);
+        }
+
+        /** What a run asks of a row, and says nothing of where the relation stands. */
+        Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
+                 List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
+                 List<PriorApplications> before) {
+            this(onTheWay, ofTheRelation, tied, unsaid, owed, before,
+                    Pullback.WorkedOutWhere.ALWAYS);
         }
 
         /** What the run to a relation asks of a row, with what the applications before it work
@@ -1047,18 +1071,47 @@ final class DemandReading {
                             .anyMatch(each -> each.workedOut().unsaidOrOwedOnWhatNoPlaceHolds());
         }
 
+        /** The same, where the relation is also worked out where {@code more} says. */
+        Answered alsoNeedingToGetToTheRelation(Pullback.WorkedOutWhere more) {
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, before,
+                    relationStands.and(more));
+        }
+
         /** This, with {@code prior} worked out by the applications before it. */
         Answered after(PriorApplications prior) {
             List<PriorApplications> all = new ArrayList<>(before);
             all.add(prior);
-            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all);
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all, relationStands);
         }
 
         /** The same, without the statements of {@code met} among what the operators narrow; what
          *  the run is owed and what the applications before work out stay. */
         Answered without(Collection<TakenConstraint.Affine> met) {
             return new Answered(notAmong(onTheWay, met), notAmong(ofTheRelation, met), tied,
-                    unsaid, owed, before);
+                    unsaid, owed, before, relationStands);
+        }
+
+        /** Every container some tie or operator owed here, or among what the applications before
+         *  work out, names as one an operator is worked out only where it or another of its set
+         *  holds an entry. */
+        Set<TermPath> containersAnOperatorIsWorkedOutInside() {
+            Set<TermPath> out = new LinkedHashSet<>();
+            tied.forEach(each -> out.addAll(each.where().containers()));
+            owed.forEach(each -> out.addAll(each.where().containers()));
+            before.forEach(each ->
+                    out.addAll(each.workedOut().containersAnOperatorIsWorkedOutInside()));
+            return out;
+        }
+
+        /** The same, without the ties and the operators owed that are worked out where
+         *  {@code missed} says no run is, among what the applications before work out as well. */
+        Answered withoutWhatIsWorkedOutWhere(Predicate<Pullback.WorkedOutWhere> missed) {
+            return new Answered(onTheWay, ofTheRelation,
+                    tied.stream().filter(each -> !missed.test(each.where())).toList(), unsaid,
+                    owed.stream().filter(each -> !missed.test(each.where())).toList(),
+                    before.stream().map(each -> new PriorApplications(each.walked(),
+                            each.workedOut().withoutWhatIsWorkedOutWhere(missed))).toList(),
+                    relationStands);
         }
 
         private static List<TakenConstraint> notAmong(List<TakenConstraint> narrowing,
@@ -1128,18 +1181,24 @@ final class DemandReading {
          *  part they were read in standing in {@code body}, where the names an owed operator is
          *  handed are bound. */
         static Answered leavingUnsaid(Pullback.OperatorsAnswer operators, Core body) {
-            return operators.leavesNothingUnsaid() ? NOTHING
-                    : new Answered(List.of(),
-                            operators.unsaidAt().stream().map(Tie::between).toList(),
-                            operators.unsaidElsewhere(),
-                            operators.obligations().stream().map(each -> each.readIn(body))
-                                    .toList(),
-                            operators.afterTheFirst().stream().map(each ->
-                                    new PriorApplications(Optional.of(List.of(
-                                            new PriorApplications.WalkedOver(each.container(),
-                                                    each.reads()))),
-                                            leavingUnsaid(each.workedOut(), body)))
-                                    .toList());
+            if (operators.leavesNothingUnsaid()
+                    && operators.relationStands().equals(Pullback.WorkedOutWhere.ALWAYS)) {
+                return NOTHING;
+            }
+            return new Answered(List.of(), List.of(),
+                    IntStream.range(0, operators.unsaidAt().size())
+                            .mapToObj(i -> Tie.between(operators.unsaidAt().get(i),
+                                    operators.unsaidWhere().get(i)))
+                            .toList(),
+                    operators.unsaidElsewhere(),
+                    operators.obligations().stream().map(each -> each.readIn(body)).toList(),
+                    operators.afterTheFirst().stream().map(each ->
+                            new PriorApplications(Optional.of(List.of(
+                                    new PriorApplications.WalkedOver(each.container(),
+                                            each.reads()))),
+                                    leavingUnsaid(each.workedOut(), body)))
+                            .toList(),
+                    operators.relationStands());
         }
 
         /** This and {@code other}, both. */
@@ -1155,7 +1214,7 @@ final class DemandReading {
             List<PriorApplications> priors = new ArrayList<>(before);
             priors.addAll(other.before);
             return new Answered(onTheWayBoth, ofTheRelationBoth, places, unsaid || other.unsaid,
-                    both, priors);
+                    both, priors, relationStands.and(other.relationStands));
         }
     }
 
@@ -1333,11 +1392,13 @@ final class DemandReading {
     static AnElementMeeting anElementMeeting(Quantity.HowManyMeet count, InputReading read) {
         List<Read> reads = asked(count.someMeets(), read);
         if (reads.size() != 1
-                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))
-                || !exists.ofAnElement().oneWay()) {
+                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))) {
             return AnElementMeeting.UNREAD;
         }
-        List<RowDemand.OfAnElement> way = exists.ofAnElement().theWay();
+        List<RowDemand.OfAnElement> way = theWayAnElementMeets(exists.ofAnElement(), read);
+        if (way == null) {
+            return AnElementMeeting.UNREAD;
+        }
         // Relations of the element itself, as the reading states the way: what some element of
         // a container inside it is asked is no relation of the element, though a row written
         // alike writes it into every one of them.
@@ -1348,6 +1409,36 @@ final class DemandReading {
                 way.size() == 1 && way.getFirst() instanceof RowDemand.WithinIt within
                         ? Optional.of(within) : Optional.empty();
         return new AnElementMeeting(heldTo, handedOn);
+    }
+
+    /**
+     * The one way an element meets {@code meets}, or null where it meets it several ways.
+     *
+     * <p>Two ways where every element of a container inside the element is to meet something: that
+     * they do, or that the container holds none. The second is no other way of meeting it — a
+     * container holding none is one every element of which meets anything — so the first is the
+     * one way, and what it asks of the container is met by one holding none as by any other.
+     */
+    private static List<RowDemand.OfAnElement> theWayAnElementMeets(
+            RowDemand.AnElementMeets meets, InputReading read) {
+        List<List<RowDemand.OfAnElement>> ways = meets.ways();
+        if (ways.size() == 1) {
+            return ways.getFirst();
+        }
+        if (ways.size() != 2) {
+            return null;
+        }
+        for (int each = 0; each < 2; each++) {
+            List<RowDemand.OfAnElement> every = ways.get(each);
+            if (every.size() == 1
+                    && every.getFirst() instanceof RowDemand.WithinIt(TermPath container,
+                            boolean some, var _)
+                    && !some
+                    && ways.get(1 - each).equals(List.of(sizeAgainst(container, read, false)))) {
+                return every;
+            }
+        }
+        return null;
     }
 
     /** What {@code way} asks, where it asks nothing but relations of the element itself. */
@@ -1960,7 +2051,7 @@ final class DemandReading {
                             ? AnElementsWay.ofTheRow(forTheRun(whole,
                                     RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE))
                             : AnElementsWay.ofTheRow(each));
-            case Read.Demands(RowDemand.ForTheRun(var _, var why, var past, var parted)) ->
+            case Read.Demands(RowDemand.ForTheRun(var _, var why, var past, var parted, var _)) ->
                     List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past, parted)));
             // Each way of each alternative: one alternative a figure stopped is said to be, and
             // the others are the ways they are.
@@ -2229,6 +2320,16 @@ final class DemandReading {
                 element.stream().anyMatch(term.subjectPath()::isAtOrUnder));
     }
 
+    /** How many the container at {@code held} holds, as the term that names it, or null where its
+     *  type measures none. */
+    private static NumericTerm.TakenOf sizeOf(TermPath held, InputReading read) {
+        Type container = read.domain().typeAt(held, read.rules());
+        ValueName.Stdlib size = container == null ? null
+                : NumericMeasures.takenOf(container, read.rules().inners());
+        return size == null ? null : NumericTerm.TakenOf.asItStands(size, held, container,
+                read.rules().inners(), read.rules().symbols());
+    }
+
     /**
      * That the container at {@code held} holds at least one, or none, as its size against one or
      * against nought.
@@ -2242,15 +2343,11 @@ final class DemandReading {
      */
     private static RowDemand.Relational sizeAgainst(TermPath held, InputReading read,
                                                     boolean atLeastOne) {
-        Type container = read.domain().typeAt(held, read.rules());
-        ValueName.Stdlib size = container == null ? null
-                : NumericMeasures.takenOf(container, read.rules().inners());
-        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.asItStands(size, held,
-                container, read.rules().inners(), read.rules().symbols());
+        NumericTerm.TakenOf count = sizeOf(held, read);
         if (count == null) {
             throw new IllegalStateException("a statement about the elements of `" + held
                     + "` was read, and the reading of the input measures no size of it: "
-                    + container);
+                    + read.domain().typeAt(held, read.rules()));
         }
         // `count - 1 >= 0`, or `count <= 0`.
         LinearForm<NumericTerm> form = atLeastOne
@@ -2306,6 +2403,15 @@ final class DemandReading {
             case Relation.Affine affine
                     when onARemainderAlone(affine, met, read) instanceof RowDemand.OnARemainder on ->
                     new Read.Demands(on);
+            // How many elements meet statements against one another and how many the container
+            // holds. The run decides it, and a row is composed for the counts with the relation
+            // holding of the elements it is chosen with.
+            case Relation.Affine affine
+                    when composedOf(affine, compared.holds(), read)
+                            instanceof RowDemand.ForTheRun.ComposedAs composed ->
+                    new Read.Demands(new RowDemand.ForTheRun(compared,
+                            RowDemand.NoComposer.A_COUNT_OF_ELEMENTS, List.of(), Optional.empty(),
+                            Optional.of(composed)));
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);
                 if (against == null) {
@@ -2424,6 +2530,32 @@ final class DemandReading {
         WholeNumberRuns leaves = RowDemand.OnARemainder.meeting(affine, met);
         return leaves == null || leaves.isNone() ? null
                 : new RowDemand.OnARemainder(remainder, leaves);
+    }
+
+    /**
+     * How many elements of one container meet statements, against one another and how many the
+     * container holds, where {@code affine} is a relation among nothing else — or null where it
+     * is none, or where a count in it is of a statement a row is not composed for.
+     *
+     * <p>The size is no number a row writes beside the counts: it is how many elements the
+     * container is composed with, which composing the counts settles together with them, so held as
+     * a number of the input it would be asked of the very thing it is composed with
+     * ({@link AggregateRelation}). Each count is asked at every number; the relation is what holds
+     * them to one another.
+     */
+    private static RowDemand.ForTheRun.ComposedAs composedOf(Relation.Affine affine,
+                                                              boolean holds, InputReading read) {
+        AggregateRelation relation = AggregateRelation.in(affine, holds, at -> sizeOf(at, read));
+        if (relation == null || !relation.counts().keySet().stream().allMatch(count ->
+                AStatementAtARow.askable(AStatementAtARow.meetingOf(count)))) {
+            return null;
+        }
+        List<RowDemand.SoMany> counts = new ArrayList<>();
+        for (Quantity.HowManyMeet each : relation.counts().keySet()) {
+            counts.add(new RowDemand.SoMany(each, Rel.GE, ExactRatio.ZERO,
+                    new LinearForm<>(ExactRatio.ZERO, Map.of()), anElementMeeting(each, read)));
+        }
+        return new RowDemand.ForTheRun.ComposedAs(relation, counts);
     }
 
     /**

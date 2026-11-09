@@ -550,4 +550,39 @@ public sealed interface RealizationTarget {
             return spelling().toString();
         }
     }
+
+    /**
+     * That the counts of a container's elements and how many it holds stand as a relation says,
+     * realized by the container the counts are composed for being one of them
+     * ({@link CardinalityComposer}).
+     *
+     * <p>The place a search fixes for this is one, the relation holding: nothing about it is a
+     * number of the row, and it asks the container's elements nothing but how they are shared out
+     * among the counts.
+     *
+     * @param relation what the counts of one container and its size are held to
+     */
+    record CountsRelated(AggregateRelation relation) implements RealizationTarget {
+
+        public CountsRelated {
+            if (relation == null) {
+                throw new IllegalArgumentException("a relation among counts is some relation");
+            }
+        }
+
+        @Override
+        public TermPath writeRoot() {
+            return relation.container().element().outermostContainer();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of(relation.container() + " counted as " + relation.counted());
+        }
+
+        @Override
+        public String toString() {
+            return spelling().toString();
+        }
+    }
 }

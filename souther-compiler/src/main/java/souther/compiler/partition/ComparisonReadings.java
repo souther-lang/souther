@@ -671,10 +671,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 ties.add(DemandReading.Tie.by(each));
             }
         }
+        // The call applying the closure is read whole, the comparison apart, so the closures the
+        // comparison stands inside are those it says.
         return upTo.after(new DemandReading.PriorApplications(
                 walkedOneAfterAnother(first.entered(), reads),
                 new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed(),
-                        before.before())));
+                        before.before())))
+                .alsoNeedingToGetToTheRelation(before.relationStands());
     }
 
     /**

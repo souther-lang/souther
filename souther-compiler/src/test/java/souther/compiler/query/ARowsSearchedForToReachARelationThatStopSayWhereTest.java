@@ -144,7 +144,11 @@ class ARowsSearchedForToReachARelationThatStopSayWhereTest {
         assertEquals(Map.of(PLACES.get(0), stop, PLACES.get(1), stop), stopped);
     }
 
-    /** The control: without the ensures the same search finds a row, and no run stopped. */
+    /**
+     * The control: without the ensures the same search finds a row, and no run stopped. The stop
+     * turns on the currency, which stays not shown reached at every value; it turns on nothing the
+     * base currency is, so a row holds any base beside it.
+     */
     @Test
     void withoutTheEnsuresARowIsFoundAndNoRunStopped() {
         Compilation compilation = compiled(model(""));
@@ -153,12 +157,12 @@ class ARowsSearchedForToReachARelationThatStopSayWhereTest {
         assertTrue(sought.found().isPresent(), sought.toString());
         assertEquals(Set.of(), sought.runsStopped());
         Map<String, PartitionEvidence.NotRead> byPlace = leftAtThePlaces(compilation);
-        for (String place : PLACES) {
-            PartitionEvidence.NotRead left = byPlace.get(place);
-            assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
-                    left.reason(), byPlace.toString());
-            assertEquals(List.of(), left.runsStopped(), left.toString());
-        }
+        PartitionEvidence.NotRead currency = byPlace.get("deals[*].currency");
+        assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                currency.reason(), byPlace.toString());
+        assertEquals(List.of(), currency.runsStopped(), currency.toString());
+        assertEquals(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
+                byPlace.get("rates.base").reason(), byPlace.toString());
         JsonNode document = JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
         DocumentShape.assertShapedLikeTheSchema(document);

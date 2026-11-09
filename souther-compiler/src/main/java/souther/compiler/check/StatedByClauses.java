@@ -712,12 +712,21 @@ sealed interface StatedByClauses {
      * @param entryKeys     for each map, the places a key of an entry the builders hold it to
      *                      stands at
      * @param balancedLists the lists the builders balance the sides of
+     * @param noEntryHolds  the maps the rules ask for an entry that no value of the map's value type
+     *                      can be, which no map holds ({@link EntryHeld#askingForNoEntry})
      */
-    record BuiltFor(Map<FactSubject, Set<FactSubject>> entryKeys, Set<FactSubject> balancedLists) {
+    record BuiltFor(Map<FactSubject, Set<FactSubject>> entryKeys, Set<FactSubject> balancedLists,
+                    Set<FactSubject> noEntryHolds) {
 
         public BuiltFor {
             entryKeys = Map.copyOf(entryKeys);
             balancedLists = Set.copyOf(balancedLists);
+            noEntryHolds = Set.copyOf(noEntryHolds);
+        }
+
+        /** Whether the rules ask {@code map} for an entry no map holds. */
+        boolean asksForNoEntry(FactSubject map) {
+            return noEntryHolds.contains(map);
         }
 
         /** Whether the builders hold {@code map} to an entry under the key at {@code key}. */
@@ -897,9 +906,11 @@ sealed interface StatedByClauses {
                 }
                 // Taken in at both where the builders hold the map to an entry under that key,
                 // and given up on where they do not: a rule they were never told of is a rule no
-                // map keeps.
+                // map keeps. Taken in as well where the entry asked for is one no map holds, which
+                // every map composed satisfies since there is none.
                 Set<FactSubject> both = Set.of(entry.container(), entry.key());
-                boolean built = builtFor.keepsAnEntry(entry.container(), entry.key());
+                boolean built = builtFor.keepsAnEntry(entry.container(), entry.key())
+                        || builtFor.asksForNoEntry(entry.container());
                 return Adoption.at(both, built ? both : Set.of(), !built);
             }
             Set<FactSubject> container = Set.of(stated.container());

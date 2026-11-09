@@ -92,6 +92,9 @@ public sealed interface SearchMessage extends Message {
     record NothingSaysHowManyElementsMeet(String container, String each)
             implements SearchMessage, Prose {}
 
+    record NothingSaysHowManyElementsMeetEachOf(String container, String counted)
+            implements SearchMessage, Prose {}
+
     record TheValuesAreCountedAtTwoPlaces(String container, String apartAt, String at)
             implements SearchMessage, Prose {}
 
@@ -100,6 +103,9 @@ public sealed interface SearchMessage extends Message {
     record CountedInOneAndAcrossAll(String container) implements SearchMessage, Prose {}
 
     record CountedAcrossTheContainersHoldingThem(String container)
+            implements SearchMessage, Prose {}
+
+    record CountedAcrossAndHowManyOneHoldsIsAskedOfOne(String container)
             implements SearchMessage, Prose {}
 
     record NoListOrSetWrittenWhereItStands(String container) implements SearchMessage, Prose {}
@@ -450,6 +456,8 @@ public sealed interface SearchMessage extends Message {
     record ContainersACountIsOffered() implements SearchMessage, Prose {}
 
     record SharesACountIsTriedAt() implements SearchMessage, Prose {}
+
+    record TuplesOfCountsARelationIsTriedAt() implements SearchMessage, Prose {}
 
     record TotalsACountIsTriedAt() implements SearchMessage, Prose {}
 

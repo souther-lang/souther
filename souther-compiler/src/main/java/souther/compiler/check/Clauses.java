@@ -498,12 +498,13 @@ final class Clauses {
          */
         void readsOf(Core clause) {
             walk(clause);
+            List<EntryHeld.Stated> entries = entriesStated(clause);
             for (Lookup each : lookups) {
                 if (WhatAClauseNeeds.aMemberFound(clause, each.lookup())) {
                     bindings.add(each.container().root());
                     reads.add(new ClauseRead(keyOf(each.container()),
                             ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
-                            memberLookedUp(each.lookup())));
+                            memberLookedUp(each.lookup(), entries)));
                 } else {
                     read(each.container(), ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
                 }
@@ -513,6 +514,26 @@ final class Clauses {
                         ? ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART
                         : ClauseRead.Kind.EACH_ELEMENTS_RUN, new RuleKey(each.run()));
             }
+        }
+
+        /**
+         * Each entry a statement of {@code clause} asks a map for, statement by statement as a
+         * declaration's rules are read ({@link ConjunctStatements}): a conjunction asks one entry
+         * per conjunct, and the bindings crossed are followed as every reader of a rule follows
+         * them.
+         */
+        private List<EntryHeld.Stated> entriesStated(Core clause) {
+            List<EntryHeld.Stated> out = new ArrayList<>();
+            for (ConjunctStatements.Stated each
+                    : ConjunctStatements.statedBy(ClauseExpr.of(clause, true))) {
+                Map<BindingId, Core> given = new HashMap<>();
+                each.crossed().forEach(crossed -> entering(given, crossed.binding()));
+                EntryHeld.Stated entry = entryStated(each.said(), given, newtypes);
+                if (entry != null) {
+                    out.add(entry);
+                }
+            }
+            return out;
         }
 
         private void walk(Core e) {
@@ -574,9 +595,12 @@ final class Clauses {
 
         /**
          * The member {@code lookup} looks for, where what it looks for is a place of the value:
-         * a key of a map for a lookup in one, an element otherwise.
+         * a key of a map for a lookup in one, an element otherwise, and for a key the numbers
+         * the statements in {@code entries} say the value under it is to be one of where they
+         * are of this lookup's key and container.
          */
-        private Optional<ClauseRead.Member> memberLookedUp(Core lookup) {
+        private Optional<ClauseRead.Member> memberLookedUp(Core lookup,
+                                                           List<EntryHeld.Stated> entries) {
             if (!(AnOperationApplied.of(lookup) instanceof AnOperationApplied(var operation,
                     List<Core> args)) || args.isEmpty()) {
                 return Optional.empty();
@@ -584,8 +608,20 @@ final class Clauses {
             Location lookedFor = locationOf(args.getFirst());
             boolean asAKey = operation.equals(ValueName.Stdlib.operation("Map", "get"))
                     || operation.equals(ValueName.Stdlib.operation("Map", "containsKey"));
-            return lookedFor == null ? Optional.empty()
-                    : Optional.of(new ClauseRead.Member(keyOf(lookedFor), asAKey));
+            if (lookedFor == null) {
+                return Optional.empty();
+            }
+            ValueAsked valueIn = null;
+            Location container = asAKey ? locationOf(args.get(1)) : null;
+            for (EntryHeld.Stated entry : entries) {
+                if (container != null && entry.valueIn() != null
+                        && lookedFor.equals(locationOf(entry.key()))
+                        && container.equals(locationOf(entry.container()))) {
+                    valueIn = valueIn == null ? entry.valueIn() : valueIn.meet(entry.valueIn());
+                }
+            }
+            return Optional.of(new ClauseRead.Member(keyOf(lookedFor), asAKey,
+                    Optional.ofNullable(valueIn)));
         }
 
         /** What the rules of the value call the place {@code at}. */
@@ -759,15 +795,7 @@ final class Clauses {
         /** The names of {@code p} that are steps: a newtype's own {@code value} is none
          *  ({@link Location#isStep}). */
         private FieldPath stepsOf(Core.FieldProjection p) {
-            List<String> out = new ArrayList<>();
-            Type from = p.base().type();
-            for (Core.FieldProjection.Step each : p.steps().inOrder()) {
-                if (Location.isStep(from, each.field(), newtypes)) {
-                    out.add(each.field());
-                }
-                from = each.type();
-            }
-            return FieldPath.of(out);
+            return Location.stepsOf(p, newtypes);
         }
 
         /** The argument of {@code call} it counts the elements of, where that is a place of the
@@ -784,6 +812,28 @@ final class Clauses {
                     || holds instanceof Type.MapOf) && locationOf(argument) != null
                     ? argument : null;
         }
+    }
+
+    /**
+     * What a binding crossed on the way to a statement gives its name: the value it binds, with
+     * the names given before it already spent.
+     */
+    static void entering(Map<BindingId, Core> given, Core.LetIn binding) {
+        given.put(binding.binder().binding(), substituted(binding.value(), given));
+    }
+
+    /**
+     * The entry {@code said} asks a map for, in the places of the value, or null where it asks
+     * nothing of the kind: the one way a statement is read as one, for the reader that files it
+     * under its rule ({@link InvariantStatements}) and the one that publishes the member it
+     * needs ({@link ClauseRead.Member}).
+     *
+     * @param given what the bindings crossed to reach the statement give their names
+     */
+    static EntryHeld.Stated entryStated(ClauseExpr.Part said, Map<BindingId, Core> given,
+                                        DeclarationNewtypes newtypes) {
+        return said.positive()
+                ? EntryHeld.read(substituted(said.of(), given), core -> core, newtypes) : null;
     }
 
     /** {@code e} with each binding {@code given} names replaced by the value it was given. */

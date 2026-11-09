@@ -82,7 +82,7 @@ class AContainerPastTheMostAComposerHoldsIsStoppedAndNotAbsentTest {
         demands.put(count, AskedAt.oneNumberOf(NumbersAskedFor.of(LevelRegion.point(
                 new Level.OfTheQuantity(ExactRatio.ONE))), Count.of(1)));
         TermRealizations.Realization composed = CardinalityComposer.compose(
-                input.typeAt(xs, rules), List.of(), xs, List.of(count), List.of(), demands, null,
+                input.typeAt(xs, rules), List.of(), xs, List.of(count), List.of(), List.of(), demands, null,
                 List.of(), List.of(), measuring, measuring.region(), reading);
         TermRealizations.Realization.Stopped stopped = assertInstanceOf(
                 TermRealizations.Realization.Stopped.class, composed, composed::toString);

@@ -95,7 +95,7 @@ class AnElementMovedToATotalKeepsToItsTypeTest {
         ContainerAsAWhole.ATotal fifty = new ContainerAsAWhole.ATotal(total,
                 new NumericSet.At(Count.of(50)), Count.of(50), measuring.ordersOf(total));
         TermRealizations.Realization composed = CardinalityComposer.compose(
-                input.typeAt(xs, rules), List.of(), xs, List.of(count), List.of(), demands, null,
+                input.typeAt(xs, rules), List.of(), xs, List.of(count), List.of(), List.of(), demands, null,
                 List.of(), List.of(fifty), measuring, measuring.region(), reading);
         TermRealizations.Realization.Built built = assertInstanceOf(
                 TermRealizations.Realization.Built.class, composed, () -> composed.shortfall()

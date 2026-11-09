@@ -82,6 +82,99 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
                 chosen.fields().get("rates").text());
     }
 
+    /** A lookup whose value is bounded has the entry hold a number inside the bound, which the
+     *  value's own type may bound as well. */
+    @Test
+    void aLookupBoundingTheValueFoundHasTheEntryHoldANumberInsideTheBound() {
+        assertEquals("[(CurrencyCode(\"AAA\"), ConversionRate(5m))]",
+                composed(table(BASE_THEN_RATES, "baseAtRate(base, rates)",
+                        atRate("Decimal.compare(r.value, 5.0m) >= 0")))
+                        .fields().get("rates").text());
+        assertEquals("[(CurrencyCode(\"AAA\"), ConversionRate(6m))]",
+                composed(table(BASE_THEN_RATES, "baseAtRate(base, rates)",
+                        atRate("Decimal.compare(r.value, 5.0m) > 0")))
+                        .fields().get("rates").text());
+        assertEquals("[(CurrencyCode(\"AAA\"), ConversionRate(5m))]",
+                composed(table(BASE_THEN_RATES, "baseAtRate(base, rates)",
+                        atRate("Decimal.compare(r.value, 5.0m) <= 0")))
+                        .fields().get("rates").text());
+    }
+
+    /** A lookup keeping the value away from a number, however it is written, has the entry hold
+     *  another number its type admits. */
+    @Test
+    void aLookupKeepingTheValueFoundAwayFromANumberHasTheEntryHoldAnotherNumber() {
+        for (String away : List.of("Bool.not(Decimal.compare(r.value, 1.0m) == 0)",
+                "Decimal.compare(r.value, 1.0m) /= 0")) {
+            String rates = composed(table(BASE_THEN_RATES, "baseAtRate(base, rates)", atRate(away)))
+                    .fields().get("rates").text();
+
+            assertTrue(rates.startsWith("[(CurrencyCode(\"AAA\"), ConversionRate("), rates);
+            assertTrue(!rates.contains("ConversionRate(1m)"), away + " " + rates);
+        }
+    }
+
+    /** A conjunction of comparisons of the value found has the entry hold a number every one of
+     *  them leaves. */
+    @Test
+    void aLookupBoundingTheValueFoundOnBothSidesHasTheEntryHoldANumberBetween() {
+        assertEquals("[(CurrencyCode(\"AAA\"), ConversionRate(2m))]",
+                composed(table(BASE_THEN_RATES, "baseAtRate(base, rates)",
+                        atRate("Decimal.compare(r.value, 1.0m) > 0"
+                                + " && Decimal.compare(r.value, 9.0m) < 0")))
+                        .fields().get("rates").text());
+    }
+
+    private static String quoted(String rule, String quoteRules) {
+        return """
+                module demo
+
+                data CurrencyCode = String
+                    invariant String.matches("[A-Z]{3}", value)
+                data ConversionRate = Decimal
+                    invariant value > 0.0m
+
+                data Quote = { rate: ConversionRate, floor: ConversionRate }
+                %s
+
+                data N = { base: CurrencyCode, quotes: Map<CurrencyCode, Quote> }
+                    invariant baseQuoted = baseQuote(base, quotes)
+
+                let baseQuote (base: CurrencyCode, quotes: Map<CurrencyCode, Quote>): Bool =
+                    Map.get(base, quotes)
+                        |> Option.map(q -> %s)
+                        |> Option.withDefault(false)
+                """.formatted(quoteRules, rule);
+    }
+
+    /** What is asked of a field of the value found under the key is held by the value composed
+     *  there, and the fields beside it are chosen against what the record's own rules say. */
+    @Test
+    void aLookupAskingAFieldOfTheValueFoundHasTheEntryHoldARecordWithThatField() {
+        Partitions.FieldsChosen chosen = composed(quoted(
+                "Decimal.compare(q.rate.value, 2.5m) == 0", ""));
+
+        String quotes = chosen.fields().get("quotes").text();
+        assertTrue(quotes.contains("rate = ConversionRate(2.5m)"), quotes);
+    }
+
+    @Test
+    void aFieldAskedOfTheValueFoundIsHeldWithTheRecordsOwnRulesBesideIt() {
+        Partitions.FieldsChosen chosen = composed(quoted(
+                "Decimal.compare(q.rate.value, 5.0m) == 0",
+                "    invariant floorUnderRate = Decimal.compare(floor.value, rate.value) < 0"));
+
+        String quotes = chosen.fields().get("quotes").text();
+        assertTrue(quotes.contains("rate = ConversionRate(5m)"), quotes);
+        assertTrue(!quotes.contains("floor = ConversionRate(5m)"), quotes);
+    }
+
+    @Test
+    void aNumberTheFieldOfTheValueFoundRefusesIsNoMapTheRulesAskFor() {
+        assertNull(composedGiven(quoted("Decimal.compare(q.rate.value, 0.0m) == 0", ""),
+                Map.of()).fields());
+    }
+
     @Test
     void theKeyIsChosenFirstWhicheverFieldIsWrittenFirst() {
         Partitions.FieldsChosen chosen = composed(table(RATES_THEN_BASE, "baseAtRate(base, rates)",

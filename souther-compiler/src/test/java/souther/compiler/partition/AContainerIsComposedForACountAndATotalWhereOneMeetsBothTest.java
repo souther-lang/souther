@@ -131,7 +131,7 @@ class AContainerIsComposedForACountAndATotalWhereOneMeetsBothTest {
                 new NumericSet.At(Count.of(total)), Count.of(total),
                 read.measuring().ordersOf(read.total()));
         return CardinalityComposer.compose(new Type.ListOf(Type.INT), List.of(), read.xs(),
-                List.of(counted), List.of(), demands, null, List.of(), List.of(asked),
+                List.of(counted), List.of(), List.of(), demands, null, List.of(), List.of(asked),
                 read.measuring(), read.measuring().region(), read.reading());
     }
 

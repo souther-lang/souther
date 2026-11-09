@@ -63,11 +63,11 @@ final class ElementsWrittenAlike {
      * it has no such demand, or where no way is one an element meets.
      */
     static Choices of(Reachability.Reaching reaching) {
-        if (reaching.boundedOnTheWay().stream()
+        if (reaching.composing().stream()
                 .allMatch(cut -> RowDemand.writtenAlikeAsItStands(cut.demand()))) {
             return Choices.NONE;
         }
-        return switch (OneOfEach.walk(reaching.boundedOnTheWay(), new OneElement(reaching),
+        return switch (OneOfEach.walk(reaching.composing(), new OneElement(reaching),
                 CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                 CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)) {
             case OneOfEach.Walked.Closed<OnTheWay.TakenIn, OnTheWay.TakenIn> _ -> Choices.NONE;

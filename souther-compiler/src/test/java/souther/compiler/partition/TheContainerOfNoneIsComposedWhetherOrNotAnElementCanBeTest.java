@@ -141,7 +141,7 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
 
     private static TermRealizations.Realization composed(Case made, SearchRegion region) {
         return CardinalityComposer.compose(made.list(), List.of(), made.xs(),
-                List.of(made.count()), List.of(), made.demands(), null, List.of(), List.of(),
+                List.of(made.count()), List.of(), List.of(), made.demands(), null, List.of(), List.of(),
                 made.measuring(), region, made.reading());
     }
 

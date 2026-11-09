@@ -891,59 +891,68 @@ final class Witnesses {
      * about. Every other entry is keyed apart from it, since a map holds one entry under a key.
      *
      * <p>{@code eachFiled} are keys each asked of an entry of its own, over whatever value the
-     * rules admit. A key among them that is {@code filed}'s, or another of them, is one entry.
+     * rules admit, or over the value of {@code holding} it names. A key among them that is
+     * {@code filed}'s, or another of them, is one entry.
      */
     static Proposals holding(Shape.Mapping map,
                              List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                             Filed filed, List<FixtureTemplate> eachFiled,
+                             Filed filed, List<Filed> eachFiled,
                              List<FixtureTemplate> keysKeptOut,
                              DeclaredBounds.CountRange holds,
                              RuleReadingContext reading) {
         Set<String> out = new LinkedHashSet<>();
         keysKeptOut.forEach(each -> out.add(each.text()));
-        if (filed != null && out.contains(filed.key().text())) {
+        List<Filed> every = new ArrayList<>();
+        if (filed != null) {
+            every.add(filed);
+        }
+        every.addAll(eachFiled);
+        Map<String, Filed> byKey = Filed.byKey(every);
+        if (byKey == null || byKey.keySet().stream().anyMatch(out::contains)) {
             return Proposals.NONE;
         }
-        Set<String> filedKeys = new LinkedHashSet<>();
-        if (filed != null) {
-            filedKeys.add(filed.key().text());
-        }
-        List<FixtureTemplate> apart = new ArrayList<>();
-        for (FixtureTemplate each : eachFiled) {
-            if (out.contains(each.text())) {
-                return Proposals.NONE;
-            }
-            if (filedKeys.add(each.text())) {
-                apart.add(each);
-            }
-        }
+        Set<String> filedKeys = new LinkedHashSet<>(byKey.keySet());
+        Filed placed = filed == null ? null : byKey.remove(filed.key().text());
+        List<Filed> apart = new ArrayList<>(byKey.values());
         // A key chosen over no value in particular needs an entry to be the key of, so the map holds
         // at least one value for each such key whatever else is asked of it.
         int keyed = filedKeys.size();
+        // Each key asked over a value is an entry of its own, so a value several keys are asked
+        // over is held that many times: what the map must hold is each value once, and what is
+        // filed under each key is asked of each key.
+        Map<String, Integer> filedOver = new LinkedHashMap<>();
+        List<Filed> eachAsked = new ArrayList<>(apart);
+        if (placed != null) {
+            eachAsked.add(placed);
+        }
+        for (Filed each : eachAsked) {
+            if (each.value() != null) {
+                filedOver.merge(each.value().text(), 1, Integer::sum);
+            }
+        }
+        Set<String> held = new LinkedHashSet<>();
+        int copies = 0;
+        for (FixtureTemplate each : holding) {
+            if (held.add(each.text())) {
+                copies += Math.max(1, filedOver.getOrDefault(each.text(), 0));
+            }
+        }
         DeclaredBounds.CountRange room = keyed > 0
-                ? new DeclaredBounds.CountRange(Math.max(keyed, holds.least()), holds.most())
+                ? new DeclaredBounds.CountRange(Math.max(Math.max(keyed, copies), holds.least()),
+                        holds.most())
                 : holds;
         Elements filled = elementsHolding(map.value(), List.of(), holding, keptOut, room, reading);
         CompositionShortfall met = filled.met();
-        List<FixtureTemplate> values = filled.held();
+        List<FixtureTemplate> values = filled.held() == null ? null
+                : eachHeldAsOftenAsFiled(filled.held(), filedOver);
         if (values == null) {
             return Proposals.NONE.meeting(met);
         }
-        // Where the value the key is chosen for stands among them, asked of the values rather than
-        // assumed from the order they were handed in. Any of them, where none was chosen.
-        int under = -1;
-        if (filed != null) {
-            for (int i = 0; i < values.size() && under < 0; i++) {
-                if (filed.value() == null || values.get(i).text().equals(filed.value().text())) {
-                    under = i;
-                }
-            }
-            if (under < 0) {
-                throw new IllegalStateException(filed.value() == null
-                        ? "a key was chosen and the map was built holding no value to file it over"
-                        : "a key was chosen for a value the map is not built to hold: "
-                                + filed.value().text());
-            }
+        if (placed != null && placed.value() != null && values.stream()
+                .noneMatch(each -> each.text().equals(placed.value().text()))) {
+            throw new IllegalStateException(
+                    "a key was chosen for a value the map is not built to hold: "
+                            + placed.value().text());
         }
         // A key no entry may have is one no other entry is filed under either.
         Set<String> written = new LinkedHashSet<>(filedKeys);
@@ -971,15 +980,59 @@ final class Witnesses {
         if (others.size() < needed) {
             return Proposals.NONE.meeting(met);
         }
+        // Every key asked over a named value is filed under a value of that name first, wherever
+        // the values put it, and the keys asked over none take what is left in the order they
+        // came: a key that wants any value is not given one a key that wants it by name needs.
+        FixtureTemplate[] filedUnder = new FixtureTemplate[values.size()];
+        List<FixtureTemplate> unnamed = new ArrayList<>();
+        for (Filed each : eachAsked) {
+            if (each.value() == null) {
+                unnamed.add(each.key());
+                continue;
+            }
+            int at = -1;
+            for (int i = 0; i < values.size() && at < 0; i++) {
+                if (filedUnder[i] == null && values.get(i).text().equals(each.value().text())) {
+                    at = i;
+                }
+            }
+            if (at < 0) {
+                return Proposals.NONE.meeting(met);
+            }
+            filedUnder[at] = each.key();
+        }
+        unnamed.addAll(others);
         List<FixtureTemplate> entries = new ArrayList<>();
-        int nextApart = 0;
         int next = 0;
         for (int i = 0; i < values.size(); i++) {
-            FixtureTemplate key = i == under ? filed.key()
-                    : nextApart < apart.size() ? apart.get(nextApart++) : others.get(next++);
-            entries.add(FixtureTemplate.entry(key, values.get(i)));
+            if (filedUnder[i] == null) {
+                filedUnder[i] = unnamed.get(next++);
+            }
+            entries.add(FixtureTemplate.entry(filedUnder[i], values.get(i)));
         }
         return Proposals.of(List.of(FixtureTemplate.collection(entries))).meeting(met);
+    }
+
+    /**
+     * {@code values}, each distinct one as often as {@code filedOver} says keys are filed over it
+     * and at least once, and as many of the first again as there were before.
+     */
+    private static List<FixtureTemplate> eachHeldAsOftenAsFiled(List<FixtureTemplate> values,
+                                                                Map<String, Integer> filedOver) {
+        Map<String, FixtureTemplate> distinct = new LinkedHashMap<>();
+        for (FixtureTemplate each : values) {
+            distinct.putIfAbsent(each.text(), each);
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        distinct.forEach((text, value) -> {
+            for (int i = 0; i < Math.max(1, filedOver.getOrDefault(text, 0)); i++) {
+                out.add(value);
+            }
+        });
+        while (out.size() < values.size()) {
+            out.add(values.getFirst());
+        }
+        return out.size() == values.size() ? out : null;
     }
 
     /**
@@ -996,15 +1049,9 @@ final class Witnesses {
      */
     static Proposals holdingEntries(Shape.Mapping map, List<Filed> asked,
                                     DeclaredBounds.CountRange holds, RuleReadingContext reading) {
-        Map<String, Filed> byKey = new LinkedHashMap<>();
-        for (Filed each : asked) {
-            Filed had = byKey.get(each.key().text());
-            if (had == null || had.value() == null) {
-                byKey.put(each.key().text(), each);
-            } else if (each.value() != null
-                    && !had.value().text().equals(each.value().text())) {
-                return Proposals.NONE;
-            }
+        Map<String, Filed> byKey = Filed.byKey(asked);
+        if (byKey == null) {
+            return Proposals.NONE;
         }
         int count = Math.max(holds.least(), byKey.size());
         if (count > holds.most()) {
@@ -1068,6 +1115,27 @@ final class Witnesses {
 
         Filed {
             Objects.requireNonNull(key, "a key is filed");
+        }
+
+        /**
+         * What is asked of each key, once: the demands on a key are one entry, a demand naming a
+         * value holding where one naming none asks nothing more. Null where two demands on a key
+         * name different values, which no map holds — the one place a map's entries are made
+         * one by key, so that what a map is built holding and what it is checked against
+         * cannot come apart.
+         */
+        static Map<String, Filed> byKey(List<Filed> asked) {
+            Map<String, Filed> byKey = new LinkedHashMap<>();
+            for (Filed each : asked) {
+                Filed had = byKey.get(each.key().text());
+                if (had == null || had.value() == null) {
+                    byKey.put(each.key().text(), each);
+                } else if (each.value() != null
+                        && !had.value().text().equals(each.value().text())) {
+                    return null;
+                }
+            }
+            return byKey;
         }
     }
 

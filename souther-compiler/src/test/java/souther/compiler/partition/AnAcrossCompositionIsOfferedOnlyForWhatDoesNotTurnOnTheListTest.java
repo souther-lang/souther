@@ -192,7 +192,7 @@ class AnAcrossCompositionIsOfferedOnlyForWhatDoesNotTurnOnTheListTest {
         demands.put(asked, AskedAt.oneNumberOf(NumbersAskedFor.of(LevelRegion.point(
                 new Level.OfTheQuantity(ExactRatio.ONE))), Count.of(1)));
         return CardinalityComposer.compose(desks, List.of(), asked.count().container(),
-                List.of(asked), List.of(), demands, null, List.of(), List.of(), measuring,
+                List.of(asked), List.of(), List.of(), demands, null, List.of(), List.of(), measuring,
                 measuring.region(), reading);
     }
 }
