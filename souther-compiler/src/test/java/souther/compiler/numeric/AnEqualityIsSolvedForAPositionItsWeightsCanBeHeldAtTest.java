@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,6 +42,20 @@ class AnEqualityIsSolvedForAPositionItsWeightsCanBeHeldAtTest {
         assertNotNull(left);
         assertTrue(left.coefs().isEmpty() && left.constant().isZero(),
                 "the equality itself is nothing once it is taken out: " + left);
+    }
+
+    /** The work spent finding a position to solve for is the equality's width, whichever position
+     *  is tried first, so the budget at which it is read does not turn on the names. */
+    @Test
+    void theEqualityIsReadAtTheSameBudgetsWhicheverOfTheTwoPositionsIsNamedFirst() {
+        for (int budget = 0; budget <= 12; budget++) {
+            boolean one = EqualitySpan.of(List.of(small("a", "b")),
+                    CanonicalOrder.asTheyAreSpelled(), budget) != null;
+            boolean other = EqualitySpan.of(List.of(small("b", "a")),
+                    CanonicalOrder.asTheyAreSpelled(), budget) != null;
+
+            assertEquals(one, other, "read at a budget of " + budget + " under one naming only");
+        }
     }
 
     @Test

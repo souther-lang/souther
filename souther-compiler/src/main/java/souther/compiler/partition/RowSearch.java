@@ -135,11 +135,14 @@ public final class RowSearch {
                                     IntFunction<Type> listing, RuleReadingContext reading,
                                     Building building, Set<Figure> stopped) {
         int[] left = {MOST_VALUES};
+        // Values a run's observation was cut short at: said only where no value is found, since a
+        // value that was found makes what was not tried of no account to what is tried with.
+        Set<Figure> cut = new HashSet<>();
         List<FixtureTemplate> stage = new ArrayList<>(named.get(parameter));
         Built built = firstOf(parameter, stage, building, left, stopped);
         if (built == null) {
             stage = new ArrayList<>();
-            takenAt(parameter, types.get(parameter), taken, reading, stage, new HashSet<>());
+            takenAt(parameter, types.get(parameter), taken, reading, stage, cut);
             built = firstOf(parameter, stage, building, left, stopped);
         }
         if (built == null) {
@@ -151,6 +154,9 @@ public final class RowSearch {
             stage = new ArrayList<>();
             addListsOf(listing.apply(parameter), reading, stage);
             built = firstOf(parameter, stage, building, left, stopped);
+        }
+        if (built == null) {
+            stopped.addAll(cut);
         }
         return built;
     }

@@ -48,7 +48,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -2334,7 +2333,7 @@ final class ReadQuantities implements Quantities {
             // Only the containers the question can turn on: what the rules leave a number is what
             // the part of them that weighs it leaves, so a container walked only by numbers of
             // other parts is no case of what is asked, however many there are.
-            open = openContainersByPart(under, terms).stream().filter(OpenGroup::reached)
+            open = groupsOf(under, terms).groups().stream().filter(ContainerGroups.Group::reached)
                     .flatMap(each -> each.containers().stream()).toList();
         }
         if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
@@ -2345,107 +2344,36 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * Containers that are asked about together, and whether the question names a number of them.
-     *
-     * @param containers the containers, in the order the terms that walk them are held in
-     * @param reached    whether a number the question is about is weighed by the part of the rules
-     *                   that reaches any of them, or walks one of them
-     */
-    private record OpenGroup(List<TermPath> containers, boolean reached) {}
-
-    /**
-     * The containers a question over {@code terms} walks that {@code under} says nothing of, in
-     * groups: two are in one group where a number walking one and a number walking the other are
-     * weighed by one connected part of the rules ({@link NumericDomain#partOf}), or where one
-     * number walks both.
+     * The groups the containers of a question over {@code terms} are kept in
+     * ({@link ContainerGroups}): a number is in the group of the part of the rules that weighs it
+     * ({@link NumericDomain#partOf}), and numbers walking one container are in one group, whether
+     * or not what {@code under} says of the container settles how it holds.
      *
      * <p>What the rules leave the numbers of one part does not turn on the other parts, since no
-     * rule relates them, so a container that only the numbers of other parts walk cannot change it,
-     * and a contradiction is in one part. Every group is asked of by itself.
+     * rule relates them, so a container that only the numbers of other parts walk cannot change
+     * it, and a contradiction is in one part. But rules are not the only relations: what a total
+     * comes to as the totals of its places ({@link #withWhatItAddsUp}) is put on when a number is
+     * asked of, and relates numbers of one container whatever the rules say, so a container
+     * settled by {@code under} still keeps its numbers together.
      */
-    private List<OpenGroup> openContainersByPart(StructuralContext under,
-                                                 Collection<NumericTerm> terms) {
-        return partsOf(under, terms).groups();
-    }
-
-    /** The groups the containers {@code under} says nothing of are kept in, for a question over
-     *  {@code terms}. */
-    private Parts partsOf(StructuralContext under, Collection<NumericTerm> terms) {
+    private ContainerGroups groupsOf(StructuralContext under, Collection<NumericTerm> terms) {
         NumericDomain<InputAtom> numbers = effectiveConstraints(under).numbers();
         List<NumericTerm> every = new ArrayList<>(terms);
         every.addAll(fixed.keySet());
         assumed.forEach(each -> every.addAll(each.terms()));
         Set<NumericTerm> asked = new HashSet<>(terms);
-        Set<TermPath> containers = new LinkedHashSet<>();
-        Parts parts = new Parts();
+        ContainerGroups groups = new ContainerGroups();
         for (NumericTerm each : every) {
             Object part = null;
             if (stands(Set.of(each), under)) {
                 int at = numbers.partOf(called(each, under));
                 part = at < 0 ? each : (Object) at;
-                parts.partOf.put(each, part);
             }
             TermPath walked = each.walkedOver();
-            boolean opens = walked != null && !under.says(walked);
-            if (part != null && asked.contains(each)) {
-                parts.askedKeys.add(part);
-            }
-            if (opens) {
-                containers.add(walked);
-                if (asked.contains(each)) {
-                    parts.askedKeys.add(walked);
-                }
-                if (part != null) {
-                    join(parts.joined, walked, part);
-                }
-            }
+            groups.say(each, part, walked, walked != null && under.says(walked),
+                    asked.contains(each));
         }
-        for (TermPath container : containers) {
-            parts.held.computeIfAbsent(rootOf(parts.joined, container), _ -> new ArrayList<>())
-                    .add(container);
-        }
-        return parts;
-    }
-
-    /**
-     * The groups the containers of a question are kept in, and which group each number is in.
-     *
-     * <p>A number is in the group of the part of the rules that weighs it and of the containers
-     * that numbers of the part walk; a number no rule weighs is in a group of its own. The
-     * question over a form is the sum of the questions over the pieces of it that are in one group
-     * each, and an emptiness is shown by any group.
-     */
-    private static final class Parts {
-
-        /** The part of the rules that weighs each number, or the number itself where none does. */
-        private final Map<NumericTerm, Object> partOf = new HashMap<>();
-        private final Map<Object, Object> joined = new HashMap<>();
-        private final Map<Object, List<TermPath>> held = new LinkedHashMap<>();
-        private final Set<Object> askedKeys = new HashSet<>();
-
-        private Parts() {}
-
-        /** What the group of {@code term} is called by. */
-        Object keyOf(NumericTerm term) {
-            Object part = partOf.get(term);
-            return part == null ? term : rootOf(joined, part);
-        }
-
-        /** The containers of the group called {@code key}, the terms' own first. */
-        List<TermPath> containersOf(Object key) {
-            return held.getOrDefault(key, List.of());
-        }
-
-        List<OpenGroup> groups() {
-            Set<Object> reached = new HashSet<>();
-            for (Object key : askedKeys) {
-                reached.add(rootOf(joined, key));
-            }
-            List<OpenGroup> out = new ArrayList<>();
-            held.forEach((root, containers) -> out.add(new OpenGroup(List.copyOf(containers),
-                    reached.contains(root))));
-            return out;
-        }
+        return groups;
     }
 
     /**
@@ -2466,10 +2394,10 @@ final class ReadQuantities implements Quantities {
             List<NumericTerm> alongside) {
         Set<NumericTerm> asked = new LinkedHashSet<>(form.coefs().keySet());
         asked.addAll(alongside);
-        Parts parts = partsOf(under, asked);
+        ContainerGroups groups = groupsOf(under, asked);
         Map<Object, Map<NumericTerm, ExactRatio>> pieces = new LinkedHashMap<>();
         for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
-            pieces.computeIfAbsent(parts.keyOf(term), _ -> new LinkedHashMap<>())
+            pieces.computeIfAbsent(groups.keyOf(term), _ -> new LinkedHashMap<>())
                     .put(term, form.coefs().get(term));
         }
         NumericDomain.Bounds total = null;
@@ -2478,7 +2406,7 @@ final class ReadQuantities implements Quantities {
             LinearForm<NumericTerm> own = new LinearForm<>(
                     first ? form.constant() : ExactRatio.ZERO, piece.getValue());
             first = false;
-            List<StructuralContext> ways = holdingEachWay(under, parts.containersOf(piece.getKey())
+            List<StructuralContext> ways = holdingEachWay(under, groups.containersOf(piece.getKey())
                     .stream().limit(MOST_CONTAINERS_ASKED_BOTH_WAYS).toList());
             if (!(across(ways, each -> runsIn(each, own, andTheDeclared, alongside))
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within))) {
@@ -2493,24 +2421,6 @@ final class ReadQuantities implements Quantities {
         }
         return new NumericDomain.FormProjection.Within(
                 total == null ? NumericDomain.Bounds.OPEN : total);
-    }
-
-    /** One group of {@code a} and {@code b}, in {@code joined}. */
-    private static void join(Map<Object, Object> joined, Object a, Object b) {
-        Object first = rootOf(joined, a);
-        Object second = rootOf(joined, b);
-        if (!first.equals(second)) {
-            joined.put(second, first);
-        }
-    }
-
-    /** The one the group of {@code key} is called by. */
-    private static Object rootOf(Map<Object, Object> joined, Object key) {
-        Object at = key;
-        while (joined.containsKey(at)) {
-            at = joined.get(at);
-        }
-        return at;
     }
 
     /** The containers a question over {@code terms} walks that {@code under} says nothing of,
@@ -3078,7 +2988,7 @@ final class ReadQuantities implements Quantities {
             // Each group of containers by itself: a contradiction is in one part of the rules, so
             // the containers of the others are no part of what shows it, and what is asked of one
             // group does not turn on how many containers stand beside it.
-            for (OpenGroup each : openContainersByPart(under, List.of())) {
+            for (ContainerGroups.Group each : groupsOf(under, List.of()).groups()) {
                 choices.addAll(choicesOfContainers(each.containers()));
             }
         }

@@ -51,6 +51,9 @@ final class EqualitySpan<A> {
     /** {@code Σ coefs·position + constant}. */
     record Residue<A>(Map<A, ExactRatio> coefs, ExactRatio constant) {}
 
+    /** The weight an equality, said at {@code at}th among the equalities, gives a position. */
+    private record Cell(int at, ExactRatio weight) {}
+
     /** An equality solved for {@code pivot}: {@code pivot + Σ rest = at}. */
     private record Solving<A>(A pivot, Map<A, ExactRatio> rest, ExactRatio at) {}
 
@@ -75,12 +78,15 @@ final class EqualitySpan<A> {
      *  before it was spent, in the order they were stated. */
     static <A> EqualitySpan<A> of(List<AffineConstraint<A>> rules, CanonicalOrder<A> order,
                                   int mostUpdates) {
-        Map<A, Integer> named = new HashMap<>();
+        Map<A, List<Cell>> named = new HashMap<>();
+        int at = 0;
         for (AffineConstraint<A> each : rules) {
             if (each instanceof AffineConstraint.Equality<A> equality) {
                 for (Map.Entry<A, ExactRatio> position : equality.form().entriesIn(order)) {
-                    named.merge(position.getKey(), 1, Integer::sum);
+                    named.computeIfAbsent(position.getKey(), _ -> new ArrayList<>())
+                            .add(new Cell(at, position.getValue()));
                 }
+                at++;
             }
         }
         Building<A> building = new Building<>(order, named, mostUpdates);
@@ -127,10 +133,16 @@ final class EqualitySpan<A> {
             if (weight == null) {
                 continue;
             }
-            for (Map.Entry<A, ExactRatio> each : solving.rest().entrySet()) {
-                if (updates != null && --updates[0] < 0) {
+            // What taking one equality out costs is how many weights it names, whether or not the
+            // numbers go on being held: counted as they are updated, a cost would be the divisions
+            // done before one failed, which turns on the order the positions are walked in.
+            if (updates != null) {
+                updates[0] -= solving.rest().size();
+                if (updates[0] < 0) {
                     return null;
                 }
+            }
+            for (Map.Entry<A, ExactRatio> each : solving.rest().entrySet()) {
                 ExactRatio moved = weight.times(each.getValue()).orNull();
                 ExactRatio had = coefs.getOrDefault(each.getKey(), ExactRatio.ZERO);
                 ExactRatio now = moved == null ? null : had.minus(moved).orNull();
@@ -166,12 +178,13 @@ final class EqualitySpan<A> {
         }
 
         private final CanonicalOrder<A> order;
-        /** How many equalities of the whole set name each position. */
-        private final Map<A, Integer> named;
+        /** The equalities of the whole set that name each position, and by what weight: the
+         *  position's column, which is what two positions are told apart by. */
+        private final Map<A, List<Cell>> named;
         private final List<Solving<A>> solvings = new ArrayList<>();
         private final int[] updates;
 
-        private Building(CanonicalOrder<A> order, Map<A, Integer> named, int mostUpdates) {
+        private Building(CanonicalOrder<A> order, Map<A, List<Cell>> named, int mostUpdates) {
             this.order = order;
             this.named = named;
             this.updates = new int[] {mostUpdates};
@@ -194,18 +207,27 @@ final class EqualitySpan<A> {
                 // Said already, or said against itself.
                 return left.constant().isZero() ? Taken.HELD : Taken.CONTRADICTS;
             }
-            // Solved for a position the fewest equalities of the set name, and among those the one
-            // the order walks last, where the weights can be divided by its weight. Which one is
-            // of no account to what is read; fewest is what leaves a position only this equality
-            // names out of every later one, and so the updates of a chain to its length whatever
-            // the positions are called. And one whose weight the others cannot be divided by is
-            // passed over for the next, so that the equality is read under every naming or under
-            // none: it is left out only where no position of it can be solved for.
+            // Solved for the first position, in an order the names have no part in, whose weight
+            // the others can be divided by: fewest equalities of the set naming it, which leaves
+            // a position only this equality names out of every later one and so keeps the updates
+            // of a chain to its length; then the size of its weight, then its sign. What each
+            // choice costs is then the same for two namings of one set, which is what keeps the
+            // work a reading may spend from showing the names. Only positions of one count, one
+            // weight, are told apart by the order, and for those the cost is the same under a
+            // renaming. A position whose weight the others cannot be divided by is passed over
+            // for the next, so the equality is left out only where no position of it can be
+            // solved for.
             List<Map.Entry<A, ExactRatio>> walked = order.walking(left.coefs().entrySet(),
                     Map.Entry::getKey);
             List<Map.Entry<A, ExactRatio>> toTry = new ArrayList<>(walked);
             Collections.reverse(toTry);
-            toTry.sort(Comparator.comparingInt(each -> named.getOrDefault(each.getKey(), 0)));
+            toTry.sort(Comparator
+                    .<Map.Entry<A, ExactRatio>>comparingInt(
+                            each -> named.getOrDefault(each.getKey(), List.of()).size())
+                    .thenComparing((one, other) -> columnsCompared(named.get(one.getKey()),
+                            named.get(other.getKey())))
+                    .thenComparing(each -> each.getValue().abs())
+                    .thenComparingInt(each -> each.getValue().signum()));
             for (Map.Entry<A, ExactRatio> pivot : toTry) {
                 Solving<A> solving = solvedFor(pivot, walked, left.constant());
                 if (updates[0] < 0) {
@@ -219,27 +241,44 @@ final class EqualitySpan<A> {
             return Taken.HELD;
         }
 
+        /** The columns of two positions of one size, the first equality that tells them apart
+         *  deciding: by which equality it is and then by its weight there. Two positions with one
+         *  column are exchanged by a renaming that leaves the set as it is. */
+        private static int columnsCompared(List<Cell> one, List<Cell> other) {
+            for (int i = 0; i < Math.min(one.size(), other.size()); i++) {
+                int by = Integer.compare(one.get(i).at(), other.get(i).at());
+                if (by == 0) {
+                    by = one.get(i).weight().compareTo(other.get(i).weight());
+                }
+                if (by != 0) {
+                    return by;
+                }
+            }
+            return 0;
+        }
+
         /** {@code walked + constant} solved for {@code pivot}, or null where the weights cannot
          *  be held divided by its, or where the work ran out: every division is one of the weights
          *  updated that {@link EqualitySpan#MOST_UPDATES} bounds, so what a position that cannot be solved for
          *  costs is spent from the same work as reading the equalities is. */
         private Solving<A> solvedFor(Map.Entry<A, ExactRatio> pivot,
                                      List<Map.Entry<A, ExactRatio>> walked, ExactRatio constant) {
+            // What trying a position costs is the width of the equality whichever way it comes
+            // out, and not the divisions done before one failed: that is the order the positions
+            // are walked in, which is the names', and a cost that turned on it would show them.
+            updates[0] -= walked.size();
+            if (updates[0] < 0) {
+                return null;
+            }
             Map<A, ExactRatio> rest = new LinkedHashMap<>();
             for (Map.Entry<A, ExactRatio> each : walked) {
                 if (!each.getKey().equals(pivot.getKey())) {
-                    if (--updates[0] < 0) {
-                        return null;
-                    }
                     ExactRatio scaled = each.getValue().dividedBy(pivot.getValue()).orNull();
                     if (scaled == null) {
                         return null;
                     }
                     rest.put(each.getKey(), scaled);
                 }
-            }
-            if (--updates[0] < 0) {
-                return null;
             }
             ExactRatio at = constant.negated().dividedBy(pivot.getValue()).orNull();
             return at == null ? null : new Solving<>(pivot.getKey(), rest, at);

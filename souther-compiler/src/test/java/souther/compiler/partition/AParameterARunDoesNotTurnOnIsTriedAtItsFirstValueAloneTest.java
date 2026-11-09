@@ -12,6 +12,7 @@ import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -55,6 +56,13 @@ class AParameterARunDoesNotTurnOnIsTriedAtItsFirstValueAloneTest {
     private static List<List<RowSearch.Built>> triedWith(IntPredicate atFirst, int howManyNamed,
                                                          RowSearch.Building building,
                                                          Set<Figure> stopped) {
+        return triedWith(atFirst, howManyNamed, building, stopped, List.of());
+    }
+
+    private static List<List<RowSearch.Built>> triedWith(IntPredicate atFirst, int howManyNamed,
+                                                         RowSearch.Building building,
+                                                         Set<Figure> stopped,
+                                                         List<List<ObservedValue>> taken) {
         Compilation compilation = Compilation.ofSource(FLAGS, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -76,7 +84,7 @@ class AParameterARunDoesNotTurnOnIsTriedAtItsFirstValueAloneTest {
             }
             named.add(values);
         });
-        return RowSearch.tried(subject.types(), named, List.of(), subject.types()::get,
+        return RowSearch.tried(subject.types(), named, taken, subject.types()::get,
                 _ -> null, atFirst, subject.ruleReading(), building, stopped);
     }
 
@@ -142,6 +150,30 @@ class AParameterARunDoesNotTurnOnIsTriedAtItsFirstValueAloneTest {
                         : Optional.of(new ObservedValue.Text(fixture.text())), new HashSet<>());
 
         assertEquals(FixtureTemplate.string("v3"), some.get(1).getFirst().fixture());
+    }
+
+    /**
+     * A value a run's observation was cut short at is one the search did not get to try. It is
+     * said where no value of the parameter was found, since the search then did not look to the
+     * end, and not where one was, since that value is what the parameter is tried with.
+     */
+    @Test
+    void whereARunWasCutShortAtAnUnreadParametersValueItIsSaidOnlyWhereNoneIsBuilt() {
+        Figure cut = WorkFigure.RUNS_REPLACING_AN_ARM.at(1);
+        List<List<ObservedValue>> taken = List.of(List.of(new ObservedValue.Text("v"),
+                new ObservedValue.Truncated(cut), new ObservedValue.Text("v")));
+
+        Set<Figure> none = new HashSet<>();
+        triedWith(at -> at == 1, 2,
+                (at, fixture) -> at == 1 ? Optional.empty()
+                        : Optional.of(new ObservedValue.Text(fixture.text())), none, taken);
+        Set<Figure> found = new HashSet<>();
+        triedWith(at -> at == 1, 2,
+                (_, fixture) -> Optional.of(new ObservedValue.Text(fixture.text())), found,
+                taken);
+
+        assertTrue(none.contains(cut), "no value was built, so what was cut short is said");
+        assertTrue(!found.contains(cut), "a value was built, so it is no account");
     }
 
     /** The first value that does not build is passed over for the next that does. */

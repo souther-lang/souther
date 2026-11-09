@@ -110,6 +110,8 @@ final class ReducedRules<A> {
     private boolean metered;
     /** How many more weights this set of equalities may update. */
     private int left;
+    /** How many weights a set of equalities may update in all, one way of solving it at a time. */
+    private int mostUpdates = MOST_UPDATES;
 
     /** A reduction being made, whose equalities are solved as it goes. */
     private ReducedRules(CanonicalOrder<A> order, Map<A, Use> uses) {
@@ -149,6 +151,13 @@ final class ReducedRules<A> {
      * the equalities it was.
      */
     static <A> List<ReducedRules<A>> of(List<AffineConstraint<A>> all, CanonicalOrder<A> order) {
+        return of(all, order, MOST_UPDATES);
+    }
+
+    /** The same, with the updates of a weight a way of solving a set of equalities may spend
+     *  said. */
+    static <A> List<ReducedRules<A>> of(List<AffineConstraint<A>> all, CanonicalOrder<A> order,
+                                        int mostUpdates) {
         List<AffineConstraint.Equality<A>> equalities = new ArrayList<>();
         for (AffineConstraint<A> each : all) {
             if (each instanceof AffineConstraint.Equality<A> equality) {
@@ -159,6 +168,7 @@ final class ReducedRules<A> {
             return List.of();
         }
         ReducedRules<A> scratch = new ReducedRules<>(order, usesIn(all, order));
+        scratch.mostUpdates = mostUpdates;
         List<Choice<A>> together = List.of(new Choice<>(List.of(), List.of()));
         for (List<AffineConstraint.Equality<A>> set : apart(equalities, order)) {
             List<Choice<A>> choices = scratch.choicesFor(set);
@@ -297,10 +307,13 @@ final class ReducedRules<A> {
             if (weight == null) {
                 continue;
             }
+            if (!spends(one.rest().size())) {
+                return null;
+            }
             for (Map.Entry<A, ExactRatio> entry : walked(one.rest())) {
                 ExactRatio moved = weight.times(entry.getValue()).orNull();
                 ExactRatio had = coefs.getOrDefault(entry.getKey(), ExactRatio.ZERO);
-                ExactRatio now = moved == null || spent() ? null : had.minus(moved).orNull();
+                ExactRatio now = moved == null ? null : had.minus(moved).orNull();
                 if (now == null) {
                     return null;
                 }
@@ -319,10 +332,19 @@ final class ReducedRules<A> {
         return new Goal<>(coefs, constant);
     }
 
-    /** Whether the weight about to be updated is one too many for the set of equalities being
-     *  solved. */
-    private boolean spent() {
-        return metered && --left < 0;
+    /**
+     * Whether {@code weights} more weights may be updated for the set of equalities being solved,
+     * which they are charged for before any is, and not as each is done. What a step costs is how
+     * many weights it names, whether or not the numbers go on being held: counted as they are
+     * updated, a step that failed part of the way would have cost the weights done before it, which
+     * is the order the positions are walked in and so the names'.
+     */
+    private boolean spends(int weights) {
+        if (!metered) {
+            return true;
+        }
+        left -= weights;
+        return left >= 0;
     }
 
     /** {@code Σ coefs rel at} over the free positions, or null where the arithmetic could not
@@ -361,7 +383,7 @@ final class ReducedRules<A> {
         }
         solved.clear();
         metered = true;
-        left = MOST_UPDATES;
+        left = mostUpdates;
         Map<Map.Entry<Set<Solved<A>>, List<AffineConstraint.Equality<A>>>, Choice<A>> found =
                 new LinkedHashMap<>();
         boolean within = descend(set, 0, found, new int[1]);
@@ -429,10 +451,12 @@ final class ReducedRules<A> {
                          Map.Entry<A, ExactRatio> last) {
         A pivot = last.getKey();
         Map<A, ExactRatio> rest = new LinkedHashMap<>();
+        if (!spends(walked.size())) {
+            return false;
+        }
         for (Map.Entry<A, ExactRatio> entry : walked) {
             if (!entry.getKey().equals(pivot)) {
-                ExactRatio scaled = spent() ? null
-                        : entry.getValue().dividedBy(last.getValue()).orNull();
+                ExactRatio scaled = entry.getValue().dividedBy(last.getValue()).orNull();
                 if (scaled == null) {
                     return false;
                 }
@@ -475,10 +499,13 @@ final class ReducedRules<A> {
         }
         Map<A, ExactRatio> rest = new LinkedHashMap<>(old.rest());
         rest.remove(fresh.pivot());
+        if (!spends(fresh.rest().size())) {
+            return null;
+        }
         for (Map.Entry<A, ExactRatio> entry : walked(fresh.rest())) {
             ExactRatio moved = weight.times(entry.getValue()).orNull();
             ExactRatio had = rest.getOrDefault(entry.getKey(), ExactRatio.ZERO);
-            ExactRatio now = moved == null || spent() ? null : had.minus(moved).orNull();
+            ExactRatio now = moved == null ? null : had.minus(moved).orNull();
             if (now == null) {
                 return null;
             }
