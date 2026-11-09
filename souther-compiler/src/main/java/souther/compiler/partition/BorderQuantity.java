@@ -2561,6 +2561,20 @@ public sealed interface BorderQuantity
         }
 
         /**
+         * Whether {@code quantity} is looked at on this row for the first time, for the walk that
+         * finds which containers a row has to choose an element of ({@link LinearQuantity#lookAt}).
+         *
+         * <p>Looking at a quantity asks the row for every position it reads and keeps nothing of
+         * the answers, so asking for the same positions again finds nothing new. A walk that is
+         * asked a quantity once for every statement that holds it, and holds it in many, would
+         * read it that many times over. Two equal quantities are one. A reading that is no such
+         * walk looks at every quantity it is handed, as it reads it.
+         */
+        default boolean firstLookAt(LinearQuantity quantity) {
+            return true;
+        }
+
+        /**
          * The elements of the occurrence of the container at {@code container} this row is read
          * in, in the order it wrote them, each read as this reading with that element chosen.
          */
