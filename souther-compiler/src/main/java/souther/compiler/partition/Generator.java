@@ -2835,10 +2835,6 @@ public final class Generator {
         /** Which parameters a candidate may move. */
         private final MoveScope scope;
 
-        private Examining(int most, Runnable whenSpent) {
-            this(most, whenSpent, MoveScope.EVERYTHING);
-        }
-
         private Examining(int most, Runnable whenSpent, MoveScope scope) {
             this.left = most;
             this.whenSpent = whenSpent;
