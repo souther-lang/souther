@@ -238,6 +238,12 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
                 != UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
                 currencyOf(evidence, "crossing").toString());
 
+        // And where the lookup is held in a name the body gave it.
+        PartitionEvidence.NotRead named = currencyOf(evidence, "byName").get("deals[*].currency");
+        assertTrue(named == null || named.reason()
+                != UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                currencyOf(evidence, "byName").toString());
+
         // The table is not shown to be reached at every key of it: a key is a value of the
         // table, and an empty table holds none.
         assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
@@ -253,7 +259,7 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
 
         // An operator reading the currency outside the lookup stops a run at some currency.
         for (String behavior : List.of("spreading", "tabled", "uncounted", "amountless",
-                "spreadFirst", "byName")) {
+                "spreadFirst")) {
             PartitionEvidence.NotRead stopped =
                     currencyOf(evidence, behavior).get("deals[*].currency");
             assertNotEquals(null, stopped, behavior + " " + currencyOf(evidence, behavior));

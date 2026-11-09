@@ -2012,7 +2012,7 @@ final class Pullback {
         for (InputReads.AppliedOver each : over) {
             Optional<Set<TermPath>> held = each.anOption()
                     ? containersAnOptionHoldsAValueWhere(each.container())
-                    : positionHoldingWhatItHolds(each.container(), read).map(Set::of);
+                    : containersAContainerHoldsSomethingWhere(each.container());
             if (held.isEmpty()) {
                 return Optional.empty();
             }
@@ -2029,6 +2029,25 @@ final class Pullback {
      */
     private Optional<Set<TermPath>> containersAnOptionHoldsAValueWhere(Denotation option) {
         Pulled pulled = ofAPresence(option.value(), option.at(), read, Optional.empty());
+        return containersHeldBy(pulled.proposition());
+    }
+
+    /**
+     * The containers of the input of which one holding something is necessary for
+     * {@code container} to: the position it is, or where it is the answer of an operation, what
+     * the library says of that operation holding something — a filter of a list holds something
+     * only where the list does. Necessary and not enough: a filter of one may be empty with the
+     * list not, which is why a container made of one is not read back to a position as one that
+     * holds exactly where it does ({@link #positionHoldingWhatItHolds}).
+     */
+    private Optional<Set<TermPath>> containersAContainerHoldsSomethingWhere(
+            Denotation container) {
+        Optional<TermPath> at = positionHoldingWhatItHolds(container, read);
+        if (at.isPresent()) {
+            return Optional.of(Set.of(at.get()));
+        }
+        Pulled pulled = ofHoldingSomething(container.value(), container.at(), read,
+                Optional.empty());
         return containersHeldBy(pulled.proposition());
     }
 
@@ -2085,6 +2104,15 @@ final class Pullback {
      *  on: those of the numbers its form is over, or else those it stands at, and no place this
      *  can name where it is neither. */
     private void leaveUnsaidOverWhatItReads(Core operand, InputReads reads, Bound bound) {
+        // A name the body gave the answer of an operation is that answer, and what it is made of
+        // is where a run that works it out may stop. A name a closure binds is asked as it stands
+        // for what the closure is handed ({@link #boundInside}).
+        if (Core.withoutStanding(operand) instanceof Core.Read name
+                && (bound == null || !bound.names().contains(name.binding()))
+                && reads.givenTo(name) instanceof Denotation given) {
+            leaveUnsaidOverWhatItReads(given.value(), given.at(), bound);
+            return;
+        }
         if (AffineForms.outcome(operand, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
             operated.leaveUnsaid(form.coefs().keySet(), bound, reads);
