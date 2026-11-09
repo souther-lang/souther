@@ -10,7 +10,6 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -465,14 +464,6 @@ final class Clauses {
                                   List<Lookup> lookups, List<Apart> aparts,
                                   Set<BindingId> bindings, Set<ClauseRead> reads) {
 
-        /** The operations that take what to look for and the container to look in, in that order,
-         *  and read the member that is looked for. */
-        private static final Set<ValueName> LOOKUPS = Set.of(
-                ValueName.Stdlib.operation("Map", "get"),
-                ValueName.Stdlib.operation("Map", "containsKey"),
-                ValueName.Stdlib.operation("Set", "contains"),
-                ValueName.Stdlib.operation("List", "contains"));
-
         ReadsOfAClause {
             Objects.requireNonNull(fields, "a walk of a clause knows which binding each field is");
             Objects.requireNonNull(newtypes, "a walk of a clause knows which names wear one value");
@@ -580,12 +571,10 @@ final class Clauses {
         /** The container {@code e} looks a member up in or asks the membership of, where that is a
          *  place of the value; null otherwise. */
         private Core entryLookedUp(Core e) {
-            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(var operation, var args))
-                    || !LOOKUPS.contains(operation)) {
-                return null;
-            }
-            Core container = args.get(1);
-            return locationOf(container) != null ? container : null;
+            AnOperationApplied applied = AnOperationApplied.of(e);
+            AnOperationApplied.Searched searched = applied == null ? null : applied.searches();
+            return searched != null && locationOf(searched.container()) != null
+                    ? searched.container() : null;
         }
 
         private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
@@ -601,18 +590,15 @@ final class Clauses {
          */
         private Optional<ClauseRead.Member> memberLookedUp(Core lookup,
                                                            List<EntryHeld.Stated> entries) {
-            if (!(AnOperationApplied.of(lookup) instanceof AnOperationApplied(var operation,
-                    List<Core> args)) || args.isEmpty()) {
-                return Optional.empty();
-            }
-            Location lookedFor = locationOf(args.getFirst());
-            boolean asAKey = operation.equals(ValueName.Stdlib.operation("Map", "get"))
-                    || operation.equals(ValueName.Stdlib.operation("Map", "containsKey"));
+            AnOperationApplied applied = AnOperationApplied.of(lookup);
+            AnOperationApplied.Searched searched = applied == null ? null : applied.searches();
+            Location lookedFor = searched == null ? null : locationOf(searched.member());
             if (lookedFor == null) {
                 return Optional.empty();
             }
+            boolean asAKey = searched.aKey();
             ValueAsked valueIn = null;
-            Location container = asAKey ? locationOf(args.get(1)) : null;
+            Location container = asAKey ? locationOf(searched.container()) : null;
             for (EntryHeld.Stated entry : entries) {
                 if (container != null && entry.valueIn() != null
                         && lookedFor.equals(locationOf(entry.key()))

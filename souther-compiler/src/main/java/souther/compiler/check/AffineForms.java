@@ -6,7 +6,6 @@ import souther.compiler.abort.GetsPast;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
-import souther.compiler.core.Kernel;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
@@ -1361,7 +1360,7 @@ public final class AffineForms {
             Core.PreservedCall call, E at, Reading<A, E> reading) {
         return call.args().size() == 1
                 && call.operation() instanceof ValueName.Stdlib.Operation operation
-                && reading.symbols().kernelOf(operation) == Kernel.LIST_LENGTH
+                && NumericMeasures.counts(operation) == NumericMeasures.Counts.LIST
                 ? listWrittenOutBy(call.args().get(0), at, reading) : Optional.empty();
     }
 

@@ -31,7 +31,7 @@ public record AnIndexedMap(Core walked, Core.Block key) {
     /** Read once: the library is the same library for every module compiled. */
     private static final class Derived {
         private static final Map<ValueName.Stdlib.Operation, EntriesFiledByKey.Filing> FILINGS =
-                EntriesFiledByKey.of(DefaultStdlib.get());
+                EntriesFiledByKey.of(DefaultStdlib.get(), DefaultBoundOperationFacts.library());
     }
 
     /**

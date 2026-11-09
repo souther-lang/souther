@@ -290,6 +290,20 @@ public final class BoundOperationFacts {
         return byOperation == null ? Set.of() : Collections.unmodifiableSet(byOperation.keySet());
     }
 
+    /**
+     * Whether {@code operation} widens a whole number: it answers the number of its argument as it
+     * is — the form is that one argument once, with nothing added to it or taken from it — and the
+     * argument is a whole number. What it answers then holds the places the number has, which are
+     * none past the point; an operation that answered any other kind of number as it is would
+     * keep places this does not say.
+     */
+    public boolean widensAWholeNumber(ValueName operation) {
+        LinearForm<DeclaredArgument> form = answersAFormOfItsArguments(operation);
+        return form != null && form.constant().equals(ExactRatio.ZERO) && form.coefs().size() == 1
+                && form.coefs().values().iterator().next().equals(ExactRatio.ONE)
+                && Type.INT.equals(form.coefs().keySet().iterator().next().stands());
+    }
+
     /** What {@code operation} answers, counted, in what its arguments are counted as — or null
      *  where it states no such form. */
     public LinearForm<DeclaredArgument> answersAFormOfItsArguments(ValueName operation) {
@@ -419,6 +433,67 @@ public final class BoundOperationFacts {
     public Set<ValueName> boundsOnEachElementOfTheResult() {
         return eachElementBounds.keySet();
     }
+
+    /**
+     * The key and the container {@code operation} answers the value filed under that key of, or null
+     * where it says no such thing ({@link BoundOperationFact.AnswersTheValueFiledUnder}).
+     */
+    public Lookup looksUp(ValueName operation) {
+        BoundOperationFact.AnswersTheValueFiledUnder held =
+                one(BoundOperationFact.AnswersTheValueFiledUnder.class, operation);
+        return held == null ? null : new Lookup(held.key(), held.container());
+    }
+
+    /**
+     * The index and the list {@code operation} answers the element at that index of, or null where
+     * it says no such thing ({@link BoundOperationFact.AnswersTheElementAt}).
+     */
+    public ElementAt elementAt(ValueName operation) {
+        BoundOperationFact.AnswersTheElementAt held =
+                one(BoundOperationFact.AnswersTheElementAt.class, operation);
+        return held == null ? null : new ElementAt(held.index(), held.list());
+    }
+
+    /** The argument an element is picked at, and the list it is picked from. */
+    public record ElementAt(DeclaredArgument index, DeclaredArgument list) {}
+
+    /** The argument a value is looked up under, and the one that files it. */
+    public record Lookup(DeclaredArgument key, DeclaredArgument container) {}
+
+    /**
+     * The member and the container {@code operation} answers whether the second holds the first
+     * of, or null where its answer is true for some other reason: read off its law of truth, which
+     * says it is true exactly where some element of a container, or some key of it, is a value it
+     * was given.
+     */
+    public Membership holdsAMember(ValueName operation) {
+        if (!(settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw<DeclaredArgument> law, var _))
+                || !(law instanceof OperationLaw.Observation<DeclaredArgument>(
+                        AnswerAspect aspect, LawProposition<DeclaredArgument> equivalent))
+                || aspect != AnswerAspect.TRUTH
+                || !(equivalent instanceof LawProposition.SomeElement<DeclaredArgument>(
+                        DeclaredArgument container, LawProposition<DeclaredArgument> held,
+                        boolean some))
+                || !some
+                || !(held instanceof LawProposition.Same<DeclaredArgument>(
+                        LawSubject<DeclaredArgument> held1,
+                        LawSubject<DeclaredArgument> given, boolean same))
+                || !same || !(given instanceof LawSubject.Argument<DeclaredArgument>(
+                        DeclaredArgument member))) {
+            return null;
+        }
+        if (held1 instanceof LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument of)
+                && of.equals(container)) {
+            return new Membership(member, container, true);
+        }
+        return held1 instanceof LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument of)
+                && of.equals(container) ? new Membership(member, container, false) : null;
+    }
+
+    /** The argument looked for, the one it is looked for in, and whether what is looked for is a
+     *  key of a map and not an element. */
+    public record Membership(DeclaredArgument member, DeclaredArgument container, boolean aKey) {}
 
     /**
      * The container whose element {@code operation} answers where it answers a value, or null where
@@ -615,6 +690,15 @@ public final class BoundOperationFacts {
 
     /** The argument whose elements are kept, and the closure that decides which. */
     public record Kept(DeclaredArgument source, DeclaredArgument closure) {}
+
+    /** The argument whose entries {@code operation} keeps where a closure holds of the key and the
+     *  value, and the closure — or null where nothing says it does
+     *  ({@link BoundOperationFact.KeepsTheEntriesWhereItHolds}). */
+    public Kept keepsEntriesWhereItHolds(ValueName operation) {
+        BoundOperationFact.KeepsTheEntriesWhereItHolds held =
+                one(BoundOperationFact.KeepsTheEntriesWhereItHolds.class, operation);
+        return held == null ? null : new Kept(held.source(), held.closure());
+    }
 
     /** The count and the list {@code operation} answers the elements of that list kept by that
      *  index of, and which side of it it keeps — or null where nothing says it does. */
@@ -1085,6 +1169,75 @@ public final class BoundOperationFacts {
      *  it accumulates nothing, including where the name is no operation of the library. */
     public BoundOperationFact.AccumulatesItsContainer accumulates(ValueName operation) {
         return one(BoundOperationFact.AccumulatesItsContainer.class, operation);
+    }
+
+    /**
+     * The type of what {@code operation} counts the contents of, as the library declares
+     * ({@link TakenAs.HowManyItHolds}): a string, or a list, set or map of anything. Null where it
+     * counts nothing.
+     */
+    public Type counted(ValueName operation) {
+        BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven held =
+                one(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class, operation);
+        return held != null && held.how() instanceof TakenAs.HowManyItHolds
+                ? held.of().stands() : null;
+    }
+
+    /**
+     * The operation that counts what a value of type {@code carried} holds, as the library declares
+     * ({@link TakenAs.HowManyItHolds}): the one whose first argument is a value of that kind. Null
+     * where none counts it, or where more than one does and which is not for this to choose.
+     */
+    public ValueName.Stdlib countOf(Type carried) {
+        ValueName found = null;
+        for (ValueName operation : ones(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class)) {
+            BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven held =
+                    one(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class, operation);
+            if (held.how() instanceof TakenAs.HowManyItHolds
+                    && instanceOf(carried, held.of().stands())) {
+                if (found != null) {
+                    return null;
+                }
+                found = operation;
+            }
+        }
+        return (ValueName.Stdlib) found;
+    }
+
+    /**
+     * Whether {@code operation} adds up or multiplies what a container holds, as the library
+     * declares ({@link Accumulation.Combine}): it folds numbers, where joining lists or strings
+     * folds something else.
+     */
+    public boolean foldsNumbers(ValueName operation) {
+        Accumulation how = accumulation(operation);
+        return how != null && (how.combine() == Accumulation.Combine.ADD
+                || how.combine() == Accumulation.Combine.MULTIPLY);
+    }
+
+    /**
+     * The operation that adds up what a container holds from nought, as the library declares
+     * ({@link Accumulation.Combine#ADD}): the one a total of numbers over the elements of a list
+     * is filed as.
+     *
+     * <p>One, and refused where the library declares none or more: which of two a total is filed
+     * as would be decided by the order they are read in, and a reader handed none would find out
+     * when it was asked.
+     */
+    public ValueName.Stdlib totalOf() {
+        List<ValueName> adding = new ArrayList<>();
+        for (ValueName operation : ones(BoundOperationFact.AccumulatesItsContainer.class)) {
+            Accumulation how = accumulation(operation);
+            if (how.identity() == Accumulation.Identity.ZERO
+                    && how.combine() == Accumulation.Combine.ADD) {
+                adding.add(operation);
+            }
+        }
+        if (adding.size() != 1) {
+            throw new IllegalStateException("a total of numbers is filed as the one operation the"
+                    + " library declares to add up from nought, and it declares " + adding);
+        }
+        return (ValueName.Stdlib) adding.getFirst();
     }
 
     /** What walking {@code operation}'s container comes to, or null where it accumulates nothing. */

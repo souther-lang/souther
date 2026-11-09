@@ -22,7 +22,6 @@ import souther.compiler.check.FoldedValue;
 import souther.compiler.check.WhatAnOptionHolds;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnteredArm;
-import souther.compiler.core.Kernel;
 import souther.compiler.inputs.OnePerElement.ReadOff;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.BuiltFrom;
@@ -113,7 +112,6 @@ import java.util.Set;
  */
 public final class InputReads {
 
-    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
 
     /** What an option is left where it holds a value. */
     private static final CasesLeft PRESENT = CasesLeft.of(Refinement.of(new Case.Presence(true)));
@@ -990,7 +988,8 @@ public final class InputReads {
     public long readingsASplitIsOneOf(List<Denotation> values) {
         Set<BindingId> turnedOn = new HashSet<>();
         for (Denotation each : values) {
-            each.at().applicationsRead(each.value(), new HashSet<>(), turnedOn);        }
+            each.at().applicationsRead(each.value(), new HashSet<>(), turnedOn);
+        }
         return applied.readings() / applied.applicationsNotThrough(turnedOn);
     }
 
@@ -1681,7 +1680,7 @@ public final class InputReads {
         Core lookup = written instanceof Core.Read
                 ? standing(scrutinee, symbols, newtypes).value() : written;
         return AnOperationApplied.of(lookup) instanceof AnOperationApplied looked
-                && GET.equals(looked.operation())
+                && looked.lookup() != null
                 ? new InputReads(inside.names.opening(arm.binder().binding(),
                         new LookupOpened(lookup, new EnteredArm(arm.binder().binding()))),
                         inside.alternatives, inside.declared, inside.dependencies, inside.applied)
@@ -2039,26 +2038,25 @@ public final class InputReads {
         public WhatItHolds otherwise(ElementsWrittenOut.Stood<InputReads> option,
                                      AnOperationApplied applied) {
             InputReads at = option.at();
-            if (applied != null && applied.operation() instanceof ValueName.Stdlib.Operation listed
-                    && symbols.kernelOf(listed) == Kernel.LIST_GET) {
-                return applied.args().size() == 2
-                        && at.folded(applied.args().get(0), symbols, newtypes).orElse(null)
+            if (applied != null && applied.picks() instanceof AnOperationApplied.Picked picked) {
+                return at.folded(picked.index(), symbols, newtypes).orElse(null)
                                 instanceof Long index && index >= 0
                         ? new WhatItHolds.AtAnIndex(new PickedAtAnIndex(
-                                new Denotation(applied.args().get(1), at), index))
+                                new Denotation(picked.list(), at), index))
                         : unsaid();
             }
             if (applied != null) {
-                if (!GET.equals(applied.operation()) || applied.args().size() != 2) {
+                AnOperationApplied.Lookup lookup = applied.lookup();
+                if (lookup == null) {
                     return unsaid();
                 }
                 EntryLookedUp entry = at.entryLookedUp(new Denotation(option.value(), at),
-                        applied.args(), symbols, newtypes);
+                        lookup.container(), symbols, newtypes);
                 if (entry != null) {
                     return new WhatItHolds.AnEntry(entry);
                 }
                 AnAnswerAt held = at.mayHoldAnAnswer()
-                        ? at.entryOfAnAnswer(applied.args(), symbols, newtypes) : null;
+                        ? at.entryOfAnAnswer(lookup.container(), symbols, newtypes) : null;
                 return held == null ? unsaid() : new WhatItHolds.AnEntryOfAnAnswer(held);
             }
             // An optional at a position holds what stands there narrowed to its present case.
@@ -2274,15 +2272,15 @@ public final class InputReads {
 
     /** The entry the lookup {@code looked}, handed {@code args}, picks out of a map of the input —
      *  or null where the map is none. */
-    private EntryLookedUp entryLookedUp(Denotation looked, List<Core> args, Symbols symbols,
+    private EntryLookedUp entryLookedUp(Denotation looked, Core container, Symbols symbols,
                                         DeclarationNewtypes newtypes) {
-        if (looked.at().forkedOn(args.get(1), newtypes) instanceof PathResolution.At(
+        if (looked.at().forkedOn(container, newtypes) instanceof PathResolution.At(
                 TermPath map)) {
             return new EntryLookedUp(map.element(), looked.value());
         }
         // A map filed from a list holds the list's own elements, so what a lookup in it answers is
         // one of them.
-        Denotation held = looked.at().standing(args.get(1), symbols, newtypes);
+        Denotation held = looked.at().standing(container, symbols, newtypes);
         AnIndexedMap indexed = AnIndexedMap.of(held.value(), closure ->
                 Core.withoutStanding(held.at().standing(closure, symbols, newtypes).value())
                         instanceof Core.Block block ? block : null);
@@ -2301,9 +2299,9 @@ public final class InputReads {
      * <p>The list itself, as it stands in the answer: a list the map was filed from through steps
      * that keep only some of its elements holds entries the answer's list does not.
      */
-    private AnAnswerAt entryOfAnAnswer(List<Core> args, Symbols symbols,
+    private AnAnswerAt entryOfAnAnswer(Core container, Symbols symbols,
                                        DeclarationNewtypes newtypes) {
-        Denotation held = standing(args.get(1), symbols, newtypes);
+        Denotation held = standing(container, symbols, newtypes);
         AnIndexedMap indexed = AnIndexedMap.of(held.value(), closure ->
                 Core.withoutStanding(held.at().standing(closure, symbols, newtypes).value())
                         instanceof Core.Block block ? block : null);
@@ -4275,17 +4273,17 @@ public final class InputReads {
     public Denotation mapLookedUpUnderOneOfItsOwnKeys(Core lookup, Symbols symbols,
                                                       DeclarationNewtypes newtypes) {
         if (!(AnOperationApplied.of(lookup) instanceof AnOperationApplied looked)
-                || !GET.equals(looked.operation()) || looked.args().size() != 2) {
+                || !(looked.lookup() instanceof AnOperationApplied.Lookup keyed)) {
             return null;
         }
-        Denotation key = standing(looked.args().getFirst(), symbols, newtypes);
+        Denotation key = standing(keyed.key(), symbols, newtypes);
         Core handedFrom = key.at().containerOfTheElement(key.value());
         if (handedFrom == null) {
             return null;
         }
         Denotation listing = key.at().standing(handedFrom, symbols, newtypes);
         Denotation keysOf = mapWhoseKeysAreListedBy(listing, symbols, newtypes);
-        Denotation map = new Denotation(looked.args().get(1), this);
+        Denotation map = new Denotation(keyed.container(), this);
         return keysOf != null && oneNamedValue(keysOf, map, symbols, newtypes)
                 ? standing(map.value(), symbols, newtypes) : null;
     }

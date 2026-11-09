@@ -14,7 +14,6 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.WrittenOfANode;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -169,23 +168,26 @@ final class CollectedBelowATree {
             if (walk != null) {
                 return evalWalk(walk, here, env);
             }
-            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(ValueName operation,
-                                                                          List<Core> args))) {
+            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied applied)) {
                 return null;
             }
-            if (new AnOperationApplied(operation, args).putsListsEndToEnd()) {
+            List<Core> args = applied.args();
+            if (applied.putsListsEndToEnd()) {
                 return eval(args.get(0), here, env) instanceof Abs.Elems left
                         && eval(args.get(1), here, env) instanceof Abs.Elems right
                         ? left.with(right) : null;
             }
-            if (operation.equals(ValueName.Stdlib.operation("Map", "get"))) {
-                return lookup(args.get(0), args.get(1), here) ? new Abs.MaybeEntry() : null;
+            AnOperationApplied.Lookup looked = applied.lookup();
+            if (looked != null) {
+                return lookup(looked.key(), looked.container(), here)
+                        ? new Abs.MaybeEntry() : null;
             }
-            if (operation.equals(ValueName.Stdlib.operation("Option", "map"))) {
-                Core.Block closure = blocksAt(here).apply(args.get(0));
+            AnOperationApplied.Mapped mapped = applied.mapsAnOption();
+            if (mapped != null) {
+                Core.Block closure = blocksAt(here).apply(mapped.closure());
                 if (closure == null || closure.params().size() != 1
                         || closure.params().getFirst().binding() == null
-                        || !(eval(args.get(1), here, env) instanceof Abs.MaybeEntry)) {
+                        || !(eval(mapped.option(), here, env) instanceof Abs.MaybeEntry)) {
                     return null;
                 }
                 Map<BindingId, Abs> inside = new HashMap<>(env);
@@ -280,14 +282,13 @@ final class CollectedBelowATree {
         private boolean stepsDownOnEachElement(SeededWalk walk, InputReads here) {
             Denotation step = here.standing(walk.step().body(), symbols, newtypes);
             if (!(AnOperationApplied.of(Core.withoutStanding(step.value()))
-                    instanceof AnOperationApplied(ValueName operation, List<Core> args))
-                    || !operation.equals(ValueName.Stdlib.operation("List", "append"))) {
+                    instanceof AnOperationApplied applied) || !applied.putsListsEndToEnd()) {
                 return false;
             }
             Set<Core> operands = new LinkedHashSet<>();
             boolean carried = false;
             boolean descends = false;
-            for (Core written : args) {
+            for (Core written : applied.args()) {
                 Core each = Core.withoutStanding(written);
                 if (!operands.add(each)) {
                     continue;
