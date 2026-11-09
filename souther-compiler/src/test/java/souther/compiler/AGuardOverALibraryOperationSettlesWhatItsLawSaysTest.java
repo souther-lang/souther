@@ -14,6 +14,7 @@ import java.math.BigInteger;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
@@ -435,6 +436,31 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             new Row("Share(List.product(xs ++ ys) - List.product(xs) * List.product(ys))", false),
             new Row("Share(List.product(xs ++ ys) - List.product(xs) * List.product(xs))", true));
 
+    /** What a call answers only where it answers: {@code xs = [MAX, 1]} and {@code ys = [-1]} add
+     *  up to {@code MAX} as a whole and the call over {@code xs} alone answers nothing, so no row
+     *  that reads the call in a branch it is not evaluated in may rule out the branch that is. */
+    private static final List<Row> ROWS_OF_CALLS_NOT_EVALUATED = List.of(
+            new Row("if List.sum(xs ++ ys) == 9223372036854775807 && List.sum(ys) == -1 then "
+                    + "Digit(0 - 1) else if List.sum(xs) == 0 then Digit(0) else Digit(0)", true),
+            new Row("if List.sum(xs ++ ys) == 9223372036854775807 && List.sum(ys) == -1 then "
+                    + "Digit(0 - 1) else Digit(0)", true),
+            new Row("if List.sum(xs ++ ys) == 9223372036854775807 && List.sum(ys) == -1 then "
+                    + "Digit(0) else if List.sum(xs) == 0 then Digit(0 - 1) else Digit(0)", true),
+            new Row("if List.sum(xs ++ ys) == 9223372036854775807 && List.sum(ys) == -1 then "
+                    + "Digit(0) else if List.sum(xs) == 0 then Digit(0) else Digit(0)", false));
+
+    @Test
+    void aCallNotEvaluatedOnAPathRulesNothingOutOfIt() {
+        List<String> wrong = new ArrayList<>();
+        for (Row row : ROWS_OF_CALLS_NOT_EVALUATED) {
+            boolean owed = owedBy(row.body());
+            if (owed != row.owed()) {
+                wrong.add(row.body() + ": owed " + owed + ", expected " + row.owed());
+            }
+        }
+        assertEquals(List.of(), wrong, "each row is owed exactly what its law leaves open");
+    }
+
     @Test
     void eachRowOfDecimalsIsOwedWhatItsLawLeavesOpen() {
         List<String> wrong = new ArrayList<>();
@@ -509,6 +535,35 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                 ? body.append(copies).append(" * List.sum(xs)) }")
                 : body.append("List.sum(a").append(times - 1).append(") - List.sum(a")
                         .append(times - 1).append(")) }")).toString();
+    }
+
+    /** A list put together one more list at a time, each a list of its own, as many steps as
+     *  {@code length} and one name for each, then {@code last} of the names. */
+    private static String chained(int length, IntFunction<String> last) {
+        StringBuilder body = new StringBuilder("{ let a0 = [x]\n");
+        for (int step = 1; step < length; step++) {
+            body.append("  let a").append(step).append(" = a").append(step - 1).append(" ++ [x + ")
+                    .append(step).append("]\n");
+        }
+        return body.append("  ").append(last.apply(length - 1)).append(" }").toString();
+    }
+
+    /**
+     * Every step of a chain holds the leaves of the step before it and one more, so what is held
+     * for the steps comes to the square of the length. The source bounds the length (E2107), and
+     * at the longest it allows the relation is still read, in the time the rest of the check
+     * takes.
+     */
+    @Test
+    void aListPutTogetherOfAsManyListsAsASourceMayWriteIsTakenApart() {
+        assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
+            assertEquals(false, owedBy(chained(300,
+                    last -> "Digit(List.sum(List.reverse(a" + last + ")) - List.sum(a" + last
+                            + "))")), "the same elements, the other way round");
+            assertEquals(true, owedBy(chained(300,
+                    last -> "Digit(List.sum(List.reverse(a" + last + ")) - List.sum(a" + (last - 1)
+                            + "))")), "one element fewer");
+        });
     }
 
     /** The product of {@code xs} put together with itself {@code times} times over, less the

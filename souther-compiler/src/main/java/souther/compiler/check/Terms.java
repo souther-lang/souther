@@ -3200,6 +3200,11 @@ final class Terms {
      * What the domain is told of the values of {@code atom}: its carrier's space, except for an
      * exact total, which is a number the type of the call answering it may not hold and so has
      * the spacing of the type and no end.
+     *
+     * <p>No end is said of it because none is known to the domain, which is less than saying it
+     * has none: an exact total is not unbounded as a claim, and no reader may take it for one. It
+     * is what keeps every law over exact totals true of the totals themselves, whether or not the
+     * call over them answers.
      */
     private static NumberSpace spaceOf(FactSubject atom, Carrier carrier) {
         return atom.identity().shape() == Term.Shape.EXACT_TOTAL
