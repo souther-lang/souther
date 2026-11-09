@@ -50,6 +50,58 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
                 """));
     }
 
+    /** Where a value is not in a set, the insert of it holds one more, as {@code taken + 1} does of
+     *  a count. So what the invariants and the guards show of the seats kept as a set is what they
+     *  show of the seats kept as a count, whichever way the invariants are declared and whether or
+     *  not the guard on the free seats is there. */
+    @Test
+    void aSetOfSeatsIsReadAsTheCountOfThemIs() {
+        for (boolean guardsFree : new boolean[] {true, false}) {
+            for (boolean balanceFirst : new boolean[] {true, false}) {
+                String balance = "invariant balance = %s + free == cap && free >= 0";
+                String within = "invariant withinCap = %s <= cap";
+                String freeGuard = guardsFree ? "guard s.free > 0 else Full" : "";
+                List<String> asSet = warnings("""
+                        module seats
+
+                        data Seats = { taken: Set<Int>, free: Int, cap: Int }
+                            %s
+                            %s
+
+                        behavior take : (s: Seats, n: Int) -> Seats | Already | Full
+                            constructs Seats
+                        let take (s, n) = {
+                            guard Bool.not(Set.contains(n, s.taken)) else Already
+                            %s
+                            Seats { ...s, taken = Set.insert(n, s.taken), free = s.free - 1 }
+                        }
+                        """.formatted(
+                        (balanceFirst ? balance : within).formatted("Set.size(taken)"),
+                        (balanceFirst ? within : balance).formatted("Set.size(taken)"),
+                        freeGuard));
+                List<String> asCount = warnings("""
+                        module seats
+
+                        data Seats = { taken: Int, free: Int, cap: Int }
+                            %s
+                            %s
+
+                        behavior take : (s: Seats, n: Int) -> Seats | Full
+                            constructs Seats
+                        let take (s, n) = {
+                            %s
+                            Seats { ...s, taken = s.taken + 1, free = s.free - 1 }
+                        }
+                        """.formatted(
+                        (balanceFirst ? balance : within).formatted("taken"),
+                        (balanceFirst ? within : balance).formatted("taken"),
+                        freeGuard));
+                assertEquals(asCount, asSet, "guardsFree=" + guardsFree + " balanceFirst=" + balanceFirst);
+                assertEquals(guardsFree, asSet.isEmpty(), "the guard on the free seats is not spare");
+            }
+        }
+    }
+
     @Test
     void theConditionReadEitherWayIsTheSameNumber() {
         assertEquals(List.of(), warnings(SEATS + """
