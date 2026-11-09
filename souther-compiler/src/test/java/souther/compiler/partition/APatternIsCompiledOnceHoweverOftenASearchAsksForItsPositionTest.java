@@ -133,9 +133,10 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
      * up, by what the rules offer together, and at exactly four, by a value of the length the count
      * asks for — two questions, each worked out once, each building its own strings of that length.
      *
-     * <p>A format that fixes the length is a count too: the strings of exactly four characters are
-     * what it says of the value, so where the value is refused the one question that lays them
-     * over the format builds its own machine once.
+     * <p>A format whose lengths the rules imply is a count too: the generator draws a line at the
+     * length the format allows and asks for a string of that many characters, and where the value
+     * is refused that one question lays the strings of that length over the format and builds its
+     * own machine once. It is so of a format that fixes the length and of one that only bounds it.
      */
     private static final Map<String, Integer> MACHINES_BUILT = Map.of(
             A_FORMAT, 1,
