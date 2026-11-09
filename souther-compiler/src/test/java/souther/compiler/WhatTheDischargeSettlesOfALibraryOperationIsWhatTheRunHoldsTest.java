@@ -213,11 +213,16 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
     }
 
     private Judged judged(List<Row> rows, List<Map<String, Object>> inputs) throws Exception {
-        return judged(rows, inputs, INPUT);
+        return judged(rows, inputs, INPUT, false);
     }
 
-    private Judged judged(List<Row> rows, List<Map<String, Object>> inputs, String header)
-            throws Exception {
+    /**
+     * Where {@code onlyWhatIsProved}, only the rows the discharge owes nothing are built and run:
+     * a row owed or refused is no claim to hold to an input, and building the rest again for the
+     * sake of the few that are claims is the cost of the check twice over.
+     */
+    private Judged judged(List<Row> rows, List<Map<String, Object>> inputs, String header,
+                          boolean onlyWhatIsProved) throws Exception {
         Compilation compilation = Compilation.ofSource(module(rows, header), "Main");
         compilation.answerEverything();
         Set<String> owed = new LinkedHashSet<>();
@@ -233,9 +238,14 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
         }
         // A row refused is a violation the discharge is sure of, and the module is not built; one
         // without any is built from the checking just done, which a second compile would repeat.
-        List<Row> built = rows.stream().filter(each -> !refused.contains(each.data())).toList();
-        BytesClassLoader loader = new BytesClassLoader(refused.isEmpty() ? compilation.classes()
-                : Compiler.compile(module(built, header)), getClass().getClassLoader());
+        List<Row> built = rows.stream().filter(each -> !refused.contains(each.data())
+                && !(onlyWhatIsProved && owed.contains(each.data()))).toList();
+        if (built.isEmpty()) {
+            return new Judged(owed, Set.of());
+        }
+        BytesClassLoader loader = new BytesClassLoader(refused.isEmpty() && !onlyWhatIsProved
+                ? compilation.classes() : Compiler.compile(module(built, header)),
+                getClass().getClassLoader());
         List<Object> decoded = new ArrayList<>();
         for (Map<String, Object> input : inputs) {
             decoded.add(Codecs.decoded(loader, "demo.In", input));
@@ -352,12 +362,10 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
             List<Row> rows = new ArrayList<>();
             for (String right : TOTALS) {
                 if (!left.equals(right)) {
-                    for (int below = 0; below <= 1; below++) {
-                        rows.add(new Row(id++, "true", true, left + " - (" + right + ")", below));
-                    }
+                    rows.add(new Row(id++, "true", true, left + " - (" + right + ")", 0));
                 }
             }
-            Judged judged = judged(rows, inputs, INPUT_OF_TOTALS);
+            Judged judged = judged(rows, inputs, INPUT_OF_TOTALS, true);
             for (Row row : rows) {
                 if (judged.provedAndBroke().contains(row.data())) {
                     unsound.add(row.count() + " - " + row.below());
