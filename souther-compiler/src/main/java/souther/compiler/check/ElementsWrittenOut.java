@@ -2,11 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
-import souther.compiler.core.Kernel;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import net.unit8.notation199x.ScalarValues;
 
@@ -321,15 +319,14 @@ public final class ElementsWrittenOut {
      */
     public static <E> Occurrence<E> picked(Core option, E at, Reading<E> reading) {
         Stood<E> call = reading.standing(option, at);
-        if (!(AnOperationApplied.of(call.value()) instanceof AnOperationApplied(
-                ValueName.Stdlib.Operation operation, List<Core> args))
-                || reading.symbols().kernelOf(operation) != Kernel.LIST_GET || args.size() != 2
-                || !(Core.withoutStanding(reading.standing(args.get(0), call.at()).value())
+        if (!(AnOperationApplied.of(call.value()) instanceof AnOperationApplied applied)
+                || !(applied.picks() instanceof AnOperationApplied.Picked picked)
+                || !(Core.withoutStanding(reading.standing(picked.index(), call.at()).value())
                         instanceof Core.Int index)
                 || index.value() < 0 || index.value() >= MOST_WALKED) {
             return null;
         }
-        Stood<E> list = reading.standing(args.get(1), call.at());
+        Stood<E> list = reading.standing(picked.list(), call.at());
         // As many as the index reaches, and as many again for each passed over on the way.
         int enough = (int) index.value() + 1;
         while (true) {
@@ -374,17 +371,13 @@ public final class ElementsWrittenOut {
             }
             return new Walked.Each<>(out);
         }
-        if (AnOperationApplied.of(value) instanceof AnOperationApplied(
-                ValueName.Stdlib.Operation operation, List<Core> args)
-                && reading.symbols().kernelOf(operation) == Kernel.STRING_CODE_POINTS
-                && args.size() == 1) {
-            return codePointsOf(reading.standing(args.getFirst(), at), value, enough, walked);
+        AnOperationApplied listing = AnOperationApplied.of(value);
+        if (listing != null && listing.whoseCodePointsItLists() != null) {
+            return codePointsOf(reading.standing(listing.whoseCodePointsItLists(), at), value,
+                    enough, walked);
         }
-        if (AnOperationApplied.of(value) instanceof AnOperationApplied(
-                ValueName.Stdlib.Operation operation, List<Core> args)
-                && reading.symbols().kernelOf(operation) == Kernel.LIST_RANGE_INCLUSIVE
-                && args.size() == 2) {
-            return rangeOf(args, value, at, reading, enough, walked);
+        if (listing != null && listing.between() != null) {
+            return rangeOf(listing.between(), value, at, reading, enough, walked);
         }
         Pieces<E> pieces = piecesOf(value, at, reading);
         if (pieces == null) {
@@ -564,10 +557,10 @@ public final class ElementsWrittenOut {
      * including {@code to}, where both stand as numbers written down — none where {@code from} is
      * past {@code to}, and nothing written out where either turns on the run.
      */
-    private static <E> Walked<E> rangeOf(List<Core> bounds, Core call, E at, Reading<E> reading,
-                                         int enough, int[] walked) {
-        if (!(reading.folded(reading.standing(bounds.get(0), at)).orElse(null) instanceof Long from)
-                || !(reading.folded(reading.standing(bounds.get(1), at)).orElse(null)
+    private static <E> Walked<E> rangeOf(AnOperationApplied.Between bounds, Core call, E at,
+                                         Reading<E> reading, int enough, int[] walked) {
+        if (!(reading.folded(reading.standing(bounds.from(), at)).orElse(null) instanceof Long from)
+                || !(reading.folded(reading.standing(bounds.to(), at)).orElse(null)
                         instanceof Long to)) {
             return new Walked.NotWrittenOut<>();
         }

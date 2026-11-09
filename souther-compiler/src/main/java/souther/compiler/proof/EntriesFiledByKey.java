@@ -1,5 +1,6 @@
 package souther.compiler.proof;
 
+import souther.compiler.core.TheWalk;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
@@ -7,6 +8,7 @@ import souther.compiler.types.ValueName;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Which operations the library defines answer a map holding each element of a list, under the key
@@ -32,23 +34,14 @@ public final class EntriesFiledByKey {
      */
     public record Filing(int keyArg, int walkedArg) {}
 
-    /** The walk a {@code fold} is written as, handed the index it starts at. */
-    private static final ValueName.Stdlib.Operation FOLD_FROM =
-            ValueName.Stdlib.operation("List", "foldFrom");
-
-    private static final ValueName.Stdlib.Operation EMPTY =
-            ValueName.Stdlib.operation("Map", "empty");
-
-    private static final ValueName.Stdlib.Operation INSERT =
-            ValueName.Stdlib.operation("Map", "insert");
-
     private EntriesFiledByKey() {}
 
-    /** The operations among {@code library}'s helpers that file each element under its key. */
-    public static Map<ValueName.Stdlib.Operation, Filing> of(Stdlib library) {
+    /** The operations among {@code stdlib}'s helpers that file each element under its key, read
+     *  as {@code library} declares the operations they are written with. */
+    public static Map<ValueName.Stdlib.Operation, Filing> of(Stdlib stdlib, Library library) {
         Map<ValueName.Stdlib.Operation, Filing> filings = new LinkedHashMap<>();
-        library.helpers().forEach((operation, declaration) -> {
-            Filing read = readOff(LibraryTerms.of(library, declaration));
+        stdlib.helpers().forEach((operation, declaration) -> {
+            Filing read = readOff(LibraryTerms.of(stdlib, declaration), stdlib.walk(), library);
             if (read != null) {
                 filings.put(operation, read);
             }
@@ -57,34 +50,38 @@ public final class EntriesFiledByKey {
     }
 
     /** The filing {@code body} is, or null where it is none. */
-    private static Filing readOff(LibraryTerm body) {
-        if (!(body instanceof LibraryTerm.Call(var walk, List<LibraryTerm> args))
-                || !walk.equals(FOLD_FROM) || args.size() != 4
-                || !(args.get(3) instanceof LibraryTerm.WholeNumber(long from)) || from != 0
-                || !(args.get(0) instanceof LibraryTerm.Closure(List<BindingId> params,
+    private static Filing readOff(LibraryTerm body, TheWalk walk, Library library) {
+        if (!(body instanceof LibraryTerm.Call(var walks, List<LibraryTerm> args))
+                || !walks.equals(walk.operation()) || args.size() != library.takes(walks).size()
+                || !(args.get(walk.index()) instanceof LibraryTerm.WholeNumber(long from))
+                || from != 0
+                || !(args.get(walk.step()) instanceof LibraryTerm.Closure(List<BindingId> params,
                         LibraryTerm step))
                 || params.size() != 2
-                || !(args.get(1) instanceof LibraryTerm.Call(var seed, List<LibraryTerm> none))
-                || !seed.equals(EMPTY) || !none.isEmpty()
-                || !(args.get(2) instanceof LibraryTerm.Parameter(int walked))
+                || !(args.get(walk.seed()) instanceof LibraryTerm.Call(var seed,
+                        List<LibraryTerm> none))
+                || !library.answersNothing(seed) || !none.isEmpty()
+                || !(args.get(walk.container()) instanceof LibraryTerm.Parameter(int walked))
                 || !(step instanceof LibraryTerm.Call(var filing, List<LibraryTerm> filed))
-                || !filing.equals(INSERT) || filed.size() != 3) {
+                || !(library.puts(filing) instanceof Library.Put(int value, int into,
+                        Optional<Integer> under))
+                || under.isEmpty()) {
             return null;
         }
-        BindingId accumulator = params.get(0);
-        BindingId element = params.get(1);
+        BindingId accumulator = params.get(walk.accumulator());
+        BindingId element = params.get(walk.element());
         // The key is what a closure given the element answers, the value is the element itself,
         // and the map it is filed in is the one so far.
-        if (!(filed.get(0) instanceof LibraryTerm.Applied(
+        if (!(filed.get(under.get()) instanceof LibraryTerm.Applied(
                         LibraryTerm function, List<LibraryTerm> appliedTo))
                 || !(function instanceof LibraryTerm.Parameter(int key))
                 || appliedTo.size() != 1
                 || !(appliedTo.getFirst() instanceof LibraryTerm.Bound(BindingId keyed))
                 || !keyed.equals(element)
-                || !(filed.get(1) instanceof LibraryTerm.Bound(BindingId value))
-                || !value.equals(element)
-                || !(filed.get(2) instanceof LibraryTerm.Bound(BindingId into))
-                || !into.equals(accumulator)) {
+                || !(filed.get(value) instanceof LibraryTerm.Bound(BindingId held))
+                || !held.equals(element)
+                || !(filed.get(into) instanceof LibraryTerm.Bound(BindingId carried))
+                || !carried.equals(accumulator)) {
             return null;
         }
         return new Filing(key, walked);

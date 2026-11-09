@@ -1115,6 +1115,7 @@ final class MeaningAssumptions {
         if (parameter != null && fields != null) {
             return terms.under(terms.placeSubject(parameter), fields);
         }
-        Core reading = places.standing().get(new ReadAt(position, identity));        return reading == null ? null : terms.subjectOf(reading, at);
+        Core reading = places.standing().get(new ReadAt(position, identity));
+        return reading == null ? null : terms.subjectOf(reading, at);
     }
 }

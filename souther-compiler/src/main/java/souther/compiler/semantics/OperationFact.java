@@ -293,6 +293,41 @@ public sealed interface OperationFact {
     }
 
     /**
+     * What the operation answers holds a value exactly where {@code container} files one under the
+     * value of {@code key}, and it is that value: {@code Map.get(k, m)} is {@code Some(v)} where
+     * {@code m} holds {@code v} under {@code k}, and nothing where it holds nothing under it.
+     *
+     * <p>Where an operation's key and container are, which a reader of a lookup asks of the
+     * operation and never spells out as a name and a place. An element of the container is what is
+     * answered, so {@link AnswersAnElementOf} is derived from this and not stated beside it.
+     */
+    record AnswersTheValueFiledUnder(ArgumentRef key, ArgumentRef container)
+            implements OperationFact {
+
+        public AnswersTheValueFiledUnder {
+            Objects.requireNonNull(key, "a value is filed under some key");
+            Objects.requireNonNull(container, "by some container");
+        }
+    }
+
+    /**
+     * What the operation answers holds a value exactly where {@code list} holds an element at the
+     * whole number {@code index} names, and it is that element: {@code List.get(i, xs)} is
+     * {@code Some(x)} where {@code xs} has an {@code i}th element and nothing where it has not.
+     *
+     * <p>Where an operation's index and list are, which a reader of a pick asks of the operation
+     * and never spells out as a name and a place. An element of the list is what is answered, so
+     * {@link AnswersAnElementOf} is derived from this and not stated beside it.
+     */
+    record AnswersTheElementAt(ArgumentRef index, ArgumentRef list) implements OperationFact {
+
+        public AnswersTheElementAt {
+            Objects.requireNonNull(index, "an element is picked at some place");
+            Objects.requireNonNull(list, "of some list");
+        }
+    }
+
+    /**
      * What the operation answers holds, where it holds a value, an element of {@code source} that
      * the closure it is handed answers true on: {@code List.find(p, xs)} is {@code Some(x)} only for
      * an {@code x} of {@code xs} with {@code p(x)}.
@@ -584,14 +619,39 @@ public sealed interface OperationFact {
      * with the value under that key replaced. Both are this statement, which says what each element
      * of the answer was and nothing about which of {@code into}'s it gave up.
      *
+     * <p>Where {@code under} is present, the container files what it holds under keys, and the
+     * answer holds {@code value} filed under that argument's value: the key it is put under is
+     * stated, so a reader that needs the entry put in, and not only the value, reads it here.
+     *
      * <p>An axiom of a kernel, read by the proofs of what the library's written operations build out
      * of what they are handed, and by nothing a reader of a condition is handed.
      */
-    record PutsAValueIn(ArgumentRef value, ArgumentRef into) implements OperationFact {
+    record PutsAValueIn(ArgumentRef value, ArgumentRef into, Optional<ArgumentRef> under)
+            implements OperationFact {
 
         public PutsAValueIn {
             Objects.requireNonNull(value, "this one names the value put in");
             Objects.requireNonNull(into, "and what it is put in");
+            Objects.requireNonNull(under, "and whether a key says where it is filed");
+        }
+    }
+
+    /**
+     * The operation answers the entries of {@code source} where its closure holds of them, and no
+     * other: of each entry of the source, the answer holds that key with that value where the
+     * closure answers true of the key and the value, and holds nothing under that key where it
+     * answers false.
+     *
+     * <p>Said of the entries and not of the values. What a container's elements are is its values,
+     * and the closure of a map's filter is handed the key beside the value, so which entries are
+     * kept is not a statement of which values are: two entries of one value are kept apart by their
+     * keys. What a reader asks of the entries that were kept — how many meet another statement of a
+     * key and a value — is asked of the source's entries where both statements hold.
+     */
+    record KeepsTheEntriesWhereItHolds(ArgumentRef source) implements OperationFact {
+
+        public KeepsTheEntriesWhereItHolds {
+            Objects.requireNonNull(source, "what is kept is kept of the entries of a map");
         }
     }
 

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -2788,16 +2789,16 @@ public final class FieldDomains {
         }
         Term walked = call.parts().getFirst();
         LinearForm<List<String>> each = LinearForm.atom(List.of());
-        if (EACH_ELEMENT_MAPPED.equals(walked.calledOperation()) && walked.parts().size() == 2) {
-            each = walked.parts().getFirst().formAClosureOfOneAnswers();
-            walked = walked.parts().getLast();
+        BoundOperationFacts.Assembled mapped = walked.calledOperation() == null ? null
+                : DefaultBoundOperationFacts.get().assembles(walked.calledOperation());
+        if (mapped != null && mapped.piece() == PieceOfAnElement.THE_CLOSURES_ANSWER
+                && walked.parts().size() == 2) {
+            each = walked.parts().get(mapped.closure().position()).formAClosureOfOneAnswers();
+            walked = walked.parts().get(mapped.source().position());
         }
         RuleKey container = each == null ? null : namedBy.get(FactSubject.of(walked));
         return container == null ? null : new TotalSpokenOf(container, operation, each);
     }
-
-    /** The operation that hands on what a closure answers of each element of a list. */
-    private static final ValueName EACH_ELEMENT_MAPPED = ValueName.Stdlib.operation("List", "map");
 
     /** The atom of a count this reading may not have, which is what every lookup of one wants. */
     private static FactSubject atomOf(Counted counted) {

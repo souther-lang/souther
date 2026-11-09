@@ -104,7 +104,8 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
     private static String blockOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();        return GeneratedRows.of(compilation, "example.gap", "f",
+        compilation.answerEverything();
+        return GeneratedRows.of(compilation, "example.gap", "f",
                 SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 

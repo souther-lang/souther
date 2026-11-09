@@ -9,6 +9,7 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.StatedComparison;
@@ -23,7 +24,6 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
-import souther.compiler.core.Kernel;
 import souther.compiler.inputs.DecimalAdditiveWalk;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.DecimalWork;
@@ -102,11 +102,6 @@ import java.util.stream.IntStream;
  * @param claim what the operator states about the threshold's own value
  */
 record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonClaim claim) {
-
-    /** The library's widening of a whole number to a decimal: exact, and no place past the
-     *  point. */
-    private static final ValueName.Stdlib.Operation WIDENS_A_WHOLE_NUMBER =
-            ValueName.Stdlib.operation("Decimal", "fromInt");
 
     /**
      * What reading {@code comparison} as a line came to.
@@ -648,8 +643,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  numbers: a division of two of them has as many places as it is asked for. */
             private boolean aDecimalMadeOfWholeNumbers(Core call) {
                 return Core.withoutStanding(call) instanceof Core.PreservedCall kept
-                        && kept.operation() instanceof ValueName.Stdlib.Operation operation
-                        && WIDENS_A_WHOLE_NUMBER.equals(operation);
+                        && DefaultBoundOperationFacts.get().widensAWholeNumber(kept.operation());
             }
 
             /**
@@ -830,7 +824,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
                         || call.args().size() != 1
                         || !(call.operation() instanceof ValueName.Stdlib.Operation operation)
-                        || ruleSource.symbols().kernelOf(operation) != Kernel.LIST_LENGTH
+                        || NumericMeasures.counts(operation) != NumericMeasures.Counts.LIST
                         || !theListEndsOnlyWhereItHasNoPlace(
                                 new Denotation(call.args().get(0), at))) {
                     return false;
@@ -1131,7 +1125,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         NumericTerm total = addedAsItIs(numbers);
                         Core.Block closure = total == null ? null : theClosureOfASum(node);
                         AddedOfEachElement each = closure == null ? null
-                                : AddedOfEachElement.ofAClosure(closure, ruleSource.symbols());
+                                : AddedOfEachElement.ofAClosure(closure);
                         if (each == null || !preparedWithoutAStop(node, at, closure, node)) {
                             told.exact = false;
                         } else if (Core.withoutStanding(node).type() == Type.DECIMAL) {
@@ -1688,7 +1682,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 NumericTerm total = addedAsItIs(walk.added());
                 AddedOfEachElement each = total == null ? null : joinsTwoMaps(total)
                         ? AddedOfEachElement.ofAJoin()
-                        : AddedOfEachElement.ofTheStep(seeded, ruleSource.symbols());
+                        : AddedOfEachElement.ofTheStep(seeded);
                 if (seeded.step().body().type() == Type.DECIMAL) {
                     BigDecimal seed = aDecimalWrittenOut(seeded.seed());
                     if (seed == null || each == null) {
@@ -1815,8 +1809,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /** Whether {@code walk}'s step is the answer so far plus a whole number written out. */
             private boolean addsAWrittenWholeNumber(SeededWalk walk) {
-                List<Core> sum = WrittenOperation.operandsOf(walk.step().body(), BinOp.ADD,
-                        ruleSource.symbols());
+                List<Core> sum = WrittenOperation.operandsOf(walk.step().body(), BinOp.ADD);
                 BindingId carried = walk.accumulator().binding();
                 return sum != null && ((isTheAnswerSoFar(sum.get(0), carried)
                         && Core.withoutStanding(sum.get(1)) instanceof Core.Int)

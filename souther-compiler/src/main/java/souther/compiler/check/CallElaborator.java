@@ -875,7 +875,7 @@ public final class CallElaborator {
             if (orderedElement != null) {
                 orderingSubject = orderedElement;
             }
-            if (kernel == Kernel.LIST_SUM || kernel == Kernel.LIST_PRODUCT) {
+            if (DefaultBoundOperationFacts.get().foldsNumbers(callee.denotes())) {
                 applied = settlingTheElement(call, applied, expected);
             }
             Core.KernelFact fact;

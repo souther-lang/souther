@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.SeededWalk;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.ElementValue;
@@ -134,22 +133,21 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
      * added to, or taken from, what is worked out of the element. Null where the step is anything
      * else, or reads the answer so far anywhere but there.
      */
-    static AddedOfEachElement ofTheStep(SeededWalk walk, Symbols symbols) {
+    static AddedOfEachElement ofTheStep(SeededWalk walk) {
         AddedOfEachElement read = new Reader(walk.element().binding(),
-                walk.accumulator().binding(), symbols).read(walk.step().body());
+                walk.accumulator().binding()).read(walk.step().body());
         return read != null && read.answer() instanceof Worked && addsTo(read.answer())
                 ? read : null;
     }
 
     /** What {@code closure} works out of the one element it is handed, as a part a total adds up;
      *  null where it works out anything else. */
-    static AddedOfEachElement ofAClosure(Core.Block closure, Symbols symbols) {
+    static AddedOfEachElement ofAClosure(Core.Block closure) {
         if (closure.params().size() != 1 || closure.params().getFirst() == null
                 || closure.params().getFirst().binding() == null) {
             return null;
         }
-        return new Reader(closure.params().getFirst().binding(), null, symbols)
-                .read(closure.body());
+        return new Reader(closure.params().getFirst().binding(), null).read(closure.body());
     }
 
     /**
@@ -386,15 +384,13 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
 
         private final BindingId element;
         private final BindingId carried;
-        private final Symbols symbols;
         private final List<Bound> bound = new ArrayList<>();
         /** What each name given so far stands for, where it is a path of the element. */
         private final Map<BindingId, Core> paths = new LinkedHashMap<>();
 
-        Reader(BindingId element, BindingId carried, Symbols symbols) {
+        Reader(BindingId element, BindingId carried) {
             this.element = element;
             this.carried = carried;
-            this.symbols = symbols;
         }
 
         /** {@code body} as what it works out, or null where any of it is anything else, or it
@@ -417,7 +413,7 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
         private Part partOf(Core e) {
             Core bare = Core.withoutStanding(e);
             for (BinOp op : List.of(BinOp.ADD, BinOp.SUB, BinOp.MUL)) {
-                List<Core> operands = WrittenOperation.operandsOf(bare, op, symbols);
+                List<Core> operands = WrittenOperation.operandsOf(bare, op);
                 if (operands != null) {
                     Part left = partOf(operands.get(0));
                     Part right = left == null ? null : partOf(operands.get(1));

@@ -128,6 +128,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "the one reading of an operator for what it places"),
             new Held("souther.compiler.semantics.ConditionJoin.of",
                     "the one reading of an operator for what a connective composes"),
+            new Held("souther.compiler.semantics.ConditionJoin.operator",
+                    "the operator that composes a way, asked of the same table and so named nowhere"),
 
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "which operands an operator takes and what it answers, which is a question"
@@ -574,10 +576,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.inputs.WrittenOperation.operandsOf",
                     "asks whether an expression is one sum, difference or product of whole numbers"
                             + " or decimals, by the operator or the library's operation"),
-            new Held("souther.compiler.inputs.WrittenOperation.isTheLibrarys",
-                    "asks which kernels of the library are the operator written as a call"),
-            new Held("souther.compiler.inputs.WrittenOperation.<clinit>",
-                    "names the kernels of the library each operator is written as"),
             new Held("souther.compiler.partition.AffineReading.1.addsAWrittenWholeNumber",
                     "asks whether a walk's step is the answer so far plus a written whole number,"
                             + " so that every answer so far lies between the seed and the answer"),
@@ -659,6 +657,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "hands back the operator a library fact states its other case by"),
             new Held("souther.compiler.check.DischargeRules.operator",
                     "reads the operator a library operation is declared to compute"),
+            new Held("souther.compiler.check.AnOperationApplied.theOperatorItComputes",
+                    "hands a reader of an application the operator its operation is declared to"
+                            + " compute, so none of them names a kernel to know it"),
             new Held("souther.compiler.semantics.Arithmetic.writtenAs",
                     "answers with the operator the language writes an arithmetic as, which is none"
                             + " for an arithmetic it writes no operator for"),
@@ -703,6 +704,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "writes the statement that holds of a set of whole numbers the one way, as the"
                             + " order of a value below a whole number and the equality: above 2 and"
                             + " at least 3 are one statement of whole numbers"),
+            new Held("souther.compiler.check.Term.Interner.closureAnsweringBoth",
+                    "writes both of two statements of one element or one entry as the operator"
+                            + " that joins them is written, so a filter of a filter and the two"
+                            + " statements written together are one term"),
             new Held("souther.compiler.check.Terms.additiveLeaves",
                     "takes an expression through sums and differences to the values it is made of,"
                             + " which are the ones a form over it is written over: a walk among"

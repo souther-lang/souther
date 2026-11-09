@@ -926,7 +926,7 @@ public final class LibraryProver {
                     }
                     held = after instanceof Value.Made(ValueName.Stdlib.Operation puts,
                             List<Value> args)
-                            && library.puts(puts) instanceof Library.Put(int value, int into)
+                            && library.puts(puts) instanceof Library.Put(int value, int into, var _)
                             && args.get(into).equals(before)
                             && follows(each, List.of(), Props.compared(
                                     reading.size(args.get(value)), Rel.LE,

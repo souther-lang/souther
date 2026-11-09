@@ -280,6 +280,21 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "- Set.size(a) - Set.size(b))", true),
             new Row("Digit(Set.size(Set.union(a, b)) + Set.size(Set.intersection(a, b)) "
                     + "- Set.size(a) - Set.size(b) - 1)", true),
+            // A filter of a map's entries keeps the entries both statements of a key and a value
+            // hold of.
+            new Row("Digit(Map.size(Map.filterEntries((k, v) -> v > 2, "
+                    + "Map.filterEntries((k, v) -> k == \"a\", ma))) "
+                    + "- Map.size(Map.filterEntries((k, v) -> k == \"a\" && v > 2, ma)))", false),
+            new Row("Digit(Map.size(Map.filterEntries((k, v) -> k == \"a\" && v > 2, ma)) "
+                    + "- Map.size(Map.filterEntries((k, v) -> v > 2, "
+                    + "Map.filterEntries((k, v) -> k == \"a\", ma))))", false),
+            new Row("Digit(Map.size(Map.filterEntries((k, v) -> v > 2, "
+                    + "Map.filterEntries((k, v) -> k == \"a\", ma))) "
+                    + "- Map.size(Map.filterEntries((k, v) -> k == \"a\" && v > 2, ma)) - 1)",
+                    true),
+            new Row("Digit(Map.size(Map.filterEntries((k, v) -> v > 2, "
+                    + "Map.filterEntries((k, v) -> k == \"a\", ma))) "
+                    + "- Map.size(Map.filterEntries((k, v) -> k == \"b\" && v > 2, ma)))", true),
             // The same of the keys of two maps.
             new Row("Digit(Map.size(mb) - Map.size(Map.intersection(ma, mb)))", false),
             new Row("Digit(Map.size(ma) - Map.size(Map.intersection(ma, mb)))", false),

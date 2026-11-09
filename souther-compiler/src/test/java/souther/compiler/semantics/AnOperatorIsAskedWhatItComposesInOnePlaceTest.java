@@ -43,6 +43,10 @@ class AnOperatorIsAskedWhatItComposesInOnePlaceTest {
     private record Licence(String who, int calls, String why) { }
 
     private static final List<Licence> MAY_ASK = List.of(
+            new Licence("souther.compiler.semantics.ConditionJoin.operator", 1,
+                    "the table read the other way, by the table's own owner: which operator"
+                            + " composes a way is asked of the one table, and no reader names a"
+                            + " connective to build the term a condition joined is"),
             new Licence("souther.compiler.partition.Condition.of", 1,
                     "the one place a condition of a body becomes a shape, which carries the"
                             + " composition to every reader of that shape"),

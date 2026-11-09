@@ -290,13 +290,13 @@ public final class BoundaryConstraints {
                 || !isValue(call.args().get(0))) {
             return null;
         }
-        if (applies(call, Kernel.STRING_LENGTH)) {
-            return Measured.STRING_LENGTH;
-        }
-        if (applies(call, Kernel.LIST_LENGTH)) {
-            return Measured.LIST_LENGTH;
-        }
-        return applies(call, Kernel.MAP_SIZE) ? Measured.MAP_SIZE : null;
+        NumericMeasures.Counts counts = NumericMeasures.counts(call.operation());
+        return counts == null ? null : switch (counts) {
+            case STRING -> Measured.STRING_LENGTH;
+            case LIST -> Measured.LIST_LENGTH;
+            case MAP -> Measured.MAP_SIZE;
+            case SET -> null;
+        };
     }
 
     /**

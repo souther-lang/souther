@@ -201,18 +201,10 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         }
     }
 
-    private static final ValueName.Stdlib.Operation EMPTY =
-            ValueName.Stdlib.operation("Map", "empty");
-
-    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
-
-    private static final ValueName.Stdlib.Operation INSERT =
-            ValueName.Stdlib.operation("Map", "insert");
-
     /** Read once: the library is the same library for every module compiled. */
     private static final class Derived {
         private static final Map<ValueName.Stdlib.Operation, KeyedUpdates.Update> UPDATES =
-                KeyedUpdates.of(DefaultStdlib.get());
+                KeyedUpdates.of(DefaultStdlib.get(), DefaultBoundOperationFacts.library());
     }
 
     /** What one step of the walk files, under which key, and where it binds what it found. */
@@ -223,8 +215,9 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
      * library writes that files under a key of it — or null where it is neither.
      */
     public static Core mapOf(AnOperationApplied applied) {
-        if (applied.operation().equals(GET)) {
-            return mapLookedUpIn(applied);
+        Core looked = mapLookedUpIn(applied);
+        if (looked != null) {
+            return looked;
         }
         KeyedUpdates.Update update = applied.operation() instanceof ValueName.Stdlib.Operation named
                 ? Derived.UPDATES.get(named) : null;
@@ -234,8 +227,8 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
     /** The map {@code applied} looks a key up in, which it reads and changes nothing of — or null
      *  where it is no lookup. */
     public static Core mapLookedUpIn(AnOperationApplied applied) {
-        return applied.operation().equals(GET) && applied.args().size() == 2
-                ? applied.args().get(1) : null;
+        AnOperationApplied.Lookup lookup = applied.lookup();
+        return lookup == null ? null : lookup.container();
     }
 
     /**
@@ -262,7 +255,9 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
         if (walk == null || walk.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
                 || !(AnOperationApplied.of(sides.standing(walk.seed(), at).value())
                 instanceof AnOperationApplied seed)
-                || !seed.operation().equals(EMPTY) || walk.element() == null
+                || !(seed.operation() instanceof ValueName.Stdlib.Operation seeded)
+                || !seed.args().isEmpty() || !DefaultBoundOperationFacts.library().answersNothing(seeded)
+                || walk.element() == null
                 || walk.element().binding() == null || walk.accumulator() == null
                 || walk.accumulator().binding() == null) {
             return null;
@@ -339,7 +334,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
             boolean somePut = false;
             for (Core.Case arm : match.cases()) {
                 ValueStanding.ReadThrough<E> filing = sides.standing(arm.body(), body.at());
-                Put put = putOf(filing);
+                AnOperationApplied.Put put = putOf(filing);
                 if (put != null) {
                     keys.add(put.key());
                     values.add(put.value());
@@ -362,23 +357,18 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                             choosing(match, added)), null);
         }
 
-        /** A value put under a key in place of what is found there, each as written. */
-        private record Put(Core key, Core value) {}
-
         /**
          * What {@code body} puts under a key of the answer so far in place of what it finds
-         * there, where it inserts a value read of the element alone under a key read of it alone
+         * there, where it files a value read of the element alone under a key read of it alone
          * — or null where it does anything else.
          */
-        private Put putOf(ValueStanding.ReadThrough<E> body) {
-            return AnOperationApplied.of(body.value()) instanceof AnOperationApplied filing
-                    && filing.operation().equals(INSERT) && filing.args().size() == 3
-                    && isThe(valueOf(filing.args().get(2), body.at()), accumulator)
-                    && !WhatABodyReads.binding(valueOf(filing.args().get(0), body.at()),
-                            accumulator)
-                    && !WhatABodyReads.binding(valueOf(filing.args().get(1), body.at()),
-                            accumulator)
-                    ? new Put(filing.args().get(0), filing.args().get(1)) : null;
+        private AnOperationApplied.Put putOf(ValueStanding.ReadThrough<E> body) {
+            AnOperationApplied filing = AnOperationApplied.of(body.value());
+            AnOperationApplied.Put put = filing == null ? null : filing.put();
+            return put != null && isThe(valueOf(put.into(), body.at()), accumulator)
+                    && !WhatABodyReads.binding(valueOf(put.key(), body.at()), accumulator)
+                    && !WhatABodyReads.binding(valueOf(put.value(), body.at()), accumulator)
+                    ? put : null;
         }
 
         /** {@code match} with each arm answering the value {@code answers} holds for it, in the
@@ -431,11 +421,11 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
                     || match.cases().size() != 2
                     || !(AnOperationApplied.of(valueOf(match.scrutinee(), body.at()))
                     instanceof AnOperationApplied looked)
-                    || !looked.operation().equals(GET) || looked.args().size() != 2
-                    || !isThe(valueOf(looked.args().get(1), body.at()), accumulator)) {
+                    || !(looked.lookup() instanceof AnOperationApplied.Lookup lookup)
+                    || !isThe(valueOf(lookup.container(), body.at()), accumulator)) {
                 return null;
             }
-            Core key = looked.args().get(0);
+            Core key = lookup.key();
             Core keyRead = valueOf(key, body.at());
             Core.Case found = armOf(match, true);
             Core.Case missing = armOf(match, false);
@@ -496,11 +486,11 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, File
          *  written and where it is written — or null where it does anything else or files under
          *  another key. */
         ValueStanding.ReadThrough<E> filedUnder(ValueStanding.ReadThrough<E> body, Core key) {
-            return AnOperationApplied.of(body.value()) instanceof AnOperationApplied filing
-                    && filing.operation().equals(INSERT) && filing.args().size() == 3
-                    && Core.sameValue(valueOf(filing.args().get(0), body.at()), key)
-                    && isThe(valueOf(filing.args().get(2), body.at()), accumulator)
-                    ? new ValueStanding.ReadThrough<>(filing.args().get(1), body.at()) : null;
+            AnOperationApplied filing = AnOperationApplied.of(body.value());
+            AnOperationApplied.Put put = filing == null ? null : filing.put();
+            return put != null && Core.sameValue(valueOf(put.key(), body.at()), key)
+                    && isThe(valueOf(put.into(), body.at()), accumulator)
+                    ? new ValueStanding.ReadThrough<>(put.value(), body.at()) : null;
         }
 
         /**
