@@ -335,6 +335,8 @@ public sealed interface Reachability {
      *                        ({@link DemandReading.Answered#owed})
      * @param before          what the applications a run walking one element does not make work
      *                        out ({@link DemandReading.Answered#before})
+     * @param relationStands  where the relation is worked out
+     *                        ({@link DemandReading.Answered#relationStands})
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
@@ -343,14 +345,16 @@ public sealed interface Reachability {
                     List<TakenConstraint> gotPast, List<TakenConstraint> gotPastOfTheRelation,
                     List<DemandReading.Tie> tied, boolean unsaid,
                     List<Pullback.StopObligation> owed,
-                    List<DemandReading.PriorApplications> before)
+                    List<DemandReading.PriorApplications> before,
+                    Pullback.WorkedOutWhere relationStands)
             implements Reachability {
 
         public Reaching {
             if (region == null || requirements == null || truths == null || ways == null
                     || declined == null || narrowedBy == null || gotPast == null
                     || gotPastOfTheRelation == null
-                    || tied == null || owed == null || before == null) {
+                    || tied == null || owed == null || before == null
+                    || relationStands == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
@@ -370,14 +374,15 @@ public sealed interface Reachability {
                         List<OnTheWay.Declined> declined,
                         Optional<List<TakenConstraint>> narrowedBy) {
             this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
-                    List.of(), List.of(), List.of(), false, List.of(), List.of());
+                    List.of(), List.of(), List.of(), false, List.of(), List.of(),
+                    Pullback.WorkedOutWhere.ALWAYS);
         }
 
         /** What the run to the border asks of a row, as the readers of the relation there are
          *  handed it: the narrowing of the run and of the relation's own working kept apart. */
         DemandReading.Answered gotPastAsAsked() {
             return new DemandReading.Answered(gotPast, gotPastOfTheRelation, tied, unsaid, owed,
-                    before);
+                    before, relationStands);
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -430,7 +435,8 @@ public sealed interface Reachability {
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
-                    narrowedBy, gotPast, gotPastOfTheRelation, tied, unsaid, owed, before);
+                    narrowedBy, gotPast, gotPastOfTheRelation, tied, unsaid, owed, before,
+                    relationStands);
         }
 
         /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
@@ -519,17 +525,19 @@ public sealed interface Reachability {
             owedNow.addAll(answered.owed());
             List<DemandReading.PriorApplications> beforeNow = new ArrayList<>(before);
             beforeNow.addAll(answered.before());
+            Pullback.WorkedOutWhere relationNow = relationStands.and(answered.relationStands());
             if (past.leavesNone()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
                         declined, narrowedBy, gotPast, gotPastOfTheRelation, ties, unsaidNow,
-                        owedNow, beforeNow);
+                        owedNow, beforeNow, relationNow);
             }
             List<TakenConstraint> gotPastNow = new ArrayList<>(gotPast);
             gotPastNow.addAll(past.onTheWay());
             List<TakenConstraint> ofTheRelationNow = new ArrayList<>(gotPastOfTheRelation);
             ofTheRelationNow.addAll(past.ofTheRelation());
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
-                    by, gotPastNow, ofTheRelationNow, ties, unsaidNow, owedNow, beforeNow);
+                    by, gotPastNow, ofTheRelationNow, ties, unsaidNow, owedNow, beforeNow,
+                    relationNow);
         }
 
         /**
