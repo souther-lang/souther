@@ -4332,23 +4332,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             notShown.add(at);
-            // Only what is shown is said. That a row was read and shows none, and that it was not
-            // read, are told apart by the answer and are not told apart in the report.
             List<String> written = sought.found()
-                    .map(row -> row.toldAt(at, lookedForAt(at), read))
-                    .map(told -> told instanceof ReachWitnesses.Told.Shown(List<String> values)
-                            ? values : null)
-                    .orElse(null);
+                    .map(row -> valuesSaid(row.toldAt(at, lookedForAt(at), read)))
+                    .orElse(List.of());
             // Where no row got there, the figures the search stopped at and the places the runs of
             // the rows tried stopped are said at every place the relation compares, as what was
             // not shown is.
-            if (written != null || !sought.runsStopped().isEmpty()
+            if (!written.isEmpty() || !sought.runsStopped().isEmpty()
                     || !sought.stoppedAt().isEmpty()) {
-                reached.put(at, new GettingThere(written == null ? List.of() : written,
-                        sought.runsStopped(), sought.stoppedAt()));
+                reached.put(at, new GettingThere(written, sought.runsStopped(),
+                        sought.stoppedAt()));
             }
         }
         return notShown.isEmpty() ? shown : shown.mayStopBefore(notShown, reached);
+    }
+
+    /**
+     * What the report says of what a row told: the values where it shows some, and nothing where it
+     * does not.
+     *
+     * <p>The one place the three answers are put into words, and each is named. A row that was
+     * read there and shows none is a fact about the model's runs that no value expresses, and a row
+     * that was not read there is a fact about what this reads of a row, which an author cannot act
+     * on; neither is a value the row got there at, and a place told neither is said as one no row
+     * is shown at.
+     */
+    private static List<String> valuesSaid(ReachWitnesses.Told told) {
+        return switch (told) {
+            case ReachWitnesses.Told.Shown(List<String> values) -> values;
+            case ReachWitnesses.Told.NotShown _, ReachWitnesses.Told.NotRead _ -> List.of();
+        };
     }
 
     /**

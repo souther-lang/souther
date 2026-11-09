@@ -214,27 +214,26 @@ public final class ReachWitnesses {
          * everywhere else ({@link WhatATermRead#ofTerm}), and not read where the row takes no
          * number: a term that is no number of the row is not a number of zero.
          *
-         * <p>Every kind of term is named here, so a kind added is one this has to decide about. A
-         * number answered by one position is one for each element of the containers the position
-         * is inside, and a number taken over a run of values is one for the row, where the run is
-         * not inside an element of another container. The others are read of an element among its
-         * neighbours, or of the values under a key, and which elements a row's numbers are read
-         * across for them is not settled here.
+         * <p>Asked of what the number is, and not of its kind. A number answered by one position is
+         * one for each element of the containers the position is inside. Any other is one for the
+         * row where it stands outside every container ({@link NumericTerm#standsAt}), whatever it
+         * is of: the end of a run, a count of a key the row holds, a product of such. Where it
+         * stands inside an element it is read of an element among its neighbours or of the values
+         * under its key, and which elements a row's numbers are read across for it is not settled
+         * here.
          */
         private static Reading numbersAt(NumericTerm term, BorderQuantity.Observation row,
                                          InputReading read) {
             Optional<Across> across = switch (term) {
                 case NumericTerm.FromOnePosition one -> Optional.of(
                         new Across(one.position(), one.position().containersHoldingIt()));
-                // One for the row where the run's outermost container is no element's: a run
-                // inside an element of another is one number for each element of it, which
-                // reading the row as a whole does not give.
-                case NumericTerm.TakenOver over -> over.walkedOver() != null
-                        && over.walkedOver().insideAContainer() ? Optional.empty()
+                // Any other number is one for the row where it stands outside every container
+                // ({@link NumericTerm#standsAt}): the end of a run, a count of a key asked for,
+                // a product of such. Where it stands inside an element it is one for each element
+                // of the container, among its neighbours or under its key, and which elements the
+                // row's numbers are read across for those is not settled here.
+                default -> term.standsAt().insideAContainer() ? Optional.empty()
                         : Optional.of(new Across(null, List.of()));
-                case NumericTerm.OfAnElementsNeighbours _, NumericTerm.OccurrencesOfItsValue _,
-                     NumericTerm.OccurrencesOfAKey _, NumericTerm.GatheredUnderItsKey _,
-                     NumericTerm.GatheredUnderAKey _, NumericTerm.ProductOf _ -> Optional.empty();
             };
             if (across.isEmpty()) {
                 return new Reading.Unread(Told.Unread.THE_KIND_OF_TERM_IS_NOT_READ_HERE);
