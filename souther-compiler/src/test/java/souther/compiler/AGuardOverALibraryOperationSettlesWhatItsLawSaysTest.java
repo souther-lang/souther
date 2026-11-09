@@ -184,6 +184,13 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             new Row("Digit(List.sum(xs ++ xs) - List.sum(xs) - List.sum(xs))", false),
             new Row("Digit(List.sum(xs ++ ys) - List.sum(List.reverse(xs) ++ ys))", false),
             new Row("Digit(List.sum(xs) - List.sum(ys))", true),
+            // An append of three is the three added, and the same container twice is added twice.
+            new Row("Digit(List.sum(xs ++ ys ++ xs) - List.sum(xs) - List.sum(xs) - List.sum(ys))",
+                    false),
+            new Row("Digit(List.sum(xs ++ ys ++ xs) - List.sum(xs) - List.sum(ys))", true),
+            new Row("Digit(List.sum(List.concat([xs, ys, xs])) "
+                    + "- List.sum(xs) - List.sum(xs) - List.sum(ys))", false),
+            new Row("Digit(List.sum(xs ++ ys ++ xs) - List.sum(xs ++ ys) - List.sum(xs))", false),
             new Row("Digit(List.product(List.reverse(xs)) - List.product(xs))", false),
             new Row("Digit(List.product(ys ++ xs) - List.product(xs ++ ys))", false),
             new Row("Digit(List.product(xs ++ ys) - List.product(xs) * List.product(ys))", false),

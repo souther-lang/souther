@@ -1645,22 +1645,52 @@ final class Terms {
                             }
                         }
                     }
-                    if (one.combine() == Accumulation.Combine.ADD
-                            && left.combine() == Accumulation.Combine.ADD
-                            && right.combine() == Accumulation.Combine.ADD
-                            && one.pieces().equals(together(left.pieces(), right.pieces()))) {
-                        LinearForm<FactSubject> parts = LinearForm.atom(totals.get(j))
-                                .plus(LinearForm.atom(totals.get(k))).orNull();
-                        LinearForm<FactSubject> gap = parts == null ? null
-                                : LinearForm.atom(totals.get(i)).minus(parts).orNull();
-                        if (gap != null) {
-                            out.add(new NumericConstraint(gap, Rel.EQ));
-                        }
-                    }
                 }
+            }
+            if (one.combine() == Accumulation.Combine.ADD) {
+                addCoversOf(totals, i, one.pieces(), 0, new ArrayList<>(), out);
             }
         }
         return out;
+    }
+
+    /**
+     * Files that the sum {@code totals[of]} is the sum of the sums {@code chosen} where what they
+     * walk between them is what it walks, for each way of choosing two or more of them, a sum
+     * being chosen as often as it is walked.
+     *
+     * <p>Each choice takes at least one container off {@code remaining}, so the search ends.
+     */
+    private void addCoversOf(List<FactSubject> totals, int of, Map<Term, Integer> remaining,
+                             int from, List<Integer> chosen, List<NumericConstraint> out) {
+        if (remaining.isEmpty()) {
+            LinearForm<FactSubject> gap = chosen.size() < 2 ? null : LinearForm.atom(totals.get(of));
+            for (int part : chosen) {
+                gap = gap == null ? null : gap.minus(LinearForm.atom(totals.get(part))).orNull();
+            }
+            if (gap != null) {
+                out.add(new NumericConstraint(gap, Rel.EQ));
+            }
+            return;
+        }
+        for (int c = from; c < totals.size(); c++) {
+            TotalOfPieces part = totalsOfPieces.get(totals.get(c));
+            if (c == of || part.combine() != Accumulation.Combine.ADD
+                    || !holdsAll(remaining, part.pieces())) {
+                continue;
+            }
+            Map<Term, Integer> left = new HashMap<>(remaining);
+            part.pieces().forEach((piece, times) ->
+                    left.compute(piece, (_, had) -> had.equals(times) ? null : had - times));
+            chosen.add(c);
+            addCoversOf(totals, of, left, c, chosen, out);
+            chosen.removeLast();
+        }
+    }
+
+    private static boolean holdsAll(Map<Term, Integer> whole, Map<Term, Integer> part) {
+        return part.entrySet().stream()
+                .allMatch(each -> whole.getOrDefault(each.getKey(), 0) >= each.getValue());
     }
 
     private static Map<Term, Integer> together(Map<Term, Integer> one, Map<Term, Integer> other) {
