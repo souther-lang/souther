@@ -177,6 +177,28 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
                 Out { n = List.length(spread) + List.length(hit) }
             }
 
+            let kept (ds: List<Deal>): List<Deal> = List.filter(d -> d.amount > 0, ds)
+
+            behavior aloneOverWhatAFunctionKept : (deals: List<Deal>, rates: Rates) -> Out
+            let aloneOverWhatAFunctionKept (deals, rates) = {
+                let spread = List.map(d -> Int.floorMod(d.amount, String.length(d.currency) - 2),
+                    kept(deals))
+                Out { n = List.length(List.filter(
+                    d -> Bool.not(Map.containsKey(d.currency, rates.rates)), deals))
+                    + List.length(spread) }
+            }
+
+            behavior insideTheLookupOverWhatAFunctionKept :
+                    (deals: List<Deal>, rates: Rates) -> Out
+            let insideTheLookupOverWhatAFunctionKept (deals, rates) = {
+                let spread = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(r -> Int.floorMod(r, String.length(d.currency) - 2)), kept(deals))
+                let hit = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(r -> Bool.not(Map.containsKey(d.currency, rates.rates))),
+                    kept(deals))
+                Out { n = List.length(spread) + List.length(hit) }
+            }
+
             behavior inTheLookup : (deals: List<Deal>, rates: Rates) -> Out
             let inTheLookup (deals, rates) = {
                 let spread = List.filterMap(d -> Map.get(d.currency, rates.rates)
@@ -206,6 +228,14 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
                 else Out { n = 0 }
             }
             """;
+
+    /** Why each place of {@code byPlace} is not read. */
+    private static Map<String, UndividedPosition.Reason> reasonsOf(
+            Map<String, PartitionEvidence.NotRead> byPlace) {
+        Map<String, UndividedPosition.Reason> reasons = new LinkedHashMap<>();
+        byPlace.forEach((place, each) -> reasons.put(place, each.reason()));
+        return reasons;
+    }
 
     private static Map<String, PartitionEvidence.NotRead> currencyOf(
             Map<String, PartitionEvidence> evidence, String behavior) {
@@ -295,6 +325,13 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
         assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
                 currencyOf(evidence, "insideTheLookup").get("deals[*].currency").reason(),
                 currencyOf(evidence, "insideTheLookup").toString());
+
+        // A container a function made is read as the function's body makes it, so the same
+        // shapes over it come out as they do over the library's own.
+        for (String twin : List.of("alone", "insideTheLookup")) {
+            assertEquals(reasonsOf(currencyOf(evidence, twin)), reasonsOf(currencyOf(evidence,
+                    twin + "OverWhatAFunctionKept")), twin);
+        }
 
         // The stop reads the table as well, is worked out only where the table holds the currency
         // (which turns on its keys), a rule names the table, or the way decides by it.
