@@ -78,6 +78,11 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
             if (facts.putsAValueIn(operation) instanceof BoundOperationFact.PutsAValueIn puts) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation, "puts a value in",
                         putsIn(puts.value().position(), puts.into().position())));
+                if (puts.under().isPresent()) {
+                    statements.add(new WhatTheLibraryComputes.Statement(operation,
+                            "files the value put in under " + puts.under().get().position(),
+                            filesUnder(puts.value().position(), puts.under().get().position())));
+                }
             }
             if (Combinators.listing(stdlib, facts, operation)
                     instanceof AppliedClosures.Listing listing) {
@@ -599,6 +604,14 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                 size(at(into)).negate()), eachFromTheTwo));
     }
 
+    /** Some element of the answer is the value at {@code value}, filed under the key at
+     *  {@code key}. */
+    private static LawProposition<Slot> filesUnder(int value, int key) {
+        return new LawProposition.SomeElement<>(new Slot.Answer(), new LawProposition.All<>(List.of(
+                same(new LawSubject.ElementOf<>(new Slot.Answer()), argument(value)),
+                same(new LawSubject.KeyOf<>(new Slot.Answer()), argument(key)))), true);
+    }
+
     /** What an answer listing {@code listing} of an argument holds of it: every element of the
      *  one in the other, as many of them, and none listed twice where none is. */
     private static LawProposition<Slot> lists(AppliedClosures.Listing listing) {
@@ -617,7 +630,9 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                 yield new LawProposition.All<>(parts);
             }
             // An entry is a pair, which no statement here names, so what is run is that there are
-            // as many as the map holds.
+            // as many as the map holds. That each is a key with the value filed under it, and
+            // each once, is run beside the operations it is taken of by
+            // TheKernelsAProofOfKeptEntriesTakesFileEachValueUnderItsKeyTest.
             case AppliedClosures.Listing.EveryEntryOf(int argument) ->
                     compared(Rel.EQ, 0, size(ANSWER), size(at(argument)).negate());
             case AppliedClosures.Listing.AtMostOneElementOf(int argument) ->

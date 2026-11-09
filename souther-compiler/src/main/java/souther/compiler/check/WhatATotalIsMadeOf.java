@@ -6,6 +6,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -434,8 +435,11 @@ final class WhatATotalIsMadeOf {
             mapped = LinearForm.weighing(exactTotal(of, inner, like), slope);
         }
         if (!line.constant().isZero()) {
-            FactSubject howMany = countNamed.apply(
-                    interned.called(NumericMeasures.HOW_MANY_A_LIST_HOLDS, List.of(inner)));
+            ValueName count = facts.countOf(Type.EMPTY_LIST);
+            if (count == null) {
+                return null;
+            }
+            FactSubject howMany = countNamed.apply(interned.called(count, List.of(inner)));
             out.add(new NumericConstraint(LinearForm.atom(howMany), Rel.GE));
             mapped = mapped.plus(LinearForm.weighing(howMany, line.constant())).orNull();
         }

@@ -118,6 +118,14 @@ final class LibraryUnderProof implements Library {
     @Override
     public Put puts(ValueName.Stdlib.Operation operation) {
         BoundOperationFact.PutsAValueIn puts = facts.putsAValueIn(operation);
-        return puts == null ? null : new Put(puts.value().position(), puts.into().position());
+        return puts == null ? null : new Put(puts.value().position(), puts.into().position(),
+                puts.under().map(DeclaredArgument::position));
+    }
+
+    @Override
+    public Lookup looksUp(ValueName.Stdlib.Operation operation) {
+        BoundOperationFacts.Lookup lookup = facts.looksUp(operation);
+        return lookup == null ? null
+                : new Lookup(lookup.key().position(), lookup.container().position());
     }
 }

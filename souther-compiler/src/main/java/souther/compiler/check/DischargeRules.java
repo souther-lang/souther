@@ -479,6 +479,20 @@ final class DischargeRules {
                 CallArguments.of(kept.closure(), call));
     }
 
+    /**
+     * What {@code call} keeps and by what, or null where the operation does not answer the entries
+     * of a map where a closure holds of the key and the value: the map and the closure as the call
+     * was handed them.
+     *
+     * <p>Read of the entries and never of the values, which a closure of the key and the value is
+     * not a statement of: the one asked of what such a call keeps is {@link #keptElements}.
+     */
+    static KeptWhereItHolds keptEntries(Core.PreservedCall call) {
+        BoundOperationFacts.Kept kept = facts().keepsEntriesWhereItHolds(call.operation());
+        return kept == null ? null : new KeptWhereItHolds(CallArguments.of(kept.source(), call),
+                CallArguments.of(kept.closure(), call));
+    }
+
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the
      * element itself — or where what stands in that argument is not a block this can read. */
     static Projection projectionOf(Core.PreservedCall call, Denotations at) {

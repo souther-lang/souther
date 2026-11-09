@@ -292,6 +292,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                                         DeclaredArgument closure)
             implements OneAboutAnOperation {}
 
+    /** The operation's answer holds the entries of {@code source} where {@code closure} holds of
+     *  the key and the value, and no other. */
+    record KeepsTheEntriesWhereItHolds(DeclaredOperation operation, DeclaredArgument source,
+                                       DeclaredArgument closure)
+            implements OneAboutAnOperation {}
+
     /** The operation answers the elements of {@code list} whose index stands to the number
      *  {@code count} names as {@code kept} says, before it or from it on, in their order, each once
      *  and nothing else. */
@@ -301,7 +307,8 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
 
     /** The operation answers what {@code into} holds with {@code value} put in: at most one element
      *  more, each element one of {@code into}'s or {@code value}. */
-    record PutsAValueIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into)
+    record PutsAValueIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into,
+                        Optional<DeclaredArgument> under)
             implements OneAboutAnOperation {}
 
     /** The operation answers a list of {@code part} of what {@code map} holds. */
@@ -455,6 +462,18 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
      *  in that order, and nothing where {@code to} is below {@code from}. */
     record HoldsEachWholeNumberInTurn(DeclaredOperation operation, DeclaredArgument from,
                                       DeclaredArgument to)
+            implements OneAboutAnOperation {}
+
+    /** What the operation answers holds a value exactly where {@code list} holds an element at the
+     *  whole number {@code index} names, and it is that element. */
+    record AnswersTheElementAt(DeclaredOperation operation, DeclaredArgument index,
+                               DeclaredArgument list)
+            implements OneAboutAnOperation {}
+
+    /** What the operation answers holds a value exactly where {@code container} files one under
+     *  the value of {@code key}, and it is that value. */
+    record AnswersTheValueFiledUnder(DeclaredOperation operation, DeclaredArgument key,
+                                     DeclaredArgument container)
             implements OneAboutAnOperation {}
 
     /** What the operation answers holds, where it holds a value, an element of {@code source}. */

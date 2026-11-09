@@ -1538,14 +1538,16 @@ final class Term {
                     ? List.of(container) : List.of(container, closure);
         }
 
-        /** The closure of one parameter that answers true where both of two such closures do, or
-         *  null where either is any other. */
+        /** The closure of one parameter — an element — or of two — a key and its value — that
+         *  answers true where both of two closures of the same do, or null where either is any
+         *  other. Each parameter is the same one in both, so the two bodies are about the same
+         *  element, or the same entry. */
         Term closureAnsweringBoth(Term one, Term other) {
             return one != null && other != null && one.shape == Shape.CLOSURE
-                    && other.shape == Shape.CLOSURE && Integer.valueOf(1).equals(one.of)
-                    && Integer.valueOf(1).equals(other.of)
-                    ? closure(1, choice(one.parts.getFirst(), other.parts.getFirst(),
-                            written(false))) : null;
+                    && other.shape == Shape.CLOSURE && one.of instanceof Integer params
+                    && (params == 1 || params == 2) && params.equals(other.of)
+                    ? closure(params, operator(ConditionJoin.BOTH.operator(),
+                            one.parts.getFirst(), other.parts.getFirst())) : null;
         }
 
         /**

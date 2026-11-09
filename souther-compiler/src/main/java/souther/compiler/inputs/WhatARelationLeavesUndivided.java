@@ -3836,7 +3836,8 @@ public final class WhatARelationLeavesUndivided {
 
         /** Every value, for a reading that does not ask where a row is computed. */
         static final Computed ANYWHERE = new Computed(new WholeRun(null, null),
-                new WholeRun(null, null), new WholeRun(null, null));    }
+                new WholeRun(null, null), new WholeRun(null, null));
+    }
 
     /**
      * The values of one of two terms at which some row holds a relation over their difference,

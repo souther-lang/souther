@@ -1,9 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.core.Kernel;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ValueName;
 
 /**
  * What an option holds where it holds a value, followed through the operations that made it.
@@ -68,8 +66,7 @@ public final class WhatAnOptionHolds {
         if (applied == null) {
             return reading.otherwise(looked, null);
         }
-        if (applied.operation() instanceof ValueName.Stdlib.Operation listed
-                && reading.symbols().kernelOf(listed) == Kernel.LIST_GET) {
+        if (applied.picks() != null) {
             ElementsWrittenOut.Occurrence<E> picked =
                     ElementsWrittenOut.picked(looked.value(), looked.at(), reading);
             return picked == null ? reading.otherwise(looked, applied)

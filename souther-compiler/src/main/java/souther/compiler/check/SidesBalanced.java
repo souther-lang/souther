@@ -1,13 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.core.TheWalk;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,9 +31,6 @@ import java.util.Map;
  * case.
  */
 public final class SidesBalanced {
-
-    private static final ValueName.Stdlib.Operation FOLD =
-            ValueName.Stdlib.operation("List", "foldFrom");
 
     private SidesBalanced() {}
 
@@ -123,16 +120,12 @@ public final class SidesBalanced {
      */
     private static List<Core> orderAtNought(Core sign, Core nought) {
         AnOperationApplied applied = AnOperationApplied.of(sign);
-        BoundOperationFact.StatesTheOrderOfItsArguments order = applied == null ? null
-                : DefaultBoundOperationFacts.get().statesTheOrderOfItsArguments(
-                        applied.operation());
-        if (order == null || !(Core.withoutStanding(nought) instanceof Core.Int zero)
+        AnOperationApplied.Ordered ordered = applied == null ? null : applied.ordersItsArguments();
+        if (ordered == null || !(Core.withoutStanding(nought) instanceof Core.Int zero)
                 || zero.value() != 0 || !WhatARunMayEndFor.itself(sign).endsNone()) {
             return null;
         }
-        Core greater = applied.argument(order.greater());
-        Core lesser = applied.argument(order.lesser());
-        return greater == null || lesser == null ? null : List.of(greater, lesser);
+        return List.of(ordered.greater(), ordered.lesser());
     }
 
     /**
@@ -148,15 +141,16 @@ public final class SidesBalanced {
     private static Side side(Core e, Map<BindingId, Core> lists) {
         Map<BindingId, Core> given = new HashMap<>();
         Core walk = LetBound.resolved(e, given);
+        TheWalk folds = DefaultBoundOperationFacts.theWalk();
         if (!(AnOperationApplied.of(walk) instanceof AnOperationApplied(var operation, var args))
-                || !operation.equals(FOLD) || args.size() != 4
-                || !(LetBound.resolved(args.get(0), given) instanceof Core.Block step)
+                || !operation.equals(folds.operation()) || args.size() != folds.arguments()
+                || !(LetBound.resolved(args.get(folds.step()), given) instanceof Core.Block step)
                 || step.params().size() != 2
-                || !(LetBound.resolved(args.get(1), given) instanceof Core.Decimal seed)
+                || !(LetBound.resolved(args.get(folds.seed()), given) instanceof Core.Decimal seed)
                 || seed.value().signum() != 0) {
             return null;
         }
-        Core walked = LetBound.resolved(args.get(2), given);
+        Core walked = LetBound.resolved(args.get(folds.container()), given);
         AtACase kept = null;
         if (AnOperationApplied.of(walked) instanceof AnOperationApplied filter
                 && DefaultBoundOperationFacts.get().assembles(filter.operation())
@@ -179,8 +173,8 @@ public final class SidesBalanced {
         if (!(walked instanceof Core.Read list)) {
             return null;
         }
-        BindingId total = step.params().get(0).binding();
-        BindingId element = step.params().get(1).binding();
+        BindingId total = step.params().get(folds.accumulator()).binding();
+        BindingId element = step.params().get(folds.element()).binding();
         Core adds = Core.withoutStanding(step.body());
         AtACase where = null;
         if (adds instanceof Core.If choice) {

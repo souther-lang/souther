@@ -16,7 +16,6 @@ import souther.compiler.meaning.WrittenOfANode;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -115,9 +114,6 @@ final class LineDownATree {
 
     private static final class Reading {
 
-        private static final ValueName.Stdlib.Operation IS_EMPTY =
-                ValueName.Stdlib.operation("List", "isEmpty");
-
         private final RecursionOverATree search;
         private final TermPath root;
         private final Symbols symbols;
@@ -208,10 +204,9 @@ final class LineDownATree {
          * only where the walk they both name is the same one.
          */
         private Abs evalFork(Core.If fork, InputReads here, Map<BindingId, Abs> env) {
-            if (!(AnOperationApplied.of(fork.cond())
-                    instanceof AnOperationApplied(ValueName operation, List<Core> asked))
-                    || !operation.equals(IS_EMPTY) || asked.size() != 1
-                    || !(eval(asked.getFirst(), here, env) instanceof Abs.Below walk)
+            if (!(AnOperationApplied.of(fork.cond()) instanceof AnOperationApplied asked)
+                    || asked.whoseEmptinessItAsks() == null
+                    || !(eval(asked.whoseEmptinessItAsks(), here, env) instanceof Abs.Below walk)
                     || !(eval(fork.then(), here, env) instanceof Abs.Nothing)) {
                 return null;
             }
@@ -261,10 +256,9 @@ final class LineDownATree {
         private boolean keepsTheFirstAnswer(SeededWalk walk, InputReads here) {
             Denotation step = here.standing(walk.step().body(), symbols, newtypes);
             if (!(Core.withoutStanding(step.value()) instanceof Core.If fork)
-                    || !(AnOperationApplied.of(fork.cond()) instanceof AnOperationApplied(
-                            ValueName operation, List<Core> asked))
-                    || !operation.equals(IS_EMPTY) || asked.size() != 1
-                    || !isRead(asked.getFirst(), walk.accumulator().binding())
+                    || !(AnOperationApplied.of(fork.cond()) instanceof AnOperationApplied asked)
+                    || asked.whoseEmptinessItAsks() == null
+                    || !isRead(asked.whoseEmptinessItAsks(), walk.accumulator().binding())
                     || !isRead(fork.els(), walk.accumulator().binding())) {
                 return false;
             }

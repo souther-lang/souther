@@ -121,8 +121,12 @@ public final class OperationFacts {
     private static List<Declared> withWhereTheKeptElementsCameFrom(List<Declared> declared) {
         List<Declared> out = new ArrayList<>(declared);
         for (Declared each : declared) {
-            if (each.fact() instanceof OperationFact.KeepsTheElementsWhereItHolds(
-                    ArgumentRef source)) {
+            ArgumentRef source = switch (each.fact()) {
+                case OperationFact.KeepsTheElementsWhereItHolds(ArgumentRef kept) -> kept;
+                case OperationFact.KeepsTheEntriesWhereItHolds(ArgumentRef kept) -> kept;
+                default -> null;
+            };
+            if (source != null) {
                 out.add(new Declared(each.operation(),
                         keeps(source, SizeAgainstItsSource.AT_MOST)));
             }
@@ -152,14 +156,20 @@ public final class OperationFacts {
 
     /**
      * {@code declared}, with that the value an operation finds by a closure is an element of what
-     * it finds it among stated from that: the weaker statement of the stronger, as where the pieces
-     * came from is.
+     * it finds it among, or by the key it is filed under in, stated from that: the weaker statement
+     * of the stronger, as where the pieces came from is.
      */
     private static List<Declared> withWhichElementAnAnswerHolds(List<Declared> declared) {
         List<Declared> out = new ArrayList<>(declared);
         for (Declared each : declared) {
-            if (each.fact() instanceof OperationFact.AnswersAnElementWhereTheClosureHolds(
-                    ArgumentRef source)) {
+            ArgumentRef source = switch (each.fact()) {
+                case OperationFact.AnswersAnElementWhereTheClosureHolds(ArgumentRef found) -> found;
+                case OperationFact.AnswersTheValueFiledUnder(var _, ArgumentRef container) ->
+                        container;
+                case OperationFact.AnswersTheElementAt(var _, ArgumentRef list) -> list;
+                default -> null;
+            };
+            if (source != null) {
                 out.add(new Declared(each.operation(), new OperationFact.AnswersAnElementOf(source)));
             }
         }
@@ -372,7 +382,7 @@ public final class OperationFacts {
             about("List", "take", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
             about("List", "drop", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
             about("Set", "filter", new OperationFact.KeepsTheElementsWhereItHolds(CONTAINER)),
-            about("Map", "filterEntries", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
+            about("Map", "filterEntries", new OperationFact.KeepsTheEntriesWhereItHolds(CONTAINER)),
             about("List", "distinctBy", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
             about("Map", "remove", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
             about("Set", "remove", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
@@ -383,7 +393,7 @@ public final class OperationFacts {
             // And the two that put one value in what they are handed: a set holds it once, and a
             // map holds it under the key, in place of what was there.
             about("Set", "insert", putsIn(at(0), at(1))),
-            about("Map", "insert", putsIn(at(1), at(2))),
+            about("Map", "insert", putsInUnder(at(0), at(1), at(2))),
             // Every value in the answer came from the map it was given: the one under the key is
             // what the closure made of it, and every other is the value that was there. Read as a
             // closure result alone, what is true of one value would be said of all of them.
@@ -610,10 +620,9 @@ public final class OperationFacts {
             // elements the list holds.
             about("List", "max", new OperationFact.AnswersAnElementOf(at(0))),
             about("List", "min", new OperationFact.AnswersAnElementOf(at(0))),
-            about("List", "get", new OperationFact.AnswersAnElementOf(at(1))),
+            about("List", "get", new OperationFact.AnswersTheElementAt(at(0), at(1))),
             // A value filed under the key asked for, which is one of the values the map holds.
-            about("Map", "get", new OperationFact.AnswersAnElementOf(at(1))),
-
+            about("Map", "get", new OperationFact.AnswersTheValueFiledUnder(at(0), at(1))),
             // Two of them, either or both.
             about("List", "append", lemma(law(AnswerAspect.EMPTINESS,
                     any(holdsSomething(at(0)), holdsSomething(at(1)))))),
@@ -1155,7 +1164,12 @@ public final class OperationFacts {
 
     /** The answer is {@code into} with {@code value} put in. */
     private static OperationFact putsIn(ArgumentRef value, ArgumentRef into) {
-        return new OperationFact.PutsAValueIn(value, into);
+        return new OperationFact.PutsAValueIn(value, into, Optional.empty());
+    }
+
+    /** The answer is {@code into} with {@code value} put in, filed under {@code key}. */
+    private static OperationFact putsInUnder(ArgumentRef key, ArgumentRef value, ArgumentRef into) {
+        return new OperationFact.PutsAValueIn(value, into, Optional.of(key));
     }
 
     /** The answer is keyed by keys {@code map} was keyed by. */
