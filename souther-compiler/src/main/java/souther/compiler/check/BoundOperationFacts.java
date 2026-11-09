@@ -712,6 +712,27 @@ public final class BoundOperationFacts {
      *  each element kept stands to the count. */
     public record KeptByIndex(DeclaredArgument count, DeclaredArgument list, Rel kept) {}
 
+    /**
+     * The operation that keeps the elements {@code operation} leaves, given the same count and the
+     * same list — which together with {@code operation} hold every element once — or null where
+     * there is none.
+     */
+    public ValueName holdingTheOtherSideOfTheIndex(ValueName operation) {
+        KeptByIndex mine = holdsTheElementsByIndex(operation);
+        if (mine == null) {
+            return null;
+        }
+        for (ValueName other : ones(BoundOperationFact.HoldsTheElementsByIndex.class)) {
+            KeptByIndex theirs = holdsTheElementsByIndex(other);
+            if (theirs.kept() == mine.kept().denied()
+                    && theirs.count().position() == mine.count().position()
+                    && theirs.list().position() == mine.list().position()) {
+                return other;
+            }
+        }
+        return null;
+    }
+
     /** Which argument {@code operation} puts in which, or null where it puts nothing in. Read by
      *  the proofs of what the library's written operations build, and by no reader of a
      *  condition. */
