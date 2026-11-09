@@ -6,6 +6,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.report.InEnglish;
 import souther.compiler.diag.Severity;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.CompositionBudget;
@@ -427,10 +428,10 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         CompositionBudget figure = CompositionBudget.READINGS_OF_ONE_CONDITION;
-        assertFalse(human.contains("stopped at " + figure.counts() + " (" + figure.name() + ", "
+        assertFalse(human.contains("stopped at " + InEnglish.said(figure.countsSaid()) +" (" + figure.name() + ", "
                 + figure.maximum() + ")"), human);
         assertFalse(human.contains("a part of what it states was not read"), human);
         assertTrue(human.contains("axes 18"), human);

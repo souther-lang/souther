@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.diag.msg.SearchMessage;
+import souther.compiler.report.InEnglish;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
 
@@ -285,7 +287,7 @@ class WhatTheAlternativesCameToTest {
 
     /** A candidate that built and had nothing this could hand on, and why. */
     private static final SearchShortfall NOT_HANDED_ON =
-            SearchShortfall.NONE.notHandedOn("the value built cannot be written");
+            SearchShortfall.NONE.notHandedOn(new SearchMessage.Code("the value built cannot be written"));
 
     /**
      * Another value of a parameter came to nothing under the one after it, and a value that built
@@ -299,7 +301,7 @@ class WhatTheAlternativesCameToTest {
 
             assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.word(),
                     () -> "beside " + other);
-            assertEquals(Optional.of("the value built cannot be written"),
+            assertEquals(Optional.of(new SearchMessage.Code("the value built cannot be written")),
                     came.found().notHandedOn());
         }
     }
@@ -333,6 +335,7 @@ class WhatTheAlternativesCameToTest {
 
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 published.why().reason());
-        assertEquals(Optional.of("the value built cannot be written"), published.why().said());
+        assertEquals(Optional.of("the value built cannot be written"),
+                InEnglish.said(published.why().told()));
     }
 }

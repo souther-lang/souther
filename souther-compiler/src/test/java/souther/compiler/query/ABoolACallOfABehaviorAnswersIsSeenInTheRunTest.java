@@ -106,7 +106,7 @@ class ABoolACallOfABehaviorAnswersIsSeenInTheRunTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(report.lines().anyMatch(line -> line.contains("decision ")
                 && line.contains("rules 3   taken 3")), report);
@@ -176,7 +176,7 @@ class ABoolACallOfABehaviorAnswersIsSeenInTheRunTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
                 .toList(), report);

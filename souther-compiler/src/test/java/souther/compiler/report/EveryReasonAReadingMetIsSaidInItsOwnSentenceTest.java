@@ -54,7 +54,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
         List<ReadingGap> reasons = everyReason();
         Set<String> said = new LinkedHashSet<>();
         for (ReadingGap each : reasons) {
-            said.add(AdequacyReport.atTheBorder(each));
+            said.add(InEnglish.said(AdequacyReport.atTheBorder(each)));
         }
 
         assertEquals(reasons.size(), said.size(),

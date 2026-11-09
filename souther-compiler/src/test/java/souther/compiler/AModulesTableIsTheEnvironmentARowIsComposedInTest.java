@@ -156,7 +156,7 @@ class AModulesTableIsTheEnvironmentARowIsComposedInTest {
     private static List<String> rowsOf(String model) {
         Compilation compilation = measured(model);
         String block = GeneratedRows.of(compilation, compilation.modules().get(0), "decides",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         return block.lines().map(String::trim).filter(line -> line.startsWith("| ")).toList();
     }
 
@@ -180,7 +180,7 @@ class AModulesTableIsTheEnvironmentARowIsComposedInTest {
     private static String human(String model) {
         Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Compilation measured(String model) {

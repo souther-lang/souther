@@ -88,7 +88,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         assertNotNull(filling, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule(compilation.modules().get(0))),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
     }
 
     /** Two minimum edges of one behavior, which compose one row between them. */

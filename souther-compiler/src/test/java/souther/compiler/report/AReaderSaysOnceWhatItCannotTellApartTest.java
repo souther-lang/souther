@@ -2,8 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceLayouts;
-import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
@@ -77,15 +76,16 @@ class AReaderSaysOnceWhatItCannotTellApartTest {
      */
     @Test
     void thePageSaysOneSentenceAboutTwoThingsOnce() {
-        String said = AdequacyReport.nothingToTry(
+        String said = InEnglish.said(AdequacyReport.nothingToTry(
                 List.of(came("nothing stood in", "one position", ELEMENTS),
                         came("nothing stood in", "another position", CHARACTERS)),
-                SourceRendering.namedByIdentity(SourceLayouts.NONE), cited -> null).text();
+                InEnglish.PAGE, cited -> null).said());
 
         assertEquals(1, said.split("nothing stood in", -1).length - 1,
                 () -> "the page cannot tell these two apart: " + said);
-        assertTrue(said.startsWith(Reasons.met(CompositionShortfall.of(Set.of(ELEMENTS,
-                        CHARACTERS)))), () -> "and the clause opens on both figures: " + said);
+        assertTrue(said.startsWith(InEnglish.said(Reasons.met(CompositionShortfall.of(
+                        Set.of(ELEMENTS, CHARACTERS))))),
+                () -> "and the clause opens on both figures: " + said);
     }
 
     /**
@@ -121,7 +121,7 @@ class AReaderSaysOnceWhatItCannotTellApartTest {
         return new RuleSearch.Came(new Generator.UnresolvedCombination(
                 List.of("a rule of the decision"),
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, about,
-                Optional.of(said)),
+                Optional.of(new SearchMessage.Code(said))),
                 PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of(figure)), NO_POPULATIONS,
                 NO_CAPACITIES, NO_FIGURES);
     }

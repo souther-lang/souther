@@ -152,7 +152,7 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("demo")),
                 Map.of(), SourceRendering.namedByIdentity(offering.texts()),
-                offering.db()).text();
+                offering.db()).textInEnglish();
         // Every line of the block but its comments is a row, wrapped onto as many as it takes.
         String examples = block.lines().dropWhile(line -> !line.startsWith("example "))
                 .skip(1).filter(line -> !line.startsWith("//"))

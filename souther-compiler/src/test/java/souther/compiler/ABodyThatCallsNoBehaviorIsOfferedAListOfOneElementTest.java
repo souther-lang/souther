@@ -118,7 +118,7 @@ class ABodyThatCallsNoBehaviorIsOfferedAListOfOneElementTest {
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("repro.nocallee")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 
     private static List<RowsOfABlock.Row> rowsForTheRewrite(String block) {

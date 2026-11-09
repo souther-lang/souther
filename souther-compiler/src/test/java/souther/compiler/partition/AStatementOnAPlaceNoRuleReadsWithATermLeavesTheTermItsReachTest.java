@@ -55,7 +55,7 @@ class AStatementOnAPlaceNoRuleReadsWithATermLeavesTheTermItsReachTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .filter(line -> line.contains("not read:"))
                 .map(line -> line.replaceAll(".*about `([^`]*)`.*", "$1"))
                 .toList();

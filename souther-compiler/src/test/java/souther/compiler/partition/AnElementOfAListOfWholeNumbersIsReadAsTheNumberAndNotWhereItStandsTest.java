@@ -78,7 +78,7 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), "the model compiles");
         List<String> report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
         assertEquals(List.of("· may stop a run: comparison@3:36 — a run that reaches it may stop"
                         + " in an operation it is read through; every run stops in a + 10 where a"
@@ -97,7 +97,7 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
     private static List<String> report(String parameters, String body) {
         Compilation compilation = compiled(parameters, body);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
     }
 

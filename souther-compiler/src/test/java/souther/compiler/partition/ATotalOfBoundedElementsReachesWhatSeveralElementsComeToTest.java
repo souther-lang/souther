@@ -63,7 +63,7 @@ class ATotalOfBoundedElementsReachesWhatSeveralElementsComeToTest {
         Compilation compilation = measured(inputs, body,
                 Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Set<String> related(String report) {

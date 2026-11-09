@@ -67,7 +67,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()))
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .replaceAll("\\d+:\\d+", "");
     }
 

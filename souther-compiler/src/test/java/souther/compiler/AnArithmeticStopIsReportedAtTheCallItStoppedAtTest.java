@@ -172,7 +172,7 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
         return new Said(JsonMapper.builder().build().readTree(report.json(rendering)),
-                report.human(rendering));
+                report.humanInEnglish(rendering));
     }
 
     /** Where the one {@code needle} in {@code source} is, as a report spells a place. */

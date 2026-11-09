@@ -66,7 +66,7 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
                 OfferingRequest.overTheModule("m"));
         assertNotNull(offering, "the model under test compiles");
         return GeneratedRows.of(offering, Map.of(),
-                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
     }
 
     /** The dates of each row the block offers, in the order the row writes them. */
@@ -345,7 +345,7 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
         List<String> reports = DAYS.stream().map(day -> {
             Compilation compilation = measured(source, day);
             return AdequacyReport.of(compilation)
-                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         }).toList();
         assertEquals(reports.get(0), reports.get(1));
     }
@@ -368,11 +368,11 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
         Compilation compilation = measured(source, DAYS.get(0));
         List<List<LocalDate>> first = rows(compilation);
         AdequacyReport owedFirst = AdequacyReport.of(compilation);
-        String saidFirst = owedFirst.human(SourceRendering.namedByIdentity(compilation.texts()));
+        String saidFirst = owedFirst.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         compilation.writtenOn(DAYS.get(1));
         List<List<LocalDate>> second = rows(compilation);
         AdequacyReport owedSecond = AdequacyReport.of(compilation);
-        String saidSecond = owedSecond.human(SourceRendering.namedByIdentity(compilation.texts()));
+        String saidSecond = owedSecond.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(rows(source, DAYS.get(1)), second);
         assertFalse(first.equals(second), "the two days are years apart: " + first);
         // What is owed, as the values the report is made of and not only as it reads: the same

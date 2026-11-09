@@ -120,7 +120,7 @@ class AReachSearchThatStoppedAtAFigureSaysSoAtEachPlaceTest {
     void thePageAndTheDocumentSayTheFigureForEachPlace() {
         Compilation compilation = compiled();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         for (String place : PLACES) {
             List<String> lines = report.lines().filter(line -> line.contains("not read: ")
                     && line.endsWith("`" + place + "`")).toList();

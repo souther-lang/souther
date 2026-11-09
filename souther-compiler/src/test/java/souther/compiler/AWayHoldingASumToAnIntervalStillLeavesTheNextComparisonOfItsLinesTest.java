@@ -74,7 +74,7 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String report(String guards) {
@@ -84,7 +84,7 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
     /** The sum each row made for what nothing covers holds. */
     private static Set<Integer> sumsOfTheRows(Compilation compilation) {
         String text = GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
         Set<Integer> sums = new TreeSet<>();
         for (RowsOfABlock.Row row : RowsOfABlock.of(text)) {
             Matcher found = A_ROW.matcher(row.written());
@@ -235,7 +235,7 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
                         + "    guard a + b < 9223372036854775807 else High")) {
             Compilation compilation = compiled(guards);
             String text = GeneratedRows.of(compilation, null, null,
-                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
             int made = 0;
             for (RowsOfABlock.Row row : RowsOfABlock.of(text)) {
                 Matcher found = A_ROW.matcher(row.written());

@@ -75,7 +75,7 @@ class AGeneratedRowIsOneItsArmsAnswerDifferentlyOnTest {
         }
         Compilation compilation = compiled(BONUS + "\n" + rows);
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(page.contains("replacement 2/2"), () -> rows + "\n" + page);
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
@@ -118,7 +118,7 @@ class AGeneratedRowIsOneItsArmsAnswerDifferentlyOnTest {
 
         Compilation compilation = compiled(source);
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertNotEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED,
                 AdequacyReport.of(compilation).adequacy(), () -> rows + "\n" + page);
         assertTrue(page.contains("replacement 4/4"), () -> "every rewrite told apart: " + page);
@@ -180,7 +180,7 @@ class AGeneratedRowIsOneItsArmsAnswerDifferentlyOnTest {
                 OfferingRequest.overTheModule(module));
         assertNotNull(offering, "the model under test compiles");
         return GeneratedRows.of(offering, Map.of(),
-                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
     }
 
     private static Compilation compiled(String source) {

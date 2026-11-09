@@ -45,7 +45,7 @@ class ARunGetsPastWhatItWorksOutOnlyWhereItsOperatorsAnswerTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The points owed at the comparison written at {@code at}, by role, as the report says each. */

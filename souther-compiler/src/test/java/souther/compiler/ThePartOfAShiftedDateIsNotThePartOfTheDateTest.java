@@ -54,7 +54,7 @@ class ThePartOfAShiftedDateIsNotThePartOfTheDateTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** It fails on 31 December 2026 alone: the year is 2026 before the move and 2027 after it. */

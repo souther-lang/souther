@@ -28,7 +28,8 @@ class TheRowsARunIsTriedForAreSaidAsTheyAreTriedTest {
     private static final String COMMANDS = "/META-INF/souther-docs/cli/commands.md";
 
     private static String said(CompositionRepertoire... these) {
-        return Reasons.writes(PublicationOrders.COMPOSITION_REPERTOIRES.keep(Set.of(these)));
+        return Reasons.writes(PublicationOrders.COMPOSITION_REPERTOIRES.keep(Set.of(these)),
+                InEnglish.PAGE);
     }
 
     /** A point is told only of the axes it was tried at. */
@@ -78,9 +79,11 @@ class TheRowsARunIsTriedForAreSaidAsTheyAreTriedTest {
             assertNotNull(in, COMMANDS);
             String text = new String(in.readAllBytes(), StandardCharsets.UTF_8)
                     .replaceAll("\\s+", " ");
-            Matcher edge = Pattern.compile("from 0 to \\d+").matcher(RowsARunIsTriedFor.sizes());
-            Matcher values = Pattern.compile("\\{\\d[^}]*\\}").matcher(RowsARunIsTriedFor.values());
-            assertTrue(edge.find() && values.find(), RowsARunIsTriedFor.sizes());
+            String sizes = InEnglish.said(RowsARunIsTriedFor.sizes());
+            Matcher edge = Pattern.compile("from 0 to \\d+").matcher(sizes);
+            Matcher values = Pattern.compile("\\{\\d[^}]*\\}")
+                    .matcher(InEnglish.said(RowsARunIsTriedFor.values()));
+            assertTrue(edge.find() && values.find(), sizes);
             assertTrue(text.contains(edge.group()), "the largest container: " + edge.group());
             assertTrue(text.contains(values.group()), "the whole numbers: " + values.group());
         }

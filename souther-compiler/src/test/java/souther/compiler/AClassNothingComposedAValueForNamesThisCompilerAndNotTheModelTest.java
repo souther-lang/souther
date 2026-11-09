@@ -49,7 +49,7 @@ class AClassNothingComposedAValueForNamesThisCompilerAndNotTheModelTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return GeneratedRows.of(compilation, "example.text", "take",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     /**

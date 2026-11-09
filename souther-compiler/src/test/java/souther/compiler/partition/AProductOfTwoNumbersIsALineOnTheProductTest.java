@@ -473,7 +473,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).toString();
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).toString();
         assertTrue(human.contains("1 row does not hold"), human);
         assertTrue(human.contains("a negative rate"), human);
         assertTrue(!human.contains("a half is") && !human.contains("a half ("), human);
@@ -815,7 +815,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                                         recentRmas = [] }
                 """.formatted(row));
         String human = AdequacyReport.of(run)
-                .human(SourceRendering.namedByIdentity(run.texts())).toString();
+                .humanInEnglish(SourceRendering.namedByIdentity(run.texts())).toString();
         assertTrue(human.contains("rows 1"), human);
         assertTrue(!human.contains("does not hold"), human);
     }

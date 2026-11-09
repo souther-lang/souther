@@ -216,7 +216,7 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         AdequacyReport report = AdequacyReport.of(compilation);
-        String page = report.human(SourceRendering.namedByIdentity(compilation.texts()));
+        String page = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertEquals(1, page.lines().filter(each -> each.contains("no row is at the ON point"))
                         .count(),
@@ -251,7 +251,7 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
                                 || each.kind() == Adequacy.Kind.DOMAIN_POINT_UNCOVERED)
                         .map(each -> each.about().toString()).toList(),
                 () -> "nothing is short of the line: "
-                        + report.human(SourceRendering.namedByIdentity(compilation.texts())));
+                        + report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     /** Two behaviors carrying one type, one of them written a row at the boundary and the other

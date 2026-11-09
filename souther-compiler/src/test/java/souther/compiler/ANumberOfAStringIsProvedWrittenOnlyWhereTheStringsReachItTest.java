@@ -279,7 +279,7 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return souther.compiler.report.AdequacyReport.of(compilation).human(
+        return souther.compiler.report.AdequacyReport.of(compilation).humanInEnglish(
                 souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts()));
     }
 

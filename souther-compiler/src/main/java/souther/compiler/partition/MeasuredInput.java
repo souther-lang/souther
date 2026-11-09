@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.EntryHeld;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.HeldClass;
@@ -163,7 +164,7 @@ public final class MeasuredInput {
      * the reading's and nothing a way brings. No part of what makes two of these one: it is
      * derived from {@link #ruleRoots} and the rules read.
      */
-    private final List<ContentsAsked.Asked> membersNeeded;
+    private final ContentsAsked membersNeeded;
 
     /** A position as what it is offered turns on: where the value stops and the runs it is in, how
      *  much it holds, the class it is held to and the values its rules name — and not the rest of
@@ -347,13 +348,15 @@ public final class MeasuredInput {
      * <p>A value standing in the elements of one container is asked of every element, and the
      * demand is the plan's to meet in each element it writes. One inside two containers or more is
      * asked of none here: what is asked inside an element names no container further in.
+     *
+     * <p>And the positions it holds apart: two keys of one container that the rules ask different
+     * numbers of the value of can not be one key, since a map holds one value under a key.
      */
-    List<ContentsAsked.Asked> membersTheRulesNeed() {
+    ContentsAsked membersTheRulesNeed() {
         return membersNeeded;
     }
 
-    private static List<ContentsAsked.Asked> membersNeeded(RuleRoots ruleRoots,
-                                                           RuleReadingSource source) {
+    private static ContentsAsked membersNeeded(RuleRoots ruleRoots, RuleReadingSource source) {
         List<ContentsAsked.Asked> out = new ArrayList<>();
         for (InputDomain.RuleRoot root : ruleRoots.roots()) {
             List<TermPath> holding = root.at().containersHoldingIt();
@@ -366,10 +369,27 @@ public final class MeasuredInput {
                 ClauseRead.Member member = read.member().orElseThrow();
                 out.add(new ContentsAsked.Asked(root.at().then(read.at().steps()),
                         root.at().then(member.lookedFor().steps()), true, member.asAKey(),
-                        around));
+                        member.valueIn(), around));
             }
         }
-        return List.copyOf(out);
+        List<RowDemand.OneValueAtBoth> apart = new ArrayList<>();
+        for (int i = 0; i < out.size(); i++) {
+            for (int j = i + 1; j < out.size(); j++) {
+                ContentsAsked.Asked one = out.get(i);
+                ContentsAsked.Asked other = out.get(j);
+                if (one.container().equals(other.container()) && one.around().equals(other.around())
+                        && one.valueIn().isPresent() && other.valueIn().isPresent()
+                        && EntryHeld.leaveNoNumberInCommon(one.valueIn().get(),
+                                other.valueIn().get())) {
+                    RowDemand.OneValueAtBoth pair =
+                            RowDemand.OneValueAtBoth.of(one.value(), other.value(), false);
+                    if (pair != null) {
+                        apart.add(pair);
+                    }
+                }
+            }
+        }
+        return new ContentsAsked(out, apart, List.of());
     }
 
     /**

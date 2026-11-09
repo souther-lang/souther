@@ -76,7 +76,7 @@ class AGeneratedModelIsCompiledRatherThanMatchedTest {
         assertEquals(List.of(), report.adequacyGaps().stream()
                         .map(each -> each.about().toString()).toList(),
                 () -> "the rows shipped with `--model full` leave something owed:\n"
-                        + report.human(souther.compiler.diag.SourceRendering.namedByIdentity(
+                        + report.humanInEnglish(souther.compiler.diag.SourceRendering.namedByIdentity(
                                 compiled.texts())));
     }
 }

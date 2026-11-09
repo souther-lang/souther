@@ -112,7 +112,7 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
             """;
 
     private static final Generator.CandidateCheck REFUSING_EVERYTHING =
-            (_, _) -> new Generator.CandidateCheck.Built.Refused("the model refuses it");
+            (_, _) -> Generator.CandidateCheck.Built.Refused.inItsOwnWords("the model refuses it");
 
     /** Each model with the check its search is run under. */
     private static Map<String, Generator.CandidateCheck> models() {

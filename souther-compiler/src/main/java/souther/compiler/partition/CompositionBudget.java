@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
+
 
 /**
  * A figure this compiler holds a piece of its own work to.
@@ -82,6 +85,14 @@ public enum CompositionBudget {
      *  an element answers the statements, and each is checked against every count before any is
      *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
+
+    /** How many choices of counts are looked at in finding the fewest that hold a relation among
+     *  the counts of one container's elements and how many it holds ({@link AggregateRelation}).
+     *  Each count is one of as many numbers as a container is composed with elements, so the
+     *  choices grow with every count a relation weighs, and a relation no whole number meets —
+     *  one that sums even numbers to an odd — is walked to its end. A search that reaches this
+     *  places no count, and says so: nothing is shown impossible by it. */
+    TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT(4096),
 
     /** How many values of each run a total is tried at, where what an element answers turns on
      *  the total of the container it is in and nothing asks the total to be any one number: the
@@ -853,126 +864,94 @@ public enum CompositionBudget {
      * budget added arrives here as a compile error rather than as a name nobody wrote a sentence
      * for.
      */
-    public String counts() {
+    public Message countsSaid() {
         return switch (this) {
-            case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";
-            case CHARACTERS_A_PROPOSAL_HOLDS -> "how many characters a proposed string holds";
-            case PAIRINGS_BUILT_AT_ONCE -> "how many of a map's pairings are built at once";
-            case ELEMENTS_A_TOTAL_IS_SPREAD_OVER -> "how many elements a total is spread over";
-            case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
+            case ELEMENTS_A_PROPOSAL_HOLDS -> new SearchMessage.ElementsAProposalHolds();
+            case CHARACTERS_A_PROPOSAL_HOLDS -> new SearchMessage.CharactersAProposalHolds();
+            case PAIRINGS_BUILT_AT_ONCE -> new SearchMessage.PairingsBuiltAtOnce();
+            case ELEMENTS_A_TOTAL_IS_SPREAD_OVER -> new SearchMessage.ElementsATotalIsSpreadOver();
+            case SHAPES_OF_A_TOTAL_OFFERED -> new SearchMessage.ShapesOfATotalOffered();
             case ELEMENTS_A_COUNT_IS_COMPOSED_WITH ->
-                    "how many elements a container composed for a count holds";
-            case CONTAINERS_A_COUNT_IS_OFFERED -> "how many containers are offered for one count";
-            case SHARES_A_COUNT_IS_TRIED_AT ->
-                    "how many ways of sharing out a container's elements are tried for a count";
-            case TOTALS_A_COUNT_IS_TRIED_AT ->
-                    "how many values of each run a total is tried at for a count of the elements"
-                            + " that turns on it";
+                    new SearchMessage.ElementsACountIsComposedWith();
+            case CONTAINERS_A_COUNT_IS_OFFERED -> new SearchMessage.ContainersACountIsOffered();
+            case SHARES_A_COUNT_IS_TRIED_AT -> new SearchMessage.SharesACountIsTriedAt();
+            case TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT ->
+                    new SearchMessage.TuplesOfCountsARelationIsTriedAt();
+            case TOTALS_A_COUNT_IS_TRIED_AT -> new SearchMessage.TotalsACountIsTriedAt();
             case RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO ->
-                    "how many runs of what the elements of a container composed for a count can"
-                            + " come to are kept while they are moved to come to a total";
+                    new SearchMessage.RunsACountsElementsCanComeTo();
             case VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED ->
-                    "how many values an element of a container composed for a count is tried"
-                            + " moved to while the elements are moved to come to a total";
-            case COUNTS_OF_KEYS_TRIED ->
-                    "how many combinations of how often each key occurs are tried";
+                    new SearchMessage.ValuesAnElementIsMovedToTried();
+            case COUNTS_OF_KEYS_TRIED -> new SearchMessage.CountsOfKeysTried();
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
-                    "how many values of an element are read for a count";
-            case WAYS_DOWN_TO_A_TOTAL_TRIED -> "how many ways down to what a total adds up are tried";
-            case WAYS_UNDER_THE_CASES_TRIED ->
-                    "how many ways under the cases of a sum a container is written are tried";
+                    new SearchMessage.ValuesAnElementIsChosenAmong();
+            case WAYS_DOWN_TO_A_TOTAL_TRIED -> new SearchMessage.WaysDownToATotalTried();
+            case WAYS_UNDER_THE_CASES_TRIED -> new SearchMessage.WaysUnderTheCasesTried();
             case CASES_A_RULE_ABOVE_IS_PLANNED_UNDER ->
-                    "how many cases of a sum a value is built as where a rule above it names a"
-                            + " field of its cases";
-            case WAYS_A_WAY_IS_LOOKED_ALONG ->
-                    "how many ways a row is looked for along where conditions on the way are"
-                            + " one of several things";
-            case CHOICES_ON_A_WAY_LOOKED_AT ->
-                    "how many alternatives of conditions on the way are looked at to find the"
-                            + " ways a row may take";
-            case WALKS_A_WAY_IS_READ_AGAIN_WITH ->
-                    "how many times a way of more ways than are looked along is walked again to"
-                            + " read it for one relation";
+                    new SearchMessage.CasesARuleAboveIsPlannedUnder();
+            case WAYS_A_WAY_IS_LOOKED_ALONG -> new SearchMessage.WaysAWayIsLookedAlong();
+            case CHOICES_ON_A_WAY_LOOKED_AT -> new SearchMessage.ChoicesOnAWayLookedAt();
+            case WALKS_A_WAY_IS_READ_AGAIN_WITH -> new SearchMessage.WalksAWayIsReadAgainWith();
             case PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH ->
-                    "how many pairs of bounds are put together to eliminate numbers, reading a way"
-                            + " of more ways than are looked along again for one relation";
+                    new SearchMessage.PairsOfBoundsAWayIsReadAgainWith();
             case CHOICES_OF_INPUT_NUMBERS_LOOKED_AT ->
-                    "how many choices of values for the input's numbers are looked at";
+                    new SearchMessage.ChoicesOfInputNumbersLookedAt();
             case PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED ->
-                    "how many values of the input's numbers are tried with an answer composed"
-                            + " for each";
-            case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
-            case PLACES_A_PAIR_IS_LOOKED_AT -> "how many places along a pair's line are looked at";
-            case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
-            case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";
+                    new SearchMessage.PairsOfInputNumbersAndAnAnswerTried();
+            case PLACES_A_PAIR_IS_TRIED_AT -> new SearchMessage.PlacesAPairIsTriedAt();
+            case PLACES_A_PAIR_IS_LOOKED_AT -> new SearchMessage.PlacesAPairIsLookedAt();
+            case STEPS_A_SEARCH_MAY_TAKE -> new SearchMessage.StepsASearchMayTake();
+            case ASSIGNMENTS_A_SEARCH_COMPOSES -> new SearchMessage.AssignmentsASearchComposes();
             case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
-                    "how many values of an unbounded progression are tried";
-            case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
-            case DIVISORS_OF_A_PRODUCT_TRIED ->
-                    "how many numbers are tried as a divisor of a level of a product";
-            case DIVISORS_OF_A_REMAINDER_TRIED ->
-                    "how many values are tried as the divisor of a remainder an input leaves";
-            case REMAINDERS_A_SUM_IS_TRIED_AT ->
-                    "how many remainders are tried beside the numbers added to them";
-            case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
+                    new SearchMessage.ValuesOfAnUnboundedProgressionTried();
+            case LEVELS_A_SIDE_IS_ASKED_AT -> new SearchMessage.LevelsASideIsAskedAt();
+            case DIVISORS_OF_A_PRODUCT_TRIED -> new SearchMessage.DivisorsOfAProductTried();
+            case DIVISORS_OF_A_REMAINDER_TRIED -> new SearchMessage.DivisorsOfARemainderTried();
+            case REMAINDERS_A_SUM_IS_TRIED_AT -> new SearchMessage.RemaindersASumIsTriedAt();
+            case TIMES_THE_RULES_ARE_ASKED_AGAIN -> new SearchMessage.TimesTheRulesAreAskedAgain();
             case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
-                    "how many values a position on the way is tried at";
+                    new SearchMessage.ValuesAPositionOnTheWayIsTriedAt();
             case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
-                    "how many places of a position on the way are looked at";
+                    new SearchMessage.PlacesAPositionOnTheWayIsLookedAt();
             case ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR ->
-                    "how many values of the numbers on the way a row is composed for";
+                    new SearchMessage.AssignmentsOnTheWayComposedFor();
             case VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT ->
-                    "how many values the positions on the way are tried at together";
-            case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
+                    new SearchMessage.ValuesThePositionsOnTheWayAreTriedAt();
+            case VALUES_A_POINT_IS_TRIED_WITH -> new SearchMessage.ValuesAPointIsTriedWith();
             case ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT ->
-                    "how many candidates beside the rows run are made for a point";
-            case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
-            case PATHS_OF_A_DECISION_READ -> "how many paths through one body a decision is read for";
+                    new SearchMessage.RowsBesideARunAreMadeForAPoint();
+            case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS ->
+                    new SearchMessage.DepthAConstructionPlanDescends();
+            case PATHS_OF_A_DECISION_READ -> new SearchMessage.PathsOfADecisionRead();
             case CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE ->
-                    "how many conditions are taken in asking whether some input takes a way through"
-                            + " one body";
-            case READINGS_OF_ONE_CONDITION ->
-                    "how many times one condition is read, once per value or case";
-            case TOTAL_READINGS_OF_ONE_CONDITION ->
-                    "how many times one condition is read in all, along every case and value";
-            case PARTS_A_DERIVATION_CONCLUDES ->
-                    "how many parts what one step of a reading states comes to, written out";
+                    new SearchMessage.ConditionsADecisionTakesInToProve();
+            case READINGS_OF_ONE_CONDITION -> new SearchMessage.ReadingsOfOneCondition();
+            case TOTAL_READINGS_OF_ONE_CONDITION -> new SearchMessage.TotalReadingsOfOneCondition();
+            case PARTS_A_DERIVATION_CONCLUDES -> new SearchMessage.PartsADerivationConcludes();
             case WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER ->
-                    "how many ways of keeping the elements of a container are written out to find"
-                            + " what a statement over all of them comes to";
+                    new SearchMessage.WaysAStatementIsWrittenOutOver();
             case PARTS_THE_CHOICES_OF_A_COUNT_COME_TO ->
-                    "how many parts the choices of which of some statements hold come to, written"
-                            + " out for a reader that takes a count of them apart";
-            case ALTERNATIVES_A_PATH_TRIES ->
-                    "how many parts of one of several things a path takes alone, to know which of"
-                            + " them it leaves";
-            case STEPS_A_STATEMENT_IS_READ_IN ->
-                    "how many steps a statement is read in, to say where each of its lines"
-                            + " decides";
-            case CASES_A_LINE_IS_TAKEN_APART_INTO ->
-                    "how many cases where a line of a statement decides are taken apart";
-            case CASES_A_LINE_IS_ASKED_IN ->
-                    "how many steps the cases where a line of a statement decides are taken"
-                            + " through, asking whether a row stands on each side of it";
-            case NUMBERS_OF_A_SET_TRIED -> "how many of the numbers a class admits are tried";
-            case COMBINATIONS_OF_TOTALS_TRIED ->
-                    "how many choices of a number for each of several totals of one container are"
-                            + " tried";
+                    new SearchMessage.PartsTheChoicesOfACountComeTo();
+            case ALTERNATIVES_A_PATH_TRIES -> new SearchMessage.AlternativesAPathTries();
+            case STEPS_A_STATEMENT_IS_READ_IN -> new SearchMessage.StepsAStatementIsReadIn();
+            case CASES_A_LINE_IS_TAKEN_APART_INTO -> new SearchMessage.CasesALineIsTakenApartInto();
+            case CASES_A_LINE_IS_ASKED_IN -> new SearchMessage.CasesALineIsAskedIn();
+            case NUMBERS_OF_A_SET_TRIED -> new SearchMessage.NumbersOfASetTried();
+            case COMBINATIONS_OF_TOTALS_TRIED -> new SearchMessage.CombinationsOfTotalsTried();
             case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
-                    "how many code points of a class a string is searched for in full";
+                    new SearchMessage.CodePointsAStringIsSearchedInFull();
             case CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR ->
-                    "how many code points past a count a string is looked for";
-            case RUNS_REPAIRING_A_ROW -> "how many runs looking for a row that goes further may make";
+                    new SearchMessage.CodePointsBeyondACountAStringIsLookedFor();
+            case RUNS_REPAIRING_A_ROW -> new SearchMessage.RunsRepairingARow();
             case ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW ->
-                    "how many rows a walk composing a row for a point hands the choice of a row";
+                    new SearchMessage.RowsAWalkHandsTheChoiceOfARow();
             case PIECES_A_STRING_IS_PUT_TOGETHER_OF ->
-                    "how many pieces a string parted by a body is put together of";
+                    new SearchMessage.PiecesAStringIsPutTogetherOf();
             case STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM ->
-                    "how many of the strings a row holds a piece of a parted string is taken from";
+                    new SearchMessage.StringsOfTheRowAPieceIsTakenFrom();
             case ELEMENTS_A_SIDE_IS_SEARCHED_OVER ->
-                    "how many elements a side of a balanced list has for its amounts to be searched";
-            case NUMBERS_A_SIDE_IS_BALANCED_FROM ->
-                    "how many of the numbers an amount admits the sides of a list are balanced from";
+                    new SearchMessage.ElementsASideIsSearchedOver();
+            case NUMBERS_A_SIDE_IS_BALANCED_FROM -> new SearchMessage.NumbersASideIsBalancedFrom();
         };
     }
 
@@ -1019,7 +998,8 @@ public enum CompositionBudget {
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT, TOTALS_A_COUNT_IS_TRIED_AT,
+                 SHARES_A_COUNT_IS_TRIED_AT, TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT,
+                 TOTALS_A_COUNT_IS_TRIED_AT,
                  RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO, VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED,
                  COUNTS_OF_KEYS_TRIED,
                  VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,

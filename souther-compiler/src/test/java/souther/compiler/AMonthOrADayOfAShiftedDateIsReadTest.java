@@ -58,7 +58,7 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static int partOf(String part, LocalDate date) {
@@ -205,7 +205,7 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
 
         int year = TestDay.DATE.getYear();
         assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 3, 1).minusDays(1) + "\")"),

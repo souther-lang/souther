@@ -53,7 +53,7 @@ class TwoLinesInCasesOnOneQuantityAreToldApartTest {
     private static String human(String source) {
         Compilation compilation = measured(source);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String json(String source) {

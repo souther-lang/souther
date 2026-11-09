@@ -103,11 +103,6 @@ import java.util.stream.IntStream;
  */
 record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonClaim claim) {
 
-    /** The library's widening of a whole number to a decimal: exact, and no place past the
-     *  point. */
-    private static final ValueName.Stdlib.Operation WIDENS_A_WHOLE_NUMBER =
-            ValueName.Stdlib.operation("Decimal", "fromInt");
-
     /**
      * What reading {@code comparison} as a line came to.
      *
@@ -648,8 +643,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  numbers: a division of two of them has as many places as it is asked for. */
             private boolean aDecimalMadeOfWholeNumbers(Core call) {
                 return Core.withoutStanding(call) instanceof Core.PreservedCall kept
-                        && kept.operation() instanceof ValueName.Stdlib.Operation operation
-                        && WIDENS_A_WHOLE_NUMBER.equals(operation);
+                        && DefaultBoundOperationFacts.get()
+                                .answersAnArgumentAsItIs(kept.operation());
             }
 
             /**

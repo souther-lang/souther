@@ -1,8 +1,10 @@
 package souther.compiler.query;
 
 import souther.compiler.diag.Localizable;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.AuthoredPlacement;
+import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Demand;
@@ -535,16 +537,15 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * same at every reading of it, so any of them answers; where on the quantity it is takes a
      * reading's words and is said under the mark rather than in it.
      */
-    public String whichSide() {
+    public SearchMessage whichSide() {
         // Of a comparison a body wrote, the point is a side of the author's line, and a reading's
         // own side of the place it was put at is the other one wherever the call turned the
         // quantity round.
         if (point.line().at().isEmpty()) {
-            return souther.compiler.partition.Border.whichSideOf(point.line().line().facts(),
-                    point.point());
+            return Border.sideOf(point.line().line().facts(), point.point());
         }
         Map.Entry<Reading, BorderAssessment> said = met.firstEntry();
-        return said.getValue().border().whichSide(seats.get(said.getKey()).asked());
+        return said.getValue().border().sideOf(seats.get(said.getKey()).asked());
     }
 
     /**
@@ -917,6 +918,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * same of both — a consumer joins on {@code obligationId} and shows this.
      */
     public PublishedSentence said(PublishedRuleHandle.WhereARuleIs places) {
-        return new PublishedSentence.AroundAHandle(role() + " point of ", handle(places), "");
+        return new PublishedSentence.AroundAHandle(handle(places),
+                new PublishedSentence.Around.PointOf(String.valueOf(role())));
     }
 }

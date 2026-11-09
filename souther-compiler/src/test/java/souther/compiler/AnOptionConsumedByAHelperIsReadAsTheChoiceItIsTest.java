@@ -39,7 +39,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String lineAbout(String report, String word) {
@@ -143,7 +143,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertEquals(0, compilation.errors().size(), report);
         assertFalse(report.contains("!"), report);
@@ -210,7 +210,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
         compilation.answerEverything();
         assertEquals(0, compilation.errors().size(), operation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static final String CALLED = "Option.withDefault(0, %s) >= q";
@@ -341,7 +341,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertEquals(List.of(
                 "· no line: ensures f (found) — it relates the value here to another value rather"

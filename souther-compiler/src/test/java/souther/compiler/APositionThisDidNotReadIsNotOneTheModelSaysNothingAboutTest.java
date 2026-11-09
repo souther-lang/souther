@@ -109,7 +109,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     private static synchronized String human() {
         if (rendered == null) {
             rendered = AdequacyReport.of(measured())
-                    .human(SourceRendering.namedByIdentity(measured().texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(measured().texts()));
         }
         return rendered;
     }
@@ -184,7 +184,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertFalse(human.contains("divided no way: c"), human);
         assertTrue(human.contains("its type could not be worked out here"), human);
@@ -263,7 +263,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
      *  the declarations drew that it reads. */
     private static String declarationsShownWith(String behavior) {
         String human = AdequacyReport.of(measured()).only(null, behavior)
-                .human(SourceRendering.namedByIdentity(measured().texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(measured().texts()));
         return human.substring(human.indexOf("  declarations "));
     }
 
@@ -282,7 +282,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.repro", "boundedByADate", SourceRendering.namedByIdentity(compilation.texts())).text();
+                compilation, "example.repro", "boundedByADate", SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertTrue(block.contains("Cutoff(Date(\"2026-01-01\"))"), block);
     }
@@ -301,7 +301,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.repro", "byDateTime", SourceRendering.namedByIdentity(compilation.texts())).text();
+                compilation, "example.repro", "byDateTime", SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertTrue(block.contains("DateTime(\"2026-01-01T00:00:00\")"), block);
         assertFalse(block.contains("refused at construction"), block);

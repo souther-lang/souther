@@ -32,7 +32,7 @@ class AWayDecidesARelationOnlyWhereItLeavesOneAnswerTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Differences of nought and of nine are both left by the way, and ten is between them. */

@@ -1,6 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ValueAsked;
+
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * The values a container being composed is to hold, and the values it is to hold nothing equal to.
@@ -15,11 +19,11 @@ import java.util.List;
  *                      of the one entry some entry is — the one holding the element placed in it,
  *                      where one is
  * @param keysEachFiled the values a map is to file an entry under, each asked of an entry of its
- *                      own over whatever value the rules admit
+ *                      own over whatever value the rules admit, or the values they name
  * @param keysKeptOut   the values no key of the map is equal to
  */
 record ContainerContents(List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                         List<FixtureTemplate> keysHeld, List<FixtureTemplate> keysEachFiled,
+                         List<KeyAsked> keysHeld, List<KeyAsked> keysEachFiled,
                          List<FixtureTemplate> keysKeptOut) {
 
     ContainerContents {
@@ -28,5 +32,21 @@ record ContainerContents(List<FixtureTemplate> holding, List<FixtureTemplate> ke
         keysHeld = List.copyOf(keysHeld);
         keysEachFiled = List.copyOf(keysEachFiled);
         keysKeptOut = List.copyOf(keysKeptOut);
+    }
+
+    /**
+     * A key a map is to file an entry under, and the numbers the rules say the value under it is
+     * among.
+     *
+     * @param key     the key
+     * @param valueIn the numbers the value filed under it is to be among; empty where any value
+     *                the rules admit will do
+     */
+    record KeyAsked(FixtureTemplate key, Optional<ValueAsked> valueIn) {
+
+        KeyAsked {
+            Objects.requireNonNull(key, "a key is asked for");
+            Objects.requireNonNull(valueIn, "the numbers asked of the value under it, or none");
+        }
     }
 }

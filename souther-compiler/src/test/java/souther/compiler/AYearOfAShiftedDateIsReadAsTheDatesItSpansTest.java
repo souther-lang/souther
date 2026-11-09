@@ -47,7 +47,7 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String about(String comparison) {
@@ -286,7 +286,7 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
                 """);
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(near.db(), OfferingRequest.overTheModule("m")), Map.of(),
-                SourceRendering.namedByIdentity(near.texts()), near.db()).text();
+                SourceRendering.namedByIdentity(near.texts()), near.db()).textInEnglish();
 
         assertFalse(offered.contains("+999999999-12-31"),
                 "no row is offered at the date whose shift aborts: " + offered);

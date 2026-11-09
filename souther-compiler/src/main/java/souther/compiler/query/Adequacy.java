@@ -71,6 +71,9 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.ReportMessage;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.diag.Citation;
@@ -7627,7 +7630,7 @@ public final class Adequacy {
             case BoundaryValues.Built.Value(var observed) ->
                     new Generator.CandidateCheck.Built.Value(observed);
             case BoundaryValues.Built.Refused(var why) ->
-                    new Generator.CandidateCheck.Built.Refused(why);
+                    Generator.CandidateCheck.Built.Refused.inItsOwnWords(why);
         };
     }
 
@@ -8770,18 +8773,17 @@ public final class Adequacy {
      * @param read      one reading of the line, which is what the rule and the quantity are asked of
      * @param axis      what the line is on, in the words its declaration wrote it in
      * @param role      which of the four the point is
-     * @param whichSide which side of the line, where the line has two points in the role
      * @param owners    the module's own declarations whose fact it is, never empty
      * @param carriedBy the behaviors whose positions read it, each once
      */
     public record DeclaredExclusion(NotOwedPoint point, BorderAssessment read, String axis,
-                                    PointRole role, String whichSide,
+                                    PointRole role,
                                     List<DeclaredDebt.Owner> owners, List<String> carriedBy) {
 
         public DeclaredExclusion {
             owners = List.copyOf(owners);
             carriedBy = List.copyOf(carriedBy);
-            if (point == null || read == null || axis == null || role == null || whichSide == null
+            if (point == null || read == null || axis == null || role == null
                     || owners.isEmpty() || carriedBy.isEmpty()) {
                 throw new IllegalArgumentException("a point no row is owed at is some line's, read"
                         + " somewhere, and some declaration's: " + point);
@@ -8803,6 +8805,11 @@ public final class Adequacy {
             return saidOn(read, axis, level());
         }
 
+        /** Which side of the line the point is on, where the line has two points in the role. */
+        public SearchMessage whichSide() {
+            return read.border().sideOf(point.point());
+        }
+
         /** Whether the declaration has a quantity to say where the line is on
          *  ({@link #namesALevel}). */
         public boolean namesItsLevel() {
@@ -8822,20 +8829,27 @@ public final class Adequacy {
          * said: a place the values stop at on the declaration's own quantity, and a line by its
          * rule.
          */
-        public String stoppedAt() {
-            StringBuilder out = new StringBuilder();
+        public Message stoppedAt() {
+            List<Message> said = new ArrayList<>();
             for (FarEnd each : point.stops()) {
-                String said = switch (each) {
+                switch (each) {
                     case FarEnd.AtTheDomain(var reaches) ->
-                            "where the values stop at " + reaches.at().spelled();
-                    case FarEnd.AtALine(var line, var _) -> "up to " + line.saidWithoutAPlace();
-                    case FarEnd.AtTheOrderEnd _ -> null;
-                };
-                if (said != null) {
-                    out.append(out.isEmpty() ? " " : " and ").append(said);
+                            said.add(new ReportMessage.WhereTheValuesStopAt(
+                                    reaches.at().spelled()));
+                    case FarEnd.AtALine(var line, var _) ->
+                            said.add(new ReportMessage.UpToTheLine(line.toldWithoutAPlace()));
+                    case FarEnd.AtTheOrderEnd _ -> {
+                    }
                 }
             }
-            return out.toString();
+            if (said.isEmpty()) {
+                return new ReportMessage.Nothing();
+            }
+            Message where = said.getLast();
+            for (int i = said.size() - 2; i >= 0; i--) {
+                where = new ReportMessage.SettledAtBoth(said.get(i), where);
+            }
+            return new ReportMessage.SettledElsewhere(where);
         }
     }
 
@@ -9080,8 +9094,7 @@ public final class Adequacy {
                         .sorted().distinct().map(DeclaredDebt.Owner::new).toList();
                 BorderAssessment read = readings.getFirst().read().line();
                 excluded.add(new DeclaredExclusion(point, read, axisOfLine.apply(point.line()),
-                        read.border().roleOf(point.point()),
-                        read.border().whichSide(point.point()), owners,
+                        read.border().roleOf(point.point()), owners,
                         readings.stream().map(each -> each.read().behavior()).distinct().toList()));
             });
             return Answer.of(new DeclaredBoundaries(out, drawn, excluded, went));

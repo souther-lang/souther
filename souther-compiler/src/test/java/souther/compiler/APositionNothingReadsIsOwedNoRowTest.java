@@ -469,6 +469,6 @@ class APositionNothingReadsIsOwedNoRowTest {
     private static String report(String model) {
         Compilation compilation = compiled(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

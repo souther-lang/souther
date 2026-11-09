@@ -290,6 +290,17 @@ public final class BoundOperationFacts {
         return byOperation == null ? Set.of() : Collections.unmodifiableSet(byOperation.keySet());
     }
 
+    /**
+     * Whether {@code operation} answers the number of an argument as it is: its form is that one
+     * argument once, and nothing is added to it or taken from it. A widening of a whole number to a
+     * decimal, which keeps every place the number has and adds none, is one.
+     */
+    public boolean answersAnArgumentAsItIs(ValueName operation) {
+        LinearForm<DeclaredArgument> form = answersAFormOfItsArguments(operation);
+        return form != null && form.constant().equals(ExactRatio.ZERO) && form.coefs().size() == 1
+                && form.coefs().values().iterator().next().equals(ExactRatio.ONE);
+    }
+
     /** What {@code operation} answers, counted, in what its arguments are counted as — or null
      *  where it states no such form. */
     public LinearForm<DeclaredArgument> answersAFormOfItsArguments(ValueName operation) {

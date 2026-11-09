@@ -66,7 +66,7 @@ class AClassTheOtherReadingsOfAComparisonCoverIsNotSearchedForTest {
     void theClassTheOtherReadingCoversIsRefutedAndNotBlamedOnAFigure() {
         Compilation compilation = measured();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(human.contains(
                 "read as full/n: in 51 < n (line 1 of 2) — no value can stand at 51 < n"), human);
@@ -78,7 +78,7 @@ class AClassTheOtherReadingsOfAComparisonCoverIsNotSearchedForTest {
     void theSameValuesAboveTheOtherLineAreStillOwedARow() {
         Compilation compilation = measured();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(human.contains("no row is at an IN point"), human);
         assertTrue(human.contains("no row is at the ON point"), human);

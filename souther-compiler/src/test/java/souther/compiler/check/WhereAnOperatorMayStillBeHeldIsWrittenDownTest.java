@@ -291,9 +291,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     /** What fetches an operator: answered by a call, read out of a field, or named as a constant. */
     private static final List<Held> FETCHED = List.of(
-            new Held("souther.compiler.check.EntryHeld.valueIs",
-                    "asks whether a statement about the value a lookup found is an equality with"
-                            + " a written number"),
             new Held("souther.compiler.check.SidesBalanced.caseOf",
                     "asks whether a condition on an element compares a field of it for equality"
                             + " with a case"),

@@ -91,7 +91,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         AdequacyReport report = measured();
 
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
-                () -> report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                () -> report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(report.adequacyGaps().isEmpty(),
                 () -> "and no gap: there is nothing left to write " + report.adequacyGaps());
     }
@@ -137,7 +137,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
     /** And a person reading the report is told so, under the verdict. */
     @Test
     void theReportSaysItUnderTheVerdict() {
-        String human = measured().human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = measured().humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertTrue(human.contains("""
                 adequacy: undetermined
@@ -178,7 +178,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         JsonNode open = JSON.readTree(report.json(SourceRendering.namedByIdentity(SourceLayouts.NONE))).get("keptOpenBy");
 
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
-                () -> report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                () -> report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertFalse(open.isEmpty(),
                 "a verdict nobody could settle is open on the measures nobody made");
         for (JsonNode each : open) {
@@ -207,7 +207,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         for (AdequacyReport each : List.of(measured(), settled(), noRows(), refused())) {
             assertEquals(each.adequacy() == AdequacyReport.AdequacyStatus.UNDETERMINED,
                     !each.whatKeepsTheVerdictOpen().isEmpty(),
-                    () -> each.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                    () -> each.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         }
     }
 
@@ -225,10 +225,10 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         JsonNode root = JSON.readTree(report.json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
 
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, report.adequacy(),
-                () -> report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                () -> report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertEquals(new AdequacyReport.HeldOpen(0, 0), report.heldOpen());
-        assertFalse(report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)).contains("what keeps it open"),
-                report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+        assertFalse(report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)).contains("what keeps it open"),
+                report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(root.get("keptOpenBy").isEmpty(), root.get("keptOpenBy").toString());
     }
 
@@ -257,7 +257,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         JsonNode root = JSON.readTree(report.json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
 
         assertNotEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
-                () -> report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                () -> report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(root.get("keptOpenBy").isEmpty(), root.get("keptOpenBy").toString());
     }
 

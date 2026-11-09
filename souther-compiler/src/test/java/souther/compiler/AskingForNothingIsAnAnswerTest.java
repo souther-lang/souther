@@ -117,7 +117,7 @@ class AskingForNothingIsAnAnswerTest {
         AdequacyReport report = AdequacyReport.of(compiled(Adequacy.Level.OFF));
 
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
-                report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertEquals(List.of(), report.findings(), "nothing was measured, so nothing was found");
     }
 

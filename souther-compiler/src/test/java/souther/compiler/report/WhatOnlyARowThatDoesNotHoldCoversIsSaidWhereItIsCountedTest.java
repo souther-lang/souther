@@ -510,7 +510,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
         Compilation compilation = measured(model);
         AdequacyReport report = AdequacyReport.of(compilation);
         String human = (behavior == null ? report : report.only(null, behavior))
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Matcher said = LEGEND.matcher(human);
         assertEquals(marked(human).size(), said.find() ? Integer.parseInt(said.group(1)) : 0,
                 () -> "the page counts the marks it wrote: " + human);

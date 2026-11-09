@@ -225,7 +225,7 @@ class SeveralTotalsOfDifferentFieldsOfOneContainerAreComposedTogetherTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Compilation measured(String source) {

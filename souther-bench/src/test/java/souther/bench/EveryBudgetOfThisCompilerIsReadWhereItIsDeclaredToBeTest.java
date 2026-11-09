@@ -218,7 +218,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " figure over as what is left of the sizes"),
             Map.entry("souther.compiler.partition.CardinalityComposer#amongItsValues("
                             + "Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;"
-                            + "Ljava/util/SequencedMap;Lsouther/compiler/inputs/TermPath;"
+                            + "Ljava/util/List;Ljava/util/SequencedMap;Lsouther/compiler/inputs/TermPath;"
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/TypeView;"
                             + "Lsouther/compiler/check/Shape$Sequence;Ljava/util/List;"
@@ -334,7 +334,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "says the figure the walk stopped at beside the ways it looked along, which"
                             + " the way composed as it stands says of what it wrote alike"),
             Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
-                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/check/TypeView;Ljava/util/List;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
@@ -753,6 +753,17 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // of them -- so what is carried out is the figure itself.
             Map.entry("souther.compiler.partition.Pullback#<clinit>()V",
                     "how many readings of one condition the reading of what it means makes"),
+            Map.entry("souther.compiler.partition.AggregateRelation#fewestAt("
+                            + "Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;)"
+                            + "Lsouther/compiler/partition/AggregateRelation$Placed;",
+                    "stops at the most elements a container is composed with or at the choices"
+                            + " of counts looked at, and hands the figure over as what the"
+                            + " counts were not placed for"),
+            Map.entry("souther.compiler.partition.AggregateRelation#fewestWithin("
+                            + "ILjava/util/List;)"
+                            + "Lsouther/compiler/partition/AggregateRelation$Fewest;",
+                    "stops at the most elements a container is composed with or at the choices"
+                            + " of counts looked at, and hands the figure over with no counts"),
             Map.entry("souther.compiler.partition.DemandReading#<clinit>()V",
                     "how many ways an element may meet what a quantifier asks are read one by one"),
             Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#walk("
@@ -1146,8 +1157,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Collection;)"
                             + "Lsouther/compiler/partition/Generator$UnresolvedCombination$Reason;",
                     "the word a search stopped by these comes back with"),
-            Map.entry("souther.compiler.report.Reasons#said("
-                            + "Lsouther/compiler/publish/CanonicalSelection;)Ljava/lang/String;",
+            Map.entry("souther.compiler.report.Reasons#budgets("
+                            + "Lsouther/compiler/publish/CanonicalSelection;)"
+                            + "Lsouther/compiler/diag/msg/Message;",
                     "what a figure is called where a reader meets one"),
             // The order. It reaches every figure and hands none of them anywhere: what it decides
             // is which of them a reader is told about first, where two were reached.
@@ -1160,7 +1172,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // it counts and what it stands at, read off the budget and handed on with it.
             Map.entry("souther.compiler.observe.Figure$Budget#name()Ljava/lang/String;",
                     "what a budget reached is called where a reader is told it stopped something"),
-            Map.entry("souther.compiler.observe.Figure$Budget#counts()Ljava/lang/String;",
+            Map.entry("souther.compiler.observe.Figure$Budget#countsSaid()"
+                            + "Lsouther/compiler/diag/msg/Message;",
                     "what a budget reached counts, in a reader's words"),
             Map.entry("souther.compiler.partition.NearbyValues#shapesOf("
                             + "Ljava/lang/String;Lsouther/compiler/meaning/PieceDemand;"
@@ -1193,7 +1206,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "the figure each reason a condition was not taken in stopped at, the same"
                             + " way"),
             Map.entry("souther.compiler.report.AdequacyReport#whyDeclined("
-                            + "Lsouther/compiler/meaning/WhyNotTaken;)Ljava/lang/String;",
+                            + "Lsouther/compiler/meaning/WhyNotTaken;)"
+                            + "Lsouther/compiler/diag/msg/Message;",
                     "what the figure a path stopped taking a disjunction at counts, in the words"
                             + " a reader is told why a condition was not taken in")));
 

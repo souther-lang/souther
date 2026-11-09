@@ -47,7 +47,7 @@ class ARewriteNamesASiblingNoRunIsRecordedInTest {
         assertEquals(List.of(0), measured, "only the `then` is an arm a run is recorded in");
 
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(page.contains(
                         "! no row would come out differently if `then` (5:13) answered as `else`"),
                 () -> "the `else` named all the same: " + page);

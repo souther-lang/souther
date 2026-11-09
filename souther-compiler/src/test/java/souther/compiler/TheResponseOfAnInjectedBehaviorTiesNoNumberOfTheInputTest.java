@@ -142,7 +142,7 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     @Test
@@ -242,7 +242,7 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         return GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     /** Every way of writing the sum of the response's quantities is the one number, down to the

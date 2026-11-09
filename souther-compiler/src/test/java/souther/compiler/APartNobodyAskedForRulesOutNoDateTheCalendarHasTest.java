@@ -114,6 +114,6 @@ class APartNobodyAskedForRulesOutNoDateTheCalendarHasTest {
                         .map(e -> e.diagnostic().code().toString()).toList(),
                 "the model under test compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

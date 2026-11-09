@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
 
@@ -30,13 +31,13 @@ final class HandedOn {
     sealed interface Came {
 
         /** The model refused the value. */
-        record Refused(String why) implements Came {}
+        record Refused(SearchMessage why) implements Came {}
 
         /** What stands at each position handed on, and what each container read holds. */
         record Values(ValuesHandedOn at) implements Came {}
 
         /** The value stands, and what is to be handed on out of it is nothing this can write. */
-        record NotWritable(String why) implements Came {}
+        record NotWritable(SearchMessage why) implements Came {}
     }
 
     /**
@@ -51,21 +52,20 @@ final class HandedOn {
                    ContentsAsked.ToHandOn read, BehaviorInputs inputs,
                    RuleReadingContext reading) {
         return switch (built) {
-            case Generator.CandidateCheck.Built.Refused(String why) -> new Came.Refused(why);
+            case Generator.CandidateCheck.Built.Refused(SearchMessage why) -> new Came.Refused(why);
             case Generator.CandidateCheck.Built.Value(var observed) ->
                     switch (ObservedFixtures.handedOn(inputs, observed, read, written, reading)) {
                         case ObservedFixtures.Writing.Written<ValuesHandedOn>(var at) ->
                                 new Came.Values(at);
-                        case ObservedFixtures.Writing.NotWritable<ValuesHandedOn>(String why) ->
+                        case ObservedFixtures.Writing.NotWritable<ValuesHandedOn>(SearchMessage why) ->
                                 new Came.NotWritable(why);
                     };
             case Generator.CandidateCheck.Built.NothingBuiltIt _ -> {
                 // What the row writes is one value at a position, and nothing about how many
                 // elements a container it writes whole holds.
                 if (!read.containers().isEmpty()) {
-                    yield new Came.NotWritable("a demand is asked over each element of `"
-                            + read.containers().iterator().next() + "`, and nothing built the"
-                            + " value to say which elements it holds");
+                    yield new Came.NotWritable(new SearchMessage.NothingBuiltTheValueToSayWhichElements(
+                            String.valueOf(read.containers().iterator().next())));
                 }
                 Map<TermPath, FixtureTemplate> writes = written.get();
                 Map<TermPath, List<ValuesHandedOn.Standing>> out = new LinkedHashMap<>();
@@ -73,9 +73,9 @@ final class HandedOn {
                 for (TermPath each : read.positions()) {
                     FixtureTemplate value = writes.get(each);
                     if (value == null) {
-                        yield new Came.NotWritable("a container is handed the value at `" + each
-                                + "`, which the row does not write, and nothing built the value"
-                                + " to say what stands there");
+                        yield new Came.NotWritable(
+                                new SearchMessage.NothingBuiltTheValueToSayWhatStandsThere(
+                                        String.valueOf(each)));
                     }
                     ValuesHandedOn.Standing standing =
                             new ValuesHandedOn.Standing(ElementsTaken.NONE, value);

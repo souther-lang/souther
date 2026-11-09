@@ -117,7 +117,7 @@ class HowManyPiecesASplitAtOneCodePointAnswersIsReadTest {
     private static void assertCovered(String model, int obligations) {
         Compilation compilation = measured(model);
         assertEquals(List.of(), compilation.errors(), "the rows hold");
-        String report = AdequacyReport.of(compilation).human(
+        String report = AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("obligations " + obligations + "/" + obligations), report);
         assertTrue(report.contains("adequacy: satisfied"), report);
@@ -125,7 +125,7 @@ class HowManyPiecesASplitAtOneCodePointAnswersIsReadTest {
 
     private static void assertNotRead(String model) {
         Compilation compilation = measured(model);
-        String report = AdequacyReport.of(compilation).human(
+        String report = AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("not read: comparison"), report);
         assertTrue(report.contains("how many times one string stands inside another"), report);

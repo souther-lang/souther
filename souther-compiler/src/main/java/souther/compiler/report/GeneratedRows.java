@@ -6,6 +6,9 @@ import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.GeneratedRowsMessage;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.ReportMessage;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.source.SourceId;
 import souther.compiler.publish.PublishedIncompleteness;
@@ -16,6 +19,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.StringOfferShortfall;
 import souther.compiler.publish.RuleHandleProse;
+import souther.compiler.diag.Messages;
 import souther.compiler.query.Sites;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.CaseOfAStatement;
@@ -52,11 +56,12 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
-import java.util.stream.Collectors;
+import java.util.function.Function;
 import java.util.stream.Stream;
 import java.util.Set;
 
@@ -74,6 +79,11 @@ import java.util.Set;
  * a behavior states, a note over a row composed for more than one thing, a line for each point no row
  * could be written at — and those are written as comments so that the block around them stays
  * something a file can hold.
+ *
+ * <p>The prose is in the reader's language and the source is not. What a block writes as Souther —
+ * the rows, their values and the names they are given — is the same whichever language is named,
+ * because it is what an author pastes and keeps; the comments around it are the catalog's, in the
+ * language the block is asked for in ({@link Block#text}).
  *
  * <p>Nothing is written to a file. Where the rows belong is a question with a real answer — the
  * module's own source or an attached {@code examples for} file — and one this does not have to guess
@@ -97,17 +107,38 @@ public final class GeneratedRows {
      * is not blank — so the action appeared, a person took it, and what it wrote into their source
      * was a comment (issue #955).
      *
-     * @param rowCount how many rows the block offers, which is what a caller that is about to
-     *                 change somebody's source has to ask
+     * <p>The text is written when it is asked for, in the language it is asked for in. What rows it
+     * holds and how many is decided before that and is one answer for every language.
      */
-    public record Block(String text, int rowCount) {
+    public static final class Block {
 
-        public Block {
-            Objects.requireNonNull(text, "a block is of something, even if it is empty");
+        private final int rowCount;
+        private final Function<Locale, String> written;
+
+        private Block(int rowCount, Function<Locale, String> written) {
             if (rowCount < 0) {
                 throw new IllegalArgumentException(
                         "a block offering fewer than no rows: " + rowCount);
             }
+            this.rowCount = rowCount;
+            this.written = Objects.requireNonNull(written,
+                    "a block is of something, even if it is empty");
+        }
+
+        /** How many rows the block offers, which is what a caller that is about to change
+         *  somebody's source has to ask. */
+        public int rowCount() {
+            return rowCount;
+        }
+
+        /** What to print: the rows, and the prose around them in {@code language}. */
+        public String text(Locale language) {
+            return written.apply(language);
+        }
+
+        /** The same with the prose in English, for a reader who reads the block in English. */
+        public String textInEnglish() {
+            return text(Messages.BASE_LANGUAGE);
         }
     }
 
@@ -161,15 +192,19 @@ public final class GeneratedRows {
      *  the report has. */
     public static Block of(Compilation compilation, SourceRendering rendering,
                            Map<String, Offering> offered) {
-        StringBuilder out = new StringBuilder();
+        List<Block> blocks = new ArrayList<>();
         int rows = 0;
         for (Map.Entry<String, Offering> each : offered.entrySet()) {
             Block one = of(each.getValue(), WrittenEnsures.of(compilation.db(), each.getKey()),
                     rendering, compilation.db());
-            out.append(one.text());
+            blocks.add(one);
             rows += one.rowCount();
         }
-        return new Block(out.toString(), rows);
+        return new Block(rows, language -> {
+            StringBuilder out = new StringBuilder();
+            blocks.forEach(one -> out.append(one.text(language)));
+            return out.toString();
+        });
     }
 
     /**
@@ -194,11 +229,10 @@ public final class GeneratedRows {
      * is said once, under the declaration that drew the line, and cannot be written from evidence
      * that does not support it.
      */
-    private static void declarations(StringBuilder out, Offering offering,
-                                     SourceRendering rendering,
+    private static void declarations(StringBuilder out, Offering offering, Page page,
                                      PublishedRuleHandle.WhereARuleIs places) {
         BorderAccount account = offering.account();
-        Set<String> said = new LinkedHashSet<>();
+        Set<Message> said = new LinkedHashSet<>();
         for (Map.Entry<BorderObligationPoint, BorderAccount.Unmet> each
                 : account.unmet().entrySet()) {
             // Nothing about a point one of the rows above stands at. What is left to write is what
@@ -211,30 +245,26 @@ public final class GeneratedRows {
                 // Said once, of the line, and in the declaration's own words. What each reading
                 // proved it of is not repeated: they agree, which is what let this be said at all.
                 case BorderAccount.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
-                        say(out, said, String.format(
-                                "// no row can be written at `%s` owed by `%s`: every reading of the"
-                                        + " line was searched and %s%n",
-                                asked, owedBy, NoValue.standsAt("it")));
+                        say(out, said, page, new GeneratedRowsMessage.NoRowCanBeWrittenAtTheLine(
+                                asked, owedBy, NoValue.standsAtIt()));
                 // One line per reading, because they are not one fact: a reading whose rules leave
                 // nothing at its own position and one whose search stopped are different news, and
                 // a line carrying whichever came first would carry the order the walk took.
                 case BorderAccount.Unmet.WhatTheReadingsCameTo(var _, var asked, var came) ->
-                        came.forEach(at -> say(out, said, switch (at) {
-                            case BorderAccount.At.Searched(var reading, var why) -> String.format(
-                                    "// no row for `%s` in `%s`: %s%n", why.subject(),
-                                    reading.behavior(), saidOf(why, rendering, places));
+                        came.forEach(at -> say(out, said, page, switch (at) {
+                            case BorderAccount.At.Searched(var reading, var why) ->
+                                    new GeneratedRowsMessage.NoRowFor(why.subject(),
+                                            reading.behavior(), saidOf(why, page, places));
                             // Said, because a reading that was asked about and could not be
                             // searched is a thing that happened to this run. Left out, a reader
                             // sees the readings that answered and no sign that another was asked.
-                            case BorderAccount.At.CouldNotBeSearched(var reading) -> String.format(
-                                    "// no row for `%s` in `%s`: the lines of that behavior could"
-                                            + " not be searched, so nothing was looked for at it%n",
-                                    asked, reading.behavior());
+                            case BorderAccount.At.CouldNotBeSearched(var reading) ->
+                                    new GeneratedRowsMessage.NoRowForAnUnsearchedBehavior(asked,
+                                            reading.behavior());
                         }));
                 case BorderAccount.Unmet.NothingWasSearched(var owedBy, var asked) ->
-                        say(out, said, String.format(
-                                "// no row for `%s` owed by `%s`: %s%n", asked, owedBy,
-                                why(Generator.UnresolvedCombination.Reason
+                        say(out, said, page, new GeneratedRowsMessage.NoRowForOwedBy(
+                                asked, owedBy, why(Generator.UnresolvedCombination.Reason
                                         .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED)));
             }
         }
@@ -249,6 +279,15 @@ public final class GeneratedRows {
      */
     public static Block of(Offering offering, Map<String, List<String>> ensures,
                            SourceRendering rendering, Db db) {
+        // The count leaves with the text. It was worked out here and thrown away, and the one
+        // caller that needed it read the text instead.
+        return new Block(offering.count(),
+                language -> written(offering, ensures, new Page(rendering, language), db));
+    }
+
+    /** The block for one offering, with its prose in the language of {@code page}. */
+    private static String written(Offering offering, Map<String, List<String>> ensures, Page page,
+                                  Db db) {
         PublishedRuleHandle.WhereARuleIs places = cited -> Sites.placeOf(db, cited);
         String module = offering.request().module();
         BorderAccount account = offering.account();
@@ -256,35 +295,30 @@ public final class GeneratedRows {
         // anything to answer. Counting the candidates instead gives a number about work a reader
         // cannot see, and asking the candidates whether the block holds a hole prints the line
         // telling them to fill one over a block that has none.
-        Map<String, List<Offered>> offered = named(offering, db, rendering, places);
+        Map<String, List<Offered>> offered = named(offering, db, page, places);
         int rows = offering.count();
         StringBuilder out = new StringBuilder();
         if (rows > 0) {
             int suggestions = offering.suggestionCount();
             int owed = rows - suggestions;
             if (suggestions == 0) {
-                out.append(String.format(
-                        "// generated by `souther examples --generate`: %d %s to fill what nothing covers.%n",
-                        rows, rows == 1 ? "row" : "rows"));
+                comment(out, page, rows == 1 ? new GeneratedRowsMessage.OneRowGenerated()
+                        : new GeneratedRowsMessage.RowsGenerated(rows));
             } else {
-                out.append(String.format(
-                        "// generated by `souther examples --generate`:%n"));
+                comment(out, page, new GeneratedRowsMessage.GeneratedBy());
                 if (owed > 0) {
-                    out.append(String.format("// %d %s to fill what nothing covers.%n",
-                            owed, owed == 1 ? "row" : "rows"));
+                    comment(out, page, owed == 1 ? new GeneratedRowsMessage.OneRowToFill()
+                            : new GeneratedRowsMessage.RowsToFill(owed));
                 }
-                out.append(String.format(
-                        "// %d optional %s trying inputs from called behaviors' examples;"
-                                + " %s no uncovered obligation.%n",
-                        suggestions, suggestions == 1 ? "row" : "rows",
-                        suggestions == 1 ? "it addresses" : "they address"));
+                comment(out, page, suggestions == 1
+                        ? new GeneratedRowsMessage.OneOptionalRow()
+                        : new GeneratedRowsMessage.OptionalRows(suggestions));
             }
-            out.append(String.format(
-                    "// Replace each `%s` with what the system actually answers.%n", UNANSWERED));
-            out.append(stated(blocks(module, offered), ensures));
+            comment(out, page, new GeneratedRowsMessage.ReplaceEachUnanswered(UNANSWERED));
+            out.append(stated(blocks(module, offered, page), ensures, page));
         }
         for (Map.Entry<String, Adequacy.Filling> behavior : offering.searched().entrySet()) {
-            notes(out, behavior.getKey(), behavior.getValue(), rendering, offering, places, db);
+            notes(out, behavior.getKey(), behavior.getValue(), page, offering, places, db);
         }
         // And what the module's declarations are owed that nothing composed a row for. Here rather
         // than after this returns, because what this builds is the block: a caller that rendered
@@ -292,11 +326,14 @@ public final class GeneratedRows {
         // holds, and the one that forgot would print rows with nothing said about the work beside
         // them.
         if (account != null) {
-            declarations(out, offering, rendering, places);
+            declarations(out, offering, page, places);
         }
-        // The count leaves with the text. It was worked out here and thrown away, and the one
-        // caller that needed it read the text instead.
-        return new Block(pastable(module, out.toString()), rows);
+        return pastable(module, out.toString());
+    }
+
+    /** A line of prose, written as the comment a block holds prose in. */
+    private static void comment(StringBuilder out, Page page, Message said) {
+        out.append("// ").append(page.say(said)).append(System.lineSeparator());
     }
 
     /**
@@ -345,13 +382,15 @@ public final class GeneratedRows {
      * with the case once it runs — so what is said is that nothing aims a row at it, and nothing
      * about the rows above.
      */
-    private static String openingFor(GenerationOutcome.NotSupported.Reason why) {
+    private static Message openingFor(GenerationOutcome.NotSupported.Reason why, Message what,
+                                      String behavior, Message said) {
         return switch (why) {
             case NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED, THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE,
                  THE_WAYS_INTO_THIS_ARM_ARE_NOT_TOLD_APART, MORE_WAYS_IN_THAN_THE_READING_HOLDS, THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT,
                  A_CONSTRUCTION_DECIDES_THIS_ARM, NO_AXIS_AT_THIS_POSITION ->
-                    "nothing offers a row for";
-            case NO_STRATEGY_FOR_AN_OUTPUT_CASE, NO_STRATEGY_FOR_A_WEIGHT -> "nothing aims a row at";
+                    new GeneratedRowsMessage.NothingOffersARowFor(what, behavior, said);
+            case NO_STRATEGY_FOR_AN_OUTPUT_CASE, NO_STRATEGY_FOR_A_WEIGHT ->
+                    new GeneratedRowsMessage.NothingAimsARowAt(what, behavior, said);
         };
     }
 
@@ -436,14 +475,14 @@ public final class GeneratedRows {
             // The name as the language writes a string, because that is what it is. Written out as
             // it stands, a name holding a quote — which a class named after a rule about strings
             // does — closes the literal early and the rest of it becomes source.
-            return name.map(thing -> "    | " + CstLexer.literalOf(thing.words())
+            return name.map(thing -> "    | " + CstLexer.literalOf(thing.name().orElseThrow())
                             + " : (" + inputs + ")" + standsIn + " -> " + UNANSWERED)
                     .orElse("    | (" + inputs + ")" + standsIn + " -> " + UNANSWERED);
         }
 
         /** What to say over the row: all it is for but what its name already says. */
-        List<String> saidOver() {
-            return besides.stream().map(Called::placed).toList();
+        List<String> saidOver(Page page) {
+            return besides.stream().map(each -> each.placed(page)).toList();
         }
     }
 
@@ -487,36 +526,46 @@ public final class GeneratedRows {
      * by every condition they turn on, and each condition is a place; their words say what kind of
      * thing it is and the conditions are the place, so a row is never named by them.
      *
-     * @param owed     which thing it is, which is what decides whether two of these are one
-     * @param nameable whether {@code words} name the thing, so that a row may be named by them
+     * <p>A name is source and the rest is prose. The words a row is named by are written in the
+     * base wording, so that the block a reader pastes is the same whichever language they read the
+     * comments in; the words a comment says are in the comment's language.
+     *
+     * @param owed  which thing it is, which is what decides whether two of these are one
+     * @param words what it is called, in the language of the page this is said on
+     * @param name  the words a row may be named by, in the base wording, where they name the
+     *              thing
+     * @param place where it is, in the words of the page this is said on
      */
-    private record Called(Owed owed, String words, Optional<String> place, boolean nameable) {
+    private record Called(Owed owed, Message words, Optional<String> name, Optional<String> place) {
 
         Called {
             Objects.requireNonNull(owed, "a thing a row is for is some thing");
             Objects.requireNonNull(words, "and is called something");
+            Objects.requireNonNull(name, "and is named, or is not");
             Objects.requireNonNull(place, "and is somewhere, or nowhere it can say");
         }
 
-        /** A thing whose words are its name, at {@code place}. */
-        static Called named(Owed owed, String name, Optional<String> place) {
-            return new Called(owed, name, place, true);
+        /** A thing a row may be named by {@code name}, at {@code place}. */
+        static Called named(Owed owed, Message words, String name, Optional<String> place) {
+            return new Called(owed, words, Optional.of(name), place);
         }
 
-        /** The words a row may be named by, where there are any. */
-        Optional<String> name() {
-            return nameable ? Optional.of(words) : Optional.empty();
+        /** A thing no row is named by. */
+        static Called unnamed(Owed owed, Message words, Optional<String> place) {
+            return new Called(owed, words, Optional.empty(), place);
         }
 
         /** The words and the place, as a comment over a row says them. */
-        String placed() {
-            return words + place.map(at -> " (" + at + ")").orElse("");
+        String placed(Page page) {
+            return page.say(place.<Message>map(at -> new GeneratedRowsMessage.Placed(words, at))
+                    .orElse(words));
         }
 
         /** The same, with a name marked as the words it is, as a note under a block says it. */
-        String quoted() {
-            return (nameable ? "`" + words + "`" : words)
-                    + place.map(at -> " (" + at + ")").orElse("");
+        Message quoted() {
+            Message said = name.isPresent() ? new GeneratedRowsMessage.Quoted(words) : words;
+            return place.<Message>map(at -> new GeneratedRowsMessage.Placed(said, at))
+                    .orElse(said);
         }
     }
 
@@ -533,59 +582,65 @@ public final class GeneratedRows {
      * them by ({@link AdequacyReport#conditionsOf}, {@link AdequacyReport#waysOf}) — the one
      * reading of each for both — and have no name: every condition is a place.
      */
-    private static Called called(Adequacy.Finding finding, Db db, String module,
-                                 SourceRendering rendering,
+    private static Called called(Adequacy.Finding finding, Db db, String module, Page page,
                                  PublishedRuleHandle.WhereARuleIs places) {
+        SourceRendering rendering = page.rendering();
         Owed owed = Owed.by(finding);
-        String name = about(finding, rendering, places);
+        Message words = about(finding, page, places);
+        // The name in the base wording throughout, parts and all: a name is source, and source is
+        // the same whichever language the comments around it are in.
+        String name = Page.inTheDocument(about(finding, page.base(), places));
         // The place as the report writes it: the position alone in the module's own file, and the
         // file with it in another's.
         SourceId declaredIn = Compilation.sourceIdOf(db, module);
         return switch (finding.about()) {
-            case About.AnArmNoRowGoesThrough _ -> Called.named(owed, name, Optional.of(
+            case About.AnArmNoRowGoesThrough _ -> Called.named(owed, words, name, Optional.of(
                     Adequacy.placeOf(db, module, finding).said(rendering, declaredIn)));
             case About.ARewriteNoRowTellsApart(var behavior, ReplacementAsWritten.OfAnArm rewrite,
-                    var reportAt, var _, var _) -> Called.named(owed, name, Optional.of(
+                    var reportAt, var _, var _) -> Called.named(owed, words, name, Optional.of(page.say(
                     switch (reportAt) {
-                        case ReplacementReportAnchor.AtTheFork _ ->
-                                Adequacy.placeOf(db, module, finding).said(rendering, declaredIn)
-                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
-                                                module, behavior, rewrite));
-                        case ReplacementReportAnchor.AtTheBehavior _ ->
-                                RewriteVocabulary.outOfSight(rewrite, module)
-                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
-                                                module, behavior, rewrite));
+                        case ReplacementReportAnchor.AtTheFork _ -> new ReportMessage.Then(
+                                new ReportMessage.Verbatim(Adequacy.placeOf(db, module, finding)
+                                        .said(rendering, declaredIn)),
+                                RewriteVocabulary.apart(Replacements.toldApartBy(db, module,
+                                        behavior, rewrite)));
+                        case ReplacementReportAnchor.AtTheBehavior _ -> new ReportMessage.Then(
+                                RewriteVocabulary.outOfSight(rewrite, module),
+                                RewriteVocabulary.apart(Replacements.toldApartBy(db, module,
+                                        behavior, rewrite)));
                         case ReplacementReportAnchor.AtTheWalk _ -> throw new IllegalStateException(
                                 "a rewrite of an arm shown at a walk: " + rewrite);
-                    }));
+                    })));
             // A fold's rewrite by the fold's place, or by the definition that wrote it where this
             // build holds no source of it, for the reason an arm's is.
             case About.ARewriteNoRowTellsApart(var behavior, ReplacementAsWritten.OfAWalk rewrite,
-                    var reportAt, var _, var _) -> Called.named(owed, name, Optional.of(
+                    var reportAt, var _, var _) -> Called.named(owed, words, name, Optional.of(page.say(
                     switch (reportAt) {
-                        case ReplacementReportAnchor.AtTheWalk _ ->
-                                Adequacy.placeOf(db, module, finding).said(rendering, declaredIn)
-                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
-                                                module, behavior, rewrite));
-                        case ReplacementReportAnchor.AtTheBehavior _ ->
-                                RewriteVocabulary.outOfSight(rewrite, module)
-                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
-                                                module, behavior, rewrite));
+                        case ReplacementReportAnchor.AtTheWalk _ -> new ReportMessage.Then(
+                                new ReportMessage.Verbatim(Adequacy.placeOf(db, module, finding)
+                                        .said(rendering, declaredIn)),
+                                RewriteVocabulary.apart(Replacements.toldApartBy(db, module,
+                                        behavior, rewrite)));
+                        case ReplacementReportAnchor.AtTheBehavior _ -> new ReportMessage.Then(
+                                RewriteVocabulary.outOfSight(rewrite, module),
+                                RewriteVocabulary.apart(Replacements.toldApartBy(db, module,
+                                        behavior, rewrite)));
                         case ReplacementReportAnchor.AtTheFork _ -> throw new IllegalStateException(
                                 "a rewrite of a walk shown at a fork: " + rewrite);
-                    }));
+                    })));
             // A body that decides nothing has one rule and it turns on no condition, so there is
             // no place to say it at.
             case About.ARuleNoRowTakes(var behavior, var ruled) -> {
                 List<AdequacyReport.ShownCondition> way = AdequacyReport.conditionsOf(db, module,
                         AdequacyReport.placesFor(db, module, behavior), ruled);
-                yield new Called(owed, "a decision rule", way.isEmpty() ? Optional.empty()
-                        : Optional.of(said(way, declaredIn, rendering)), false);
+                yield Called.unnamed(owed, new GeneratedRowsMessage.ADecisionRule(),
+                        way.isEmpty() ? Optional.empty()
+                                : Optional.of(said(way, declaredIn, page)));
             }
             // A point of a line is said with the rule that drew it, which is its place; and points
             // coincide, so no row is named for one.
             case About.APointOfABorder _, About.APointOfADeclaredBorder _ ->
-                    new Called(owed, name, Optional.empty(), false);
+                    Called.unnamed(owed, words, Optional.empty());
             case About.ACombinationNoRowMakes(var combination) -> {
                 InteractionEvidence meetings = Objects.requireNonNull(
                         db.ask(new Adequacy.Interacts(module)).value(),
@@ -593,39 +648,39 @@ public final class GeneratedRows {
                 List<String> ways = AdequacyReport.waysOf(db, module,
                                 AdequacyReport.placesFor(db, module, combination.behavior()),
                                 meetings, combination).stream()
-                        .map(way -> said(way, declaredIn, rendering)).toList();
-                yield new Called(owed, "a combination of the decisions",
-                        Optional.of(String.join(", or ", ways)), false);
+                        .map(way -> said(way, declaredIn, page)).toList();
+                String said = ways.getLast();
+                for (int i = ways.size() - 2; i >= 0; i--) {
+                    said = page.say(new GeneratedRowsMessage.OrElse(ways.get(i), said));
+                }
+                yield Called.unnamed(owed, new GeneratedRowsMessage.ACombinationOfTheDecisions(),
+                        Optional.of(said));
             }
-            default -> Called.named(owed, name, Optional.empty());
+            default -> Called.named(owed, words, name, Optional.empty());
         };
     }
 
     /** What a case a statement of the decision draws inside itself is, said in a few words. */
-    private static String wordsOf(CaseOfAStatement which) {
+    private static Message wordsOf(CaseOfAStatement which) {
         return switch (which) {
             case CaseOfAStatement.Search(var _, var step) -> switch (step) {
-                case AT_THE_NODE -> "a search that finds what it asks at the node it starts at";
-                case BELOW_IT -> "a search that finds what it asks below the node it starts at";
-                case NOWHERE_AT_A_LEAF ->
-                        "a search that finds nothing at a node with nothing below it";
-                case NOWHERE_BELOW ->
-                        "a search that finds nothing through the nodes below its start";
+                case AT_THE_NODE -> new GeneratedRowsMessage.ASearchThatFindsItAtTheNode();
+                case BELOW_IT -> new GeneratedRowsMessage.ASearchThatFindsItBelowTheNode();
+                case NOWHERE_AT_A_LEAF -> new GeneratedRowsMessage.ASearchThatFindsNothingAtALeaf();
+                case NOWHERE_BELOW -> new GeneratedRowsMessage.ASearchThatFindsNothingBelow();
             };
             case CaseOfAStatement.KeyOrder(var _, var _, var way) -> switch (way) {
-                case HOLDS_BY_THE_LAST ->
-                        "a key held twice whose last element makes the statement hold";
-                case FAILS_BY_THE_LAST ->
-                        "a key held twice whose last element makes the statement fail";
+                case HOLDS_BY_THE_LAST -> new GeneratedRowsMessage.AKeyHeldTwiceThatHolds();
+                case FAILS_BY_THE_LAST -> new GeneratedRowsMessage.AKeyHeldTwiceThatFails();
             };
         };
     }
 
     /** The conditions of one way, as the report says each, in their order. */
     private static String said(List<AdequacyReport.ShownCondition> way, SourceId declaredIn,
-                               SourceRendering rendering) {
-        return way.stream().map(each -> AdequacyReport.said(each, declaredIn, rendering))
-                .collect(Collectors.joining("; "));
+                               Page page) {
+        return AdequacyReport.reasons(page, way.stream()
+                .map(each -> AdequacyReport.said(each, declaredIn, page)).toList());
     }
 
     /**
@@ -641,7 +696,7 @@ public final class GeneratedRows {
                                        Map<ObligationIdentity, Called> owed) {
 
         static WhatTheFindingsCall in(String behavior, Adequacy.Filling filling, Db db,
-                                      String module, SourceRendering rendering,
+                                      String module, Page page,
                                       PublishedRuleHandle.WhereARuleIs places) {
             Map<ArmProbe, Called> arms = new LinkedHashMap<>();
             Map<ObligationIdentity, Called> owed = new LinkedHashMap<>();
@@ -651,15 +706,15 @@ public final class GeneratedRows {
                 for (Adequacy.GenerationDisposition each : filling.generation()) {
                     switch (each.finding().about()) {
                         case About.AnArmNoRowGoesThrough(var arm) -> arms.put(arm.index(),
-                                called(each.finding(), db, module, rendering, places));
+                                called(each.finding(), db, module, page, places));
                         case About.ARewriteNoRowTellsApart rewrite -> owed.put(
                                 rewrite.obligationIdentity(),
-                                called(each.finding(), db, module, rendering, places));
+                                called(each.finding(), db, module, page, places));
                         case About.ARuleNoRowTakes rule -> owed.put(rule.obligationIdentity(),
-                                called(each.finding(), db, module, rendering, places));
+                                called(each.finding(), db, module, page, places));
                         case About.ACombinationNoRowMakes combination -> owed.put(
                                 combination.obligationIdentity(),
-                                called(each.finding(), db, module, rendering, places));
+                                called(each.finding(), db, module, page, places));
                         default -> { }
                     }
                 }
@@ -706,15 +761,16 @@ public final class GeneratedRows {
                     case Generator.Purpose.ForACaseOfAStatement(var which) -> {
                         Owed owed = new Owed.AnObligation(
                                 new ObligationIdentity.OfACaseOfAStatement(behavior, which));
-                        out.putIfAbsent(owed, new Called(owed, wordsOf(which), Optional.empty(),
-                                false));
+                        out.putIfAbsent(owed, Called.unnamed(owed, wordsOf(which),
+                                Optional.empty()));
                     }
                     case Generator.Purpose.ForAClass _, Generator.Purpose.ForAFallbackPairCell _,
                             Generator.Purpose.ForAPoint _, Generator.Purpose.Unstated _ ->
                             purpose.labels().forEach(label -> {
                                 Owed owed = new Owed.ALabel(purpose, label);
-                                out.putIfAbsent(owed,
-                                        Called.named(owed, label, Optional.empty()));
+                                out.putIfAbsent(owed, Called.named(owed,
+                                        new ReportMessage.Verbatim(label), label,
+                                        Optional.empty()));
                             });
                 }
             }
@@ -745,15 +801,14 @@ public final class GeneratedRows {
      * <p>Which rows are named is asked of the block once every row's things are known: a name
      * another thing in the block is also called by would name either of them ({@link Offered}).
      */
-    private static Map<String, List<Offered>> named(Offering offering, Db db,
-                                                    SourceRendering rendering,
+    private static Map<String, List<Offered>> named(Offering offering, Db db, Page page,
                                                     PublishedRuleHandle.WhereARuleIs places) {
         String module = offering.request().module();
-        Map<ObligationIdentity, Called> lines = linesOf(offering, rendering, places);
+        Map<ObligationIdentity, Called> lines = linesOf(offering, page, places);
         Map<String, List<Offered>> out = new LinkedHashMap<>();
         offering.rowsByBehavior().forEach((behavior, rows) -> {
             WhatTheFindingsCall called = WhatTheFindingsCall.in(behavior,
-                    offering.searched().get(behavior), db, module, rendering, places);
+                    offering.searched().get(behavior), db, module, page, places);
             // What each row was composed for, and apart from it the lines and rewrites it is the
             // row a person is handed for. A row is never composed for a line — what a line is owed
             // is answered in the account — and a row composed for something else may be the one a
@@ -799,7 +854,7 @@ public final class GeneratedRows {
                 boolean several = forIt.size() + handed.get(i).size() > 1;
                 List<String> stops = new ArrayList<>();
                 for (RepairShortfall stop : row.stops()) {
-                    stops.add(stoppedShort(stop, several, db, rendering, places));
+                    stops.add(stoppedShort(stop, several, db, page, places));
                 }
                 here.add(new Offered(row.key().inputs(), standingIn(module, row), name, besides,
                         stops, offering.isSuggestion(row.key())));
@@ -821,8 +876,7 @@ public final class GeneratedRows {
      * <p>No name. A point's words are its place, and points coincide: which one a row is handed
      * for is what changes when something else is written.
      */
-    private static Map<ObligationIdentity, Called> linesOf(Offering offering,
-                                                           SourceRendering rendering,
+    private static Map<ObligationIdentity, Called> linesOf(Offering offering, Page page,
                                                            PublishedRuleHandle.WhereARuleIs places) {
         Map<ObligationIdentity, Called> out = new LinkedHashMap<>();
         if (offering.account() == null) {
@@ -830,10 +884,10 @@ public final class GeneratedRows {
         }
         offering.account().resolved().forEach((point, answer) -> {
             ObligationIdentity line = new ObligationIdentity.OfALine(point);
-            String words = answer.declaredAxis() == null
-                    ? about(answer.point(), rendering, places)
-                    : answer.said();
-            out.put(line, new Called(new Owed.AnObligation(line), words, Optional.empty(), false));
+            Message words = answer.declaredAxis() == null
+                    ? about(answer.point(), page, places)
+                    : new ReportMessage.Verbatim(answer.said());
+            out.put(line, Called.unnamed(new Owed.AnObligation(line), words, Optional.empty()));
         });
         return out;
     }
@@ -870,7 +924,7 @@ public final class GeneratedRows {
      * file that {@code souther fmt} then runs over. A block that came out in a shape the formatter
      * would change turns a paste into a diff on the next commit.
      */
-    private static String blocks(String module, Map<String, List<Offered>> offered) {
+    private static String blocks(String module, Map<String, List<Offered>> offered, Page page) {
         StringBuilder source = new StringBuilder();
         source.append("examples for ").append(module).append("\n");
         for (Map.Entry<String, List<Offered>> behavior : offered.entrySet()) {
@@ -891,7 +945,7 @@ public final class GeneratedRows {
         }
         // The header was there to make the rows parseable on their own. Where they are pasted is the
         // author's choice — the module's own file or an attached one — and only one of those wants it.
-        return fills(formatted.replaceFirst("^examples for \\S+\\R+", ""), offered);
+        return fills(formatted.replaceFirst("^examples for \\S+\\R+", ""), offered, page);
     }
 
     /**
@@ -910,7 +964,7 @@ public final class GeneratedRows {
      * row was found for; this row is offered, and a reader completing it is the one who needs to
      * know it does not get past the guard.
      */
-    private static String fills(String rows, Map<String, List<Offered>> offered) {
+    private static String fills(String rows, Map<String, List<Offered>> offered, Page page) {
         List<Offered> inOrder = new ArrayList<>();
         offered.values().forEach(inOrder::addAll);
         StringBuilder out = new StringBuilder();
@@ -919,14 +973,13 @@ public final class GeneratedRows {
             if (line.startsWith(ROW) && at < inOrder.size()) {
                 Offered row = inOrder.get(at++);
                 if (row.suggested()) {
-                    out.append("// suggested input; no uncovered obligation")
-                            .append(System.lineSeparator());
+                    comment(out, page, new GeneratedRowsMessage.SuggestedInput());
                 }
-                for (String each : row.saidOver()) {
-                    out.append("// fills ").append(each).append(System.lineSeparator());
+                for (String each : row.saidOver(page)) {
+                    comment(out, page, new GeneratedRowsMessage.Fills(each));
                 }
                 for (String each : row.stops()) {
-                    out.append("// stops at ").append(each).append(System.lineSeparator());
+                    comment(out, page, new GeneratedRowsMessage.StopsAt(each));
                 }
             }
             out.append(line).append(System.lineSeparator());
@@ -949,7 +1002,7 @@ public final class GeneratedRows {
      * builds is source, written so that {@code souther fmt} would leave it alone; a heading is prose
      * and is written as a comment, and the formatter parses what it is handed.
      */
-    private static String stated(String source, Map<String, List<String>> ensures) {
+    private static String stated(String source, Map<String, List<String>> ensures, Page page) {
         StringBuilder out = new StringBuilder();
         for (String line : source.lines().toList()) {
             // The heading a behavior's rows are written under, which is the one line of the block
@@ -963,7 +1016,7 @@ public final class GeneratedRows {
                 // The words the author put in the declaration, quoted whether or not the checker
                 // could make a rule of them: what is claimed is that they are written, and nothing
                 // further.
-                out.append(String.format("// `ensures` written for `%s`:%n", behavior));
+                comment(out, page, new GeneratedRowsMessage.EnsuresWrittenFor(behavior));
                 for (String clause : clauses) {
                     for (String each : clause.lines().toList()) {
                         out.append("//     ").append(each).append(System.lineSeparator());
@@ -990,10 +1043,10 @@ public final class GeneratedRows {
      * the rows it was offering were printed two lines above the line saying it had stopped.
      */
     private static void notes(StringBuilder out, String behavior, Adequacy.Filling filling,
-                              SourceRendering rendering, Offering offering,
+                              Page page, Offering offering,
                               PublishedRuleHandle.WhereARuleIs places, Db db) {
         String module = offering.request().module();
-        Set<String> said = new LinkedHashSet<>();
+        Set<Message> said = new LinkedHashSet<>();
         // What is said about each finding, kept apart by the finding: two findings can be said in
         // the same words, and they are still two.
         Set<Said> saidOf = new HashSet<>();
@@ -1004,14 +1057,14 @@ public final class GeneratedRows {
         // line holding what both met rather than one line twice with half of it apiece.
         for (CameToNothing each : CameToNothing.joinedAsShown(filling.composed().unresolved(),
                 GeneratedRows::shownForWhatItIsAbout)) {
-            say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
-                    each.why().subject(), behavior, saidOf(each, rendering, places)));
+            say(out, said, page, new GeneratedRowsMessage.NoRowFor(
+                    each.why().subject(), behavior, saidOf(each, page, places)));
         }
         // And the points, whose figures are said at the point's own account in the report rather
         // than here. Written with the same clause, one figure would reach a reader twice.
         for (Generator.UnresolvedCombination each : filling.boundaries().unresolved()) {
-            say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
-                    each.subject(), behavior, saidOf(each, rendering, places)));
+            say(out, said, page, new GeneratedRowsMessage.NoRowFor(each.subject(),
+                    behavior, saidOf(each, page, places)));
         }
         // Every finding a row could answer, and not only the ones a strategy took. One printed in
         // the report and left out of this block is one an author is told nothing about, while the
@@ -1045,11 +1098,13 @@ public final class GeneratedRows {
                     for (CameToNothing came : CameToNothing.joinedAsShown(cannot.why(), named
                             ? GeneratedRows::shownUnderItsFinding
                             : GeneratedRows::shownForWhatItIsAbout)) {
-                        say(out, saidOf, Owed.by(each.finding()), String.format(
-                                "// no row for %s in `%s`: %s%n",
-                                named ? called(each.finding(), db, module, rendering, places)
-                                        .quoted() : "`" + came.why().subject() + "`",
-                                behavior, saidOf(came, rendering, places)));
+                        say(out, saidOf, Owed.by(each.finding()), page,
+                                new GeneratedRowsMessage.NoRowForThe(named
+                                        ? called(each.finding(), db, module, page, places)
+                                                .quoted()
+                                        : new ReportMessage.Verbatim(
+                                                "`" + came.why().subject() + "`"),
+                                        behavior, saidOf(came, page, places)));
                     }
                 }
                 // Told apart from the one above it in its own words. A strategy that tried and
@@ -1061,21 +1116,18 @@ public final class GeneratedRows {
                 // thing that stands in two places is read at both, and what is missing at one of
                 // them is not what is missing at the other.
                 case GenerationOutcome.NotSupported none -> none.reasons().forEach(why ->
-                        say(out, saidOf, Owed.by(each.finding()),
-                                String.format("// %s %s in `%s`: %s%n", openingFor(why),
-                                        called(each.finding(), db, module, rendering, places)
-                                                .quoted(), behavior,
-                                        why.said())));
+                        say(out, saidOf, Owed.by(each.finding()), page,
+                                openingFor(why, called(each.finding(), db, module, page, places)
+                                        .quoted(), behavior, why.told())));
                 // Said rather than passed over, because the report counts this coordinate among
                 // what is missing and no row is offered for it. Left out, an author reads a gap
                 // above and no account of why nothing was written for it; the account is that the
                 // line it is a coordinate of is owed one row and has one — written already, or
                 // composed at another of the line's positions and offered above.
                 case GenerationOutcome.ObligationAlreadySettled _ -> say(out, saidOf,
-                        Owed.by(each.finding()),
-                        String.format("// no row offered for %s in `%s`: this line is answered"
-                                + " by a row elsewhere%n",
-                                called(each.finding(), db, module, rendering, places).quoted(),
+                        Owed.by(each.finding()), page,
+                        new GeneratedRowsMessage.NoRowOfferedAnsweredElsewhere(
+                                called(each.finding(), db, module, page, places).quoted(),
                                 behavior));
                 // Filtered out above, and listed here so that the switch stays exhaustive: an
                 // answer added later has to be given words rather than falling silently into
@@ -1089,86 +1141,81 @@ public final class GeneratedRows {
             // Through the same set the lines above went through. Two searches of one behavior stop
             // for one reason — nothing built to put a candidate through stops both — and a reader
             // told that twice reads two things having gone wrong.
-            lines(out, said, switch (why) {
-                case GenerationReason.PositionWithheld withheld -> String.format(
-                        "// no rows offered at `%s`: a row's value there could not be read, so a"
-                                + " row written for it may be one that is already here%n",
-                        withheld.axis());
-                case GenerationReason.SearchLimit limit -> String.format(
-                        "// generation stopped for `%s`: %d %s past the row limit%n",
-                        limit.behavior(), limit.owed(),
-                        limit.owed() == 1 ? "class or arm" : "classes and arms");
+            switch (why) {
+                case GenerationReason.PositionWithheld withheld -> say(out, said, page,
+                        new GeneratedRowsMessage.NoRowsOfferedAtAWithheldPosition(
+                                String.valueOf(withheld.axis())));
+                case GenerationReason.SearchLimit limit -> say(out, said, page,
+                        limit.owed() == 1
+                                ? new GeneratedRowsMessage.StoppedOneClassOrArmPastTheLimit(
+                                        limit.behavior())
+                                : new GeneratedRowsMessage.StoppedClassesAndArmsPastTheLimit(
+                                        limit.behavior(), limit.owed()));
                 // Beside the line above rather than folded into it. That one is a budget an author
                 // can raise; this is a walk that was never made, and a reader told the first where
                 // the second happened would raise a limit that changes nothing.
                 // What was not walked, and not what is missing from the block. A row through an arm
                 // behind one of these comes from the way into the arm and is offered above, so a
                 // line saying rows were not offered here says a row is owed where one is written.
-                case GenerationReason.GroupsNotOffered held -> String.format(
-                        "// the combinations of %d %s of `%s` were not looked in: each has more of"
-                                + " them together than this walks%n",
-                        held.groups(), held.groups() == 1 ? "group of decisions" : "groups of"
-                                + " decisions", held.behavior());
-                case GenerationReason.NothingToBuildAgainst none -> String.format(
-                        "// generation stopped for `%s`: there was nothing to build a candidate"
-                                + " against%n", none.behavior());
-                case GenerationReason.LinkageFailed failed -> String.format(
-                        "// generation stopped for `%s`: the generated classes would not link, so"
-                                + " the decoders a candidate is built through were out of reach%n",
-                        failed.behavior());
+                case GenerationReason.GroupsNotOffered held -> say(out, said, page,
+                        held.groups() == 1
+                                ? new GeneratedRowsMessage.OneGroupWasNotLookedIn(held.behavior())
+                                : new GeneratedRowsMessage.GroupsWereNotLookedIn(held.groups(),
+                                        held.behavior()));
+                case GenerationReason.NothingToBuildAgainst none -> say(out, said, page,
+                        new GeneratedRowsMessage.StoppedWithNothingToBuildAgainst(
+                                none.behavior()));
+                case GenerationReason.LinkageFailed failed -> say(out, said, page,
+                        new GeneratedRowsMessage.StoppedAsTheClassesWouldNotLink(
+                                failed.behavior()));
                 // Not a stop. The rows above it are there and are worth writing; what is said is
                 // that nothing ran them, so what each is offered for is a reading of the body
                 // rather than something anything watched.
-                case GenerationReason.RowsNotConfirmed unconfirmed -> String.format(
-                        "// rows offered for `%s` were not run, so which combination each reaches"
-                                + " is read off the body rather than observed%n",
-                        unconfirmed.behavior());
+                case GenerationReason.RowsNotConfirmed unconfirmed -> say(out, said, page,
+                        new GeneratedRowsMessage.RowsOfferedWereNotRun(unconfirmed.behavior()));
                 // The reasons it rests on rather than a word of its own. What was not read is a
                 // measurement's answer and is already said in those words; saying it again in the
                 // generator's would be the same fact under two spellings, read side by side.
+                //
+                // In the order a document writes them in, which is the order every surface that
+                // says these facts writes them in. A block written from the account itself would
+                // come out in whatever that iterated in, and a person comparing two generations of
+                // one model would be reading the difference between two walks.
                 case GenerationReason.RowsNotRead unread -> {
-                    StringBuilder lines = new StringBuilder();
-                    // In the order a document writes them in, which is the order every surface
-                    // that says these facts writes them in. A block written from the account
-                    // itself would come out in whatever that iterated in, and a person comparing
-                    // two generations of one model would be reading the difference between two
-                    // walks.
                     for (PublishedIncompleteness because
                             : PublishedIncompleteness.everyOne(unread.because()).written()) {
-                        lines.append(String.format("// generation stopped for `%s`: %s%n",
-                                unread.behavior(), Reasons.said(because.fact(), rendering)));
+                        say(out, said, page, new GeneratedRowsMessage.StoppedAsRowsWereNotRead(
+                                unread.behavior(), Reasons.told(because.fact(), page)));
                     }
-                    yield lines.toString();
                 }
-            });
+            }
         }
     }
 
-    /** Each line of what a reason came to, and each of them once. */
-    private static void lines(StringBuilder out, Set<String> said, String written) {
-        for (String line : written.lines().toList()) {
-            say(out, said, line + System.lineSeparator());
-        }
-    }
-
-    /** One line, and once. Two gaps can rest on one fact, and a reader owed it is owed it once. */
-    private static void say(StringBuilder out, Set<String> said, String line) {
+    /**
+     * One line, and once. Two gaps can rest on one fact, and a reader owed it is owed it once.
+     *
+     * <p>Once for what the line says, and never for how a language words it: two lines are one
+     * where they say one thing, and two things a language happens to word alike are still two.
+     */
+    private static void say(StringBuilder out, Set<Message> said, Page page, Message line) {
         if (said.add(line)) {
-            out.append(line);
+            out.append("// ").append(page.say(line)).append(System.lineSeparator());
         }
     }
 
     /** A line about one thing, which is that thing's and is said once for it. */
-    private record Said(Owed about, String line) {}
+    private record Said(Owed about, Message line) {}
 
     /**
-     * One line about {@code about}, and once for it. Not once for its words: two things said in
-     * the same words are two, and the second dropped as a repeat of the first is a thing a reader
-     * is not told about.
+     * One line about {@code about}, and once for it. Not once for what it says alone: two things
+     * said alike are two, and the second dropped as a repeat of the first is a thing a reader is
+     * not told about.
      */
-    private static void say(StringBuilder out, Set<Said> said, Owed about, String line) {
+    private static void say(StringBuilder out, Set<Said> said, Owed about, Page page,
+                            Message line) {
         if (said.add(new Said(about, line))) {
-            out.append(line);
+            out.append("// ").append(page.say(line)).append(System.lineSeparator());
         }
     }
 
@@ -1177,10 +1224,11 @@ public final class GeneratedRows {
      * report says a rule in, and which point of it. The one place a block says a point, whether a
      * finding is about it or a row is handed for it.
      */
-    private static String about(BorderObligationPointAssessment point,
-                                SourceRendering rendering,
-                                PublishedRuleHandle.WhereARuleIs places) {
-        return RuleHandleProse.said(point.said(places), rendering, null);
+    private static Message about(BorderObligationPointAssessment point, Page page,
+                                 PublishedRuleHandle.WhereARuleIs places) {
+        return new ReportMessage.DeclaredPointOf(point.role().name(),
+                RuleHandleProse.said(point.handle(places), page.rendering(), page.language(),
+                        null));
     }
 
     /**
@@ -1189,58 +1237,70 @@ public final class GeneratedRows {
      * <p>Read off the value the finding was established with, so that a subject printed here and
      * a subject printed in the report are the same words about the same thing.
      */
-    private static String about(Adequacy.Finding finding, SourceRendering rendering,
-                                PublishedRuleHandle.WhereARuleIs places) {
+    private static Message about(Adequacy.Finding finding, Page page,
+                                 PublishedRuleHandle.WhereARuleIs places) {
         return switch (finding.about()) {
             // The point's own words, which is what the edge's own attempt is named by a few lines
             // above ({@code saidOf}). Spelled out here as well, the two vocabularies differed by
             // the role: a point away from the line was written as the value the line is at, which
             // is the one place in reach that such a point is not.
-            case About.APointOfABorder(var point) -> about(point, rendering, places);
+            case About.APointOfABorder(var point) -> about(point, page, places);
             // The same words on what the declaration wrote. Nothing composes a row for one of
             // these yet — the search walks one behavior's inputs and this line is owed once over
             // all of them — so what is printed beside it is that, in its own sentence.
-            case About.APointOfADeclaredBorder(var debt) -> debt.said();
+            case About.APointOfADeclaredBorder(var debt) -> new ReportMessage.Verbatim(debt.said());
             // The arm's own short name, which is what the report writes and what the document's
             // `subject` joins on. The finding carries the arm rather than words about it, so that
             // the sentence a diagnostic says in the reader's language and the words written here
             // are two readings of one arm rather than one of them being handed the other's.
-            case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);
-            case About.ACaseNoRowAppliesItTo(var _, var missing, var _) -> missing.name();
-            case About.ACaseNoRowExpects(var _, var missing) -> missing.name();
+            case About.AnArmNoRowGoesThrough(var arm) ->
+                    new ReportMessage.Verbatim(ArmVocabulary.label(arm));
+            case About.ACaseNoRowAppliesItTo(var _, var missing, var _) ->
+                    new ReportMessage.Verbatim(missing.name());
+            case About.ACaseNoRowExpects(var _, var missing) ->
+                    new ReportMessage.Verbatim(missing.name());
             // The class and the measure it is a class of, which a class name alone does not say:
             // two parameters of one type divide into classes of the same names, and one location is
             // measured at more than one number.
             case About.AClassNoRowIsIn(var missing) ->
-                    missing.name() + " at " + missing.axis().name();
+                    new GeneratedRowsMessage.TheClassAt(missing.name(), missing.axis().name());
             // The behavior whose decision it is a rule of, which is as far as words about a rule
             // go. What tells one from another is the proposition each of its conditions is keyed
             // on, written the one way round that makes a comparison and its denial one column —
             // and printing that would show an author a comparison they did not write.
-            case About.ARuleNoRowTakes(var behavior, var _) -> "a decision rule of " + behavior;
+            case About.ARuleNoRowTakes(var behavior, var _) ->
+                    new GeneratedRowsMessage.ADecisionRuleOf(behavior);
             // Which rewrite, in the words the report writes for it.
             case About.ARewriteNoRowTellsApart(var _, var written, var _, var _, var _) ->
-                    RewriteVocabulary.label(written, rendering);
+                    RewriteVocabulary.label(written, page);
             // The behavior again, and for the same reason: what the combination is of is written
             // in the terms the account keys on, and a block printing those would hand an author
             // this compiler's spelling of their own body.
             case About.ACombinationNoRowMakes(var combination) ->
-                    "a combination of the decisions of " + combination.behavior();
+                    new GeneratedRowsMessage.ACombinationOfTheDecisionsOf(combination.behavior());
             // The two classes, which is the whole of what one of these is and is something a
             // reader can act on: where a value has to fall at each of two positions.
-            case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
-                    combination.inOrder().stream()
-                            .map(each -> each.classId() + " at " + each.at())
-                            .collect(java.util.stream.Collectors.joining(" with "));
+            case About.ACombinationOfTwoClassesNoRowIsIn(var combination) -> {
+                List<Message> each = combination.inOrder().stream()
+                        .<Message>map(one -> new GeneratedRowsMessage.TheClassAt(one.classId(),
+                                String.valueOf(one.at()))).toList();
+                Message said = each.getLast();
+                for (int i = each.size() - 2; i >= 0; i--) {
+                    said = new GeneratedRowsMessage.TheClassesWith(each.get(i), said);
+                }
+                yield said;
+            }
             // Both lines, which is what a row here would settle between. What is printed beside
             // these words is what the search for such a row came to, and a row that was composed
             // is offered above rather than said here.
             case About.ALineTheRowsDoNotTellFromAnother untold ->
-                    untold.line().border().label() + " against " + untold.allowed().label();
+                    new GeneratedRowsMessage.TheLineAgainst(untold.line().border().label(),
+                            untold.allowed().label());
             // The position and the total it weighs into, which is the whole of what the weight is
             // of.
             case About.ATiltOfADerivedValueNoRowShows tilt ->
-                    "the weight of " + tilt.position() + " in " + tilt.into().left();
+                    new GeneratedRowsMessage.TheWeightOf(String.valueOf(tilt.position()),
+                            String.valueOf(tilt.into().left()));
             // Findings row synthesis is not about, which `shown` leaves out and nothing here is
             // asked to name. Listed rather than defaulted so that a shape added later has to be
             // given words here.
@@ -1270,15 +1330,16 @@ public final class GeneratedRows {
      * both. So the two are joined here, and the one carrier that replaces the category is the one
      * whose whole job is to say which case of it this was.
      */
-    private static String saidOf(Generator.UnresolvedCombination left, SourceRendering rendering,
-                                 PublishedRuleHandle.WhereARuleIs places) {
-        return beside(left.said().orElseGet(() -> why(left.reason())), left, rendering, places);
+    private static Message saidOf(Generator.UnresolvedCombination left, Page page,
+                                  PublishedRuleHandle.WhereARuleIs places) {
+        return beside(left.told().<Message>map(told -> told).orElseGet(() -> why(left.reason())),
+                left, page, places);
     }
 
     /**
      * What a line naming what a search was about is made from, beside what the search met: what
      * it was about, its own sentence or its word ({@link #saidOf(Generator.UnresolvedCombination,
-     * SourceRendering, PublishedRuleHandle.WhereARuleIs)}), and what else its offer was short of
+     * Page, PublishedRuleHandle.WhereARuleIs)}), and what else its offer was short of
      * ({@link #beside}). Changed with those and never apart from them.
      */
     static List<Object> shownForWhatItIsAbout(Generator.UnresolvedCombination why) {
@@ -1291,7 +1352,7 @@ public final class GeneratedRows {
     }
 
     private static Object sentenceOrWord(Generator.UnresolvedCombination why) {
-        return why.said().<Object>map(sentence -> sentence).orElse(why.reason());
+        return why.told().<Object>map(sentence -> sentence).orElse(why.reason());
     }
 
     /**
@@ -1303,10 +1364,9 @@ public final class GeneratedRows {
      * made what they were going to make of it — which is a shortfall of this compiler's read as
      * something the model settles.
      */
-    private static String saidOf(CameToNothing came,
-                                 SourceRendering rendering,
-                                 PublishedRuleHandle.WhereARuleIs places) {
-        return Reasons.met(came) + saidOf(came.why(), rendering, places);
+    private static Message saidOf(CameToNothing came, Page page,
+                                  PublishedRuleHandle.WhereARuleIs places) {
+        return Reasons.opening(Reasons.met(came), saidOf(came.why(), page, places));
     }
 
     /**
@@ -1314,7 +1374,7 @@ public final class GeneratedRows {
      * {@code stops at}.
      *
      * <p>The guard where the author wrote it, and each way past it in the words its search already
-     * has ({@link #saidOf(CameToNothing, SourceRendering, PublishedRuleHandle.WhereARuleIs)}). Spelled
+     * has ({@link #saidOf(CameToNothing, Page, PublishedRuleHandle.WhereARuleIs)}). Spelled
      * again here, a way this compiler could not compose a row down and a way the rules leave no row
      * down would be one more pair of sentences free to say the same thing; through the one that
      * says every search's word, the first opens on what this compiler fell short at and the second
@@ -1328,81 +1388,83 @@ public final class GeneratedRows {
      * one of them, with its classes held, and a reader told only that the row stops would not know
      * whose search said so.
      */
-    private static String stoppedShort(RepairShortfall stop, boolean among, Db db,
-                                       SourceRendering rendering,
+    private static String stoppedShort(RepairShortfall stop, boolean among, Db db, Page page,
                                        PublishedRuleHandle.WhereARuleIs places) {
-        String guard = "the guard at "
-                + Sites.placeOf(db, stop.refused().anchor()).said(rendering, null);
+        String at = Sites.placeOf(db, stop.refused().anchor()).said(page.rendering(), null);
+        String guard;
         if (among) {
             List<String> labels = new ArrayList<>();
             stop.soughtFor().forEach(purpose -> labels.addAll(purpose.labels()));
-            guard += " looking for `" + String.join("` with `", labels) + "`";
+            String said = "`" + labels.getLast() + "`";
+            for (int i = labels.size() - 2; i >= 0; i--) {
+                said = page.say(new GeneratedRowsMessage.LookingForWith(
+                        "`" + labels.get(i) + "`", said));
+            }
+            guard = page.say(new GeneratedRowsMessage.TheGuardAtLookingFor(at, said));
+        } else {
+            guard = page.say(new GeneratedRowsMessage.TheGuardAt(at));
         }
-        return switch (stop.came()) {
+        return page.say(switch (stop.came()) {
             case RepairShortfall.AtTheGuard.NoWayPast(List<RepairShortfall.WayPast> ways) -> {
-                List<String> each = new ArrayList<>();
-                for (int at = 0; at < ways.size(); at++) {
-                    each.add("way " + (at + 1) + " past it: "
-                            + wayPast(ways.get(at), rendering, places));
+                List<Message> each = new ArrayList<>();
+                for (int way = 0; way < ways.size(); way++) {
+                    each.add(new GeneratedRowsMessage.WayPastIt(way + 1,
+                            wayPast(ways.get(way), page, places)));
                 }
-                yield guard + ", and no row was found that goes past it — "
-                        + String.join("; ", each);
+                yield new GeneratedRowsMessage.NoRowWasFoundThatGoesPast(guard,
+                        Joined.reasons(each));
             }
             // What the reading of the body settles: said as the model's, with nothing about a
             // search, because there was nothing to search for.
-            case RepairShortfall.AtTheGuard.NoWayGoesPast _ -> guard + ": its condition never"
-                    + " comes out the way the block goes on, so no row goes past it";
+            case RepairShortfall.AtTheGuard.NoWayGoesPast _ ->
+                    new GeneratedRowsMessage.ItsConditionNeverComesOutThatWay(guard);
             // And this compiler's, said as such: the guard may well let rows past.
-            case RepairShortfall.AtTheGuard.WaysNotRead _ -> guard + ": the ways past it could not"
-                    + " be read off the body, so none was looked for — which does not make it a"
-                    + " guard no row goes past";
-            case RepairShortfall.AtTheGuard.BackAtAGuardLookedPast _ -> guard + ": a row was taken"
-                    + " past it once, the row taken further stops at it again, and nothing looks"
-                    + " past one guard twice";
-        };
+            case RepairShortfall.AtTheGuard.WaysNotRead _ ->
+                    new GeneratedRowsMessage.TheWaysPastItCouldNotBeRead(guard);
+            case RepairShortfall.AtTheGuard.BackAtAGuardLookedPast _ ->
+                    new GeneratedRowsMessage.NothingLooksPastOneGuardTwice(guard);
+        });
     }
 
     /** What one way past a guard came to, in the words that kind of answer has. */
-    private static String wayPast(RepairShortfall.WayPast way, SourceRendering rendering,
-                                  PublishedRuleHandle.WhereARuleIs places) {
+    private static Message wayPast(RepairShortfall.WayPast way, Page page,
+                                   PublishedRuleHandle.WhereARuleIs places) {
         return switch (way) {
             case RepairShortfall.WayPast.Searched(List<CameToNothing> came) ->
-                    saidOf(came, rendering, places);
+                    saidOf(came, page, places);
             // The figure first, the way every search this compiler stopped is said: what the
             // searches had come to is the answer of looking that did not finish.
             case RepairShortfall.WayPast.CutShort(List<CameToNothing> came,
                                                   Set<CompositionBudget> figures) ->
-                    Reasons.met(CompositionShortfall.of(figures)) + (came.isEmpty()
-                            ? "nothing was looked for, which does not make it a way no row goes"
-                            : saidOf(came, rendering, places));
+                    Reasons.opening(Reasons.met(CompositionShortfall.of(figures)),
+                            came.isEmpty() ? new GeneratedRowsMessage.NothingWasLookedFor()
+                                    : saidOf(came, page, places));
             // Every reason a part gave, in the order the reasons are declared, and the figures that
             // left a part unlooked at first where any did.
             case RepairShortfall.WayPast.NotSearchable(Set<RepairShortfall.Barrier> why,
                                                        Set<CompositionBudget> figures) ->
-                    (figures.isEmpty() ? "" : Reasons.met(CompositionShortfall.of(figures)))
-                            + String.join("; ", why.stream().sorted()
-                                    .map(GeneratedRows::why).toList());
+                    Reasons.opening(Reasons.met(CompositionShortfall.of(figures)),
+                            Joined.reasons(why.stream().sorted().map(GeneratedRows::why)
+                                    .toList()));
         };
     }
 
     /** What each of the searches one way was held along came to, each word once, in turn. */
-    private static String saidOf(List<CameToNothing> came, SourceRendering rendering,
-                                 PublishedRuleHandle.WhereARuleIs places) {
-        return String.join("; ", came.stream()
-                .map(each -> saidOf(each, rendering, places)).toList());
+    private static Message saidOf(List<CameToNothing> came, Page page,
+                                  PublishedRuleHandle.WhereARuleIs places) {
+        return Joined.reasons(came.stream().map(each -> saidOf(each, page, places)).toList());
     }
 
     /** Why a way past a guard was not looked for, in the words a reader of the block is shown. */
-    static String why(RepairShortfall.Barrier why) {
+    static Message why(RepairShortfall.Barrier why) {
         return switch (why) {
-            case NOTHING_HOLDS_A_ROW_TO_IT -> "nothing here can hold a row to it, so it was not"
-                    + " looked for — which does not make it a way no row goes";
-            case NO_VALUE_CAN_GO_THAT_WAY -> NoValue.goesThatWay() + ", so no row goes this way";
-            case IT_WOULD_REWRITE_A_STATED_VALUE -> "a row going this way would write afresh a"
-                    + " value the module states, which the row keeps as written, so it was not"
-                    + " looked for";
-            case THE_ROW_ALREADY_DOES_ALL_OF_IT -> "the row was seen doing all of it and stopped"
-                    + " all the same, so the ways read off the body are not every way there is";
+            case NOTHING_HOLDS_A_ROW_TO_IT -> new GeneratedRowsMessage.NothingHoldsARowToIt();
+            case NO_VALUE_CAN_GO_THAT_WAY ->
+                    new GeneratedRowsMessage.SoNoRowGoesThisWay(NoValue.goesThatWay());
+            case IT_WOULD_REWRITE_A_STATED_VALUE ->
+                    new GeneratedRowsMessage.ItWouldRewriteAStatedValue();
+            case THE_ROW_ALREADY_DOES_ALL_OF_IT ->
+                    new GeneratedRowsMessage.TheRowAlreadyDoesAllOfIt();
         };
     }
 
@@ -1414,18 +1476,19 @@ public final class GeneratedRows {
      * came to, and one that wrote its own separator would tell a reader who meets both surfaces
      * that they are reading two different facts.
      */
-    static String beside(String category, Generator.UnresolvedCombination left,
-                         SourceRendering rendering, PublishedRuleHandle.WhereARuleIs places) {
-        List<String> more = new ArrayList<>();
+    static Message beside(Message category, Generator.UnresolvedCombination left, Page page,
+                          PublishedRuleHandle.WhereARuleIs places) {
+        List<Message> said = new ArrayList<>();
+        said.add(category);
         BesideTheWord beside = left.beside();
-        String also = alsoShort(beside.shortOf(), rendering, places);
-        if (!also.isEmpty()) {
-            more.add(also);
+        Message also = alsoShort(beside.shortOf(), page, places);
+        if (!(also instanceof ReportMessage.Nothing)) {
+            said.add(also);
         }
         if (!beside.stopped().isEmpty()) {
-            more.add(stoppedAt(beside.stopped(), rendering));
+            said.add(stoppedAt(beside.stopped(), page));
         }
-        return more.isEmpty() ? category : category + ", and " + String.join(", and ", more);
+        return Joined.also(said);
     }
 
     /**
@@ -1435,38 +1498,43 @@ public final class GeneratedRows {
      * and every one is an input the model has not decided about. Read by every line that says
      * where runs stopped, so a place reads alike wherever a reader meets it.
      */
-    static String stoppedAt(List<WhereARunStopped> stops, SourceRendering rendering) {
-        return "the runs stopped at " + placesStoppedAt(stops, rendering);
+    static Message stoppedAt(List<WhereARunStopped> stops, Page page) {
+        return new ReportMessage.TheRunsStoppedAt(placesStoppedAt(stops, page));
     }
 
     /** The same places, each once and with nothing before them, for a line that says what the
      *  runs did in words of its own. */
-    static String placesStoppedAt(List<WhereARunStopped> stops, SourceRendering rendering) {
-        List<String> each = new ArrayList<>();
-        for (WhereARunStopped stop : stops) {
-            each.add(onePlaceStoppedAt(stop, rendering));
-        }
-        return String.join(" and at ", each);
+    static Message placesStoppedAt(List<WhereARunStopped> stops, Page page) {
+        return Joined.andAt(stops.stream().map(stop -> onePlaceStoppedAt(stop, page)).toList());
     }
 
     /** One place a run stopped, in the handle a report names the rule there by, and where it is
      *  written only where the run said. */
-    private static String onePlaceStoppedAt(WhereARunStopped where, SourceRendering rendering) {
+    private static Message onePlaceStoppedAt(WhereARunStopped where, Page page) {
         return switch (where.stop()) {
-            case RunStop.AtAConstruction it -> "the construction"
-                    + it.site().map(site -> " " + writtenAt(site, where, rendering)).orElse("")
-                    + ", where "
-                    + RuleHandleProse.said(ruleRefusing(it).orElseThrow(), rendering, null)
-                    + " did not hold";
-            case RunStop.AtAnEnsures it -> "the answer, where "
-                    + RuleHandleProse.said(ruleRefusing(it).orElseThrow(), rendering, null)
-                    + " did not hold";
-            case RunStop.AtAnEnd it -> "an operation the runtime would not finish (" + it.said()
-                    + ")";
-            case RunStop.AtAnUnreachable it -> "an `unreachable`"
-                    + it.site().map(site -> " " + writtenAt(site, where, rendering)).orElse("")
-                    + " (" + it.said() + ")";
+            case RunStop.AtAConstruction it -> {
+                String rule = ruleHandleSaid(it, page);
+                yield it.site().<Message>map(site ->
+                                new ReportMessage.TheConstructionAtAPlaceWhereTheRuleDidNotHold(
+                                        writtenAt(site, where, page), rule))
+                        .orElseGet(() -> new ReportMessage.TheConstructionWhereTheRuleDidNotHold(
+                                rule));
+            }
+            case RunStop.AtAnEnsures it ->
+                    new ReportMessage.TheAnswerWhereTheRuleDidNotHold(ruleHandleSaid(it, page));
+            case RunStop.AtAnEnd it ->
+                    new ReportMessage.AnOperationTheRuntimeWouldNotFinish(it.said());
+            case RunStop.AtAnUnreachable it -> it.site().<Message>map(site ->
+                            new ReportMessage.AnUnreachableAtAPlace(
+                                    writtenAt(site, where, page), it.said()))
+                    .orElseGet(() -> new ReportMessage.AnUnreachable(it.said()));
         };
+    }
+
+    /** The rule that refused a run, in the handle a page names it by. */
+    private static String ruleHandleSaid(RunStop stop, Page page) {
+        return RuleHandleProse.said(ruleRefusing(stop).orElseThrow(), page.rendering(),
+                page.language(), null);
     }
 
     /**
@@ -1495,12 +1563,11 @@ public final class GeneratedRows {
      * column in it, or the line and column of the module where this compilation holds no source
      * declaring it.
      */
-    private static String writtenAt(RunStop.Site site, WhereARunStopped where,
-                                    SourceRendering rendering) {
+    private static Message writtenAt(RunStop.Site site, WhereARunStopped where, Page page) {
         String numbers = site.line() + ":" + site.column();
-        return where.source()
-                .map(source -> "at " + rendering.names().nameOf(source) + ":" + numbers)
-                .orElseGet(() -> "at " + numbers + " of `" + site.module() + "`");
+        return where.source().<Message>map(source -> new ReportMessage.AtAPositionOfASource(
+                        page.rendering().names().nameOf(source), numbers))
+                .orElseGet(() -> new ReportMessage.AtAPositionOfAModule(numbers, site.module()));
     }
 
     /**
@@ -1513,37 +1580,37 @@ public final class GeneratedRows {
      * vocabulary for reasons this one already spells — one that goes stale the first time a reason
      * is added to the other.
      */
-    private static String alsoShort(
+    private static Message alsoShort(
             java.util.SequencedMap<TermPath, StringOfferShortfall> shortfall,
-            SourceRendering rendering, PublishedRuleHandle.WhereARuleIs places) {
-        List<String> ways = new ArrayList<>();
+            Page page, PublishedRuleHandle.WhereARuleIs places) {
+        List<Message> ways = new ArrayList<>();
         for (Map.Entry<TermPath, StringOfferShortfall> at : shortfall.entrySet()) {
             for (StringOfferShortfall.NotOffered each : at.getValue().these()) {
-                ways.add(gaveNothing(each, at.getKey(), rendering, places));
+                ways.add(gaveNothing(each, at.getKey(), page, places));
             }
         }
-        return String.join("; ", ways);
+        return Joined.reasons(ways);
     }
 
     /** One thing that gave the offer no value, said as what it was and what stopped it. */
-    private static String gaveNothing(StringOfferShortfall.NotOffered each, TermPath at,
-                                      SourceRendering rendering,
-                                      PublishedRuleHandle.WhereARuleIs places) {
+    private static Message gaveNothing(StringOfferShortfall.NotOffered each, TermPath at,
+                                       Page page, PublishedRuleHandle.WhereARuleIs places) {
         // Named by the rule where a rule is what it was about, and never by the position alone: a
         // position carrying two rules about its strings, one of them this compiler cannot read, is
         // one an author fixes by rewriting that one. And never by a rule where what it was about is
         // not one, which is what sends an author to a rule that would have built.
-        String subject = switch (each.of()) {
-            case StringOfferShortfall.Subject.ARule it ->
+        Message subject = switch (each.of()) {
+            case StringOfferShortfall.Subject.ARule it -> new GeneratedRowsMessage.TheRuleAt(
                     RuleHandleProse.said(PublishedRuleHandle.of(
-                            new RuleCitation.Named(it.part().rule()), places), rendering, null)
-                            + " at `" + at + "`";
+                            new RuleCitation.Named(it.part().rule()), places), page.rendering(),
+                            page.language(), null),
+                    at.toString());
             case StringOfferShortfall.Subject.WhatTheyLeaveTogether _ ->
-                    "what the rules about `" + at + "` leave between them";
+                    new GeneratedRowsMessage.WhatTheRulesAboutItLeave(at.toString());
             case StringOfferShortfall.Subject.ComposingAValue _ ->
-                    "composing a value for `" + at + "`";
+                    new GeneratedRowsMessage.ComposingAValueFor(at.toString());
         };
-        return subject + " " + becauseOf(each.why());
+        return new GeneratedRowsMessage.GaveNothing(subject, becauseOf(each.why()));
     }
 
     /**
@@ -1555,21 +1622,17 @@ public final class GeneratedRows {
      * those: no rule went unread, and the sentence says what was being done rather than what the
      * rule is.
      */
-    static String becauseOf(StringOfferShortfall.Why why) {
+    static Message becauseOf(StringOfferShortfall.Why why) {
         return switch (why) {
-            case StringOfferShortfall.Why.NotRead it ->
-                    "gave none of them: " + AdequacyReport.whyUnread(ReportedReason.of(it.why()));
+            case StringOfferShortfall.Why.NotRead it -> new GeneratedRowsMessage.GaveNoneAsUnread(
+                    AdequacyReport.whyUnread(ReportedReason.of(it.why())));
             case StringOfferShortfall.Why.TooCostly it -> switch (it.stopped()) {
-                case ONE_MACHINE -> "gave none of them: working a value out of it asks for a larger"
-                        + " machine than one may be";
-                case THE_ANSWER -> "gave none of them: working the values out spent what composing"
-                        + " one for a row may spend";
+                case ONE_MACHINE -> new GeneratedRowsMessage.GaveNoneForALargerMachine();
+                case THE_ANSWER -> new GeneratedRowsMessage.GaveNoneHavingSpentTheComposing();
             };
             case StringOfferShortfall.Why.PatternTooCostly it -> switch (it.stopped()) {
-                case ONE_MACHINE -> "gave none of them: working a value out of it asks for a larger"
-                        + " machine than one may be";
-                case THE_ANSWER -> "gave none of them: building its machine spent what building one"
-                        + " pattern may spend";
+                case ONE_MACHINE -> new GeneratedRowsMessage.GaveNoneForALargerMachine();
+                case THE_ANSWER -> new GeneratedRowsMessage.GaveNoneHavingSpentThePattern();
             };
         };
     }
@@ -1581,85 +1644,59 @@ public final class GeneratedRows {
      * sentence that says more than the word does is the way a reader comes to act on something
      * nothing established, and reading it back is the only way to ask whether one does.
      */
-    static String why(Generator.UnresolvedCombination.Reason reason) {
+    static Message why(Generator.UnresolvedCombination.Reason reason) {
         return switch (reason) {
-            case NOTHING_COMPOSES_ONE ->
-                    "nothing here could build a representative for it, which does not make one"
-                            + " unwritable";
-            case ALL_CANDIDATES_REJECTED ->
-                    "every value tried was refused at construction, which does not make the"
-                            + " combination impossible";
+            case NOTHING_COMPOSES_ONE -> new GeneratedRowsMessage.NothingCouldBuildARepresentative();
+            case ALL_CANDIDATES_REJECTED -> new GeneratedRowsMessage.EveryValueTriedWasRefused();
             // The same refusals, and one fewer thing they show. What was offered is not shown to be
             // every value there is, so a reader is told they were refused and not that any value
             // was left untried — whether one was is what nobody knows. Which rule gave none of them
             // follows this, said as the rule it was.
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED ->
-                    "every value tried was refused at construction, but the values offered were"
-                            + " not shown to be exhaustive";
+                    new GeneratedRowsMessage.EveryValueTriedWasRefusedOfSome();
             // What is missing is the stand-in and not the row's values, so an author reading this
             // is being told what to write beside the row rather than that no row exists.
             case NOTHING_STANDS_IN_FOR_A_DEPENDENCY ->
-                    "nothing here could answer for a behavior the target depends on, and a row"
-                            + " that stands none in is a row nothing applies";
-            case A_TABLE_IS_WHAT_THIS_NEEDS ->
-                    "it needs a behavior the target depends on to answer by what it was applied to,"
-                            + " which is a table written for the module and not a line on a row";
+                    new GeneratedRowsMessage.NothingCouldAnswerForADependency();
+            case A_TABLE_IS_WHAT_THIS_NEEDS -> new GeneratedRowsMessage.ATableIsWhatThisNeeds();
             // As above: one of the two ways a search leaves something untried has a number in it
             // and the other has none, so neither is said as a halt here.
-            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> "the search left something untried";
-            case THE_GROUP_WAS_NOT_OFFERED ->
-                    "the decisions that settle it have more combinations together than this offers"
-                            + " a row for, so none of them was looked in";
-            case NO_CERTIFIED_WITNESS ->
-                    "no row composed for it was seen reaching it, which does not make it"
-                            + " unreachable";
-            case THE_WAY_IN_PLACES_AT_NO_CLASS ->
-                    "the way to it holds a decision that no class of any position stands for, so"
-                            + " nothing here can steer a row along it";
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED ->
+                    new GeneratedRowsMessage.TheSearchLeftSomethingUntried();
+            case THE_GROUP_WAS_NOT_OFFERED -> new GeneratedRowsMessage.TheGroupWasNotOffered();
+            case NO_CERTIFIED_WITNESS -> new GeneratedRowsMessage.NoRowComposedWasSeenReachingIt();
+            case THE_WAY_IN_PLACES_AT_NO_CLASS -> new GeneratedRowsMessage.TheWayInPlacesAtNoClass();
             // Nothing was left untried here and nothing is unwritable: the value is in hand and
             // the block is full. What lifts it is the number of rows a block offers, which is not
             // what any of the words above are about.
             case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE ->
-                    "a value was found for it and this block already offers as many rows as it may";
+                    new GeneratedRowsMessage.TheBlockIsAsLongAsItMayBe();
             // What the model settles, said without a word about how this compiler came to know it.
             // Two routes reach here — a walk of the whole of what the rules leave that reached
             // nothing, and a proof that was in hand before anything was walked — and a sentence
             // saying everything was tried is false of the second and tells a reader of the first
             // something they cannot act on either. Nor which part of the model proved it: a type
             // with two values leaves nothing past them with no rule written.
-            case NO_VALUE_CAN_STAND_THERE ->
-                    NoValue.standsHere();
+            case NO_VALUE_CAN_STAND_THERE -> NoValue.standsHere();
             case ONE_POSITION_CANNOT_BE_BOTH ->
-                    "it would need one position to be two things at once, so "
-                            + NoValue.standsHere() + " and there is no row to write";
+                    new GeneratedRowsMessage.ItWouldNeedOnePositionToBeTwoThings(
+                            NoValue.standsHere());
             case A_CONDITION_NEVER_COMES_OUT_THAT_WAY ->
-                    "it is past a condition that comes out the other way for every row, so "
-                            + NoValue.goesThatWay() + " and there is no row to write";
+                    new GeneratedRowsMessage.ItIsPastAConditionThatNeverComesOutSo(
+                            NoValue.goesThatWay());
             case NOTHING_TO_BUILD_AGAINST ->
-                    "the module's classes were not there to build a candidate against";
-            case NO_VALUES_WERE_ASKED_FOR ->
-                    "this build composed no values, so nothing was tried at it";
-            case LINKAGE_FAILED ->
-                    "the generated classes would not link, so the decoders a candidate is built"
-                            + " through were out of reach";
-            case THE_POSITION_WAS_WITHHELD ->
-                    "a row's value at that position could not be read, so no class of it was looked"
-                            + " for — one written for it may be one that is already here";
-            case THE_ROWS_WERE_NOT_READ ->
-                    "the rows were not read, so nothing was looked for; what stopped them being"
-                            + " read is said above";
-            case NO_CANDIDATE_WAS_OFFERED ->
-                    "the walk over what could stand there put no value forward, so nothing was"
-                            + " built and nothing was refused";
+                    new GeneratedRowsMessage.TheModulesClassesWereNotThere();
+            case NO_VALUES_WERE_ASKED_FOR -> new GeneratedRowsMessage.ThisBuildComposedNoValues();
+            case LINKAGE_FAILED -> new GeneratedRowsMessage.TheGeneratedClassesWouldNotLink();
+            case THE_POSITION_WAS_WITHHELD -> new GeneratedRowsMessage.ThePositionWasWithheld();
+            case THE_ROWS_WERE_NOT_READ -> new GeneratedRowsMessage.TheRowsWereNotRead();
+            case NO_CANDIDATE_WAS_OFFERED -> new GeneratedRowsMessage.NoCandidateWasOffered();
             case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED ->
-                    "no reading of the line this asked about could be searched, so nothing was"
-                            + " looked for at it — which says nothing about whether a row stands"
-                            + " there";
+                    new GeneratedRowsMessage.NoReadingOfTheLineCouldBeSearched();
             // The body's statement and not the model's: nothing proves no input arrives there, and
             // what is known is that the compiler refuses a row that does.
             case EVERY_ROW_THERE_REACHES_AN_UNREACHABLE ->
-                    "every row composed for it reaches an `unreachable` the body states, which the"
-                            + " compiler refuses";
+                    new GeneratedRowsMessage.EveryRowComposedReachesAnUnreachable();
         };
     }
 

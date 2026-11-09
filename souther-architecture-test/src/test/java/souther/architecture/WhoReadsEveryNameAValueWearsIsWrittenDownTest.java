@@ -121,14 +121,22 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(Lsouther/compiler/types/TypeSymbol$AtModule;L" + CHECK + "RuleKey;" + TYPE
                             + "Ljava/util/function/Function;" + SOURCE + ")Ljava/util/List;",
                     THE_POSITION),
-            row(CHECK + "EntryHeld", "keysStayFree",
-                    "(L" + CHECK + "RuleKey;Ljava/util/List;L" + CHECK
-                            + "RecordRules;Ljava/util/List;"
-                            + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT + ")Z",
-                    THE_POSITION),
-            row(CHECK + "EntryHeld", "valueTypeAdmits",
+            row(CHECK + "EntryHeld", "admission",
                     "(" + TYPE + "Ljava/math/BigDecimal;"
-                            + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT + ")Z",
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT + ")L"
+                            + CHECK + "EntryHeld$Admission;",
+                    THE_POSITION),
+            row(CHECK + "EntryHeld", "numberAmong",
+                    "(" + TYPE + "Lsouther/compiler/numeric/OrderedRuns;"
+                            + "Lsouther/compiler/types/TypeSymbol$AtModule;" + CONTEXT
+                            + ")L" + CHECK + "EntryHeld$Among;",
+                    THE_POSITION),
+            row(CHECK + "EntryHeld", "typeAt",
+                    "(" + TYPE + "Ljava/util/List;" + SOURCE + ")" + TYPE,
+                    THE_POSITION),
+            row(CHECK + "EntryHeld", "valueTypeOf",
+                    "(L" + CHECK + "RuleKey;Lsouther/compiler/types/TypeSymbol$AtModule;"
+                            + SOURCE + ")" + TYPE,
                     THE_POSITION),
             row(CHECK + "InvariantChecker", "name",
                     "(Lsouther/compiler/core/Core;L" + CHECK + "RuleKey;" + TYPE + "L" + CHECK
@@ -169,7 +177,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "compose",
                     "(" + TYPE + "Ljava/util/List;L" + INPUTS + "TermPath;Ljava/util/List;"
-                            + "Ljava/util/List;Ljava/util/SequencedMap;L" + PARTITION
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/SequencedMap;L" + PARTITION
                             + "RealizationTarget$OfANumber;Ljava/util/List;Ljava/util/List;L"
                             + INPUTS + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
                             + REALIZATION,
@@ -287,6 +295,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,
+                    THE_POSITION),
+            row(PARTITION + "Partitions", "valueHolding",
+                    "(" + TYPE + "Ljava/util/Map;" + CONTEXT + ")L" + PARTITION
+                            + "FixtureTemplate;",
                     THE_POSITION),
             row(PARTITION + "Partitions", "writtenNumberAt",
                     "(" + TYPE + "Ljava/math/BigDecimal;" + CONTEXT + ")L" + PARTITION

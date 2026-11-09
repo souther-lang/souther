@@ -271,7 +271,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
     void aPersonIsToldTheCountsAndWhatMadeThePartsAsAListAndNeverAsAProduct() {
         Compilation compilation = compiled(FIND, NO_CASE_TAKEN_APART);
         String said = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> lines = said.lines().filter(each -> each.contains("case expansion:"))
                 .toList();
         assertFalse(lines.isEmpty(), said);

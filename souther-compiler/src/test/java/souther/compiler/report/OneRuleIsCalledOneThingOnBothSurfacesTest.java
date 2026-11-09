@@ -25,6 +25,7 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -131,7 +132,8 @@ class OneRuleIsCalledOneThingOnBothSurfacesTest {
                     new RuleReportAnchor.ByTheModuleThatWroteIt());
             String said = RuleHandleProse.said(
                     PublishedRuleHandle.of(cited, SOMEWHERE),
-                    new SourceRendering(SourceNameResolver.identity(), SourceLayouts.NONE), null);
+                    new SourceRendering(SourceNameResolver.identity(), SourceLayouts.NONE),
+                    Locale.ENGLISH, null);
 
             assertEquals(AdequacyReport.schemaRuleKind(each),
                     said.substring(0, said.indexOf('@')),
@@ -165,7 +167,7 @@ class OneRuleIsCalledOneThingOnBothSurfacesTest {
             assertEquals(named.citedName(), RuleHandleProse.said(
                             PublishedRuleHandle.of(cited, SOMEWHERE),
                             new SourceRendering(SourceNameResolver.identity(),
-                                    SourceLayouts.NONE), null),
+                                    SourceLayouts.NONE), Locale.ENGLISH, null),
                     () -> "a rule with a name is cited by it: " + each);
             assertTrue(!named.citedName().isBlank(),
                     () -> "and there is a name to cite it by: " + each);

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.TestDay;
+import souther.compiler.report.InEnglish;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.FieldDomains;
@@ -117,7 +118,7 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
     @Test
     void theAnswerSaysWhatTheRulesLeaveRoomFor() {
         for (CameToNothing each : unresolved()) {
-            String said = each.why().said().orElse(null);
+            String said = InEnglish.said(each.why().told()).orElse(null);
 
             assertNotNull(said, () -> "the answer says what it is about: " + each);
             assertTrue(said.contains("box.xs") && said.contains("hold 1")

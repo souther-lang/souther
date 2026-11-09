@@ -58,7 +58,7 @@ class AClassNoRowIsInNamesThePositionItIsAClassOfTest {
     /** The human report writes the position beside the class. */
     @Test
     void theReportSaysWhichPositionEachClassIsOf() {
-        String human = report().human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = report().humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertEquals(List.of("      ! no row is in `No` at left",
                         "      ! no row is in `No` at right"),

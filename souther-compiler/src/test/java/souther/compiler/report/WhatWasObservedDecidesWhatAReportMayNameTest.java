@@ -129,8 +129,7 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
     void andNothingSaysARowWasNotRead() {
         StringBuilder out = new StringBuilder();
         new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "x", WeakeningSet.none(),
-                List.of()).branch(out, "m", reported(), null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE),
+                List.of()).branch(out, "m", reported(), null, InEnglish.PAGE,
                 reported().coveredOnlyByRowsThatDoNotHold(), new AdequacyReport.MarksWritten());
 
         // Two arms and not four. What the count holds is what a row can be owed for, and a fork

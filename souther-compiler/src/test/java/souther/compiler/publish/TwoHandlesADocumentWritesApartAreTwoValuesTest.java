@@ -29,6 +29,7 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -424,7 +425,7 @@ class TwoHandlesADocumentWritesApartAreTwoValuesTest {
      * which makes the property below hold over a projection that says nothing.
      */
     private static String said(PublishedRuleHandle handle) {
-        return RuleHandleProse.said(handle, REACHED.sources(), null);
+        return RuleHandleProse.said(handle, REACHED.sources(), Locale.ENGLISH, null);
     }
 
     /**

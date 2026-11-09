@@ -60,7 +60,7 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
         // Without the places a report sends a reader to. The two spellings write one call at two
         // columns, and what is compared is what each says of the rule.
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()))
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .replaceAll(", at \\d+:\\d+", "");
     }
 
@@ -83,7 +83,7 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("not read: invariant Pair #1"), report);
     }
 

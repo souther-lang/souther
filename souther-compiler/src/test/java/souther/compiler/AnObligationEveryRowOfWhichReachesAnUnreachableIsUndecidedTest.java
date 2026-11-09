@@ -197,7 +197,7 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
 
     private static String reportOn(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /**
@@ -306,7 +306,7 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED, split.disposition());
         assertEquals(List.of("never On here", "never Off here"), premiseOf(split));
         String offered = GeneratedRows.of(compilation, "example.half", "f",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
         assertFalse(offered.contains("(Y, Q"), offered);
     }
 
@@ -403,7 +403,7 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
                     | "Y Q Off" : (Y, Q, Off) -> 22
                 """;
         String offered = GeneratedRows.of(measured(sparse), "example.blank", "f",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
 
         assertFalse(offered.contains("(X, P"), offered);
         StringBuilder rows = new StringBuilder();
@@ -426,7 +426,7 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
     @Test
     void nothingIsOfferedAtTheBlankCell() {
         String offered = GeneratedRows.of(measured(BLANK), "example.blank", "f",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
 
         assertFalse(offered.contains("(Y, Q)"), offered);
     }

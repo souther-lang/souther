@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.RuleReadingContext;
@@ -185,7 +186,7 @@ final class ContainersAddingUp {
             if (!alsoAddingUp.isEmpty()) {
                 return orTheContainerOfNone(answer, container, keptApart, orders, within, reading,
                         alsoHolding, alsoAddingUp, inside, severalTotalsNotComposed(
-                                "the lists of a list are spread over one total at a time"));
+                                new SearchMessage.TheListsOfAListAreSpreadOverOneTotalAtATime()));
             }
             return new NestedContainersAddingUp(flat.subjectPath()).to(answer, container,
                     keptApart, orders, within, reading, alsoHolding, inside);
@@ -294,7 +295,7 @@ final class ContainersAddingUp {
             DemandsInside inside) {
         TermRealizations.Realization notWritten = new TermRealizations.Realization.Unexhausted(
                 CompositionShortfall.writing(Set.of(CompositionRepertoire.MAPS_WRITTEN_WITH_ONE_ENTRY)),
-                "a map whose values come to a total is written with one entry");
+                new SearchMessage.AMapWhoseValuesComeToATotalHasOneEntry());
         if (!alsoAddingUp.isEmpty() || !inside.among().isEmpty() || map.value() != Type.INT) {
             return notWritten;
         }
@@ -343,7 +344,7 @@ final class ContainersAddingUp {
     }
 
     /** A group of totals that this does not compose, said as the compiler's repertoire. */
-    private static TermRealizations.Realization severalTotalsNotComposed(String why) {
+    private static TermRealizations.Realization severalTotalsNotComposed(SearchMessage why) {
         return new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
                 Set.of(CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)), why);
     }
@@ -497,8 +498,8 @@ final class ContainersAddingUp {
             if (spelled.isAtOrUnder(share) || share.isAtOrUnder(spelled)) {
                 return new TermRealizations.Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        "`" + asked + "` is asked for a value where each element holds its share"
-                                + " of the total");
+                        new SearchMessage.AskedForAValueWhereEachElementHoldsItsShare(
+                                String.valueOf(asked)));
             }
         }
         // How a value of the element is built with the number written where the total reads it,
@@ -525,8 +526,8 @@ final class ContainersAddingUp {
         if (solved == null || solved.fixing() == null) {
             Ways ways = planning.apply(inside);
             if (ways.narrowingBeyondTheFirst()) {
-                return severalTotalsNotComposed("which case the elements hold the other totals'"
-                        + " fields under is a choice the first total's path does not make");
+                return severalTotalsNotComposed(
+                        new SearchMessage.WhichCaseTheOtherTotalsAreUnderIsNotChosen());
             }
             // Nothing to fill a container along, so there is no count of one or more and no shape
             // of one to try; the container of none is built along no way, and is the one left.
@@ -618,7 +619,7 @@ final class ContainersAddingUp {
         Ways waysUnder(AtACount at, WhatWasLeft left);
 
         /** What the ways planned found, said where nothing was composed. */
-        String said(TermPath demand);
+        SearchMessage said(TermPath demand);
 
         /**
          * The way a total is solved through at one count of the elements.
@@ -642,7 +643,7 @@ final class ContainersAddingUp {
             }
 
             @Override
-            public String said(TermPath demand) {
+            public SearchMessage said(TermPath demand) {
                 return ways.said(demand);
             }
         }
@@ -706,8 +707,8 @@ final class ContainersAddingUp {
             }
 
             @Override
-            public String said(TermPath demand) {
-                return last == null ? "no value held the other fields of the elements still"
+            public SearchMessage said(TermPath demand) {
+                return last == null ? new SearchMessage.NoValueHeldTheOtherFieldsStill()
                         : last.said(demand);
             }
         }
@@ -751,7 +752,7 @@ final class ContainersAddingUp {
                 || (orders.term() instanceof NumericTerm.TakenOver over
                 && over.source() instanceof RunSource.FlattenedOccurrences)) {
             return new AlsoRead.Refused(severalTotalsNotComposed(
-                    "the totals are not of the elements of one container"));
+                    new SearchMessage.TheTotalsAreNotOfOneContainer()));
         }
         FieldSolved solved = null;
         Carrier carrier = orders.answered();
@@ -760,8 +761,7 @@ final class ContainersAddingUp {
             if (ways.size() != 1 || ways.getFirst().kept() != null
                     || ways.getFirst().ofTheCase() != null || ways.getFirst().ofOneCase()) {
                 return new AlsoRead.Refused(severalTotalsNotComposed(
-                        "a total beside another is computed of the field of each element it adds"
-                                + " up, and a choice among forms is not solved for beside one"));
+                        new SearchMessage.ATotalBesideAnotherIsComputedOfAField()));
             }
             solved = ways.getFirst();
             carrier = solved.carrier();
@@ -783,9 +783,8 @@ final class ContainersAddingUp {
         taken.add(firstShare);
         for (TermPath other : taken) {
             if (other.isAtOrUnder(share) || share.isAtOrUnder(other)) {
-                return new AlsoRead.Refused(severalTotalsNotComposed("`" + field + "` is read by"
-                        + " more than one of the totals, or asked for a value, where each element"
-                        + " holds its share"));
+                return new AlsoRead.Refused(severalTotalsNotComposed(
+                        new SearchMessage.ReadByMoreThanOneOfTheTotals(String.valueOf(field))));
             }
         }
         // A run the elements are kept apart at that the field stands at is a field the shares do
@@ -796,8 +795,8 @@ final class ContainersAddingUp {
                 at = at.then(name);
             }
             if (field.isAtOrUnder(at)) {
-                return new AlsoRead.Refused(severalTotalsNotComposed("the elements are kept apart"
-                        + " at `" + field + "`, which a total beside another does not keep"));
+                return new AlsoRead.Refused(severalTotalsNotComposed(
+                        new SearchMessage.TheElementsAreKeptApartAt(String.valueOf(field))));
             }
         }
         if (!(within.projectionOf(new NumericTerm.ValueOf(field))
@@ -2300,9 +2299,9 @@ final class ContainersAddingUp {
         return inside.contradiction().<TermRealizations.Realization>map(conflict ->
                 new TermRealizations.Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        "what each element is asked to hold puts `" + conflict.at() + "` both at "
-                                + conflict.one().spelled() + " and at "
-                                + conflict.other().spelled())).orElse(null);
+                        new SearchMessage.EachElementIsAskedToHoldItAtTwo(
+                                String.valueOf(conflict.at()), conflict.one().spelled(),
+                                conflict.other().spelled()))).orElse(null);
     }
 
     /**
@@ -2526,16 +2525,17 @@ final class ContainersAddingUp {
          * says there was never a way to try. Told the same thing, a reader would be working out
          * which of them it was from what the sentence left out.
          */
-        String said(TermPath demand) {
+        SearchMessage said(TermPath demand) {
             if (!filled.isEmpty()) {
-                return spelling(filled.stream().map(Filling::fixed).toList())
-                        + (filled.size() == 1 ? " was a way down to `" : " were ways down to `")
-                        + demand + "`, and none of them composed a value";
+                String ways = spelling(filled.stream().map(Filling::fixed).toList());
+                return filled.size() == 1
+                        ? new SearchMessage.AWayDownComposedNothing(ways, String.valueOf(demand))
+                        : new SearchMessage.WaysDownComposedNothing(ways, String.valueOf(demand));
             }
             return nothingStandsAt.isEmpty()
-                    ? "nothing here reaches `" + demand + "`"
-                    : "nothing standing at " + spelling(nothingStandsAt)
-                            + " gives a way down to `" + demand + "`";
+                    ? new SearchMessage.NothingHereReaches(String.valueOf(demand))
+                    : new SearchMessage.NothingStandingAtGivesAWayDown(spelling(nothingStandsAt),
+                            String.valueOf(demand));
         }
 
         private static String spelling(List<TermPath> paths) {

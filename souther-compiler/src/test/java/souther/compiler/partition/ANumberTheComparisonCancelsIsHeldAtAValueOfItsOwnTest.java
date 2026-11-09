@@ -75,7 +75,7 @@ class ANumberTheComparisonCancelsIsHeldAtAValueOfItsOwnTest {
         return GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("demo")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
     }
 
     /** One row offered: the values of {@code base}, {@code commuting} and {@code social}. */

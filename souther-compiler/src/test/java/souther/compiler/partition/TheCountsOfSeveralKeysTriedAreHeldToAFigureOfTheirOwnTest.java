@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -26,7 +27,8 @@ class TheCountsOfSeveralKeysTriedAreHeldToAFigureOfTheirOwnTest {
 
     private static TermRealizations.Realization nothingComposes() {
         return new TermRealizations.Realization.None(
-                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, "nothing composes");
+                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                new SearchMessage.Code("nothing composes"));
     }
 
     /** Keys the rules leave any count of, over containers that hold none of the combinations. */

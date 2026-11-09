@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.diag.Localizable;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.numeric.Count;
@@ -281,20 +283,17 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 + " point, and its rule accounts for no such absence: " + answers.keySet());
     }
 
+
     /**
-     * How a report names one of this border's points.
+     * One of this border's points as its role and which side of the line it is on, in the catalog's
+     * base language.
      *
      * <p>Which of the four it is, and which side of the line where this border has two of them in
      * that role. A rule that names a value owes a row outside it on each side, and the two are
-     * different work — so a report that wrote the role alone would print one sentence twice and
-     * leave a reader unable to say which value is being asked for.
-     *
-     * <p>The side and not the value. Where a point is takes a quantity to write, and a quantity
-     * belongs to the reading that met the line; which side of the line it lies on is the line's own
-     * and is the same at every reading of it.
+     * different work — so a name that wrote the role alone would name two points alike.
      */
     public String named(DomainPoint point) {
-        return roleOf(point) + whichSide(point);
+        return roleOf(point) + Messages.render(sideOf(point), Messages.BASE_LANGUAGE);
     }
 
     /**
@@ -306,27 +305,28 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * alone instead, every border would say a side and an order's one point outside it would be
      * given a side nobody was choosing between.
      */
-    public String whichSide(DomainPoint point) {
-        PointRole role = roleOf(point);
-        return sideSaid(point, answers.keySet().stream()
-                .anyMatch(each -> !each.equals(point) && roleOf(each) == role));
+    public SearchMessage sideOf(DomainPoint at) {
+        PointRole role = roleOf(at);
+        return sideSaid(at, answers.keySet().stream()
+                .anyMatch(each -> !each.equals(at) && roleOf(each) == role));
     }
 
     /**
      * The same, of {@code point} of a line that claims {@code facts}: which side of it the point is
      * on, where another point of that line plays the same role.
      */
-    public static String whichSideOf(LineFacts facts, DomainPoint point) {
+    public static SearchMessage sideOf(LineFacts facts, DomainPoint point) {
         PointRole role = PointRole.of(point, facts.holdsAt(point));
         return sideSaid(point, pointsOf(facts).stream().anyMatch(each -> !each.equals(point)
                 && PointRole.of(each, facts.holdsAt(each)) == role));
     }
 
-    private static String sideSaid(DomainPoint point, boolean andAnother) {
+    private static SearchMessage sideSaid(DomainPoint point, boolean andAnother) {
         if (!andAnother) {
-            return "";
+            return new SearchMessage.NothingSaid();
         }
-        return point.side() == Towards.BELOW ? " below the line" : " above the line";
+        return point.side() == Towards.BELOW ? new SearchMessage.BelowTheLine()
+                : new SearchMessage.AboveTheLine();
     }
 
     /** What this border asks of the rows at the one point playing {@code role}. */

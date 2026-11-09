@@ -270,7 +270,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .filter(line -> line.contains("not accounted for"))
                 .map(String::strip)
                 .sorted()

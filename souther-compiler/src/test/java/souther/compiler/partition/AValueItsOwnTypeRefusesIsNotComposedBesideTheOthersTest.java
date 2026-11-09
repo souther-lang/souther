@@ -73,7 +73,7 @@ class AValueItsOwnTypeRefusesIsNotComposedBesideTheOthersTest {
         @Override
         public Built build(int parameter, FixtureTemplate candidate) {
             composed.add(candidate.text());
-            return new Built.Refused("not any of them");
+            return Built.Refused.inItsOwnWords("not any of them");
         }
     }
 
@@ -164,7 +164,7 @@ class AValueItsOwnTypeRefusesIsNotComposedBesideTheOthersTest {
             public Built build(int parameter, FixtureTemplate candidate) {
                 composed.add(candidate.text());
                 return candidate.text().contains("= 0") || candidate.text().contains("= 1")
-                        ? new Built.Refused("not this one") : new Built.NothingBuiltIt();
+                        ? Built.Refused.inItsOwnWords("not this one") : new Built.NothingBuiltIt();
             }
 
             @Override

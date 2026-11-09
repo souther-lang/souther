@@ -48,7 +48,7 @@ class AnElementAWalkStopsAtIsOneOfTheListAHelperChoseTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Every point of both lines is offered a row, and each row holds an open cart. */

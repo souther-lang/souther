@@ -661,7 +661,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         }
 
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.lines().anyMatch(line -> line.contains("not read")
                         && line.contains(CompositionBudget.READINGS_OF_ONE_CONDITION.name())
                         && line.contains("about `on`")),

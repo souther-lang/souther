@@ -234,11 +234,11 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
     boolean holds(RootOpening opening) {
         return switch (opening) {
             case RootOpening.Taken _ -> true;
-            case RootOpening.Refined it -> assumptions().contains(
-                    new Assumption.TheCaseAt(it.crossing().sum(),
-                            CasesLeft.of(it.crossing().branch())));
-            case RootOpening.Inside it ->
-                    assumptions().contains(new Assumption.HoldingSomething(it.container()));
+            // Asked of what is kept rather than of every assumption made anew: a reading asks this
+            // for each root it stands under, and one sum has one case taken in at most.
+            case RootOpening.Refined it -> CasesLeft.of(it.crossing().branch())
+                    .equals(refinements.refinements().get(it.crossing().sum()));
+            case RootOpening.Inside it -> nonEmptyContainers.contains(it.container());
         };
     }
 }

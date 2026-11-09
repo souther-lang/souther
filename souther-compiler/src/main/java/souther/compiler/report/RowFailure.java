@@ -1,5 +1,7 @@
 package souther.compiler.report;
 
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.ReportMessage;
 import souther.compiler.observe.FailurePhase;
 
 /**
@@ -17,32 +19,33 @@ import souther.compiler.observe.FailurePhase;
 public enum RowFailure {
 
     /** An input could not be built, so the behavior was never applied. */
-    INPUT_FIXTURE("its input could not be built"),
+    INPUT_FIXTURE,
 
     /** What the row expects could not be built, or names a case the behavior cannot produce. */
-    EXPECTED_FIXTURE("what it expects could not be built"),
+    EXPECTED_FIXTURE,
 
     /** A dependency had no fake, or the fake had no answer for what it was given. */
-    FAKE_RESOLUTION("a dependency had no fake for it"),
+    FAKE_RESOLUTION,
 
     /** What the row states does not keep what the behavior declares of its answer. */
-    ENSURES("what it states breaks what the behavior ensures"),
+    ENSURES,
 
     /** Applying the behavior produced no answer. */
-    INVOCATION("applying the behavior gave no answer"),
+    INVOCATION,
 
     /** The behavior answered, and not with what the row expects. */
-    COMPARISON("the behavior answered otherwise");
-
-    private final String said;
-
-    RowFailure(String said) {
-        this.said = said;
-    }
+    COMPARISON;
 
     /** How a line of a page says it. */
-    public String said() {
-        return said;
+    public Message said() {
+        return switch (this) {
+            case INPUT_FIXTURE -> new ReportMessage.ItsInputCouldNotBeBuilt();
+            case EXPECTED_FIXTURE -> new ReportMessage.WhatItExpectsCouldNotBeBuilt();
+            case FAKE_RESOLUTION -> new ReportMessage.ADependencyHadNoFakeForIt();
+            case ENSURES -> new ReportMessage.WhatItStatesBreaksWhatTheBehaviorEnsures();
+            case INVOCATION -> new ReportMessage.ApplyingTheBehaviorGaveNoAnswer();
+            case COMPARISON -> new ReportMessage.TheBehaviorAnsweredOtherwise();
+        };
     }
 
     /**

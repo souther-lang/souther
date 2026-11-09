@@ -67,7 +67,7 @@ class WhetherALineTurnsTheStatementDoesNotDependOnHowManyCasesItHasTest {
                 example draw
                     | (MB(0), Held { h0 = MB(0), h1 = MB(1), h2 = MB(0), h3 = MB(0) }) -> MB(0)
                 """);
-        String human = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         String border = human.lines()
                 .dropWhile(line -> !line.strip().startsWith("border"))
                 .takeWhile(line -> line.strip().startsWith("border") || line.startsWith("      "))

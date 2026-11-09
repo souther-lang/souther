@@ -9,6 +9,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.diag.Messages;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -28,6 +29,7 @@ import souther.compiler.values.AsACompilationAllows;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -171,7 +173,7 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
                 "no element is both a card and cash");
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, none.why());
         assertEquals("what each element is asked to hold puts `ns[*].method` both at Cash and at"
-                        + " Card", none.detail(),
+                        + " Card", Messages.render(none.detail(), Locale.ENGLISH),
                 "said of what was asked, which contradicts itself before any way down is tried");
     }
 

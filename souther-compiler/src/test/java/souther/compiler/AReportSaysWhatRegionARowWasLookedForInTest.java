@@ -69,7 +69,7 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
         Compilation compilation = Compilation.ofSource(model(above), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The line about one point, which is where what a search came to is written. */

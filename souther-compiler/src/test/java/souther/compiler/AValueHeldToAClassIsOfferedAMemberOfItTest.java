@@ -49,7 +49,7 @@ class AValueHeldToAClassIsOfferedAMemberOfItTest {
         return GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
     }
 
     /** A field the body never reads, held to a remainder and to a day of the month. */

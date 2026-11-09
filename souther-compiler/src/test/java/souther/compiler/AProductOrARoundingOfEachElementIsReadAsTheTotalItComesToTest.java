@@ -397,7 +397,7 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
 
     private static String rowsOf(Compilation compilation) {
         return GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     /** Each model measured once for the class: the methods read the same models, and only read
@@ -415,6 +415,6 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -105,6 +106,9 @@ final class CardinalityComposer {
      *
      * @param together   statements the elements are to meet together, each one of several ways the
      *                   elements may take — which every container composed here meets
+     * @param related    what the counts and how many the container holds are held to, each
+     *                   relation over counts among {@code counts} — which every container composed
+     *                   here meets
      * @param standingAt the element itself, each asked to stand in a set: a value the row places at
      *                   an element, which some element of the container is
      * @param totals     what the container is asked to come to, each with the numbers tried for it
@@ -118,6 +122,7 @@ final class CardinalityComposer {
                                                 List<RealizationTarget.ACount> counts,
                                                 List<RealizationTarget.ElementsMeetingTogether>
                                                         together,
+                                                List<AggregateRelation> related,
                                                 SequencedMap<RealizationTarget, AskedAt> demands,
                                                 RealizationTarget.OfANumber manyItHolds,
                                                 List<RealizationTarget.OfANumber> standingAt,
@@ -132,8 +137,8 @@ final class CardinalityComposer {
         for (RealizationTarget.ACount each : counts) {
             AskedAt at = demands.get(each);
             if (at == null) {
-                return none("nothing says how many elements of `" + container + "` are to meet `"
-                        + each + "`");
+                return none(new SearchMessage.NothingSaysHowManyElementsMeet(
+                        String.valueOf(container), String.valueOf(each)));
             }
             asked.add(new Asked.SoManyMeeting(each.count().perElement(), at.about().values(),
                     each.count().differentAt(), each.count().across()));
@@ -145,31 +150,42 @@ final class CardinalityComposer {
         for (RealizationTarget.ACount each : counts) {
             Quantity.TheValue at = each.count().differentAt().orElse(null);
             if (at != null && apartAt != null && !apartAt.equals(at)) {
-                return notChosen("the values the elements of `" + container + "` hold are counted"
-                        + " at `" + apartAt + "` and at `" + at + "`, and no elements are chosen"
-                        + " apart at both");
+                return notChosen(new SearchMessage.TheValuesAreCountedAtTwoPlaces(
+                        String.valueOf(container), String.valueOf(apartAt), String.valueOf(at)));
             }
             apartAt = at != null ? at : apartAt;
+        }
+        List<Joint> joints = new ArrayList<>();
+        for (AggregateRelation each : related) {
+            Joint joint = Joint.of(each, counts);
+            if (joint == null) {
+                return none(new SearchMessage.NothingSaysHowManyElementsMeetEachOf(
+                        String.valueOf(container), String.valueOf(each.counted())));
+            }
+            joints.add(joint);
         }
         NumericSet size = null;
         if (manyItHolds != null) {
             AskedAt holds = demands.get(manyItHolds);
             if (holds == null || holds.walking() == null) {
-                return none("nothing says how many elements `" + container + "` holds");
+                return none(new SearchMessage.NothingSaysHowManyElementsItHolds(
+                        String.valueOf(container)));
             }
             size = holds.walking();
         }
         Optional<TermPath> across = counts.isEmpty() ? Optional.empty()
                 : counts.getFirst().count().across();
         if (counts.stream().anyMatch(each -> !each.count().across().equals(across))) {
-            return notChosen("the elements of `" + container + "` are counted in one container"
-                    + " and across all of them, and are chosen for one of the two");
+            return notChosen(new SearchMessage.CountedInOneAndAcrossAll(String.valueOf(container)));
         }
         if (across.isPresent()) {
+            if (!joints.isEmpty()) {
+                return notChosen(new SearchMessage.CountedAcrossAndHowManyOneHoldsIsAskedOfOne(
+                        String.valueOf(container)));
+            }
             if (!totals.isEmpty()) {
-                return notChosen("the elements of `" + container + "` are counted across the"
-                        + " containers holding them, and what one container comes to is a"
-                        + " question about that one");
+                return notChosen(new SearchMessage.CountedAcrossTheContainersHoldingThem(
+                        String.valueOf(container)));
             }
             return composeAcross(asked, standingAt, demands, container, across.get(), size,
                     together, sourceType, keptApart, apartAt, measuring, within, reading);
@@ -178,7 +194,8 @@ final class CardinalityComposer {
                 ruleSource.kinds(), ruleSource.sums());
         if (!(view.shape() instanceof Shape.Sequence holding)
                 || !container.element().outermostContainer().equals(container)) {
-            return notChosen("`" + container + "` is no list or set written where it stands");
+            return notChosen(new SearchMessage.NoListOrSetWrittenWhereItStands(
+                    String.valueOf(container)));
         }
         // A statement the elements meet together is one their values meet, which is what they are
         // chosen among their values for.
@@ -187,9 +204,9 @@ final class CardinalityComposer {
             stated.add(AStatementAtARow.of(each.stated(), each.behavior(), measuring));
         }
         if (!stated.isEmpty()) {
-            return amongItsValues(asked, stated, standingAt, totals, demands, container, size,
-                    sourceType, view, holding, keptApart, apartAt, measuring, within, reading,
-                    new Standing.WhereItIsWritten(sourceType, reading));
+            return amongItsValues(asked, stated, joints, standingAt, totals, demands, container,
+                    size, sourceType, view, holding, keptApart, apartAt, measuring, within,
+                    reading, new Standing.WhereItIsWritten(sourceType, reading));
         }
         // What another container is made to hold for the elements chooses none of their values,
         // so none are chosen apart that way.
@@ -201,13 +218,13 @@ final class CardinalityComposer {
                 handed.add(ACountHandedOn.of(each.count()).orElseThrow());
                 meeting.add(ACountHandedOn.counted(demands.get(each)));
             }
-            return handingOn(asked, handed, meeting, size, view, keptApart, reading);
+            return handingOn(asked, handed, meeting, joints, size, view, keptApart, reading);
         }
         // Every element is chosen among the values it is read at whole, whether it is one number
         // or several, whether or not the different values of a place are counted, and whether or
         // not what it answers reads the container as a whole.
-        return amongItsValues(asked, List.of(), standingAt, totals, demands, container, size,
-                sourceType, view, holding, keptApart, apartAt, measuring, within, reading,
+        return amongItsValues(asked, List.of(), joints, standingAt, totals, demands, container,
+                size, sourceType, view, holding, keptApart, apartAt, measuring, within, reading,
                 new Standing.WhereItIsWritten(sourceType, reading));
     }
 
@@ -236,39 +253,36 @@ final class CardinalityComposer {
             Type sourceType, List<List<String>> keptApart, Quantity.TheValue apartAt,
             Quantities measuring, SearchRegion within, RuleReadingContext reading) {
         if (size != null || !together.isEmpty()) {
-            return notChosen("`" + container + "` is asked something of one of the containers,"
-                    + " and its elements are chosen across all of them");
+            return notChosen(new SearchMessage.AskedOfOneOfTheContainers(String.valueOf(container)));
         }
         for (Asked each : asked) {
             if (each instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)
                     && !perElement.answersHoweverTheElementsAreSharedOut(container, across)) {
-                return notChosen("what an element of `" + container + "` answers reads a container"
-                        + " holding it, and the elements are chosen across all of them, whichever"
-                        + " they are shared out over");
+                return notChosen(new SearchMessage.WhatAnElementAnswersReadsAContainerHoldingIt(
+                        String.valueOf(container)));
             }
         }
         for (RealizationTarget.OfANumber each : standingAt) {
             if (AStatementAtARow.readsAroundTheElement(each.term(), container, across)) {
-                return notChosen("`" + each.term() + "` is read off a container holding an element"
-                        + " of `" + container + "`, and the elements are chosen across all of"
-                        + " them, whichever they are shared out over");
+                return notChosen(new SearchMessage.ReadOffAContainerHoldingAnElement(
+                        String.valueOf(each.term()), String.valueOf(container)));
             }
         }
         RuleReadingSource ruleSource = reading.source();
         NestedContainersAddingUp.Inside inner =
                 NestedContainersAddingUp.ofTheContainerAt(sourceType, container, reading);
         if (inner == null || !across.equals(container.element().outermostContainer())) {
-            return notChosen("`" + container + "` is no list or set inside the elements of a list"
-                    + " or set written where it stands");
+            return notChosen(new SearchMessage.NoListOrSetInsideTheElements(
+                    String.valueOf(container)));
         }
         TypeView view = TypeView.of(inner.type(), ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         if (!(view.shape() instanceof Shape.Sequence holding)) {
-            return notChosen("`" + container + "` is no list or set");
+            return notChosen(new SearchMessage.NoListOrSet(String.valueOf(container)));
         }
-        return amongItsValues(asked, List.of(), standingAt, List.of(), demands, container, null,
-                inner.type(), view, holding, inner.keptApart(), apartAt, measuring, within, reading,
-                new Standing.AcrossTheElementsOf(across, container, sourceType, keptApart, within,
+        return amongItsValues(asked, List.of(), List.of(), standingAt, List.of(), demands,
+                container, null, inner.type(), view, holding, inner.keptApart(), apartAt,
+                measuring, within, reading, new Standing.AcrossTheElementsOf(across, container, sourceType, keptApart, within,
                         reading));
     }
 
@@ -358,6 +372,7 @@ final class CardinalityComposer {
     private static TermRealizations.Realization handingOn(List<Asked> asked,
                                                           List<ACountHandedOn> handed,
                                                           List<OptionalInt> meeting,
+                                                          List<Joint> joints,
                                                           NumericSet size, TypeView view,
                                                           List<List<String>> keptApart,
                                                           RuleReadingContext reading) {
@@ -377,8 +392,7 @@ final class CardinalityComposer {
                     || !count.asMany(meeting.get(i).getAsInt())) {
                 return new TermRealizations.Realization.Unexhausted(CompositionShortfall.of(
                         Set.of(), Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT),
-                        Set.of()), "no count walked of what is counted is one a container"
-                        + " composed with that many meeting it is asked for");
+                        Set.of()), new SearchMessage.NoCountWalkedIsOneAContainerMeets());
             }
             least = Math.max(least, meeting.get(i).getAsInt());
         }
@@ -389,6 +403,15 @@ final class CardinalityComposer {
                 break;
             }
             if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
+                continue;
+            }
+            // Of the elements this many that meet each statement and this many in all, the
+            // relations among the counts hold.
+            int[] atThisSize = new int[meeting.size()];
+            for (int i = 0; i < atThisSize.length; i++) {
+                atThisSize[i] = meeting.get(i).getAsInt();
+            }
+            if (!Joint.allHold(joints, elements, atThisSize)) {
                 continue;
             }
             // Where some of the elements meet a statement and the rest do not, the other container
@@ -441,8 +464,8 @@ final class CardinalityComposer {
         if (!rest.figures().isEmpty()) {
             return new TermRealizations.Realization.Stopped(rest);
         }
-        return new TermRealizations.Realization.Unexhausted(rest, "no size of the container the"
-                + " rules leave has room for as many elements as are counted");
+        return new TermRealizations.Realization.Unexhausted(rest,
+                new SearchMessage.NoSizeHasRoomForTheCount());
     }
 
     /**
@@ -472,6 +495,7 @@ final class CardinalityComposer {
      *
      * @param counted    what the counts ask, one for each
      * @param together   statements the elements meet together, each about {@code container} alone
+     * @param joints     what the counts and how many the container holds are held to
      * @param standingAt numbers inside an element, each asked to stand in a set: a value the row
      *                   places there, which some element of the container holds
      * @param totals     what the row asks the container to come to, beside the counts
@@ -482,6 +506,7 @@ final class CardinalityComposer {
      */
     private static TermRealizations.Realization amongItsValues(List<Asked> counted,
                                                                List<AStatementAtARow> together,
+                                                               List<Joint> joints,
                                                                List<RealizationTarget.OfANumber>
                                                                        standingAt,
                                                                List<ContainerAsAWhole.ATotal>
@@ -504,8 +529,8 @@ final class CardinalityComposer {
             TermOrders orders = measuring.ordersOf(each.term());
             Carrier on = orders == null ? null : orders.observed();
             if (at == null || at.walking() == null || on == null) {
-                return none("nothing says where `" + each.term() + "` is to stand inside an"
-                        + " element of `" + container + "`");
+                return none(new SearchMessage.NothingSaysWhereItStandsInsideAnElement(
+                        String.valueOf(each.term()), String.valueOf(container)));
             }
             asked.add(new Asked.SomeElementAt(each.term().subjectPath(), at.walking(), on));
         }
@@ -552,9 +577,8 @@ final class CardinalityComposer {
         ContainerAsAWhole whole = ContainerAsAWhole.of(container, view, asked, totals, outside,
                 size, measuring, within, reading);
         if (whole == null) {
-            return notChosen("a number of `" + container + "` as a whole is a total of a place"
-                    + " whose numbers are not whole ones, and nothing here moves its elements to"
-                    + " come to it");
+            return notChosen(new SearchMessage.ATotalOfAPlaceWhoseNumbersAreNotWhole(
+                    String.valueOf(container)));
         }
         // The container of none needs no element and no choice of those numbers — what it comes
         // to is read off it — so it is looked at first and apart from both, and offered where the
@@ -601,12 +625,10 @@ final class CardinalityComposer {
             if (byValue == null || (apartAt != null && byValue.values().isEmpty())) {
                 if (whole.isEmpty() && built.isEmpty()) {
                     return byValue == null
-                            ? notChosen("an element of `" + container + "` has a part whose"
-                                    + " values are neither one of so many nor numbers the"
-                                    + " statements part")
-                            : notChosen("the different values at `" + apartAt + "` are counted,"
-                                    + " and no value is chosen there as a part of an element of `"
-                                    + container + "`");
+                            ? notChosen(new SearchMessage.APartNeitherOneOfSoManyNorNumbers(
+                                    String.valueOf(container)))
+                            : notChosen(new SearchMessage.TheDifferentValuesAreCounted(
+                                    String.valueOf(apartAt), String.valueOf(container)));
                 }
                 unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
                 continue;
@@ -668,7 +690,8 @@ final class CardinalityComposer {
                 drawing = under::drawn;
             }
             unread.addAll(groups.unread());
-            Sharing sharing = new Sharing(groups, asked, statements, size, capacity, MOST_SHARES);
+            Sharing sharing = new Sharing(groups, asked, statements, joints, size, capacity,
+                    MOST_SHARES);
             Function<int[], List<List<ObservedValue>>> alike = alikeTo;
             boolean stopped = false;
             // From one: the container of none was looked at before any choice.
@@ -770,17 +793,16 @@ final class CardinalityComposer {
         }
         if (!rest.nothing()) {
             return new TermRealizations.Realization.Unexhausted(rest,
-                    "an element a statement could not be read at was not chosen: " + unread);
+                    new SearchMessage.AnElementAStatementCouldNotBeReadAt(String.valueOf(unread)));
         }
         // No element can be at all, so the container of none is the one container there is, and
         // what an element would have turned on is nothing to choose by.
         if (!anElementCanBe) {
-            return none("no element of `" + container + "` is left a value, and the container of"
-                    + " none does not meet every count asked");
+            return none(new SearchMessage.NoElementIsLeftAValue(String.valueOf(container)));
         }
-        String alone = chosenAlone(asked, container, apartAt);
+        SearchMessage alone = chosenAlone(asked, container, apartAt);
         return alone != null ? notChosen(alone)
-                : none("no container of `" + container + "` this composed meets every count asked");
+                : none(new SearchMessage.NoContainerMeetsEveryCount(String.valueOf(container)));
     }
 
     /**
@@ -850,7 +872,7 @@ final class CardinalityComposer {
      * ({@link AStatementAtARow.TurnsOn}). Elsewhere a container chosen that way is still read
      * whole before it is offered, so what is offered holds; what is not found is not shown absent.
      */
-    private static String chosenAlone(List<Asked> asked, TermPath container,
+    private static SearchMessage chosenAlone(List<Asked> asked, TermPath container,
                                       Quantity.TheValue under) {
         AStatementAtARow.TurnsOn turns = AStatementAtARow.TurnsOn.THE_ELEMENT;
         for (Asked each : asked) {
@@ -858,14 +880,12 @@ final class CardinalityComposer {
         }
         return switch (turns) {
             case THE_ELEMENT, THOSE_UNDER_ITS_VALUE -> null;
-            case THE_ORDER_OF_THOSE_UNDER_ITS_VALUE -> "what an element of `" + container
-                    + "` answers turns on which of the elements holding its value at `" + under
-                    + "` is handed last, and a group of them is chosen by which elements it holds";
-            case OTHER_ELEMENTS -> "what an element of `" + container + "` answers turns on"
-                    + (under == null ? " the elements beside it, and each is chosen by what it"
-                            + " answers alone" : " elements not holding its value at `" + under
-                            + "`, and the elements holding one value are chosen by what they"
-                            + " answer alone");
+            case THE_ORDER_OF_THOSE_UNDER_ITS_VALUE -> new SearchMessage.TurnsOnWhichIsHandedLast(
+                    String.valueOf(container), String.valueOf(under));
+            case OTHER_ELEMENTS -> under == null
+                    ? new SearchMessage.TurnsOnTheElementsBesideIt(String.valueOf(container))
+                    : new SearchMessage.TurnsOnElementsNotHoldingItsValue(
+                            String.valueOf(container), String.valueOf(under));
         };
     }
 
@@ -875,6 +895,65 @@ final class CardinalityComposer {
      * are asked.
      */
     private record Together(AStatementAtARow.Counting counting) {}
+
+    /**
+     * What counts of a container's elements and how many it holds are held to
+     * ({@link AggregateRelation}), with each count where it stands among what is asked.
+     *
+     * @param relation what the counts and the size are held to
+     * @param at       where each of the relation's counts stands among what is asked, in the order
+     *                 of {@link AggregateRelation#counts}
+     */
+    private record Joint(AggregateRelation relation, List<Integer> at) {
+
+        /** This over {@code counts}, the counts asked of the container, or null where one the
+         *  relation weighs is not among them. */
+        static Joint of(AggregateRelation relation,
+                        List<RealizationTarget.ACount> counts) {
+            List<Integer> at = new ArrayList<>();
+            for (Quantity.HowManyMeet each : relation.counts().keySet()) {
+                int found = -1;
+                for (int i = 0; i < counts.size() && found < 0; i++) {
+                    CountedElements count = counts.get(i).count();
+                    if (count.identity().equals(
+                            CountedElements.identityOf(count.behavior(), each))) {
+                        found = i;
+                    }
+                }
+                if (found < 0) {
+                    return null;
+                }
+                at.add(found);
+            }
+            return new Joint(relation, List.copyOf(at));
+        }
+
+        /** Whether every one of {@code joints} holds of a container of {@code size} elements of
+         *  which {@code meeting} meet each thing asked. */
+        static boolean allHold(List<Joint> joints, int size, int[] meeting) {
+            for (Joint each : joints) {
+                if (!each.holdsAt(size, meeting)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** Whether the relation holds where {@code size} elements are shared out so that
+         *  {@code meeting} meet each thing asked. */
+        boolean holdsAt(int size, int[] meeting) {
+            return relation.holdsAt(size, ofTheRelation(meeting))
+                    instanceof ExactAnswer.Held<Boolean>(Boolean holds) && holds;
+        }
+
+        private int[] ofTheRelation(int[] meeting) {
+            int[] out = new int[at.size()];
+            for (int i = 0; i < out.length; i++) {
+                out[i] = meeting[at.get(i)];
+            }
+            return out;
+        }
+    }
 
     /**
      * Whether every one of {@code together} holds of the container {@code row} holds, read with
@@ -1131,14 +1210,16 @@ final class CardinalityComposer {
         RuleReadingSource ruleSource = reading.source();
         AskedAt asked = demands.get(alike);
         if (asked == null || asked.walking() == null) {
-            return none("nothing says how often an element of `" + container + "` is to occur");
+            return none(new SearchMessage.NothingSaysHowOftenAnElementOccurs(
+                    String.valueOf(container)));
         }
         NumericSet wanted = asked.walking();
         NumericSet size = null;
         if (manyItHolds != null) {
             AskedAt holds = demands.get(manyItHolds);
             if (holds == null || holds.walking() == null) {
-                return none("nothing says how many elements `" + container + "` holds");
+                return none(new SearchMessage.NothingSaysHowManyElementsItHolds(
+                        String.valueOf(container)));
             }
             size = holds.walking();
         }
@@ -1146,8 +1227,8 @@ final class CardinalityComposer {
                 ruleSource.kinds(), ruleSource.sums());
         if (!(view.shape() instanceof Shape.Sequence holding)
                 || !container.element().outermostContainer().equals(container)) {
-            return notChosen("`" + container + "` is no list or set written where it stands, to"
-                    + " hold an element as often as asked (it stands as " + sourceType + ")");
+            return notChosen(new SearchMessage.NoListOrSetToHoldAnElementAsOften(
+                    String.valueOf(container), String.valueOf(sourceType)));
         }
         // Alike at a place inside the element, the elements holding one value there are chosen
         // together, as many as asked, among the values each is read at whole.
@@ -1159,8 +1240,7 @@ final class CardinalityComposer {
         TermOrders orders = measuring.ordersOf(own);
         Carrier carrier = orders == null ? null : orders.observed();
         if (carrier == null) {
-            return notChosen("an element of `" + container + "` is on no order its values are"
-                    + " chosen on");
+            return notChosen(new SearchMessage.AnElementIsOnNoOrder(String.valueOf(container)));
         }
         NumericDomain.Bounds run = switch (within == null ? null : within.projectionOf(own)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
@@ -1169,7 +1249,7 @@ final class CardinalityComposer {
             case null -> NumericDomain.Bounds.OPEN;
         };
         if (run == null) {
-            return none("the rules leave no value for an element of `" + container + "`");
+            return none(new SearchMessage.NoValueForAnElement(String.valueOf(container)));
         }
         // One value to repeat and as many different ones beside it as the size asked for leaves
         // room for; elements kept apart — a set's, or a list's its rules keep apart — hold each
@@ -1186,8 +1266,8 @@ final class CardinalityComposer {
         List<Place> candidates = valuesToCount(kept, own, container, place, carrier, run,
                 repeated, unheld, unnamed, reading.today());
         if (candidates == null) {
-            return notChosen("where `" + kept.key() + "` turns over an element of `"
-                    + container + "` could not be worked out");
+            return notChosen(new SearchMessage.WhereItTurnsOverCouldNotBeWorkedOut(
+                    String.valueOf(kept.key()), String.valueOf(container)));
         }
         List<Place> beside = candidates.isEmpty() ? List.of()
                 : valuesBeside(candidates.getFirst(), candidates, kept, carrier, run, repeated,
@@ -1241,8 +1321,7 @@ final class CardinalityComposer {
         if (!rest.nothing()) {
             return new TermRealizations.Realization.Unexhausted(rest, null);
         }
-        return none("no container of `" + container + "` this composed holds an element as often"
-                + " as asked");
+        return none(new SearchMessage.NoContainerHoldsAnElementAsOften(String.valueOf(container)));
     }
 
     /**
@@ -1277,12 +1356,12 @@ final class CardinalityComposer {
                         measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
                         reading.today()));
         if (byValue == null) {
-            return notChosen("an element of `" + container + "` has a part whose values are"
-                    + " neither one of so many nor numbers the statements part");
+            return notChosen(new SearchMessage.APartNeitherOneOfSoManyNorNumbers(
+                    String.valueOf(container)));
         }
         if (byValue.values().isEmpty()) {
-            return notChosen("an element of `" + container + "` is alike another at `" + place
-                    + "`, and no value is chosen there as a part of the element");
+            return notChosen(new SearchMessage.AnElementIsAlikeAnother(String.valueOf(container),
+                    String.valueOf(place)));
         }
         ElementValues ofTheElement = byValue.first();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
@@ -1340,10 +1419,10 @@ final class CardinalityComposer {
         if (!rest.nothing()) {
             return new TermRealizations.Realization.Unexhausted(rest, groups.unreadSaid());
         }
-        String alone = chosenAlone(asked, container, value);
+        SearchMessage alone = chosenAlone(asked, container, value);
         return alone != null ? notChosen(alone)
-                : none("no container of `" + container + "` this composed holds a value at `"
-                        + place + "` as often as asked");
+                : none(new SearchMessage.NoContainerHoldsAValueAtAsOften(
+                        String.valueOf(container), String.valueOf(place)));
     }
 
     /**
@@ -1399,19 +1478,19 @@ final class CardinalityComposer {
         TermPath place = term.subjectPath();
         AskedAt asked = demands.get(alike);
         if (asked == null || asked.walking() == null) {
-            return none("nothing says how often a value at `" + place + "` is to occur");
+            return none(new SearchMessage.NothingSaysHowOftenAValueOccurs(String.valueOf(place)));
         }
         NumericSet wanted = asked.walking();
         List<TermPath> chain = place.containersHoldingIt();
         if (chain.size() < 2 || !place.equals(chain.getLast().element())) {
-            return notChosen("a value at `" + place + "` is not an element of the container it"
-                    + " stands inside, so the elements are chosen at a place inside them");
+            return notChosen(new SearchMessage.AValueIsNotAnElementOfItsContainer(
+                    String.valueOf(place)));
         }
         NumericTerm own = new NumericTerm.ValueOf(place);
         TermOrders orders = measuring.ordersOf(own);
         Carrier carrier = orders == null ? null : orders.observed();
         if (carrier == null) {
-            return notChosen("a value at `" + place + "` is on no order its values are chosen on");
+            return notChosen(new SearchMessage.AValueIsOnNoOrder(String.valueOf(place)));
         }
         NumericDomain.Bounds run = switch (within == null ? null : within.projectionOf(own)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
@@ -1420,7 +1499,7 @@ final class CardinalityComposer {
             case null -> NumericDomain.Bounds.OPEN;
         };
         if (run == null) {
-            return none("the rules leave no value at `" + place + "`");
+            return none(new SearchMessage.NoValueAt(String.valueOf(place)));
         }
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
@@ -1430,12 +1509,13 @@ final class CardinalityComposer {
         List<Place> candidates = valuesToCount(kept, own, chain.getLast(), place, carrier, run,
                 leaves, unheld, unnamed, reading.today());
         if (candidates == null) {
-            return notChosen("where `" + kept.key() + "` turns over an element of `"
-                    + chain.getLast() + "` could not be worked out");
+            return notChosen(new SearchMessage.WhereItTurnsOverCouldNotBeWorkedOut(
+                    String.valueOf(kept.key()), String.valueOf(chain.getLast())));
         }
         if (candidates.isEmpty()) {
-            return none(kept == null ? "the rules leave no value at `" + place + "` to repeat"
-                    : "no value at `" + place + "` to repeat that `" + kept.key() + "` keeps");
+            return none(kept == null ? new SearchMessage.NoValueToRepeat(String.valueOf(place))
+                    : new SearchMessage.NoValueToRepeatThatKeeps(String.valueOf(place),
+                            String.valueOf(kept.key())));
         }
         List<Place> beside = valuesBeside(candidates.getFirst(), candidates, kept, carrier, run,
                 leaves, unheld, unnamed, reading.today());
@@ -1473,8 +1553,8 @@ final class CardinalityComposer {
         if (!built.isEmpty()) {
             return new TermRealizations.Realization.Built(built, rest);
         }
-        return unbuilt.came(rest, none("no containers of `" + place + "` this composed hold a"
-                + " value as often as asked"));
+        return unbuilt.came(rest, none(new SearchMessage.NoContainersHoldAValueAsOften(
+                String.valueOf(place))));
     }
 
     /**
@@ -1502,14 +1582,13 @@ final class CardinalityComposer {
             NumericTerm.OccurrencesOfAKey term = (NumericTerm.OccurrencesOfAKey) each.term();
             AskedAt asked = demands.get(each);
             if (asked == null || asked.walking() == null) {
-                return none("nothing says how often the value at `" + term.key()
-                        + "` is to occur at `" + place + "`");
+                return none(new SearchMessage.NothingSaysHowOftenTheValueOccursAt(
+                        String.valueOf(term.key()), String.valueOf(place)));
             }
             Place value = within == null ? null
                     : settled(within, new NumericTerm.ValueOf(term.key()));
             if (value == null) {
-                return notChosen("`" + term.key() + "` stands at no one value, so what is counted"
-                        + " for is not known");
+                return notChosen(new SearchMessage.StandsAtNoOneValue(String.valueOf(term.key())));
             }
             int at = 0;
             while (at < values.size() && !values.get(at).sameAs(value)) {
@@ -1523,14 +1602,14 @@ final class CardinalityComposer {
         }
         List<TermPath> chain = place.containersHoldingIt();
         if (chain.size() < 2 || !place.equals(chain.getLast().element())) {
-            return notChosen("a value at `" + place + "` is not an element of the container it"
-                    + " stands inside, so the elements are chosen at a place inside them");
+            return notChosen(new SearchMessage.AValueIsNotAnElementOfItsContainer(
+                    String.valueOf(place)));
         }
         NumericTerm own = new NumericTerm.ValueOf(place);
         TermOrders orders = measuring.ordersOf(own);
         Carrier carrier = orders == null ? null : orders.observed();
         if (carrier == null) {
-            return notChosen("a value at `" + place + "` is on no order its values are chosen on");
+            return notChosen(new SearchMessage.AValueIsOnNoOrder(String.valueOf(place)));
         }
         NumericDomain.Bounds run = switch (within.projectionOf(own)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
@@ -1539,7 +1618,7 @@ final class CardinalityComposer {
             case null -> NumericDomain.Bounds.OPEN;
         };
         if (run == null) {
-            return none("the rules leave no value at `" + place + "`");
+            return none(new SearchMessage.NoValueAt(String.valueOf(place)));
         }
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
@@ -1569,8 +1648,8 @@ final class CardinalityComposer {
         if (!search.built.isEmpty()) {
             return new TermRealizations.Realization.Built(search.built, rest);
         }
-        return search.unbuilt.came(rest, none("no containers of `" + place + "` this composed"
-                + " hold the keys as often as asked"));
+        return search.unbuilt.came(rest, none(new SearchMessage.NoContainersHoldTheKeysAsOften(
+                String.valueOf(place))));
     }
 
     /**
@@ -3031,8 +3110,8 @@ final class CardinalityComposer {
             return out;
         }
 
-        String unreadSaid() {
-            return "an element a statement could not be read at was not chosen: " + unread;
+        SearchMessage unreadSaid() {
+            return new SearchMessage.AnElementAStatementCouldNotBeReadAt(String.valueOf(unread));
         }
     }
 
@@ -3045,7 +3124,12 @@ final class CardinalityComposer {
         private final Groups<?> groups;
         private final List<Asked> asked;
         private final List<Together> together;
+        private final List<Joint> joints;
         private final NumericSet size;
+
+        /** How many elements the sharings being looked at share out. */
+        private int elements;
+
         /** How many of a group's values one sharing may draw, by the group. */
         private final IntUnaryOperator capacity;
 
@@ -3080,11 +3164,12 @@ final class CardinalityComposer {
          * @param capacity how many of a group's values one sharing may draw, by the group
          * @param most     how many sharings this looks at, over every size it is asked for
          */
-        Sharing(Groups<?> groups, List<Asked> asked, List<Together> together, NumericSet size,
-                IntUnaryOperator capacity, int most) {
+        Sharing(Groups<?> groups, List<Asked> asked, List<Together> together, List<Joint> joints,
+                NumericSet size, IntUnaryOperator capacity, int most) {
             this.groups = groups;
             this.asked = asked;
             this.together = together;
+            this.joints = joints;
             this.size = size;
             this.capacity = capacity;
             this.left = most;
@@ -3111,6 +3196,7 @@ final class CardinalityComposer {
             if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
                 return true;
             }
+            this.elements = elements;
             return share(new int[groups.counts().size()], new int[asked.size()], 0, elements,
                     take);
         }
@@ -3202,14 +3288,15 @@ final class CardinalityComposer {
         }
 
         /** Whether a sharing every element of which is shared out, {@code meeting} of them
-         *  meeting each thing asked, meets every count and leaves every statement a way. */
+         *  meeting each thing asked, meets every count, holds every relation among the counts and
+         *  leaves every statement a way. */
         private boolean meetsEveryCount(int[] meeting) {
             for (int i = 0; i < asked.size(); i++) {
                 if (!asked.get(i).asMany(meeting[i])) {
                     return false;
                 }
             }
-            return leavesAWay(meeting, none);
+            return Joint.allHold(joints, elements, meeting) && leavesAWay(meeting, none);
         }
 
         /**
@@ -3289,13 +3376,13 @@ final class CardinalityComposer {
         }
     }
 
-    static TermRealizations.Realization none(String why) {
+    static TermRealizations.Realization none(SearchMessage why) {
         return new TermRealizations.Realization.None(
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, why);
     }
 
     /** Elements of a kind nothing here chooses, which is the population and no proof. */
-    static TermRealizations.Realization notChosen(String why) {
+    static TermRealizations.Realization notChosen(SearchMessage why) {
         return new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
                 Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)), why);
     }

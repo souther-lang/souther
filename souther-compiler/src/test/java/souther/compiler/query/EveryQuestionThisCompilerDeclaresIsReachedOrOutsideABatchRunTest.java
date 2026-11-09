@@ -208,7 +208,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
             ConformanceCorpus.Analysed analysed = corpus.analyse();
             Compilation compilation = analysed.compilation();
             GeneratedRows.of(compilation, null, null,
-                    new SourceRendering(corpus.names(), compilation.texts())).text();
+                    new SourceRendering(corpus.names(), compilation.texts())).textInEnglish();
             compilation.modules().forEach(compilation::declaredBehaviors);
             into(compilation, out);
 

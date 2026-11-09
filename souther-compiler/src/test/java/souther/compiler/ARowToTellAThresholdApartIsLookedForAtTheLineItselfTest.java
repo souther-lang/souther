@@ -72,7 +72,7 @@ class ARowToTellAThresholdApartIsLookedForAtTheLineItselfTest {
                 OfferingRequest.overTheModule(compilation.modules().get(0)));
         assertNotNull(offering, "the model compiles");
         String block = GeneratedRows.of(offering, Map.of(),
-                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
 
         Matcher rows = ROW.matcher(block);
         boolean offered = false;

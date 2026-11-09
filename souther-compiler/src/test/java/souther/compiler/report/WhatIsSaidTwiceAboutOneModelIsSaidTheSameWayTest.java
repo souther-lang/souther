@@ -85,7 +85,7 @@ class WhatIsSaidTwiceAboutOneModelIsSaidTheSameWayTest {
         List<String> written = report().modules().get(0).incompleteness().written().stream()
                 .map(each -> each.fact().shown(rendering)).toList();
 
-        assertEquals(written, namedOnThePage(report().human(rendering)),
+        assertEquals(written, namedOnThePage(report().humanInEnglish(rendering)),
                 "the page a person reads and the document a build reads say what a module could"
                         + " not read in two orders, so one of them is not the order this compiler"
                         + " decided");

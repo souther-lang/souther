@@ -135,7 +135,7 @@ class AnObservationThisCompilerStoppedIsNotAPointNothingWritesTest {
 
     private static String report(int names) {
         return AdequacyReport.of(compiled(names)).only("example.through", "判定する")
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static Compilation compiled(int names) {

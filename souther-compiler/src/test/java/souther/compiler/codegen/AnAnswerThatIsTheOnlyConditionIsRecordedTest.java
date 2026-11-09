@@ -65,7 +65,7 @@ class AnAnswerThatIsTheOnlyConditionIsRecordedTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),

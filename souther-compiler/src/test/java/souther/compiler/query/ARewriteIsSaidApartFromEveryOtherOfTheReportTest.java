@@ -155,7 +155,7 @@ class ARewriteIsSaidApartFromEveryOtherOfTheReportTest {
         Compilation compilation = compiled(CLAMPED_TWICE);
         AdequacyReport report = reported(compilation);
 
-        List<String> lines = report.human(SourceRendering.namedByIdentity(compilation.texts()))
+        List<String> lines = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .lines().map(String::strip)
                 .filter(line -> line.contains("souther.int.clamp")).toList();
 
@@ -175,7 +175,7 @@ class ARewriteIsSaidApartFromEveryOtherOfTheReportTest {
         Compilation compilation = compiled(foldModel("probe.one", ""),
                 foldModel("probe.two", ""));
         AdequacyReport report = reported(compilation);
-        List<String> lines = report.human(SourceRendering.namedByIdentity(compilation.texts()))
+        List<String> lines = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .lines().map(String::strip).toList();
 
         Matcher atAFigure = Pattern.compile("stopped at a figure of this compiler\\s+(\\d+)")
@@ -252,7 +252,7 @@ class ARewriteIsSaidApartFromEveryOtherOfTheReportTest {
         AdequacyReport report = reported(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 
-        String page = report.human(rendering);
+        String page = report.humanInEnglish(rendering);
         assertTrue(page.contains("replacement 4/4"), () -> "every rewrite is noticed: " + page);
         assertFalse(page.contains("? not decided"), () -> "none is left open: " + page);
 

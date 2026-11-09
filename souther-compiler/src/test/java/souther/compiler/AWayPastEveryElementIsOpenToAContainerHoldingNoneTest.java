@@ -54,7 +54,7 @@ class AWayPastEveryElementIsOpenToAContainerHoldingNoneTest {
     void theRulesPastAnEmptyListAreOwedARow() {
         Compilation compilation = measured();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertFalse(report.contains("no value can stand at a rule of the decision"),
                 () -> "a way an empty list takes is not one the rules close:\n" + report);
     }
@@ -66,7 +66,7 @@ class AWayPastEveryElementIsOpenToAContainerHoldingNoneTest {
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule(module)),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
         List<String> past = block.lines()
                 .filter(line -> line.contains("items = []") && line.contains("gate = "))
                 .toList();

@@ -6,6 +6,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.publish.RuleHandleProse;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -228,7 +229,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
                 .map(point -> RuleHandleProse.said(point.said(read.rulePlace()),
                         new souther.compiler.diag.SourceRendering(
                                 souther.compiler.source.SourceId::value,
-                                compilation.texts()), null))
+                                compilation.texts()), Locale.ENGLISH, null))
                 .collect(Collectors.joining(", ")) + "]";
     }
 }

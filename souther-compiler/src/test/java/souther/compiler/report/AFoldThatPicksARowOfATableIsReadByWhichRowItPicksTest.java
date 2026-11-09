@@ -75,7 +75,7 @@ class AFoldThatPicksARowOfATableIsReadByWhichRowItPicksTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** The lines the table's bounds draw are on the value, and nothing is left unread. */

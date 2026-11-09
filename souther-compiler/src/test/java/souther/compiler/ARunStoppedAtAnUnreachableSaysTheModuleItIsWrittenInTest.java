@@ -64,7 +64,7 @@ class ARunStoppedAtAnUnreachableSaysTheModuleItIsWrittenInTest {
                 stopsOf(compilation, "go"));
 
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         String lib = SourceRendering.namedByIdentity(compilation.texts()).names()
                 .nameOf(compilation.sourceIdOf("lib"));
         assertTrue(human.contains("an `unreachable` at " + lib + ":" + line + ":" + column

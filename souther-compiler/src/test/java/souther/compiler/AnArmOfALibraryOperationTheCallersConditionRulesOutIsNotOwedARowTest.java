@@ -232,6 +232,6 @@ class AnArmOfALibraryOperationTheCallersConditionRulesOutIsNotOwedARowTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 }

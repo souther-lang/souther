@@ -31,7 +31,7 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
     }
 
     private static List<String> said(String source) {

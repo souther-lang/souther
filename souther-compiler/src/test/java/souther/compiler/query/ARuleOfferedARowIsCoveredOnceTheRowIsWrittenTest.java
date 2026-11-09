@@ -154,13 +154,13 @@ class ARuleOfferedARowIsCoveredOnceTheRowIsWrittenTest {
     private static String block(String model) {
         Compilation measured = measured(model);
         return GeneratedRows.of(measured, "example.decide", null,
-                SourceRendering.namedByIdentity(measured.texts())).text();
+                SourceRendering.namedByIdentity(measured.texts())).textInEnglish();
     }
 
     private static String report(String model) {
         Compilation measured = measured(model);
         return AdequacyReport.of(measured)
-                .human(SourceRendering.namedByIdentity(measured.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(measured.texts()));
     }
 
     private static Compilation measured(String model) {

@@ -123,7 +123,7 @@ class AWeightOfADerivedValueCutAtSeveralPlacesIsOwedOnceTest {
         long[] undecided = {0};
         walk(json, weights, besides, undecided);
         return new Document(weights, besides, undecided[0], json.get("adequacy").asString(),
-                report.human(SourceRendering.namedByIdentity(compilation.texts())));
+                report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     private static void walk(JsonNode node, Map<String, String> weights, List<JsonNode> besides,

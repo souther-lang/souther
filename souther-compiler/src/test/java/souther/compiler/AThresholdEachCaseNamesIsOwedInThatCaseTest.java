@@ -348,7 +348,7 @@ class AThresholdEachCaseNamesIsOwedInThatCaseTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Pattern point = Pattern.compile("no row is at (?:an|the) (IN|OUT|ON|OFF) point");
         String prefix = "· read as cancelFee/month: ";
         List<String> out = new ArrayList<>();

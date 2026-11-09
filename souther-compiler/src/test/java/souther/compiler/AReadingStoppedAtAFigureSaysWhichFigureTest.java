@@ -6,6 +6,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.report.InEnglish;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -84,8 +85,8 @@ class AReadingStoppedAtAFigureSaysWhichFigureTest {
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 
-        String human = report.human(rendering);
-        String said = ", stopped at " + figure.counts() + " (" + figure.name() + ", "
+        String human = report.humanInEnglish(rendering);
+        String said = ", stopped at " + InEnglish.said(figure.countsSaid()) +" (" + figure.name() + ", "
                 + figure.maximum() + ")";
         List<String> lines = human.lines()
                 .filter(line -> line.contains(": " + THE_WORD)

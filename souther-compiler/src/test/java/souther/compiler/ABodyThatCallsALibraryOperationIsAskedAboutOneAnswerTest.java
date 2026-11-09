@@ -113,7 +113,7 @@ class ABodyThatCallsALibraryOperationIsAskedAboutOneAnswerTest {
 
     private static String page(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Compilation compiled(String source) {

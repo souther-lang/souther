@@ -48,7 +48,7 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.labels")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         assertTrue(offered.contains("3 rows to fill what nothing covers"), offered);
         assertTrue(offered.contains("(\" \")"), () -> "a text of whitespace alone: " + offered);
@@ -72,7 +72,7 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
                 """);
 
         assertEquals(List.of(), compilation.errors(), "the rows hold");
-        String report = AdequacyReport.of(compilation).human(
+        String report = AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("obligations 3/3"), report);
         assertTrue(report.contains("adequacy: satisfied"), report);
@@ -125,7 +125,7 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.tagged")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         assertTrue(offered.contains("3 rows to fill what nothing covers"), offered);
         assertTrue(offered.contains("Text(\", \")"),
@@ -167,7 +167,7 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.digits")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         assertTrue(!offered.contains("Digits(\"  \")") && !offered.contains("Digits(\", \")"),
                 () -> "a text of blanks, which the type refuses: " + offered);
