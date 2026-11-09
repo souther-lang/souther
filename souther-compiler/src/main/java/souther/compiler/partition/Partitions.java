@@ -25,6 +25,7 @@ import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.ValueAsked;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.InputDomain;
@@ -2477,8 +2478,8 @@ public final class Partitions {
         for (List<EntryHeld.Requirement> inOneMap : asked.values()) {
             for (EntryHeld.Requirement one : inOneMap) {
                 for (EntryHeld.Requirement other : inOneMap) {
-                    if (one.valueIs() != null && other.valueIs() != null
-                            && one.valueIs().compareTo(other.valueIs()) != 0) {
+                    if (one.valueIn() != null && other.valueIn() != null
+                            && EntryHeld.leaveNoNumberInCommon(one.valueIn(), other.valueIn())) {
                         apart.computeIfAbsent(one.key().steps().getFirst(),
                                 _ -> new LinkedHashSet<>()).add(other.key().steps().getFirst());
                     }
@@ -2517,15 +2518,14 @@ public final class Partitions {
             return Proposals.NONE;
         }
         List<Witnesses.Filed> entries = new ArrayList<>();
+        Map<RuleKey, ValueAsked> ranges = EntryHeld.valuesAsked(asked);
         for (EntryHeld.Requirement each : asked) {
             FixtureTemplate key = chosen.get(each.key().steps().getFirst());
             // A number the value's type admits and can be written as: a value written under a name
             // is a value of the type only if its rules let it be.
-            FixtureTemplate value = each.valueIs() == null
-                    || !EntryHeld.valueTypeAdmits(map.value(), each.valueIs(), null, reading)
-                    ? null
-                    : writtenNumberAt(map.value(), each.valueIs(), reading);
-            if (key == null || (each.valueIs() != null && value == null)) {
+            ValueAsked range = ranges.get(each.key());
+            FixtureTemplate value = range == null ? null : valueFiledAs(map.value(), range, reading);
+            if (key == null || (range != null && value == null)) {
                 return Proposals.NONE;
             }
             entries.add(new Witnesses.Filed(key, value));
@@ -2866,6 +2866,55 @@ public final class Partitions {
             sums = nextSums;
         }
         return reached;
+    }
+
+    /**
+     * A value of {@code valueType} holding a number among {@code asked} at each place the rules
+     * name, as a map of that type files it under a key, or null where no such number is one the
+     * type can be at some place, or the position cannot write it.
+     *
+     * <p>The one way an entry's value is written, for a map built field by field and for one
+     * composed into its container: a number the value's type refuses is no value of the type, and
+     * a map holding it is one the rules refuse. Where the value is a record and the numbers are
+     * asked of its fields, it is composed as any record is, with those fields handed over and the
+     * rest chosen against the rules of the record as they stand with them in it.
+     */
+    static FixtureTemplate valueFiledAs(Type valueType, ValueAsked asked,
+                                        RuleReadingContext reading) {
+        return EntryHeld.numbersAmong(valueType, asked, null, reading)
+                instanceof EntryHeld.Among.Found(var numbers)
+                ? valueHolding(valueType, numbers, reading) : null;
+    }
+
+    /** A value of {@code type} holding the numbers {@code at} each of their places, or null. */
+    private static FixtureTemplate valueHolding(Type type, Map<List<String>, BigDecimal> at,
+                                                RuleReadingContext reading) {
+        BigDecimal itself = at.get(ValueAsked.THE_VALUE);
+        if (itself != null) {
+            return at.size() == 1 ? writtenNumberAt(type, itself, reading) : null;
+        }
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Product(TypeSymbol.AtModule record, var fields))) {
+            return null;
+        }
+        Map<String, Map<List<String>, BigDecimal>> byField = new LinkedHashMap<>();
+        at.forEach((place, number) -> byField
+                .computeIfAbsent(place.getFirst(), _ -> new LinkedHashMap<>())
+                .put(place.subList(1, place.size()), number));
+        Map<String, FixtureTemplate> given = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<List<String>, BigDecimal>> each : byField.entrySet()) {
+            FixtureTemplate field = fields.get(each.getKey()) instanceof Type fieldType
+                    ? valueHolding(fieldType, each.getValue(), reading) : null;
+            if (field == null) {
+                return null;
+            }
+            given.put(each.getKey(), field);
+        }
+        Proposals made = composed(record, record, reading, Set.of(), given, RulesAround.NONE);
+        return made.isEmpty() ? null
+                : WornNames.under(view.wrappers(), made.values().getFirst(), source);
     }
 
     /** {@code number} written as a value of {@code type}, or null where the position holds no

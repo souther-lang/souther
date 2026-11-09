@@ -378,6 +378,13 @@ public sealed interface Reachability {
                     Pullback.WorkedOutWhere.ALWAYS);
         }
 
+        /** What a composer is asked of a row on the way: {@link #boundedOnTheWay}, each as the
+         *  statement a row is composed toward ({@link OnTheWay.TakenIn#forComposing}). */
+        List<OnTheWay.TakenIn> composing() {
+            return boundedOnTheWay.stream()
+                    .flatMap(each -> each.forComposing().stream()).toList();
+        }
+
         /** What the run to the border asks of a row, as the readers of the relation there are
          *  handed it: the narrowing of the run and of the relation's own working kept apart. */
         DemandReading.Answered gotPastAsAsked() {

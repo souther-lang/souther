@@ -63,7 +63,8 @@ public sealed interface Realization {
                     case RealizationTarget.OfANumber number -> byTerm.computeIfAbsent(
                             number.term(), _ -> new ArrayList<>()).add(each);
                     case RealizationTarget.ACount _,
-                         RealizationTarget.ElementsMeetingTogether _ -> counts.add(each);
+                         RealizationTarget.ElementsMeetingTogether _,
+                         RealizationTarget.CountsRelated _ -> counts.add(each);
                 }
             }
             List<RealizationTarget> ordered = new ArrayList<>();

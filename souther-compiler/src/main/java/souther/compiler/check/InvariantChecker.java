@@ -1549,7 +1549,11 @@ public final class InvariantChecker {
                 }
             }
         });
-        return new StatedByClauses.BuiltFor(entryKeys, lists);
+        Set<FactSubject> noEntryHolds = new LinkedHashSet<>();
+        for (RuleKey map : EntryHeld.askingForNoEntry(named, world)) {
+            noEntryHolds.addAll(subjectsAt(map, atoms, keys));
+        }
+        return new StatedByClauses.BuiltFor(entryKeys, lists, noEntryHolds);
     }
 
     /** Every subject the position at {@code path} is filed under. */

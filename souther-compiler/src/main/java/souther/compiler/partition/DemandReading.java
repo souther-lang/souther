@@ -1392,11 +1392,13 @@ final class DemandReading {
     static AnElementMeeting anElementMeeting(Quantity.HowManyMeet count, InputReading read) {
         List<Read> reads = asked(count.someMeets(), read);
         if (reads.size() != 1
-                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))
-                || !exists.ofAnElement().oneWay()) {
+                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))) {
             return AnElementMeeting.UNREAD;
         }
-        List<RowDemand.OfAnElement> way = exists.ofAnElement().theWay();
+        List<RowDemand.OfAnElement> way = theWayAnElementMeets(exists.ofAnElement(), read);
+        if (way == null) {
+            return AnElementMeeting.UNREAD;
+        }
         // Relations of the element itself, as the reading states the way: what some element of
         // a container inside it is asked is no relation of the element, though a row written
         // alike writes it into every one of them.
@@ -1407,6 +1409,36 @@ final class DemandReading {
                 way.size() == 1 && way.getFirst() instanceof RowDemand.WithinIt within
                         ? Optional.of(within) : Optional.empty();
         return new AnElementMeeting(heldTo, handedOn);
+    }
+
+    /**
+     * The one way an element meets {@code meets}, or null where it meets it several ways.
+     *
+     * <p>Two ways where every element of a container inside the element is to meet something: that
+     * they do, or that the container holds none. The second is no other way of meeting it — a
+     * container holding none is one every element of which meets anything — so the first is the
+     * one way, and what it asks of the container is met by one holding none as by any other.
+     */
+    private static List<RowDemand.OfAnElement> theWayAnElementMeets(
+            RowDemand.AnElementMeets meets, InputReading read) {
+        List<List<RowDemand.OfAnElement>> ways = meets.ways();
+        if (ways.size() == 1) {
+            return ways.getFirst();
+        }
+        if (ways.size() != 2) {
+            return null;
+        }
+        for (int each = 0; each < 2; each++) {
+            List<RowDemand.OfAnElement> every = ways.get(each);
+            if (every.size() == 1
+                    && every.getFirst() instanceof RowDemand.WithinIt(TermPath container,
+                            boolean some, var _)
+                    && !some
+                    && ways.get(1 - each).equals(List.of(sizeAgainst(container, read, false)))) {
+                return every;
+            }
+        }
+        return null;
     }
 
     /** What {@code way} asks, where it asks nothing but relations of the element itself. */
@@ -2019,7 +2051,7 @@ final class DemandReading {
                             ? AnElementsWay.ofTheRow(forTheRun(whole,
                                     RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE))
                             : AnElementsWay.ofTheRow(each));
-            case Read.Demands(RowDemand.ForTheRun(var _, var why, var past, var parted)) ->
+            case Read.Demands(RowDemand.ForTheRun(var _, var why, var past, var parted, var _)) ->
                     List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past, parted)));
             // Each way of each alternative: one alternative a figure stopped is said to be, and
             // the others are the ways they are.
@@ -2288,6 +2320,16 @@ final class DemandReading {
                 element.stream().anyMatch(term.subjectPath()::isAtOrUnder));
     }
 
+    /** How many the container at {@code held} holds, as the term that names it, or null where its
+     *  type measures none. */
+    private static NumericTerm.TakenOf sizeOf(TermPath held, InputReading read) {
+        Type container = read.domain().typeAt(held, read.rules());
+        ValueName.Stdlib size = container == null ? null
+                : NumericMeasures.takenOf(container, read.rules().inners());
+        return size == null ? null : NumericTerm.TakenOf.asItStands(size, held, container,
+                read.rules().inners(), read.rules().symbols());
+    }
+
     /**
      * That the container at {@code held} holds at least one, or none, as its size against one or
      * against nought.
@@ -2301,15 +2343,11 @@ final class DemandReading {
      */
     private static RowDemand.Relational sizeAgainst(TermPath held, InputReading read,
                                                     boolean atLeastOne) {
-        Type container = read.domain().typeAt(held, read.rules());
-        ValueName.Stdlib size = container == null ? null
-                : NumericMeasures.takenOf(container, read.rules().inners());
-        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.asItStands(size, held,
-                container, read.rules().inners(), read.rules().symbols());
+        NumericTerm.TakenOf count = sizeOf(held, read);
         if (count == null) {
             throw new IllegalStateException("a statement about the elements of `" + held
                     + "` was read, and the reading of the input measures no size of it: "
-                    + container);
+                    + read.domain().typeAt(held, read.rules()));
         }
         // `count - 1 >= 0`, or `count <= 0`.
         LinearForm<NumericTerm> form = atLeastOne
@@ -2365,6 +2403,15 @@ final class DemandReading {
             case Relation.Affine affine
                     when onARemainderAlone(affine, met, read) instanceof RowDemand.OnARemainder on ->
                     new Read.Demands(on);
+            // How many elements meet statements against one another and how many the container
+            // holds. The run decides it, and a row is composed for the counts with the relation
+            // holding of the elements it is chosen with.
+            case Relation.Affine affine
+                    when composedOf(affine, compared.holds(), read)
+                            instanceof RowDemand.ForTheRun.ComposedAs composed ->
+                    new Read.Demands(new RowDemand.ForTheRun(compared,
+                            RowDemand.NoComposer.A_COUNT_OF_ELEMENTS, List.of(), Optional.empty(),
+                            Optional.of(composed)));
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);
                 if (against == null) {
@@ -2483,6 +2530,32 @@ final class DemandReading {
         WholeNumberRuns leaves = RowDemand.OnARemainder.meeting(affine, met);
         return leaves == null || leaves.isNone() ? null
                 : new RowDemand.OnARemainder(remainder, leaves);
+    }
+
+    /**
+     * How many elements of one container meet statements, against one another and how many the
+     * container holds, where {@code affine} is a relation among nothing else — or null where it
+     * is none, or where a count in it is of a statement a row is not composed for.
+     *
+     * <p>The size is no number a row writes beside the counts: it is how many elements the
+     * container is composed with, which composing the counts settles together with them, so held as
+     * a number of the input it would be asked of the very thing it is composed with
+     * ({@link AggregateRelation}). Each count is asked at every number; the relation is what holds
+     * them to one another.
+     */
+    private static RowDemand.ForTheRun.ComposedAs composedOf(Relation.Affine affine,
+                                                              boolean holds, InputReading read) {
+        AggregateRelation relation = AggregateRelation.in(affine, holds, at -> sizeOf(at, read));
+        if (relation == null || !relation.counts().keySet().stream().allMatch(count ->
+                AStatementAtARow.askable(AStatementAtARow.meetingOf(count)))) {
+            return null;
+        }
+        List<RowDemand.SoMany> counts = new ArrayList<>();
+        for (Quantity.HowManyMeet each : relation.counts().keySet()) {
+            counts.add(new RowDemand.SoMany(each, Rel.GE, ExactRatio.ZERO,
+                    new LinearForm<>(ExactRatio.ZERO, Map.of()), anElementMeeting(each, read)));
+        }
+        return new RowDemand.ForTheRun.ComposedAs(relation, counts);
     }
 
     /**

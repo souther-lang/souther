@@ -288,6 +288,16 @@ final class AdmissibleReading {
         // did not read, at every place it names.
         EntryAt entry = entryHeldAt(part, at);
         FactSubject sides = entry == null ? sidesBalancedAt(part, at) : null;
+        // One asking for an entry no map holds is false of every value, so no place it names has a
+        // value that leaves the rules true of it: a rule read, and read as leaving each of them
+        // nothing.
+        if (entry != null && builtFor.asksForNoEntry(entry.container())) {
+            PlannedValues<FactSubject> none = PlannedValues.at(entry.container(), AdmittedPlan.NONE);
+            for (FactSubject each : names(part.of(), at)) {
+                none = none.meet(PlannedValues.at(each, AdmittedPlan.NONE));
+            }
+            return none;
+        }
         if (entry != null && builtFor.keepsAnEntry(entry.container(), entry.key())) {
             return shortOf(part, Set.of(entry.container()),
                     UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER);
@@ -358,7 +368,8 @@ final class AdmissibleReading {
         if (!part.positive()) {
             return null;
         }
-        EntryHeld.Stated stated = EntryHeld.read(part.of(), core -> followed(core, at));
+        EntryHeld.Stated stated =
+                EntryHeld.read(part.of(), core -> followed(core, at), terms.newtypes());
         FactSubject container = stated == null ? null : positionIn(stated.container(), at);
         FactSubject key = stated == null ? null : positionIn(stated.key(), at);
         return container == null || key == null ? null : new EntryAt(container, key);

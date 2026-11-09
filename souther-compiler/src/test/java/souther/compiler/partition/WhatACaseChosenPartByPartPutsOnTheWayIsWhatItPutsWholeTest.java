@@ -150,7 +150,8 @@ class WhatACaseChosenPartByPartPutsOnTheWayIsWhatItPutsWholeTest {
                 case OnTheWay.TakenIn(var _, RowDemand.OnARemainder _, var _, var _) ->
                         follows = by;
                 case OnTheWay.TakenIn(var _,
-                        RowDemand.ForTheRun(var stated, var _, var _, var _), var _, var _)
+                        RowDemand.ForTheRun(var stated, var _, var _, var _, var _), var _,
+                        var _)
                         when copies.containsKey(stated) ->
                         assertEquals(List.of(copies.get(stated)), by, stated::toString);
                 default -> { }

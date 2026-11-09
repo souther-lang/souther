@@ -96,7 +96,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     private static List<String> keysEachFiled(ContentsAsked.Here here) {
         ContainerContents contents = here.contentsOf(SHELF, _ -> null);
         assertNotNull(contents, "nothing is read off the shelf's own parameter");
-        return contents.keysEachFiled().stream().map(FixtureTemplate::text).toList();
+        return contents.keysEachFiled().stream().map(each -> each.key().text()).toList();
     }
 
     @Test
@@ -289,7 +289,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
 
         assertNotNull(contents);
         assertEquals(List.of("\"a\""), contents.keysEachFiled().stream()
-                .map(FixtureTemplate::text).toList());
+                .map(each -> each.key().text()).toList());
         assertEquals(List.of("\"b\""), contents.keysKeptOut().stream()
                 .map(FixtureTemplate::text).toList());
     }
@@ -314,7 +314,8 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
 
     private static FixtureTemplate built(List<FixtureTemplate> eachFiled,
                                          List<FixtureTemplate> keptOut, int most) {
-        Proposals built = Witnesses.holding(map(), List.of(), List.of(), null, eachFiled, keptOut,
+        Proposals built = Witnesses.holding(map(), List.of(), List.of(), null,
+                eachFiled.stream().map(key -> new Witnesses.Filed(key, null)).toList(), keptOut,
                 new DeclaredBounds.CountRange(0, most), READING);
         return built.isEmpty() ? null : built.values().getFirst();
     }
@@ -328,6 +329,190 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         FixtureTemplate both = built(List.of(a, b, a), List.of(), Integer.MAX_VALUE);
         assertNotNull(both);
         assertEquals("[(\"a\", \"x\"), (\"b\", \"x\")]", both.text());
+    }
+
+    /**
+     * A key asked over a named value is filed under that value wherever the values put it, and a
+     * key asked over none takes what is left; the entries asked for differently are all kept.
+     */
+    @Test
+    void aKeyAskedOverANamedValueIsFiledUnderItAndEveryEntryIsKept() {
+        FixtureTemplate a = FixtureTemplate.string("a");
+        FixtureTemplate b = FixtureTemplate.string("b");
+        FixtureTemplate c = FixtureTemplate.string("c");
+        FixtureTemplate p = FixtureTemplate.string("p");
+        FixtureTemplate q = FixtureTemplate.string("q");
+
+        Proposals built = Witnesses.holding(map(), List.of(q, p), List.of(), null,
+                List.of(new Witnesses.Filed(a, p), new Witnesses.Filed(b, q),
+                        new Witnesses.Filed(c, null)),
+                List.of(), new DeclaredBounds.CountRange(0, Integer.MAX_VALUE), READING);
+
+        assertFalse(built.isEmpty());
+        String map = built.values().getFirst().text();
+        assertTrue(map.contains("(\"a\", \"p\")"), map);
+        assertTrue(map.contains("(\"b\", \"q\")"), map);
+        assertTrue(map.contains("(\"c\", "), map);
+    }
+
+    /**
+     * Several keys asked over one value are several entries of the map, a map holding one value
+     * under more than one key: the values a map must hold are asked once, and what is filed under
+     * each key is asked of each. Whichever order the values and the entries come in.
+     */
+    @Test
+    void severalKeysAskedOverOneValueAreEveryOneAnEntry() {
+        FixtureTemplate a = FixtureTemplate.string("a");
+        FixtureTemplate b = FixtureTemplate.string("b");
+        FixtureTemplate c = FixtureTemplate.string("c");
+        FixtureTemplate p = FixtureTemplate.string("p");
+        FixtureTemplate q = FixtureTemplate.string("q");
+        List<Witnesses.Filed> filed = List.of(new Witnesses.Filed(a, p),
+                new Witnesses.Filed(b, q), new Witnesses.Filed(c, q));
+
+        for (List<FixtureTemplate> values : List.of(List.of(p, q), List.of(q, p))) {
+            for (List<Witnesses.Filed> order : List.of(filed,
+                    List.of(filed.get(2), filed.get(1), filed.get(0)),
+                    List.of(filed.get(1), filed.get(0), filed.get(2)))) {
+                Proposals built = Witnesses.holding(map(), values, List.of(), null, order,
+                        List.of(), new DeclaredBounds.CountRange(0, Integer.MAX_VALUE), READING);
+                assertFalse(built.isEmpty(), () -> "values " + values + " entries " + order);
+                String map = built.values().getFirst().text();
+                for (Witnesses.Filed each : filed) {
+                    assertTrue(map.contains("(" + each.key().text() + ", "
+                            + each.value().text() + ")"), map);
+                }
+            }
+        }
+    }
+
+    /**
+     * Whatever values a map must hold, whichever keys are asked over which of them or over none,
+     * and whichever of the keys is the one the element was put at, a map is built holding every
+     * entry asked and every value held, in whatever order they are handed in. Every such request
+     * has a map, so none is answered with nothing: a key that wants any value is not given one a
+     * key that wants it by name needs.
+     */
+    @Test
+    void everyRequestSomeMapMeetsIsBuiltWhateverOrderItIsHandedIn() {
+        List<FixtureTemplate> keys = List.of(FixtureTemplate.string("a"),
+                FixtureTemplate.string("b"), FixtureTemplate.string("c"));
+        List<FixtureTemplate> all = List.of(FixtureTemplate.string("p"),
+                FixtureTemplate.string("q"), FixtureTemplate.string("r"));
+        int built = 0;
+        for (int heldMask = 1; heldMask < 8; heldMask++) {
+            List<FixtureTemplate> held = new ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                if ((heldMask & (1 << i)) != 0) {
+                    held.add(all.get(i));
+                }
+            }
+            for (List<FixtureTemplate> values : orders(held)) {
+                // For each key, which of the held values it is asked over: one of them, or none.
+                int choices = held.size() + 1;
+                for (int assignment = 0; assignment < choices * choices * choices; assignment++) {
+                    List<Witnesses.Filed> filed = new ArrayList<>();
+                    int rest = assignment;
+                    for (FixtureTemplate key : keys) {
+                        int which = rest % choices;
+                        rest /= choices;
+                        filed.add(new Witnesses.Filed(key,
+                                which == held.size() ? null : held.get(which)));
+                    }
+                    // Whichever of the keys, or none, the element was put at; the other entries
+                    // in every order.
+                    for (int placed = -1; placed < 3; placed++) {
+                        Witnesses.Filed at = placed < 0 ? null : filed.get(placed);
+                        List<Witnesses.Filed> beside = new ArrayList<>(filed);
+                        if (at != null) {
+                            beside.remove(at);
+                        }
+                        for (List<Witnesses.Filed> order : orders(beside)) {
+                            Proposals made = Witnesses.holding(map(), values, List.of(), at,
+                                    order, List.of(),
+                                    new DeclaredBounds.CountRange(0, Integer.MAX_VALUE), READING);
+                            String request = "values " + values + " placed " + at + " entries "
+                                    + order;
+                            assertFalse(made.isEmpty(), request);
+                            String map = made.values().getFirst().text();
+                            for (Witnesses.Filed each : filed) {
+                                String entry = "(" + each.key().text() + ", ";
+                                assertTrue(map.contains(each.value() == null ? entry
+                                        : entry + each.value().text() + ")"),
+                                        () -> request + " -> " + map);
+                            }
+                            for (FixtureTemplate value : held) {
+                                assertTrue(map.contains(", " + value.text() + ")"),
+                                        () -> request + " holds " + value + " -> " + map);
+                            }
+                            built++;
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(built > 1000, "the requests there are were all asked: " + built);
+    }
+
+    private static <T> List<List<T>> orders(List<T> of) {
+        if (of.size() <= 1) {
+            return List.of(List.copyOf(of));
+        }
+        List<List<T>> out = new ArrayList<>();
+        for (int i = 0; i < of.size(); i++) {
+            List<T> without = new ArrayList<>(of);
+            T first = without.remove(i);
+            for (List<T> each : orders(without)) {
+                List<T> one = new ArrayList<>();
+                one.add(first);
+                one.addAll(each);
+                out.add(one);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Entries asked under one key are one entry where they name one value or only one names any,
+     * and no map where they name two: a map holding both values is not one the second was asked
+     * of. Held by the one place entries are made one by key, so a map built to hold entries and
+     * a map checked for them cannot disagree.
+     */
+    @Test
+    void aKeyAskedOverTwoValuesIsNoMapAndOverOneIsOneEntry() {
+        FixtureTemplate a = FixtureTemplate.string("a");
+        FixtureTemplate p = FixtureTemplate.string("p");
+        FixtureTemplate q = FixtureTemplate.string("q");
+        Witnesses.Filed overP = new Witnesses.Filed(a, p);
+        Witnesses.Filed overQ = new Witnesses.Filed(a, q);
+        Witnesses.Filed overNone = new Witnesses.Filed(a, null);
+
+        assertTrue(Witnesses.Filed.byKey(List.of(overP, overQ)) == null);
+        assertTrue(Witnesses.Filed.byKey(List.of(overP, overP)).size() == 1);
+        assertEquals(overP, Witnesses.Filed.byKey(List.of(overNone, overP)).get("\"a\""));
+        assertEquals(overP, Witnesses.Filed.byKey(List.of(overP, overNone)).get("\"a\""));
+        assertTrue(holding(List.of(p, q), List.of(overP, overQ)).isEmpty());
+        assertFalse(holding(List.of(p, q), List.of(overP, overP)).isEmpty());
+        assertFalse(holding(List.of(p, q), List.of(overNone, overP)).isEmpty());
+    }
+
+    /** The key an element is filed under is asked one value only, whichever way it is asked. */
+    @Test
+    void theKeyAnElementIsFiledUnderIsAskedOneValueOnly() {
+        FixtureTemplate a = FixtureTemplate.string("a");
+        FixtureTemplate p = FixtureTemplate.string("p");
+        FixtureTemplate q = FixtureTemplate.string("q");
+        DeclaredBounds.CountRange any = new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+
+        assertTrue(Witnesses.holding(map(), List.of(p, q), List.of(), new Witnesses.Filed(a, p),
+                List.of(new Witnesses.Filed(a, q)), List.of(), any, READING).isEmpty());
+        assertFalse(Witnesses.holding(map(), List.of(p, q), List.of(), new Witnesses.Filed(a, p),
+                List.of(new Witnesses.Filed(a, null)), List.of(), any, READING).isEmpty());
+    }
+
+    private static Proposals holding(List<FixtureTemplate> holding, List<Witnesses.Filed> asked) {
+        return Witnesses.holding(map(), holding, List.of(), null, asked, List.of(),
+                new DeclaredBounds.CountRange(0, Integer.MAX_VALUE), READING);
     }
 
     /** More keys than the rules leave room for, or a key kept out, is no map. */

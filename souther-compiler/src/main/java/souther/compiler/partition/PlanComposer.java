@@ -133,8 +133,8 @@ final class PlanComposer {
                                   RuleReadingContext reading) {
         List<FixtureTemplate> holding = new ArrayList<>();
         List<FixtureTemplate> keptOut = List.of();
-        List<FixtureTemplate> keysHeld = List.of();
-        List<FixtureTemplate> keysEachFiled = List.of();
+        List<ContainerContents.KeyAsked> keysHeld = List.of();
+        List<ContainerContents.KeyAsked> keysEachFiled = List.of();
         List<FixtureTemplate> keysKeptOut = List.of();
         CompositionShortfall met = CompositionShortfall.NONE;
         FixtureTemplate element = null;
@@ -181,14 +181,6 @@ final class PlanComposer {
             }
             key = composed.values().getFirst();
         }
-        // A key the rules ask the entry to be filed under is a value of another position, and one
-        // entry is filed under one key.
-        for (FixtureTemplate asked : keysHeld) {
-            if (key != null && !key.text().equals(asked.text())) {
-                return Proposals.NONE.meeting(met);
-            }
-            key = asked;
-        }
         Proposals collection = switch (container) {
             case Shape.Sequence carrier -> {
                 // Every element is the one composed, and elements kept apart — a set's, or a
@@ -199,21 +191,35 @@ final class PlanComposer {
                 if (plan.eachOf() && !apart.isEmpty() && plan.holds().least() > 1) {
                     yield Proposals.NONE;
                 }
-                if (key != null || !keysEachFiled.isEmpty()) {
+                if (key != null || !keysHeld.isEmpty() || !keysEachFiled.isEmpty()) {
                     throw new IllegalStateException("a plan put a key on what a list or a set"
                             + " holds, which files nothing under one: " + plan.at());
                 }
                 yield Witnesses.holding(carrier, apart, holding, keptOut, plan.holds(), reading);
             }
-            case Shape.Mapping carrier -> Witnesses.holding(carrier, holding, keptOut,
-                    key == null ? null : new Witnesses.Filed(key, element), keysEachFiled,
-                    keysKeptOut, plan.holds(), reading);
+            case Shape.Mapping carrier -> {
+                EntriesAsked entries =
+                        EntriesAsked.of(carrier, key, element, keysHeld, keysEachFiled, reading);
+                if (entries == null) {
+                    yield Proposals.NONE;
+                }
+                entries.written().forEach(value -> holdingOnce(holding, value));
+                yield Witnesses.holding(carrier, holding, keptOut, entries.placed(),
+                        entries.others(), keysKeptOut, plan.holds(), reading);
+            }
         };
         met = met.and(collection.met());
         // A name this module cannot write leaves no value to write.
         return collection.isEmpty() ? Proposals.NONE.meeting(met)
                 : Proposals.ofNullable(WornNames.under(plan.worn(),
                         collection.values().getFirst(), ruleSource)).meeting(met);
+    }
+
+    /** {@code value} among {@code holding}, once. */
+    private static void holdingOnce(List<FixtureTemplate> holding, FixtureTemplate value) {
+        if (holding.stream().noneMatch(each -> each.text().equals(value.text()))) {
+            holding.add(value);
+        }
     }
 
     /** One record of the plan, out of whatever the caller has at the positions under it. */

@@ -140,6 +140,20 @@ public sealed interface OnTheWay {
             return "TakenIn[anchor=" + anchor + ", demand=" + demand + ", named=" + named + "]";
         }
 
+        /**
+         * What a composer is asked of a row for this: each count it writes a row toward where the
+         * demand has some beside the run's ({@link RowDemand.ForTheRun#composedAs}), and this as it
+         * is otherwise.
+         */
+        public List<TakenIn> forComposing() {
+            if (demand instanceof RowDemand.ForTheRun(var _, var _, var _, var _,
+                    Optional<RowDemand.ForTheRun.ComposedAs> composedAs) && composedAs.isPresent()) {
+                return composedAs.get().counts().stream()
+                        .map(count -> new TakenIn(anchor, count, named)).toList();
+            }
+            return List.of(this);
+        }
+
         /** The rest compared, the hash first: two entries that differ almost always differ in
          *  it. */
         @Override
