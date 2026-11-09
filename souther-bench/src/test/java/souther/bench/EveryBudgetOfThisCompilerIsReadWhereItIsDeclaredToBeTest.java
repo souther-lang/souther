@@ -754,10 +754,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Pullback#<clinit>()V",
                     "how many readings of one condition the reading of what it means makes"),
             Map.entry("souther.compiler.partition.AggregateRelation#fewestAt("
-                            + "Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;)Ljava/util/Map;",
-                    "places no count where no container of the most elements a count is composed"
-                            + " with meets the relation, which leaves each at the fewest its own"
-                            + " conditions leave it and composing says what it came to"),
+                            + "Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;)"
+                            + "Lsouther/compiler/partition/AggregateRelation$Placed;",
+                    "stops at the most elements a container is composed with or at the choices"
+                            + " of counts looked at, and hands the figure over as what the"
+                            + " counts were not placed for"),
+            Map.entry("souther.compiler.partition.AggregateRelation#fewestWithin("
+                            + "ILjava/util/List;)"
+                            + "Lsouther/compiler/partition/AggregateRelation$Fewest;",
+                    "stops at the most elements a container is composed with or at the choices"
+                            + " of counts looked at, and hands the figure over with no counts"),
             Map.entry("souther.compiler.partition.DemandReading#<clinit>()V",
                     "how many ways an element may meet what a quantifier asks are read one by one"),
             Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#walk("

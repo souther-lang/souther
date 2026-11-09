@@ -332,6 +332,7 @@ public final class PublicationOrders {
                     CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                     CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED,
                     CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT,
+                    CompositionBudget.TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT,
                     CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT,
                     CompositionBudget.RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO,
                     CompositionBudget.VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED,

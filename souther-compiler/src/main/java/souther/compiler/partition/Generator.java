@@ -810,6 +810,7 @@ public final class Generator {
                              CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                              CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
+                             TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT,
                              TOTALS_A_COUNT_IS_TRIED_AT, RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO,
                              VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED, COUNTS_OF_KEYS_TRIED,
                              VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
@@ -7635,15 +7636,24 @@ public final class Generator {
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
             if (cut.demand() instanceof RowDemand.ForTheRun(var _, var _, var _, var _,
                     Optional<RowDemand.ForTheRun.ComposedAs> composedAs) && composedAs.isPresent()) {
-                composedAs.get().relation().fewestAt(subject.behavior(), countedBefore,
-                        leftOfACount).forEach((identity, count) -> {
-                            RealizationTarget.ACount target =
-                                    new RealizationTarget.ACount(countedBefore.get(identity));
-                            relatedAt.put(identity, count);
-                            if (countsToCome.containsKey(target)) {
-                                countsToCome.put(target, count);
-                            }
-                        });
+                switch (composedAs.get().relation().fewestAt(subject.behavior(), countedBefore,
+                        leftOfACount)) {
+                    case AggregateRelation.Placed.At(var placed) ->
+                            placed.forEach((identity, count) -> {
+                                RealizationTarget.ACount target = new RealizationTarget.ACount(
+                                        countedBefore.get(identity));
+                                relatedAt.put(identity, count);
+                                if (countsToCome.containsKey(target)) {
+                                    countsToCome.put(target, count);
+                                }
+                            });
+                    // Where no counts were found the figure that stopped the search is what the
+                    // row is short of, and no count is placed for the relation.
+                    case AggregateRelation.Placed.Missing(CompositionBudget by) -> gaps.add(
+                            new ReachabilityGap.Uncomposed(cut,
+                                    ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
+                                            CompositionShortfall.of(Set.of(by)))));
+                }
             }
         }
         // And the values the counts a condition asks for are counts of, which the container is

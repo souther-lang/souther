@@ -387,6 +387,92 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     }
 
     /**
+     * Whatever values a map must hold, whichever keys are asked over which of them or over none,
+     * and whichever of the keys is the one the element was put at, a map is built holding every
+     * entry asked and every value held, in whatever order they are handed in. Every such request
+     * has a map, so none is answered with nothing: a key that wants any value is not given one a
+     * key that wants it by name needs.
+     */
+    @Test
+    void everyRequestSomeMapMeetsIsBuiltWhateverOrderItIsHandedIn() {
+        List<FixtureTemplate> keys = List.of(FixtureTemplate.string("a"),
+                FixtureTemplate.string("b"), FixtureTemplate.string("c"));
+        List<FixtureTemplate> all = List.of(FixtureTemplate.string("p"),
+                FixtureTemplate.string("q"), FixtureTemplate.string("r"));
+        int built = 0;
+        for (int heldMask = 1; heldMask < 8; heldMask++) {
+            List<FixtureTemplate> held = new ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                if ((heldMask & (1 << i)) != 0) {
+                    held.add(all.get(i));
+                }
+            }
+            for (List<FixtureTemplate> values : orders(held)) {
+                // For each key, which of the held values it is asked over: one of them, or none.
+                int choices = held.size() + 1;
+                for (int assignment = 0; assignment < choices * choices * choices; assignment++) {
+                    List<Witnesses.Filed> filed = new ArrayList<>();
+                    int rest = assignment;
+                    for (FixtureTemplate key : keys) {
+                        int which = rest % choices;
+                        rest /= choices;
+                        filed.add(new Witnesses.Filed(key,
+                                which == held.size() ? null : held.get(which)));
+                    }
+                    // Whichever of the keys, or none, the element was put at; the other entries
+                    // in every order.
+                    for (int placed = -1; placed < 3; placed++) {
+                        Witnesses.Filed at = placed < 0 ? null : filed.get(placed);
+                        List<Witnesses.Filed> beside = new ArrayList<>(filed);
+                        if (at != null) {
+                            beside.remove(at);
+                        }
+                        for (List<Witnesses.Filed> order : orders(beside)) {
+                            Proposals made = Witnesses.holding(map(), values, List.of(), at,
+                                    order, List.of(),
+                                    new DeclaredBounds.CountRange(0, Integer.MAX_VALUE), READING);
+                            String request = "values " + values + " placed " + at + " entries "
+                                    + order;
+                            assertFalse(made.isEmpty(), request);
+                            String map = made.values().getFirst().text();
+                            for (Witnesses.Filed each : filed) {
+                                String entry = "(" + each.key().text() + ", ";
+                                assertTrue(map.contains(each.value() == null ? entry
+                                        : entry + each.value().text() + ")"),
+                                        () -> request + " -> " + map);
+                            }
+                            for (FixtureTemplate value : held) {
+                                assertTrue(map.contains(", " + value.text() + ")"),
+                                        () -> request + " holds " + value + " -> " + map);
+                            }
+                            built++;
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(built > 1000, "the requests there are were all asked: " + built);
+    }
+
+    private static <T> List<List<T>> orders(List<T> of) {
+        if (of.size() <= 1) {
+            return List.of(List.copyOf(of));
+        }
+        List<List<T>> out = new ArrayList<>();
+        for (int i = 0; i < of.size(); i++) {
+            List<T> without = new ArrayList<>(of);
+            T first = without.remove(i);
+            for (List<T> each : orders(without)) {
+                List<T> one = new ArrayList<>();
+                one.add(first);
+                one.addAll(each);
+                out.add(one);
+            }
+        }
+        return out;
+    }
+
+    /**
      * Entries asked under one key are one entry where they name one value or only one names any,
      * and no map where they name two: a map holding both values is not one the second was asked
      * of. Held by the one place entries are made one by key, so a map built to hold entries and

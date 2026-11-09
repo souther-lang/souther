@@ -921,11 +921,11 @@ final class Witnesses {
         // over is held that many times: what the map must hold is each value once, and what is
         // filed under each key is asked of each key.
         Map<String, Integer> filedOver = new LinkedHashMap<>();
-        List<Filed> withValues = new ArrayList<>(apart);
+        List<Filed> eachAsked = new ArrayList<>(apart);
         if (placed != null) {
-            withValues.add(placed);
+            eachAsked.add(placed);
         }
-        for (Filed each : withValues) {
+        for (Filed each : eachAsked) {
             if (each.value() != null) {
                 filedOver.merge(each.value().text(), 1, Integer::sum);
             }
@@ -948,21 +948,11 @@ final class Witnesses {
         if (values == null) {
             return Proposals.NONE.meeting(met);
         }
-        // Where the value the key is chosen for stands among them, asked of the values rather than
-        // assumed from the order they were handed in. Any of them, where none was chosen.
-        int under = -1;
-        if (placed != null) {
-            for (int i = 0; i < values.size() && under < 0; i++) {
-                if (placed.value() == null || values.get(i).text().equals(placed.value().text())) {
-                    under = i;
-                }
-            }
-            if (under < 0) {
-                throw new IllegalStateException(placed.value() == null
-                        ? "a key was chosen and the map was built holding no value to file it over"
-                        : "a key was chosen for a value the map is not built to hold: "
-                                + placed.value().text());
-            }
+        if (placed != null && placed.value() != null && values.stream()
+                .noneMatch(each -> each.text().equals(placed.value().text()))) {
+            throw new IllegalStateException(
+                    "a key was chosen for a value the map is not built to hold: "
+                            + placed.value().text());
         }
         // A key no entry may have is one no other entry is filed under either.
         Set<String> written = new LinkedHashSet<>(filedKeys);
@@ -990,14 +980,12 @@ final class Witnesses {
         if (others.size() < needed) {
             return Proposals.NONE.meeting(met);
         }
-        // A key asked over a named value is filed under the value of that name, wherever the values
-        // put it; the others take what is left in the order they came.
+        // Every key asked over a named value is filed under a value of that name first, wherever
+        // the values put it, and the keys asked over none take what is left in the order they
+        // came: a key that wants any value is not given one a key that wants it by name needs.
         FixtureTemplate[] filedUnder = new FixtureTemplate[values.size()];
-        if (under >= 0) {
-            filedUnder[under] = placed.key();
-        }
         List<FixtureTemplate> unnamed = new ArrayList<>();
-        for (Filed each : apart) {
+        for (Filed each : eachAsked) {
             if (each.value() == null) {
                 unnamed.add(each.key());
                 continue;

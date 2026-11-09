@@ -83,6 +83,14 @@ public enum CompositionBudget {
      *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
 
+    /** How many choices of counts are looked at in finding the fewest that hold a relation among
+     *  the counts of one container's elements and how many it holds ({@link AggregateRelation}).
+     *  Each count is one of as many numbers as a container is composed with elements, so the
+     *  choices grow with every count a relation weighs, and a relation no whole number meets —
+     *  one that sums even numbers to an odd — is walked to its end. A search that reaches this
+     *  places no count, and says so: nothing is shown impossible by it. */
+    TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT(4096),
+
     /** How many values of each run a total is tried at, where what an element answers turns on
      *  the total of the container it is in and nothing asks the total to be any one number: the
      *  runs are those between where the statements turn over on the total, inside what the region
@@ -865,6 +873,9 @@ public enum CompositionBudget {
             case CONTAINERS_A_COUNT_IS_OFFERED -> "how many containers are offered for one count";
             case SHARES_A_COUNT_IS_TRIED_AT ->
                     "how many ways of sharing out a container's elements are tried for a count";
+            case TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT ->
+                    "how many choices of counts are tried for a relation among how many elements"
+                            + " of a container meet statements and how many it holds";
             case TOTALS_A_COUNT_IS_TRIED_AT ->
                     "how many values of each run a total is tried at for a count of the elements"
                             + " that turns on it";
@@ -1019,7 +1030,8 @@ public enum CompositionBudget {
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT, TOTALS_A_COUNT_IS_TRIED_AT,
+                 SHARES_A_COUNT_IS_TRIED_AT, TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT,
+                 TOTALS_A_COUNT_IS_TRIED_AT,
                  RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO, VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED,
                  COUNTS_OF_KEYS_TRIED,
                  VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,

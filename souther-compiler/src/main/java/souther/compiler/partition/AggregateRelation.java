@@ -121,6 +121,27 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
      * asks. Where an end is no number an exact ratio holds, it may.
      */
     boolean mayHoldWith(int size, int[] least, int[] most) {
+        return over(size, least, most) != Throughout.FAILS;
+    }
+
+    /** What the relation does over every container of a size and the counts between two ends. */
+    enum Throughout {
+        /** It holds of every one of them. */
+        HOLDS,
+        /** It holds of none of them. */
+        FAILS,
+        /** Of some and not others, or the ends could not be worked out. */
+        UNTOLD
+    }
+
+    /**
+     * What the relation does over every container of {@code size} elements of which between
+     * {@code least} and {@code most} meet what each count counts, in the order of {@link #counts}:
+     * where the sum stands over them, which is between its two ends, and so relative to nought as
+     * every one of those ends stands. A sum is worked out at the two ends and not at each of the
+     * counts between, so what is told is told of all of them at the cost of two.
+     */
+    Throughout over(int size, int[] least, int[] most) {
         int[] low = new int[least.length];
         int[] high = new int[least.length];
         int at = 0;
@@ -133,9 +154,17 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
         if (!(valueAt(size, low) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio smallest))
                 || !(valueAt(size, high) instanceof ExactAnswer.Held<ExactRatio>(
                         ExactRatio largest))) {
-            return true;
+            return Throughout.UNTOLD;
         }
-        return switch (rel) {
+        boolean always = switch (rel) {
+            case GE -> smallest.signum() >= 0;
+            case GT -> smallest.signum() > 0;
+            case LE -> largest.signum() <= 0;
+            case LT -> largest.signum() < 0;
+            case EQ -> smallest.signum() == 0 && largest.signum() == 0;
+            case NE -> smallest.signum() > 0 || largest.signum() < 0;
+        };
+        boolean sometimes = switch (rel) {
             case GE -> largest.signum() >= 0;
             case GT -> largest.signum() > 0;
             case LE -> smallest.signum() <= 0;
@@ -143,27 +172,53 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
             case EQ -> smallest.signum() <= 0 && largest.signum() >= 0;
             case NE -> smallest.signum() != 0 || largest.signum() != 0;
         };
+        return always ? Throughout.HOLDS : sometimes ? Throughout.UNTOLD : Throughout.FAILS;
     }
 
     /**
      * The fewest elements of each count's statement a container of at most {@code most} elements
      * can have where the relation holds and each count is one {@code allowed} says, taking the
-     * first count's fewest before the second's, in the order of {@link #counts} — or null where no
-     * container that large has them.
+     * first count's fewest before the second's, in the order of {@link #counts} — or the figure
+     * that stopped the search where there are none.
      *
-     * <p>A figure of the walk and not of the relation: a container with more elements may hold it
-     * where none with so many does, so null is what composing reaches and no answer about the
-     * relation.
+     * <p>Both ways of finding none are a figure of the walk and not an answer about the relation:
+     * a container with more elements may hold it where none with so many does, and a search
+     * allowed more steps may find what this one did not. What is told is which figure, so that
+     * nothing is shown impossible by it ({@link CompositionBudget}).
      *
      * @param allowed for each count, in the order of {@link #counts}, which numbers of elements it
      *                may be
      */
-    int[] fewestWithin(int most, List<IntPredicate> allowed) {
+    Fewest fewestWithin(int most, List<IntPredicate> allowed) {
         int[] meeting = new int[counts.size()];
-        return fewest(meeting, 0, most, allowed) ? meeting : null;
+        int[] left = {CompositionBudget.TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT.maximum()};
+        return switch (fewest(meeting, 0, most, allowed, left)) {
+            case FOUND -> new Fewest.Found(meeting);
+            case EXHAUSTED -> new Fewest.Missing(
+                    CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+            case STOPPED -> new Fewest.Missing(
+                    CompositionBudget.TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT);
+        };
     }
 
-    private boolean fewest(int[] meeting, int at, int most, List<IntPredicate> allowed) {
+    /** How a search for the fewest counts ended. */
+    private enum Search { FOUND, EXHAUSTED, STOPPED }
+
+    /** The fewest counts, or the figure that stopped the search for them. */
+    sealed interface Fewest {
+
+        /** The counts, in the order of {@link AggregateRelation#counts}. */
+        record Found(int[] meeting) implements Fewest {}
+
+        /** None found, for want of this figure. */
+        record Missing(CompositionBudget by) implements Fewest {}
+    }
+
+    private Search fewest(int[] meeting, int at, int most, List<IntPredicate> allowed,
+                          int[] left) {
+        if (left[0]-- <= 0) {
+            return Search.STOPPED;
+        }
         if (at == meeting.length) {
             int largest = 0;
             for (int each : meeting) {
@@ -172,54 +227,70 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
             for (int size = largest; size <= most; size++) {
                 if (holdsAt(size, meeting) instanceof ExactAnswer.Held<Boolean>(Boolean holds)
                         && holds) {
-                    return true;
+                    return Search.FOUND;
                 }
             }
-            return false;
+            return Search.EXHAUSTED;
         }
         for (int n = 0; n <= most; n++) {
             if (!allowed.get(at).test(n)) {
                 continue;
             }
             meeting[at] = n;
-            if (mayBeCompleted(meeting, at + 1, most) && fewest(meeting, at + 1, most, allowed)) {
-                return true;
+            if (!mayBeCompleted(meeting, at + 1, most)) {
+                continue;
+            }
+            Search below = fewest(meeting, at + 1, most, allowed, left);
+            if (below != Search.EXHAUSTED) {
+                return below;
             }
         }
-        return false;
+        return Search.EXHAUSTED;
     }
 
     /**
      * Where each count is composed: the fewest the relation leaves it within the counts each is
      * left by every condition on it ({@code left}, by which count it is), taking the first
-     * count's fewest before the second's — or nothing where one of them is no count composed for
-     * or no container of the most elements a count is composed with has them.
+     * count's fewest before the second's — or the figure that stopped the search where there is
+     * none. Where one of the counts is not composed for there is no place to say, and none is
+     * placed.
      *
      * @param composedFor the counts composed for, by which count each is
      */
-    Map<CountedElements.Identity, Count> fewestAt(
-            String behavior, Map<CountedElements.Identity, CountedElements> composedFor,
-            Map<CountedElements.Identity, LevelRegion> left) {
+    Placed fewestAt(String behavior, Map<CountedElements.Identity, CountedElements> composedFor,
+                    Map<CountedElements.Identity, LevelRegion> left) {
         List<CountedElements.Identity> identities = new ArrayList<>();
         List<IntPredicate> allowed = new ArrayList<>();
         for (Quantity.HowManyMeet each : counts.keySet()) {
             CountedElements.Identity identity = CountedElements.identityOf(behavior, each);
             LevelRegion region = left.get(identity);
             if (!composedFor.containsKey(identity) || region == null) {
-                return Map.of();
+                return new Placed.At(Map.of());
             }
             identities.add(identity);
             allowed.add(n -> region.contains(new Level.OfTheQuantity(ExactRatio.of(n))));
         }
-        int[] fewest = fewestWithin(
-                CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum(), allowed);        if (fewest == null) {
-            return Map.of();
-        }
-        Map<CountedElements.Identity, Count> out = new LinkedHashMap<>();
-        for (int i = 0; i < fewest.length; i++) {
-            out.put(identities.get(i), Count.of(fewest[i]));
-        }
-        return out;
+        return switch (fewestWithin(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum(),
+                allowed)) {
+            case Fewest.Missing(CompositionBudget by) -> new Placed.Missing(by);
+            case Fewest.Found(int[] fewest) -> {
+                Map<CountedElements.Identity, Count> out = new LinkedHashMap<>();
+                for (int i = 0; i < fewest.length; i++) {
+                    out.put(identities.get(i), Count.of(fewest[i]));
+                }
+                yield new Placed.At(out);
+            }
+        };
+    }
+
+    /** Where the counts of a relation are composed, or the figure that stopped the search. */
+    sealed interface Placed {
+
+        /** Each count and the number it is composed at; none where no count is composed for. */
+        record At(Map<CountedElements.Identity, Count> counts) implements Placed {}
+
+        /** No place found, for want of this figure. */
+        record Missing(CompositionBudget by) implements Placed {}
     }
 
     /** Whether some container of at most {@code most} elements may hold the relation with the

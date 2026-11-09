@@ -977,42 +977,26 @@ final class CardinalityComposer {
          */
         AStatementAtARow.Answer over(List<Asked> asked, TermPath container, int size,
                                      BorderQuantity.Observation row) {
-            List<AStatementAtARow.HowManyAtARow> counted = new ArrayList<>();
-            for (int each : at) {
-                AStatementAtARow.HowManyAtARow howMany = asked.get(each).among(container, row);
+            int[] least = new int[at.size()];
+            int[] most = new int[at.size()];
+            Set<ReadingGap> why = new LinkedHashSet<>();
+            for (int i = 0; i < least.length; i++) {
+                AStatementAtARow.HowManyAtARow howMany =
+                        asked.get(at.get(i)).among(container, row);
                 if (howMany == null) {
                     return new AStatementAtARow.Answer.CouldNotTell(
                             Set.of(ReadingGap.COULD_NOT_WALK));
                 }
-                counted.add(howMany);
+                least[i] = howMany.meet();
+                most[i] = howMany.meet() + howMany.unread();
+                why.addAll(howMany.why());
             }
-            return whether(counted, 0, new int[at.size()], size);
-        }
-
-        private AStatementAtARow.Answer whether(List<AStatementAtARow.HowManyAtARow> counted,
-                                                int from, int[] meeting, int size) {
-            if (from == meeting.length) {
-                return switch (relation.holdsAt(size, meeting)) {
-                    case ExactAnswer.Held<Boolean>(Boolean holds) -> holds
-                            ? AStatementAtARow.Answer.HOLDS : AStatementAtARow.Answer.FAILS;
-                    case ExactAnswer.Unheld<Boolean> unheld -> new AStatementAtARow.Answer
-                            .CouldNotTell(Set.of(ReadingGap.of(unheld.why())));
-                };
-            }
-            AStatementAtARow.HowManyAtARow one = counted.get(from);
-            AStatementAtARow.Answer every = null;
-            for (int n = one.meet(); n <= one.meet() + one.unread(); n++) {
-                meeting[from] = n;
-                AStatementAtARow.Answer here = whether(counted, from + 1, meeting, size);
-                if (here instanceof AStatementAtARow.Answer.CouldNotTell) {
-                    return here;
-                }
-                if (every != null && !every.equals(here)) {
-                    return new AStatementAtARow.Answer.CouldNotTell(one.why());
-                }
-                every = here;
-            }
-            return every;
+            // Told of every count each may be at the cost of its two ends.
+            return switch (relation.over(size, least, most)) {
+                case HOLDS -> AStatementAtARow.Answer.HOLDS;
+                case FAILS -> AStatementAtARow.Answer.FAILS;
+                case UNTOLD -> new AStatementAtARow.Answer.CouldNotTell(why);
+            };
         }
 
         private int[] ofTheRelation(int[] meeting) {
