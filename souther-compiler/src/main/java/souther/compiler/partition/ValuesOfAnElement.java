@@ -31,9 +31,9 @@ import java.util.function.BiFunction;
  * <p>A truth, a case of a sum, a record of such parts and an optional of one are each one of
  * finitely many, so every one of them is read. A number has values without end, and what the
  * statements asked of the element say of it is where they turn over, so the values standing for
- * each run between those places are the ones read ({@code numbersAt}). A part that is neither — a
- * text, a container — has values nothing here chooses among, and an element holding one is not
- * one of these.
+ * each run between those places are the ones read ({@code numbersAt}). A container is each size
+ * its statements turn at, over the values of its element. A part that is none of these — a text,
+ * a map — has values nothing here chooses among, and an element holding one is not one of these.
  *
  * <p>Written the way the values a run holds are read back, so that what is read of one is what a
  * row holding it would be read as: a name the type wears around another is a construction holding
@@ -70,13 +70,25 @@ final class ValuesOfAnElement {
      */
     static Listed of(Type type, TermPath at, RuleReadingContext reading, int most,
                      BiFunction<TermPath, TypeView, List<ObservedValue>> numbersAt) {
+        Walk walk = new Walk();
         List<ObservedValue> out = valuesOf(type, at, NO_RULE_HERE, reading, most + 1, numbersAt,
-                new HashSet<>());
+                walk);
         if (out == null) {
             return null;
         }
         return out.size() > most ? new Listed(out.subList(0, most), false)
-                : new Listed(out, true);
+                : new Listed(out, !walk.left);
+    }
+
+    /**
+     * What one listing carries down the type it walks: the records it is inside, which a type
+     * written in terms of itself would walk for ever, and whether a container of a size it was
+     * asked for was left out.
+     */
+    private static final class Walk {
+
+        private final Set<TypeSymbol> expanding = new HashSet<>();
+        private boolean left;
     }
 
     /** What a place no rule is written about admits: every value, read in full. */
@@ -99,7 +111,7 @@ final class ValuesOfAnElement {
     private static List<ObservedValue> valuesOf(Type type, TermPath at, AdmissibleSet atThePlace,
                                                 RuleReadingContext reading, int most,
                                                 BiFunction<TermPath, TypeView, List<ObservedValue>> numbersAt,
-                                                Set<TypeSymbol> expanding) {
+                                                Walk walk) {
         if (most <= 0) {
             return List.of();
         }
@@ -138,12 +150,12 @@ final class ValuesOfAnElement {
             }
             case Shape.Unit unit -> List.of(new ObservedValue.Unit(unit.name()));
             case Shape.Product product -> {
-                if (!expanding.add(product.name())) {
+                if (!walk.expanding.add(product.name())) {
                     yield null;
                 }
                 List<ObservedValue> made = recordsOf(product, at, reading, most, numbersAt,
-                        expanding);
-                expanding.remove(product.name());
+                        walk);
+                walk.expanding.remove(product.name());
                 yield made;
             }
             // Each case where it stands under the narrowing to it, which is where what is read
@@ -165,7 +177,7 @@ final class ValuesOfAnElement {
                             instanceof Shape.Unit;
                     List<ObservedValue> ofTheCase = valuesOf(Type.ref(each),
                             at.refine(Refinement.of(new Case.SumCase(each, oneValue))),
-                            NO_RULE_HERE, reading, most - made.size(), numbersAt, expanding);
+                            NO_RULE_HERE, reading, most - made.size(), numbersAt, walk);
                     if (ofTheCase == null) {
                         yield null;
                     }
@@ -179,7 +191,7 @@ final class ValuesOfAnElement {
             case Shape.Optional optional -> {
                 List<ObservedValue> held = valuesOf(optional.element(),
                         at.refine(Refinement.of(new Case.Presence(true))), NO_RULE_HERE, reading,
-                        most - 1, numbersAt, expanding);
+                        most - 1, numbersAt, walk);
                 if (held == null) {
                     yield null;
                 }
@@ -188,7 +200,17 @@ final class ValuesOfAnElement {
                 made.addAll(held);
                 yield made;
             }
-            case Shape.Sequence _, Shape.Mapping _, Shape.Unresolved _, Shape.Cases _,
+            // The number standing at a container is how many it holds, so its values are the
+            // containers of each of those sizes, over the values of an element.
+            case Shape.Sequence sequence -> {
+                List<ObservedValue> sizes = numbersAt.apply(at, view);
+                List<ObservedValue> elements = sizes == null ? null
+                        : valuesOf(sequence.element(), at.element(), NO_RULE_HERE, reading, most,
+                                numbersAt, walk);
+                yield elements == null ? null
+                        : containersOf(sequence.kind(), sizes, elements, most, walk);
+            }
+            case Shape.Mapping _, Shape.Unresolved _, Shape.Cases _,
                  Shape.Tuple _, Shape.Function _, Shape.Uninhabited _, Shape.Bottom _,
                  Shape.Erroneous _, Shape.Undecided _ -> null;
         };
@@ -208,12 +230,61 @@ final class ValuesOfAnElement {
         return out;
     }
 
+    /**
+     * Up to {@code most} containers, those of each of {@code sizes} in turn: of a list, every
+     * element at every position, so each order the elements may stand in, which a statement may
+     * read; of a set, each choice of that many distinct elements once, since it has no order.
+     */
+    private static List<ObservedValue> containersOf(Shape.Sequence.Kind kind,
+                                                    List<ObservedValue> sizes,
+                                                    List<ObservedValue> elements, int most,
+                                                    Walk walk) {
+        List<ObservedValue> out = new ArrayList<>();
+        for (ObservedValue size : sizes) {
+            if (!(size instanceof ObservedValue.Integer(long held)) || held < 0) {
+                continue;
+            }
+            // A container holds no more elements than a count is composed with, so a larger size
+            // is a container left out, and the listing says so.
+            if (held > MOST_HELD) {
+                walk.left = true;
+                continue;
+            }
+            takenFrom(kind == Shape.Sequence.Kind.SET, (int) held, 0, elements,
+                    new ArrayList<>(), most, out);
+        }
+        return out;
+    }
+
+    /** The most elements a container of the listing holds. */
+    private static final int MOST_HELD =
+            CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
+
+    private static void takenFrom(boolean distinct, int left, int from,
+                                  List<ObservedValue> elements, List<ObservedValue> taken, int most,
+                                  List<ObservedValue> out) {
+        if (out.size() >= most) {
+            return;
+        }
+        if (left == 0) {
+            out.add(new ObservedValue.Sequence(taken));
+            return;
+        }
+        for (int each = from; each < elements.size(); each++) {
+            taken.add(elements.get(each));
+            // A set holds each element once and in no order, so what follows is taken from the
+            // elements after this one; a list is each element at each position.
+            takenFrom(distinct, left - 1, distinct ? each + 1 : 0, elements, taken, most, out);
+            taken.removeLast();
+        }
+    }
+
     /** Up to {@code most} records of {@code product}: every field at each of its values, the
      *  first field changing slowest, and each field at the values the record's rules leave it. */
     private static List<ObservedValue> recordsOf(Shape.Product product, TermPath at,
                                                  RuleReadingContext reading, int most,
                                                  BiFunction<TermPath, TypeView, List<ObservedValue>> numbersAt,
-                                                 Set<TypeSymbol> expanding) {
+                                                 Walk walk) {
         List<Map<String, ObservedValue>> made = new ArrayList<>();
         made.add(new LinkedHashMap<>());
         for (Map.Entry<String, Type> field : product.fields().entrySet()) {
@@ -221,7 +292,7 @@ final class ValuesOfAnElement {
             AdmissibleSet atTheField = product.name() instanceof TypeSymbol.AtModule record
                     ? Partitions.admittedAt(record, field.getKey(), reading) : NO_RULE_HERE;
             List<ObservedValue> values = valuesOf(field.getValue(), at.then(field.getKey()),
-                    atTheField, reading, most, numbersAt, expanding);
+                    atTheField, reading, most, numbersAt, walk);
             if (values == null) {
                 return null;
             }

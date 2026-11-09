@@ -628,6 +628,19 @@ public final class ReadThroughNames {
                         : told == container && element == ofTheElement ? quantity
                         : new Quantity.HowManyMeet(told, element);
             }
+            case Quantity.HowManyMeetAcross(DecisionSubject container, DecisionSubject inner,
+                                            Proposition ofTheElement) -> {
+                DecisionSubject told = told(container, telling);
+                DecisionSubject toldInner = told(inner, telling);
+                Proposition element = toldWhole(ofTheElement,
+                        ownElementLeftAlone(inner, telling));
+                yield told == null || toldInner == null || element == null ? null
+                        : told == container && toldInner == inner && element == ofTheElement
+                                ? quantity
+                                : Quantity.HowManyMeetAcross.insideEach(told, toldInner)
+                                        ? new Quantity.HowManyMeetAcross(told, toldInner, element)
+                                        : null;
+            }
             case Quantity.HowManyHold(List<Proposition> each) -> {
                 List<Proposition> told = new ArrayList<>(each.size());
                 boolean changed = false;

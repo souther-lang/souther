@@ -86,6 +86,8 @@ public final class WrittenOfANode {
                  Quantity.TheKeptTotal _ -> false;
             case Quantity.HowManyMeet count -> reads(count.container())
                     && reads(count.ofTheElement());
+            case Quantity.HowManyMeetAcross count -> reads(count.container())
+                    && reads(count.inner()) && reads(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream().allMatch(this::reads);
             case Quantity.HowManyDifferent different -> reads(different.container())
                     && reads(different.ofTheElement());

@@ -276,6 +276,9 @@ public sealed interface Proposition {
                     || mayBeAnElementOf(among.string(), container);
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
+            case Quantity.HowManyMeetAcross(DecisionSubject counted, DecisionSubject _,
+                                            Proposition each) ->
+                    isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
             case Quantity.HowManyDifferent(DecisionSubject counted, Quantity.TheValue _) ->
@@ -2064,6 +2067,9 @@ public sealed interface Proposition {
                  Quantity.TheKeptTotal _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(count.ofTheElement());
+            case Quantity.HowManyMeetAcross count ->
+                    count.container() instanceof DecisionSubject.AnAnswer
+                            || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
                     .anyMatch(Proposition::aboutAnAnswer);
             case Quantity.HowManyDifferent different ->

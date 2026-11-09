@@ -1,8 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
@@ -13,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiPredicate;
 
 /**
  * A row of a behavior's inputs the boundary builds and on which the behavior answers, a run of it
@@ -21,7 +26,7 @@ import java.util.Set;
  *
  * <p>What it shows is that row and nothing more. A relation the way to it may stop before is
  * shown reached at the values the row holds at the places it reads that a run of it is shown to
- * have made the relation at ({@link Witness#shownAt}), and at no other value: a second row is what
+ * have made the relation at ({@link Witness#toldAt}), and at no other value: a second row is what
  * shows a second value, and no row shows every value. A reader that says what
  * the relation leaves of a place says the values shown beside what was not shown, and never
  * reads the one as the other ({@code UndividedByARelation}).
@@ -69,38 +74,278 @@ public final class ReachWitnesses {
         }
 
         /**
-         * The values the row holds at {@code place} that a run of it is shown to have made the
-         * comparison at, as the behavior's inputs are walked by {@code read} — or empty where none
-         * is.
+         * What the row shows of a run of it having made the comparison at {@code at}: the values
+         * it holds at a position, or the numbers it takes at a term ({@link WhatATermRead}), as the
+         * behavior's inputs are walked by {@code read}, written out as the model writes a value of
+         * its type.
          *
          * <p>That the run went through the comparison says it was made at some value the row
          * holds there, and not at which: a walk that stops early leaves the values after it
          * unasked. So a row holding one value there shows that one, and a row holding several
          * shows all of them only where the place stands inside exactly the containers the
-         * comparison is shown made on every element of ({@link #madeOnEvery}); otherwise none.
+         * comparison is shown made on every element of ({@link #madeOnEvery}).
+         *
+         * <p>Where it does not, the place a search for an equal element ranges over is shown the
+         * values of it that equal a value shown at the place looked for ({@code lookedForAt},
+         * {@link UndividedByARelation.Search}). The search is made at a value looked for and ends
+         * where it finds an element equal to it, so an equal element the row holds is one the run
+         * made the comparison at: a map's entry under the key the run looked it up by. A value
+         * the place looked for does not show is shown at neither, and nothing is said of a
+         * comparison that is not such a search: one that ends at the first element unequal to the
+         * value passes over the equal ones after it.
+         *
+         * <p>Three answers, and none stands for another ({@link Told}): values are shown, the row
+         * is read and none is, or the row is not read there.
+         *
+         * @param same whether two values of a type are the same value, as the language says and
+         *             not as the values are written or held: asked of the caller that can, as a
+         *             row holds no function ({@link ComparisonWitnesses.AtAComparison#sameValue})
          */
-        public Optional<List<ObservedValue>> shownAt(TermPath place, InputReading read) {
-            BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
-                    new StandingAtAPoint.RowWalk(BehaviorInputs.of(read), new ObservedInputs(built,
-                            new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
-            if (!(row.everyValueAt(place)
+        public Told toldAt(FilingCoordinate at, Optional<FilingCoordinate> lookedForAt,
+                           InputReading read, BehaviorInputs.SameValue same) {
+            BorderQuantity.Observation row = observed(read);
+            return switch (heldAt(at, row, read, same)) {
+                case Reading.Unread(Told.Unread why) -> new Told.NotRead(why);
+                case Reading.Held here -> {
+                    Optional<List<Value>> shown = shown(here);
+                    if (shown.isEmpty() && lookedForAt.isPresent()
+                            && heldAt(lookedForAt.get(), row, read, same)
+                                    instanceof Reading.Held there) {
+                        shown = shown(there).map(looked -> here.distinct().stream()
+                                .filter(each -> here.isAmong(each, looked)).toList());
+                    }
+                    yield shown.filter(values -> !values.isEmpty())
+                            .<Told>map(values -> new Told.Shown(
+                                    values.stream().map(Value::written).toList()))
+                            .orElseGet(Told.NotShown::new);
+                }
+            };
+        }
+
+        /**
+         * A value the row holds or takes: what it is, and how the model writes it.
+         *
+         * <p>Two are one by what they are and never by how they are written: what a report shows
+         * of a value is for a person. Nor by how Java holds them: a decimal is the amount it
+         * stands for, whatever scale it was written at, which a record of one says otherwise
+         * of. So these are not compared with {@code equals}: a {@link Reading.Held} says
+         * whether two of its own are one.
+         *
+         * @param is      the value, as the row built it, or the place of the number that is taken
+         * @param written the value written out as the model writes a value of its type
+         */
+        private record Value(Object is, String written) {}
+
+        /** What the row holds or takes at a coordinate, or why it is not read. */
+        private sealed interface Reading {
+
+            /**
+             * Every value the row holds or takes there, in the order the row writes them, and
+             * where they stand: the place a value is held at, or the position a number is taken
+             * of, and null where the number is taken over a run of values and stands at no one
+             * place.
+             *
+             * @param same whether two of the values are one value
+             */
+            record Held(List<Value> values, TermPath place, BiPredicate<Value, Value> same)
+                    implements Reading {
+
+                /** Each value once, as the language says two are one. */
+                List<Value> distinct() {
+                    List<Value> out = new ArrayList<>();
+                    for (Value each : values) {
+                        if (!isAmong(each, out)) {
+                            out.add(each);
+                        }
+                    }
+                    return out;
+                }
+
+                /** Whether {@code value} is one of {@code among}. */
+                boolean isAmong(Value value, List<Value> among) {
+                    return among.stream().anyMatch(each -> same.test(each, value));
+                }
+            }
+
+            record Unread(Told.Unread why) implements Reading {}
+        }
+
+        private static Reading heldAt(FilingCoordinate at, BorderQuantity.Observation row,
+                                      InputReading read, BehaviorInputs.SameValue same) {
+            return switch (at) {
+                case FilingCoordinate.AtPosition(TermPath path) -> valuesAt(path, row, read, same);
+                case FilingCoordinate.OfTerm(NumericTerm.ValueOf(TermPath position)) ->
+                        valuesAt(position, row, read, same);
+                case FilingCoordinate.OfTerm(NumericTerm term) -> numbersAt(term, row, read);
+            };
+        }
+
+        private static Reading valuesAt(TermPath place, BorderQuantity.Observation row,
+                                        InputReading read, BehaviorInputs.SameValue same) {
+            Type type = read.domain().typeAt(place, read.rules());
+            if (type == null || !(row.everyValueAt(place)
                     instanceof WalkResult.Reached<List<ObservedValue>>(List<ObservedValue> there))
                     || there.isEmpty()) {
-                return Optional.empty();
+                return new Reading.Unread(Told.Unread.THE_ROW_HOLDS_NONE_THERE);
             }
-            if (new LinkedHashSet<>(there).size() == 1) {
-                return Optional.of(List.of(there.getFirst()));
+            RuleReadingContext reading = RuleReadingContext.of(read.rules(),
+                    read.domain().policy(), read.domain().machines(), read.domain().today());
+            List<Value> out = new ArrayList<>();
+            for (ObservedValue each : there) {
+                if (!(ObservedFixtures.of(each, type, reading)
+                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                FixtureTemplate fixture))) {
+                    return new Reading.Unread(Told.Unread.THE_ROW_HOLDS_NONE_THERE);
+                }
+                out.add(new Value(each, fixture.text()));
+            }
+            return new Reading.Held(out, place, (one, other) -> same.at(
+                    (ObservedValue) one.is(), (ObservedValue) other.is(), type));
+        }
+
+        /**
+         * Where a term is read of a row: the position its elements are chosen through, and the
+         * containers the row is read element by element across, outermost first.
+         */
+        private record Across(TermPath position, List<TermPath> containers) {}
+
+        /**
+         * The numbers the row takes at {@code term}, each read as the term is read of a row
+         * everywhere else ({@link WhatATermRead#ofTerm}), and not read where the row takes no
+         * number: a term that is no number of the row is not a number of zero.
+         *
+         * <p>Asked of what the number is, and not of its kind. A number answered by one position is
+         * one for each element of the containers the position is inside. Any other is one for the
+         * row where it stands outside every container ({@link NumericTerm#standsAt}), whatever it
+         * is of: the end of a run, a count of a key the row holds, a product of such. Where it
+         * stands inside an element it is read of an element among its neighbours or of the values
+         * under its key, and which elements a row's numbers are read across for it is not settled
+         * here.
+         */
+        private static Reading numbersAt(NumericTerm term, BorderQuantity.Observation row,
+                                         InputReading read) {
+            Optional<Across> across = switch (term) {
+                case NumericTerm.FromOnePosition one -> Optional.of(
+                        new Across(one.position(), one.position().containersHoldingIt()));
+                // Any other number is one for the row where it stands outside every container
+                // ({@link NumericTerm#standsAt}): the end of a run, a count of a key asked for,
+                // a product of such. Where it stands inside an element it is one for each element
+                // of the container, among its neighbours or under its key, and which elements the
+                // row's numbers are read across for those is not settled here.
+                default -> term.standsAt().insideAContainer() ? Optional.empty()
+                        : Optional.of(new Across(null, List.of()));
+            };
+            if (across.isEmpty()) {
+                return new Reading.Unread(Told.Unread.THE_KIND_OF_TERM_IS_NOT_READ_HERE);
+            }
+            TermOrders orders = read.quantities().ordersOf(term);
+            if (orders == null || orders.answered() == null) {
+                return new Reading.Unread(Told.Unread.NO_ORDER_ANSWERS_FOR_THE_TERM);
+            }
+            List<Place> there = new ArrayList<>();
+            if (!numbersAt(row, across.get().containers(), orders, there) || there.isEmpty()) {
+                return new Reading.Unread(Told.Unread.THE_ROW_HOLDS_NONE_THERE);
+            }
+            // A number is the same number where its place is the same one: what makes two places
+            // one line, whatever scale they were written at ({@link Place#key}).
+            return new Reading.Held(there.stream()
+                    .map(number -> new Value(number.key(), orders.answered().written(number)))
+                    .toList(), across.get().position(),
+                    (one, other) -> one.is().equals(other.is()));
+        }
+
+        private BorderQuantity.Observation observed(InputReading read) {
+            return new StandingAtAPoint.DiscoveringRow(
+                    new StandingAtAPoint.RowWalk(BehaviorInputs.of(read), new ObservedInputs(built,
+                            new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
+        }
+
+        /** What a run of the row is shown to have made the comparison at, of what the row holds
+         *  or takes there. */
+        private Optional<List<Value>> shown(Reading.Held held) {
+            List<Value> there = held.distinct();
+            TermPath place = held.place();
+            if (there.size() == 1) {
+                return Optional.of(there);
             }
             List<TermPath> inside = new ArrayList<>();
-            for (TermPath container : place.containersHoldingIt()) {
-                TermPath element = container.element();
-                if (!place.standsAtOrUnder(element)) {
-                    return Optional.empty();
+            if (place != null) {
+                for (TermPath container : place.containersHoldingIt()) {
+                    TermPath element = container.element();
+                    if (!place.standsAtOrUnder(element)) {
+                        return Optional.empty();
+                    }
+                    inside.add(element);
                 }
-                inside.add(element);
             }
             return inside.equals(madeOnEvery) ? Optional.of(List.copyOf(there))
                     : Optional.empty();
+        }
+
+        /** Adds to {@code out} the number {@code orders} reads at each element of the
+         *  {@code containers}, outermost first; false where some is not read to a number. */
+        private static boolean numbersAt(BorderQuantity.Observation row,
+                                         List<TermPath> containers, TermOrders orders,
+                                         List<Place> out) {
+            if (containers.isEmpty()) {
+                if (!(WhatATermRead.ofTerm(orders, row) instanceof WhatATermRead.Number(
+                        Place number))) {
+                    return false;
+                }
+                out.add(number);
+                return true;
+            }
+            if (!(row.eachElementOf(containers.getFirst())
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>>(
+                            List<BorderQuantity.Observation> each))) {
+                return false;
+            }
+            for (BorderQuantity.Observation element : each) {
+                if (!numbersAt(element, containers.subList(1, containers.size()), orders, out)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /**
+     * What a row shows of a run of it having made a comparison at one coordinate
+     * ({@link Witness#toldAt}).
+     *
+     * <p>Three answers and not an absent one: a reader that has only the values cannot tell a row
+     * that was read and shows none from one that was not read, and the second is a fact about the
+     * reader or the row, which nothing is said of by the first.
+     */
+    public sealed interface Told {
+
+        /** The values, one or more, each once and as the model writes it, that a run of the row is
+         *  shown to have made the comparison at. */
+        record Shown(List<String> values) implements Told {
+
+            public Shown {
+                values = List.copyOf(values);
+                if (values.isEmpty()) {
+                    throw new IllegalArgumentException("values are shown, or none is");
+                }
+            }
+        }
+
+        /** The row was read there, and a run of it is shown to have made the comparison at none of
+         *  the values it holds. */
+        record NotShown() implements Told {}
+
+        /** The row was not read there, and what a row shows of a run is not asked of it. */
+        record NotRead(Unread why) implements Told {}
+
+        /** Why a row was not read at a coordinate. */
+        enum Unread {
+            /** The row holds no value there, or none it writes out, or takes no number there. */
+            THE_ROW_HOLDS_NONE_THERE,
+            /** No order answers for the number, so what it comes to is not written. */
+            NO_ORDER_ANSWERS_FOR_THE_TERM,
+            /** The kind of term is one this does not read of a row: it is no failure of the row. */
+            THE_KIND_OF_TERM_IS_NOT_READ_HERE
         }
     }
 

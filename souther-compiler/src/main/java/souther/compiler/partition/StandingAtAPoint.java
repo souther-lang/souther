@@ -1190,9 +1190,17 @@ public final class StandingAtAPoint {
         /** How many elements each container was found to hold, in the order the walk met them,
          *  which is the order the readings are taken in. */
         private final Map<TermPath, Integer> containers = new LinkedHashMap<>();
+        /** The quantities looked at: the same quantity is asked for by every statement holding
+         *  it. */
+        private final Set<LinearQuantity> lookedAt = new HashSet<>();
 
         DiscoveringRow(RowWalk walk) {
             super(walk);
+        }
+
+        @Override
+        public boolean firstLookAt(LinearQuantity quantity) {
+            return lookedAt.add(quantity);
         }
 
         @Override

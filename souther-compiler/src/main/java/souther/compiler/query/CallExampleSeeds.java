@@ -11,13 +11,9 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.observe.Comparisons;
-import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
-import souther.compiler.observe.ValueTypes;
 import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
@@ -202,13 +198,7 @@ final class CallExampleSeeds {
                 base == null ? List.of() : base.answers(),
                 db.ask(new Names.FakeTables(module)).value());
         BehaviorInputs reading = BehaviorInputs.of(input);
-        ValueTypes types = ValueTypes.over(ExampleExecutions.checkedFieldTypes(db));
-        // Whether two values are the same is the language's to say, and it asks of a value that it
-        // be there in full.
-        BehaviorInputs.SameValue same = (found, expected, type) ->
-                Limits.UNBOUNDED.stoppedBy(found) == null
-                        && Limits.UNBOUNDED.stoppedBy(expected) == null
-                        && Comparisons.same(found, expected, types, Position.at(type));
+        BehaviorInputs.SameValue same = ExampleExecutions.sameValue(db);
         Set<List<String>> considered = new HashSet<>();
         Map<WrittenRow, List<Optional<FixtureTemplate>>> written = new HashMap<>();
         int tried = 0;

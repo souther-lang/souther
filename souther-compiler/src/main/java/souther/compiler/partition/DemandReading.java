@@ -2185,6 +2185,24 @@ final class DemandReading {
     }
 
     /**
+     * Whether some way an element meets what is asked reads how many elements of a container
+     * inside it meet something, which no composer writes toward as a condition of the element: the
+     * elements of the outer container are chosen as a count of them is, each read whole.
+     */
+    private static boolean readsACountWithinTheElement(List<AnElementsWay> ways) {
+        return ways.stream().anyMatch(way -> way.ofTheRow().stream().anyMatch(each ->
+                each instanceof Read.Demands(RowDemand.ForTheRun(var _, var why, var _, var _,
+                        var _)) && why == RowDemand.NoComposer.A_COUNT_WITHIN_AN_ELEMENT));
+    }
+
+    /** {@code counted} held against {@code level} as {@code met} says, as the whole demand. */
+    private static List<Read> countedWhole(Quantity.HowManyMeet counted, Rel met,
+                                           ExactRatio level) {
+        return List.of(new Read.Demands(new RowDemand.SoMany(counted, met, level,
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), AnElementMeeting.UNREAD)));
+    }
+
+    /**
      * What some element meeting one of {@code ways} asks of a row.
      *
      * <p>Some element meeting one of several things is some element meeting the first or some
@@ -2200,6 +2218,9 @@ final class DemandReading {
                                                  InputReading read,
                                                  Optional<Quantity.HowManyMeet> counted,
                                                  Optional<Proposition> stated) {
+        if (counted.isPresent() && readsACountWithinTheElement(ways)) {
+            return countedWhole(counted.get(), Rel.GE, ExactRatio.ONE);
+        }
         RowDemand.Relational holdingOne = sizeAgainst(held, read, true);
         Map<List<Read>, List<List<RowDemand.AskedOfAnElement>>> byTheRow =
                 new LinkedHashMap<>();
@@ -2257,6 +2278,9 @@ final class DemandReading {
                                                   InputReading read,
                                                   Optional<Quantity.HowManyMeet> counted,
                                                   Optional<Proposition> stated) {
+        if (counted.isPresent() && readsACountWithinTheElement(ways)) {
+            return countedWhole(counted.get(), Rel.EQ, ExactRatio.ZERO);
+        }
         RowDemand.Relational holdingNone = sizeAgainst(held, read, false);
         List<List<RowDemand.AskedOfAnElement>> ofTheElement = new ArrayList<>();
         List<AnElementsWay> withTheRow = new ArrayList<>();
@@ -2460,8 +2484,7 @@ final class DemandReading {
         }
         Quantity count = null;
         for (Quantity each : affine.form().coefs().keySet()) {
-            if ((each instanceof Quantity.HowManyMeet
-                    || each instanceof Quantity.HowManyDifferentMeet) && count == null) {
+            if (AStatementAtARow.countsElements(each) && count == null) {
                 count = each;
             } else if (each instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)
                     && term.atOnePosition() != null) {
@@ -2580,8 +2603,8 @@ final class DemandReading {
                      DecisionAtom.ComputedOverAnAnswer _ -> {
                     return anAnswerARowStandsIn(compared);
                 }
-                case Quantity.HowManyMeet _, Quantity.HowManyHold _,
-                     Quantity.HowManyDifferentMeet _ -> counted = true;
+                case Quantity.HowManyMeet _, Quantity.HowManyMeetAcross _,
+                     Quantity.HowManyHold _, Quantity.HowManyDifferentMeet _ -> counted = true;
                 case Quantity.HowManyDifferent _, Quantity.HowManyDifferentBelow _,
                      Quantity.HowManyDifferentAcross _, Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _ -> overElements = true;

@@ -92,6 +92,11 @@ final class WhatARunWorksOutBeforeACount {
             public ReachWitnesses.Sought reached() {
                 return witnesses.reached();
             }
+
+            @Override
+            public BehaviorInputs.SameValue sameValue() {
+                return witnesses.sameValue();
+            }
         };
     }
 

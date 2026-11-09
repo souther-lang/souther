@@ -80,7 +80,6 @@ import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
@@ -210,10 +209,12 @@ import java.util.stream.Stream;
  *                        form of the input's numbers, the form and the divisor; null otherwise
  * @param working         what the comparison this relation was read from works out, which a
  *                        row has to get past to be a row of it
+ * @param search          where the relation is what a search for an equal element evaluates,
+ *                        which says what a run through it was made at; null otherwise
  */
 record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             List<FilingCoordinate> amongThemselves, Kind kind,
-                            RemainderSide remainder, Working working) {
+                            RemainderSide remainder, Working working, Search search) {
 
     /** A relation that shows no place undivided: one nothing here takes apart. */
     static final UndividedByARelation SHOWING_NOTHING =
@@ -510,13 +511,67 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                          List<FilingCoordinate> amongThemselves, Kind kind,
                          RemainderSide remainder) {
-        this(sides, constant, relation, amongThemselves, kind, remainder, Working.NOTHING);
+        this(sides, constant, relation, amongThemselves, kind, remainder, Working.NOTHING, null);
     }
 
     /** The same relation, read from a comparison that works out {@code working}. */
     UndividedByARelation workingOut(Working working) {
         return new UndividedByARelation(sides, constant, relation, amongThemselves, kind,
-                remainder, working);
+                remainder, working, search);
+    }
+
+    /**
+     * A search for an element equal to a value held outside the container it ranges over, read
+     * of a relation that says only that the two are one value.
+     *
+     * <p>That the relation holds is a fact about values, and what a run was made at is a fact about
+     * how the statement is evaluated. Both a search and a scan that stops at the first element
+     * unequal to the value are statements over the same two places, and only the first of them is
+     * made at every value of the place searched that equals the value looked for: it ends where an
+     * equal element is found, so an equal element is never passed over, while the second ends at
+     * the first element that is not equal and passes over any after it.
+     *
+     * @param searched the place inside the container the search ranges over
+     * @param probe    the place holding the value looked for, outside the container
+     */
+    record Search(FilingCoordinate searched, FilingCoordinate probe) {
+
+        Search {
+            Objects.requireNonNull(searched, "the place searched");
+            Objects.requireNonNull(probe, "the place holding what is looked for");
+        }
+    }
+
+    /**
+     * The same relation, read as the search {@code some} is: some element of the container is the
+     * value at a place outside it. Unchanged where {@code some} says anything else — another
+     * statement of the element, a statement joined to it, the element not being equal to the
+     * value — which is not one an equal element is found by.
+     *
+     * <p>The statement of the element is the equality and nothing joined to it: with another
+     * statement beside it, an element may be passed over before the equality is asked of it.
+     *
+     * <p>And a container that is no element's: the search is one for the row. Inside an element
+     * of another container it is one for each of them, and a run that went through the equality
+     * went through the search of some of those and not of every one, so which of the values the
+     * row holds at the place were searched is not said by the search.
+     */
+    UndividedByARelation searchedBy(Proposition.Some some) {
+        if (!(some.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
+                || !(some.ofTheElement() instanceof Proposition.SameValue(
+                        DecisionSubject.AnInput(TermPath one, var _),
+                        DecisionSubject.AnInput(TermPath other, var _), boolean equal, var _))
+                || !equal || one.isAtOrUnder(container) == other.isAtOrUnder(container)) {
+            return this;
+        }
+        TermPath searched = one.isAtOrUnder(container) ? one : other;
+        if (!searched.containersHoldingIt().equals(List.of(container))) {
+            return this;
+        }
+        TermPath probe = searched.equals(one) ? other : one;
+        return new UndividedByARelation(sides, constant, relation, amongThemselves, kind,
+                remainder, working,
+                new Search(FilingCoordinate.at(searched), FilingCoordinate.at(probe)));
     }
 
     UndividedByARelation {
@@ -1573,7 +1628,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             together.add(ofTheInput(each, ExactRatio.ONE));
         }
         UndividedByARelation withThem = new UndividedByARelation(together, constant, relation,
-                amongThemselves, kind, remainder, working);
+                amongThemselves, kind, remainder, working, null);
         SidesAsDeclared declared = withThem.sidesAsDeclared(read);
         if (declared == null) {
             return Map.of();
@@ -4256,7 +4311,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>Where a run may stop, a row a run of which is shown to get to the relation
      * ({@link ComparisonWitnesses.AtAComparison#reached}) shows the values it holds at a place
-     * that the run is shown to have made the relation at ({@link ReachWitnesses.Witness#shownAt}),
+     * that the run is shown to have made the relation at ({@link ReachWitnesses.Witness#toldAt}),
      * and nothing of any other value: the place is still not shown reached at every value.
      */
     private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
@@ -4278,18 +4333,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             notShown.add(at);
             List<String> written = sought.found()
-                    .flatMap(row -> place == null ? Optional.empty() : row.shownAt(place, read))
-                    .map(values -> writtenOut(values, place, read)).orElse(null);
+                    .map(row -> valuesSaid(row.toldAt(at, lookedForAt(at), read,
+                            witnesses.sameValue())))
+                    .orElse(List.of());
             // Where no row got there, the figures the search stopped at and the places the runs of
             // the rows tried stopped are said at every place the relation compares, as what was
             // not shown is.
-            if (written != null || !sought.runsStopped().isEmpty()
+            if (!written.isEmpty() || !sought.runsStopped().isEmpty()
                     || !sought.stoppedAt().isEmpty()) {
-                reached.put(at, new GettingThere(written == null ? List.of() : written,
-                        sought.runsStopped(), sought.stoppedAt()));
+                reached.put(at, new GettingThere(written, sought.runsStopped(),
+                        sought.stoppedAt()));
             }
         }
         return notShown.isEmpty() ? shown : shown.mayStopBefore(notShown, reached);
+    }
+
+    /**
+     * What the report says of what a row told: the values where it shows some, and nothing where it
+     * does not.
+     *
+     * <p>The one place the three answers are put into words, and each is named. A row that was
+     * read there and shows none is a fact about the model's runs that no value expresses, and a row
+     * that was not read there is a fact about what this reads of a row, which an author cannot act
+     * on; neither is a value the row got there at, and a place told neither is said as one no row
+     * is shown at.
+     */
+    private static List<String> valuesSaid(ReachWitnesses.Told told) {
+        return switch (told) {
+            case ReachWitnesses.Told.Shown(List<String> values) -> values;
+            case ReachWitnesses.Told.NotShown _, ReachWitnesses.Told.NotRead _ -> List.of();
+        };
     }
 
     /**
@@ -4547,23 +4620,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         && most.exactly().compareTo(ExactRatio.ONE) >= 0));
     }
 
-    /** Each of {@code values}, held at {@code place}, as the model writes a value of its type —
-     *  or null where some is no value written out. */
-    private static List<String> writtenOut(List<ObservedValue> values, TermPath place,
-                                           InputReading read) {
-        Type type = read.domain().typeAt(place, read.rules());
-        RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
-                read.domain().machines(), read.domain().today());
-        List<String> out = new ArrayList<>();
-        for (ObservedValue each : values) {
-            if (type == null || !(ObservedFixtures.of(each, type, reading)
-                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                            FixtureTemplate fixture))) {
-                return null;
-            }
-            out.add(fixture.text());
-        }
-        return out;
+    /** The place holding the value looked for, where {@code at} is the place a search for an
+     *  equal element ranges over ({@link #searchedBy}) — or empty. */
+    private Optional<FilingCoordinate> lookedForAt(FilingCoordinate at) {
+        return search != null && search.searched().equals(at)
+                ? Optional.of(search.probe()) : Optional.empty();
     }
 
     /** The position {@code at} is the value at, or null where it is a number taken of one — how

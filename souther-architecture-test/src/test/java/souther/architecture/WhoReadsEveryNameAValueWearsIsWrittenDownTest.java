@@ -342,7 +342,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "ValuesOfAnElement", "valuesOf",
                     "(" + TYPE + "L" + INPUTS + "TermPath;" + ADMITTED + CONTEXT
-                            + "ILjava/util/function/BiFunction;Ljava/util/Set;)Ljava/util/List;",
+                            + "ILjava/util/function/BiFunction;L" + PARTITION
+                            + "ValuesOfAnElement$Walk;)Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "differing",
                     "(" + TYPE + "I" + HELD + CONTEXT + "Ljava/util/Set;)" + PROPOSALS,

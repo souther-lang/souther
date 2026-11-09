@@ -419,7 +419,13 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
      */
     @Test
     void aStepAddingANumberOfWhatItCarriedIsNoNumberOfEachElement() {
-        assertFalse(numbersAsked("keptOfEach").isEmpty(), "the control is read");
+        // The control keeps by what each element holds, so how many it keeps is how many elements
+        // of the lists inside the elements meet it: a count across them, which a row is composed
+        // for.
+        List<OnTheWay> control = statedAll("keptOfEach");
+        assertEquals(1, control.size(), () -> "one statement: " + control);
+        assertInstanceOf(Quantity.HowManyMeetAcross.class, assertInstanceOf(RowDemand.SoMany.class,
+                assertInstanceOf(OnTheWay.TakenIn.class, control.getFirst()).demand()).count());
         assertEquals(List.of(), numbersAsked("keptPastWhatWasCarried"));
         assertEquals(List.of(), numbersAsked("keptPastWhatWasCarriedWrittenOut"));
     }

@@ -5,6 +5,7 @@ import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
@@ -612,14 +613,14 @@ final class CardinalityComposer {
                 listedAt.add(at);
                 return numbersAt(at, OfTheType.of(part, reading), asked, apartAt, measuring,
                         within, beside, keptApartByItsRules ? MOST_ELEMENTS : 1, unheld, unnamed,
-                        reading.today());
+                        refused, reading.today(), part, reading);
             };
             ListedByValue byValue = listedByValue(container, holding.element(), reading, apartAt,
                     numbers, (at, part) -> {
                         listedAt.add(at);
                         return numbersAt(at, OfTheType.manyOf(part, reading), asked, apartAt,
                                 measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
-                                reading.today());
+                                refused, reading.today(), part, reading);
                     });
             List<TermPath> parts = List.copyOf(listedAt);
             if (byValue == null || (apartAt != null && byValue.values().isEmpty())) {
@@ -1109,10 +1110,24 @@ final class CardinalityComposer {
                                                  Quantity.TheValue apartAt, Quantities measuring,
                                                  SearchRegion within,
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
-                                                 Set<CompositionRepertoire> unnamed, Today today) {
-        NumericTerm term = new NumericTerm.ValueOf(at);
+                                                 Set<CompositionRepertoire> unnamed,
+                                                 Set<CompositionBudget> refused, Today today,
+                                                 TypeView view, RuleReadingContext reading) {
+        asked = withWhatIsSaidOfTheInnerElements(asked, at);
+        // What stands at a container is read as how many it holds, a count.
+        boolean howMany = view.shape() instanceof Shape.Sequence;
+        NumericTerm term = howMany ? sizeAsked(at, asked) : new NumericTerm.ValueOf(at);
+        if (howMany && term == null) {
+            // The sizes past the figure are not listed, and a statement over how many of its
+            // elements meet something may be met only at one of them.
+            refused.add(CompositionBudget.ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH);
+            return sizesNoneIsAskedOf();
+        }
+        if (term == null) {
+            return null;
+        }
         TermOrders orders = measuring.ordersOf(term);
-        Carrier carrier = orders == null ? null : orders.observed();
+        Carrier carrier = orders == null ? null : howMany ? orders.answered() : orders.observed();
         if (carrier == null) {
             return null;
         }
@@ -1171,7 +1186,184 @@ final class CardinalityComposer {
         for (Place place : places) {
             out.add(carrier.valueOf(place));
         }
+        for (ObservedValue value : whereWhatIsTakenTurns(at, view, asked, measuring, within,
+                beside, unheld, unnamed, refused, reading)) {
+            if (!out.contains(value)) {
+                out.add(value);
+            }
+        }
         return out;
+    }
+
+    /**
+     * {@code asked}, and what each statement in it says of each element of the containers inside
+     * an element that {@code at} stands in: a number inside those turns where that does, as a
+     * number of the element turns where the statement over the element does.
+     */
+    private static List<Asked> withWhatIsSaidOfTheInnerElements(List<Asked> asked, TermPath at) {
+        List<TermPath> inner = at.containersHoldingIt();
+        if (inner.size() < 2) {
+            return asked;
+        }
+        List<Asked> out = new ArrayList<>(asked);
+        for (Asked one : asked) {
+            if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
+                for (TermPath container : inner.subList(1, inner.size())) {
+                    perElement.ofEachElementOf(container).values().forEach(each -> out.add(
+                            new Asked.SoManyMeeting(each, ANY_COUNT, Optional.empty(),
+                                    Optional.empty())));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The most elements a container is listed holding where no statement reads how many it holds. */
+    private static final int MOST_HELD_UNASKED =
+            CompositionBudget.ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH.maximum();
+
+    /**
+     * The sizes a container is listed at where no statement reads how many it holds: none up to
+     * {@link #MOST_HELD_UNASKED}, which tell apart a statement over which of its elements meet
+     * something — none, one, several, and more than that.
+     */
+    private static List<ObservedValue> sizesNoneIsAskedOf() {
+        List<ObservedValue> sizes = new ArrayList<>();
+        for (int size = 0; size <= MOST_HELD_UNASKED; size++) {
+            sizes.add(new ObservedValue.Integer(size));
+        }
+        return sizes;
+    }
+
+    /** How many the container at {@code at} holds, as a statement asked reads it — or null where
+     *  none reads it. */
+    private static NumericTerm sizeAsked(TermPath at, List<Asked> asked) {
+        for (Asked one : asked) {
+            if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
+                for (NumericTerm number : perElement.numbers()) {
+                    if (NumbersOfTheWhole.howManyItHolds(number, at)) {
+                        return number;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The values at {@code at} that stand where a number taken of the value turns: the day of a
+     * date, how long a string is, what a number leaves of a divisor.
+     *
+     * <p>A statement over what is taken of a value turns at a number of that, which is no place of
+     * the value's own order, so the places above never name a value that meets it. What names one
+     * is what builds a value for the numbers taken of one place together
+     * ({@link TermRealizations#jointRealizationOf}), asked at each place the statements turn at and
+     * read through the bare type: the value comes back as the template {@link FixtureTemplate#on}
+     * writes, which {@link FixtureTemplate#observed} reads.
+     */
+    private static List<ObservedValue> whereWhatIsTakenTurns(
+            TermPath at, TypeView view, List<Asked> asked, Quantities measuring,
+            SearchRegion within, Map<NumericTerm, Place> beside,
+            Set<CompositionCapacity> unheld, Set<CompositionRepertoire> unnamed,
+            Set<CompositionBudget> refused, RuleReadingContext reading) {
+        Set<NumericTerm> taken = new LinkedHashSet<>();
+        for (Asked one : view.shape() instanceof Shape.Sequence ? List.<Asked>of() : asked) {
+            if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
+                for (NumericTerm number : perElement.numbers()) {
+                    if (number instanceof NumericTerm.FromOnePosition from
+                            && !(number instanceof NumericTerm.ValueOf)
+                            && at.equals(from.position())) {
+                        taken.add(number);
+                    }
+                }
+            }
+        }
+        // The places each number turns at, and the order it is answered on.
+        Map<NumericTerm, List<Place>> turns = new LinkedHashMap<>();
+        Map<NumericTerm, Carrier> answeredOn = new LinkedHashMap<>();
+        for (NumericTerm number : taken) {
+            TermOrders orders = measuring.ordersOf(number);
+            Set<Place> levels = new LinkedHashSet<>();
+            for (Asked one : asked) {
+                List<ExactRatio> where = one.turnsAt(number, beside);
+                for (ExactRatio level : where == null ? List.<ExactRatio>of() : where) {
+                    if (Count.written(level) instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> written) && written.isPresent()) {
+                        levels.add(written.get());
+                    }
+                }
+            }
+            if (orders != null && orders.answered() != null && !levels.isEmpty()) {
+                turns.put(number, List.copyOf(levels));
+                answeredOn.put(number, orders.answered());
+            } else {
+                // Where a statement turns on it could not be worked out, so no value is built for
+                // it.
+                unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
+            }
+        }
+        Type bare = TypeOps.base(view.declared(), reading.source().inners());
+        List<ObservedValue> out = new ArrayList<>();
+        // One value answers every number taken of it at once, so what is built is a value for each
+        // choice of a place for each number, and the choices are walked no further than elements
+        // are composed with.
+        List<NumericTerm> numbers = List.copyOf(turns.keySet());
+        int[] choice = new int[numbers.size()];
+        for (int tried = 0; !numbers.isEmpty(); tried++) {
+            if (tried == MOST_ELEMENTS) {
+                refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+                break;
+            }
+            SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
+            for (int each = 0; each < numbers.size(); each++) {
+                NumericTerm number = numbers.get(each);
+                Place place = turns.get(number).get(choice[each]);
+                demands.put(RealizationTarget.of(number),
+                        AskedAt.aNumberOutOf(new NumericSet.At(place), place,
+                                answeredOn.get(number)));
+            }
+            TermRealizations.Realization realized =
+                    TermRealizations.jointRealizationOf(demands.keySet())
+                            instanceof TermRealizations.JointRealization.Supported(var builder)
+                            ? builder.from(bare, List.of(), demands, measuring, within, reading,
+                                    DemandsInside.NOTHING)
+                            : null;
+            if (realized != null) {
+                CompositionShortfall met = realized.shortfall();
+                refused.addAll(met.figures());
+                unnamed.addAll(met.populations());
+                unheld.addAll(met.unheld());
+            }
+            if (realized instanceof TermRealizations.Realization.Built built) {
+                for (FixtureTemplate each : built.values()) {
+                    ObservedValue value = each.observed();
+                    if (value == null) {
+                        unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
+                    } else if (!out.contains(value)) {
+                        out.add(value);
+                    }
+                }
+            } else {
+                unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
+            }
+            if (!nextChoice(choice, numbers, turns)) {
+                break;
+            }
+        }
+        return out;
+    }
+
+    /** Steps {@code choice}, a place for each number, to the next of the choices; false where it
+     *  was the last. */
+    private static boolean nextChoice(int[] choice, List<NumericTerm> numbers,
+                                      Map<NumericTerm, List<Place>> turns) {
+        for (int each = 0; each < choice.length; each++) {
+            if (++choice[each] < turns.get(numbers.get(each)).size()) {
+                return true;
+            }
+            choice[each] = 0;
+        }
+        return false;
     }
 
     /**
@@ -1345,16 +1537,17 @@ final class CardinalityComposer {
                         Optional.empty()));
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
+        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         Map<NumericTerm, Place> beside = settledOutside(asked, container, within);
         List<List<String>> apart = ElementsKeptApart.at(view, keptApart, reading);
         Quantity.TheValue value = new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(place));
         ListedByValue byValue = listedByValue(container, holding.element(), reading, value,
                 (at, part) -> numbersAt(at, OfTheType.of(part, reading), asked, null, measuring,
                         within, beside, apart.isEmpty() ? 1 : MOST_ELEMENTS, unheld, unnamed,
-                        reading.today()),
+                        refused, reading.today(), part, reading),
                 (at, part) -> numbersAt(at, OfTheType.manyOf(part, reading), asked, null,
                         measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
-                        reading.today()));
+                        refused, reading.today(), part, reading));
         if (byValue == null) {
             return notChosen(new SearchMessage.APartNeitherOneOfSoManyNorNumbers(
                     String.valueOf(container)));
@@ -1364,7 +1557,6 @@ final class CardinalityComposer {
                     String.valueOf(place)));
         }
         ElementValues ofTheElement = byValue.first();
-        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         if (!ofTheElement.listed().all()) {
             refused.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG);
         }

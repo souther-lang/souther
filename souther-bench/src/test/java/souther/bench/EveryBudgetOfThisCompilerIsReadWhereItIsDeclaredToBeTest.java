@@ -253,6 +253,33 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the values an element is chosen among, at a size or at the"
                             + " containers offered, and hands the figure over in the shortfall it"
                             + " comes back with"),
+            // The values a number inside an element is listed at: the sizes a container inside it
+            // is listed holding, and the combinations of places the numbers taken of one value are
+            // built for, each put in the set the caller hands over.
+            Map.entry("souther.compiler.partition.CardinalityComposer#numbersAt("
+                            + "Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/partition/CardinalityComposer$OfTheType;"
+                            + "Ljava/util/List;Lsouther/compiler/meaning/Quantity$TheValue;"
+                            + "Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/Map;I"
+                            + "Ljava/util/Set;Ljava/util/Set;Ljava/util/Set;"
+                            + "Lsouther/compiler/numeric/Today;Lsouther/compiler/check/TypeView;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)Ljava/util/List;",
+                    "lists the sizes of a container no statement reads the size of, and puts that"
+                            + " figure in the set it is handed"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#whereWhatIsTakenTurns("
+                            + "Lsouther/compiler/inputs/TermPath;Lsouther/compiler/check/TypeView;"
+                            + "Ljava/util/List;Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/Map;"
+                            + "Ljava/util/Set;Ljava/util/Set;Ljava/util/Set;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)Ljava/util/List;",
+                    "stops at the combinations of places the numbers taken of one value are built"
+                            + " for, and puts the figure in the set it is handed, with what the"
+                            + " realizations it asked came back short of"),
+            Map.entry("souther.compiler.partition.ValuesOfAnElement#<clinit>()V",
+                    "the most elements a container listed as a part of an element holds, which the"
+                            + " listing says it stopped at, and the listing of the element is not"
+                            + " every value where it left a size out"),
             // The ways a way is looked along where conditions on it came out one of several
             // things: the walk stops at either figure and says which, and each caller carries it
             // on with what was looked along.
