@@ -66,14 +66,18 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
             """;
 
     /**
-     * Rates holding two currencies, one of them the currency the row's deal is in. The count of
-     * the deals the rates cover is made at the deal's currency, so of the two keys the rates hold
-     * only that one is a key the relation was read at. A deal in the currency held at nought stops
-     * a run before the count, so the relation is not shown reached at every value.
+     * Two deals, in two currencies, and rates holding two currencies, one of them a deal's. The
+     * count of the deals the rates cover is made at each deal's currency, so of the two keys the
+     * rates hold only the one a deal is in is a key the relation was read at. A deal in the
+     * currency held at nought stops a run before the count, so the relation is not shown reached
+     * at every value.
      */
     private static final String TWO_KEYS = RATES + """
 
-            let twoRates = Rates { rates = Map.fromList([ ("Z", 0), ("x", 1) ]), year = 2000 }
+            let day = Date("2026-07-01")
+            let mixedDeals: List<Deal> = [ Deal { currency = "Y", amount = 1, on = day },
+                                           Deal { currency = "W", amount = 1, on = day } ]
+            let twoRates = Rates { rates = Map.fromList([ ("Z", 0), ("Y", 1) ]), year = 2000 }
 
             behavior covered : (deals: List<Deal>, rates: Rates) -> Ok
             let covered (deals, rates) = {
@@ -143,9 +147,9 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         assertEquals(List.of(), compilation.errors(), "the model under test compiles");
 
         Map<String, PartitionEvidence.NotRead> covered = notRead(evidence, "covered");
-        assertEquals(List.of("\"x\""), covered.get("deals[*].currency").shownReachedAt(),
+        assertEquals(List.of("\"Y\"", "\"W\""), covered.get("deals[*].currency").shownReachedAt(),
                 covered.toString());
-        assertEquals(List.of("\"x\""), covered.get("rates.rates[key]").shownReachedAt(),
+        assertEquals(List.of("\"Y\""), covered.get("rates.rates[key]").shownReachedAt(),
                 covered.toString());
     }
 
