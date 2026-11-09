@@ -90,6 +90,33 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
             """;
 
     /**
+     * Groups of which the first has no key looked for, the second is ready and the third holds
+     * it. The groups are walked until one is ready, and the table of each is searched for the key
+     * looked for only while they are, so the table of the third is not searched at all: a key it
+     * holds is not one the search was made at, though it equals the key looked for.
+     */
+    private static final String GROUPS = RATES + """
+
+            data Group = { ready: Bool, table: Map<String, Int> }
+
+            let groups: List<Group> = [
+                Group { ready = false, table = Map.fromList([ ("A", 1) ]) },
+                Group { ready = true, table = Map.empty },
+                Group { ready = false, table = Map.fromList([ ("B", 1) ]) } ]
+            let wantedB: String = "B"
+            let zeroRates = Rates { rates = Map.fromList([ ("Z", 0) ]), year = 2000 }
+
+            behavior anyGroup : (groups: List<Group>, wanted: String, rates: Rates) -> Ok
+            let anyGroup (groups, wanted, rates) = {
+                let share = Map.get(wanted, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(7, rate))
+                    |> Option.withDefault(0)
+                Ok { n = share + (if List.any(
+                    g -> g.ready || Map.containsKey(wanted, g.table), groups) then 1 else 0) }
+            }
+            """;
+
+    /**
      * Two deals, one in each of two currencies, and a currency looked for. A scan that goes on
      * while every deal is in the currency looked for ends at the first deal that is not, so the
      * deal in the currency looked for, which comes after it, is not one the comparison was made
@@ -223,6 +250,21 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         assertEquals(List.of("\"B\""), toldAt(scanned, "wanted"),
                 "the row got there, which the currency looked for says: " + scanned);
         assertEquals(List.of(), toldAt(scanned, "deals[*].currency"), scanned.toString());
+    }
+
+    /**
+     * A search inside an element of another container is one for each of them, and a run that went
+     * through it went through the search of some, so the keys the row holds in the tables of the
+     * others are not told as keys the search was made at.
+     */
+    @Test
+    void aSearchInsideAnElementIsNotToldTheKeysOfTheElementsItWasNotMadeIn() {
+        Map<String, PartitionEvidence.NotRead> scanned =
+                notRead(evidenceOf(GROUPS), "anyGroup");
+
+        assertEquals(List.of("\"B\""), toldAt(scanned, "wanted"),
+                "the row got there, which the key looked for says: " + scanned);
+        assertTrue(!toldAt(scanned, "table[key]").contains("\"B\""), scanned.toString());
     }
 
     private static Map<String, PartitionEvidence> evidenceOf(String source) {

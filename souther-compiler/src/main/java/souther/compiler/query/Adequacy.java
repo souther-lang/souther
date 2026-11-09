@@ -1223,7 +1223,7 @@ public final class Adequacy {
             ASearchForARow search = ASearchForARow.of(db, name, behavior, reaching);
             return Answer.of(search == null ? ReachWitnesses.Sought.NOTHING
                     : ReachWitnesses.of(search.read(), search.named(), search.taken(),
-                            search.building(), search.running()));
+                            search.building(), search.running(), search.same()));
         }
     }
 
@@ -1241,7 +1241,7 @@ public final class Adequacy {
      */
     private record ASearchForARow(InputReading read, List<List<FixtureTemplate>> named,
                                   List<List<ObservedValue>> taken, RowSearch.Building building,
-                                  RowSearch.Running running) {
+                                  RowSearch.Running running, BehaviorInputs.SameValue same) {
 
         /** The search for a row of {@code behavior} going through one of {@code reaching}, or
          *  null where the module did not build far enough to run one. */
@@ -1302,7 +1302,8 @@ public final class Adequacy {
                                     // stopped is said beside what it was tried for.
                                     : new RowSearch.Run(false,
                                             ran.stopped().map(stop -> whereItStopped(db, stop))))
-                            .orElseGet(() -> RowSearch.Run.stoppedNowhere(false)));
+                            .orElseGet(() -> RowSearch.Run.stoppedNowhere(false)),
+                    ExampleExecutions.sameValue(db));
         }
 
         /** Whether the run {@code seen} is had some place of {@code reaching} come out either

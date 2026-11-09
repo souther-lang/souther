@@ -550,6 +550,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>The statement of the element is the equality and nothing joined to it: with another
      * statement beside it, an element may be passed over before the equality is asked of it.
+     *
+     * <p>And a container that is no element's: the search is one for the row. Inside an element
+     * of another container it is one for each of them, and a run that went through the equality
+     * went through the search of some of those and not of every one, so which of the values the
+     * row holds at the place were searched is not said by the search.
      */
     UndividedByARelation searchedBy(Proposition.Some some) {
         if (!(some.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
@@ -560,6 +565,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return this;
         }
         TermPath searched = one.isAtOrUnder(container) ? one : other;
+        if (!searched.containersHoldingIt().equals(List.of(container))) {
+            return this;
+        }
         TermPath probe = searched.equals(one) ? other : one;
         return new UndividedByARelation(sides, constant, relation, amongThemselves, kind,
                 remainder, working,

@@ -15,8 +15,10 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiPredicate;
 
 /**
  * A row of a behavior's inputs the boundary builds and on which the behavior answers, a run of it
@@ -47,14 +49,17 @@ public final class ReachWitnesses {
      *                    first, where a run that answers and goes through the comparison once is
      *                    shown to make it on every element of each, read through the name each
      *                    closure hands it; none where that is not shown
+     * @param same        whether two values of a type are the same value, as the language says
+     *                    and not as the values are written or held
      */
     public record Witness(List<FixtureTemplate> inputs, List<ObservedValue> built,
-                          List<TermPath> madeOnEvery) {
+                          List<TermPath> madeOnEvery, BehaviorInputs.SameValue same) {
 
         public Witness {
             inputs = List.copyOf(inputs);
             built = List.copyOf(built);
             madeOnEvery = List.copyOf(madeOnEvery);
+            Objects.requireNonNull(same, "whether two values are one is the language's to say");
             if (inputs.size() != built.size()) {
                 throw new IllegalArgumentException("a row is built of each of its inputs");
             }
@@ -62,14 +67,15 @@ public final class ReachWitnesses {
 
         /** A row the search found, nothing shown of which elements a run of it made the
          *  comparison on. */
-        public Witness(List<FixtureTemplate> inputs, List<ObservedValue> built) {
-            this(inputs, built, List.of());
+        public Witness(List<FixtureTemplate> inputs, List<ObservedValue> built,
+                       BehaviorInputs.SameValue same) {
+            this(inputs, built, List.of(), same);
         }
 
         /** The same row, a run of which is shown to make the comparison on every element of each
          *  of {@code elements}. */
         public Witness madeOnEveryElementOf(List<TermPath> elements) {
-            return new Witness(inputs, built, elements);
+            return new Witness(inputs, built, elements, same);
         }
 
         /**
@@ -105,8 +111,8 @@ public final class ReachWitnesses {
                     Optional<List<Value>> shown = shown(here);
                     if (shown.isEmpty() && lookedForAt.isPresent()
                             && heldAt(lookedForAt.get(), row, read) instanceof Reading.Held there) {
-                        shown = shown(there).map(looked -> here.values().stream()
-                                .filter(looked::contains).distinct().toList());
+                        shown = shown(there).map(looked -> here.distinct().stream()
+                                .filter(each -> here.isAmong(each, looked)).toList());
                     }
                     yield shown.filter(values -> !values.isEmpty())
                             .<Told>map(values -> new Told.Shown(
@@ -120,23 +126,15 @@ public final class ReachWitnesses {
          * A value the row holds or takes: what it is, and how the model writes it.
          *
          * <p>Two are one by what they are and never by how they are written: what a report shows
-         * of a value is for a person, and a rule that two values are equal is not asked of it.
+         * of a value is for a person. Nor by how Java holds them: a decimal is the amount it
+         * stands for, whatever scale it was written at, which a record of one says otherwise
+         * of. So these are not compared with {@code equals}: a {@link Reading.Held} says
+         * whether two of its own are one.
          *
          * @param is      the value, as the row built it, or the place of the number that is taken
          * @param written the value written out as the model writes a value of its type
          */
-        private record Value(Object is, String written) {
-
-            @Override
-            public boolean equals(Object other) {
-                return other instanceof Value that && is.equals(that.is);
-            }
-
-            @Override
-            public int hashCode() {
-                return is.hashCode();
-            }
-        }
+        private record Value(Object is, String written) {}
 
         /** What the row holds or takes at a coordinate, or why it is not read. */
         private sealed interface Reading {
@@ -146,8 +144,28 @@ public final class ReachWitnesses {
              * where they stand: the place a value is held at, or the position a number is taken
              * of, and null where the number is taken over a run of values and stands at no one
              * place.
+             *
+             * @param same whether two of the values are one value
              */
-            record Held(List<Value> values, TermPath place) implements Reading {}
+            record Held(List<Value> values, TermPath place, BiPredicate<Value, Value> same)
+                    implements Reading {
+
+                /** Each value once, as the language says two are one. */
+                List<Value> distinct() {
+                    List<Value> out = new ArrayList<>();
+                    for (Value each : values) {
+                        if (!isAmong(each, out)) {
+                            out.add(each);
+                        }
+                    }
+                    return out;
+                }
+
+                /** Whether {@code value} is one of {@code among}. */
+                boolean isAmong(Value value, List<Value> among) {
+                    return among.stream().anyMatch(each -> same.test(each, value));
+                }
+            }
 
             record Unread(Told.Unread why) implements Reading {}
         }
@@ -162,8 +180,8 @@ public final class ReachWitnesses {
             };
         }
 
-        private static Reading valuesAt(TermPath place, BorderQuantity.Observation row,
-                                        InputReading read) {
+        private Reading valuesAt(TermPath place, BorderQuantity.Observation row,
+                                 InputReading read) {
             Type type = read.domain().typeAt(place, read.rules());
             if (type == null || !(row.everyValueAt(place)
                     instanceof WalkResult.Reached<List<ObservedValue>>(List<ObservedValue> there))
@@ -181,7 +199,8 @@ public final class ReachWitnesses {
                 }
                 out.add(new Value(each, fixture.text()));
             }
-            return new Reading.Held(out, place);
+            return new Reading.Held(out, place, (one, other) -> same.at(
+                    (ObservedValue) one.is(), (ObservedValue) other.is(), type));
         }
 
         /**
@@ -228,9 +247,12 @@ public final class ReachWitnesses {
             if (!numbersAt(row, across.get().containers(), orders, there) || there.isEmpty()) {
                 return new Reading.Unread(Told.Unread.THE_ROW_HOLDS_NONE_THERE);
             }
+            // A number is the same number where its place is the same one: what makes two places
+            // one line, whatever scale they were written at ({@link Place#key}).
             return new Reading.Held(there.stream()
                     .map(number -> new Value(number.key(), orders.answered().written(number)))
-                    .toList(), across.get().position());
+                    .toList(), across.get().position(),
+                    (one, other) -> one.is().equals(other.is()));
         }
 
         private BorderQuantity.Observation observed(InputReading read) {
@@ -242,10 +264,10 @@ public final class ReachWitnesses {
         /** What a run of the row is shown to have made the comparison at, of what the row holds
          *  or takes there. */
         private Optional<List<Value>> shown(Reading.Held held) {
-            List<Value> there = held.values();
+            List<Value> there = held.distinct();
             TermPath place = held.place();
-            if (new LinkedHashSet<>(there).size() == 1) {
-                return Optional.of(List.of(there.getFirst()));
+            if (there.size() == 1) {
+                return Optional.of(there);
             }
             List<TermPath> inside = new ArrayList<>();
             if (place != null) {
@@ -367,10 +389,11 @@ public final class ReachWitnesses {
      *
      * @param named the values the model names at each parameter's type
      * @param taken what each row written for the behavior took, one value per parameter
+     * @param same  whether two values of a type are one value, as the language says
      */
     public static Sought of(InputReading read, List<List<FixtureTemplate>> named,
                             List<List<ObservedValue>> taken, RowSearch.Building building,
-                            RowSearch.Running running) {
+                            RowSearch.Running running, BehaviorInputs.SameValue same) {
         BehaviorInputs inputs = BehaviorInputs.of(read);
         RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
                 read.domain().machines(), read.domain().today());
@@ -387,7 +410,8 @@ public final class ReachWitnesses {
             RowSearch.Run ran = running.run(fixtures);
             if (ran.getsThere()) {
                 return new Sought(Optional.of(new Witness(fixtures,
-                        row.stream().map(RowSearch.Built::value).toList())), Set.of(), Set.of());
+                        row.stream().map(RowSearch.Built::value).toList(), same)), Set.of(),
+                        Set.of());
             }
             ran.stopped().ifPresent(runs::add);
         }
