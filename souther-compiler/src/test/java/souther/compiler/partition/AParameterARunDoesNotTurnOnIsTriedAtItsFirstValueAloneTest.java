@@ -48,6 +48,13 @@ class AParameterARunDoesNotTurnOnIsTriedAtItsFirstValueAloneTest {
             """;
 
     private static List<List<RowSearch.Built>> triedWith(IntPredicate atFirst) {
+        return triedWith(atFirst, 2, (_, fixture) -> Optional.of(new ObservedValue.Text(
+                fixture.text())), new HashSet<>());
+    }
+
+    private static List<List<RowSearch.Built>> triedWith(IntPredicate atFirst, int howManyNamed,
+                                                         RowSearch.Building building,
+                                                         Set<Figure> stopped) {
         Compilation compilation = Compilation.ofSource(FLAGS, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -62,12 +69,15 @@ class AParameterARunDoesNotTurnOnIsTriedAtItsFirstValueAloneTest {
                 Partitions.of("f", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         MeasuredInput subject = MeasuredInput.of("f", domain.reading(rules), partitioning);
         List<List<FixtureTemplate>> named = new ArrayList<>();
-        subject.types().forEach(_ -> named.add(
-                List.of(FixtureTemplate.string("p"), FixtureTemplate.string("q"))));
+        subject.types().forEach(_ -> {
+            List<FixtureTemplate> values = new ArrayList<>();
+            for (int i = 0; i < howManyNamed; i++) {
+                values.add(FixtureTemplate.string("v" + i));
+            }
+            named.add(values);
+        });
         return RowSearch.tried(subject.types(), named, List.of(), subject.types()::get,
-                _ -> null, atFirst, subject.ruleReading(),
-                (_, fixture) -> Optional.of(new ObservedValue.Text(fixture.text())),
-                new HashSet<>());
+                _ -> null, atFirst, subject.ruleReading(), building, stopped);
     }
 
     @Test
@@ -80,6 +90,40 @@ class AParameterARunDoesNotTurnOnIsTriedAtItsFirstValueAloneTest {
         assertEquals(1, standing.get(1).size());
         assertEquals(1, standing.get(2).size());
         assertEquals(every.get(1).getFirst(), standing.get(1).getFirst());
+    }
+
+    /**
+     * Past the figure a parameter's values are cut at, a parameter the run does not turn on is
+     * still built once and says nothing of the values it never took: the figure is for the
+     * parameters whose later values the search would have tried.
+     */
+    @Test
+    void aParameterTheRunDoesNotTurnOnBuildsOnceAndStopsNowhereHoweverManyValuesItHas() {
+        int[] built = new int[3];
+        Set<Figure> stopped = new HashSet<>();
+
+        List<List<RowSearch.Built>> each = triedWith(at -> at != 0, RowSearch.MOST_VALUES + 1,
+                (at, fixture) -> {
+                    built[at]++;
+                    return Optional.of(new ObservedValue.Text(fixture.text()));
+                }, stopped);
+
+        assertEquals(1, built[1], "built once");
+        assertEquals(1, built[2], "built once");
+        assertEquals(RowSearch.MOST_VALUES, built[0], "a parameter that can decide is built to the figure");
+        assertEquals(1, each.get(1).size());
+        assertEquals(1, stopped.size(), "the one parameter that can decide was cut at its figure");
+    }
+
+    /** The first value that does not build is passed over for the next that does. */
+    @Test
+    void aParameterTheRunDoesNotTurnOnIsTriedWithTheFirstValueThatBuilds() {
+        List<List<RowSearch.Built>> each = triedWith(at -> at != 0, 4,
+                (at, fixture) -> at == 1 && fixture.equals(FixtureTemplate.string("v0"))
+                        ? Optional.empty()
+                        : Optional.of(new ObservedValue.Text(fixture.text())), new HashSet<>());
+
+        assertEquals(FixtureTemplate.string("v1"), each.get(1).getFirst().fixture());
     }
 
     @Test

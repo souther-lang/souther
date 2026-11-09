@@ -1,6 +1,8 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,6 +68,13 @@ final class EqualitySpan<A> {
      * ({@link #MOST_UPDATES}) are what is read.
      */
     static <A> EqualitySpan<A> of(List<AffineConstraint<A>> rules, CanonicalOrder<A> order) {
+        return of(rules, order, MOST_UPDATES);
+    }
+
+    /** The same, with the work it may spend said: a smaller one reads the equalities it reached
+     *  before it was spent, in the order they were stated. */
+    static <A> EqualitySpan<A> of(List<AffineConstraint<A>> rules, CanonicalOrder<A> order,
+                                  int mostUpdates) {
         Map<A, Integer> named = new HashMap<>();
         for (AffineConstraint<A> each : rules) {
             if (each instanceof AffineConstraint.Equality<A> equality) {
@@ -74,7 +83,7 @@ final class EqualitySpan<A> {
                 }
             }
         }
-        Building<A> building = new Building<>(order, named);
+        Building<A> building = new Building<>(order, named, mostUpdates);
         for (AffineConstraint<A> each : rules) {
             if (!(each instanceof AffineConstraint.Equality<A> equality)) {
                 continue;
@@ -160,11 +169,12 @@ final class EqualitySpan<A> {
         /** How many equalities of the whole set name each position. */
         private final Map<A, Integer> named;
         private final List<Solving<A>> solvings = new ArrayList<>();
-        private final int[] updates = {MOST_UPDATES};
+        private final int[] updates;
 
-        private Building(CanonicalOrder<A> order, Map<A, Integer> named) {
+        private Building(CanonicalOrder<A> order, Map<A, Integer> named, int mostUpdates) {
             this.order = order;
             this.named = named;
+            this.updates = new int[] {mostUpdates};
         }
 
         private Taken take(AffineConstraint.Equality<A> equality) {
@@ -185,36 +195,43 @@ final class EqualitySpan<A> {
                 return left.constant().isZero() ? Taken.HELD : Taken.CONTRADICTS;
             }
             // Solved for a position the fewest equalities of the set name, and among those the one
-            // the order walks last. Which one is of no account to what is read; fewest is what
-            // leaves a position only this equality names out of every later one, and so the
-            // updates of a chain to its length whatever the positions are called.
+            // the order walks last, where the weights can be divided by its weight. Which one is
+            // of no account to what is read; fewest is what leaves a position only this equality
+            // names out of every later one, and so the updates of a chain to its length whatever
+            // the positions are called. And one whose weight the others cannot be divided by is
+            // passed over for the next, so that the equality is read under every naming or under
+            // none: it is left out only where no position of it can be solved for.
             List<Map.Entry<A, ExactRatio>> walked = order.walking(left.coefs().entrySet(),
                     Map.Entry::getKey);
-            int fewest = Integer.MAX_VALUE;
-            for (Map.Entry<A, ExactRatio> each : walked) {
-                fewest = Math.min(fewest, named.getOrDefault(each.getKey(), 0));
-            }
-            Map.Entry<A, ExactRatio> last = null;
-            for (Map.Entry<A, ExactRatio> each : walked) {
-                if (named.getOrDefault(each.getKey(), 0) == fewest) {
-                    last = each;
+            List<Map.Entry<A, ExactRatio>> toTry = new ArrayList<>(walked);
+            Collections.reverse(toTry);
+            toTry.sort(Comparator.comparingInt(each -> named.getOrDefault(each.getKey(), 0)));
+            for (Map.Entry<A, ExactRatio> pivot : toTry) {
+                Solving<A> solving = solvedFor(pivot, walked, left.constant());
+                if (solving != null) {
+                    solvings.add(solving);
+                    break;
                 }
             }
+            return Taken.HELD;
+        }
+
+        /** {@code walked + constant} solved for {@code pivot}, or null where the weights cannot
+         *  be held divided by its. */
+        private Solving<A> solvedFor(Map.Entry<A, ExactRatio> pivot,
+                                     List<Map.Entry<A, ExactRatio>> walked, ExactRatio constant) {
             Map<A, ExactRatio> rest = new LinkedHashMap<>();
             for (Map.Entry<A, ExactRatio> each : walked) {
-                if (!each.getKey().equals(last.getKey())) {
-                    ExactRatio scaled = each.getValue().dividedBy(last.getValue()).orNull();
+                if (!each.getKey().equals(pivot.getKey())) {
+                    ExactRatio scaled = each.getValue().dividedBy(pivot.getValue()).orNull();
                     if (scaled == null) {
-                        return Taken.HELD;
+                        return null;
                     }
                     rest.put(each.getKey(), scaled);
                 }
             }
-            ExactRatio at = left.constant().negated().dividedBy(last.getValue()).orNull();
-            if (at != null) {
-                solvings.add(new Solving<>(last.getKey(), rest, at));
-            }
-            return Taken.HELD;
+            ExactRatio at = constant.negated().dividedBy(pivot.getValue()).orNull();
+            return at == null ? null : new Solving<>(pivot.getKey(), rest, at);
         }
     }
 }

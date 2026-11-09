@@ -19,6 +19,12 @@ import java.util.Set;
  *       at the origin's value of it as at any other.
  * </ul>
  *
+ * <p>The second holds of a rewrite as of the body only while a rewrite reads nothing the body does
+ * not. Those there are answer with a part of the body (an arm answering as a sibling does, a walk
+ * left at its first element) or with one value that reads nothing, so no rewrite brings a
+ * parameter into what is answered. A rewrite that did would have to say which parameters it reads,
+ * and a search over it would leave those moved.
+ *
  * <p>Held per parameter and never per position: a parameter read anywhere is moved everywhere,
  * since which of its positions the body decides on is the reading's question and not this one's.
  * Where nothing is known of what the body reads, every position is moved.

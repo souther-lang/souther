@@ -6,6 +6,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -92,31 +93,21 @@ public final class RowSearch {
                                    Set<Figure> stopped) {
         List<List<Built>> each = new ArrayList<>();
         for (int i = 0; i < types.size(); i++) {
+            if (atItsFirst.test(i)) {
+                // Its first value the boundary builds and nothing past it: another value of it is
+                // the same run, so none is built, and none is a figure the search stopped at.
+                Built first = firstBuilt(i, types, named, taken, standing, listing, reading,
+                        building);
+                if (first == null) {
+                    return null;
+                }
+                each.add(List.of(first));
+                continue;
+            }
             List<FixtureTemplate> tried = new ArrayList<>(named.get(i));
-            for (List<ObservedValue> row : taken) {
-                // A value the run's observation was cut short at is one the search did not get
-                // to try, at that figure.
-                if (row.get(i) instanceof ObservedValue.Truncated(Figure cut)) {
-                    stopped.add(cut);
-                } else if (ObservedFixtures.of(row.get(i), types.get(i), reading)
-                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                                FixtureTemplate fixture)
-                        && !tried.contains(fixture)) {
-                    tried.add(fixture);
-                }
-            }
+            takenAt(i, types.get(i), taken, reading, tried, stopped);
             tried.addAll(Partitions.representativesOf(standing.apply(i), reading).values());
-            // And a list of one of what stands for its element: what stands for a list holds
-            // nothing, and a walk of nothing gets to no comparison inside it.
-            Type element = listing.apply(i);
-            if (element != null) {
-                for (FixtureTemplate one : Partitions.representativesOf(element, reading).values()) {
-                    FixtureTemplate holding = FixtureTemplate.collection(List.of(one));
-                    if (!tried.contains(holding)) {
-                        tried.add(holding);
-                    }
-                }
-            }
+            addListsOf(listing.apply(i), reading, tried);
             List<Built> made = new ArrayList<>();
             for (FixtureTemplate one : upTo(tried, stopped)) {
                 building.build(i, one).ifPresent(value -> made.add(new Built(one, value)));
@@ -124,9 +115,84 @@ public final class RowSearch {
             if (made.isEmpty()) {
                 return null;
             }
-            each.add(atItsFirst.test(i) ? made.subList(0, 1) : made);
+            each.add(made);
         }
         return each;
+    }
+
+    /**
+     * The first value at {@code parameter} the boundary builds, going through what the model
+     * names, what the rows took, what stands for the type and a list of one of what stands for its
+     * element, each only as far as it takes to find one; or null where none is built.
+     */
+    private static Built firstBuilt(int parameter, List<Type> types,
+                                    List<List<FixtureTemplate>> named,
+                                    List<List<ObservedValue>> taken, IntFunction<Type> standing,
+                                    IntFunction<Type> listing, RuleReadingContext reading,
+                                    Building building) {
+        List<FixtureTemplate> stage = new ArrayList<>(named.get(parameter));
+        Built built = firstOf(parameter, stage, building);
+        if (built == null) {
+            stage = new ArrayList<>();
+            takenAt(parameter, types.get(parameter), taken, reading, stage, new HashSet<>());
+            built = firstOf(parameter, stage, building);
+        }
+        if (built == null) {
+            built = firstOf(parameter, List.copyOf(
+                    Partitions.representativesOf(standing.apply(parameter), reading).values()),
+                    building);
+        }
+        if (built == null) {
+            stage = new ArrayList<>();
+            addListsOf(listing.apply(parameter), reading, stage);
+            built = firstOf(parameter, stage, building);
+        }
+        return built;
+    }
+
+    private static Built firstOf(int parameter, List<FixtureTemplate> candidates,
+                                 Building building) {
+        for (FixtureTemplate one : candidates) {
+            Optional<ObservedValue> value = building.build(parameter, one);
+            if (value.isPresent()) {
+                return new Built(one, value.get());
+            }
+        }
+        return null;
+    }
+
+    /** Adds to {@code into} what each row took at {@code parameter}, written back from what was
+     *  built, each once; and to {@code stopped} the figure a value a run's observation was cut
+     *  short at is one the search did not get to try. */
+    private static void takenAt(int parameter, Type type, List<List<ObservedValue>> taken,
+                                RuleReadingContext reading, List<FixtureTemplate> into,
+                                Set<Figure> stopped) {
+        for (List<ObservedValue> row : taken) {
+            if (row.get(parameter) instanceof ObservedValue.Truncated(Figure cut)) {
+                stopped.add(cut);
+            } else if (ObservedFixtures.of(row.get(parameter), type, reading)
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate fixture)
+                    && !into.contains(fixture)) {
+                into.add(fixture);
+            }
+        }
+    }
+
+    /** Adds to {@code into} a list of one of what stands for {@code element}, where it is a type:
+     *  what stands for a list holds nothing, and a walk of nothing gets to no comparison inside
+     *  it. */
+    private static void addListsOf(Type element, RuleReadingContext reading,
+                                   List<FixtureTemplate> into) {
+        if (element == null) {
+            return;
+        }
+        for (FixtureTemplate one : Partitions.representativesOf(element, reading).values()) {
+            FixtureTemplate holding = FixtureTemplate.collection(List.of(one));
+            if (!into.contains(holding)) {
+                into.add(holding);
+            }
+        }
     }
 
     /** As many of {@code values} as the search tries, first first, with the figure added to
