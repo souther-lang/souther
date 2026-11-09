@@ -80,8 +80,10 @@ final class FormReach<A> {
     private Premises<A> premises;
 
     /** The places of the premises each rule gives, which a form read without one of the rules
-     *  asks of it — see {@link #placesOf}. Null until such a form asks. */
-    private Map<AffineConstraint<A>, int[]> placesOfRule;
+     *  asks of it — see {@link #placesOf}. Null until such a form asks. Held as one immutable
+     *  value, as {@link #premises} is, so that two threads that both work it out publish equal
+     *  ones and neither reads one half built. */
+    private Map<AffineConstraint<A>, List<Integer>> placesOfRule;
 
     private static final int[] NO_PLACES = {};
 
@@ -319,7 +321,8 @@ final class FormReach<A> {
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
-        int[] left = without == null ? NO_PLACES : placesOf(without);
+        int[] left = without == null ? NO_PLACES
+                : placesOf(without).stream().mapToInt(Integer::intValue).toArray();
         for (Premise<A> each : premises().each()) {
             if (isAmong(left, each.place())) {
                 continue;
@@ -650,22 +653,20 @@ final class FormReach<A> {
      * rule asks it at each of the premises a round holds, and holding each against the rule is a
      * comparison of two constraints as many times as there are premises. Which premises a rule
      * gives is the same for every form asked in the round, so it is worked out the first time a form
-     * asks and kept. Two threads that both work it out work out the same.
+     * asks and kept, as one immutable value. Two threads that both work it out work out the same.
      */
-    private int[] placesOf(AffineConstraint<A> rule) {
-        Map<AffineConstraint<A>, int[]> read = placesOfRule;
+    private List<Integer> placesOf(AffineConstraint<A> rule) {
+        Map<AffineConstraint<A>, List<Integer>> read = placesOfRule;
         if (read == null) {
             Map<AffineConstraint<A>, List<Integer>> given = new HashMap<>();
             for (Premise<A> each : premises().each()) {
                 given.computeIfAbsent(each.rule(), _ -> new ArrayList<>()).add(each.place());
             }
-            read = new HashMap<>();
-            for (Map.Entry<AffineConstraint<A>, List<Integer>> each : given.entrySet()) {
-                read.put(each.getKey(), each.getValue().stream().mapToInt(i -> i).toArray());
-            }
+            given.replaceAll((_, places) -> List.copyOf(places));
+            read = Map.copyOf(given);
             placesOfRule = read;
         }
-        return read.getOrDefault(rule, NO_PLACES);
+        return read.getOrDefault(rule, List.of());
     }
 
     private static boolean isAmong(int[] places, int place) {

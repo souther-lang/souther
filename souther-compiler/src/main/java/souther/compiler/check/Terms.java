@@ -2459,7 +2459,8 @@ final class Terms {
         for (DischargeRules.KeptWhereItHolds kept = by == null || asked != AnswerAspect.TRUTH ? null
                 : keptBy(source); kept != null; kept = keptBy(source)) {
             Term both = interned.closureAnsweringBoth(bodyKey(kept.closure(), at), by);
-            Term handed = bodyKey(kept.source(), at);            if (both == null || handed == null) {
+            Term handed = bodyKey(kept.source(), at);
+            if (both == null || handed == null) {
                 break;
             }
             by = both;
