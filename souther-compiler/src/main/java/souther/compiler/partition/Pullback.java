@@ -2110,7 +2110,7 @@ final class Pullback {
 
         WorkedOutWhere {
             oneHolds = oneHolds.stream().map(each -> Set.copyOf(each)).toList();
-            decidedBy = Collections.unmodifiableSet(new LinkedHashSet<>(decidedBy));
+            decidedBy = Set.copyOf(decidedBy);
         }
 
         /** This, inside a closure applied over {@code other}'s containers as well. */
