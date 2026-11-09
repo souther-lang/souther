@@ -134,6 +134,32 @@ class AGuardTyingWhatIsTakenOfTwoValuesIsComposedTest {
         }
     }
 
+    /**
+     * Elements chosen by what they hold inside: how many they hold, whether some inside meets a
+     * statement, how many inside do.
+     */
+    @Test
+    void aCountOfTheElementsWhoseInnerContainerIsReadIsComposed() {
+        for (String statement : List.of(
+                "List.length(g.deals) == 2",
+                "List.any(d -> d.amount == 5, g.deals)",
+                "List.all(d -> d.amount == 5, g.deals)",
+                "List.length(List.filter(d -> d.amount == 5, g.deals)) == 1")) {
+            for (String held : List.of("== 1", "== 2", ">= 1")) {
+                assertEquals(List.of(), whatNothingCouldShow("List.length(List.filter(g -> "
+                        + statement + ", groups)) " + held), statement + " " + held);
+            }
+        }
+    }
+
+    /** Some or every element chosen by how many it holds inside that meet something. */
+    @Test
+    void someOrEveryElementWhoseInnerCountIsReadIsComposed() {
+        String inner = "List.length(List.filter(d -> d.amount == 5, g.deals)) == 1";
+        assertEquals(List.of(), whatNothingCouldShow("List.any(g -> " + inner + ", groups)"));
+        assertEquals(List.of(), whatNothingCouldShow("List.all(g -> " + inner + ", groups)"));
+    }
+
     /** The rules of the decision no search could settle. */
     private static List<DecisionRule> whatNothingCouldShow(String guard) {
         return DecisionRulesTheSearchLeftUnsettled.notShownIn(DEALS.replace("GUARD", guard),

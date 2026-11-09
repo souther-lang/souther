@@ -31,9 +31,9 @@ import java.util.function.BiFunction;
  * <p>A truth, a case of a sum, a record of such parts and an optional of one are each one of
  * finitely many, so every one of them is read. A number has values without end, and what the
  * statements asked of the element say of it is where they turn over, so the values standing for
- * each run between those places are the ones read ({@code numbersAt}). A part that is neither — a
- * text, a container — has values nothing here chooses among, and an element holding one is not
- * one of these.
+ * each run between those places are the ones read ({@code numbersAt}). A container is each size
+ * its statements turn at, over the values of its element. A part that is none of these — a text,
+ * a map — has values nothing here chooses among, and an element holding one is not one of these.
  *
  * <p>Written the way the values a run holds are read back, so that what is read of one is what a
  * row holding it would be read as: a name the type wears around another is a construction holding
@@ -188,7 +188,17 @@ final class ValuesOfAnElement {
                 made.addAll(held);
                 yield made;
             }
-            case Shape.Sequence _, Shape.Mapping _, Shape.Unresolved _, Shape.Cases _,
+            // The number standing at a container is how many it holds, so its values are the
+            // containers of each of those sizes, over the values of an element.
+            case Shape.Sequence sequence -> {
+                List<ObservedValue> sizes = numbersAt.apply(at, view);
+                List<ObservedValue> elements = sizes == null ? null
+                        : valuesOf(sequence.element(), at.element(), NO_RULE_HERE, reading, most,
+                                numbersAt, expanding);
+                yield elements == null ? null
+                        : containersOf(sequence.kind(), sizes, elements, most);
+            }
+            case Shape.Mapping _, Shape.Unresolved _, Shape.Cases _,
                  Shape.Tuple _, Shape.Function _, Shape.Uninhabited _, Shape.Bottom _,
                  Shape.Erroneous _, Shape.Undecided _ -> null;
         };
@@ -206,6 +216,42 @@ final class ValuesOfAnElement {
             out.add(worn);
         }
         return out;
+    }
+
+    /**
+     * Up to {@code most} containers, those of each of {@code sizes} in turn: every way to take that
+     * many of {@code elements}, with one repeated where a list holds it twice and not where a set
+     * does. Which element stands where is no order that is chosen, so each way is taken once, in the
+     * order the elements are listed.
+     */
+    private static List<ObservedValue> containersOf(Shape.Sequence.Kind kind,
+                                                    List<ObservedValue> sizes,
+                                                    List<ObservedValue> elements, int most) {
+        List<ObservedValue> out = new ArrayList<>();
+        for (ObservedValue size : sizes) {
+            if (size instanceof ObservedValue.Integer(long held) && held >= 0 && held <= most) {
+                takenFrom(kind == Shape.Sequence.Kind.SET, (int) held, 0, elements, new ArrayList<>(),
+                        most, out);
+            }
+        }
+        return out;
+    }
+
+    private static void takenFrom(boolean distinct, int left, int from,
+                                  List<ObservedValue> elements, List<ObservedValue> taken, int most,
+                                  List<ObservedValue> out) {
+        if (out.size() >= most) {
+            return;
+        }
+        if (left == 0) {
+            out.add(new ObservedValue.Sequence(taken));
+            return;
+        }
+        for (int each = from; each < elements.size(); each++) {
+            taken.add(elements.get(each));
+            takenFrom(distinct, left - 1, distinct ? each + 1 : each, elements, taken, most, out);
+            taken.removeLast();
+        }
     }
 
     /** Up to {@code most} records of {@code product}: every field at each of its values, the

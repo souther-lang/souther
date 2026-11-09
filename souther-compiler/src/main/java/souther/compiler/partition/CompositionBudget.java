@@ -135,6 +135,12 @@ public enum CompositionBudget {
      *  refused. */
     VALUES_AN_ELEMENT_IS_CHOSEN_AMONG(256),
 
+    /** How many elements a container inside an element is listed holding where no statement reads
+     *  how many it holds: none up to this, which tell apart a statement over how many of its
+     *  elements meet something — none, one, several. A statement turning on a size past it is
+     *  read through the size it names, which is listed whatever this is. */
+    ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH(3),
+
     /** How many ways down to the number a total is read from are tried. Its own figure and not
      *  {@link #SHAPES_OF_A_TOTAL_OFFERED}: a way that plans is not a container that was offered, and
      *  charging one to the other leaves a case never tried because an earlier one planned and built
@@ -885,6 +891,8 @@ public enum CompositionBudget {
             case COUNTS_OF_KEYS_TRIED -> new SearchMessage.CountsOfKeysTried();
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
                     new SearchMessage.ValuesAnElementIsChosenAmong();
+            case ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH ->
+                    new SearchMessage.ElementsAnInnerContainerIsListedWith();
             case WAYS_DOWN_TO_A_TOTAL_TRIED -> new SearchMessage.WaysDownToATotalTried();
             case WAYS_UNDER_THE_CASES_TRIED -> new SearchMessage.WaysUnderTheCasesTried();
             case CASES_A_RULE_ABOVE_IS_PLANNED_UNDER ->
@@ -1002,7 +1010,7 @@ public enum CompositionBudget {
                  TOTALS_A_COUNT_IS_TRIED_AT,
                  RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO, VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED,
                  COUNTS_OF_KEYS_TRIED,
-                 VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
+                 VALUES_AN_ELEMENT_IS_CHOSEN_AMONG, ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
                  CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,

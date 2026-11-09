@@ -1112,9 +1112,18 @@ final class CardinalityComposer {
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
                                                  Set<CompositionRepertoire> unnamed, Today today,
                                                  TypeView view, RuleReadingContext reading) {
-        NumericTerm term = new NumericTerm.ValueOf(at);
+        asked = withWhatIsSaidOfTheInnerElements(asked, at);
+        // What stands at a container is read as how many it holds, a count.
+        boolean howMany = view.shape() instanceof Shape.Sequence;
+        NumericTerm term = howMany ? sizeAsked(at, asked) : new NumericTerm.ValueOf(at);
+        if (howMany && term == null) {
+            return sizesNoneIsAskedOf();
+        }
+        if (term == null) {
+            return null;
+        }
         TermOrders orders = measuring.ordersOf(term);
-        Carrier carrier = orders == null ? null : orders.observed();
+        Carrier carrier = orders == null ? null : howMany ? orders.answered() : orders.observed();
         if (carrier == null) {
             return null;
         }
@@ -1183,6 +1192,61 @@ final class CardinalityComposer {
     }
 
     /**
+     * {@code asked}, and what each statement in it says of each element of the containers inside
+     * an element that {@code at} stands in: a number inside those turns where that does, as a
+     * number of the element turns where the statement over the element does.
+     */
+    private static List<Asked> withWhatIsSaidOfTheInnerElements(List<Asked> asked, TermPath at) {
+        List<TermPath> inner = at.containersHoldingIt();
+        if (inner.size() < 2) {
+            return asked;
+        }
+        List<Asked> out = new ArrayList<>(asked);
+        for (Asked one : asked) {
+            if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
+                for (TermPath container : inner.subList(1, inner.size())) {
+                    perElement.ofEachElementOf(container).values().forEach(each -> out.add(
+                            new Asked.SoManyMeeting(each, ANY_COUNT, Optional.empty(),
+                                    Optional.empty())));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The most elements a container is listed holding where no statement reads how many it holds. */
+    private static final int MOST_HELD_UNASKED =
+            CompositionBudget.ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH.maximum();
+
+    /**
+     * The sizes a container is listed at where no statement reads how many it holds: none up to
+     * {@link #MOST_HELD_UNASKED}, which tell apart a statement over which of its elements meet
+     * something — none, one, several, and more than that.
+     */
+    private static List<ObservedValue> sizesNoneIsAskedOf() {
+        List<ObservedValue> sizes = new ArrayList<>();
+        for (int size = 0; size <= MOST_HELD_UNASKED; size++) {
+            sizes.add(new ObservedValue.Integer(size));
+        }
+        return sizes;
+    }
+
+    /** How many the container at {@code at} holds, as a statement asked reads it — or null where
+     *  none reads it. */
+    private static NumericTerm sizeAsked(TermPath at, List<Asked> asked) {
+        for (Asked one : asked) {
+            if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
+                for (NumericTerm number : perElement.numbers()) {
+                    if (NumbersOfTheWhole.howManyItHolds(number, at)) {
+                        return number;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * The values at {@code at} that stand where a number taken of the value turns: the day of a
      * date, how long a string is, what a number leaves of a divisor.
      *
@@ -1197,7 +1261,7 @@ final class CardinalityComposer {
             TermPath at, TypeView view, List<Asked> asked, Quantities measuring,
             SearchRegion within, Map<NumericTerm, Place> beside, RuleReadingContext reading) {
         Set<NumericTerm> taken = new LinkedHashSet<>();
-        for (Asked one : asked) {
+        for (Asked one : view.shape() instanceof Shape.Sequence ? List.<Asked>of() : asked) {
             if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
                 for (NumericTerm number : perElement.numbers()) {
                     if (number instanceof NumericTerm.FromOnePosition from
