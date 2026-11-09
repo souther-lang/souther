@@ -79,6 +79,12 @@ final class FormReach<A> {
      *  position — see {@link #premises}. Null until the first form of two or more positions asks. */
     private Premises<A> premises;
 
+    /** The places of the premises each rule gives, which a form read without one of the rules
+     *  asks of it — see {@link #placesOf}. Null until such a form asks. */
+    private Map<AffineConstraint<A>, int[]> placesOfRule;
+
+    private static final int[] NO_PLACES = {};
+
     /**
      * How many premises this has merged into a form, and how many it has held against the ends, for
      * a test holding a premise the ends already hold to being passed over and to being held against
@@ -313,8 +319,9 @@ final class FormReach<A> {
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
+        int[] left = without == null ? NO_PLACES : placesOf(without);
         for (Premise<A> each : premises().each()) {
-            if (each.rule().equals(without)) {
+            if (isAmong(left, each.place())) {
                 continue;
             }
             AffineConstraint.HalfSpace<A> premise = each.half();
@@ -634,6 +641,40 @@ final class FormReach<A> {
             premises = read;
         }
         return read;
+    }
+
+    /**
+     * The places of the premises {@code rule} gives, or none where this holds no rule equal to it.
+     *
+     * <p>Asked once for the rule left out and not once for every premise: a form read without a
+     * rule asks it at each of the premises a round holds, and holding each against the rule is a
+     * comparison of two constraints as many times as there are premises. Which premises a rule
+     * gives is the same for every form asked in the round, so it is worked out the first time a form
+     * asks and kept. Two threads that both work it out work out the same.
+     */
+    private int[] placesOf(AffineConstraint<A> rule) {
+        Map<AffineConstraint<A>, int[]> read = placesOfRule;
+        if (read == null) {
+            Map<AffineConstraint<A>, List<Integer>> given = new HashMap<>();
+            for (Premise<A> each : premises().each()) {
+                given.computeIfAbsent(each.rule(), _ -> new ArrayList<>()).add(each.place());
+            }
+            read = new HashMap<>();
+            for (Map.Entry<AffineConstraint<A>, List<Integer>> each : given.entrySet()) {
+                read.put(each.getKey(), each.getValue().stream().mapToInt(i -> i).toArray());
+            }
+            placesOfRule = read;
+        }
+        return read.getOrDefault(rule, NO_PLACES);
+    }
+
+    private static boolean isAmong(int[] places, int place) {
+        for (int each : places) {
+            if (each == place) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void addPremise(AffineConstraint<A> rule, AffineConstraint.HalfSpace<A> half,
