@@ -1199,7 +1199,9 @@ final class CardinalityComposer {
         for (Asked one : asked) {
             if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
                 for (NumericTerm number : perElement.numbers()) {
-                    if (!(number instanceof NumericTerm.ValueOf) && at.equals(number.subjectPath())) {
+                    if (number instanceof NumericTerm.FromOnePosition from
+                            && !(number instanceof NumericTerm.ValueOf)
+                            && at.equals(from.position())) {
                         taken.add(number);
                     }
                 }

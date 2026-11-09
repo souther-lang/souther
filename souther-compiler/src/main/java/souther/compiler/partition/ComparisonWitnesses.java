@@ -30,6 +30,15 @@ public final class ComparisonWitnesses {
         }
 
         /**
+         * Whether two values of a type are the same value, as the language says: what a row found
+         * by {@link #reached} is compared with, which a row does not carry because it holds no
+         * function. Never the same where nothing was found to compare.
+         */
+        default BehaviorInputs.SameValue sameValue() {
+            return (_, _, _) -> false;
+        }
+
+        /**
          * The same, a run of each row found getting to the comparison shown to make it on every
          * element of each of {@code elements} ({@link ReachWitnesses.Witness#madeOnEvery}): a
          * fact about where the comparison stands, which the search for the row does not know.
@@ -48,6 +57,11 @@ public final class ComparisonWitnesses {
                 @Override
                 public ReachWitnesses.Sought reached() {
                     return found.reached().madeOnEveryElementOf(elements);
+                }
+
+                @Override
+                public BehaviorInputs.SameValue sameValue() {
+                    return found.sameValue();
                 }
             };
         }

@@ -7,6 +7,7 @@ import souther.compiler.coverage.AnswerEmissionIndex;
 import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.CountWitnesses;
 import souther.compiler.diag.Citation;
@@ -153,6 +154,9 @@ final class Coverages {
 
         /** A row a run of which is recorded at one of {@code reaching}. */
         ReachWitnesses.Sought reaching(Set<ConditionOutcomeSite> reaching);
+
+        /** Whether two values of a type are the same value, as the language says. */
+        BehaviorInputs.SameValue sameValue();
     }
 
     /**
@@ -188,6 +192,11 @@ final class Coverages {
                         @Override
                         public ReachWitnesses.Sought reached() {
                             return found.reaching(reaching);
+                        }
+
+                        @Override
+                        public BehaviorInputs.SameValue sameValue() {
+                            return found.sameValue();
                         }
                     };
         };

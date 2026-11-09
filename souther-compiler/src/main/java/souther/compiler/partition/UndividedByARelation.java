@@ -4333,7 +4333,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             notShown.add(at);
             List<String> written = sought.found()
-                    .map(row -> valuesSaid(row.toldAt(at, lookedForAt(at), read)))
+                    .map(row -> valuesSaid(row.toldAt(at, lookedForAt(at), read,
+                            witnesses.sameValue())))
                     .orElse(List.of());
             // Where no row got there, the figures the search stopped at and the places the runs of
             // the rows tried stopped are said at every place the relation compares, as what was
