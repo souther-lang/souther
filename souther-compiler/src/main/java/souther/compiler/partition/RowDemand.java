@@ -1219,7 +1219,7 @@ public sealed interface RowDemand {
      * @param partedStrings the string a statement about a piece of one is over, and how its
      *                  pieces were taken, where it is one: what it depends on, and not what it
      *                  places — a composer places nothing for it
-     * @param composedAs a statement a composer does write a row toward, which a row meets exactly
+     * @param composedAs how a composer does write a row toward this, which a row meets exactly
      *                  where it meets this one, or none: what the run decides is still asked of the
      *                  row, and a row composing it is composed for is one the run need not turn
      *                  away. Said apart from the statement because a reader of what the way
@@ -1227,8 +1227,24 @@ public sealed interface RowDemand {
      */
     record ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past,
                      Optional<Derivation.APieceInALanguage.PartedString> partedStrings,
-                     Optional<SoMany> composedAs)
+                     Optional<ComposedAs> composedAs)
             implements OfACondition {
+
+        /**
+         * Counts of the elements of one container and how many it holds, held to a relation: each
+         * count is composed for as a count of every number is, and the container is composed with
+         * the relation holding of the elements it is chosen with ({@link AggregateRelation}).
+         *
+         * @param relation what the counts and the size are held to
+         * @param counts   each count the relation weighs, asked at every number
+         */
+        public record ComposedAs(AggregateRelation relation, List<SoMany> counts) {
+
+            public ComposedAs {
+                Objects.requireNonNull(relation, "a relation among counts");
+                counts = List.copyOf(counts);
+            }
+        }
 
         public ForTheRun {
             Objects.requireNonNull(statement, "a statement about some value");

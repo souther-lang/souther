@@ -72,6 +72,20 @@ class AnElementCountedForFailingAMembershipIsComposedTest {
         assertEquals(List.of(), whatNothingCouldShow(length + " - 1 == " + PRICED));
     }
 
+    /**
+     * How many meet a statement weighed against how many there are, and how many meet it against
+     * how many meet another, are each a relation among counts of the one container: a row is
+     * composed for the container with the relation holding, and for it not holding.
+     */
+    @Test
+    void countsOfOneContainerHeldToOneAnotherAndToHowManyItHoldsAreComposed() {
+        String length = "List.length(deals)";
+        assertEquals(List.of(), whatNothingCouldShow("2 * " + PRICED + " >= " + length));
+        assertEquals(List.of(), whatNothingCouldShow("2 * " + PRICED + " > " + length));
+        assertEquals(List.of(), whatNothingCouldShow(PRICED + " > " + UNPRICED));
+        assertEquals(List.of(), whatNothingCouldShow(PRICED + " == " + UNPRICED));
+    }
+
     /** The rules of the decision no search could settle. */
     private static List<DecisionRule> whatNothingCouldShow(String guard) {
         return DecisionRulesTheSearchLeftUnsettled.in(DEALS.replace("GUARD", guard), "probe");

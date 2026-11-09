@@ -177,7 +177,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "compose",
                     "(" + TYPE + "Ljava/util/List;L" + INPUTS + "TermPath;Ljava/util/List;"
-                            + "Ljava/util/List;Ljava/util/SequencedMap;L" + PARTITION
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/SequencedMap;L" + PARTITION
                             + "RealizationTarget$OfANumber;Ljava/util/List;Ljava/util/List;L"
                             + INPUTS + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
                             + REALIZATION,

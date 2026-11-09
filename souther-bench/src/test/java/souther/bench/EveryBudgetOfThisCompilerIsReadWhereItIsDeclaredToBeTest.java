@@ -218,7 +218,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " figure over as what is left of the sizes"),
             Map.entry("souther.compiler.partition.CardinalityComposer#amongItsValues("
                             + "Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;"
-                            + "Ljava/util/SequencedMap;Lsouther/compiler/inputs/TermPath;"
+                            + "Ljava/util/List;Ljava/util/SequencedMap;Lsouther/compiler/inputs/TermPath;"
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/TypeView;"
                             + "Lsouther/compiler/check/Shape$Sequence;Ljava/util/List;"
@@ -334,7 +334,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "says the figure the walk stopped at beside the ways it looked along, which"
                             + " the way composed as it stands says of what it wrote alike"),
             Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
-                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/check/TypeView;Ljava/util/List;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
@@ -753,6 +753,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // of them -- so what is carried out is the figure itself.
             Map.entry("souther.compiler.partition.Pullback#<clinit>()V",
                     "how many readings of one condition the reading of what it means makes"),
+            Map.entry("souther.compiler.partition.DemandReading#composedOf("
+                            + "Lsouther/compiler/meaning/Relation$Affine;ZLsouther/compiler/inputs/"
+                            + "InputReading;)Lsouther/compiler/partition/RowDemand$ForTheRun"
+                            + "$ComposedAs;",
+                    "reads a relation no container of the most elements a count is composed with"
+                            + " meets as one asked of the run with no row composed toward it, and"
+                            + " says no composer for it"),
             Map.entry("souther.compiler.partition.DemandReading#<clinit>()V",
                     "how many ways an element may meet what a quantifier asks are read one by one"),
             Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#walk("

@@ -376,7 +376,8 @@ public sealed interface Reachability {
         /** What a composer is asked of a row on the way: {@link #boundedOnTheWay}, each as the
          *  statement a row is composed toward ({@link OnTheWay.TakenIn#forComposing}). */
         List<OnTheWay.TakenIn> composing() {
-            return boundedOnTheWay.stream().map(OnTheWay.TakenIn::forComposing).toList();
+            return boundedOnTheWay.stream()
+                    .flatMap(each -> each.forComposing().stream()).toList();
         }
 
         /** What the run to the border asks of a row, as the readers of the relation there are

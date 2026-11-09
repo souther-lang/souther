@@ -105,6 +105,9 @@ final class CardinalityComposer {
      *
      * @param together   statements the elements are to meet together, each one of several ways the
      *                   elements may take — which every container composed here meets
+     * @param related    what the counts and how many the container holds are held to, each
+     *                   relation over counts among {@code counts} — which every container composed
+     *                   here meets
      * @param standingAt the element itself, each asked to stand in a set: a value the row places at
      *                   an element, which some element of the container is
      * @param totals     what the container is asked to come to, each with the numbers tried for it
@@ -118,6 +121,7 @@ final class CardinalityComposer {
                                                 List<RealizationTarget.ACount> counts,
                                                 List<RealizationTarget.ElementsMeetingTogether>
                                                         together,
+                                                List<AggregateRelation> related,
                                                 SequencedMap<RealizationTarget, AskedAt> demands,
                                                 RealizationTarget.OfANumber manyItHolds,
                                                 List<RealizationTarget.OfANumber> standingAt,
@@ -151,6 +155,15 @@ final class CardinalityComposer {
             }
             apartAt = at != null ? at : apartAt;
         }
+        List<Joint> joints = new ArrayList<>();
+        for (AggregateRelation each : related) {
+            Joint joint = Joint.of(each, counts);
+            if (joint == null) {
+                return none("nothing says how many elements of `" + container + "` meet each of `"
+                        + each.counted() + "`");
+            }
+            joints.add(joint);
+        }
         NumericSet size = null;
         if (manyItHolds != null) {
             AskedAt holds = demands.get(manyItHolds);
@@ -166,6 +179,11 @@ final class CardinalityComposer {
                     + " and across all of them, and are chosen for one of the two");
         }
         if (across.isPresent()) {
+            if (!joints.isEmpty()) {
+                return notChosen("the elements of `" + container + "` are counted across the"
+                        + " containers holding them, and how many one container holds is a"
+                        + " question about that one");
+            }
             if (!totals.isEmpty()) {
                 return notChosen("the elements of `" + container + "` are counted across the"
                         + " containers holding them, and what one container comes to is a"
@@ -187,9 +205,9 @@ final class CardinalityComposer {
             stated.add(AStatementAtARow.of(each.stated(), each.behavior(), measuring));
         }
         if (!stated.isEmpty()) {
-            return amongItsValues(asked, stated, standingAt, totals, demands, container, size,
-                    sourceType, view, holding, keptApart, apartAt, measuring, within, reading,
-                    new Standing.WhereItIsWritten(sourceType, reading));
+            return amongItsValues(asked, stated, joints, standingAt, totals, demands, container,
+                    size, sourceType, view, holding, keptApart, apartAt, measuring, within,
+                    reading, new Standing.WhereItIsWritten(sourceType, reading));
         }
         // What another container is made to hold for the elements chooses none of their values,
         // so none are chosen apart that way.
@@ -201,13 +219,13 @@ final class CardinalityComposer {
                 handed.add(ACountHandedOn.of(each.count()).orElseThrow());
                 meeting.add(ACountHandedOn.counted(demands.get(each)));
             }
-            return handingOn(asked, handed, meeting, size, view, keptApart, reading);
+            return handingOn(asked, handed, meeting, joints, size, view, keptApart, reading);
         }
         // Every element is chosen among the values it is read at whole, whether it is one number
         // or several, whether or not the different values of a place are counted, and whether or
         // not what it answers reads the container as a whole.
-        return amongItsValues(asked, List.of(), standingAt, totals, demands, container, size,
-                sourceType, view, holding, keptApart, apartAt, measuring, within, reading,
+        return amongItsValues(asked, List.of(), joints, standingAt, totals, demands, container,
+                size, sourceType, view, holding, keptApart, apartAt, measuring, within, reading,
                 new Standing.WhereItIsWritten(sourceType, reading));
     }
 
@@ -266,9 +284,9 @@ final class CardinalityComposer {
         if (!(view.shape() instanceof Shape.Sequence holding)) {
             return notChosen("`" + container + "` is no list or set");
         }
-        return amongItsValues(asked, List.of(), standingAt, List.of(), demands, container, null,
-                inner.type(), view, holding, inner.keptApart(), apartAt, measuring, within, reading,
-                new Standing.AcrossTheElementsOf(across, container, sourceType, keptApart, within,
+        return amongItsValues(asked, List.of(), List.of(), standingAt, List.of(), demands,
+                container, null, inner.type(), view, holding, inner.keptApart(), apartAt,
+                measuring, within, reading, new Standing.AcrossTheElementsOf(across, container, sourceType, keptApart, within,
                         reading));
     }
 
@@ -358,6 +376,7 @@ final class CardinalityComposer {
     private static TermRealizations.Realization handingOn(List<Asked> asked,
                                                           List<ACountHandedOn> handed,
                                                           List<OptionalInt> meeting,
+                                                          List<Joint> joints,
                                                           NumericSet size, TypeView view,
                                                           List<List<String>> keptApart,
                                                           RuleReadingContext reading) {
@@ -389,6 +408,15 @@ final class CardinalityComposer {
                 break;
             }
             if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
+                continue;
+            }
+            // Of the elements this many that meet each statement and this many in all, the
+            // relations among the counts hold.
+            int[] atThisSize = new int[meeting.size()];
+            for (int i = 0; i < atThisSize.length; i++) {
+                atThisSize[i] = meeting.get(i).getAsInt();
+            }
+            if (!Joint.allHold(joints, elements, atThisSize)) {
                 continue;
             }
             // Where some of the elements meet a statement and the rest do not, the other container
@@ -472,6 +500,7 @@ final class CardinalityComposer {
      *
      * @param counted    what the counts ask, one for each
      * @param together   statements the elements meet together, each about {@code container} alone
+     * @param joints     what the counts and how many the container holds are held to
      * @param standingAt numbers inside an element, each asked to stand in a set: a value the row
      *                   places there, which some element of the container holds
      * @param totals     what the row asks the container to come to, beside the counts
@@ -482,6 +511,7 @@ final class CardinalityComposer {
      */
     private static TermRealizations.Realization amongItsValues(List<Asked> counted,
                                                                List<AStatementAtARow> together,
+                                                               List<Joint> joints,
                                                                List<RealizationTarget.OfANumber>
                                                                        standingAt,
                                                                List<ContainerAsAWhole.ATotal>
@@ -565,7 +595,8 @@ final class CardinalityComposer {
             writtenIfAsked(List.of(), standing.read(withNumbersBeside(
                             ElementValues.holding(container, reading, sourceType, List.of()),
                             outside)),
-                    asked, container, false, together, standing, built, refused, unnamed, unheld);
+                    asked, joints, container, false, together, standing, built, refused, unnamed,
+                    unheld);
         }
         TermRealizations.Together choices = whole.isEmpty()
                 ? new TermRealizations.Together(List.of(List.of()), CompositionShortfall.NONE)
@@ -668,7 +699,8 @@ final class CardinalityComposer {
                 drawing = under::drawn;
             }
             unread.addAll(groups.unread());
-            Sharing sharing = new Sharing(groups, asked, statements, size, capacity, MOST_SHARES);
+            Sharing sharing = new Sharing(groups, asked, statements, joints, size, capacity,
+                    MOST_SHARES);
             Function<int[], List<List<ObservedValue>>> alike = alikeTo;
             boolean stopped = false;
             // From one: the container of none was looked at before any choice.
@@ -726,9 +758,9 @@ final class CardinalityComposer {
                             continue;
                         }
                         if (sized.admits(values, parts, apartByItsRules)) {
-                            writtenIfAsked(values, holdingThem.apply(values), asked, container,
-                                    sharing.holdsTogether(), together, standing, built, refused,
-                                    unnamed, unheld);
+                            writtenIfAsked(values, holdingThem.apply(values), asked, joints,
+                                    container, sharing.holdsTogether(), together, standing, built,
+                                    refused, unnamed, unheld);
                         } else {
                             turnedAway = true;
                         }
@@ -793,8 +825,8 @@ final class CardinalityComposer {
      */
     private static void writtenIfAsked(List<ObservedValue> values,
                                           BorderQuantity.Observation all,
-                                          List<Asked> asked, TermPath container,
-                                          boolean heldTogether,
+                                          List<Asked> asked, List<Joint> joints,
+                                          TermPath container, boolean heldTogether,
                                           List<AStatementAtARow> together, Standing standing,
                                           List<FixtureTemplate> built,
                                           Set<CompositionBudget> refused,
@@ -803,6 +835,12 @@ final class CardinalityComposer {
         for (Asked each : asked) {
             // A count reads the container through the row and not the values handed it.
             if (!(each.over(container, List.of(), all) instanceof AStatementAtARow.Answer.Holds)) {
+                return;
+            }
+        }
+        for (Joint each : joints) {
+            if (!(each.over(asked, container, values.size(), all)
+                    instanceof AStatementAtARow.Answer.Holds)) {
                 return;
             }
         }
@@ -875,6 +913,116 @@ final class CardinalityComposer {
      * are asked.
      */
     private record Together(AStatementAtARow.Counting counting) {}
+
+    /**
+     * What counts of a container's elements and how many it holds are held to
+     * ({@link AggregateRelation}), with each count where it stands among what is asked.
+     *
+     * @param relation what the counts and the size are held to
+     * @param at       where each of the relation's counts stands among what is asked, in the order
+     *                 of {@link AggregateRelation#counts}
+     */
+    private record Joint(AggregateRelation relation, List<Integer> at) {
+
+        /** This over {@code counts}, the counts asked of the container, or null where one the
+         *  relation weighs is not among them. */
+        static Joint of(AggregateRelation relation,
+                        List<RealizationTarget.ACount> counts) {
+            List<Integer> at = new ArrayList<>();
+            for (Quantity.HowManyMeet each : relation.counts().keySet()) {
+                int found = -1;
+                for (int i = 0; i < counts.size() && found < 0; i++) {
+                    CountedElements count = counts.get(i).count();
+                    if (count.identity().equals(
+                            CountedElements.identityOf(count.behavior(), each))) {
+                        found = i;
+                    }
+                }
+                if (found < 0) {
+                    return null;
+                }
+                at.add(found);
+            }
+            return new Joint(relation, List.copyOf(at));
+        }
+
+        /** Whether every one of {@code joints} holds of a container of {@code size} elements of
+         *  which {@code meeting} meet each thing asked. */
+        static boolean allHold(List<Joint> joints, int size, int[] meeting) {
+            for (Joint each : joints) {
+                if (!each.holdsAt(size, meeting)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** Whether the relation holds where {@code size} elements are shared out so that
+         *  {@code meeting} meet each thing asked. */
+        boolean holdsAt(int size, int[] meeting) {
+            return relation.holdsAt(size, ofTheRelation(meeting))
+                    instanceof ExactAnswer.Held<Boolean>(Boolean holds) && holds;
+        }
+
+        /** Whether the relation may still hold where {@code size} elements are shared out and
+         *  {@code least} to {@code most} of them meet each thing asked. */
+        boolean mayHoldWith(int size, int[] least, int[] most) {
+            return relation.mayHoldWith(size, ofTheRelation(least), ofTheRelation(most));
+        }
+
+        /**
+         * Whether the relation holds of {@code container} as {@code row} holds it, of {@code size}
+         * elements: for every count each is read at and every count it is somewhere between — where
+         * one could not be told, not told.
+         */
+        AStatementAtARow.Answer over(List<Asked> asked, TermPath container, int size,
+                                     BorderQuantity.Observation row) {
+            List<AStatementAtARow.HowManyAtARow> counted = new ArrayList<>();
+            for (int each : at) {
+                AStatementAtARow.HowManyAtARow howMany = asked.get(each).among(container, row);
+                if (howMany == null) {
+                    return new AStatementAtARow.Answer.CouldNotTell(
+                            Set.of(ReadingGap.COULD_NOT_WALK));
+                }
+                counted.add(howMany);
+            }
+            return whether(counted, 0, new int[at.size()], size);
+        }
+
+        private AStatementAtARow.Answer whether(List<AStatementAtARow.HowManyAtARow> counted,
+                                                int from, int[] meeting, int size) {
+            if (from == meeting.length) {
+                return switch (relation.holdsAt(size, meeting)) {
+                    case ExactAnswer.Held<Boolean>(Boolean holds) -> holds
+                            ? AStatementAtARow.Answer.HOLDS : AStatementAtARow.Answer.FAILS;
+                    case ExactAnswer.Unheld<Boolean> unheld -> new AStatementAtARow.Answer
+                            .CouldNotTell(Set.of(ReadingGap.of(unheld.why())));
+                };
+            }
+            AStatementAtARow.HowManyAtARow one = counted.get(from);
+            AStatementAtARow.Answer every = null;
+            for (int n = one.meet(); n <= one.meet() + one.unread(); n++) {
+                meeting[from] = n;
+                AStatementAtARow.Answer here = whether(counted, from + 1, meeting, size);
+                if (here instanceof AStatementAtARow.Answer.CouldNotTell) {
+                    return here;
+                }
+                if (every != null && !every.equals(here)) {
+                    return new AStatementAtARow.Answer.CouldNotTell(one.why());
+                }
+                every = here;
+            }
+            return every;
+        }
+
+        private int[] ofTheRelation(int[] meeting) {
+            int[] out = new int[at.size()];
+            for (int i = 0; i < out.length; i++) {
+                out[i] = meeting[at.get(i)];
+            }
+            return out;
+        }
+    }
 
     /**
      * Whether every one of {@code together} holds of the container {@code row} holds, read with
@@ -3045,7 +3193,15 @@ final class CardinalityComposer {
         private final Groups<?> groups;
         private final List<Asked> asked;
         private final List<Together> together;
+        private final List<Joint> joints;
         private final NumericSet size;
+
+        /** How many elements the sharings being looked at share out. */
+        private int elements;
+
+        /** What each thing asked is met by at most, filled in where a sharing is asked whether it
+         *  can still come to what is asked. */
+        private final int[] atMost;
         /** How many of a group's values one sharing may draw, by the group. */
         private final IntUnaryOperator capacity;
 
@@ -3080,11 +3236,13 @@ final class CardinalityComposer {
          * @param capacity how many of a group's values one sharing may draw, by the group
          * @param most     how many sharings this looks at, over every size it is asked for
          */
-        Sharing(Groups<?> groups, List<Asked> asked, List<Together> together, NumericSet size,
-                IntUnaryOperator capacity, int most) {
+        Sharing(Groups<?> groups, List<Asked> asked, List<Together> together, List<Joint> joints,
+                NumericSet size, IntUnaryOperator capacity, int most) {
             this.groups = groups;
             this.asked = asked;
             this.together = together;
+            this.joints = joints;
+            this.atMost = new int[asked.size()];
             this.size = size;
             this.capacity = capacity;
             this.left = most;
@@ -3111,6 +3269,7 @@ final class CardinalityComposer {
             if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
                 return true;
             }
+            this.elements = elements;
             return share(new int[groups.counts().size()], new int[asked.size()], 0, elements,
                     take);
         }
@@ -3196,6 +3355,16 @@ final class CardinalityComposer {
             for (Together each : together) {
                 if (each.counting().at(meeting, more) == AStatementAtARow.Counting.FAILS) {
                     return false;
+                }
+            }
+            if (!joints.isEmpty()) {
+                for (int i = 0; i < atMost.length; i++) {
+                    atMost[i] = meeting[i] + more[i];
+                }
+                for (Joint each : joints) {
+                    if (!each.mayHoldWith(elements, meeting, atMost)) {
+                        return false;
+                    }
                 }
             }
             return true;

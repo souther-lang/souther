@@ -141,14 +141,17 @@ public sealed interface OnTheWay {
         }
 
         /**
-         * What a composer is asked of a row for this: the statement it writes a row toward where
-         * the demand has one beside the run's ({@link RowDemand.ForTheRun#composedAs}), and this
-         * as it is otherwise.
+         * What a composer is asked of a row for this: each count it writes a row toward where the
+         * demand has some beside the run's ({@link RowDemand.ForTheRun#composedAs}), and this as it
+         * is otherwise.
          */
-        public TakenIn forComposing() {
-            return demand instanceof RowDemand.ForTheRun(var _, var _, var _, var _,
-                    Optional<RowDemand.SoMany> composedAs) && composedAs.isPresent()
-                    ? new TakenIn(anchor, composedAs.get(), named) : this;
+        public List<TakenIn> forComposing() {
+            if (demand instanceof RowDemand.ForTheRun(var _, var _, var _, var _,
+                    Optional<RowDemand.ForTheRun.ComposedAs> composedAs) && composedAs.isPresent()) {
+                return composedAs.get().counts().stream()
+                        .map(count -> new TakenIn(anchor, count, named)).toList();
+            }
+            return List.of(this);
         }
 
         /** The rest compared, the hash first: two entries that differ almost always differ in

@@ -7532,6 +7532,18 @@ public final class Generator {
                         new Level.OfTheQuantity(ExactRatio.ONE))));
             }
         }
+        // The counts of one container a relation holds to one another and to how many it holds are
+        // composed for as counts, and the container is composed with the relation holding.
+        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var _, var _, var _,
+                    Optional<RowDemand.ForTheRun.ComposedAs> composedAs) && composedAs.isPresent()) {
+                RealizationTarget.CountsRelated related =
+                        new RealizationTarget.CountsRelated(composedAs.get().relation());
+                out.put(related, Count.of(1));
+                counted.put(related, NumbersAskedFor.of(LevelRegion.point(
+                        new Level.OfTheQuantity(ExactRatio.ONE))));
+            }
+        }
         for (OnTheWay.TakenIn cut : reaching.composing()) {
             if (countedOf(cut.demand()).isEmpty()) {
                 continue;
@@ -9838,6 +9850,7 @@ public final class Generator {
         for (RealizationTarget each : group.keySet()) {
             if (each instanceof RealizationTarget.ACount
                     || each instanceof RealizationTarget.ElementsMeetingTogether
+                    || each instanceof RealizationTarget.CountsRelated
                     || each.keyAskedFor() != null) {
                 Map<NumericTerm, Place> fixed = new LinkedHashMap<>();
                 standing.forEach((target, place) -> {
@@ -10035,6 +10048,7 @@ public final class Generator {
             TermPath container = switch (each) {
                 case RealizationTarget.ACount count -> count.count().container();
                 case RealizationTarget.ElementsMeetingTogether together -> together.container();
+                case RealizationTarget.CountsRelated related -> related.relation().container();
                 case RealizationTarget.OfANumber number ->
                         NumbersOfTheWhole.containerOf(number.term());
             };
@@ -15155,7 +15169,8 @@ public final class Generator {
                      NumericTerm.ProductOf _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.
-            case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> null;
+            case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _,
+                 RealizationTarget.CountsRelated _ -> null;
         };
         return new Edge(made, settled, writtenAt);
     }

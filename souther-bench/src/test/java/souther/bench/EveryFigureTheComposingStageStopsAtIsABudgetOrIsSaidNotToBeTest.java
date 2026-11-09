@@ -72,6 +72,12 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                             + ".MOST_DATES_A_WAY_IS_ASKED_OF",
                     "how many dates a way may state the parts of for them to be looked through"),
 
+            // A relation weighing more counts than this is read and asked of the run, with no row
+            // composed toward it; no search stops at it.
+            Map.entry("souther.compiler.partition.AggregateRelation.MOST_COUNTS",
+                    "how many counts of one container a relation may weigh for a container to be"
+                            + " composed for them"),
+
             // A distance no assignment reaches, which a position with no class to move to is at.
             Map.entry("souther.compiler.partition.NearestAssignments.UNREACHABLE",
                     "no distance, which is what a position with no class to move to changes"
