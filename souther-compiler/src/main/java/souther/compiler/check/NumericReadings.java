@@ -189,11 +189,14 @@ final class NumericReadings {
                      BoundOperationFact.ResultIsNoSmallerThan _,
                      BoundOperationFact.PutsAValueIn _,
                      BoundOperationFact.AssemblesPieces _,
+                     BoundOperationFact.KeepsTheElementsWhereItHolds _,
                      BoundOperationFact.HoldsTheElementsByIndex _,
                      BoundOperationFact.ReadsItsContainer _,
                      BoundOperationFact.IsStatedOverAProjection _,
                      BoundOperationFact.StatesItsPredicateOfEveryElement _,
                      BoundOperationFact.MeansTheSameAsASizeOfNought _,
+                     BoundOperationFact.AgreesWithAnotherWhereItIsGivenText _,
+                     BoundOperationFact.IsTheOperator _,
                      BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> { }
             }
         }

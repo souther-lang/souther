@@ -1024,12 +1024,15 @@ final class MeaningAssumptions {
      */
     private FactSubject howManyAre(TermPath container, ValueIdentity identity, DecisionSubject one,
                                    DecisionSubject other) {
+        Type type = places.typeAt().apply(container);
+        ValueName size = type == null ? null : NumericMeasures.takenOf(type, terms.newtypeInners());
         for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
             DecisionSubject value = heldAs(container, of, one) ? other
                     : heldAs(container, of, other) ? one : null;
             FactSubject count = value instanceof DecisionSubject.AnInput(TermPath at,
                     ValueIdentity named)
-                    ? terms.howManyAreAtPlace(placeOf(container, identity), placeOf(at, named), of)
+                    ? terms.howManyAreAtPlace(placeOf(container, identity), placeOf(at, named), of,
+                            size)
                     : null;
             if (count != null) {
                 return count;

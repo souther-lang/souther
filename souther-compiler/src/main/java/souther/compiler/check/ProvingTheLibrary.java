@@ -173,6 +173,12 @@ final class ProvingTheLibrary implements LibraryProofs {
                     elements.assemblesPieces(operation, assembles.source().position(),
                             assembles.closure().position(), assembles.piece())
                             instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.IsTheOperator is -> prover.isTheOperator(operation,
+                    is.operator()) instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.KeepsTheElementsWhereItHolds keeps ->
+                    elements.keepsWhereItHolds(operation, keeps.source().position(),
+                            keeps.closure().position())
+                            instanceof LibraryProver.Outcome.Proved;
             case BoundOperationFact.HoldsTheElementsByIndex byIndex ->
                     elements.byAnIndex(operation, byIndex.count().position(),
                             byIndex.list().position(), byIndex.kept())
@@ -200,6 +206,7 @@ final class ProvingTheLibrary implements LibraryProofs {
             // A kernel's, which an operation with a body is refused where the facts are bound, or
             // a statement no body here is proved to make.
             case BoundOperationFact.HasALaw _ -> false;
+            case BoundOperationFact.AgreesWithAnotherWhereItIsGivenText _ -> false;
             case BoundOperationFact.HoldsThePiecesOf _ -> false;
             case BoundOperationFact.ListsTheCodePointsOf _ -> false;
             case BoundOperationFact.EveryElementOfItsAnswerIs _ -> false;

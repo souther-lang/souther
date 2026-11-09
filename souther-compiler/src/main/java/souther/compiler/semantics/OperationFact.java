@@ -387,6 +387,23 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation's answer holds the elements of {@code source} where its closure holds of them,
+     * and no other: of each element of the source, it is in the answer where the closure answers
+     * true of it and is not where it answers false.
+     *
+     * <p>Said of the elements as a collection and not of their order, so a list kept in the order
+     * of its source and a set or a map kept by what it holds both state it. What a reader asks of
+     * the elements that were kept — how many of them meet another statement, whether any does — is
+     * asked of the source's elements where both statements hold.
+     */
+    record KeepsTheElementsWhereItHolds(ArgumentRef source) implements OperationFact {
+
+        public KeepsTheElementsWhereItHolds {
+            Objects.requireNonNull(source, "what is kept is kept of the elements of something");
+        }
+    }
+
+    /**
      * What the operation answers holds a value exactly where {@code option} does, and the value it
      * holds is what the closure answers on the one {@code option} holds: {@code Some(f(x))} of
      * {@code Some(x)}, and nothing of nothing.
@@ -809,6 +826,44 @@ public sealed interface OperationFact {
 
         public MeansTheSameAsASizeOfNought {
             Objects.requireNonNull(size, "this one names the size it means");
+        }
+    }
+
+    /**
+     * The operation is what {@code operator} comes to over two values of the type it takes, and
+     * answers a value of that type: {@code a ++ b} over lists is {@code List.append(a, b)}, and
+     * over strings {@code String.append(a, b)}.
+     *
+     * <p>Said of the operation so that a reader meeting the operator asks which operation it is
+     * for the type it is written over, and a reader meeting the operation asks whether it is the
+     * operator, rather than each holding the pair as two names of its own.
+     */
+    record IsTheOperator(souther.compiler.types.BinOp operator) implements OperationFact {
+
+        public IsTheOperator {
+            Objects.requireNonNull(operator, "this one names the operator it is");
+        }
+    }
+
+    /**
+     * Where the operation is handed the string {@code text} at {@code position}, it answers what
+     * {@code other} answers on the arguments that remain, in their order.
+     *
+     * <p>Not what the operation does but what a call of it says: {@code String.join("", xs)} and
+     * {@code String.concat(xs)} are one statement, so what is said of either is said of both.
+     * Without it a reader that knows what one says leaves the other unrelated to it, which is an
+     * accident of which one the author reached for.
+     */
+    record AgreesWithAnotherWhereItIsGivenText(souther.compiler.types.ValueName other,
+                                               int position, String text)
+            implements OperationFact {
+
+        public AgreesWithAnotherWhereItIsGivenText {
+            Objects.requireNonNull(other, "this one names the operation it agrees with");
+            Objects.requireNonNull(text, "this one names the string it is given");
+            if (position < 0) {
+                throw new IllegalArgumentException("an argument is at a place from nought");
+            }
         }
     }
 

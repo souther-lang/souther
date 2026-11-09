@@ -1,0 +1,152 @@
+package souther.compiler.numeric;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+/**
+ * Two equalities over several positions together say what neither says alone: {@code x = a + b}
+ * beside {@code y = b + a} is {@code x = y}. A goal is written over the positions the equalities
+ * leave free, so a question that takes one rule as its premise is handed the one it needs.
+ */
+class AGoalIsWrittenOverThePositionsTheEqualitiesLeaveFreeTest {
+
+    private static ExactRatio num(long whole) {
+        return ExactRatio.of(whole);
+    }
+
+    private static Map<String, ExactRatio> weighing(Object... pairs) {
+        Map<String, ExactRatio> out = new LinkedHashMap<>();
+        for (int i = 0; i < pairs.length; i += 2) {
+            out.put((String) pairs[i], num((Integer) pairs[i + 1]));
+        }
+        return out;
+    }
+
+    /** {@code Σ c·p = at}. */
+    private static AffineConstraint.Equality<String> equality(Map<String, ExactRatio> coefs, long at) {
+        return new AffineConstraint.Equality<>(new CanonicalForm<>(coefs), num(at));
+    }
+
+    private static final AffineConstraint.Equality<String> X_IS_A_AND_B =
+            equality(weighing("x", 1, "a", -1, "b", -1), 0);
+
+    private static final AffineConstraint.Equality<String> Y_IS_B_AND_A =
+            equality(weighing("y", 1, "b", -1, "a", -1), 0);
+
+    private static ReducedRules.Goal<String> goal(Map<String, ExactRatio> coefs, long constant) {
+        return new ReducedRules.Goal<>(coefs, num(constant));
+    }
+
+    private static ReducedRules.Goal<String> through(
+            List<AffineConstraint.Equality<String>> equalities, ReducedRules.Goal<String> goal) {
+        List<AffineConstraint<String>> rules = new ArrayList<>(equalities);
+        ReducedRules<String> reduced = ReducedRules.of(rules, CanonicalOrder.asTheyAreSpelled());
+        return reduced == null ? null : reduced.put(goal);
+    }
+
+    @Test
+    void twoEqualitiesTogetherSayWhatNeitherSaysAlone() {
+        ReducedRules.Goal<String> freed = through(
+                List.of(X_IS_A_AND_B, Y_IS_B_AND_A), goal(weighing("x", 1, "y", -1), 0));
+
+        assertNotNull(freed);
+        assertEquals(Map.of(), freed.coefs());
+        assertEquals(num(0), freed.constant());
+    }
+
+    @Test
+    void theOrderTheyAreSaidInDoesNotMatter() {
+        ReducedRules.Goal<String> one = through(
+                List.of(X_IS_A_AND_B, Y_IS_B_AND_A), goal(weighing("x", 1, "y", -1), 0));
+        ReducedRules.Goal<String> other = through(
+                List.of(Y_IS_B_AND_A, X_IS_A_AND_B), goal(weighing("x", 1, "y", -1), 0));
+
+        assertEquals(one, other);
+    }
+
+    @Test
+    void theWritingIsTheSameWhicheverOrderTheEqualitiesAreSaidIn() {
+        ReducedRules.Goal<String> goal = goal(weighing("x", 1, "c", 2), 1);
+        AffineConstraint.Equality<String> third = equality(weighing("c", 1, "a", -1), 4);
+
+        assertEquals(through(List.of(X_IS_A_AND_B, Y_IS_B_AND_A, third), goal),
+                through(List.of(third, Y_IS_B_AND_A, X_IS_A_AND_B), goal));
+    }
+
+    @Test
+    void anEqualityNoOtherIsSaidWithLeavesTheGoalSomethingToProve() {
+        ReducedRules.Goal<String> freed = through(
+                List.of(X_IS_A_AND_B), goal(weighing("x", 1, "y", -1), 0));
+
+        assertEquals(weighing("a", 1, "b", 1, "y", -1).keySet(), freed.coefs().keySet());
+    }
+
+    @Test
+    void theConstantsAreCarriedAlong() {
+        ReducedRules.Goal<String> freed = through(
+                List.of(equality(weighing("x", 1, "a", -1, "b", -1), 2),
+                        equality(weighing("y", 1, "a", -1, "b", -1), 5)),
+                goal(weighing("y", 1, "x", -1), -3));
+
+        assertEquals(Map.of(), freed.coefs());
+        assertEquals(num(0), freed.constant());
+    }
+
+    @Test
+    void equalitiesThatAreOnlyDifferencesAreLeftToTheDomainThatHoldsThemExactly() {
+        assertNull(through(
+                List.of(equality(weighing("x", 1, "a", -1), 2), equality(weighing("y", 1, "a", -1), 5)),
+                goal(weighing("y", 1, "x", -1), -3)));
+    }
+
+    @Test
+    void aGoalNoEqualityWeighsIsLeftAsItWas() {
+        assertEquals(goal(weighing("c", 1, "d", -1), 0),
+                through(List.of(X_IS_A_AND_B), goal(weighing("c", 1, "d", -1), 0)));
+        assertNull(through(List.of(), goal(weighing("x", 1), 0)), "nothing to leave free");
+    }
+
+    @Test
+    void anEqualityJoinedToTheGoalThroughAnotherIsSolvedAndOneNothingJoinsIsNot() {
+        AffineConstraint.Equality<String> y_is_c = equality(weighing("y", 1, "c", -1), 0);
+        AffineConstraint.Equality<String> c_is_a_and_b = equality(weighing("c", 1, "a", -1, "b", -1), 0);
+        AffineConstraint.Equality<String> apart = equality(weighing("e", 1, "f", -1), 7);
+
+        ReducedRules.Goal<String> freed = through(
+                List.of(apart, X_IS_A_AND_B, y_is_c, c_is_a_and_b),
+                goal(weighing("x", 1, "y", -1), 0));
+
+        assertEquals(Map.of(), freed.coefs());
+        assertEquals(num(0), freed.constant());
+        assertNull(through(List.of(apart), goal(weighing("x", 1, "y", -1), 0)));
+    }
+
+    @Test
+    void twoSumsOfTwoPositionsAreSolvedTogether() {
+        // a + b = 10 and a + c = 10 say b = c, and neither is a difference of two positions.
+        ReducedRules.Goal<String> freed = through(
+                List.of(equality(weighing("a", 1, "b", 1), 10), equality(weighing("a", 1, "c", 1), 10)),
+                goal(weighing("b", 1, "c", -1), 0));
+
+        assertNotNull(freed);
+        assertEquals(Map.of(), freed.coefs());
+        assertEquals(num(0), freed.constant());
+    }
+
+    @Test
+    void anEqualityGivenTwiceIsGivenOnce() {
+        ReducedRules.Goal<String> freed = through(
+                List.of(X_IS_A_AND_B, Y_IS_B_AND_A, X_IS_A_AND_B),
+                goal(weighing("x", 1, "y", -1), 0));
+
+        assertEquals(Map.of(), freed.coefs());
+    }
+}

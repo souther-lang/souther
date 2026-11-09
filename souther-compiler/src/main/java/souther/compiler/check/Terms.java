@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.Accumulation;
+import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
@@ -18,6 +20,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -28,18 +31,23 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.function.BinaryOperator;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -355,9 +363,11 @@ final class Terms {
      */
     List<NumericConstraint> carriedBy(java.util.Collection<FactSubject> from) {
         List<NumericConstraint> out = new ArrayList<>();
-        for (FactSubject atom : reachedFrom(from)) {
+        Set<FactSubject> reached = reachedFrom(from);
+        for (FactSubject atom : reached) {
             out.addAll(knowledgeOf(atom).intrinsic());
         }
+        out.addAll(relationsAmongCounts(reached));
         return out;
     }
 
@@ -2290,6 +2300,44 @@ final class Terms {
         }
     }
 
+    /** What a walk answers, the seed it answers where it walks none, and how many it walked over. */
+    record WalkOver(FactSubject answer, LinearForm<FactSubject> seed, FactSubject walked) {}
+
+    /**
+     * What {@code call} walks over where it is a reduction or an accumulation, or null where it is
+     * neither or this names none of the three.
+     *
+     * <p>Asked of the expression and not kept of the atom: a walk is one value however many places
+     * walk equal values, and how many the container it walked holds is the place's.
+     */
+    WalkOver walkOver(Core call, Denotations at) {
+        if (!(asOperator(call) instanceof Core.PreservedCall operation)) {
+            return null;
+        }
+        Reductions.Reducing walk = Reductions.reducing(operation, at);
+        Accumulations.Accumulating accumulating = walk == null
+                ? Accumulations.accumulating(operation) : null;
+        Core container = walk != null ? walk.container()
+                : accumulating == null ? null : accumulating.container();
+        LinearForm<FactSubject> seed = walk != null ? affineOf(walk.seed(), at)
+                : accumulating == null ? null : startedFrom(accumulating.what().identity());
+        FactSubject answer = container == null || seed == null ? null : atomOf(call, at);
+        FactSubject walked = answer == null ? null : sizeOfWhatItHolds(container, at);
+        return walked == null ? null : new WalkOver(answer, seed, walked);
+    }
+
+    /** The values {@code side} is a sum of, taken through sums and differences: what a form over
+     *  it is made of before any of them is more than one value. */
+    static void additiveLeaves(Core side, List<Core> out) {
+        if (Core.withoutStanding(side) instanceof Core.Binary joined
+                && (joined.op() == BinOp.ADD || joined.op() == BinOp.SUB)) {
+            additiveLeaves(joined.left(), out);
+            additiveLeaves(joined.right(), out);
+        } else {
+            out.add(side);
+        }
+    }
+
     /** The atom of the size {@code e} takes of a container this can name, or null where it takes
      * none or names none. */
     FactSubject sizeAtomOf(Core e, Denotations at) {
@@ -2351,15 +2399,18 @@ final class Terms {
      */
     FactSubject howManyAreAtomFor(Core container, Core value, AddsWhatItDoesNotHold.Of of,
                                   Denotations at) {
-        return howManyAre(bodyKey(container, at), bodyKey(value, at), of);
+        return howManyAre(bodyKey(container, at), bodyKey(value, at), of,
+                sizeOfWhatItHolds(container, at));
     }
 
     /** The same, of a container and a value a proposition read off another tree says it of, named
-     *  the way {@link #howManyAreAtomFor} names them, so the two are one number. */
+     *  the way {@link #howManyAreAtomFor} names them, so the two are one number; {@code size} is
+     *  what the container's type is counted by, or null where nothing counts it. */
     FactSubject howManyAreAtPlace(FactSubject container, FactSubject value,
-                                  AddsWhatItDoesNotHold.Of of) {
+                                  AddsWhatItDoesNotHold.Of of, ValueName size) {
         return container == null || value == null ? null
-                : howManyAre(container.identity(), value.identity(), of);
+                : howManyAre(container.identity(), value.identity(), of,
+                        size == null ? null : sizeAtPlace(size, container));
     }
 
     /**
@@ -2379,11 +2430,380 @@ final class Terms {
         return howManyAreIn(new Given(counted, at), new Given(holder, at), of);
     }
 
+    /**
+     * The atom how many elements of {@code container} come out on the holding side of
+     * {@code aspect} is — each element itself where {@code closure} is null, and otherwise what
+     * that closure answers of each — named and with what it carries filed, or null where either is
+     * no value this names.
+     *
+     * <p>A count of the container's elements, so never below nought and never above how many it
+     * holds. Where the closure answers the denial of another's, it is how many there are less how
+     * many the other holds of, so that asking of either is asking of one number.
+     */
+    LinearForm<FactSubject> howManyMeetFor(Core container, Core closure, AnswerAspect aspect,
+                                           Denotations at) {
+        Core source = container;
+        Term counted = bodyKey(source, at);
+        Term by = closure == null ? null : bodyKey(closure, at);
+        if (counted == null || (closure != null && by == null)) {
+            return null;
+        }
+        // The elements that hold something are those whose size is at least one: a statement
+        // about how many they hold, counted as any other.
+        Term holding = aspect == AnswerAspect.EMPTINESS ? holdingSomething(container, closure, by, at)
+                : null;
+        AnswerAspect asked = holding == null ? aspect : AnswerAspect.TRUTH;
+        by = holding == null ? by : holding;
+        // What a statement holds of among the elements a filter kept is what it and the filter's
+        // statement hold of together among the elements the filter was handed.
+        for (DischargeRules.KeptWhereItHolds kept = by == null || asked != AnswerAspect.TRUTH ? null
+                : keptBy(source); kept != null; kept = keptBy(source)) {
+            Term both = interned.closureAnsweringBoth(bodyKey(kept.closure(), at), by);
+            Term handed = bodyKey(kept.source(), at);
+            if (both == null || handed == null) {
+                break;
+            }
+            by = both;
+            counted = handed;
+            source = kept.source();
+        }
+        // Of a statement over whole numbers, the count of the set it holds of or of the numbers it
+        // leaves, whichever the order puts first: the count of the other is how many there are
+        // less this one. Of any other statement, the one that denies another is counted as that.
+        // A statement and its denial are counted by the one the order of terms puts first, and
+        // the count of the other is how many there are less that one.
+        Term counting = by;
+        boolean denies = false;
+        Term opposite = by == null || asked != AnswerAspect.TRUTH ? null
+                : interned.normalClosure(interned.closureDenying(by));
+        if (opposite != null) {
+            counting = interned.normalClosure(by);
+            denies = Term.inOneOrder(opposite, counting) < 0;
+            counting = denies ? opposite : counting;
+        }
+        FactSubject atom = named(interned.howManyMeet(counted, counting, asked), Carrier.WHOLE);
+        if (atom == null) {
+            return null;
+        }
+        FactSubject all = sizeOfWhatItHolds(source, at);
+        if (firstFiledFrom(atom, readOff(container, closure, at))) {
+            carrying(atom, amongTheElements(atom, source, at));
+        }
+        Term.StatementOverWholeNumbers statement = counting == null ? null
+                : counting.statementOverWholeNumbers();
+        if (statement != null && asked == AnswerAspect.TRUTH) {
+            wholeNumberCounts.putIfAbsent(atom, new CountOfWholeNumbers(counted,
+                    statement.subject(), statement.runs(), all));
+        }
+        if (!denies) {
+            return LinearForm.atom(atom);
+        }
+        return all == null ? null : LinearForm.atom(all).minus(LinearForm.atom(atom)).orNull();
+    }
+
+    /**
+     * The closure that answers true of what holds at least one, where {@code closure} answers a
+     * container (or, where it is null, the elements are) of a type something counts: its size is
+     * not below one. Null where nothing counts what is answered.
+     */
+    private Term holdingSomething(Core container, Core closure, Term by, Denotations at) {
+        Term size = sizeOfEach(container, closure, by, at);
+        WholeNumberRuns atLeastOne = WholeNumberRuns.standing(Rel.GE, ExactRatio.ONE);
+        return size == null || atLeastOne == null ? null
+                : interned.closureAnswering(size, atLeastOne);
+    }
+
+    /** How many each element holds — or each answer of {@code closure}, where it has one — as a
+     *  term of the closure's parameter, or null where nothing counts what is held. */
+    private Term sizeOfEach(Core container, Core closure, Term by, Denotations at) {
+        Core.Block block = closure == null ? null : blockOf(closure, at);
+        Type answered = closure == null
+                ? Type.elementOf(TypeOps.base(Core.withoutStanding(container).type(),
+                        newtypeInners()))
+                : block == null ? null : block.body().type();
+        ValueName measure = answered == null ? null
+                : NumericMeasures.takenOf(answered, newtypeInners());
+        return measure == null ? null : interned.called(measure,
+                List.of(closure == null ? interned.bound(0, 0) : by.parts().getFirst()));
+    }
+
+    /** What {@code container} keeps of what it was handed and by what, where it is the answer of
+     *  an operation declared to keep the elements a closure holds of — and null where it is not. */
+    private static DischargeRules.KeptWhereItHolds keptBy(Core container) {
+        return Core.withoutStanding(container) instanceof Core.PreservedCall call
+                ? DischargeRules.keptElements(call) : null;
+    }
+
+    /** What a count of the elements that fall in a set of whole numbers is a count of: the
+     *  container as named, the set, and how many the container holds. */
+    private record CountOfWholeNumbers(Term container, Term subject, WholeNumberRuns runs,
+                                       FactSubject all) {}
+
+    /** The counts named so far that are of a set of whole numbers, by the atom that counts. */
+    private final Map<FactSubject, CountOfWholeNumbers> wholeNumberCounts = new HashMap<>();
+
+    /** What a sum of how many each element holds is a sum of: the container as named, and how
+     *  many each element holds as a term of the closure's parameter. */
+    private record SumOfWhatEachHolds(Term container, Term held) {}
+
+    /** The sums named so far of how many each element holds, by the atom. */
+    private final Map<FactSubject, SumOfWhatEachHolds> sumsOfWhatEachHolds = new HashMap<>();
+
+    /**
+     * How the counts among {@code atoms} of the elements of one container that fall in sets of
+     * whole numbers stand to each other: no more than the count of a set it is inside, no more
+     * than how many there are together with the count of a set it shares nothing with, and no
+     * fewer than how many there are together with the count of a set that with it is every number.
+     *
+     * <p>Worked out of the atoms a question reaches and not filed against either of two counts,
+     * for the reason what an atom carries is the same whenever it is asked: which other counts
+     * have been named by the time one is, is the order the program was read in.
+     */
+    List<NumericConstraint> relationsAmongCounts(Collection<FactSubject> atoms) {
+        Map<Map.Entry<Term, Term>, List<FactSubject>> counting = new LinkedHashMap<>();
+        for (FactSubject atom : atoms) {
+            CountOfWholeNumbers counted = wholeNumberCounts.get(atom);
+            if (counted != null) {
+                counting.computeIfAbsent(Map.entry(counted.container(), counted.subject()),
+                        key -> new ArrayList<>()).add(atom);
+            }
+        }
+        List<NumericConstraint> out = new ArrayList<>();
+        if (counting.isEmpty()) {
+            return out;
+        }
+        for (List<FactSubject> counts : counting.values()) {
+            for (int i = 0; i < counts.size(); i++) {
+                for (int j = i + 1; j < counts.size(); j++) {
+                    relationBetween(counts.get(i), counts.get(j), out);
+                }
+            }
+        }
+        for (FactSubject sum : atoms) {
+            SumOfWhatEachHolds of = sumsOfWhatEachHolds.get(sum);
+            if (of != null) {
+                for (FactSubject count : counting.getOrDefault(
+                        Map.entry(of.container(), of.held()), List.of())) {
+                    sumNoLessThan(sum, count, out);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * That a sum of how many each element holds is no less than the least that can be held, for
+     * as many as hold at least that, both of the set a count is of and of the numbers it leaves:
+     * the elements that hold at least three hold three each at the least, so the sum is no
+     * less than three for each.
+     */
+    private void sumNoLessThan(FactSubject sum, FactSubject count, List<NumericConstraint> out) {
+        SumOfWhatEachHolds of = sumsOfWhatEachHolds.get(sum);
+        CountOfWholeNumbers counted = wholeNumberCounts.get(count);
+        if (!counted.container().equals(of.container()) || !counted.subject().equals(of.held())) {
+            return;
+        }
+        for (boolean leave : new boolean[] {false, true}) {
+            WholeNumberRuns held = leave ? counted.runs().others() : counted.runs();
+            BigInteger least = held.runs().isEmpty() ? null : held.runs().getFirst().from();
+            LinearForm<FactSubject> many = leave
+                    ? (counted.all() == null ? null
+                            : LinearForm.atom(counted.all()).minus(LinearForm.atom(count)).orNull())
+                    : LinearForm.atom(count);
+            LinearForm<FactSubject> atLeast = least == null || least.signum() < 1
+                    || least.bitLength() > Long.SIZE - 1 || many == null ? null
+                    : many.times(ExactRatio.of(least.longValue())).orNull();
+            LinearForm<FactSubject> over = atLeast == null ? null
+                    : LinearForm.atom(sum).minus(atLeast).orNull();
+            if (over != null) {
+                out.add(new NumericConstraint(over, Rel.GE));
+            }
+        }
+    }
+
+    private void relationBetween(FactSubject one, FactSubject other,
+                                 List<NumericConstraint> out) {
+        CountOfWholeNumbers here = wholeNumberCounts.get(one);
+        CountOfWholeNumbers there = wholeNumberCounts.get(other);
+        if (!here.container().equals(there.container()) || !here.subject().equals(there.subject())) {
+            return;
+        }
+        if (here.runs().and(there.runs().others()).isNone()) {
+            out.add(new NumericConstraint(LinearForm.difference(one, other), Rel.LE));
+        }
+        if (there.runs().and(here.runs().others()).isNone()) {
+            out.add(new NumericConstraint(LinearForm.difference(other, one), Rel.LE));
+        }
+        LinearForm<FactSubject> both = LinearForm.atom(one).plus(LinearForm.atom(other)).orNull();
+        LinearForm<FactSubject> together = here.all() == null || both == null ? null
+                : both.minus(LinearForm.atom(here.all())).orNull();
+        if (together != null && here.runs().and(there.runs()).isNone()) {
+            out.add(new NumericConstraint(together, Rel.LE));
+        }
+        if (together != null && here.runs().or(there.runs()).isEvery()) {
+            out.add(new NumericConstraint(together, Rel.GE));
+        }
+    }
+
+    /**
+     * The atom how many different values the elements of {@code container} come to is — the
+     * elements or their keys as {@code of} says where {@code closure} is null, and otherwise what
+     * that closure answers of each — named and with what it carries filed, or null where either is
+     * no value this names.
+     *
+     * <p>Never below nought and never above how many the container holds, and at least one where
+     * it holds something: one element is one value.
+     */
+    FactSubject howManyDifferentAtomFor(Core container, Core closure, AddsWhatItDoesNotHold.Of of,
+                                        Denotations at) {
+        return measureOfEach(container, closure, at,
+                (counted, by) -> interned.howManyDifferent(counted, by, of), atom -> {
+                    carrying(atom, amongTheElements(atom, container, at));
+                    FactSubject holds = sizeOfWhatItHolds(container, at);
+                    LinearForm<FactSubject> past = holds == null ? null
+                            : LinearForm.atomMinusConstant(holds, ExactRatio.ONE);
+                    if (past != null) {
+                        guaranteedWhere(atom, past, LinearForm.atomMinusConstant(atom,
+                                ExactRatio.ONE), Rel.GE);
+                    }
+                });
+    }
+
+    /**
+     * The atom a measure of the elements of {@code container} is — over each element where
+     * {@code closure} is null, and otherwise over what that closure answers of each — named by
+     * {@code identity} of the two terms, and with what {@code filing} says it carries filed once;
+     * or null where either is no value this names.
+     */
+    private FactSubject measureOfEach(Core container, Core closure, Denotations at,
+                                      BinaryOperator<Term> identity,
+                                      Consumer<FactSubject> filing) {
+        Term counted = bodyKey(container, at);
+        Term by = closure == null ? null : bodyKey(closure, at);
+        if (counted == null || (closure != null && by == null)) {
+            return null;
+        }
+        FactSubject atom = named(identity.apply(counted, by), Carrier.WHOLE);
+        if (atom != null && firstFiledFrom(atom, readOff(container, closure, at))) {
+            filing.accept(atom);
+        }
+        return atom;
+    }
+
+    /** Where {@code when} stands {@code rel} to nought, {@code then} does too: recorded of
+     *  {@code atom} as a recipe, since which case holds is the path's to say. */
+    private void guaranteedWhere(FactSubject atom, LinearForm<FactSubject> when,
+                                 LinearForm<FactSubject> then, Rel rel) {
+        computedBy(atom, new AtomKnowledge.Computation.Derived(new Derivation.GuaranteedWhere(
+                List.of(new ConditionalConstraint(new NumericConstraint(when, rel),
+                        new NumericConstraint(then, rel))))));
+    }
+
+    /**
+     * The atom how many the elements of {@code container} hold, added up, is — each element where
+     * {@code closure} is null, and otherwise what that closure answers of each — named and with
+     * what it carries filed, or null where either is no value this names.
+     *
+     * <p>No fewer than how many of them hold something, each of which holds at least one, and
+     * nought where none does.
+     */
+    FactSubject sumOfSizesAtomFor(Core container, Core closure, Denotations at) {
+        return measureOfEach(container, closure, at, interned::sumOfSizes, atom -> {
+            LinearForm<FactSubject> nonEmpty = howManyMeetFor(container, closure,
+                    AnswerAspect.EMPTINESS, at);
+            LinearForm<FactSubject> over = nonEmpty == null ? null
+                    : LinearForm.atom(atom).minus(nonEmpty).orNull();
+            List<NumericConstraint> facts = new ArrayList<>(eachAnswersTheSameNumber(atom,
+                    container, closure, at));
+            facts.add(new NumericConstraint(over == null ? LinearForm.atom(atom) : over, Rel.GE));
+            carrying(atom, facts);
+            if (over != null) {
+                guaranteedWhere(atom, nonEmpty, LinearForm.atom(atom), Rel.LE);
+            }
+            Term held = closure == null ? sizeOfEach(container, null, null, at) : null;
+            Term among = held == null ? null : bodyKey(container, at);
+            if (among != null) {
+                sumsOfWhatEachHolds.putIfAbsent(atom, new SumOfWhatEachHolds(among, held));
+            }
+        });
+    }
+
+    /**
+     * That the sum is that many of each element's, where the closure answers a container written
+     * out whatever it is handed: {@code [n, n]} holds two, so the sum is twice as many as there are
+     * elements.
+     */
+    private List<NumericConstraint> eachAnswersTheSameNumber(FactSubject atom, Core container,
+                                                             Core closure, Denotations at) {
+        Core.Block block = closure == null ? null : blockOf(closure, at);
+        OptionalLong each = block == null ? OptionalLong.empty() : writtenCount(block.body(), at);
+        FactSubject all = sizeOfWhatItHolds(container, at);
+        LinearForm<FactSubject> times = each.isPresent() && all != null
+                ? LinearForm.atom(all).times(ExactRatio.of(each.getAsLong())).orNull() : null;
+        LinearForm<FactSubject> missing = times == null ? null
+                : LinearForm.atom(atom).minus(times).orNull();
+        return missing == null ? List.of() : List.of(new NumericConstraint(missing, Rel.EQ));
+    }
+
+    /**
+     * The atom how many of the code points of {@code string} are in {@code counted} is, named and
+     * with what it carries filed, or null where the string is no value this names.
+     *
+     * <p>Never below nought and never above how many code points the string holds, which is the
+     * number its length is.
+     */
+    FactSubject codePointsAtomFor(Core string, CodePointClass counted, Denotations at) {
+        return measureOfEach(string, null, at,
+                (of, _) -> interned.codePoints(of, counted),
+                atom -> carrying(atom, amongTheElements(atom, string, at)));
+    }
+
+    /** What {@code container} and {@code closure} were given, each where it stands, as the values
+     *  an atom over them is read off. */
+    private ReadOff readOff(Core container, Core closure, Denotations at) {
+        return new ReadOff(given(container, at), closure == null ? null : given(closure, at));
+    }
+
+    /** That {@code atom} counts some of what {@code container} holds: at least none, and no more
+     *  than all of it, where its size is one this names. */
+    private List<NumericConstraint> amongTheElements(FactSubject atom, Core container,
+                                                     Denotations at) {
+        List<NumericConstraint> out = new ArrayList<>();
+        out.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
+        FactSubject holds = sizeOfWhatItHolds(container, at);
+        if (holds != null) {
+            out.add(new NumericConstraint(LinearForm.difference(atom, holds), Rel.LE));
+        }
+        return out;
+    }
+
+    /** The atom of how many {@code container} holds, by the measure its type is counted by, or
+     *  null where nothing counts it or this cannot name the count. */
+    FactSubject sizeOfWhatItHolds(Core container, Denotations at) {
+        ValueName counts = NumericMeasures.takenOf(Core.withoutStanding(container).type(),
+                newtypeInners());
+        return counts == null ? null : sizeAtomFor(counts, container, at);
+    }
+
+    /** Whether {@code among} holds each of its elements once, or each of its keys once, as
+     *  {@code of} says: a set its elements and a map its keys. */
+    private static boolean holdsEachOnce(Given among, AddsWhatItDoesNotHold.Of of) {
+        Type type = Core.withoutStanding(among.value()).type();
+        return of == AddsWhatItDoesNotHold.Of.ELEMENTS ? type instanceof Type.SetOf
+                : type instanceof Type.MapOf;
+    }
+
     private FactSubject howManyAreIn(Given counted, Given holder, AddsWhatItDoesNotHold.Of of) {
         Term countedKey = bodyKey(counted.value(), counted.at());
         Term holderKey = bodyKey(holder.value(), holder.at());
         if (countedKey == null || holderKey == null) {
             return null;
+        }
+        // Of two containers that hold each value once, how many of one the other holds is how
+        // many of the other the one holds: the values they have in common, whichever is counted.
+        boolean inCommon = holdsEachOnce(counted, of) && holdsEachOnce(holder, of);
+        if (inCommon && Term.inOneOrder(holderKey, countedKey) < 0) {
+            return howManyAreIn(holder, counted, of);
         }
         FactSubject atom = named(interned.howManyAreIn(countedKey, holderKey, of), Carrier.WHOLE);
         if (atom == null) {
@@ -2395,8 +2815,16 @@ final class Terms {
             return atom;
         }
         List<NumericConstraint> carried = new ArrayList<>();
-        // A count, and so never below nought.
+        // A count, and so never below nought, and never above how many there are of what is
+        // counted — or of what holds them, where each holds a value once and the count is the
+        // values in common.
         carried.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
+        for (Given among : inCommon ? List.of(counted, holder) : List.of(counted)) {
+            FactSubject all = sizeOfWhatItHolds(among.value(), among.at());
+            if (all != null) {
+                carried.add(new NumericConstraint(LinearForm.difference(atom, all), Rel.LE));
+            }
+        }
         // One side at a time, and a side that took in another container's elements before a side
         // that took in one value. Taking both sides at every step names a count for every pair of
         // the values the two sides added, and what bounds a step that added one value is how many
@@ -2413,12 +2841,14 @@ final class Terms {
         AddedTo grown = holderFirst ? null : onTheCounted;
         if (added != null) {
             between(atom, howManyAreIn(counted, added.before(), of), added.oneValue()
-                    ? howManyAre(countedKey, bodyKey(added.what().value(), added.what().at()), of)
+                    ? howManyAre(countedKey, bodyKey(added.what().value(), added.what().at()), of,
+                            sizeOfWhatItHolds(counted.value(), counted.at()))
                     : howManyAreIn(counted, added.what(), of), carried);
         }
         if (grown != null) {
             between(atom, howManyAreIn(grown.before(), holder, of), grown.oneValue()
-                    ? howManyAre(holderKey, bodyKey(grown.what().value(), grown.what().at()), of)
+                    ? howManyAre(holderKey, bodyKey(grown.what().value(), grown.what().at()), of,
+                            sizeOfWhatItHolds(holder.value(), holder.at()))
                     : howManyAreIn(grown.what(), holder, of), carried);
         }
         carrying(atom, carried);
@@ -2510,14 +2940,25 @@ final class Terms {
         }
     }
 
-    private FactSubject howManyAre(Term within, Term counted, AddsWhatItDoesNotHold.Of of) {
+    /**
+     * The atom how many elements of {@code within}, or keys, are {@code counted} is, carrying that
+     * it is a count of some of them: never below nought, and never above {@code holds}, how many
+     * {@code within} holds, where that is named. Every route that names one names {@code holds}
+     * the way the size of the container is named everywhere, so they file one answer.
+     */
+    private FactSubject howManyAre(Term within, Term counted, AddsWhatItDoesNotHold.Of of,
+                                   FactSubject holds) {
         if (within == null || counted == null) {
             return null;
         }
         FactSubject atom = named(interned.howManyAre(within, counted, of), Carrier.WHOLE);
         if (atom != null) {
-            // A count, and so never below nought.
-            carrying(atom, List.of(new NumericConstraint(LinearForm.atom(atom), Rel.GE)));
+            List<NumericConstraint> carried = new ArrayList<>();
+            carried.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
+            if (holds != null) {
+                carried.add(new NumericConstraint(LinearForm.difference(atom, holds), Rel.LE));
+            }
+            carrying(atom, carried);
         }
         return atom;
     }
@@ -3376,8 +3817,12 @@ final class Terms {
             // exactly as many as it was given does not change the number, which the discharge table
             // states as a relation between the two values (`Cardinality.SAME`) rather than as
             // something this check happens to follow — so it is an equality identity may read.
-            case Core.PreservedCall c -> over(sizedOver(c, leaf), at, bound, depth, leaf,
-                    ps -> interned.called(c.operation(), ps));
+            case Core.PreservedCall c -> AnOperationApplied.asTheOperationItAgreesWith(c)
+                    instanceof AnOperationApplied joined
+                    ? over(joined.args(), at, bound, depth, leaf,
+                            ps -> interned.called(joined.operation(), ps))
+                    : over(sizedOver(c, leaf), at, bound, depth, leaf,
+                            ps -> interned.called(c.operation(), ps));
             case Core.Call c -> switch (c.fn()) {
                 case Core.Reached reached -> switch (answersOf(reached.denotes())) {
                     case Naming.OfAName.AnswersNothing none ->
@@ -3506,8 +3951,13 @@ final class Terms {
     }
 
     /** The term a binary that placed no comparison is: the operator it was written with, over the
-     * terms its two operands are. */
+     * terms its two operands are — except a join, which is the call of the operation it is
+     * ({@link AnOperationApplied}), so that {@code a ++ b} and {@code List.append(a, b)} are one
+     * term and what either is, is said of both. */
     private Term operatorTerm(Core.Binary b, List<Term> sides) {
+        if (b.op() == BinOp.CONCAT && AnOperationApplied.of(b) instanceof AnOperationApplied joined) {
+            return interned.called(joined.operation(), sides);
+        }
         return interned.operator(b.op(), sides.get(0), sides.get(1));
     }
 
