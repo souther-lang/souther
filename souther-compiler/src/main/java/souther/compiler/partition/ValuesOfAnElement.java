@@ -231,10 +231,9 @@ final class ValuesOfAnElement {
     }
 
     /**
-     * Up to {@code most} containers, those of each of {@code sizes} in turn: every way to take that
-     * many of {@code elements}, with one repeated where a list holds it twice and not where a set
-     * does. Which element stands where is no order that is chosen, so each way is taken once, in the
-     * order the elements are listed.
+     * Up to {@code most} containers, those of each of {@code sizes} in turn: of a list, every
+     * element at every position, so each order the elements may stand in, which a statement may
+     * read; of a set, each choice of that many distinct elements once, since it has no order.
      */
     private static List<ObservedValue> containersOf(Shape.Sequence.Kind kind,
                                                     List<ObservedValue> sizes,
@@ -273,7 +272,9 @@ final class ValuesOfAnElement {
         }
         for (int each = from; each < elements.size(); each++) {
             taken.add(elements.get(each));
-            takenFrom(distinct, left - 1, distinct ? each + 1 : each, elements, taken, most, out);
+            // A set holds each element once and in no order, so what follows is taken from the
+            // elements after this one; a list is each element at each position.
+            takenFrom(distinct, left - 1, distinct ? each + 1 : 0, elements, taken, most, out);
             taken.removeLast();
         }
     }
