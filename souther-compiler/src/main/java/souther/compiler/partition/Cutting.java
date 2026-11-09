@@ -2271,7 +2271,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (same.size() == 1 && same.getFirst() instanceof Proposition.SameValue(
                 DecisionSubject.AnInput(TermPath one, var _),
                 DecisionSubject.AnInput(TermPath other, var _), boolean _, Spelling _)) {
-            return UndividedByARelation.ofTwoPositions(one, other);
+            UndividedByARelation two = UndividedByARelation.ofTwoPositions(one, other);
+            return stated instanceof Proposition.Some some ? two.searchedBy(some) : two;
         }
         List<Proposition.StringInside> inside = new ArrayList<>();
         stringsInsideIn(stated, inside);

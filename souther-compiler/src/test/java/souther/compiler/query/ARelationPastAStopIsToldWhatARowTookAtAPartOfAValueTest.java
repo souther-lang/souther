@@ -66,6 +66,50 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
                         d -> Bool.not(Map.containsKey(d.currency, rates.rates)), deals)) }
                 Ok { n = List.length(weighed) }
             }
+
+            behavior moved : (deals: List<Deal>, rates: Rates) -> Ok | Missing
+            let moved (deals, rates) = {
+                let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
+                guard List.length(weighed) == List.length(deals)
+                    else Missing { n = List.length(List.filter(
+                            d -> Date.month(Date.addDays(0 - 1, d.on)) == rates.year, deals))
+                        + List.length(List.filter(d -> Date.day(d.on) == rates.year, deals)) }
+                Ok { n = List.length(weighed) }
+            }
+
+            behavior summed : (deals: List<Deal>, rates: Rates) -> Ok | Missing
+            let summed (deals, rates) = {
+                let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
+                guard List.length(weighed) == List.length(deals)
+                    else Missing { n = if List.sum(List.map(d -> d.amount, deals)) == rates.year
+                        then 1 else 0 }
+                Ok { n = List.length(weighed) }
+            }
+            """;
+
+    /**
+     * Two deals, one in each of two currencies, and a currency looked for. A scan that goes on
+     * while every deal is in the currency looked for ends at the first deal that is not, so the
+     * deal in the currency looked for, which comes after it, is not one the comparison was made
+     * on: the currency is not told at it, though it equals the currency looked for.
+     */
+    private static final String A_SCAN = RATES + """
+
+            let day = Date("2026-07-01")
+            let twoDeals: List<Deal> = [ Deal { currency = "A", amount = 1, on = day },
+                                         Deal { currency = "B", amount = 1, on = day } ]
+            let wantedB: String = "B"
+            let zeroRates = Rates { rates = Map.fromList([ ("Z", 0) ]), year = 2000 }
+
+            behavior everyDealIn : (deals: List<Deal>, wanted: String, rates: Rates) -> Ok
+            let everyDealIn (deals, wanted, rates) = {
+                let share = Map.get(wanted, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(7, rate))
+                    |> Option.withDefault(0)
+                Ok { n = share + (if List.all(d -> d.currency == wanted, deals) then 1 else 0) }
+            }
             """;
 
     /**
@@ -154,6 +198,50 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
                 covered.toString());
         assertEquals(List.of("\"Y\""), covered.get("rates.rates[key]").shownReachedAt(),
                 covered.toString());
+    }
+
+    /**
+     * A part of a date a move put elsewhere is told as the moved date has it and not as the date
+     * stands, and a total is told as the row's elements come to.
+     */
+    @Test
+    void aMovedDatesPartAndATotalAreToldAsTheRowTookThem() {
+        Map<String, PartitionEvidence> evidence = evidenceOf(SEEDED);
+
+        Map<String, PartitionEvidence.NotRead> moved = notRead(evidence, "moved");
+        assertEquals(List.of("6"), toldAt(moved, "Date.month"), moved.toString());
+        assertEquals(List.of("1"), toldAt(moved, "Date.day"), moved.toString());
+        Map<String, PartitionEvidence.NotRead> summed = notRead(evidence, "summed");
+        assertEquals(List.of("1"), toldAt(summed, "List.sum"), summed.toString());
+    }
+
+    @Test
+    void aScanThatEndsAtTheFirstUnequalElementIsNotToldTheEqualOnesAfterIt() {
+        Map<String, PartitionEvidence.NotRead> scanned =
+                notRead(evidenceOf(A_SCAN), "everyDealIn");
+
+        assertEquals(List.of("\"B\""), toldAt(scanned, "wanted"),
+                "the row got there, which the currency looked for says: " + scanned);
+        assertEquals(List.of(), toldAt(scanned, "deals[*].currency"), scanned.toString());
+    }
+
+    private static Map<String, PartitionEvidence> evidenceOf(String source) {
+        Compilation compilation = onTheDay(source);
+        compilation.measure(Adequacy.Asked.fullReport());
+        Map<String, PartitionEvidence> evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value();
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+        return evidence;
+    }
+
+    /** What is told at the one place of {@code byPlace} that is written with {@code part}. */
+    private static List<String> toldAt(Map<String, PartitionEvidence.NotRead> byPlace,
+                                       String part) {
+        List<PartitionEvidence.NotRead> at = byPlace.entrySet().stream()
+                .filter(each -> each.getKey().contains(part)).map(Map.Entry::getValue).toList();
+        assertEquals(1, at.size(), part + " in " + byPlace);
+        return at.getFirst().shownReachedAt();
     }
 
     /**

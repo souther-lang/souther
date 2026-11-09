@@ -84,32 +84,58 @@ public final class ReachWitnesses {
          * shows all of them only where the place stands inside exactly the containers the
          * comparison is shown made on every element of ({@link #madeOnEvery}).
          *
-         * <p>Where it does not, a place held equal to another, {@code heldEqualTo}, shows the
-         * values of it that the other shows. The comparison is made at the other's value and reads
-         * the place only at what is equal to it, so a value the row holds at the place that the
-         * other shows is read there, whichever of the place's elements the run walked: a map's
-         * entry under the key the run looked it up by. A value the other does not show is shown at
-         * neither.
+         * <p>Where it does not, the place a search for an equal element ranges over is shown the
+         * values of it that equal a value shown at the place looked for ({@code lookedForAt},
+         * {@link UndividedByARelation.Search}). The search is made at a value looked for and ends
+         * where it finds an element equal to it, so an equal element the row holds is one the run
+         * made the comparison at: a map's entry under the key the run looked it up by. A value
+         * the place looked for does not show is shown at neither, and nothing is said of a
+         * comparison that is not such a search: one that ends at the first element unequal to the
+         * value passes over the equal ones after it.
          *
          * <p>Three answers, and none stands for another ({@link Told}): values are shown, the row
          * is read and none is, or the row is not read there.
          */
-        public Told toldAt(FilingCoordinate at, Optional<FilingCoordinate> heldEqualTo,
+        public Told toldAt(FilingCoordinate at, Optional<FilingCoordinate> lookedForAt,
                            InputReading read) {
             BorderQuantity.Observation row = observed(read);
             return switch (heldAt(at, row, read)) {
                 case Reading.Unread(Told.Unread why) -> new Told.NotRead(why);
                 case Reading.Held here -> {
-                    Optional<List<String>> shown = shown(here);
-                    if (shown.isEmpty() && heldEqualTo.isPresent()
-                            && heldAt(heldEqualTo.get(), row, read) instanceof Reading.Held there) {
-                        shown = shown(there).map(theirs -> here.values().stream()
-                                .filter(theirs::contains).distinct().toList());
+                    Optional<List<Value>> shown = shown(here);
+                    if (shown.isEmpty() && lookedForAt.isPresent()
+                            && heldAt(lookedForAt.get(), row, read) instanceof Reading.Held there) {
+                        shown = shown(there).map(looked -> here.values().stream()
+                                .filter(looked::contains).distinct().toList());
                     }
-                    yield shown.filter(values -> !values.isEmpty()).<Told>map(Told.Shown::new)
+                    yield shown.filter(values -> !values.isEmpty())
+                            .<Told>map(values -> new Told.Shown(
+                                    values.stream().map(Value::written).toList()))
                             .orElseGet(Told.NotShown::new);
                 }
             };
+        }
+
+        /**
+         * A value the row holds or takes: what it is, and how the model writes it.
+         *
+         * <p>Two are one by what they are and never by how they are written: what a report shows
+         * of a value is for a person, and a rule that two values are equal is not asked of it.
+         *
+         * @param is      the value, as the row built it, or the place of the number that is taken
+         * @param written the value written out as the model writes a value of its type
+         */
+        private record Value(Object is, String written) {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Value that && is.equals(that.is);
+            }
+
+            @Override
+            public int hashCode() {
+                return is.hashCode();
+            }
         }
 
         /** What the row holds or takes at a coordinate, or why it is not read. */
@@ -121,7 +147,7 @@ public final class ReachWitnesses {
              * of, and null where the number is taken over a run of values and stands at no one
              * place.
              */
-            record Held(List<String> values, TermPath place) implements Reading {}
+            record Held(List<Value> values, TermPath place) implements Reading {}
 
             record Unread(Told.Unread why) implements Reading {}
         }
@@ -146,14 +172,14 @@ public final class ReachWitnesses {
             }
             RuleReadingContext reading = RuleReadingContext.of(read.rules(),
                     read.domain().policy(), read.domain().machines(), read.domain().today());
-            List<String> out = new ArrayList<>();
+            List<Value> out = new ArrayList<>();
             for (ObservedValue each : there) {
                 if (!(ObservedFixtures.of(each, type, reading)
                         instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
                                 FixtureTemplate fixture))) {
                     return new Reading.Unread(Told.Unread.THE_ROW_HOLDS_NONE_THERE);
                 }
-                out.add(fixture.text());
+                out.add(new Value(each, fixture.text()));
             }
             return new Reading.Held(out, place);
         }
@@ -196,8 +222,9 @@ public final class ReachWitnesses {
             if (!numbersAt(row, across.get().containers(), orders, there) || there.isEmpty()) {
                 return new Reading.Unread(Told.Unread.THE_ROW_HOLDS_NONE_THERE);
             }
-            return new Reading.Held(there.stream().map(orders.answered()::written).toList(),
-                    across.get().position());
+            return new Reading.Held(there.stream()
+                    .map(number -> new Value(number.key(), orders.answered().written(number)))
+                    .toList(), across.get().position());
         }
 
         private BorderQuantity.Observation observed(InputReading read) {
@@ -208,8 +235,8 @@ public final class ReachWitnesses {
 
         /** What a run of the row is shown to have made the comparison at, of what the row holds
          *  or takes there. */
-        private Optional<List<String>> shown(Reading.Held held) {
-            List<String> there = held.values();
+        private Optional<List<Value>> shown(Reading.Held held) {
+            List<Value> there = held.values();
             TermPath place = held.place();
             if (new LinkedHashSet<>(there).size() == 1) {
                 return Optional.of(List.of(there.getFirst()));
