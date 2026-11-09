@@ -4276,8 +4276,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             notShown.add(at);
+            // Only what is shown is said. That a row was read and shows none, and that it was not
+            // read, are told apart by the answer and are not told apart in the report.
             List<String> written = sought.found()
-                    .flatMap(row -> row.toldAt(at, heldEqualTo(at), read)).orElse(null);            // Where no row got there, the figures the search stopped at and the places the runs of
+                    .map(row -> row.toldAt(at, heldEqualTo(at), read))
+                    .map(told -> told instanceof ReachWitnesses.Told.Shown(List<String> values)
+                            ? values : null)
+                    .orElse(null);            // Where no row got there, the figures the search stopped at and the places the runs of
             // the rows tried stopped are said at every place the relation compares, as what was
             // not shown is.
             if (written != null || !sought.runsStopped().isEmpty()

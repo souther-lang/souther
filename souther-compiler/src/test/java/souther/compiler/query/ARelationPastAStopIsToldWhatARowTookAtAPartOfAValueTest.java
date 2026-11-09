@@ -9,6 +9,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,6 +44,8 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
     private static final String SEEDED = RATES + """
 
             let zeroRates = Rates { rates = Map.fromList([ ("Z", 0) ]), year = 2000 }
+            let oneDeal: List<Deal> = [ Deal { currency = "Q", amount = 1,
+                                               on = Date("2026-07-01") } ]
 
             behavior dated : (deals: List<Deal>, rates: Rates) -> Ok | Missing
             let dated (deals, rates) = {
@@ -108,7 +111,7 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
 
     @Test
     void aPartOfADateAndAKeyAreToldWhatTheRowRunToTheRelationTookThere() {
-        Compilation compilation = Compilation.ofSource(SEEDED, "Main");
+        Compilation compilation = onTheDay(SEEDED);
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
@@ -125,7 +128,7 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
                 key.reason(), unpriced.toString());
         assertEquals(List.of("\"Z\""), key.shownReachedAt(), key.toString());
-        assertEquals(List.of("\"x\""), unpriced.get("deals[*].currency").shownReachedAt(),
+        assertEquals(List.of("\"Q\""), unpriced.get("deals[*].currency").shownReachedAt(),
                 "a place that is a value is told as it was");
 
         JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
@@ -139,7 +142,7 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
 
     @Test
     void aKeyIsToldOnlyAtTheKeysTheLookupWasMadeAt() {
-        Compilation compilation = Compilation.ofSource(TWO_KEYS, "Main");
+        Compilation compilation = onTheDay(TWO_KEYS);
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
@@ -160,7 +163,7 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
      */
     @Test
     void aRelationAmongCountsAloneIsAGroupNothingSolvesAndNoValueIsToldForIt() {
-        Compilation compilation = Compilation.ofSource(UNSEEDED, "Main");
+        Compilation compilation = onTheDay(UNSEEDED);
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
@@ -170,6 +173,12 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         Map<String, PartitionEvidence.NotRead> byPlace = notRead(evidence, "priced");
         assertTrue(!byPlace.isEmpty(), byPlace.toString());
         byPlace.forEach((at, each) -> assertEquals(List.of(), each.shownReachedAt(), at));
+    }
+
+    /** A compilation writing rows on a day the test fixes, so that what a search generates where the model
+     *  names nothing does not turn on the day the test runs. */
+    private static Compilation onTheDay(String source) {
+        return Compilation.ofSource(source, "Main").writtenOn(LocalDate.of(2026, 11, 9));
     }
 
     private static Map<String, PartitionEvidence.NotRead> notRead(
