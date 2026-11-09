@@ -27,6 +27,9 @@ import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.StoodInAnswer;
+import souther.compiler.partition.BesideTheWord;
+import souther.compiler.partition.WhereARunStopped;
+import souther.compiler.execute.RunStop;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -1279,12 +1282,12 @@ public final class GeneratedRows {
      * ({@link #beside}). Changed with those and never apart from them.
      */
     static List<Object> shownForWhatItIsAbout(Generator.UnresolvedCombination why) {
-        return List.of(why.subject(), sentenceOrWord(why), why.alsoShort());
+        return List.of(why.subject(), sentenceOrWord(why), why.beside());
     }
 
     /** The same, of a line named for its finding, which does not say what the search was about. */
     static List<Object> shownUnderItsFinding(Generator.UnresolvedCombination why) {
-        return List.of(sentenceOrWord(why), why.alsoShort());
+        return List.of(sentenceOrWord(why), why.beside());
     }
 
     private static Object sentenceOrWord(Generator.UnresolvedCombination why) {
@@ -1413,8 +1416,91 @@ public final class GeneratedRows {
      */
     static String beside(String category, Generator.UnresolvedCombination left,
                          SourceRendering rendering, PublishedRuleHandle.WhereARuleIs places) {
-        String also = alsoShort(left.alsoShort(), rendering, places);
-        return also.isEmpty() ? category : category + ", and " + also;
+        List<String> more = new ArrayList<>();
+        BesideTheWord beside = left.beside();
+        String also = alsoShort(beside.shortOf(), rendering, places);
+        if (!also.isEmpty()) {
+            more.add(also);
+        }
+        if (!beside.stopped().isEmpty()) {
+            more.add(stoppedAt(beside.stopped(), rendering));
+        }
+        return more.isEmpty() ? category : category + ", and " + String.join(", and ", more);
+    }
+
+    /**
+     * Where the runs of the rows composed stopped, each place once.
+     *
+     * <p>Each of them and not the first. Rows of different values may stop at different places,
+     * and every one is an input the model has not decided about. Read by every line that says
+     * where runs stopped, so a place reads alike wherever a reader meets it.
+     */
+    static String stoppedAt(List<WhereARunStopped> stops, SourceRendering rendering) {
+        return "the runs stopped at " + placesStoppedAt(stops, rendering);
+    }
+
+    /** The same places, each once and with nothing before them, for a line that says what the
+     *  runs did in words of its own. */
+    static String placesStoppedAt(List<WhereARunStopped> stops, SourceRendering rendering) {
+        List<String> each = new ArrayList<>();
+        for (WhereARunStopped stop : stops) {
+            each.add(onePlaceStoppedAt(stop, rendering));
+        }
+        return String.join(" and at ", each);
+    }
+
+    /** One place a run stopped, in the handle a report names the rule there by, and where it is
+     *  written only where the run said. */
+    private static String onePlaceStoppedAt(WhereARunStopped where, SourceRendering rendering) {
+        return switch (where.stop()) {
+            case RunStop.AtAConstruction it -> "the construction"
+                    + it.site().map(site -> " " + writtenAt(site, where, rendering)).orElse("")
+                    + ", where "
+                    + RuleHandleProse.said(ruleRefusing(it).orElseThrow(), rendering, null)
+                    + " did not hold";
+            case RunStop.AtAnEnsures it -> "the answer, where "
+                    + RuleHandleProse.said(ruleRefusing(it).orElseThrow(), rendering, null)
+                    + " did not hold";
+            case RunStop.AtAnEnd it -> "an operation the runtime would not finish (" + it.said()
+                    + ")";
+            case RunStop.AtAnUnreachable it -> "an `unreachable`"
+                    + it.site().map(site -> " " + writtenAt(site, where, rendering)).orElse("")
+                    + " (" + it.said() + ")";
+        };
+    }
+
+    /**
+     * The rule that refused a run where a rule did: the invariant clause of the type a
+     * construction built, or the {@code ensures} the answer did not keep. Named the way every
+     * rule of the model is named — a clause by its name, and one with none by its place among its
+     * declaration's clauses, counted from one. Read by the page and by the document alike.
+     */
+    static Optional<PublishedRuleHandle> ruleRefusing(RunStop stop) {
+        return switch (stop) {
+            case RunStop.AtAConstruction it -> Optional.of(it.clauseName()
+                    .<PublishedRuleHandle>map(name -> new PublishedRuleHandle.NamedInvariant(
+                            it.clauseType(), name))
+                    .orElseGet(() -> new PublishedRuleHandle.NumberedInvariant(
+                            it.clauseType(), it.ordinal() + 1)));
+            case RunStop.AtAnEnsures it -> Optional.of(it.clause()
+                    .<PublishedRuleHandle>map(name -> new PublishedRuleHandle.NamedEnsures(
+                            it.behavior(), name))
+                    .orElseGet(() -> new PublishedRuleHandle.WholeEnsures(it.behavior())));
+            case RunStop.AtAnEnd _, RunStop.AtAnUnreachable _ -> Optional.empty();
+        };
+    }
+
+    /**
+     * Where a place a run stopped at is written, as its run said: the source and the line and
+     * column in it, or the line and column of the module where this compilation holds no source
+     * declaring it.
+     */
+    private static String writtenAt(RunStop.Site site, WhereARunStopped where,
+                                    SourceRendering rendering) {
+        String numbers = site.line() + ":" + site.column();
+        return where.source()
+                .map(source -> "at " + rendering.names().nameOf(source) + ":" + numbers)
+                .orElseGet(() -> "at " + numbers + " of `" + site.module() + "`");
     }
 
     /**

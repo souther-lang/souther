@@ -151,7 +151,7 @@ final class WorkedOutToReachIt {
         for (ClausesInOrder.OneClause clause : clauses.inOrder()) {
             if (!(clause instanceof ClausesInOrder.OneClause.Stated stated)
                     || !WhatARunMayEndFor.of(stated.term()).endsNone()
-                    || !Boolean.TRUE.equals(at.forADeclaredRule()
+                    || !Boolean.TRUE.equals(at.forADeclaredRule(stated.elements())
                             .handingTheFields(stated.given(), at, read.rules().newtypes())
                             .folded(stated.term(), read.rules().symbols(),
                                     read.rules().newtypes()).orElse(null))) {

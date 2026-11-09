@@ -215,6 +215,37 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
             new Held("souther.compiler.semantics.Arithmetic.TheOperator#op",
                     "a library operation declared to compute what an operator computes"),
+            new Held("souther.compiler.semantics.OperationFact.IsTheOperator#operator",
+                    "a library operation declared to be what an operator comes to over two values"
+                            + " of one type"),
+            new Held("souther.compiler.semantics.OperationFact.IsTheOperator.<init>",
+                    "makes the declaration that a library operation is an operator"),
+            new Held("souther.compiler.semantics.OperationFact.IsTheOperator.operator",
+                    "hands back the operator a library operation is declared to be"),
+            new Held("souther.compiler.check.BoundOperationFact.IsTheOperator#operator",
+                    "the operator a library operation was bound as, held to its signature"),
+            new Held("souther.compiler.check.BoundOperationFact.IsTheOperator.<init>",
+                    "makes the operator a library operation was bound as"),
+            new Held("souther.compiler.check.BoundOperationFact.IsTheOperator.operator",
+                    "hands back the operator a library operation was bound as"),
+            new Held("souther.compiler.check.BoundOperationFacts.operatorOf",
+                    "which operator a library operation is, as it was declared"),
+            new Held("souther.compiler.check.BoundOperationFacts.operandOf",
+                    "the type a library operation takes two of where it is an operator"),
+            new Held("souther.compiler.check.BoundOperationFacts.operationFor",
+                    "which library operation an operator is over the type it is written over"),
+            new Held("souther.compiler.check.BoundOperationFacts.putsListsEndToEnd",
+                    "whether a library operation is the operator that puts two values end to end,"
+                            + " over a list"),
+            new Held("souther.compiler.check.OperationFactBinder.bind",
+                    "reads the operator a library operation is declared to be and holds it to"
+                            + " the operation's signature"),
+            new Held("souther.compiler.check.ProvingTheLibrary.proves",
+                    "hands the operator a library body is declared to be to the proof that its"
+                            + " body answers it"),
+            new Held("souther.compiler.proof.LibraryProver.isTheOperator",
+                    "whether a library body answers the operator over its two arguments on every"
+                            + " run"),
             new Held("souther.compiler.semantics.NumericResult.TheOtherCaseWhen#op",
                     "a library fact stating the case an operation answers something else in, as a"
                             + " comparison against a number: an operator standing for what it"
@@ -668,6 +699,18 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " nothing the source holds, because a statement stands nowhere"),
             new Held("souther.compiler.check.Term.Interner.AsTerms.below",
                     "the one order a term is written in, which the claim exchanged the sides for"),
+            new Held("souther.compiler.check.Term.Interner.closureAnswering",
+                    "writes the statement that holds of a set of whole numbers the one way, as the"
+                            + " order of a value below a whole number and the equality: above 2 and"
+                            + " at least 3 are one statement of whole numbers"),
+            new Held("souther.compiler.check.Terms.additiveLeaves",
+                    "takes an expression through sums and differences to the values it is made of,"
+                            + " which are the ones a form over it is written over: a walk among"
+                            + " them says what the path puts on its answer of the container it"
+                            + " walked"),
+            new Held("souther.compiler.check.Term.runsOfAStatement",
+                    "reads which whole numbers a statement holds of, from the order of a value"
+                            + " below a whole number, the equality, and what joins and denies them"),
             new Held("souther.compiler.check.Terms.repeating",
                     "writes the multiplication a repeated accumulation comes to"),
             new Held("souther.compiler.semantics.OperationFacts.declared",

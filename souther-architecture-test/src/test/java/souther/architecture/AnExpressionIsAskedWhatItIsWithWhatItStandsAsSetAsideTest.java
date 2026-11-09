@@ -761,6 +761,11 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "flow/ValueArrivals", "meant", ways, 1,
                 "whether the node the walk stands at is an operator that stops early: a Widen has"
                         + " its own reading, as the value it holds, and never arrives here");
+        row(out, c + "flow/ValueArrivals", "built", ways, 1,
+                "whether the node the walk stands at is a construction a run has to get past: a"
+                        + " Widen is built of the value it holds, and the construction under it is"
+                        + " got past where that value is settled, so asked through the Widen it"
+                        + " would be got past twice");
         return out;
     }
 

@@ -122,6 +122,9 @@ public final class NumericDomain<A> {
     private FormReach<A> reach;
     private Systems<A> systems;
     private ProjectionCertification certification;
+    /** The reduction of the rules, or empty where there is none to use; null until asked for. One
+     *  reference decides whether it was worked out and what it came to. */
+    private Optional<Reduction<A>> reduction;
     private Boolean noRow;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, NumberSpace> spaces,
@@ -379,12 +382,18 @@ public final class NumericDomain<A> {
      *               ({@link NumberSpace#spacedOnly}), which is a thing said and not a default.
      */
     public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
-        NumericDomain<A> knowing = knowing(f.coefs().keySet(), spaces);
+        return assuming(f.coefs(), f.constant(), rel, spaces);
+    }
+
+    /** The domain with {@code Σ coefs·atom + constant rel 0} taken in. */
+    private NumericDomain<A> assuming(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
+                                      Map<A, NumberSpace> spaces) {
+        NumericDomain<A> knowing = knowing(coefs.keySet(), spaces);
         if (knowing.readARuleNothingSatisfies) {
             return knowing;
         }
         AffineConstraint.Read<A> read = AffineConstraint.of(
-                f.coefs(), f.constant(), rel, knowing::spacingOf);
+                coefs, constant, rel, knowing::spacingOf);
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
@@ -802,7 +811,74 @@ public final class NumericDomain<A> {
             // proves about it either. Said before the reading, which would want its spacing.
             return false;
         }
-        return switch (AffineConstraint.of(coefs, f.constant(), rel, this::spacingOf)) {
+        if (entailsOver(coefs, f.constant(), rel, withRules)) {
+            return true;
+        }
+        if (!withRules) {
+            return false;   // asked of the box and its differences alone, which no equality adds to
+        }
+        return provenOverThePositionsTheEqualitiesLeaveFree(coefs, f.constant(), rel);
+    }
+
+    /**
+     * What the rules, written over the positions their equalities leave free, prove of the same
+     * goal written so: a query takes one rule as its premise, and written over the free positions
+     * the premise it needs is the one it is given.
+     *
+     * <p>A further way to prove a goal and never a second account of what the rules leave. The
+     * reduced rules follow from the rules and say less ({@link ReducedRules}), so what they prove is
+     * proven, and what they do not says nothing. The ranges, the closed differences, the certificate
+     * and whether anything is left at all are the rules' own and are asked of them alone: this is
+     * asked of by {@link #entails} after they have not proved the goal, and by nothing else.
+     */
+    private boolean provenOverThePositionsTheEqualitiesLeaveFree(Map<A, ExactRatio> coefs,
+                                                                 ExactRatio constant, Rel rel) {
+        Reduction<A> reduced = reduction();
+        if (reduced == null) {
+            return false;
+        }
+        ReducedRules.Goal<A> freed = reduced.rules().put(new ReducedRules.Goal<>(coefs, constant));
+        return freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)
+                && reduced.over().entailsOver(freed.coefs(), freed.constant(), rel, true);
+    }
+
+    /** The rules over the positions their equalities leave free, and what they leave. */
+    private record Reduction<A>(ReducedRules<A> rules, NumericDomain<A> over) {}
+
+    /**
+     * The reduction of these rules, worked out when first asked for and kept — or null where there
+     * is nothing to reduce, or where what is left leaves nothing.
+     *
+     * <p>Not used where it leaves nothing. That the rules leave nothing is what {@link #isBottom}
+     * says of them, and it is that answer's to give: a path is unreachable when the rules as they
+     * stand show it, and one whose reduction alone found the rules empty would prove everything and
+     * be reached all the same, so {@link #refutes} could say both of a goal and of its denial.
+     */
+    private Reduction<A> reduction() {
+        Optional<Reduction<A>> had = reduction;
+        if (had == null) {
+            had = Optional.ofNullable(reductionOfTheRules());
+            reduction = had;
+        }
+        return had.orElse(null);
+    }
+
+    private Reduction<A> reductionOfTheRules() {
+        ReducedRules<A> rules = ReducedRules.of(rules(), order);
+        if (rules == null) {
+            return null;
+        }
+        NumericDomain<A> over = new NumericDomain<>(StatedRules.none(), spaces, false, order,
+                closedStates, null, null);
+        for (ReducedRules.Rule<A> each : rules.rules()) {
+            over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
+        }
+        return over.isBottom() ? null : new Reduction<>(rules, over);
+    }
+
+    private boolean entailsOver(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
+                                boolean withRules) {
+        return switch (AffineConstraint.of(coefs, constant, rel, this::spacingOf)) {
             case AffineConstraint.Read.HoldsAlways<A> _ -> true;
             case AffineConstraint.Read.HoldsNever<A> _ -> false;
             case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);

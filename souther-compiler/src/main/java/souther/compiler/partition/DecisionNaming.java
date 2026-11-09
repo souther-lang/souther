@@ -12,6 +12,7 @@ import souther.compiler.flow.Truth;
 import souther.compiler.flow.WayWritten;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.WhatAConditionRuns;
+import souther.compiler.observe.Figure;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
@@ -112,7 +113,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
         if (joined == null) {
             return null;
         }
-        Optional<NoInputTakesIt> none = noInputTakes(joined);
+        Optional<NoInputTakesIt> none = noInputTakes(joined).proof();
         if (none.isEmpty()) {
             return joined;
         }
@@ -127,24 +128,80 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * first way two clashing conditions are on is one with every condition after them on it too.
      * Each condition the proof is had without is taken off, one at a time: what is left is the way
      * that stands for every rule past it, and two rules past one clash come to one way.
+     *
+     * <p>The constructions first, a clause at a time ({@link PassedConstruction}), and then the
+     * conditions. A proof had without every construction
+     * is one the conditions give alone, and taking a condition off first can leave a construction
+     * the proof then needs only because a condition went: two clashing conditions and a
+     * construction one of them contradicts come to that condition and the construction, which is a
+     * way every run of stops, when what the body states is a way no input takes. Taken off first,
+     * a construction is kept exactly where the conditions on the way do not give the proof alone.
+     *
+     * <p>A construction still in the least proof is one every input bringing the conditions out as
+     * the way does is refused at — or at one before it — so the way is reached and every run along
+     * it stops: said as that ({@link DecisionReading.EveryRunStops}) and not as a way no input
+     * takes. Only where every construction taken off was answered: one the figure of conditions
+     * taken in left unanswered is no proof the conditions do not give it alone, nor that they do,
+     * and the way is said as one the proof did not tell between the two, with the figure
+     * ({@link DecisionReading.UndecidedAtAFigure}).
+     *
+     * <p>A construction whose invariant was not reached ({@link ClauseOfAConstruction.NotReached})
+     * states only that it was not read, which the region takes in as nothing; a proof without it is
+     * the proof with it, so it is taken off wherever the asking is answered, and is kept only where
+     * the figure stopped it.
      */
     private void proveWithLess(DecisionPath path, NoInputTakesIt why) {
         DecisionPath least = path;
         NoInputTakesIt leastWhy = why;
+        Optional<Figure> stoppedAt = Optional.empty();
+        for (PassedConstruction each : path.passed()) {
+            List<PassedConstruction> without = new ArrayList<>(least.passed());
+            without.remove(each);
+            if (without.isEmpty() && least.consulted().isEmpty()) {
+                continue;
+            }
+            DecisionPath less = new DecisionPath(least.consulted(), without);
+            switch (noInputTakes(less)) {
+                case WaysNoInputTakes.Asked.Proved(NoInputTakesIt still) -> {
+                    least = less;
+                    leastWhy = still;
+                }
+                case WaysNoInputTakes.Asked.NotProved _ -> { }
+                case WaysNoInputTakes.Asked.StoppedAt(Figure figure) ->
+                        stoppedAt = Optional.of(figure);
+            }
+        }
         for (DecisionPath.Consulted each : path.consulted()) {
             List<DecisionPath.Consulted> without = new ArrayList<>(least.consulted());
             without.remove(each);
-            if (without.isEmpty()) {
+            if (without.isEmpty() && least.passed().isEmpty()) {
                 continue;
             }
-            DecisionPath less = new DecisionPath(without);
-            Optional<NoInputTakesIt> still = noInputTakes(less);
+            DecisionPath less = new DecisionPath(without, least.passed());
+            Optional<NoInputTakesIt> still = noInputTakes(less).proof();
             if (still.isPresent()) {
                 least = less;
                 leastWhy = still.get();
             }
         }
-        proved.add(least, leastWhy);
+        proved.add(least, excludedAs(least, leastWhy, stoppedAt));
+    }
+
+    /**
+     * What a least proof says {@code least} is: a way no input takes where it was had of the
+     * conditions alone; one the proof did not tell where a construction it keeps is one the figure
+     * left unanswered; and otherwise a way every run of which stops at the constructions it keeps.
+     */
+    private static DecisionReading.Excluded excludedAs(DecisionPath least, NoInputTakesIt why,
+                                                       Optional<Figure> stoppedAt) {
+        DecisionReading.Ruled way = new DecisionReading.Ruled(least.rule(), least.steps(), true,
+                least.passed());
+        if (least.passed().isEmpty()) {
+            return new DecisionReading.ImpossiblePath(way, why);
+        }
+        return stoppedAt.<DecisionReading.Excluded>map(figure ->
+                        new DecisionReading.UndecidedAtAFigure(way, why, figure))
+                .orElseGet(() -> new DecisionReading.EveryRunStops(way, why));
     }
 
     /**
@@ -155,21 +212,17 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * is asked here, where every way ends.
      */
     boolean takenByNoInput(DecisionPath path) {
-        Optional<NoInputTakesIt> none = noInputTakes(path);
+        Optional<NoInputTakesIt> none = noInputTakes(path).proof();
         none.ifPresent(why -> proveWithLess(path, why));
         return none.isPresent();
     }
 
-    /** Why no input brings out every condition {@code path} consulted as it did, where that is
-     *  proved. */
-    private Optional<NoInputTakesIt> noInputTakes(DecisionPath path) {
-        return proved.whyNoInputTakes(path.rule(), () -> {
-            List<OnTheWay> stated = new ArrayList<>();
-            path.consulted().forEach(each -> stated.addAll(each.states()));
-            return WayToTheBorder.forArrival(stated)
-                    .takenByNoInput(meanings.states().read().quantities().region(),
-                            proved::takesIn);
-        });
+    /** Whether no input brings out every condition {@code path} consulted as it did and gets past
+     *  every construction it goes through: proved, not proved, or not known for the figure. */
+    private WaysNoInputTakes.Asked noInputTakes(DecisionPath path) {
+        return proved.whyNoInputTakes(path.way(), () -> WayToTheBorder.forArrival(path.stated())
+                .takenByNoInput(meanings.states().read().quantities().region(),
+                        proved::takesIn));
     }
 
     @Override
@@ -222,6 +275,21 @@ final class DecisionNaming implements Naming<DecisionPath> {
         return meanings.entering(match, part, reads, numbering)
                 .map(read -> atAnArm(read, match.occurrence(), part))
                 .orElse(DecisionPath.NOWHERE);
+    }
+
+    /**
+     * That a run got past {@code construction}: each clause of the invariant of the type it builds
+     * holding of what it is handed, gone through by the way a clause apiece and asked of a row
+     * composed for it. A clause apiece, so that a proof that no input takes the way is had without
+     * each clause it does not need, one at a time ({@link #proveWithLess}). One way through every
+     * clause, made at once. Nothing where the type holds its values to no invariant, which a run
+     * gets past whatever it hands it.
+     */
+    @Override
+    public Optional<DecisionPath> passing(Core.Construct construction) {
+        List<PassedConstruction> clauses = meanings.constructing(construction, reads, numbering);
+        return clauses.isEmpty() ? Optional.empty()
+                : Optional.of(new DecisionPath(List.of(), clauses));
     }
 
     /**

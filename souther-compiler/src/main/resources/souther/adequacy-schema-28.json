@@ -2390,6 +2390,192 @@
         }
       ]
     },
+    "runsStopped": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Where the runs of the rows a search tried stopped without answering, each place once. Each is an input the model has not decided about: `a_construction` is a construction one of its type's invariant clauses refused, `an_ensures` an `ensures` the answer did not keep, `an_end` an operation the runtime would not finish — a number past what its type holds, a division by zero — and `an_unreachable` an `unreachable` reached. Beside the word of the entry it is in and never inside it: a run that stopped is a row that was tried, which the word does not say, and no figure, so a run allowed more stops there too. Absent where no run stopped at any of them. Published by every entry that says where runs stopped, through this one definition, so a place reads alike wherever a consumer meets it.",
+      "items": {
+        "type": "object",
+        "required": [
+          "at"
+        ],
+        "additionalProperties": false,
+        "dependentRequired": {
+          "line": [
+            "column",
+            "module"
+          ],
+          "column": [
+            "line"
+          ],
+          "sourceId": [
+            "line"
+          ],
+          "rule": [
+            "declaredIn"
+          ],
+          "declaredIn": [
+            "rule"
+          ]
+        },
+        "properties": {
+          "at": {
+            "enum": [
+              "a_construction",
+              "an_ensures",
+              "an_end",
+              "an_unreachable"
+            ]
+          },
+          "rule": {
+            "$ref": "#/$defs/ruleHandle",
+            "description": "The rule that did not hold: the invariant clause of the type built, or the `ensures` of the behavior. The handle and nothing else."
+          },
+          "module": {
+            "type": "string",
+            "description": "Where the run stopped, as a module: for a construction or an `unreachable`, the module whose text it is written in, which for a body that calls another module's helper is that module and not the one whose behavior ran; for an ensures, the behavior's module. For a construction or an `unreachable`, present exactly where the code that stopped the run said where it is written, with `line` and `column`, and absent with them where it said no place — never another module in its stead. Present for an ensures; absent for an end, which the runtime says no place for."
+          },
+          "declaredIn": {
+            "type": "string",
+            "description": "The module the rule that did not hold is declared in, as a rule's `ruleId` says it: for an invariant clause, the module declaring the type, which need not be where the construction is written; for an ensures, the behavior's module. With `rule`, what tells two rules of one handle apart — two modules may each declare a type of one name with an invariant. Present exactly where `rule` is."
+          },
+          "sourceId": {
+            "$ref": "#/$defs/sourceIdentity",
+            "description": "The source the construction or the `unreachable` is written in: the one declaring `module`. Absent where no source of this compilation declares it."
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The line the construction or the `unreachable` starts at in the text of `module`, counted from one. Absent, with `module` and `sourceId`, where the code that stopped the run had no place for it: where the place has no text, or this compilation holds its text not laid out or as no module's."
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The column it starts at, counted from one."
+          },
+          "said": {
+            "type": "string",
+            "description": "What the runtime said ended the run, or what the `unreachable` said, where the place names no rule."
+          }
+        },
+        "allOf": [
+          {
+            "description": "A construction is refused by a rule: the rule is named, and nothing the runtime said is. Where it is written is said whole — `module`, `line` and `column` — or not at all.",
+            "if": {
+              "properties": {
+                "at": {
+                  "const": "a_construction"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "rule"
+              ],
+              "dependentRequired": {
+                "module": [
+                  "line"
+                ]
+              },
+              "not": {
+                "required": [
+                  "said"
+                ]
+              }
+            }
+          },
+          {
+            "description": "An ensures is a rule of the answer and stands at no construction: it is in the behavior's module, and at no line.",
+            "if": {
+              "properties": {
+                "at": {
+                  "const": "an_ensures"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "rule",
+                "module"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "said"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "line"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "description": "An end names no rule and stands at no construction: what the runtime said is all there is.",
+            "if": {
+              "properties": {
+                "at": {
+                  "const": "an_end"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "said"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "rule"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "module"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "line"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "description": "An unreachable names no rule: what it said is the reason the model wrote. Where it is written — the text of `module`, at `line` and `column` there — is said whole where the code that reached it had a place for it, and not at all where it had none.",
+            "if": {
+              "properties": {
+                "at": {
+                  "const": "an_unreachable"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "said"
+              ],
+              "dependentRequired": {
+                "module": [
+                  "line"
+                ]
+              },
+              "not": {
+                "required": [
+                  "rule"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
     "obligations": {
       "type": "array",
       "description": "What a set of obligations comes to: one entry per thing a row is owed for, once each however many positions read the line, with every reading of it. A behavior's account and the declarations' are two projections of one relation and are written in this one shape, so a consumer joins a finding to either by `obligationId`.",
@@ -6921,6 +7107,59 @@
             }
           }
         },
+        "waysEveryRunStops": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The ways through the body every run of which the reading proved stops at a construction, apart from `waysNoInputTakes` and from the rules: inputs bring the conditions out as the way does — no proof is had of them alone — and none of those inputs gets past the constructions the proof keeps, each of which is refused by a clause of the invariant of the type it builds. Each stands for every rule that goes on from it, as a way no input takes does; none of those rules is in `obligations` or counted in `coverage`, and the model has a body that aborts along the way, which `waysNoInputTakes` would not say. Each is a fact about the model and no finding, as a rule every run reaching which stops in an operation is (`rule_answers_nowhere`): no row can answer it, since every row down the way stops too, and the verdict is what it would be without it. It is a fact about the model that stands by itself: a check of the model's invariants may or may not report the same construction as well, and this entry neither depends on that report nor stands in for it. Absent where no way was proved one every run of stops.",
+          "items": {
+            "type": "object",
+            "required": [
+              "way",
+              "runsStopped"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "way": {
+                "$ref": "#/$defs/ruleObligationId"
+              },
+              "runsStopped": {
+                "$ref": "#/$defs/runsStopped",
+                "description": "Where every run along the way stops: one entry for each clause of a construction the proof keeps, which is a clause the inputs of the way break. A clause of the same construction those inputs keep is not named."
+              }
+            }
+          }
+        },
+        "waysUndecided": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The ways through the body no input gets past where the reading stopped at a figure before it could say whether any input takes them, apart from `waysNoInputTakes` and `waysEveryRunStops` and from the rules: the proof that no input gets past the constructions on the way was had, and the proof without one of them was not answered for the figure. So the way is one of the two and neither is said: some input may bring its conditions out, and then every such run stops at a construction kept; or none does, and the way is unreachable. Each stands for every rule that goes on from it, as the ways of the other two lists do; none of those rules is in `obligations` or counted in `coverage`. No input gets past the constructions on either, so no rule past the way is owed a row whichever it is, and the way holds no verdict open. Absent where no proof stopped short of saying which.",
+          "items": {
+            "type": "object",
+            "required": [
+              "way",
+              "figures"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "way": {
+                "$ref": "#/$defs/ruleObligationId"
+              },
+              "figures": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "The figure the proof stopped at, by the name it is declared as: what a wider run would have to allow to say which the way is.",
+                "items": {
+                  "$ref": "#/$defs/figure"
+                }
+              },
+              "runsStopped": {
+                "$ref": "#/$defs/runsStopped",
+                "description": "Where every run along the way would stop were some input to take it: one entry for each clause of a construction still in the proof. A construction whose invariant was not reached names no clause and is not here. Absent where no construction still in the proof names a clause."
+              }
+            }
+          }
+        },
         "obligations": {
           "type": "array",
           "description": "One entry per rule the body states.",
@@ -7224,6 +7463,10 @@
                           }
                         }
                       }
+                    },
+                    "runsStopped": {
+                      "$ref": "#/$defs/runsStopped",
+                      "description": "Where the runs of the rows the searches with this word composed stopped without answering, each place once, in the order they were met. Beside `reason` and never inside it. Absent where no run stopped at any of them."
                     }
                   }
                 }
@@ -8459,6 +8702,10 @@
                         "$ref": "#/$defs/figure"
                       }
                     },
+                    "runsStopped": {
+                      "$ref": "#/$defs/runsStopped",
+                      "description": "Where a relation's other value was not shown to reach every value here because the rows searched for to show it met what they were asked to and the behavior's runs on them stopped without answering, where those runs stopped, each place once and in one order: what lifting this entry would take, as `figures` is, and not part of what tells two entries apart. Written under `relation_not_shown_to_reach_every_value`; the same places the `notRead` entry for the same rule carries. Absent where no run of a row tried for the entry stopped."
+                    },
                     "sentTo": {
                       "$ref": "#/$defs/at",
                       "description": "Where inside the rule a reader goes about this one, for an entry about a part of it rather than about the whole. `rule` beside the entry sends them to the rule, which is the whole answer wherever what they lift is the rule; a choice whose other alternative went unread is lifted at the `||`, and the clause `rule` names reads perfectly well; where the arithmetic stopped, it is the call the arithmetic failed to take apart, which is where lifting begins. Absent where the rule is the whole of it, and absent where the part is in a text this document cannot point at. The same place the `notRead` entry for the same choice carries, so a consumer holding what the values were short of and what the ends were short of knows the two are one thing to fix."
@@ -8743,6 +8990,10 @@
                 "items": {
                   "$ref": "#/$defs/figure"
                 }
+              },
+              "runsStopped": {
+                "$ref": "#/$defs/runsStopped",
+                "description": "Where a relation's other value was not shown to reach every value here because the rows searched for to show it met what they were asked to and the behavior's runs on them stopped without answering, where those runs stopped, each place once and in one order. Written under `relation_not_shown_to_reach_every_value`, which says neither that a row was tried nor where its run stopped. Not a figure: a wider run stops there too, which is why it is not in `figures`. Absent where no run of a row tried for the entry stopped."
               },
               "shownReachedAt": {
                 "type": "array",

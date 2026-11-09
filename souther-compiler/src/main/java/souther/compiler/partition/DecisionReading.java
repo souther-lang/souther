@@ -6,8 +6,10 @@ import souther.compiler.diag.Citation;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Paths;
 import souther.compiler.flow.ValueArrivals;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.observe.Figure;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -54,9 +56,11 @@ import java.util.Set;
  * @param behavior    whose decision this is
  * @param found       the rules, in the order the reading holds the ways, each with what a run down
  *                    its path would be seen doing
- * @param impossible  the ways no input takes, each where the proof was had and none narrower than
- *                    another, in the order the reading met them; the rules past each are in none of
- *                    {@code found}
+ * @param excluded    the ways no rule past which is owed a row — no input takes it, every run of
+ *                    it stops at a construction, or a proof stopped at a figure did not tell
+ *                    which ({@link Excluded}) — each where the proof was had
+ *                    and none narrower than another, in the order the reading met them; the rules
+ *                    past each are in none of {@code found}
  * @param enumeration whether every way was written down
  * @param metAt       where this reading met each condition it places itself, which is what a
  *                    report about one of them is sent to
@@ -64,7 +68,7 @@ import java.util.Set;
  *                    condition is named by the reading that met it, and the same name from
  *                    another reading is another condition
  */
-public record DecisionReading(String behavior, List<Ruled> found, List<ImpossiblePath> impossible,
+public record DecisionReading(String behavior, List<Ruled> found, List<Excluded> excluded,
                               Enumeration enumeration, Map<ConditionOccurrence, Citation> metAt) {
 
     /** The figure this reading stops at, read here rather than written here. */
@@ -72,7 +76,7 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
 
     public DecisionReading {
         found = List.copyOf(found);
-        impossible = List.copyOf(impossible);
+        excluded = List.copyOf(excluded);
         // In the order the reading met them, which is an order nobody reads and the one a copy
         // that kept none would replace with the run's.
         metAt = Collections.unmodifiableMap(new LinkedHashMap<>(metAt));
@@ -91,10 +95,17 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
      *              that is not is a rule this compiler read less of than the body states, which is
      *              a weakening of the measurement rather than a rule the body does not have
      */
-    public record Ruled(DecisionRule rule, List<RuleStep> steps, boolean whole) {
+    public record Ruled(DecisionRule rule, List<RuleStep> steps, boolean whole,
+                        List<PassedConstruction> passed) {
 
         public Ruled {
             steps = List.copyOf(steps);
+            passed = List.copyOf(passed);
+        }
+
+        /** The same, of a path that goes through no construction. */
+        public Ruled(DecisionRule rule, List<RuleStep> steps, boolean whole) {
+            this(rule, steps, whole, List.of());
         }
 
         /** Every condition the path consulted, said as what a run through it would be seen
@@ -103,11 +114,14 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
             return steps.stream().map(RuleStep::shown).toList();
         }
 
-        /** The same conditions in the words a composer of a row works from, which is what a row
-         *  standing in this rule would have to satisfy of the input. */
+        /** The same conditions in the words a composer of a row works from, with what getting past
+         *  each construction on the way states: what a row standing in this rule would have to
+         *  satisfy of the input. */
         public WayToTheBorder states() {
-            return WayToTheBorder.forArrival(steps.stream()
-                    .flatMap(each -> each.states().stream()).toList());
+            List<OnTheWay> stated = new ArrayList<>();
+            steps.forEach(each -> stated.addAll(each.states()));
+            passed.forEach(each -> stated.addAll(each.states()));
+            return WayToTheBorder.forArrival(stated);
         }
 
         /** What a row has to be, beside the way, for each case the statements on this path draw
@@ -162,29 +176,171 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
     }
 
     /**
-     * A way through the body no input takes, proved.
+     * A way through the body no rule past which is owed a row, proved, and what the proof says the
+     * way is.
      *
-     * <p>The conditions it consulted as the way met them, which is a way and not a rule: the reading
+     * <p>Three answers, and a reader of these is told which it holds. A way no input takes is one
+     * no run goes down, and there is nothing to do about it. A way every run of which stops at a
+     * construction is one runs go down and every one of them is refused: the conditions on it leave
+     * inputs, and what the constructions on it are handed under them breaks their invariants. And a
+     * way the proof could not tell between the two, because the figure of conditions taken in was
+     * spent before the proof without a construction was answered: no input gets past the
+     * constructions, and whether any input brings the conditions out is not known. All three leave
+     * every rule past the way owed no row, since no run gets past it, and only the first is the
+     * body being unreachable there; read as one, a body every run of which aborts along a way would
+     * be said as a way nothing reaches, and a way nobody decided about as either.
+     *
+     * <p>The conditions the way consulted as it met them, which is a way and not a rule: the reading
      * stopped there, so it names the conditions the proof needed and none past them. Every rule that
-     * goes on from it consults these as it did, and is no rule a run takes — this one proof is the
-     * account of all of them, and none of them is counted as a rule.
+     * goes on from it consults these as it did, and is no rule a run gets to the end of — this one
+     * proof is the account of all of them, and none of them is counted as a rule.
+     */
+    public sealed interface Excluded permits ImpossiblePath, EveryRunStops, UndecidedAtAFigure {
+
+        /** What the way consulted and went through, and where a run down it would be seen. */
+        Ruled way();
+
+        /** What leaves no input getting past everything on it. */
+        NoInputTakesIt why();
+
+        /**
+         * Whether the proof stands for {@code other}: it consulted every condition this way did as
+         * this way did, and goes through every construction this way does, so whatever left this
+         * way no input leaves {@code other} none.
+         */
+        default boolean standsFor(Ruled other) {
+            return consultedAsIn(other.rule()) && other.passed().containsAll(way().passed());
+        }
+
+        /** The same, of a rule along a way through no construction. */
+        default boolean standsFor(DecisionRule rule) {
+            return consultedAsIn(rule) && way().passed().isEmpty();
+        }
+
+        /** Whether the way consulted {@code rule}'s conditions as {@code rule} did. */
+        private boolean consultedAsIn(DecisionRule rule) {
+            return way().rule().consulted().entrySet().stream().allMatch(each ->
+                    each.getValue().equals(rule.consulted().get(each.getKey())));
+        }
+    }
+
+    /**
+     * A way through the body no input takes, proved: what its conditions state leaves no input,
+     * whatever it goes through.
      *
      * @param way what the way consulted, and where a run down it would have been seen doing so
      * @param why what leaves no input there
      */
-    public record ImpossiblePath(Ruled way, NoInputTakesIt why) {
+    public record ImpossiblePath(Ruled way, NoInputTakesIt why) implements Excluded {
 
         public ImpossiblePath {
             Objects.requireNonNull(way, "a way no input takes is some way");
             Objects.requireNonNull(why, "a way no input takes is proved to be one");
         }
+    }
 
-        /** Whether the way consulted {@code rule}'s conditions as {@code rule} did, which makes
-         *  the rule one past it. */
-        public boolean standsFor(DecisionRule rule) {
-            return way.rule().consulted().entrySet().stream().allMatch(each ->
-                    each.getValue().equals(rule.consulted().get(each.getKey())));
+    /**
+     * A way through the body every run of which stops at a construction, proved.
+     *
+     * <p>Some input brings out the conditions on it as the way does — no proof is had of them
+     * alone — and none of those gets past every clause of a construction the proof keeps
+     * ({@link Ruled#passed}): each is a construction a run along the way reaches, or one stopped
+     * before it reaches, and what it is handed there breaks the clause kept. No rule past
+     * it is owed a row, since no run gets past; and it is not unreachable, since every one of those
+     * runs got as far as the construction.
+     *
+     * <p>A fact about the model, and nothing a row is owed for: the same kind of fact as a
+     * comparison every run reaching which stops in an operation it is read through
+     * ({@link BlockReason.ComparisonAnswersNowhere}), which states nothing
+     * on either side because no run gets past it. No row can answer the way, since every row down
+     * it stops too. What is wrong is the body, building a value nothing it is handed there can be.
+     * This is a fact about the model that stands by itself: the check of the model's invariants
+     * may or may not report the same construction as well, and this neither depends on that
+     * report nor stands in for it. The account says the way and where its runs stop, and leaves
+     * the verdict where the rules put it.
+     *
+     * <p>Some construction the proof keeps names the clause it is held to. One whose invariant was
+     * not reached states only that it was not read, which proves no contradiction, so a proof had
+     * with it is had without it and a least proof answered in full never keeps it
+     * ({@link ClauseOfAConstruction}). A least proof keeping nothing else stopped at the figure, and
+     * is {@link UndecidedAtAFigure}.
+     *
+     * @param way what the way consulted and the constructions the proof keeps, never none of them,
+     *            and some of them held to a clause
+     * @param why what leaves no input getting past them
+     */
+    public record EveryRunStops(Ruled way, NoInputTakesIt why) implements Excluded {
+
+        public EveryRunStops {
+            Objects.requireNonNull(way, "a way every run of which stops is some way");
+            Objects.requireNonNull(why, "a way every run of which stops is proved to be one");
+            if (way.passed().stream().noneMatch(each ->
+                    each.clause() instanceof ClauseOfAConstruction.Held)) {
+                throw new IllegalArgumentException("a way every run of which stops goes through a"
+                        + " construction held to a clause the way's inputs break: " + way);
+            }
         }
+
+        /** The clauses of the constructions every run along the way stops at one of. */
+        public List<PassedConstruction> stoppedAt() {
+            return way.passed();
+        }
+    }
+
+    /**
+     * A way through the body no input gets past, where the proof could not say whether any input
+     * takes it at all: the figure of conditions taken in was spent before a proof without one of
+     * the constructions on it was answered.
+     *
+     * <p>Either of the other two. Some input may bring out the conditions on the way, and then every
+     * such run stops at one of the constructions kept, which is the body building a value nothing
+     * it is handed there can be — or none does, and then the way is unreachable. No rule past it
+     * is owed a row either way, since the proof that no input both takes the conditions and gets
+     * past the constructions was had in full. What the figure left open is which of the two the
+     * way is, and that changes no verdict.
+     *
+     * @param way    what the way consulted and the constructions still in the proof, never none
+     *               of them
+     * @param why    what leaves no input getting past them
+     * @param figure the figure the proof stopped at, as it stood there
+     */
+    public record UndecidedAtAFigure(Ruled way, NoInputTakesIt why, Figure figure)
+            implements Excluded {
+
+        public UndecidedAtAFigure {
+            Objects.requireNonNull(way, "a way left undecided is some way");
+            Objects.requireNonNull(why, "no input gets past a way left undecided, proved");
+            Objects.requireNonNull(figure, "a proof cut short was cut short at some figure");
+            if (way.passed().isEmpty()) {
+                throw new IllegalArgumentException("a way proved of its conditions alone is one no"
+                        + " input takes: " + way);
+            }
+        }
+
+        /** The clauses of the constructions every run along the way would stop at one of, were
+         *  any input to take it. */
+        public List<PassedConstruction> stoppedAt() {
+            return way.passed();
+        }
+    }
+
+    /** The ways no input takes, of {@link #excluded}. */
+    public List<ImpossiblePath> impossible() {
+        return excluded.stream().filter(ImpossiblePath.class::isInstance)
+                .map(ImpossiblePath.class::cast).toList();
+    }
+
+    /** The ways every run of which stops at a construction, of {@link #excluded}. */
+    public List<EveryRunStops> everyRunStops() {
+        return excluded.stream().filter(EveryRunStops.class::isInstance)
+                .map(EveryRunStops.class::cast).toList();
+    }
+
+    /** The ways a proof cut short at a figure did not tell between the other two, of
+     *  {@link #excluded}. */
+    public List<UndecidedAtAFigure> undecided() {
+        return excluded.stream().filter(UndecidedAtAFigure.class::isInstance)
+                .map(UndecidedAtAFigure.class::cast).toList();
     }
 
     /**
@@ -309,15 +465,16 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
         // beside the proof, however the reading came to it: the proof stands for it.
         List<Arrival<DecisionPath>> arrived = held.arrivals().stream()
                 .filter(way -> !naming.takenByNoInput(way.path())).toList();
-        List<ImpossiblePath> impossible = proved.leastOfThem();
+        List<Excluded> excluded = proved.leastOfThem();
         List<Ruled> found = new ArrayList<>();
         for (Arrival<DecisionPath> way : arrived) {
-            DecisionRule rule = way.path().rule();
-            if (impossible.stream().noneMatch(each -> each.standsFor(rule))) {
-                found.add(new Ruled(rule, way.path().steps(), way.isComplete()));
+            Ruled ruled = new Ruled(way.path().rule(), way.path().steps(), way.isComplete(),
+                    way.path().passed());
+            if (excluded.stream().noneMatch(each -> each.standsFor(ruled))) {
+                found.add(ruled);
             }
         }
-        return new DecisionReading(behavior, found, impossible, new Enumeration.Complete(),
+        return new DecisionReading(behavior, found, excluded, new Enumeration.Complete(),
                 numbering.metAt());
     }
 

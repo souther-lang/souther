@@ -76,8 +76,9 @@ public final class OperationFacts {
      * beside it would be a kind nothing validates until someone remembers — and the arrangement is
      * meant to make remembering unnecessary.
      */
-    private static final List<Declared> DECLARED = withWhichElementAnAnswerHolds(
-            withWhetherAnOptionHoldsAValue(withWhereThePiecesCameFrom(declared())));
+    private static final List<Declared> DECLARED = withWhereTheKeptElementsCameFrom(
+            withWhichElementAnAnswerHolds(
+                    withWhetherAnOptionHoldsAValue(withWhereThePiecesCameFrom(declared()))));
 
     /**
      * {@code declared}, with where the elements of each list put together of pieces came from
@@ -96,13 +97,34 @@ public final class OperationFacts {
                     ArgumentRef source, PieceOfAnElement piece)) {
                 out.add(new Declared(each.operation(), switch (piece) {
                     case THE_CLOSURES_ANSWER -> maps(source, SizeAgainstItsSource.SAME);
-                    case THE_ELEMENT_WHERE_IT_HOLDS -> keeps(source, SizeAgainstItsSource.AT_MOST);
+                    case THE_ELEMENT_WHERE_IT_HOLDS ->
+                            new OperationFact.KeepsTheElementsWhereItHolds(source);
                     // Any number for each, which is neither of the two counts a building can
                     // state, so the lineage stands alone and is no row the discharge reads.
                     case WHAT_THE_CLOSURE_ANSWERS -> new OperationFact.ElementsComeFrom(
                             new ElementLineage.InsideClosureResult<>(
                                     new ElementLineage.Source<>(source, 1)));
                 }));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * {@code declared}, with where the elements of what an operation answers came from, and how
+     * many there are, stated from that it keeps the elements of its source where a closure holds
+     * of them: each is one of the source's, none of them twice, so no more than the source holds.
+     *
+     * <p>Stated from it and never beside it, for the reason where the pieces came from is. A list
+     * put together of pieces states it by its piece, so it is derived there first.
+     */
+    private static List<Declared> withWhereTheKeptElementsCameFrom(List<Declared> declared) {
+        List<Declared> out = new ArrayList<>(declared);
+        for (Declared each : declared) {
+            if (each.fact() instanceof OperationFact.KeepsTheElementsWhereItHolds(
+                    ArgumentRef source)) {
+                out.add(new Declared(each.operation(),
+                        keeps(source, SizeAgainstItsSource.AT_MOST)));
             }
         }
         return List.copyOf(out);
@@ -349,7 +371,7 @@ public final class OperationFacts {
             about("List", "distinct", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             about("List", "take", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
             about("List", "drop", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
-            about("Set", "filter", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
+            about("Set", "filter", new OperationFact.KeepsTheElementsWhereItHolds(CONTAINER)),
             about("Map", "filterEntries", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
             about("List", "distinctBy", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
             about("Map", "remove", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
@@ -410,6 +432,12 @@ public final class OperationFacts {
                     at(0))),
             // And the code points of one, each the number it is.
             about("String", "codePoints", new OperationFact.ListsTheCodePointsOf(at(0))),
+            // What the operator ++ comes to over two strings, and over two lists.
+            about("String", "append", new OperationFact.IsTheOperator(BinOp.CONCAT)),
+            about("List", "append", new OperationFact.IsTheOperator(BinOp.CONCAT)),
+            // Nothing between the strings joined is the strings put end to end.
+            about("String", "join", new OperationFact.AgreesWithAnotherWhereItIsGivenText(
+                    ValueName.Stdlib.operation("String", "concat"), 0, "")),
 
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the

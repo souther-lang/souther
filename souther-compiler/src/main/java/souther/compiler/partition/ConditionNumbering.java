@@ -93,25 +93,29 @@ final class ConditionNumbering {
     private final Map<OnTheWay, ModelOccurrences> madeBy;
     /** How many names this reading has handed out, shared with every place it reads. */
     private final int[] next;
+    /** How many constructions this reading has named the getting past of, shared the same way and
+     *  counted apart from {@link #next}. */
+    private final int[] nextGotPast;
     /** What this reading names inside the body of each call of a recursive helper it reads, by the
      *  call, shared with every place it reads. */
     private final Map<CallContext, ConditionNumbering> within;
 
     ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading) {
         this(module, behavior, reading, new LinkedHashMap<>(), new IdentityHashMap<>(),
-                new int[1], new HashMap<>());
+                new int[1], new int[1], new HashMap<>());
     }
 
     private ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading,
                                Map<ConditionOccurrence, Citation> metAt,
                                Map<OnTheWay, ModelOccurrences> madeBy, int[] next,
-                               Map<CallContext, ConditionNumbering> within) {
+                               int[] nextGotPast, Map<CallContext, ConditionNumbering> within) {
         this.module = module;
         this.behavior = behavior;
         this.reading = reading;
         this.metAt = metAt;
         this.madeBy = madeBy;
         this.next = next;
+        this.nextGotPast = nextGotPast;
         this.within = within;
     }
 
@@ -127,7 +131,7 @@ final class ConditionNumbering {
         return context.equals(CallContext.OF_THE_BODY) ? this
                 : within.computeIfAbsent(context,
                         _ -> new ConditionNumbering(module, behavior, reading, metAt, madeBy,
-                                next, within));
+                                next, nextGotPast, within));
     }
 
     /** What this reading already made of the condition at {@code at} under {@code reads}, or null
@@ -144,6 +148,29 @@ final class ConditionNumbering {
     /** The name of the condition being recognised now, where no construct of the model is it. */
     ConditionOccurrence met() {
         return new ConditionOccurrence(behavior, reading, next[0]++);
+    }
+
+    /**
+     * The name getting past {@code construction} goes by: one of
+     * {@link ConditionOccurrence.Reading#GETTING_PAST}, counted apart from the conditions so that
+     * theirs are the numbers they are whatever the body builds. Refused where this reading has
+     * named it already, for the reason an arm is ({@link #metEntering}), and refused of any
+     * reading but the decision's, which is the one whose ways get past constructions.
+     */
+    ConditionOccurrence metGettingPast(Core.Construct construction) {
+        if (reading != ConditionOccurrence.Reading.DECIDING) {
+            throw new IllegalStateException("only the ways a body decides by get past a"
+                    + " construction, and this is the reading of " + reading);
+        }
+        Map<Integer, ConditionOccurrence> named =
+                arms.computeIfAbsent(construction, _ -> new LinkedHashMap<>());
+        ConditionOccurrence already = named.putIfAbsent(0, new ConditionOccurrence(behavior,
+                ConditionOccurrence.Reading.GETTING_PAST, nextGotPast[0]++));
+        if (already != null) {
+            throw new IllegalStateException(
+                    "this reading has already named getting past a construction: " + already);
+        }
+        return named.get(0);
     }
 
     /**

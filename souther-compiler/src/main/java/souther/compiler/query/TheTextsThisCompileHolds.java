@@ -1,9 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.codegen.TextsOfModules;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.diag.LaidOutText;
 import souther.compiler.diag.QuotedFrom;
-import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.meta.ReadableModule;
@@ -11,6 +11,7 @@ import souther.compiler.source.SourceId;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The texts a compilation can lay a place out against: its own sources, and the texts it put back
@@ -24,7 +25,7 @@ import java.util.Map;
  * from end to end, and a pass that asks about a thousand instructions of one body would otherwise
  * read that body's text a thousand times.
  */
-public final class TheTextsThisCompileHolds implements SourceLayouts {
+public final class TheTextsThisCompileHolds implements TextsOfModules {
 
     private final Db db;
 
@@ -32,6 +33,21 @@ public final class TheTextsThisCompileHolds implements SourceLayouts {
 
     TheTextsThisCompileHolds(Db db) {
         this.db = db;
+    }
+
+    /**
+     * The module {@code text} is part of: the one a source of this compilation declares or holds
+     * rows for, and the one whose published text a read-back text is. None for a text nobody named.
+     */
+    @Override
+    public Optional<String> moduleOf(QuotedFrom text) {
+        return switch (text) {
+            case QuotedFrom.ASourceThisCompileHolds(SourceId source) ->
+                    Optional.ofNullable(db.ask(new Front.ModuleOf(source)).value());
+            case QuotedFrom.TextItCannotShow(SourceProvenance published) ->
+                    Optional.of(published.module());
+            case QuotedFrom.TextItCannotName _ -> Optional.empty();
+        };
     }
 
     @Override

@@ -121,9 +121,9 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
                     if List.contains(1, a) then
                         Bad
                     else
-                        (if List.contains(2, a) then NEL(List.append(a, b)) else Bad)
+                        (if List.contains(2, a) then NEL(b) else Bad)
                 """),
-                "a list may hold two and not one, and nothing there says the built list is not empty");
+                "a list may hold two and not one, and nothing there says the other list is not empty");
     }
 
     // --- the question itself -------------------------------------------------------------------

@@ -9,7 +9,6 @@ import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
@@ -461,12 +460,23 @@ final class DischargeRules {
      * name this spells.
      */
     static Core.Block keptWhereItHolds(Core.PreservedCall call, Denotations at) {
-        BoundOperationFacts.Assembled assembled = facts().assembles(call.operation());
-        if (assembled == null || assembled.piece() != PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS) {
-            return null;
-        }
-        Core.Block predicate = Terms.blockOf(CallArguments.of(assembled.closure(), call), at);
+        KeptWhereItHolds kept = keptElements(call);
+        Core.Block predicate = kept == null ? null : Terms.blockOf(kept.closure(), at);
         return predicate == null || predicate.params().size() != 1 ? null : predicate;
+    }
+
+    /** The elements {@code call} answers: those of {@code source} that {@code closure} holds of. */
+    record KeptWhereItHolds(Core source, Core closure) {}
+
+    /**
+     * What {@code call} keeps and by what, or null where the operation does not answer the
+     * elements of a container where a closure holds of them: the container and the closure as
+     * the call was handed them.
+     */
+    static KeptWhereItHolds keptElements(Core.PreservedCall call) {
+        BoundOperationFacts.Kept kept = facts().keepsWhereItHolds(call.operation());
+        return kept == null ? null : new KeptWhereItHolds(CallArguments.of(kept.source(), call),
+                CallArguments.of(kept.closure(), call));
     }
 
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the

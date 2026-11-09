@@ -40,7 +40,7 @@ class AStatementOfSeveralLinesKeepsTheStringsItsPartnersCanHoldTest {
             Set<FilingCoordinate> undivided,
             Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> parted) {
         return new ComparisonAssessment.AgainstAnotherValue(AT_S, List.of(), undivided, List.of(),
-                Optional.empty(), Map.of(), Set.of(), Map.of(), parted);
+                Optional.empty(), Map.of(), Map.of(), Set.of(), Map.of(), parted);
     }
 
     private static ComparisonAssessment.Several of(ComparisonAssessment... lines) {
