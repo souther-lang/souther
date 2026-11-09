@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The rules written over the positions their equalities leave free, so that a goal asked of them
@@ -18,14 +19,13 @@ import java.util.Map;
  * it would have needed two to find. {@code x = a + b} beside {@code y = b + a} proves
  * {@code x - y} is nought.
  *
- * <p>Which position an equality is solved for is the one the rules use most, and among positions
- * they use alike, the last in the order the domain walks them ({@link Use}). Chosen by the names,
- * the rules written over what is left differ between two namings of one system, and what a question
+ * <p>An equality is solved for a position the rules use most ({@link Use}), and there is one
+ * reduction for each way of choosing among the positions they use alike. Chosen by the names, the
+ * rules written over what is left differ between two namings of one system, and what a question
  * finds in them with it. What the rules use of a position — how many name it, and in what shape of
- * rule — is the same under any naming and under any writing of a rule, so the names decide only
- * between positions nothing tells apart. The rules come out the same whichever order they were
- * said in, since each equality is solved for the position ranked last of those that none of the
- * others was already solved for.
+ * rule — is the same under any naming and under any writing of a rule, so the choices are the same
+ * under any naming, and what is proved by any of them is proved under every naming. More than
+ * {@link #MOST_CHOICES} of them are none, since the first few would be the names' choice.
  *
  * <p>What the reduced rules say is what the rules say, less. Every rule here follows from the
  * rules it was made of, and a goal written as {@link #put} writes it is equal to the goal wherever
@@ -48,6 +48,20 @@ final class ReducedRules<A> {
      * this stops one that can be held and is too much to do.
      */
     static final int MOST_UPDATES = 20_000;
+
+    /**
+     * The most reductions the rules may have, one for each way of choosing among the positions
+     * they use alike. Past it none is used, and not the first few in the order of the names: which
+     * ones those were would be the names deciding again.
+     */
+    static final int MOST_CHOICES = 16;
+
+    /**
+     * The most ways of choosing that are tried to find the reductions, before they are counted
+     * as one for each set of positions solved for. More than that is more than {@link
+     * #MOST_CHOICES} reductions for the purpose of this bound.
+     */
+    static final int MOST_WAYS = 256;
 
     /** A sum and a constant: {@code Σ coefs·position + constant}. */
     record Goal<A>(Map<A, ExactRatio> coefs, ExactRatio constant) {}
@@ -78,24 +92,41 @@ final class ReducedRules<A> {
     }
 
     private final CanonicalOrder<A> order;
-    private final Map<A, Use> uses = new HashMap<>();
+    private final Map<A, Use> uses;
     private final List<Solved<A>> solved = new ArrayList<>();
     private final List<Rule<A>> rules = new ArrayList<>();
     /** Whether the updates of a weight are counted: while a set of equalities is solved. */
     private boolean metered;
+    /** Whether each equality is solved for one position only, the last the rules rank. */
+    private boolean alone;
     /** How many more weights this set of equalities may update. */
     private int left;
 
-    private ReducedRules(CanonicalOrder<A> order) {
+    private ReducedRules(CanonicalOrder<A> order, Map<A, Use> uses) {
         this.order = order;
+        this.uses = uses;
     }
 
     /**
-     * {@code all} over the positions their equalities leave free, or null where there is nothing
-     * to leave free: every equality is one the domain holds exactly already as a difference of two
-     * positions, or none of the sets of equalities could be solved.
+     * One way a set of equalities is solved: the positions solved for, or the equalities left as
+     * they were where the set could not be solved.
      */
-    static <A> ReducedRules<A> of(List<AffineConstraint<A>> all, CanonicalOrder<A> order) {
+    private record Choice<A>(List<Solved<A>> solved, List<AffineConstraint.Equality<A>> unsolved) {
+
+        /** What tells two ways apart: the same positions solved for are the same reduction. */
+        Map.Entry<Set<Solved<A>>, List<AffineConstraint.Equality<A>>> identity() {
+            return Map.entry(Set.copyOf(solved), unsolved);
+        }
+    }
+
+    /**
+     * {@code all} over the positions their equalities leave free, one reduction for each way of
+     * choosing among the positions the rules use alike, or none where there is nothing to leave
+     * free: every equality is one the domain holds exactly already as a difference of two
+     * positions, none of the sets of equalities could be solved, or the ways of choosing are more
+     * than {@link #MOST_CHOICES}.
+     */
+    static <A> List<ReducedRules<A>> of(List<AffineConstraint<A>> all, CanonicalOrder<A> order) {
         List<AffineConstraint.Equality<A>> equalities = new ArrayList<>();
         for (AffineConstraint<A> each : all) {
             if (each instanceof AffineConstraint.Equality<A> equality) {
@@ -103,20 +134,75 @@ final class ReducedRules<A> {
             }
         }
         if (equalities.stream().allMatch(each -> DifferenceBounds.holdsExactly(each, order))) {
-            return null;
+            return List.of();
         }
-        ReducedRules<A> reduced = new ReducedRules<>(order);
-        reduced.uses.putAll(usesIn(all, order));
-        List<AffineConstraint.Equality<A>> unsolved = new ArrayList<>();
+        ReducedRules<A> scratch = new ReducedRules<>(order, usesIn(all, order));
+        List<Choice<A>> together = List.of(new Choice<>(List.of(), List.of()));
         for (List<AffineConstraint.Equality<A>> set : apart(equalities, order)) {
-            if (!reduced.solve(set)) {
-                unsolved.addAll(set);
+            List<Choice<A>> choices = scratch.choicesFor(set);
+            if (choices == null || together.size() * choices.size() > MOST_CHOICES) {
+                return List.of();
+            }
+            List<Choice<A>> crossed = new ArrayList<>();
+            for (Choice<A> before : together) {
+                for (Choice<A> choice : choices) {
+                    crossed.add(new Choice<>(joined(before.solved(), choice.solved()),
+                            joined(before.unsolved(), choice.unsolved())));
+                }
+            }
+            together = crossed;
+        }
+        List<ReducedRules<A>> out = new ArrayList<>();
+        for (Choice<A> each : together) {
+            if (!each.solved().isEmpty()) {
+                out.add(scratch.written(all, each));
             }
         }
-        reduced.metered = false;
-        if (reduced.solved.isEmpty()) {
-            return null;
+        return out;
+    }
+
+    /**
+     * What the equalities of {@code all} come to, solved once for one position each, or null where
+     * none could be solved.
+     *
+     * <p>Not a reduction to write rules over: the positions solved for are the names' choice here,
+     * and what is read of it is only what does not turn on the choice. A sum is a combination of the
+     * equalities exactly when {@link #put} writes it as a constant, and two sums are one the other
+     * scaled exactly when they are written as such, whichever positions were solved for — so those
+     * are asked of this, and never what is left of a sum beside the positions that remain. Every
+     * equality that could not be solved is left out, which says less and nothing false, and no
+     * equality is held to a count of ways: there is only one.
+     */
+    static <A> ReducedRules<A> span(List<AffineConstraint<A>> all, CanonicalOrder<A> order) {
+        List<AffineConstraint.Equality<A>> equalities = new ArrayList<>();
+        for (AffineConstraint<A> each : all) {
+            if (each instanceof AffineConstraint.Equality<A> equality) {
+                equalities.add(equality);
+            }
         }
+        ReducedRules<A> scratch = new ReducedRules<>(order, usesIn(all, order));
+        scratch.alone = true;
+        ReducedRules<A> out = new ReducedRules<>(order, scratch.uses);
+        for (List<AffineConstraint.Equality<A>> set : apart(equalities, order)) {
+            List<Choice<A>> choices = scratch.choicesFor(set);
+            if (choices != null && choices.size() == 1) {
+                out.solved.addAll(choices.getFirst().solved());
+            }
+        }
+        return out.solved.isEmpty() ? null : out;
+    }
+
+    private static <T> List<T> joined(List<T> first, List<T> second) {
+        List<T> out = new ArrayList<>(first);
+        out.addAll(second);
+        return out;
+    }
+
+    /** The rules written over what {@code choice} leaves free. */
+    private ReducedRules<A> written(List<AffineConstraint<A>> all, Choice<A> choice) {
+        ReducedRules<A> reduced = new ReducedRules<>(order, uses);
+        reduced.solved.addAll(choice.solved());
+        List<AffineConstraint.Equality<A>> unsolved = choice.unsolved();
         for (AffineConstraint<A> each : all) {
             Rule<A> rule = switch (each) {
                 case AffineConstraint.HalfSpace<A> half -> reduced.rewritten(
@@ -204,6 +290,11 @@ final class ReducedRules<A> {
         return rules;
     }
 
+    /** {@code form + constant}, as a goal to put over the free positions. */
+    Goal<A> goalOf(CanonicalForm<A> form, ExactRatio constant) {
+        return new Goal<>(said(form), constant);
+    }
+
     /** {@code goal} over the free positions, or null where the arithmetic could not hold it. */
     Goal<A> put(Goal<A> goal) {
         Map<A, ExactRatio> coefs = new LinkedHashMap<>(goal.coefs());
@@ -264,38 +355,83 @@ final class ReducedRules<A> {
     }
 
     /**
-     * Solves {@code set} for one position each, within {@link #MOST_UPDATES} updates — or leaves
-     * what was solved as it was and answers false, where one cannot be held, the set contradicts
-     * itself, or the work is more than that.
+     * Every way {@code set} is solved for one position each, within {@link #MOST_UPDATES} updates
+     * a way: an equality is solved for each of the positions the rules use most and alike, and the
+     * ways that solve for the same positions are one. A way that cannot be taken to its end, where
+     * a weight cannot be held, the set contradicts itself, or the work is more than that, leaves the
+     * set as the equalities it was. Null where the ways are more than {@link #MOST_CHOICES} or
+     * {@link #MOST_WAYS} are tried to find them.
      */
-    private boolean solve(List<AffineConstraint.Equality<A>> set) {
-        List<Solved<A>> before = new ArrayList<>(solved);
+    private List<Choice<A>> choicesFor(List<AffineConstraint.Equality<A>> set) {
+        solved.clear();
         metered = true;
         left = MOST_UPDATES;
-        for (AffineConstraint.Equality<A> each : set) {
-            if (!take(each)) {
-                solved.clear();
-                solved.addAll(before);
-                return false;
-            }
-        }
-        return true;
+        Map<Map.Entry<Set<Solved<A>>, List<AffineConstraint.Equality<A>>>, Choice<A>> found =
+                new LinkedHashMap<>();
+        boolean within = descend(set, 0, found, new int[1]);
+        metered = false;
+        solved.clear();
+        return within ? List.copyOf(found.values()) : null;
     }
 
-    /** Solves {@code equality} for one position, after putting the ones already solved in terms of
-     *  the rest. False where the arithmetic could not hold it, or it says something no value
-     *  satisfies. */
-    private boolean take(AffineConstraint.Equality<A> equality) {
+    /** Takes {@code set} from {@code index} on, in every way the choice of a position allows. False
+     *  where the ways are too many. */
+    private boolean descend(List<AffineConstraint.Equality<A>> set, int index,
+                            Map<Map.Entry<Set<Solved<A>>, List<AffineConstraint.Equality<A>>>,
+                                    Choice<A>> found, int[] ways) {
+        if (index == set.size()) {
+            Choice<A> done = new Choice<>(new ArrayList<>(solved), List.of());
+            found.putIfAbsent(done.identity(), done);
+            return ++ways[0] <= MOST_WAYS && found.size() <= MOST_CHOICES;
+        }
+        AffineConstraint.Equality<A> equality = set.get(index);
         Goal<A> as = put(new Goal<>(said(equality.form()), equality.at().negated()));
-        if (as == null) {
-            return false;
+        List<Map.Entry<A, ExactRatio>> walked = as == null ? List.of() : walked(as.coefs());
+        List<Solved<A>> before = new ArrayList<>(solved);
+        int updates = left;
+        boolean within = true;
+        if (as != null && walked.isEmpty() && as.constant().isZero()) {
+            // Said already.
+            return descend(set, index + 1, found, ways);
         }
-        List<Map.Entry<A, ExactRatio>> walked = walked(as.coefs());
-        if (walked.isEmpty()) {
-            // Said already, or said against itself.
-            return as.constant().isZero();
+        if (as != null && !walked.isEmpty()) {
+            Use last = uses.get(walked.getLast().getKey());
+            for (Map.Entry<A, ExactRatio> pivot : walked) {
+                if (uses.get(pivot.getKey()).compareTo(last) != 0
+                        || (alone && pivot != walked.getLast())) {
+                    continue;
+                }
+                if (take(as, walked, pivot)) {
+                    within = descend(set, index + 1, found, ways);
+                } else {
+                    within = unsolved(set, found, ways);
+                }
+                solved.clear();
+                solved.addAll(before);
+                left = updates;
+                if (!within) {
+                    return false;
+                }
+            }
+            return true;
         }
-        Map.Entry<A, ExactRatio> last = walked.getLast();
+        // Said against itself, or in weights that cannot be held.
+        return unsolved(set, found, ways);
+    }
+
+    /** Records that {@code set} was left as the equalities it was, on the way being tried. */
+    private boolean unsolved(List<AffineConstraint.Equality<A>> set,
+                             Map<Map.Entry<Set<Solved<A>>, List<AffineConstraint.Equality<A>>>,
+                                     Choice<A>> found, int[] ways) {
+        Choice<A> asItWas = new Choice<>(List.of(), set);
+        found.putIfAbsent(asItWas.identity(), asItWas);
+        return ++ways[0] <= MOST_WAYS && found.size() <= MOST_CHOICES;
+    }
+
+    /** Solves {@code as} for {@code last}, which is one of the {@code walked}, after putting the
+     *  ones already solved in terms of the rest. False where the arithmetic could not hold it. */
+    private boolean take(Goal<A> as, List<Map.Entry<A, ExactRatio>> walked,
+                         Map.Entry<A, ExactRatio> last) {
         A pivot = last.getKey();
         Map<A, ExactRatio> rest = new LinkedHashMap<>();
         for (Map.Entry<A, ExactRatio> entry : walked) {

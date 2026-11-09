@@ -8,8 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Equalities that share no position are solved apart. A set that contradicts itself, or takes more
@@ -56,11 +55,8 @@ class ASetOfEqualitiesThatCannotBeSolvedCostsTheOthersNothingTest {
         List<AffineConstraint<String>> rules = new ArrayList<>(chain(400));
         rules.add(SMALL);
 
-        ReducedRules<String> reduced = ReducedRules.of(rules, ORDER);
+        ReducedRules<String> reduced = solvingXForX(ReducedRules.of(rules, ORDER));
 
-        assertNotNull(reduced);
-        assertEquals(Map.of("a", ExactRatio.ONE, "b", ExactRatio.ONE),
-                reduced.put(goal("x")).coefs(), "x = a + b is solved");
         assertEquals(goal("p0"), reduced.put(goal("p0")), "the chain is left unsolved");
         assertEquals(400, reduced.rules().stream().filter(each -> each.rel() == Rel.EQ).count(),
                 "and its equalities stay rules");
@@ -68,10 +64,20 @@ class ASetOfEqualitiesThatCannotBeSolvedCostsTheOthersNothingTest {
 
     @Test
     void aChainWithinTheBoundIsSolved() {
-        ReducedRules<String> reduced = ReducedRules.of(new ArrayList<>(chain(20)), ORDER);
+        List<ReducedRules<String>> reduced = ReducedRules.of(new ArrayList<>(chain(3)), ORDER);
 
-        assertNotNull(reduced);
-        assertEquals(List.of(), reduced.rules());
+        assertTrue(!reduced.isEmpty());
+        assertTrue(reduced.stream().allMatch(each -> each.rules().isEmpty()), reduced.toString());
+    }
+
+    /**
+     * The last equation of a chain, written over what the others solved, names every end of it
+     * alike, and each is a position it may be solved for. Solved for the first few of them in the
+     * order of the names, which they were would be the names' choice, so past the bound none is.
+     */
+    @Test
+    void aChainWithMoreWaysOfSolvingItThanTheBoundHasNoReduction() {
+        assertEquals(List.of(), ReducedRules.of(new ArrayList<>(chain(20)), ORDER));
     }
 
     @Test
@@ -81,19 +87,28 @@ class ASetOfEqualitiesThatCannotBeSolvedCostsTheOthersNothingTest {
                 equality(weighing("u", 1, "c", -1, "d", -1), 1),
                 SMALL);
 
-        ReducedRules<String> reduced = ReducedRules.of(rules, ORDER);
+        ReducedRules<String> reduced = solvingXForX(ReducedRules.of(rules, ORDER));
 
-        assertNotNull(reduced);
-        assertEquals(Map.of("a", ExactRatio.ONE, "b", ExactRatio.ONE),
-                reduced.put(goal("x")).coefs());
         assertEquals(goal("u"), reduced.put(goal("u")));
         assertEquals(2, reduced.rules().size(), "the two that contradict stay rules");
     }
 
     @Test
     void whereNoSetCanBeSolvedThereIsNothingToLeaveFree() {
-        assertNull(ReducedRules.of(List.of(
+        assertEquals(List.of(), ReducedRules.of(List.of(
                 equality(weighing("u", 1, "c", -1, "d", -1), 0),
                 equality(weighing("u", 1, "c", -1, "d", -1), 1)), ORDER));
+    }
+
+    /**
+     * The reduction of {@code x = a + b} that solves it for {@code x}, one of the three there are
+     * for it: the positions of that equality are used alike.
+     */
+    private static ReducedRules<String> solvingXForX(List<ReducedRules<String>> reductions) {
+        assertEquals(3, reductions.size());
+        return reductions.stream()
+                .filter(each -> Map.of("a", ExactRatio.ONE, "b", ExactRatio.ONE)
+                        .equals(each.put(goal("x")).coefs()))
+                .findFirst().orElseThrow();
     }
 }

@@ -9,6 +9,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -265,9 +268,43 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
     @Test
     void whatIsProvedDoesNotDependOnWhatThePositionsAreCalled() {
         Random random = new Random(19);
+        assertEquals(List.of(), movedByRenaming(random, 250, () -> system(random)));
+    }
+
+    /**
+     * The same where the rules are unchanged by exchanging two positions: nothing in the rules
+     * tells the two apart, so the names would decide which one an equality is solved for, and a
+     * goal written over what is left was proved in one writing and not in the other.
+     */
+    @Test
+    void whatIsProvedDoesNotDependOnWhatTwoInterchangeablePositionsAreCalled() {
+        Random random = new Random(29);
+        assertEquals(List.of(), movedByRenaming(random, 600, () -> symmetric(random)));
+    }
+
+    /** A system and its image with positions {@code a} and {@code b} exchanged. */
+    private static List<Row> symmetric(Random random) {
+        List<Row> rules = new ArrayList<>();
+        rules.add(random(random, 3, true));
+        for (int i = 0; i < 2; i++) {
+            rules.add(random(random, 3, false));
+        }
+        for (Row each : List.copyOf(rules)) {
+            List<Term> exchanged = new ArrayList<>();
+            for (Term term : each.terms()) {
+                exchanged.add(new Term(term.atom() < 2 ? 1 - term.atom() : term.atom(), term.coef()));
+            }
+            rules.add(new Row(exchanged, each.constant(), each.rel()));
+        }
+        return rules;
+    }
+
+    /** What was asked that was answered differently once the positions were called other things. */
+    private static List<String> movedByRenaming(Random random, int rounds,
+                                                Supplier<List<Row>> systems) {
         List<String> moved = new ArrayList<>();
-        for (int round = 0; round < 250; round++) {
-            List<Row> rules = system(random);
+        for (int round = 0; round < rounds; round++) {
+            List<Row> rules = systems.get();
             NumericDomain<String> plain = domain(rules);
             if (plain.isBottom()) {
                 continue;
@@ -292,7 +329,7 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
                 }
             }
         }
-        assertEquals(List.of(), moved);
+        return moved;
     }
 
     /**
@@ -306,7 +343,7 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
         CanonicalOrder<String> order = CanonicalOrder.asTheyAreSpelled();
         for (int round = 0; round < 300; round++) {
             List<AffineConstraint<String>> rules = domain(system(random)).rulesRead();
-            ReducedRules<String> one = ReducedRules.of(rules, order);
+            List<ReducedRules<String>> one = ReducedRules.of(rules, order);
             List<AffineConstraint<String>> written = new ArrayList<>();
             for (AffineConstraint<String> each : rules) {
                 written.add(each instanceof AffineConstraint.Equality<String> equality
@@ -316,13 +353,12 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
                         : each);
             }
             Collections.shuffle(written, random);
-            ReducedRules<String> other = ReducedRules.of(written, order);
-            assertEquals(one == null, other == null, rules.toString());
-            if (one == null) {
+            List<ReducedRules<String>> other = ReducedRules.of(written, order);
+            assertEquals(one.size(), other.size(), rules.toString());
+            if (one.isEmpty()) {
                 continue;
             }
-            assertEquals(new HashSet<>(one.rules()), new HashSet<>(other.rules()),
-                    rules + " written as " + written);
+            assertEquals(rulesOf(one), rulesOf(other), rules + " written as " + written);
             for (int i = 0; i < 8; i++) {
                 Row goal = random(random, 3, false);
                 Map<String, ExactRatio> coefs = new LinkedHashMap<>();
@@ -331,8 +367,23 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
                 }
                 ReducedRules.Goal<String> asked =
                         new ReducedRules.Goal<>(coefs, ExactRatio.of(goal.constant()));
-                assertEquals(one.put(asked), other.put(asked), rules.toString());
+                assertEquals(goalsOf(one, asked), goalsOf(other, asked), rules.toString());
             }
         }
+    }
+
+    /** What each reduction says, as a set: the reductions are not in an order. */
+    private static Set<Set<ReducedRules.Rule<String>>> rulesOf(List<ReducedRules<String>> each) {
+        return each.stream().map(one -> Set.copyOf(one.rules())).collect(Collectors.toSet());
+    }
+
+    /** The goal as each reduction writes it, as a set. */
+    private static Set<ReducedRules.Goal<String>> goalsOf(List<ReducedRules<String>> each,
+                                                         ReducedRules.Goal<String> asked) {
+        Set<ReducedRules.Goal<String>> out = new HashSet<>();
+        for (ReducedRules<String> one : each) {
+            out.add(one.put(asked));
+        }
+        return out;
     }
 }

@@ -8,13 +8,16 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -122,9 +125,14 @@ public final class NumericDomain<A> {
     private FormReach<A> reach;
     private Systems<A> systems;
     private ProjectionCertification certification;
-    /** The reduction of the rules, or empty where there is none to use; null until asked for. One
-     *  reference decides whether it was worked out and what it came to. */
-    private Optional<Reduction<A>> reduction;
+    /** What the equalities come to together, or empty where there are none to use; null until
+     *  asked for. */
+    private Optional<Span<A>> span;
+    /** The rules in the parts that share no position ({@link ClosureQuestion#independentRules});
+     *  null until asked for. */
+    private List<List<AffineConstraint<A>>> parts;
+    /** The reductions of the parts a goal reaches, by which parts those are. */
+    private Map<Set<Integer>, List<Reduction<A>>> reductions;
     private Boolean noRow;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, NumberSpace> spaces,
@@ -817,7 +825,120 @@ public final class NumericDomain<A> {
         if (!withRules) {
             return false;   // asked of the box and its differences alone, which no equality adds to
         }
-        return provenOverThePositionsTheEqualitiesLeaveFree(coefs, f.constant(), rel);
+        return provenByTheEqualitiesTogether(coefs, f.constant(), rel)
+                || provenOverThePositionsTheEqualitiesLeaveFree(coefs, f.constant(), rel);
+    }
+
+    /** What the equalities come to together ({@link ReducedRules#span}), and the bounds written as
+     *  what is left of them. */
+    private record Span<A>(ReducedRules<A> equalities, List<ReducedRules.Rule<A>> bounds) {}
+
+    private Span<A> span() {
+        Optional<Span<A>> had = span;
+        if (had == null) {
+            had = Optional.ofNullable(spanOfTheRules());
+            span = had;
+        }
+        return had.orElse(null);
+    }
+
+    private Span<A> spanOfTheRules() {
+        ReducedRules<A> equalities = ReducedRules.span(rules(), order);
+        if (equalities == null) {
+            return null;
+        }
+        List<ReducedRules.Rule<A>> bounds = new ArrayList<>();
+        for (AffineConstraint<A> each : rules()) {
+            if (each instanceof AffineConstraint.HalfSpace<A> half) {
+                ReducedRules.Goal<A> left = equalities.put(
+                        equalities.goalOf(half.form(), half.bound().at().negated()));
+                if (left != null && !left.coefs().isEmpty()) {
+                    bounds.add(new ReducedRules.Rule<>(left.coefs(), left.constant(),
+                            half.bound().inclusive() ? Rel.LE : Rel.LT));
+                }
+            }
+        }
+        return new Span<>(equalities, List.copyOf(bounds));
+    }
+
+    /**
+     * Whether the equalities together, and at most one bound beside them, prove the goal.
+     *
+     * <p>What the equalities come to is asked, and not what is left over the positions they are
+     * solved for: a sum that is a combination of the equalities is written as a constant, and one
+     * that is a bound scaled up is written as that bound's own rest, whichever positions were solved
+     * for. So this answers the same under any naming of the positions and under any rules added
+     * that the goal and the bound do not reach, which solving for each way of choosing and asking
+     * each of them is not able to: those are counted, and past a count they are none.
+     */
+    private boolean provenByTheEqualitiesTogether(Map<A, ExactRatio> coefs, ExactRatio constant,
+                                                  Rel rel) {
+        Span<A> span = span();
+        if (span == null) {
+            return false;
+        }
+        if (!(AffineConstraint.of(coefs, constant, rel, this::spacingOf)
+                instanceof AffineConstraint.Read.Stated<A> stated)) {
+            return false;
+        }
+        if (stated.constraint() instanceof AffineConstraint.Disequality<A> hole) {
+            return belowByTheEqualities(span, hole.form(), hole.at().negated(), true)
+                    || belowByTheEqualities(span, hole.form().negated(), hole.at(), true);
+        }
+        for (AffineConstraint.HalfSpace<A> half : stated.constraint().halfSpaces()) {
+            if (!belowByTheEqualities(span, half.form(), half.bound().at().negated(),
+                    !half.bound().inclusive())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code Σ coefs + constant <= 0} (or {@code < 0}) is a combination of the equalities,
+     *  or a bound scaled up beside one. */
+    private boolean belowByTheEqualities(Span<A> span, CanonicalForm<A> form,
+                                         ExactRatio constant, boolean strict) {
+        ReducedRules.Goal<A> rest = span.equalities().put(span.equalities().goalOf(form, constant));
+        if (rest == null) {
+            return false;
+        }
+        if (rest.coefs().isEmpty()) {
+            int sign = rest.constant().signum();
+            return sign < 0 || (sign == 0 && !strict);
+        }
+        for (ReducedRules.Rule<A> bound : span.bounds()) {
+            ExactRatio scale = scaleOf(rest.coefs(), bound.coefs());
+            if (scale == null) {
+                continue;
+            }
+            ExactRatio carried = scale.times(bound.constant()).orNull();
+            ExactRatio over = carried == null ? null : rest.constant().minus(carried).orNull();
+            if (over == null) {
+                continue;
+            }
+            int sign = over.signum();
+            if (sign < 0 || (sign == 0 && (!strict || bound.rel() == Rel.LT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** What {@code of} is {@code than} times, where it is a positive multiple of it; null where it
+     *  is not. */
+    private static <A> ExactRatio scaleOf(Map<A, ExactRatio> of, Map<A, ExactRatio> than) {
+        if (!of.keySet().equals(than.keySet())) {
+            return null;
+        }
+        ExactRatio scale = null;
+        for (Map.Entry<A, ExactRatio> each : of.entrySet()) {
+            ExactRatio unit = each.getValue().dividedBy(than.get(each.getKey())).orNull();
+            if (unit == null || unit.signum() <= 0 || (scale != null && !scale.equals(unit))) {
+                return null;
+            }
+            scale = unit;
+        }
+        return scale;
     }
 
     /**
@@ -833,47 +954,76 @@ public final class NumericDomain<A> {
      */
     private boolean provenOverThePositionsTheEqualitiesLeaveFree(Map<A, ExactRatio> coefs,
                                                                  ExactRatio constant, Rel rel) {
-        Reduction<A> reduced = reduction();
-        if (reduced == null) {
-            return false;
+        for (Reduction<A> reduced : reductionsReachedBy(coefs.keySet())) {
+            ReducedRules.Goal<A> freed =
+                    reduced.rules().put(new ReducedRules.Goal<>(coefs, constant));
+            if (freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)
+                    && reduced.over().entailsOver(freed.coefs(), freed.constant(), rel, true)) {
+                return true;
+            }
         }
-        ReducedRules.Goal<A> freed = reduced.rules().put(new ReducedRules.Goal<>(coefs, constant));
-        return freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)
-                && reduced.over().entailsOver(freed.coefs(), freed.constant(), rel, true);
+        return false;
     }
 
     /** The rules over the positions their equalities leave free, and what they leave. */
     private record Reduction<A>(ReducedRules<A> rules, NumericDomain<A> over) {}
 
     /**
-     * The reduction of these rules, worked out when first asked for and kept — or null where there
-     * is nothing to reduce, or where what is left leaves nothing.
+     * The reductions of the rules a goal reaches, one for each way of choosing among the positions
+     * those rules use alike, worked out when first asked for and kept. None where there is nothing
+     * to reduce. What any of them proves is proved, so the choice among positions nothing tells
+     * apart is not the names' to make.
      *
-     * <p>Not used where it leaves nothing. That the rules leave nothing is what {@link #isBottom}
-     * says of them, and it is that answer's to give: a path is unreachable when the rules as they
-     * stand show it, and one whose reduction alone found the rules empty would prove everything and
-     * be reached all the same, so {@link #refutes} could say both of a goal and of its denial.
+     * <p>The rules a goal reaches are the parts ({@link ClosureQuestion#independentRules}) that
+     * weigh a position it weighs. A rule in another part is about positions nothing here relates
+     * to the goal, so it neither helps a proof of it nor takes part in counting the ways of
+     * choosing: equalities elsewhere cannot make the ways too many for a goal they do not reach.
+     *
+     * <p>A reduction that leaves nothing is not one of them. That the rules leave nothing is what
+     * {@link #isBottom} says of them, and it is that answer's to give: a path is unreachable when
+     * the rules as they stand show it, and one whose reduction alone found the rules empty would
+     * prove everything and be reached all the same, so {@link #refutes} could say both of a goal
+     * and of its denial.
      */
-    private Reduction<A> reduction() {
-        Optional<Reduction<A>> had = reduction;
-        if (had == null) {
-            had = Optional.ofNullable(reductionOfTheRules());
-            reduction = had;
+    private List<Reduction<A>> reductionsReachedBy(Set<A> goalPositions) {
+        if (parts == null) {
+            parts = ClosureQuestion.independentRules(rules());
         }
-        return had.orElse(null);
+        Set<Integer> reached = new TreeSet<>();
+        for (int at = 0; at < parts.size(); at++) {
+            for (AffineConstraint<A> rule : parts.get(at)) {
+                if (!Collections.disjoint(rule.form().atomsIn(order), goalPositions)) {
+                    reached.add(at);
+                    break;
+                }
+            }
+        }
+        if (reductions == null) {
+            reductions = new HashMap<>();
+        }
+        List<Reduction<A>> had = reductions.get(reached);
+        if (had == null) {
+            List<AffineConstraint<A>> reachedRules = new ArrayList<>();
+            reached.forEach(at -> reachedRules.addAll(parts.get(at)));
+            had = reductionsOf(reachedRules);
+            reductions.put(reached, had);
+        }
+        return had;
     }
 
-    private Reduction<A> reductionOfTheRules() {
-        ReducedRules<A> rules = ReducedRules.of(rules(), order);
-        if (rules == null) {
-            return null;
+    private List<Reduction<A>> reductionsOf(List<AffineConstraint<A>> reachedRules) {
+        List<Reduction<A>> out = new ArrayList<>();
+        for (ReducedRules<A> rules : ReducedRules.of(reachedRules, order)) {
+            NumericDomain<A> over = new NumericDomain<>(StatedRules.none(), spaces, false, order,
+                    closedStates, null, null);
+            for (ReducedRules.Rule<A> each : rules.rules()) {
+                over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
+            }
+            if (!over.isBottom()) {
+                out.add(new Reduction<>(rules, over));
+            }
         }
-        NumericDomain<A> over = new NumericDomain<>(StatedRules.none(), spaces, false, order,
-                closedStates, null, null);
-        for (ReducedRules.Rule<A> each : rules.rules()) {
-            over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
-        }
-        return over.isBottom() ? null : new Reduction<>(rules, over);
+        return List.copyOf(out);
     }
 
     private boolean entailsOver(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,

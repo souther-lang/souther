@@ -52,4 +52,38 @@ class AFormIsSummedInTheOrderItsPositionsDecideTest {
         assertNotNull(one1.most(), "and in the order the positions decide, the sum is held: "
                 + one1);
     }
+
+    /**
+     * The order the positions decide is the order of their names, so the same form over the same
+     * ends with the positions called other things is the same sum met in another order. What it
+     * runs between is the same under each of the six ways of calling them.
+     */
+    @Test
+    void theFormComesToOneAnswerWhateverThePositionsAreCalled() {
+        List<List<String>> namings = List.of(List.of("a", "b", "c"), List.of("a", "c", "b"),
+                List.of("b", "a", "c"), List.of("b", "c", "a"), List.of("c", "a", "b"),
+                List.of("c", "b", "a"));
+        Reach first = null;
+        for (List<String> names : namings) {
+            Map<String, ExactCut> one = new LinkedHashMap<>();
+            for (String each : names) {
+                one.put(each, ExactCut.inclusive(ExactRatio.of(1)));
+            }
+            FormReach<String> reading = FormReach.over(List.of(), new Box<>(one, one),
+                    DifferenceBounds.over(List.of(), CanonicalOrder.asTheyAreSpelled()),
+                    CanonicalOrder.asTheyAreSpelled());
+            Map<String, ExactRatio> weighing = new LinkedHashMap<>();
+            weighing.put(names.get(0), HUGE);
+            weighing.put(names.get(1), HUGE.negated());
+            weighing.put(names.get(2), TINY);
+
+            Reach reach = reading.of(weighing, ExactRatio.ZERO);
+
+            assertNotNull(reach.most(), "the sum is held under " + names + ": " + reach);
+            if (first == null) {
+                first = reach;
+            }
+            assertEquals(first, reach, "and comes to the same under " + names);
+        }
+    }
 }

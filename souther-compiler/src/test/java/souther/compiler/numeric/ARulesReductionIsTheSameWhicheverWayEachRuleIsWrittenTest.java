@@ -5,10 +5,10 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -50,14 +50,17 @@ class ARulesReductionIsTheSameWhicheverWayEachRuleIsWrittenTest {
      */
     @Test
     void anEqualityWrittenTheOtherWayRoundIsSolvedForTheSamePosition() {
-        ReducedRules<String> one = ReducedRules.of(
+        List<ReducedRules<String>> one = ReducedRules.of(
                 List.of(equality(weighing("x", 1, "y", -2), 3)), ORDER);
-        ReducedRules<String> other = ReducedRules.of(
+        List<ReducedRules<String>> other = ReducedRules.of(
                 List.of(equality(weighing("x", -1, "y", 2), -3)), ORDER);
 
-        assertNotNull(one);
-        assertEquals(one.put(goal(weighing("x", 1))), other.put(goal(weighing("x", 1))));
-        assertEquals(one.put(goal(weighing("y", 1))), other.put(goal(weighing("y", 1))));
+        assertEquals(1, one.size());
+        assertEquals(1, other.size());
+        assertEquals(one.getFirst().put(goal(weighing("x", 1))),
+                other.getFirst().put(goal(weighing("x", 1))));
+        assertEquals(one.getFirst().put(goal(weighing("y", 1))),
+                other.getFirst().put(goal(weighing("y", 1))));
     }
 
     @Test
@@ -67,16 +70,21 @@ class ARulesReductionIsTheSameWhicheverWayEachRuleIsWrittenTest {
         List<AffineConstraint<String>> other = List.of(equality(weighing("x", 1, "a", -1, "b", -1), 0),
                 hole(weighing("a", -1, "b", 2), -3));
 
-        assertEquals(ReducedRules.of(one, ORDER).rules(), ReducedRules.of(other, ORDER).rules());
+        assertEquals(rulesOf(ReducedRules.of(one, ORDER)), rulesOf(ReducedRules.of(other, ORDER)));
+    }
+
+    /** What each reduction says, as a set: the reductions are not in an order. */
+    private static Set<List<ReducedRules.Rule<String>>> rulesOf(List<ReducedRules<String>> each) {
+        return each.stream().map(ReducedRules::rules).collect(Collectors.toSet());
     }
 
     /** Whether the domain holds an equality exactly as a difference does not turn on its writing. */
     @Test
     void anEqualityTheDomainHoldsExactlyIsLeftToItWhicheverWayItIsWritten() {
-        assertNull(ReducedRules.of(List.of(equality(weighing("x", 1, "y", -1), 2)), ORDER));
-        assertNull(ReducedRules.of(List.of(equality(weighing("x", -1, "y", 1), -2)), ORDER));
-        assertNull(ReducedRules.of(List.of(equality(weighing("x", 1), 3)), ORDER));
-        assertNull(ReducedRules.of(List.of(equality(weighing("x", -1), -3)), ORDER));
+        assertEquals(List.of(), ReducedRules.of(List.of(equality(weighing("x", 1, "y", -1), 2)), ORDER));
+        assertEquals(List.of(), ReducedRules.of(List.of(equality(weighing("x", -1, "y", 1), -2)), ORDER));
+        assertEquals(List.of(), ReducedRules.of(List.of(equality(weighing("x", 1), 3)), ORDER));
+        assertEquals(List.of(), ReducedRules.of(List.of(equality(weighing("x", -1), -3)), ORDER));
     }
 
     /** What a bound says is which side it holds a sum on, and that is kept. */
@@ -87,7 +95,7 @@ class ARulesReductionIsTheSameWhicheverWayEachRuleIsWrittenTest {
                 below(weighing("x", 1, "c", -1), ExactCut.exclusive(ExactRatio.of(5))),
                 below(weighing("x", -1, "d", 1), ExactCut.inclusive(ExactRatio.of(2))));
 
-        List<ReducedRules.Rule<String>> reduced = ReducedRules.of(rules, ORDER).rules();
+        List<ReducedRules.Rule<String>> reduced = ReducedRules.of(rules, ORDER).getFirst().rules();
 
         assertEquals(2, reduced.size());
         assertTrue(reduced.stream().anyMatch(each -> each.rel() == Rel.LT), reduced.toString());
@@ -101,7 +109,7 @@ class ARulesReductionIsTheSameWhicheverWayEachRuleIsWrittenTest {
                 equality(weighing("x", 1, "a", -1, "b", -1), 0),
                 hole(weighing("x", 1, "c", -1), 3));
 
-        List<ReducedRules.Rule<String>> reduced = ReducedRules.of(rules, ORDER).rules();
+        List<ReducedRules.Rule<String>> reduced = ReducedRules.of(rules, ORDER).getFirst().rules();
 
         assertEquals(1, reduced.size());
         assertEquals(Rel.NE, reduced.getFirst().rel());
