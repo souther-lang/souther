@@ -168,6 +168,15 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
                     + List.length(spread) }
             }
 
+            behavior insideTheLookup : (deals: List<Deal>, rates: Rates) -> Out
+            let insideTheLookup (deals, rates) = {
+                let spread = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(r -> Int.floorMod(r, String.length(d.currency) - 2)), deals)
+                let hit = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(r -> Bool.not(Map.containsKey(d.currency, rates.rates))), deals)
+                Out { n = List.length(spread) + List.length(hit) }
+            }
+
             behavior inTheLookup : (deals: List<Deal>, rates: Rates) -> Out
             let inTheLookup (deals, rates) = {
                 let spread = List.filterMap(d -> Map.get(d.currency, rates.rates)
@@ -274,6 +283,12 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
         assertNotEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
                 currencyOf(evidence, "alone").get("rates.rates[key]").reason(),
                 currencyOf(evidence, "alone").toString());
+
+        // The relation is itself reached only where the table holds the currency, so a row holding
+        // the table empty gets to nothing and the stop it avoids is no stop avoided.
+        assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                currencyOf(evidence, "insideTheLookup").get("deals[*].currency").reason(),
+                currencyOf(evidence, "insideTheLookup").toString());
 
         // The stop reads the table as well, is worked out only where the table holds the currency
         // (which turns on its keys), a rule names the table, or the way decides by it.

@@ -126,6 +126,21 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0", "a"));
     }
 
+    /**
+     * A stop inside a closure over a container the input holds is worked out only where the
+     * container holds something, so a row holding it empty gets to the membership past no stop
+     * beside any value of {@code a}. Where the membership is itself inside a closure over the
+     * container, a row holding it empty gets to nothing, and {@code a} stays not shown.
+     */
+    @Test
+    void aStopInAClosureOverAContainerIsAvoidedByAnEmptyContainerOnlyWhereTheMembershipDoesNotNeedIt() {
+        String stop = "{ let s = List.map(x -> Int.floorMod(100, a - x - 1), xs)  ";
+        String used = " || List.length(s) < 0 }";
+        assertEquals(List.of(READ), reasonsAt(NUMBERS, stop + MEMBERSHIP + used, "a"));
+        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+                stop + "List.any(x -> x >= 0 && " + MEMBERSHIP + ", xs)" + used, "a"));
+    }
+
     /** The same sum as the left arm of a choice, worked out on every run before the membership. */
     @Test
     void aSumTheLeftArmOfAChoiceWorksOutOnEveryRunIsAStopThere() {

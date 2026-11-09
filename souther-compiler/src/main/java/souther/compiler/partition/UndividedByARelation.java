@@ -4297,13 +4297,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the place {@code place}, where {@code past} is already said to stop a run on what the
      * relation reads ({@link #mayStopOnWhatItReads}).
      *
-     * <p>A tie of an operator a run works out only inside a closure applied to what a lookup in a
-     * container found ({@link DemandReading.Tie#reachedOnlyWhereHolding}) stops no run where that
-     * container holds nothing. It holds nothing beside every value of {@code place} where the
-     * container is no part of {@code place} and nor inside it, the rules and the way leave it no
-     * entry, and nothing relates it to {@code place}: a row holds any value there, the container
-     * empty, and no such operator is worked out on it. Every other stop is asked as it is
-     * ({@link #mayStopOnWhatItReads}).
+     * <p>A tie of an operator a run works out only inside a closure applied over containers
+     * ({@link DemandReading.Tie#reachedOnlyWhereOneHolds}) stops no run where every container of
+     * one of the sets it says holds nothing. A container holds nothing beside every value of
+     * {@code place} where it is no part of {@code place} and nor inside it, the rules and the way
+     * leave it no entry, and nothing relates it to {@code place}: a row holds any value there,
+     * the container empty, and no such operator is worked out on it. Every other stop is asked as
+     * it is ({@link #mayStopOnWhatItReads}).
      */
     private boolean mayStopOnValueAt(TermPath place, DemandReading.Answered past,
                                      InputReading read, SearchRegion region,
@@ -4318,7 +4318,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
         DemandReading.Answered narrowed = past.withoutTies(tie ->
-                tie.reachedOnlyWhereHolding().stream().anyMatch(empty::contains));
+                tie.reachedOnlyWhereOneHolds().stream().anyMatch(empty::containsAll));
         return mayStopOnWhatItReads(narrowed, read, region, conditions, declined, accountedFor);
     }
 
@@ -4375,8 +4375,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // worked out inside of hold, so the stop turns on them as well as on its places.
             if (touchesAny(tie.places(), List.of(place))
                     || tie.places().stream().anyMatch(place::bearsOn)
-                    || touchesAny(tie.reachedOnlyWhereHolding(), List.of(place))
-                    || tie.reachedOnlyWhereHolding().stream().anyMatch(place::bearsOn)) {
+                    || touchesAny(tie.containersItIsWorkedOutInside(), List.of(place))
+                    || tie.containersItIsWorkedOutInside().stream().anyMatch(place::bearsOn)) {
                 return true;
             }
         }
@@ -4405,16 +4405,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * one {@code place} is at, and those containers none.
      *
      * <p>Of those the ties of {@code past} name as the ones an operator is worked out inside
-     * ({@link DemandReading.Tie#reachedOnlyWhereHolding}).
+     * ({@link DemandReading.Tie#reachedOnlyWhereOneHolds}).
      */
     private static Set<TermPath> leftEmptyBesideAnyValueAt(TermPath place,
                                                            DemandReading.Answered past,
                                                            InputReading read, SearchRegion region,
                                                            List<OnAWay> conditions,
                                                            Optional<Set<String>> declined) {
+        // The relation is reached only where a container of each set it stands inside holds an
+        // entry, and a row holding every container of a set empty gets to nothing. Where what the
+        // relation stands inside is not said, no container is emptied.
+        if (past.relationNeedsOneOf().isEmpty()) {
+            return Set.of();
+        }
+        Set<TermPath> theRelationStandsInside = new LinkedHashSet<>();
+        past.relationNeedsOneOf().get().forEach(theRelationStandsInside::addAll);
         List<TermPath> empty = new ArrayList<>();
-        for (TermPath container : past.reachedOnlyWhereHolding()) {
-            if (container.isAtOrUnder(place) || place.isAtOrUnder(container)
+        for (TermPath container : past.containersAnOperatorIsWorkedOutInside()) {
+            if (theRelationStandsInside.contains(container)
+                    || container.isAtOrUnder(place) || place.isAtOrUnder(container)
                     || declined.isEmpty() || declined.get().contains(container.head())
                     || tiedByARule(container, place, read)
                     || empty.stream().anyMatch(other -> tiedByARule(container, other, read))

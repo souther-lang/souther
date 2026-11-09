@@ -944,37 +944,46 @@ final class DemandReading {
      * @param places the places the tie names, in the order they were met
      * @param by     what is stated of their numbers, or null where only the places are known — the
      *               numbers an operator not said may stop the run on
-     * @param reachedOnlyWhereHolding the containers the operator is worked out inside a closure
-     *               applied to what a lookup in one found: a run works it out only where each of
-     *               them holds an entry
+     * @param reachedOnlyWhereOneHolds what has to hold for a run to work the operator out, as the
+     *               closures it is inside of say it: for each set, one of its containers holds an
+     *               entry, since the closure is applied only over what a container holds
      */
-    record Tie(Set<TermPath> places, TakenConstraint by, Set<TermPath> reachedOnlyWhereHolding) {
+    record Tie(Set<TermPath> places, TakenConstraint by,
+               List<Set<TermPath>> reachedOnlyWhereOneHolds) {
 
         Tie {
             places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
-            reachedOnlyWhereHolding =
-                    Collections.unmodifiableSet(new LinkedHashSet<>(reachedOnlyWhereHolding));
+            reachedOnlyWhereOneHolds = reachedOnlyWhereOneHolds.stream()
+                    .map(each -> Collections.unmodifiableSet(new LinkedHashSet<>(each)))
+                    .toList();
         }
 
         /** The tie a statement of numbers makes, between every place its numbers are read off
          *  ({@link RowDemand#placesReadOff}). */
         static Tie by(TakenConstraint constraint) {
-            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint, Set.of());
+            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint, List.of());
         }
 
         Tie(Set<TermPath> places, TakenConstraint by) {
-            this(places, by, Set.of());
+            this(places, by, List.of());
         }
 
         /** The tie of places an operator not said of may stop the run on. */
         static Tie between(Set<TermPath> places) {
-            return between(places, Set.of());
+            return between(places, List.of());
         }
 
-        /** The same, of an operator a run works out only where each container of
-         *  {@code reachedOnlyWhereHolding} holds an entry. */
-        static Tie between(Set<TermPath> places, Set<TermPath> reachedOnlyWhereHolding) {
-            return new Tie(places, null, reachedOnlyWhereHolding);
+        /** The same, of an operator a run works out only where, for each set of
+         *  {@code reachedOnlyWhereOneHolds}, one of its containers holds an entry. */
+        static Tie between(Set<TermPath> places, List<Set<TermPath>> reachedOnlyWhereOneHolds) {
+            return new Tie(places, null, reachedOnlyWhereOneHolds);
+        }
+
+        /** Every container named among what the operator is worked out only where one holds. */
+        Set<TermPath> containersItIsWorkedOutInside() {
+            Set<TermPath> out = new LinkedHashSet<>();
+            reachedOnlyWhereOneHolds.forEach(out::addAll);
+            return out;
         }
     }
 
@@ -1003,10 +1012,15 @@ final class DemandReading {
      * @param before    what the applications a run walking one element does not make work out
      *                  ({@link PriorApplications}): until a reader shows a run with none, as much
      *                  the run's as the above
+     * @param relationNeedsOneOf what the closures the relation stands inside add to what a run
+     *                  needs to get to it: for each set, one of its containers holds an entry.
+     *                  Nothing for what states nothing of where the relation stands, and empty
+     *                  where it stands somewhere that is not said
      */
     record Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
                     List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
-                    List<PriorApplications> before) {
+                    List<PriorApplications> before,
+                    Optional<List<Set<TermPath>>> relationNeedsOneOf) {
 
         static final Answered NOTHING = new Answered(List.of(), List.of(), false);
 
@@ -1016,6 +1030,14 @@ final class DemandReading {
             tied = List.copyOf(tied);
             owed = List.copyOf(owed);
             before = List.copyOf(before);
+            relationNeedsOneOf = relationNeedsOneOf.map(List::copyOf);
+        }
+
+        /** What a run asks of a row, and says nothing of where the relation stands. */
+        Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
+                 List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
+                 List<PriorApplications> before) {
+            this(onTheWay, ofTheRelation, tied, unsaid, owed, before, Optional.of(List.of()));
         }
 
         /** What the run to a relation asks of a row, with what the applications before it work
@@ -1064,26 +1086,41 @@ final class DemandReading {
                             .anyMatch(each -> each.workedOut().unsaidOrOwedOnWhatNoPlaceHolds());
         }
 
+        /** The same, where getting to the relation also needs what {@code more} says of the
+         *  closures it stands inside: not said where either is not. */
+        Answered alsoNeedingToGetToTheRelation(Optional<List<Set<TermPath>>> more) {
+            Optional<List<Set<TermPath>>> together = relationNeedsOneOf.flatMap(mine ->
+                    more.map(theirs -> {
+                        List<Set<TermPath>> both = new ArrayList<>(mine);
+                        both.addAll(theirs);
+                        return both;
+                    }));
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, before, together);
+        }
+
         /** This, with {@code prior} worked out by the applications before it. */
         Answered after(PriorApplications prior) {
             List<PriorApplications> all = new ArrayList<>(before);
             all.add(prior);
-            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all);
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all,
+                    relationNeedsOneOf);
         }
 
         /** The same, without the statements of {@code met} among what the operators narrow; what
          *  the run is owed and what the applications before work out stay. */
         Answered without(Collection<TakenConstraint.Affine> met) {
             return new Answered(notAmong(onTheWay, met), notAmong(ofTheRelation, met), tied,
-                    unsaid, owed, before);
+                    unsaid, owed, before, relationNeedsOneOf);
         }
 
         /** Every container some tie here, or among what the applications before work out, names
-         *  as one an operator is worked out only where it holds an entry. */
-        Set<TermPath> reachedOnlyWhereHolding() {
+         *  as one an operator is worked out only where it or another of its set holds an
+         *  entry. */
+        Set<TermPath> containersAnOperatorIsWorkedOutInside() {
             Set<TermPath> out = new LinkedHashSet<>();
-            tied.forEach(each -> out.addAll(each.reachedOnlyWhereHolding()));
-            before.forEach(each -> out.addAll(each.workedOut().reachedOnlyWhereHolding()));
+            tied.forEach(each -> out.addAll(each.containersItIsWorkedOutInside()));
+            before.forEach(each ->
+                    out.addAll(each.workedOut().containersAnOperatorIsWorkedOutInside()));
             return out;
         }
 
@@ -1093,7 +1130,8 @@ final class DemandReading {
             return new Answered(onTheWay, ofTheRelation,
                     tied.stream().filter(each -> !missed.test(each)).toList(), unsaid, owed,
                     before.stream().map(each -> new PriorApplications(each.walked(),
-                            each.workedOut().withoutTies(missed))).toList());
+                            each.workedOut().withoutTies(missed))).toList(),
+                    relationNeedsOneOf);
         }
 
         private static List<TakenConstraint> notAmong(List<TakenConstraint> narrowing,
@@ -1163,21 +1201,20 @@ final class DemandReading {
          *  part they were read in standing in {@code body}, where the names an owed operator is
          *  handed are bound. */
         static Answered leavingUnsaid(Pullback.OperatorsAnswer operators, Core body) {
-            return operators.leavesNothingUnsaid() ? NOTHING
-                    : new Answered(List.of(),
-                            IntStream.range(0, operators.unsaidAt().size())
-                                    .mapToObj(i -> Tie.between(operators.unsaidAt().get(i),
-                                            operators.unsaidReachedOnlyWhereHolding().get(i)))
-                                    .toList(),
-                            operators.unsaidElsewhere(),
-                            operators.obligations().stream().map(each -> each.readIn(body))
-                                    .toList(),
-                            operators.afterTheFirst().stream().map(each ->
-                                    new PriorApplications(Optional.of(List.of(
-                                            new PriorApplications.WalkedOver(each.container(),
-                                                    each.reads()))),
-                                            leavingUnsaid(each.workedOut(), body)))
-                                    .toList());
+            return new Answered(List.of(), List.of(),
+                    IntStream.range(0, operators.unsaidAt().size())
+                            .mapToObj(i -> Tie.between(operators.unsaidAt().get(i),
+                                    operators.unsaidReachedOnlyWhereOneHolds().get(i)))
+                            .toList(),
+                    operators.unsaidElsewhere(),
+                    operators.obligations().stream().map(each -> each.readIn(body)).toList(),
+                    operators.afterTheFirst().stream().map(each ->
+                            new PriorApplications(Optional.of(List.of(
+                                    new PriorApplications.WalkedOver(each.container(),
+                                            each.reads()))),
+                                    leavingUnsaid(each.workedOut(), body)))
+                            .toList(),
+                    operators.relationNeedsOneOf());
         }
 
         /** This and {@code other}, both. */
@@ -1192,8 +1229,14 @@ final class DemandReading {
             both.addAll(other.owed);
             List<PriorApplications> priors = new ArrayList<>(before);
             priors.addAll(other.before);
+            Optional<List<Set<TermPath>>> relationNeeds = relationNeedsOneOf.flatMap(mine ->
+                    other.relationNeedsOneOf.map(theirs -> {
+                        List<Set<TermPath>> together = new ArrayList<>(mine);
+                        together.addAll(theirs);
+                        return together;
+                    }));
             return new Answered(onTheWayBoth, ofTheRelationBoth, places, unsaid || other.unsaid,
-                    both, priors);
+                    both, priors, relationNeeds);
         }
     }
 

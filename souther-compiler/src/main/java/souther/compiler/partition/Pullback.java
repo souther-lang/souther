@@ -1309,7 +1309,7 @@ final class Pullback {
                 answered == null ? Optional.empty()
                         : Optional.of(pulled(answered).proposition()),
                 told[0].unsaidGroups, told[0].unsaidGroupsHolding, told[0].unsaidElsewhere,
-                told[0].obligations, told[0].afterTheFirst);
+                told[0].obligations, told[0].afterTheFirst, told[0].relationNeedsOneOf());
     }
 
     /**
@@ -1607,14 +1607,19 @@ final class Pullback {
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
-        if (e == operated.leftOut || operated.neverApplied.contains(e)) {
+        if (e == operated.leftOut) {
+            operated.relationIsInside(bound == null ? List.of() : bound.holding(),
+                    bound == null || bound.enclosureKnown());
+            return;
+        }
+        if (operated.neverApplied.contains(e)) {
             return;
         }
         operated.readsAt.putIfAbsent(e, reads);
         boolean told = operated.nodes.contains(e) || operated.nodes.contains(standing);
         GetsPast completion = told ? null : completionOf(e, reads);
         if (!told && !(completion instanceof GetsPast.Always)) {
-            operated.beginGroup(bound == null ? Set.of() : bound.holding());
+            operated.beginGroup(bound == null ? List.of() : bound.holding());
             boolean[] hasOperands = {false};
             boolean elsewhereBefore = operated.unsaidElsewhere;
             // A quotient or a remainder stops where its divisor is nought, and what it divides is
@@ -1964,80 +1969,117 @@ final class Pullback {
                 }
             }
         }
-        Set<TermPath> holding = new LinkedHashSet<>(outer == null ? Set.of() : outer.holding());
-        TermPath looked = containerLookedUpFor(call, block, reads);
-        if (looked != null) {
-            holding.add(looked);
-        }
-        return new Bound(names, standFor, holding);
-    }
-
-    /**
-     * The map at a place that {@code applied} looks an entry up in and hands what it found to
-     * {@code block}, or null where it is no such call: {@code Option.map} of a closure over
-     * {@code Map.get(key, map)}, which applies the closure only where the map holds the key.
-     *
-     * <p>The option the call is handed is followed through what binds names around it and through
-     * {@code Option.map} of another option, which holds a value only where that one does
-     * ({@link #containerAnOptionHoldsAValueFor}). An option that comes from a name, or from
-     * anything else, is not followed, and nothing is said of what the closure stops on.
-     */
-    private TermPath containerLookedUpFor(Core applied, Core.Block block, InputReads reads) {
-        if (!(AnOperationApplied.of(applied) instanceof AnOperationApplied map)
-                || !map.operation().equals(OPTION_MAP) || map.args().size() != 2) {
-            return null;
-        }
-        Core found = null;
-        for (Core arg : map.args()) {
-            if (Core.withoutStanding(arg) == Core.withoutStanding(block)) {
-                continue;
-            }
-            found = arg;
-        }
-        return found == null ? null : containerAnOptionHoldsAValueFor(found, reads);
-    }
-
-    /**
-     * The map at a place whose holding the key {@code option} looks up is what {@code option}
-     * holding a value comes to, or null where it is none: {@code Map.get(key, map)}, an
-     * {@code Option.map} over such an option, either of them as the body of what binds names
-     * around it. What is bound to those names is worked out whatever the option holds, and is no
-     * part of this.
-     */
-    private TermPath containerAnOptionHoldsAValueFor(Core option, InputReads reads) {
-        Core here = Core.withoutStanding(option);
-        if (here instanceof Core.LetIn li) {
-            return containerAnOptionHoldsAValueFor(li.body(), quantities().inside(li, reads));
-        }
-        if (!(AnOperationApplied.of(here) instanceof AnOperationApplied call)
-                || call.args().size() != 2) {
-            return null;
-        }
-        if (call.operation().equals(MAP_GET)) {
-            return reads.pathOf(call.args().get(1), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath container) ? container : null;
-        }
-        if (call.operation().equals(OPTION_MAP)) {
-            for (Core arg : call.args()) {
-                if (!(Core.withoutStanding(arg) instanceof Core.Block)) {
-                    return containerAnOptionHoldsAValueFor(arg, reads);
+        List<Set<TermPath>> holding = new ArrayList<>(outer == null ? List.of() : outer.holding());
+        boolean known = outer == null || outer.enclosureKnown();
+        switch (applicationsOf(block, reads, read)) {
+            // Applied over what the input holds: a run is inside only where one of those holds
+            // something, and where that is not read back to places nothing is said of it.
+            case InputReads.Applications.NoneHanded _ -> {
+                Optional<Set<TermPath>> over = containersTheClosureIsAppliedOver(block, reads);
+                if (over.isPresent()) {
+                    holding.add(over.get());
+                } else {
+                    known = false;
                 }
             }
+            // Applied to values written out, or to none: no container of the input is asked.
+            case InputReads.Applications.Each _, InputReads.Applications.NoneMade _ -> { }
+            case InputReads.Applications.Unsaid _, InputReads.Applications.MoreThanAreRead _,
+                 InputReads.Applications.PastWhatIsWrittenOut _ -> known = false;
         }
-        return null;
+        return new Bound(names, standFor, holding, known);
     }
 
-    private static final ValueName.Stdlib.Operation OPTION_MAP =
-            ValueName.Stdlib.operation("Option", "map");
-    private static final ValueName.Stdlib.Operation MAP_GET =
-            ValueName.Stdlib.operation("Map", "get");
+    /**
+     * The containers of the input {@code block}, a closure an operation applies, is applied over,
+     * of which one holding something is what a run being inside it comes to — or empty where that
+     * is not said of every container it is applied over.
+     *
+     * <p>A closure is applied over the elements of a container, or the one value of an option, so
+     * a run is inside it only where one of them holds something. What an option holding a value
+     * comes to is what the library says of the operation that made it
+     * ({@link #ofAPresence}): the map a lookup is made in, through {@code Option.map} of another
+     * option and what binds names around it. A container that is no position of the input and no
+     * map filed under the keys of one is not read back to a place.
+     */
+    private Optional<Set<TermPath>> containersTheClosureIsAppliedOver(Core.Block block,
+                                                                      InputReads reads) {
+        List<InputReads.AppliedOver> over = reads.containersAppliedOver(block);
+        if (over.isEmpty()) {
+            return Optional.empty();
+        }
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (InputReads.AppliedOver each : over) {
+            Optional<Set<TermPath>> held = each.anOption()
+                    ? containersAnOptionHoldsAValueWhere(each.container())
+                    : positionHoldingWhatItHolds(each.container(), read).map(Set::of);
+            if (held.isEmpty()) {
+                return Optional.empty();
+            }
+            out.addAll(held.get());
+        }
+        return Optional.of(out);
+    }
+
+    /**
+     * The containers of which one holding an entry is what {@code option} holding a value comes
+     * to, or empty where its presence is not said by the holding of a container of the input: a
+     * statement that some element of one meets something, read as it is where the library says
+     * when the operation that made the option answers.
+     */
+    private Optional<Set<TermPath>> containersAnOptionHoldsAValueWhere(Denotation option) {
+        Pulled pulled = ofAPresence(option.value(), option.at(), read, Optional.empty());
+        return containersHeldBy(pulled.proposition());
+    }
+
+    /**
+     * The containers of the input of which one holding an entry is necessary for {@code stated},
+     * or empty where it is not shown to need one: a statement that some element of a container
+     * meets something needs the container to hold one; of several, every part needs what it
+     * needs, and one of several alternatives needs one of what the alternatives each need.
+     */
+    private static Optional<Set<TermPath>> containersHeldBy(Proposition stated) {
+        switch (stated) {
+            case Proposition.Some(DecisionSubject.AnInput(TermPath at, var _), var _,
+                                  boolean holds, var _) when holds -> {
+                return Optional.of(Set.of(at));
+            }
+            case Proposition.All all -> {
+                Set<TermPath> out = new LinkedHashSet<>();
+                for (Proposition part : all.parts()) {
+                    containersHeldBy(part).ifPresent(out::addAll);
+                }
+                return out.isEmpty() ? Optional.empty() : Optional.of(out);
+            }
+            case Proposition.Any any -> {
+                Set<TermPath> out = new LinkedHashSet<>();
+                for (Proposition part : any.parts()) {
+                    Optional<Set<TermPath>> needed = containersHeldBy(part);
+                    if (needed.isEmpty()) {
+                        return Optional.empty();
+                    }
+                    out.addAll(needed.get());
+                }
+                return out.isEmpty() ? Optional.empty() : Optional.of(out);
+            }
+            default -> {
+                return Optional.empty();
+            }
+        }
+    }
 
     /**
      * The names the closures around a part bind, and the places they stand for, or null where
-     * they stand for nothing this can name; and the containers a run works the part out only
-     * where each holds an entry, being inside a closure applied to what a lookup in one found.
+     * they stand for nothing this can name; and what has to hold for a run to be inside the
+     * closures around it: for each set, one of its containers holds something
+     * ({@link #containersTheClosureIsAppliedOver}).
+     *
+     * @param enclosureKnown whether every closure around it is applied over something said: a
+     *                       part is worked out only inside them, so what it needs to be reached
+     *                       is {@code holding} only where that holds
      */
-    private record Bound(Set<BindingId> names, Set<TermPath> standFor, Set<TermPath> holding) {}
+    private record Bound(Set<BindingId> names, Set<TermPath> standFor,
+                         List<Set<TermPath>> holding, boolean enclosureKnown) {}
 
     /** The places {@code operand} reads, as the ones what is worked out over it may stop a run
      *  on: those of the numbers its form is over, or else those it stands at, and no place this
@@ -8082,9 +8124,9 @@ final class Pullback {
          *  stands now ({@link WhatTheStepsNamesHold}). */
         private WhatTheStepsNamesHold stepsNames = WhatTheStepsNamesHold.NOTHING;
         private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
-        /** For each of {@link #unsaidGroups}, the containers its operator is worked out only
-         *  where each holds an entry. */
-        private final List<Set<TermPath>> unsaidGroupsHolding = new ArrayList<>();
+        /** For each of {@link #unsaidGroups}, what has to hold for its operator to be worked out:
+         *  for each set, one of its containers holds an entry. */
+        private final List<List<Set<TermPath>>> unsaidGroupsHolding = new ArrayList<>();
         private Set<TermPath> unsaidAt = new LinkedHashSet<>();
         private boolean unsaidElsewhere;
         private final List<StopObligation> obligations = new ArrayList<>();
@@ -8093,9 +8135,38 @@ final class Pullback {
         private Core within;
         private Core leftOut;
 
+        /** What has to hold for a run to get to the comparison left out, as the closures it stands
+         *  inside say: for each set, one of its containers holds an entry. */
+        private final List<Set<TermPath>> relationNeeds = new ArrayList<>();
+        /** Whether the walk got to the comparison left out. */
+        private boolean relationReached;
+        /** Whether every closure the walk got to it inside is applied over something said. */
+        private boolean relationEnclosureKnown = true;
+
         Operators() {
             unsaidGroups.add(unsaidAt);
-            unsaidGroupsHolding.add(Set.of());
+            unsaidGroupsHolding.add(List.of());
+        }
+
+        /** The walk got to the comparison left out, inside the closures {@code inside} says,
+         *  where {@code known} says every one is applied over something said. */
+        void relationIsInside(List<Set<TermPath>> inside, boolean known) {
+            relationNeeds.addAll(inside);
+            relationReached = true;
+            relationEnclosureKnown &= known;
+        }
+
+        /**
+         * What has to hold for a run to get to the comparison: nothing where none is left out of
+         * the part read; what its closures say where the walk got to it; and not said where one
+         * is left out and the walk did not get to it.
+         */
+        Optional<List<Set<TermPath>>> relationNeedsOneOf() {
+            if (leftOut == null) {
+                return Optional.of(List.of());
+            }
+            return relationReached && relationEnclosureKnown
+                    ? Optional.of(List.copyOf(relationNeeds)) : Optional.empty();
         }
 
         /**
@@ -8119,7 +8190,7 @@ final class Pullback {
         /** What is left unsaid and owed here, with nothing told of where an operator answers. */
         OperatorsAnswer leftUnsaid() {
             return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidGroupsHolding,
-                    unsaidElsewhere, obligations, afterTheFirst);
+                    unsaidElsewhere, obligations, afterTheFirst, relationNeedsOneOf());
         }
 
         /** What has been told so far, which is the same only while nothing more has. */
@@ -8167,15 +8238,15 @@ final class Pullback {
         /** What the next operator not said of may stop a run on is one group of places: it ties
          *  them to one another, which what another operator stops a run on does not. */
         void beginGroup() {
-            beginGroup(Set.of());
+            beginGroup(List.of());
         }
 
-        /** The same, of an operator a run works out only where each container of
-         *  {@code reachedOnlyWhereHolding} holds an entry. */
-        void beginGroup(Set<TermPath> reachedOnlyWhereHolding) {
+        /** The same, of an operator a run works out only where, for each set of
+         *  {@code reachedOnlyWhereOneHolds}, one of its containers holds an entry. */
+        void beginGroup(List<Set<TermPath>> reachedOnlyWhereOneHolds) {
             unsaidAt = new LinkedHashSet<>();
             unsaidGroups.add(unsaidAt);
-            unsaidGroupsHolding.add(Set.copyOf(reachedOnlyWhereHolding));
+            unsaidGroupsHolding.add(List.copyOf(reachedOnlyWhereOneHolds));
         }
 
         /** Every place any operator not said of may stop a run on. */
@@ -8238,29 +8309,34 @@ final class Pullback {
      *                        run on, a group to an operator
      * @param unsaidElsewhere whether an operator not said may stop a run on something that is no
      *                        number of a place, or on operands no form says
+     * @param relationNeedsOneOf what has to hold for a run to get to the comparison left out of
+     *                        the part read, as the closures it stands inside say: for each set, one
+     *                        of its containers holds an entry; or empty where that is not said
      */
     record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
-                           List<Set<TermPath>> unsaidReachedOnlyWhereHolding,
+                           List<List<Set<TermPath>>> unsaidReachedOnlyWhereOneHolds,
                            boolean unsaidElsewhere, List<StopObligation> obligations,
-                           List<AfterTheFirst> afterTheFirst) {
+                           List<AfterTheFirst> afterTheFirst,
+                           Optional<List<Set<TermPath>>> relationNeedsOneOf) {
 
         OperatorsAnswer {
-            if (unsaidAt.size() != unsaidReachedOnlyWhereHolding.size()) {
+            if (unsaidAt.size() != unsaidReachedOnlyWhereOneHolds.size()) {
                 throw new IllegalArgumentException("each group of places an operator not said may"
                         + " stop a run on says where the operator is worked out");
             }
             List<Set<TermPath>> kept = new ArrayList<>();
-            List<Set<TermPath>> keptWhere = new ArrayList<>();
+            List<List<Set<TermPath>>> keptWhere = new ArrayList<>();
             for (int i = 0; i < unsaidAt.size(); i++) {
                 if (!unsaidAt.get(i).isEmpty()) {
                     kept.add(Set.copyOf(unsaidAt.get(i)));
-                    keptWhere.add(Set.copyOf(unsaidReachedOnlyWhereHolding.get(i)));
+                    keptWhere.add(List.copyOf(unsaidReachedOnlyWhereOneHolds.get(i)));
                 }
             }
             unsaidAt = List.copyOf(kept);
-            unsaidReachedOnlyWhereHolding = List.copyOf(keptWhere);
+            unsaidReachedOnlyWhereOneHolds = List.copyOf(keptWhere);
             obligations = List.copyOf(obligations);
             afterTheFirst = List.copyOf(afterTheFirst);
+            relationNeedsOneOf = relationNeedsOneOf.map(List::copyOf);
         }
 
         /** Whether nothing here may stop a run that nothing says of. */
