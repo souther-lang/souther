@@ -120,6 +120,11 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "else Digit(String.length(s) - String.length(t))", true),
             new Row("if String.contains(t, s) then Digit(String.length(t) - 1) "
                     + "else Digit(0)", true),
+            // The empty string stands inside every string, so what is not inside is never it.
+            new Row("if String.contains(\"\", s) then Digit(0) "
+                    + "else Digit(String.length(s) - 1)", false),
+            new Row("if String.contains(\"a\", s) then Digit(0) "
+                    + "else Digit(String.length(s) - 1)", true),
             // A conjunction that does not hold leaves either part possible, so neither part's
             // denial is taken.
             new Row("if String.contains(t, s) && String.contains(u, s) then Digit(0) "

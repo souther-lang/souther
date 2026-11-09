@@ -540,9 +540,17 @@ final class Validity {
                     Props.either(new LawProposition.SomeElement<>(container, ofTheElement, false),
                             holds(container)));
             case Atom.Alike _ -> List.of();
-            // Nothing is taken of a string standing inside another beyond what the statements
-            // about it say: the facts a string being inside another carries are laws of their own.
-            case Atom.Inside _ -> List.of();
+            // Standing inside another, a string holds no more code points than it; not standing
+            // inside, it holds some, since the empty string stands inside every string wherever
+            // the place is. Each is a condition of its side only: a string no longer than another
+            // need not stand inside it, and one holding some may.
+            case Atom.Inside(Value inner, Value outer, StringContainment place) -> List.of(
+                    Props.either(new LawProposition.Inside<>(new LawSubject.Argument<>(inner),
+                                    new LawSubject.Argument<>(outer), place, false),
+                            Props.compared(sizeOf(inner), Rel.LE, sizeOf(outer))),
+                    Props.either(new LawProposition.Inside<>(new LawSubject.Argument<>(inner),
+                                    new LawSubject.Argument<>(outer), place, true),
+                            Props.compared(sizeOf(inner), Rel.GE, Props.constant(1))));
         };
     }
 
