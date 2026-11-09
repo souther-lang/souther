@@ -2204,6 +2204,9 @@ public final class InvariantChecker {
             if (c.numeric() != null) {
                 stated.add(c.numeric());
             }
+            // What the predicate says of its arguments is stated of them as well, and a projection
+            // taking the clause has to hold it to say it holds the clause.
+            stated.addAll(c.following());
         }
         return new PartRead(Predicates.subjectsIn(said), Predicates.narrowableIn(said), stated);
     }

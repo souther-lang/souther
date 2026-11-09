@@ -468,7 +468,7 @@ final class Predicates {
             new NumericConstraint(
                     LinearForm.constant(ExactRatio.ONE.negated()), Rel.GE),
             null, List.of(),
-            null, null);
+            null, null, List.of());
 
     /**
      * One clause of an invariant, and the two ways it can come out: a relation for the domain to
@@ -477,11 +477,11 @@ final class Predicates {
      * another, and which of the two routes carries it is not the author's concern.
      */
     record Clause(NumericConstraint numeric, Fact fact, List<NumericConstraint> known, Piecewise piecewise,
-                  Choice choice) {
+                  Choice choice, List<NumericConstraint> following) {
 
         /** This clause with what asking its choice of the path came to. */
         Clause choosing(Choice asked) {
-            return new Clause(numeric, fact, known, piecewise, asked);
+            return new Clause(numeric, fact, known, piecewise, asked, following);
         }
 
         /**
@@ -1009,7 +1009,7 @@ final class Predicates {
             }
         }
         if (parts.isEmpty()) {
-            parts.add(new Part.Carried(new Clause(null, null, List.of(), null, answer)));
+            parts.add(new Part.Carried(new Clause(null, null, List.of(), null, answer, List.of())));
         }
         return new Owed(List.copyOf(parts), owed.folded());
     }
@@ -1149,7 +1149,15 @@ final class Predicates {
         // atom files what it carries where it is named, so having read the clause into forms is
         // having read them ({@link IntrinsicNumericFacts}).
         List<NumericConstraint> known = terms.carriedBy(namedBy(numeric, fact));
-        return Owed.of(new Clause(numeric, fact, known, piecewise, null)).alsoFolded(fold);
+        // What the predicate says of its arguments where it is as stated: the necessary conditions
+        // of that side of its law, which hold wherever the clause does. They are the clause's to
+        // carry and not what the values carry, so they stay out of `known`.
+        Derivation.HoldsSomethingWhere.Holding law = LawOverAtoms.whereItHolds(polar.expr(), at,
+                terms);
+        List<NumericConstraint> following = law == null ? null
+                : LawOverAtoms.certain(law, polar.positive());
+        return Owed.of(new Clause(numeric, fact, known, piecewise, null,
+                following == null ? List.of() : following)).alsoFolded(fold);
     }
 
     /** What a clause folding to {@code folded}, read with polarity {@code positive}, comes to on its
@@ -2024,6 +2032,11 @@ final class Predicates {
             if (c.numeric() != null) {
                 out = out.taking(c.numeric().form(), c.numeric().rel(), held,
                         terms.spacesOf(c.numeric().form()));
+            }
+            // What the predicate says of its arguments where the clause holds, as a guard saying
+            // the same says it.
+            for (NumericConstraint each : c.following()) {
+                out = out.taking(each.form(), each.rel(), held, terms.spacesOf(each.form()));
             }
             if (c.fact() != null) {
                 // What is guaranteed is guaranteed of the term as written; a container built from it
