@@ -730,11 +730,32 @@ public final class OperationFacts {
                                             number(at(0)))),
                             all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
                                     atLeast(sizeOf(carried(1)), -1, 0))))),
+            // What is taken and what is dropped, at one count over one list, are the whole list
+            // between them.
+            about("List", "take", lemma(related(equalToTheSum(sizeOf(at(1)),
+                    sizeOf(answerOf("List", "take", the(at(0)), the(at(1)))),
+                    sizeOf(answerOf("List", "drop", the(at(0)), the(at(1)))))),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    any(all(atLeast(number(at(0)), -1, 0), atLeast(sizeOf(carried(1)), -1, 0)),
+                            all(atLeast(number(at(0)), 1, -1),
+                                    atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
+                                    equal(sizeOf(carried(1)), number(at(0)), 0)),
+                            all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
+                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0))))),
             // A pair for each element of the shorter: as many as the first where the second has
             // as many, and as many as the second where it has fewer.
             about("List", "zipShortest", lemma(sizeInCases(
                     sized(atLeast(sizeOf(at(1)), 1, sizeOf(at(0)), -1, 0), sizeOf(at(0)), 0),
                     sized(atLeast(sizeOf(at(0)), 1, sizeOf(at(1)), -1, -1), sizeOf(at(1)), 0)),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    any(all(atLeast(sizeOf(at(1)), 1, sizeOf(WALKED), -1, 0),
+                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0)),
+                            all(atLeast(sizeOf(WALKED), 1, sizeOf(at(1)), -1, -1),
+                                    equal(sizeOf(carried(1)), sizeOf(at(1)), 0))))),
+            // Two lists paired are as many pairs whichever of them is first.
+            about("List", "zipShortest", lemma(related(equal(
+                    sizeOf(answerOf("List", "zipShortest", the(at(0)), the(at(1)))),
+                    sizeOf(answerOf("List", "zipShortest", the(at(1)), the(at(0)))), 0)),
                     equal(number(carried(0)), sizeOf(WALKED), 0),
                     any(all(atLeast(sizeOf(at(1)), 1, sizeOf(WALKED), -1, 0),
                                     equal(sizeOf(carried(1)), sizeOf(WALKED), 0)),
@@ -886,6 +907,16 @@ public final class OperationFacts {
                             answerOf("Set", "insert", the(at(0)), the(at(1))))),
                     any(alike(the(ANY), the(at(0))),
                             isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
+            // Put in is as many as the union with the one value alone, and taken out is as many as
+            // the difference from it.
+            about("Set", "insert", related(equal(
+                    sizeOf(answerOf("Set", "insert", the(at(0)), the(at(1)))),
+                    sizeOf(answerOf("Set", "union", the(at(1)),
+                            answerOf("Set", "singleton", the(at(0))))), 0))),
+            about("Set", "remove", related(equal(
+                    sizeOf(answerOf("Set", "remove", the(at(0)), the(at(1)))),
+                    sizeOf(answerOf("Set", "difference", the(at(1)),
+                            answerOf("Set", "singleton", the(at(0))))), 0))),
             // A union holds exactly what either set held.
             about("Set", "union", related(iff(
                     isTrue(answerOf("Set", "contains", the(ANY),

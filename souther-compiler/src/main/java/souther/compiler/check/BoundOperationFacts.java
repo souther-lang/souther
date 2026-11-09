@@ -919,11 +919,21 @@ public final class BoundOperationFacts {
                 OperationLaw<DeclaredArgument> law, var _))) {
             return null;
         }
-        List<LawProposition<Slot>> beside = new ArrayList<>(relationsOf(operation));
+        return AddsWhatItDoesNotHold.of(operation, law, provedRelationsOf(operation),
+                this::askedWhetherItHolds);
+    }
+
+    /**
+     * What is stated of {@code operation}'s answer beside what other operations answer, as a
+     * reader of a program may take it: declared of a kernel, and of an operation the library
+     * writes only once its body has proved it.
+     */
+    public List<LawProposition<Slot>> provedRelationsOf(ValueName operation) {
+        List<LawProposition<Slot>> out = new ArrayList<>(relationsOf(operation));
         several.getOrDefault(BoundOperationFact.HasARelatedLemma.class, Map.of())
                 .getOrDefault(operation, List.of())
-                .forEach(each -> beside.add(((BoundOperationFact.HasARelatedLemma) each).holds()));
-        return AddsWhatItDoesNotHold.of(operation, law, beside, this::askedWhetherItHolds);
+                .forEach(each -> out.add(((BoundOperationFact.HasARelatedLemma) each).holds()));
+        return out;
     }
 
     /**

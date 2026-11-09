@@ -3,7 +3,11 @@ package souther.compiler.check;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.CodePointClass;
+import souther.compiler.semantics.LawNumber;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.proof.Slot;
 import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BinOp;
@@ -2388,8 +2392,10 @@ final class Terms {
             if (!firstFiledFrom(atom, new ReadOff(built, null))) {
                 return atom;
             }
-            carrying(atom, IntrinsicNumericFacts.ofSize(size, built.value(), atom, built.at(),
-                    this));
+            List<NumericConstraint> carried = new ArrayList<>(IntrinsicNumericFacts.ofSize(
+                    size, built.value(), atom, built.at(), this));
+            carried.addAll(sizesRelatedAtACall(size, built.value(), built.at()));
+            carrying(atom, carried);
             Derivation held = IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(), atom,
                     built.at(), this);
             if (held != null) {
@@ -2397,6 +2403,79 @@ final class Terms {
             }
         }
         return atom;
+    }
+
+    /**
+     * What the library proves of the sizes of what {@code container}'s operation answers beside
+     * what other operations answer on the same arguments, as equalities and bounds between the
+     * atoms of those sizes: {@code take} and {@code drop} at one count over one list are the whole
+     * list between them.
+     *
+     * <p>Only a relation every number of which is a size is read, and only where each argument it
+     * names is a value this names. The size of an answer the relation names and the call does not
+     * is named as a call of that operation over the same arguments ({@link #sizeKeyOf}): the atom a
+     * clause reading that call names, which carries what it carries where that clause names it.
+     */
+    private List<NumericConstraint> sizesRelatedAtACall(ValueName size, Core container,
+                                                        Denotations at) {
+        AnOperationApplied applied = AnOperationApplied.of(container);
+        if (applied == null) {
+            return List.of();
+        }
+        List<NumericConstraint> out = new ArrayList<>();
+        for (LawProposition<Slot> each : DefaultBoundOperationFacts.get()
+                .provedRelationsOf(applied.operation())) {
+            if (each instanceof LawProposition.Compared<Slot>(var form, var rel)) {
+                LinearForm<FactSubject> read = form.over(
+                        number -> sizeNamedByARelation(size, number, applied, at));
+                if (read != null) {
+                    out.add(new NumericConstraint(read, rel));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The size atom {@code number} names over the arguments {@code applied} was handed, or null
+     *  where it is no size or names a value this cannot. */
+    private LinearForm<FactSubject> sizeNamedByARelation(ValueName size, LawNumber<Slot> number,
+                                                         AnOperationApplied applied,
+                                                         Denotations at) {
+        if (!(number instanceof LawNumber.SizeOf<Slot>(var of))) {
+            return null;
+        }
+        FactSubject atom;
+        if (of instanceof LawSubject.Argument<Slot>(Slot.Place(int position))) {
+            atom = position < applied.args().size()
+                    ? sizeOfWhatItHolds(applied.args().get(position), at) : null;
+        } else {
+            Term answer = termOfARelatedValue(of, applied, at);
+            atom = answer == null ? null : sizeKeyOf(size, answer);
+        }
+        return atom == null ? null : LinearForm.atom(atom);
+    }
+
+    /** What a value a relation names keys as over the arguments {@code applied} was handed, or
+     *  null where it names an argument that is not there. */
+    private Term termOfARelatedValue(LawSubject<Slot> subject, AnOperationApplied applied,
+                                     Denotations at) {
+        return switch (subject) {
+            case LawSubject.Argument<Slot>(Slot.Place(int position)) ->
+                    position < applied.args().size()
+                            ? bodyKey(applied.args().get(position), at) : null;
+            case LawSubject.AnswerOf<Slot>(var operation, var args) -> {
+                List<Term> keys = new ArrayList<>();
+                for (LawSubject<Slot> arg : args) {
+                    Term key = termOfARelatedValue(arg, applied, at);
+                    if (key == null) {
+                        yield null;
+                    }
+                    keys.add(key);
+                }
+                yield interned.called(operation, keys);
+            }
+            default -> null;
+        };
     }
 
     /**
