@@ -4269,7 +4269,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (FilingCoordinate at : places()) {
             TermPath place = theValueAt(at);
             if (place != null && !mayStopOnValueAt(place, past, read, region, conditions,
-                    declined, accountedFor)) {
+                    declined, accountedFor, sought.found().isPresent())) {
                 continue;
             }
             notShown.add(at);
@@ -4304,7 +4304,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private boolean mayStopOnValueAt(TermPath place, DemandReading.Answered past,
                                      InputReading read, SearchRegion region,
                                      List<OnAWay> conditions, Optional<Set<String>> declined,
-                                     Set<TermPath> accountedFor) {
+                                     Set<TermPath> accountedFor, boolean aRowGotThere) {
+        if (aRowGotThere && theRunDoesNotTurnOn(place, past, read, region, conditions)) {
+            return false;
+        }
         Set<TermPath> empty = leftEmptyBesideAnyValueAt(place, past, read, region, conditions,
                 declined);
         if (empty.isEmpty()) {
@@ -4313,6 +4316,76 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         DemandReading.Answered narrowed = past.withoutTies(tie ->
                 tie.reachedOnlyWhereHolding().stream().anyMatch(empty::contains));
         return mayStopOnWhatItReads(narrowed, read, region, conditions, declined, accountedFor);
+    }
+
+    /**
+     * Whether the run to the relation, which a row got to, is the same run with any other value at
+     * {@code place}: nothing it stops on, narrows or decides by reads the place, and no rule names
+     * the place, so the row holds any value of its type there and is still a row of the way. A
+     * place inside a container is asked on a row holding the one element, as the relation is read
+     * at one.
+     *
+     * <p>What a statement of the way reads is known only where every part of it is a place
+     * ({@link PositionsAStatementReads#everyPlaceOf}); one reading anything else may turn on the
+     * place, and nothing is shown. An empty set of positions says nothing of what it turns on.
+     */
+    private boolean theRunDoesNotTurnOn(TermPath place, DemandReading.Answered past,
+                                        InputReading read, SearchRegion region,
+                                        List<OnAWay> conditions) {
+        if (reachedByTheDeclarations(place, read).named() != Named.NOT) {
+            return false;
+        }
+        for (TermPath container : place.containersHoldingIt()) {
+            if (!oneIsHeld(container, read, region)) {
+                return false;
+            }
+        }
+        for (OnAWay each : conditions) {
+            Set<TermPath> turnsOn = new LinkedHashSet<>(each.positions());
+            if (each.statedOfTheRun() != null) {
+                Optional<List<TermPath>> stated =
+                        PositionsAStatementReads.everyPlaceItTurnsOn(each.statedOfTheRun());
+                if (stated.isEmpty()) {
+                    return false;
+                }
+                turnsOn.addAll(stated.get());
+            } else if (turnsOn.isEmpty()) {
+                return false;
+            }
+            if (touchesAny(turnsOn, List.of(place))
+                    || turnsOn.stream().anyMatch(place::bearsOn)) {
+                return false;
+            }
+        }
+        return !mayStopOnTheValueAt(place, past);
+    }
+
+    /** Whether a stop, a tie, a statement the operators narrow by, or what the applications before
+     *  work out may turn on the value at {@code place}. */
+    private static boolean mayStopOnTheValueAt(TermPath place, DemandReading.Answered past) {
+        if (past.unsaid()) {
+            return true;
+        }
+        for (DemandReading.Tie tie : past.tied()) {
+            if (touchesAny(tie.places(), List.of(place))
+                    || tie.places().stream().anyMatch(place::bearsOn)) {
+                return true;
+            }
+        }
+        for (Pullback.StopObligation owed : past.owed()) {
+            if (owed.onWhatNoPlaceHolds() || touchesAny(owed.places(), List.of(place))
+                    || owed.places().stream().anyMatch(place::bearsOn)) {
+                return true;
+            }
+        }
+        for (TakenConstraint narrowing : past.narrowing()) {
+            if (narrowing.terms().stream().anyMatch(term ->
+                    term.isReadOffAPlaceBearingOn(place))) {
+                return true;
+            }
+        }
+        return past.before().stream().anyMatch(each ->
+                mayStopOnTheValueAt(place, each.workedOut()));
     }
 
     /**

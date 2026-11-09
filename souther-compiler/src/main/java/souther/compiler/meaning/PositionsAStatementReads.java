@@ -37,15 +37,24 @@ public final class PositionsAStatementReads {
     /** How many applications of a closure the part read is inside. */
     private int insideAnApplication;
 
+    /** Whether a value a binding holds is read as the places what it is handed is of. */
+    private final boolean handedOff;
+
     private PositionsAStatementReads(boolean answersNameNothing, boolean everyPlace) {
         this(answersNameNothing, everyPlace, false);
     }
 
     private PositionsAStatementReads(boolean answersNameNothing, boolean everyPlace,
                                      boolean valuesBound) {
+        this(answersNameNothing, everyPlace, valuesBound, false);
+    }
+
+    private PositionsAStatementReads(boolean answersNameNothing, boolean everyPlace,
+                                     boolean valuesBound, boolean handedOff) {
         this.answersNameNothing = answersNameNothing;
         this.everyPlace = everyPlace;
         this.valuesBound = valuesBound;
+        this.handedOff = handedOff;
     }
 
     /**
@@ -150,6 +159,46 @@ public final class PositionsAStatementReads {
     }
 
     /**
+     * Every place {@code stated} turns on: those it is read off ({@link #everyPlaceOf}), and for a
+     * value a binding holds the places what the binding was handed is of — the two ends of the
+     * whole numbers a walk is handed, the container a walk walks and how many it holds, or the
+     * container an index picks in. Empty where it reads anything else, a value bound that was
+     * handed nothing included: that value may turn on any place.
+     */
+    public static Optional<List<TermPath>> everyPlaceItTurnsOn(Proposition stated) {
+        PositionsAStatementReads reading =
+                new PositionsAStatementReads(false, true, false, true);
+        return reading.reads(stated) ? Optional.of(List.copyOf(reading.out)) : Optional.empty();
+    }
+
+    /** The places a value handed to a step is of, or false where it is handed nothing that says. */
+    private boolean readsWhatIsHanded(Quantity.OfABinding value) {
+        if (value.handed().isEmpty()) {
+            return false;
+        }
+        return switch (value.handed().get()) {
+            case Quantity.AWholeNumberInTurn(var from, var to) -> {
+                from.coefs().keySet().forEach(term -> out.addAll(term.placesReadOff()));
+                to.coefs().keySet().forEach(term -> out.addAll(term.placesReadOff()));
+                yield true;
+            }
+            case Quantity.PositionInTheWalk(TermPath container, var howMany) -> {
+                out.add(container);
+                out.addAll(howMany.placesReadOff());
+                yield true;
+            }
+            case Quantity.PickedAtAnIndex(TermPath container, long _, TermPath element,
+                                          var howMany) -> {
+                out.add(container);
+                out.add(element);
+                out.addAll(howMany.placesReadOff());
+                yield true;
+            }
+            case Quantity.KeptSoFar _ -> false;
+        };
+    }
+
+    /**
      * The positions of the input {@code stated} names beside what a dependency answered, in the
      * order it names them — or empty where it reads something that is neither, or is about no
      * answer at all.
@@ -202,8 +251,8 @@ public final class PositionsAStatementReads {
             case DecisionAtom.OfTheInput(var term, var _) -> reads(term);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
                  DecisionAtom.ComputedOverAnAnswer _ -> answersNameNothing;
-            case Quantity.OfABinding value -> valuesBound && insideAnApplication == 0
-                    && kept(value);
+            case Quantity.OfABinding value -> handedOff ? readsWhatIsHanded(value)
+                    : valuesBound && insideAnApplication == 0 && kept(value);
             case Quantity.HowManyCarried _, Quantity.TheKeptTotal _ -> false;
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .allMatch(this::reads);

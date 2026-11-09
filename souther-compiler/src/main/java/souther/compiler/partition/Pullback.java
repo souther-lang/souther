@@ -1977,9 +1977,10 @@ final class Pullback {
      * {@code block}, or null where it is no such call: {@code Option.map} of a closure over
      * {@code Map.get(key, map)}, which applies the closure only where the map holds the key.
      *
-     * <p>Only the lookup written as the option the call is handed. An option that comes from a
-     * name, or from a call of a declared function, is not followed, and nothing is said of what
-     * the closure stops on.
+     * <p>The option the call is handed is followed through what binds names around it and through
+     * {@code Option.map} of another option, which holds a value only where that one does
+     * ({@link #containerAnOptionHoldsAValueFor}). An option that comes from a name, or from
+     * anything else, is not followed, and nothing is said of what the closure stops on.
      */
     private TermPath containerLookedUpFor(Core applied, Core.Block block, InputReads reads) {
         if (!(AnOperationApplied.of(applied) instanceof AnOperationApplied map)
@@ -1993,13 +1994,37 @@ final class Pullback {
             }
             found = arg;
         }
-        if (found == null
-                || !(AnOperationApplied.of(found) instanceof AnOperationApplied lookup)
-                || !lookup.operation().equals(MAP_GET) || lookup.args().size() != 2) {
+        return found == null ? null : containerAnOptionHoldsAValueFor(found, reads);
+    }
+
+    /**
+     * The map at a place whose holding the key {@code option} looks up is what {@code option}
+     * holding a value comes to, or null where it is none: {@code Map.get(key, map)}, an
+     * {@code Option.map} over such an option, either of them as the body of what binds names
+     * around it. What is bound to those names is worked out whatever the option holds, and is no
+     * part of this.
+     */
+    private TermPath containerAnOptionHoldsAValueFor(Core option, InputReads reads) {
+        Core here = Core.withoutStanding(option);
+        if (here instanceof Core.LetIn li) {
+            return containerAnOptionHoldsAValueFor(li.body(), quantities().inside(li, reads));
+        }
+        if (!(AnOperationApplied.of(here) instanceof AnOperationApplied call)
+                || call.args().size() != 2) {
             return null;
         }
-        return reads.pathOf(lookup.args().get(1), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath container) ? container : null;
+        if (call.operation().equals(MAP_GET)) {
+            return reads.pathOf(call.args().get(1), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath container) ? container : null;
+        }
+        if (call.operation().equals(OPTION_MAP)) {
+            for (Core arg : call.args()) {
+                if (!(Core.withoutStanding(arg) instanceof Core.Block)) {
+                    return containerAnOptionHoldsAValueFor(arg, reads);
+                }
+            }
+        }
+        return null;
     }
 
     private static final ValueName.Stdlib.Operation OPTION_MAP =
