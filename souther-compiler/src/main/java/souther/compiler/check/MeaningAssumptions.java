@@ -439,8 +439,12 @@ final class MeaningAssumptions {
                             ? WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES
                             : WhyNotTaken.DomainLimit.A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN),
                     asked).forEach(this::notTaken);
-            case Proposition.Unread unread ->
-                    notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
+            // A part nothing read the meaning of is no fact of the way, and what it would be said
+            // as still makes certain what that statement does.
+            case Proposition.Unread unread -> {
+                unread.couldBe().ifPresent(could -> takingTheLengths(could.on(unread.holds())));
+                notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
+            }
             case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.Compared(Relation.Ordered ordered, boolean holds, var _, var _) ->
                     onAnOrder(ordered, holds);
@@ -466,12 +470,27 @@ final class MeaningAssumptions {
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES);
             // One string inside another, or which language a string is in, is no fact a path holds
             // of a place: what it holds is what the statement says of how long each string is.
-            case Proposition.StringInside(Quantity inner, Quantity outer, var _, boolean holds,
-                                          var _) -> {
-                takingTheLengths(WhatAStringSaysOfItsLength.inside(
-                        lengthOfAString(inner), lengthOfAString(outer)), holds);
+            case Proposition.StringInside _ -> {
+                takingTheLengths(asked);
                 outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER);
             }
+            case Proposition.InTheStrings _ -> {
+                takingTheLengths(asked);
+                outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+            }
+        }
+    }
+
+    /**
+     * What a statement about strings makes certain of their lengths, on the side it comes out; and
+     * nothing of any other statement.
+     */
+    private void takingTheLengths(Proposition stated) {
+        switch (stated) {
+            case Proposition.StringInside(Quantity inner, Quantity outer, var _, boolean holds,
+                                          var _) -> takingTheLengths(
+                    WhatAStringSaysOfItsLength.inside(lengthOfAString(inner),
+                            lengthOfAString(outer)), holds);
             case Proposition.InTheStrings(var of, StringsLanguage accepts, boolean holds, var _) -> {
                 FactSubject length = of instanceof Proposition.InTheStrings.Strings.AtAPosition(
                         TermPath at, ValueIdentity identity) ? lengthAt(at, identity) : null;
@@ -479,12 +498,11 @@ final class MeaningAssumptions {
                     takingTheLengths(WhatAStringSaysOfItsLength.inALanguage(length,
                             accepts.meaning()), holds);
                 }
-                outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
             }
+            default -> { }
         }
     }
 
-    /** What a statement about strings makes certain of their lengths, on the side it came out. */
     private void takingTheLengths(WhatAStringSaysOfItsLength.Sides<FactSubject> said,
                                   boolean holds) {
         for (WhatAStringSaysOfItsLength.Condition<FactSubject> each

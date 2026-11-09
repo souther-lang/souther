@@ -22,10 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * lengths to be what that rules out is one no value reaches, which the account says of its decision
  * rule; the same branch beside a length the statement allows is not.
  *
- * <p>A pattern a call of {@code String.matches} is written with over a string of the row is not
- * among them: the model reads it as a statement the decision reads of the row, and it is no fact of
- * a way. So what such a call says of the lengths is taken where a guard is read and where an
- * invariant is assumed, and not here.
+ * <p>A call of {@code String.matches} over a string of the row is no statement the model has words
+ * for, and a decision reads it of the row. What it would be said as is what a way takes of it, so
+ * a way is told what the pattern says of the lengths on whichever side the way comes out, as it is
+ * of a statement the model does have words for.
  */
 class WhatAStringInsideAnotherSaysOfLengthsIsHeldOnTheWayThroughTheModelTest {
 
@@ -57,6 +57,25 @@ class WhatAStringInsideAnotherSaysOfLengthsIsHeldOnTheWayThroughTheModelTest {
             // either is beside the other.
             new Row("if String.contains(t, s) then B else "
                     + "(if String.length(t) > String.length(s) then A else C)", "C", false),
+            // A string a pattern accepts holds the lengths the pattern's strings do, and one it
+            // does not is not empty where the pattern accepts the empty string.
+            new Row("if String.matches(\"[0-9]{3}\", s) then "
+                    + "(if String.length(s) == 5 then A else B) else C", "C", true),
+            // The other way round: a string a pattern of one length accepts is not of another.
+            new Row("if String.matches(\"[0-9]{3}\", s) then "
+                    + "(if String.length(s) == 3 then A else B) else C", "C", true),
+            new Row("if String.matches(\"[A-Z]{2,4}\", s) then "
+                    + "(if String.length(s) > 4 then A else B) else C", "C", true),
+            new Row("if String.matches(\"[A-Z]{2,4}\", s) then "
+                    + "(if String.length(s) == 4 then A else B) else C", "C", false),
+            new Row("if String.matches(\"[0-9]*\", s) then B else "
+                    + "(if String.length(s) == 0 then A else C)", "C", true),
+            new Row("if String.matches(\"[0-9]*\", s) then B else "
+                    + "(if String.length(s) == 1 then A else C)", "C", false),
+            // A pattern that accepts only strings of some length does not say the others are not
+            // matched, and one that accepts the empty string says nothing where it is accepted.
+            new Row("if String.matches(\"[0-9]{3}\", s) then C else "
+                    + "(if String.length(s) == 0 then A else B)", "B", false),
             // A string with a character in a language is in the language of the strings holding
             // one, which is none of them empty.
             new Row("if List.any(p -> String.matches(\"[0-9]{3}\", p), String.split(\",\", s)) "

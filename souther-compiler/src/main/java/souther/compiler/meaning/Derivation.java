@@ -3811,11 +3811,23 @@ public sealed interface Derivation {
         }
     }
 
-    /** A part this reading took no step into, and why. */
-    record Stopped(WhyUnread why, boolean fixed) implements Derivation {
+    /**
+     * A part this reading took no step into, and why.
+     *
+     * @param couldBe what the part would be said as were there words for it, where there is such a
+     *                statement ({@link Proposition.Unread#couldBe})
+     */
+    record Stopped(WhyUnread why, boolean fixed, Optional<Proposition.Unread.CouldBe> couldBe)
+            implements Derivation {
 
         public Stopped {
             Objects.requireNonNull(why, "a reading stops for a reason");
+            Objects.requireNonNull(couldBe, "a statement is there or it is not");
+        }
+
+        /** A part there is no statement for. */
+        public Stopped(WhyUnread why, boolean fixed) {
+            this(why, fixed, Optional.empty());
         }
 
         @Override
