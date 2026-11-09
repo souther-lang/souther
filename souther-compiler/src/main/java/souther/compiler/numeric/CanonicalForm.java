@@ -120,22 +120,32 @@ public final class CanonicalForm<A> {
      *         form that exists and that this cannot write, and is not a form with no terms
      */
     public static <A> Normalized<A> of(Map<A, ExactRatio> coefs) {
-        // The mapping being built, in no order — what a form holds is in none, and one kept here
-        // would be one a reader could start taking again on the way in.
-        Map<A, ExactRatio> weighed = new HashMap<>();
-        coefs.forEach((atom, coef) -> {
-            if (!coef.isZero()) {
-                weighed.put(atom, coef);
-            }
-        });
-        if (weighed.isEmpty()) {
-            return new NoTerms<>();
-        }
         // What every weight shares, which is a question about the weights and not about which of
         // them comes first — see AdditiveImage#divisorOf, where the fold is commutative.
-        ExactRatio shared = AdditiveImage.divisorOf(weighed.values());
+        boolean weighsNothingSomewhere = false;
+        ExactRatio shared = ExactRatio.ZERO;
+        for (ExactRatio each : coefs.values()) {
+            if (each.isZero()) {
+                weighsNothingSomewhere = true;
+            } else {
+                shared = ExactRatio.gcd(shared, each);
+            }
+        }
+        if (shared.isZero()) {
+            return new NoTerms<>();
+        }
+        // Already in lowest terms and naming only positions it weighs, which is nearly every form
+        // here: it is its own canonical form, and nothing is built on the way to it.
+        if (!weighsNothingSomewhere && shared.equals(ExactRatio.ONE)) {
+            return new Scaled<>(new CanonicalForm<>(coefs), shared);
+        }
+        // The mapping being built, in no order — what a form holds is in none, and one kept here
+        // would be one a reader could start taking again on the way in.
         Map<A, ExactRatio> primitive = new HashMap<>();
-        for (Map.Entry<A, ExactRatio> each : weighed.entrySet()) {
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            if (each.getValue().isZero()) {
+                continue;
+            }
             switch (each.getValue().dividedBy(shared)) {
                 case ExactAnswer.Held<ExactRatio> held -> primitive.put(each.getKey(), held.value());
                 case ExactAnswer.Unheld<ExactRatio> unheld -> {
