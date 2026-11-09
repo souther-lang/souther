@@ -9,6 +9,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReachName;
@@ -239,6 +240,31 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
             // A string stands for itself, so what a row carries is the string, escaped the way the
             // language reads one back.
             case Carrier.Text _ -> string(at.spelled());
+        };
+    }
+
+    /**
+     * The value a bare scalar template stands for, which is what {@link #on} wrote — or null where
+     * this is no such template: a value wearing a name, a case, a container.
+     *
+     * <p>The other direction of {@link #on} and the one place it is read back, so a value built as
+     * a template and one read off a run are the same value. A temporal is told from a newtype
+     * around a string by the type's own name, which is all {@link #temporal} writes.
+     */
+    public ObservedValue observed() {
+        return switch (value) {
+            case Hir.IntLit lit -> new ObservedValue.Integer(lit.value());
+            case Hir.DecimalLit lit -> new ObservedValue.Decimal(lit.value());
+            case Hir.StringLit lit -> new ObservedValue.Text(lit.value());
+            case Hir.Neg(Hir.IntLit lit, _, _) -> new ObservedValue.Integer(-lit.value());
+            case Hir.Neg(Hir.DecimalLit lit, _, _) ->
+                    new ObservedValue.Decimal(lit.value().negate());
+            case Hir.Apply apply when apply.args().size() == 1
+                    && apply.args().getFirst() instanceof Hir.StringLit iso
+                    && List.of("Date(", "Time(", "DateTime(", "Instant(")
+                            .stream().anyMatch(text::startsWith) ->
+                    new ObservedValue.Temporal(iso.value());
+            default -> null;
         };
     }
 

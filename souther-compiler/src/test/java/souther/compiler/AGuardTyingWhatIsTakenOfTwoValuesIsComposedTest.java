@@ -73,6 +73,24 @@ class AGuardTyingWhatIsTakenOfTwoValuesIsComposedTest {
                 "List.all(d -> " + BEFORE_YESTERDAY + ", deals)"));
     }
 
+    /**
+     * Exactly so many elements whose number taken of a value stands at a figure are chosen among
+     * values built for that figure: the places the value itself turns at name none of them.
+     */
+    @Test
+    void exactlySoManyElementsWhoseTakenNumberIsAtAFigureAreComposed() {
+        for (String statement : List.of(
+                "Date.day(d.on) == 5",
+                "Date.month(d.on) == 3",
+                "Date.year(d.on) == 1990",
+                "Date.day(d.on) == Date.day(rates.since)",
+                "String.length(d.currency) == 7",
+                "Int.floorMod(d.amount, 7) == 3")) {
+            assertEquals(List.of(), whatNothingCouldShow(
+                    "List.length(List.filter(d -> " + statement + ", deals)) == 1"), statement);
+        }
+    }
+
     /** The rules of the decision no search could settle. */
     private static List<DecisionRule> whatNothingCouldShow(String guard) {
         return DecisionRulesTheSearchLeftUnsettled.notShownIn(DEALS.replace("GUARD", guard),

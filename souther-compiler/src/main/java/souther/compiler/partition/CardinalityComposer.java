@@ -5,6 +5,7 @@ import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
@@ -612,14 +613,14 @@ final class CardinalityComposer {
                 listedAt.add(at);
                 return numbersAt(at, OfTheType.of(part, reading), asked, apartAt, measuring,
                         within, beside, keptApartByItsRules ? MOST_ELEMENTS : 1, unheld, unnamed,
-                        reading.today());
+                        reading.today(), part, reading);
             };
             ListedByValue byValue = listedByValue(container, holding.element(), reading, apartAt,
                     numbers, (at, part) -> {
                         listedAt.add(at);
                         return numbersAt(at, OfTheType.manyOf(part, reading), asked, apartAt,
                                 measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
-                                reading.today());
+                                reading.today(), part, reading);
                     });
             List<TermPath> parts = List.copyOf(listedAt);
             if (byValue == null || (apartAt != null && byValue.values().isEmpty())) {
@@ -1109,7 +1110,8 @@ final class CardinalityComposer {
                                                  Quantity.TheValue apartAt, Quantities measuring,
                                                  SearchRegion within,
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
-                                                 Set<CompositionRepertoire> unnamed, Today today) {
+                                                 Set<CompositionRepertoire> unnamed, Today today,
+                                                 TypeView view, RuleReadingContext reading) {
         NumericTerm term = new NumericTerm.ValueOf(at);
         TermOrders orders = measuring.ordersOf(term);
         Carrier carrier = orders == null ? null : orders.observed();
@@ -1170,6 +1172,66 @@ final class CardinalityComposer {
         List<ObservedValue> out = new ArrayList<>();
         for (Place place : places) {
             out.add(carrier.valueOf(place));
+        }
+        for (ObservedValue value : whereWhatIsTakenTurns(at, view, asked, measuring, within,
+                beside, reading)) {
+            if (!out.contains(value)) {
+                out.add(value);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The values at {@code at} that stand where a number taken of the value turns: the day of a
+     * date, how long a string is, what a number leaves of a divisor.
+     *
+     * <p>A statement over what is taken of a value turns at a number of that, which is no place of
+     * the value's own order, so the places above never name a value that meets it. What names one
+     * is what builds a value for that number ({@link TermRealizations#at}), asked at each place the
+     * statements turn at, and read through the bare type: the value comes back as the template
+     * {@link FixtureTemplate#on} writes, which {@link FixtureTemplate#observed} reads.
+     */
+    private static List<ObservedValue> whereWhatIsTakenTurns(
+            TermPath at, TypeView view, List<Asked> asked, Quantities measuring,
+            SearchRegion within, Map<NumericTerm, Place> beside, RuleReadingContext reading) {
+        Set<NumericTerm> taken = new LinkedHashSet<>();
+        for (Asked one : asked) {
+            if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
+                for (NumericTerm number : perElement.numbers()) {
+                    if (!(number instanceof NumericTerm.ValueOf) && at.equals(number.subjectPath())) {
+                        taken.add(number);
+                    }
+                }
+            }
+        }
+        Type bare = TypeOps.base(view.declared(), reading.source().inners());
+        List<ObservedValue> out = new ArrayList<>();
+        for (NumericTerm number : taken) {
+            TermOrders orders = measuring.ordersOf(number);
+            if (orders == null || orders.answered() == null) {
+                continue;
+            }
+            Set<ExactRatio> levels = new LinkedHashSet<>();
+            for (Asked one : asked) {
+                List<ExactRatio> turns = one.turnsAt(number, beside);
+                if (turns != null) {
+                    levels.addAll(turns);
+                }
+            }
+            for (ExactRatio level : levels) {
+                if (Count.written(level) instanceof ExactAnswer.Held<Optional<Count>>(
+                        Optional<Count> written) && written.isPresent()
+                        && TermRealizations.at(bare, orders, written.get(), within, reading)
+                                instanceof TermRealizations.Realization.Built built) {
+                    for (FixtureTemplate each : built.values()) {
+                        ObservedValue value = each.observed();
+                        if (value != null && !out.contains(value)) {
+                            out.add(value);
+                        }
+                    }
+                }
+            }
         }
         return out;
     }
@@ -1351,10 +1413,10 @@ final class CardinalityComposer {
         ListedByValue byValue = listedByValue(container, holding.element(), reading, value,
                 (at, part) -> numbersAt(at, OfTheType.of(part, reading), asked, null, measuring,
                         within, beside, apart.isEmpty() ? 1 : MOST_ELEMENTS, unheld, unnamed,
-                        reading.today()),
+                        reading.today(), part, reading),
                 (at, part) -> numbersAt(at, OfTheType.manyOf(part, reading), asked, null,
                         measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
-                        reading.today()));
+                        reading.today(), part, reading));
         if (byValue == null) {
             return notChosen(new SearchMessage.APartNeitherOneOfSoManyNorNumbers(
                     String.valueOf(container)));
