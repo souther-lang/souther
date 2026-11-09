@@ -1209,7 +1209,11 @@ final class Predicates {
                 case EITHER -> NumericConstraint.commonTo(List.of(followingOf(join.left(), at),
                         followingOf(join.right(), at)));
             };
-            case ClauseExpr.Scoped _ -> List.of();
+            // What a binding stands for says what its body says, read where the binding is entered
+            // as every reading of a clause enters it: a way stated through a helper says what the
+            // same way written out says.
+            case ClauseExpr.Scoped scoped ->
+                    followingOf(scoped.body(), terms.inside(scoped.binding(), at));
         };
     }
 

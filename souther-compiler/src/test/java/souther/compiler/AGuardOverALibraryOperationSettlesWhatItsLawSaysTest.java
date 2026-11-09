@@ -473,6 +473,41 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
         assertEquals(List.of(), wrong, "each row is owed exactly what its law leaves open");
     }
 
+    /**
+     * A condition stated through a helper makes certain what the same condition written out does:
+     * which pattern a call is written with, and which side of it the path is on, do not turn on
+     * whether a name stands between the guard and the call.
+     */
+    @Test
+    void aGuardStatedThroughAHelperSaysWhatTheSameGuardWrittenOutSays() {
+        List<String> wrong = new ArrayList<>();
+        for (String guard : List.of("String.matches(\"B{5}\", s)", "five(s)")) {
+            for (Row row : List.of(
+                    new Row("if %s then Digit(String.length(s) - 5) else Digit(0)", false),
+                    new Row("if %s then Digit(String.length(s) - 6) else Digit(0)", true),
+                    new Row("if %s then Digit(0) else Digit(String.length(s) - 5)", true))) {
+                String body = row.body().formatted(guard);
+                boolean owed = owedBy("""
+                        module demo
+
+                        data Digit = Int
+                            invariant atLeastNought = value >= 0
+
+                        let five (x: String): Bool = String.matches("B{5}", x)
+
+                        behavior f : (s: String) -> Digit
+                            constructs Digit
+                        let f (s) =
+                            %s
+                        """.formatted(body), body);
+                if (owed != row.owed()) {
+                    wrong.add(body + ": owed " + owed + ", expected " + row.owed());
+                }
+            }
+        }
+        assertEquals(List.of(), wrong, "a name between the guard and the call changes nothing");
+    }
+
     /** The totals of lists of decimals are related as those of lists of integers are, and the
      *  row beside each moves one side by one. */
     private static final List<Row> ROWS_OF_DECIMALS = List.of(

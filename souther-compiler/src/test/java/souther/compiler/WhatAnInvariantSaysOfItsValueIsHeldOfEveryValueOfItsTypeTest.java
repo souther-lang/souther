@@ -53,6 +53,16 @@ class WhatAnInvariantSaysOfItsValueIsHeldOfEveryValueOfItsTypeTest {
             new Row("Digit(String.length(either.value) - 4)", true),
             new Row("Digit(5 - String.length(either.value))", false),
             new Row("Digit(4 - String.length(either.value))", true),
+            // A way of the choice stated through a helper says what it says written out.
+            new Row("Digit(String.length(viaHelper.value) - 3)", false),
+            new Row("Digit(String.length(viaHelper.value) - 4)", true),
+            new Row("Digit(5 - String.length(viaHelper.value))", false),
+            new Row("Digit(4 - String.length(viaHelper.value))", true),
+            // And the whole clause stated through one.
+            new Row("Digit(String.length(wrapped.value) - 3)", false),
+            new Row("Digit(String.length(wrapped.value) - 4)", true),
+            new Row("Digit(5 - String.length(wrapped.value))", false),
+            new Row("Digit(4 - String.length(wrapped.value))", true),
             // A pattern written as a constant that is worked out is the pattern it comes to.
             new Row("Digit(String.length(computed.value) - 3)", false),
             new Row("Digit(String.length(computed.value) - 4)", true),
@@ -86,11 +96,24 @@ class WhatAnInvariantSaysOfItsValueIsHeldOfEveryValueOfItsTypeTest {
             data Computed = String
                 invariant computed = String.matches("[0-9]" ++ "{3}", value)
 
+            let five (x: String): Bool = String.matches("B{5}", x)
+
+            data ViaHelper = String
+                invariant either = String.matches("A{3}", value) || five(value)
+
+            let threeOrFive (x: String): Bool =
+                String.matches("A{3}", x) || String.matches("B{5}", x)
+
+            data Wrapped = String
+                invariant either = threeOrFive(value)
+
             behavior f : (three: Three, letters: Letters, prefixed: Prefixed, plain: Plain,
-                          notDigits: NotDigits, either: Either, computed: Computed)
+                          notDigits: NotDigits, either: Either, computed: Computed,
+                          viaHelper: ViaHelper, wrapped: Wrapped)
                 -> Digit
                 constructs Digit
-            let f (three, letters, prefixed, plain, notDigits, either, computed) =
+            let f (three, letters, prefixed, plain, notDigits, either, computed, viaHelper,
+                   wrapped) =
                 %s
             """;
 

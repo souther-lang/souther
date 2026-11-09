@@ -18,7 +18,8 @@ import java.util.List;
  * holds says nothing of whether the statement does, and the denied side's are not the denial of the
  * holding side's. A side with none says nothing.
  *
- * @param <S> what a string is called by the reader: a number of the call, a place, a value
+ * <p>Over whatever a reader calls a string — a number of the call, a place, a value — which is the
+ * type argument of what is said.
  */
 public final class WhatAStringSaysOfItsLength {
 
