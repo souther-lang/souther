@@ -90,8 +90,9 @@ class AFormIsSummedInTheOrderItsPositionsDecideTest {
         }
         List<List<Integer>> out = new ArrayList<>();
         for (int at = 0; at < of.size(); at++) {
-            List<Integer> rest = new ArrayList<>(of);
-            Integer head = rest.remove(at);
+            List<Integer> rest = new ArrayList<>(of.subList(0, at));
+            rest.addAll(of.subList(at + 1, of.size()));
+            Integer head = of.get(at);
             for (List<Integer> tail : permutations(rest)) {
                 List<Integer> one = new ArrayList<>();
                 one.add(head);

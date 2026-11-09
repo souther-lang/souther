@@ -85,6 +85,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.CalledBody;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.AtomSpace;
@@ -7914,6 +7915,19 @@ public final class Adequacy {
                 return application.change(was, now);
             }
 
+            /** The parameters the body never reads, worked out once a search asks. */
+            private volatile Set<String> notRead;
+
+            @Override
+            public Set<String> parametersTheBodyDoesNotRead() {
+                Set<String> found = notRead;
+                if (found == null) {
+                    found = unreadParametersOf(db, new ValueName.Behavior(module, behavior));
+                    notRead = found;
+                }
+                return found;
+            }
+
             /** What the rows written say of the walks they entered, read once a row asks. */
             private volatile WalkedNoFurther walkedNoFurther;
 
@@ -7943,6 +7957,24 @@ public final class Adequacy {
                         .map(FixtureTemplate::value).toList();
             }
         });
+    }
+
+    /**
+     * The parameters of {@code behavior} its body never reads. None where the body or its
+     * parameters cannot be read, which is every parameter being read.
+     */
+    static Set<String> unreadParametersOf(Db db, ValueName.Behavior behavior) {
+        CalledBody called = db.ask(new BodyAtACall(behavior)).value();
+        if (called == null) {
+            return Set.of();
+        }
+        Set<String> unread = new LinkedHashSet<>();
+        for (Core.Binder parameter : called.parameters()) {
+            if (!WhatABodyReads.binding(called.body(), parameter.binding())) {
+                unread.add(parameter.name());
+            }
+        }
+        return unread;
     }
 
     /** A row, and what building it came to. */
