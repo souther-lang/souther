@@ -103,6 +103,19 @@ class AGuardTyingWhatIsTakenOfTwoValuesIsComposedTest {
                 + "String.length(d.currency) == 3 && Date.year(d.on) == 1990, deals)) == 2"));
     }
 
+    /**
+     * What is added up of the elements a statement of their own field keeps is added up of the
+     * values that statement holds at: the form is taken there, and the elements are chosen there.
+     */
+    @Test
+    void aTotalOfTheElementsAStatementOfTheirFieldKeepsIsComposed() {
+        for (String kept : List.of("d.amount > 3", "d.amount >= 3", "d.amount < 3",
+                "d.amount <= 3", "d.amount == 5")) {
+            assertEquals(List.of(), whatNothingCouldShow("List.sum(List.map(d -> d.amount, "
+                    + "List.filter(d -> " + kept + ", deals))) == 10"), kept);
+        }
+    }
+
     /** The rules of the decision no search could settle. */
     private static List<DecisionRule> whatNothingCouldShow(String guard) {
         return DecisionRulesTheSearchLeftUnsettled.notShownIn(DEALS.replace("GUARD", guard),

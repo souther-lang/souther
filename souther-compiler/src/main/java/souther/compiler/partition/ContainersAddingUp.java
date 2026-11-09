@@ -34,6 +34,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.types.Type;
@@ -207,8 +208,8 @@ final class ContainersAddingUp {
             // Each way is tried until one writes the total; the fields it holds still are held, at
             // each count, at the values they are held at for this total.
             return throughEach(ways, way -> walkedInPartWhereHeldStill(way, composedThrough(way,
-                    answer, container, keptApart, orders, within, reading, alsoHolding,
-                    alsoAddingUp, inside, null)));
+                    answer, container, keptApart, orders, way.narrow(within), reading,
+                    alsoHolding, alsoAddingUp, inside, null)));
         }
         return composedThrough(null, answer, container, keptApart, orders, within, reading,
                 alsoHolding, alsoAddingUp, inside, null);
@@ -1084,7 +1085,24 @@ final class ContainersAddingUp {
      */
     private record FieldSolved(TermPath field, Carrier carrier, ExactRatio weight,
                                ExactRatio constant, boolean ofOneCase, Kept kept,
-                               TermPath ofTheCase, Fixing fixing) {
+                               TermPath ofTheCase, Fixing fixing, Where where) {
+
+        /**
+         * Where the field stands for every element to take the form: a choice by a test of the
+         * field itself takes it for the values the test holds at, so the elements are chosen
+         * there and each comes to the form.
+         *
+         * @param at  the value the test turns at
+         * @param rel how the field stands to it
+         */
+        record Where(Place at, Rel rel) {}
+
+        /** {@code within} narrowed to the values the form is taken at, where it is taken for
+         *  some only; as it is where it is taken for all. */
+        SearchRegion narrow(SearchRegion within) {
+            return where == null ? within
+                    : within.assuming(new NumericTerm.ValueOf(field), where.at(), where.rel());
+        }
 
         /**
          * The fields of a sum of products held still while the one left is solved for.
@@ -1172,7 +1190,8 @@ final class ContainersAddingUp {
                 return null;
             }
             return new FieldSolved(field, carrier, weighs, left.constant(), ofOneCase, kept,
-                    ofTheCase, new Fixing(fixing.products(), fixing.free(), fixing.elements(), at));
+                    ofTheCase, new Fixing(fixing.products(), fixing.free(), fixing.elements(), at),
+                    where);
         }
 
         /** Each field of {@code runs} at one, or the whole number nearest it its run holds — or
@@ -1366,9 +1385,18 @@ final class ContainersAddingUp {
                         out.add(solved);
                     }
                 }
-                // A choice by a test of the element chooses per element on a value nothing here
-                // chooses, and a weight made of the position, or a choice between two forms of the
-                // field, weighs each position apart: the fields adding up to a total are no one
+                // A choice by a test of the field the form is of takes the form at the values the
+                // test holds at, so the elements are chosen there ({@link Where}).
+                case ElementValue.Choose choice
+                        when choice.test() instanceof ElementValue.Test.Compared test -> {
+                    FieldSolved solved = byTestOfItsField(choice, test, elements, orders);
+                    if (solved != null) {
+                        out.add(solved);
+                    }
+                }
+                // A choice by some other test of the element chooses per element on a value nothing
+                // here chooses, and a weight made of the position, or a choice between two forms of
+                // the field, weighs each position apart: the fields adding up to a total are no one
                 // quotient of it.
                 case ElementValue.Multilinear products ->
                         out.addAll(ofProducts(products.form(), elements, orders));
@@ -1376,6 +1404,49 @@ final class ContainersAddingUp {
                      ElementValue.SumOfChoices _ -> { }
             }
             return List.copyOf(out);
+        }
+
+        /**
+         * The field a choice by a comparison of one field is solved for, where one of its answers
+         * is a form of that same field and the other a number of none — or null where it is any
+         * other choice, or where the comparison leaves a hole and not an end.
+         *
+         * <p>The elements are all asked to stand where the form is taken, so each comes to it and
+         * the others, which the choice leaves at the number of none, are not written.
+         */
+        private static FieldSolved byTestOfItsField(ElementValue.Choose choice,
+                                                    ElementValue.Test.Compared test,
+                                                    TermPath elements, TermOrders orders) {
+            if (!(choice.whenHolds() instanceof ElementValue.Affine holds)
+                    || !(choice.otherwise() instanceof ElementValue.Affine not)
+                    || test.form().coefs().size() != 1) {
+                return null;
+            }
+            boolean formWhereItHolds = not.form().coefs().isEmpty();
+            ElementValue.Affine form = formWhereItHolds ? holds : not;
+            if (!(formWhereItHolds ? not : holds).form().coefs().isEmpty()) {
+                return null;
+            }
+            FieldSolved solved = ofAForm(form, null, elements, orders);
+            Map.Entry<ElementProjection, ExactRatio> tested =
+                    test.form().coefs().entrySet().iterator().next();
+            if (solved == null || !tested.getKey().from(elements).equals(solved.field())) {
+                return null;
+            }
+            // weight * field + constant stands to nought as the relation says, where the form is
+            // taken; so the field stands to what turns it as the relation does, turned about where
+            // the weight is below nought.
+            Rel taken = formWhereItHolds ? test.relation() : test.relation().denied();
+            if (taken == Rel.NE
+                    || !(test.form().constant().negated().dividedBy(tested.getValue())
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio turns))
+                    || !(Count.written(turns) instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> at)) || at.isEmpty()) {
+                return null;
+            }
+            return new FieldSolved(solved.field(), solved.carrier(), solved.weight(),
+                    solved.constant(), false, null, null, null, new Where(at.get(),
+                            tested.getValue().signum() < 0 ? taken.turned() : taken));
         }
 
         /**
@@ -1403,7 +1474,7 @@ final class ContainersAddingUp {
                     : new FieldSolved(solved.field(), solved.carrier(), solved.weight(),
                             solved.constant(), false, new Kept(
                                     formWhereItHolds ? test : test.denied(),
-                                    direction, rest.form().constant()), null, null);
+                                    direction, rest.form().constant()), null, null, null);
         }
 
         /**
@@ -1432,7 +1503,7 @@ final class ContainersAddingUp {
             Carrier carrier = orders.fieldCarrier(only.getKey());
             return carrier == null ? null
                     : new FieldSolved(field, carrier, only.getValue(), affine.form().constant(),
-                            taken != null, null, ofTheCase, null);
+                            taken != null, null, ofTheCase, null, null);
         }
 
         /**
@@ -1456,7 +1527,7 @@ final class ContainersAddingUp {
                         .forEach(other -> at.put(other, ExactRatio.ONE));
                 out.add(new FieldSolved(free.from(elements), carrier, ExactRatio.ONE,
                         ExactRatio.ZERO, false, null, null,
-                        new Fixing(products, free, elements, at)));
+                        new Fixing(products, free, elements, at), null));
             }
             out.sort(Comparator.comparing(way -> way.field().toString()));
             return out;
