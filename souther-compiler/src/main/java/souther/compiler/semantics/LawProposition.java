@@ -99,9 +99,8 @@ public sealed interface LawProposition<A> {
             return new Compared<>(form, states.denied());
         }
 
-        /** Whether every number it compares is how many some value holds: what it says is for a
-         *  reader of numbers, and a proof over what operations answer has the laws of those sizes
-         *  already. */
+        /** Whether every number it compares is how many some value holds: a statement for the
+         *  reader of numbers, which a proof over what operations answer is not handed. */
         public boolean ofSizesOnly() {
             return form.coefs().keySet().stream().allMatch(LawNumber.SizeOf.class::isInstance);
         }

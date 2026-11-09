@@ -2411,8 +2411,10 @@ final class Terms {
      * atoms of those sizes: {@code take} and {@code drop} at one count over one list are the whole
      * list between them.
      *
-     * <p>Only a relation every number of which is a size is read, and only where each argument it
-     * names is a value this names. The size of an answer the relation names and the call does not
+     * <p>Only a relation of sizes alone ({@link LawProposition.Compared#ofSizesOnly}) is read: one
+     * that compares a size with a number of another kind is left, for what reads those numbers to
+     * take, and is not half read here. Of those, only where each argument it names is a value
+     * this names. The size of an answer the relation names and the call does not
      * is named as a call of that operation over the same arguments ({@link #sizeKeyOf}): the atom a
      * clause reading that call names, which carries what it carries where that clause names it.
      */
@@ -2425,11 +2427,12 @@ final class Terms {
         List<NumericConstraint> out = new ArrayList<>();
         for (LawProposition<Slot> each : DefaultBoundOperationFacts.get()
                 .provedRelationsOf(applied.operation())) {
-            if (each instanceof LawProposition.Compared<Slot>(var form, var rel)) {
-                LinearForm<FactSubject> read = form.over(
+            if (each instanceof LawProposition.Compared<Slot> compared
+                    && compared.ofSizesOnly()) {
+                LinearForm<FactSubject> read = compared.form().over(
                         number -> sizeNamedByARelation(size, number, applied, at));
                 if (read != null) {
-                    out.add(new NumericConstraint(read, rel));
+                    out.add(new NumericConstraint(read, compared.states()));
                 }
             }
         }

@@ -184,6 +184,29 @@ class TheSizesOfTwoAnswersOverTheSameArgumentsAreRelatedTest {
                 notProved(notProved));
     }
 
+    /** {@code count} sums each of which is nought only where its two values are read in the cases
+     *  that agree, each value one of two: the cases of the clause are two to the twice count. */
+    private static String sumsOfNoughtOver(int count) {
+        List<String> sums = new ArrayList<>();
+        for (int at = 1; at <= count; at++) {
+            sums.add("Int.max(i.x, %1$d) + Int.min(i.x, %1$d) - i.x - %1$d".formatted(at));
+        }
+        return String.join(" + ", sums);
+    }
+
+    /** A clause whose cases are more than the most is read as it stands, as one that is not
+     *  expanded: it proves less than the expansion would, and nothing the expansion would not. */
+    @Test
+    void aClauseOfMoreCasesThanTheMostIsReadAsItStandsAndNeverProvesMore() {
+        assertEquals(Set.of(), notProved(List.of(
+                new Row(91, sumsOfNoughtOver(2)))), "sixteen cases are expanded");
+        assertEquals(Set.of("D92"), notProved(List.of(
+                new Row(92, sumsOfNoughtOver(3)))), "sixty-four are not");
+        assertEquals(Set.of("D93", "D94"), notProved(List.of(
+                new Row(93, sumsOfNoughtOver(2) + " - 1"),
+                new Row(94, sumsOfNoughtOver(3) + " - 1"))), "either side of the most");
+    }
+
     @Test
     void twoListsPairedAreNotLongerThanTheSwappedPairingByAnything() {
         List<Row> notProved = List.of(

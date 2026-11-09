@@ -913,10 +913,11 @@ public final class BoundOperationFacts {
 
     /**
      * What a proof takes of {@code relations}: every one but those of sizes alone, which are for
-     * the reader of numbers. A proof takes every relation of every value it meets, and what a
-     * relation names that the proof did not is a value more to take relations of, a few rounds
-     * deep; the laws of those sizes it has already. Every relation a proof is handed goes through
-     * here.
+     * the reader of numbers. A proof is given the law of each operation's size, and a relation
+     * between sizes beside those is an equation more among the atoms its search parts, which
+     * costs it several times over, over values it has already met as much as over ones the
+     * relation brings in. A relation of what an answer holds is not of sizes alone and is taken.
+     * Every relation a proof is handed goes through here, so that no way in is left out.
      */
     static List<LawProposition<Slot>> asAProofTakesThem(List<LawProposition<Slot>> relations) {
         return relations.stream()
