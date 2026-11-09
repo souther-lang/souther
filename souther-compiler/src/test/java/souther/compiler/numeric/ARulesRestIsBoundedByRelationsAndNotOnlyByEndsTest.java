@@ -215,6 +215,28 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
     }
 
     /**
+     * A rule stated twice is one rule: leaving it out leaves out every statement of it, and not the
+     * first one the premises hold, so the copy that is left does not bound the rest of the rule it
+     * is a copy of. The rule stated twice is the stronger of the two, so a copy left in is read.
+     */
+    @Test
+    void aRuleStatedTwiceIsLeftOutWhereverItIsStated() {
+        AffineConstraint<String> atFive = stated(form("x", 10, "y", -1, null, -5), Rel.GE);
+        AffineConstraint<String> atNought = stated(form("x", 10, "y", -1), Rel.GE);
+        AffineConstraint<String> atFiveAgain = stated(form("x", 10, "y", -1, null, -5), Rel.GE);
+        List<AffineConstraint<String>> rules = List.of(atFive, atNought, atFiveAgain);
+        FormReach<String> reading = FormReach.over(rules, Box.unbounded(),
+                DifferenceBounds.over(rules, CanonicalOrder.asTheyAreSpelled()),
+                CanonicalOrder.asTheyAreSpelled());
+        Map<String, ExactRatio> itsOwnForm =
+                Map.of("x", ExactRatio.of(10), "y", ExactRatio.of(-1));
+
+        assertEquals(ExactRatio.ZERO, reading.leastOfTheRestOf(atFive, itsOwnForm,
+                ExactRatio.ZERO).at(), "with both statements of the rule at five left out, the"
+                        + " rule at nought is what is read");
+    }
+
+    /**
      * What was derived is numbered with the rules: a half-space derived that a rule states is that
      * rule, and leaving the rule out leaves it out too.
      */

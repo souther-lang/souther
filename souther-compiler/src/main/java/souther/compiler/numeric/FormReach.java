@@ -321,8 +321,7 @@ final class FormReach<A> {
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
-        int[] left = without == null ? NO_PLACES
-                : placesOf(without).stream().mapToInt(Integer::intValue).toArray();
+        int[] left = without == null ? NO_PLACES : placesLeftOutWith(without);
         for (Premise<A> each : premises().each()) {
             if (isAmong(left, each.place())) {
                 continue;
@@ -667,6 +666,20 @@ final class FormReach<A> {
             placesOfRule = read;
         }
         return read.getOrDefault(rule, List.of());
+    }
+
+    /**
+     * {@link #placesOf} as a fresh array, which a form read without {@code rule} holds each premise
+     * against as it goes: the ends of a walk over the premises, where a premise is held against
+     * them as many times as there are premises, and a number is not made of each.
+     *
+     * <p>Its own method, and one that is handed no form. What a form read without a rule skips is
+     * a set of places of premises, which has no order of the form's in it; a method that holds the
+     * form's coefficients and takes a list by its position is one the rule that keeps a form's
+     * order out of answers finds, whatever the list is of.
+     */
+    private int[] placesLeftOutWith(AffineConstraint<A> rule) {
+        return placesOf(rule).stream().mapToInt(Integer::intValue).toArray();
     }
 
     private static boolean isAmong(int[] places, int place) {
