@@ -19,7 +19,7 @@ import static souther.compiler.numeric.RulesAsWritten.relationsIn;
  * What every reader of a set of rules says is what the rules say, over the systems chosen for the
  * steps the readers take.
  *
- * <p>The readers are the closed state, the reduction and the difference bounds
+ * <p>The readers are the closed state, the reduction, the difference bounds and the numeric domain
  * ({@link RulesReaders#READERS}), and each is held to the same three claims: the same answer in
  * every order the rules have, the same answer however often each was said, and no point the rules
  * admit left outside it. The systems are those of {@link RulesAsWritten#OVER_THREE}, each written

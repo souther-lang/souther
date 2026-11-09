@@ -72,12 +72,12 @@ final class RulesReaders {
         String name();
 
         /** What this reader says of {@code rules}, said in the order given, over {@code positions}. */
-        Said say(List<AffineConstraint<String>> rules, List<String> positions);
+        Said say(List<Written> rules, List<String> positions);
     }
 
     /** The orders to try the rules of a system in. */
     interface Orders {
-        List<List<AffineConstraint<String>>> of(List<AffineConstraint<String>> stated);
+        List<List<Written>> of(List<Written> system);
     }
 
     /** How many of the answers narrowed a position and how many said nothing was left, so that a
@@ -91,10 +91,11 @@ final class RulesReaders {
     static final List<Reader> READERS = List.of(
             reader("the closed state", RulesReaders::closedState),
             reader("the reduction", RulesReaders::reduction),
-            reader("the difference bounds", RulesReaders::differenceBounds));
+            reader("the difference bounds", RulesReaders::differenceBounds),
+            reader("the numeric domain", RulesReaders::numericDomain));
 
     private interface Saying {
-        Said say(List<AffineConstraint<String>> rules, List<String> positions);
+        Said say(List<Written> rules, List<String> positions);
     }
 
     private static Reader reader(String name, Saying how) {
@@ -105,7 +106,7 @@ final class RulesReaders {
             }
 
             @Override
-            public Said say(List<AffineConstraint<String>> rules, List<String> positions) {
+            public Said say(List<Written> rules, List<String> positions) {
                 return how.say(rules, positions);
             }
 
@@ -116,8 +117,8 @@ final class RulesReaders {
         };
     }
 
-    private static Said closedState(List<AffineConstraint<String>> rules, List<String> positions) {
-        ClosedState<String> closed = ClosedState.of(rules, atom -> Granularity.DISCRETE,
+    private static Said closedState(List<Written> written, List<String> positions) {
+        ClosedState<String> closed = ClosedState.of(read(written), atom -> Granularity.DISCRETE,
                 CanonicalOrder.asTheyAreSpelled());
         if (closed.holdsNothing()) {
             return Said.NOTHING;
@@ -129,7 +130,8 @@ final class RulesReaders {
     /** The reduction reads the rules against the range every position is held to, which is what a
      *  round of the closure hands it. Where the difference bounds alone hold nothing no round is
      *  reached, and that is nothing left too. */
-    private static Said reduction(List<AffineConstraint<String>> rules, List<String> positions) {
+    private static Said reduction(List<Written> written, List<String> positions) {
+        List<AffineConstraint<String>> rules = read(written);
         Box<String> from = between(positions);
         DifferenceBounds<String> differences =
                 DifferenceBounds.over(rules, CanonicalOrder.asTheyAreSpelled());
@@ -146,10 +148,9 @@ final class RulesReaders {
         return new Said(tightened, after::leastOf, after::mostOf);
     }
 
-    private static Said differenceBounds(List<AffineConstraint<String>> rules,
-                                         List<String> positions) {
+    private static Said differenceBounds(List<Written> written, List<String> positions) {
         DifferenceBounds<String> closed =
-                DifferenceBounds.over(rules, CanonicalOrder.asTheyAreSpelled());
+                DifferenceBounds.over(read(written), CanonicalOrder.asTheyAreSpelled());
         if (closed.holdsNothing()) {
             return Said.NOTHING;
         }
@@ -162,6 +163,63 @@ final class RulesReaders {
             }
         }
         return new Said(told, closed::lowerBoundOf, closed::upperBoundOf);
+    }
+
+    /** What the domain said of the rules, apart from the order they were said in: the range at each
+     *  position, and what it proves and refutes of each rule. */
+    private record Told(boolean bottom, List<NumericDomain.Bounds> ranges,
+                        Map<Written, List<Boolean>> verdicts) {
+    }
+
+    /**
+     * The domain says what it proves and refutes of each rule as well as the range it leaves, and a
+     * question scaled by a positive number is the same question, so the answer to each rule's
+     * question is asked again of it scaled up and the two are held equal whenever the domain is
+     * read.
+     */
+    private static Said numericDomain(List<Written> written, List<String> positions) {
+        Map<String, NumberSpace> kinds = new LinkedHashMap<>();
+        for (String position : positions) {
+            kinds.put(position, NumberSpace.spacedOnly(Granularity.DISCRETE));
+        }
+        NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
+        for (Written each : written) {
+            domain = domain.assume(formOf(each), each.rel(), kinds);
+        }
+        NumericDomain<String> held = domain;
+        if (held.isBottom()) {
+            return Said.NOTHING;
+        }
+        Map<Written, List<Boolean>> verdicts = new LinkedHashMap<>();
+        for (Written each : written) {
+            LinearForm<String> scaled = SmallForm.small(formOf(each)).times(ExactRatio.of(3)).form();
+            boolean proven = held.entails(formOf(each), each.rel());
+            boolean refuted = held.refutes(formOf(each), each.rel());
+            assertEquals(proven, held.entails(scaled, each.rel()),
+                    () -> "scaling the question moved what is proven: " + written);
+            assertEquals(refuted, held.refutes(scaled, each.rel()),
+                    () -> "scaling the question moved what is refuted: " + written);
+            assertEquals(held.provenByTheBoxAndItsDifferences(formOf(each), each.rel()),
+                    held.provenByTheBoxAndItsDifferences(scaled, each.rel()),
+                    () -> "scaling the question moved what the ranges state: " + written);
+            verdicts.put(each, List.of(proven, refuted));
+        }
+        List<NumericDomain.Bounds> ranges = new ArrayList<>();
+        for (String position : positions) {
+            ranges.add(held.boundsOf(position));
+        }
+        return new Said(new Told(false, ranges, verdicts),
+                position -> cut(held.boundsOf(position).min()),
+                position -> cut(held.boundsOf(position).max()));
+    }
+
+    private static LinearForm<String> formOf(Written each) {
+        return new LinearForm<>(each.constant(), each.coefs());
+    }
+
+    private static ExactCut cut(Endpoint end) {
+        return end == null ? null
+                : new ExactCut(ExactRatio.of(((Count) end.at()).at()), end.inclusive());
     }
 
     /** The box holding every one of {@code positions} to {@link #LOW} to {@link #HIGH}. */
@@ -179,9 +237,8 @@ final class RulesReaders {
         return RulesAsWritten.read(written, atom -> Granularity.DISCRETE);
     }
 
-    private static List<AffineConstraint<String>> followedBy(List<AffineConstraint<String>> first,
-                                                              List<AffineConstraint<String>> then) {
-        List<AffineConstraint<String>> out = new ArrayList<>(first);
+    private static List<Written> followedBy(List<Written> first, List<Written> then) {
+        List<Written> out = new ArrayList<>(first);
         out.addAll(then);
         return out;
     }
@@ -195,11 +252,10 @@ final class RulesReaders {
     static void theOrderTheRulesArrivedInIsNotPartOfTheAnswer(Reader reader, List<Written> system,
                                                               Orders orders) {
         List<String> positions = List.copyOf(positionsOf(system));
-        List<AffineConstraint<String>> stated = read(system);
-        List<AffineConstraint<String>> range = read(boxed(List.of(), positions, LOW, HIGH));
-        Said asWritten = reader.say(stated, positions);
-        Said rangedAsWritten = reader.say(followedBy(range, stated), positions);
-        for (List<AffineConstraint<String>> order : orders.of(stated)) {
+        List<Written> range = boxed(List.of(), positions, LOW, HIGH);
+        Said asWritten = reader.say(system, positions);
+        Said rangedAsWritten = reader.say(followedBy(range, system), positions);
+        for (List<Written> order : orders.of(system)) {
             assertEquals(asWritten, reader.say(order, positions),
                     () -> reader + " moved when the rules were reordered: " + order);
             assertEquals(rangedAsWritten, reader.say(followedBy(range, order), positions),
@@ -212,9 +268,8 @@ final class RulesReaders {
     /** Saying a rule twice says what saying it once says. */
     static void sayingARuleTwiceSaysWhatSayingItOnceSays(Reader reader, List<Written> system) {
         List<String> positions = List.copyOf(positionsOf(system));
-        List<AffineConstraint<String>> stated = read(system);
-        assertEquals(reader.say(stated, positions), reader.say(twice(stated), positions),
-                () -> reader + " said more of " + stated + " said twice");
+        assertEquals(reader.say(system, positions), reader.say(twice(system), positions),
+                () -> reader + " said more of " + system + " said twice");
     }
 
     /**
@@ -230,7 +285,7 @@ final class RulesReaders {
         List<String> positions = List.copyOf(positionsOf(system));
         List<Written> written = boxed(system, positions, LOW, HIGH);
         List<Map<String, Integer>> admitted = pointsSatisfying(written, positions, LOW, HIGH);
-        Said said = reader.say(read(written), positions);
+        Said said = reader.say(written, positions);
         tally.systems++;
         if (said.nothingLeft()) {
             tally.emptied++;

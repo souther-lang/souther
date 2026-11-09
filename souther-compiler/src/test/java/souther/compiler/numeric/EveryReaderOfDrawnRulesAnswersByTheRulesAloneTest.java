@@ -59,10 +59,10 @@ class EveryReaderOfDrawnRulesAnswersByTheRulesAloneTest {
 
     /** A few orders of the rules, which for rules drawn at random is as many as are worth asking. */
     private static Orders shuffles(Random dice) {
-        return stated -> {
-            List<List<AffineConstraint<String>>> out = new ArrayList<>();
+        return system -> {
+            List<List<Written>> out = new ArrayList<>();
             for (int i = 0; i < 3; i++) {
-                List<AffineConstraint<String>> shuffled = new ArrayList<>(stated);
+                List<Written> shuffled = new ArrayList<>(system);
                 Collections.shuffle(shuffled, dice);
                 out.add(shuffled);
             }
