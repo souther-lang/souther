@@ -91,6 +91,18 @@ class CountsOfAnElementsOwnValueAreComposedWithTheirRelationTest {
                 noneOver.replace("GUARD", either), "probe"));
     }
 
+    /**
+     * A relation only a large container meets is reached by sharing its elements out among the
+     * ways they meet the statements: the ways grow with the size, and those the relation leaves
+     * no count to are not walked.
+     */
+    @Test
+    void aRelationOnlyALargeContainerMeetsIsComposedAmongManyWaysOfSharing() {
+        String under = "List.length(List.filter(d -> d.amount < 50, deals))";
+        assertEquals(List.of(), whatNothingCouldShow(
+                LENGTH + " - " + OVER_A_HUNDRED + " - " + under + " >= 14"));
+    }
+
     /** More counts than a pair are held to the same relation, and are composed the same. */
     @Test
     void moreThanTwoCountsAreComposedWithTheirRelation() {

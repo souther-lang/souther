@@ -121,27 +121,6 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
      * asks. Where an end is no number an exact ratio holds, it may.
      */
     boolean mayHoldWith(int size, int[] least, int[] most) {
-        return over(size, least, most) != Throughout.FAILS;
-    }
-
-    /** What the relation does over every container of a size and the counts between two ends. */
-    enum Throughout {
-        /** It holds of every one of them. */
-        HOLDS,
-        /** It holds of none of them. */
-        FAILS,
-        /** Of some and not others, or the ends could not be worked out. */
-        UNTOLD
-    }
-
-    /**
-     * What the relation does over every container of {@code size} elements of which between
-     * {@code least} and {@code most} meet what each count counts, in the order of {@link #counts}:
-     * where the sum stands over them, which is between its two ends, and so relative to nought as
-     * every one of those ends stands. A sum is worked out at the two ends and not at each of the
-     * counts between, so what is told is told of all of them at the cost of two.
-     */
-    Throughout over(int size, int[] least, int[] most) {
         int[] low = new int[least.length];
         int[] high = new int[least.length];
         int at = 0;
@@ -154,17 +133,9 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
         if (!(valueAt(size, low) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio smallest))
                 || !(valueAt(size, high) instanceof ExactAnswer.Held<ExactRatio>(
                         ExactRatio largest))) {
-            return Throughout.UNTOLD;
+            return true;
         }
-        boolean always = switch (rel) {
-            case GE -> smallest.signum() >= 0;
-            case GT -> smallest.signum() > 0;
-            case LE -> largest.signum() <= 0;
-            case LT -> largest.signum() < 0;
-            case EQ -> smallest.signum() == 0 && largest.signum() == 0;
-            case NE -> smallest.signum() > 0 || largest.signum() < 0;
-        };
-        boolean sometimes = switch (rel) {
+        return switch (rel) {
             case GE -> largest.signum() >= 0;
             case GT -> largest.signum() > 0;
             case LE -> smallest.signum() <= 0;
@@ -172,7 +143,6 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
             case EQ -> smallest.signum() <= 0 && largest.signum() >= 0;
             case NE -> smallest.signum() != 0 || largest.signum() != 0;
         };
-        return always ? Throughout.HOLDS : sometimes ? Throughout.UNTOLD : Throughout.FAILS;
     }
 
     /**
