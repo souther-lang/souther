@@ -135,12 +135,16 @@ final class ValueChoices {
         // The values of the lets this walk went under: a name that stands for one of them was
         // written in the value itself, and is evaluated where the value is.
         Set<Core> writtenHere = newSeen();
-        for (int steps = 0; steps < MOST_STEPS; steps++) {
+        // Only the names that stand for something else are steps. A let is one the value is written
+        // under and there are as many as were written, so the lets a body is under cost it nothing
+        // of what it is allowed to follow.
+        for (int steps = 0; steps < MOST_STEPS;) {
             if (Core.withoutStanding(e) instanceof Core.LetIn let) {
                 writtenHere.add(Core.withoutStanding(let.value()));
                 at = at.entering(new ScopeStep.Let(let), names.symbols(), newtypes);
                 e = let.body();
             } else if (Core.withoutStanding(e) instanceof Core.Read read) {
+                steps++;
                 ElementsWrittenOut.Stood<InputReads> stands = names.standing(read, at);
                 // A name that stands for itself is a position of the input, and is where it ends.
                 if (Core.withoutStanding(stands.value()) == read) {

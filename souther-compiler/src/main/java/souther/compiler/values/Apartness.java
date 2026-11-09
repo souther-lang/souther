@@ -591,6 +591,12 @@ public final class Apartness<A> {
      * where it was not before. So the three are what decides outside the fourth's reach and what
      * says the lack better inside it, and neither of those is being kept for the sake of the other.
      *
+     * <p><b>Part by part.</b> Pairs that share no block are relations of their own, each read as
+     * above and put together: a lack in any of them is a lack of the whole, and the whole stands
+     * where every part does. Every figure a search is bounded by is a figure of one part, so blocks
+     * nothing joins to the ones a lack is about neither make it too large to look through nor are
+     * looked through for it.
+     *
      * <p><b>What it still cannot.</b> A relation whose shape is past what either search is admitted
      * by and whose blocks do not each outnumber their neighbours, and a relation naming a block
      * whose values nothing wrote down. Both are {@link Reduction.NotKnown}, which says that this
@@ -607,6 +613,61 @@ public final class Apartness<A> {
         if (!stated.isEmpty()) {
             return new Reduction.Nothing<>(stated);
         }
+        List<Apartness<A>> parts = parts();
+        if (parts.size() == 1) {
+            return reduceOne(admitting);
+        }
+        // Each part is a relation of its own: no pair joins a block of one to a block of another,
+        // so a value for each block of one part never takes a value a block of another needs. What
+        // is looked through, narrowed and counted is bounded for the part a lack is about, and
+        // blocks stated nothing of that relation do not make it too large to look through.
+        Lacks<A> shown = Lacks.none();
+        boolean everyPartStands = true;
+        for (Apartness<A> part : parts) {
+            switch (part.reduceOne(admitting)) {
+                case Reduction.Nothing<A> it -> shown = shown.and(it.lacks());
+                case Reduction.NotKnown<A> _ -> everyPartStands = false;
+                case Reduction.Standing<A> _ -> { }
+            }
+        }
+        if (!shown.isEmpty()) {
+            return new Reduction.Nothing<>(shown);
+        }
+        return everyPartStands ? new Reduction.Standing<>() : new Reduction.NotKnown<>();
+    }
+
+    /**
+     * The pairs in the sets of them that share no block, each set a relation of its own, in the
+     * order the pairs were stated.
+     */
+    private List<Apartness<A>> parts() {
+        Map<Sameness.Block<A>, Sameness.Block<A>> parent = new HashMap<>();
+        for (Edge<A> edge : edges) {
+            parent.putIfAbsent(edge.one(), edge.one());
+            parent.putIfAbsent(edge.other(), edge.other());
+            parent.put(rootOf(parent, edge.one()), rootOf(parent, edge.other()));
+        }
+        Map<Sameness.Block<A>, Set<Edge<A>>> parts = new LinkedHashMap<>();
+        for (Edge<A> edge : edges) {
+            parts.computeIfAbsent(rootOf(parent, edge.one()), _ -> new LinkedHashSet<>()).add(edge);
+        }
+        if (parts.size() == 1) {
+            return List.of(this);
+        }
+        return parts.values().stream().map(Apartness::ofEdges).toList();
+    }
+
+    private static <A> Sameness.Block<A> rootOf(Map<Sameness.Block<A>, Sameness.Block<A>> parent,
+                                                Sameness.Block<A> block) {
+        Sameness.Block<A> at = block;
+        while (!parent.get(at).equals(at)) {
+            at = parent.get(at);
+        }
+        return at;
+    }
+
+    /** What {@link #reduce} makes of a relation that is one part. */
+    private Reduction<A> reduceOne(WhatABlockAdmits<A> admitting) {
         // How many values a block has to hold before it never runs out, which is how many blocks
         // there are: its neighbours take fewer values than that between them, so one is left.
         int atMost = blocks().size();

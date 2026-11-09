@@ -6,11 +6,13 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.IntFunction;
+import java.util.function.IntPredicate;
 
 /**
  * The rows of a behavior's inputs a search for a witness tries, nearest first, each value built
@@ -80,38 +82,32 @@ public final class RowSearch {
      *                 parameter's own where nothing else takes its place
      * @param listing  the element of the list each parameter is, as the reading of the input
      *                 says, or null where it is no list or a list of one is not tried there
+     * @param atItsFirst which parameters are tried with their first value alone: the ones a run
+     *                 of the behavior does not turn on, since another value of one of them is the
+     *                 same run, and the rows of the others are not to be spent on them
      */
     static List<List<Built>> tried(List<Type> types, List<List<FixtureTemplate>> named,
                                    List<List<ObservedValue>> taken, IntFunction<Type> standing,
-                                   IntFunction<Type> listing, RuleReadingContext reading,
-                                   Building building, Set<Figure> stopped) {
+                                   IntFunction<Type> listing, IntPredicate atItsFirst,
+                                   RuleReadingContext reading, Building building,
+                                   Set<Figure> stopped) {
         List<List<Built>> each = new ArrayList<>();
         for (int i = 0; i < types.size(); i++) {
+            if (atItsFirst.test(i)) {
+                // Its first value the boundary builds and nothing past it: another value of it is
+                // the same run, so none is built, and none is a figure the search stopped at.
+                Built first = firstBuilt(i, types, named, taken, standing, listing, reading,
+                        building, stopped);
+                if (first == null) {
+                    return null;
+                }
+                each.add(List.of(first));
+                continue;
+            }
             List<FixtureTemplate> tried = new ArrayList<>(named.get(i));
-            for (List<ObservedValue> row : taken) {
-                // A value the run's observation was cut short at is one the search did not get
-                // to try, at that figure.
-                if (row.get(i) instanceof ObservedValue.Truncated(Figure cut)) {
-                    stopped.add(cut);
-                } else if (ObservedFixtures.of(row.get(i), types.get(i), reading)
-                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                                FixtureTemplate fixture)
-                        && !tried.contains(fixture)) {
-                    tried.add(fixture);
-                }
-            }
+            takenAt(i, types.get(i), taken, reading, tried, stopped);
             tried.addAll(Partitions.representativesOf(standing.apply(i), reading).values());
-            // And a list of one of what stands for its element: what stands for a list holds
-            // nothing, and a walk of nothing gets to no comparison inside it.
-            Type element = listing.apply(i);
-            if (element != null) {
-                for (FixtureTemplate one : Partitions.representativesOf(element, reading).values()) {
-                    FixtureTemplate holding = FixtureTemplate.collection(List.of(one));
-                    if (!tried.contains(holding)) {
-                        tried.add(holding);
-                    }
-                }
-            }
+            addListsOf(listing.apply(i), reading, tried);
             List<Built> made = new ArrayList<>();
             for (FixtureTemplate one : upTo(tried, stopped)) {
                 building.build(i, one).ifPresent(value -> made.add(new Built(one, value)));
@@ -124,6 +120,100 @@ public final class RowSearch {
         return each;
     }
 
+    /**
+     * The first value at {@code parameter} the boundary builds, going through what the model
+     * names, what the rows took, what stands for the type and a list of one of what stands for its
+     * element, each only as far as it takes to find one; or null where none is built.
+     *
+     * <p>No more than {@link #MOST_VALUES} are built in looking, which is the figure the values of
+     * a parameter are tried to: past it the figure is added to {@code stopped}, and there is
+     * nothing to say where one was found first.
+     */
+    private static Built firstBuilt(int parameter, List<Type> types,
+                                    List<List<FixtureTemplate>> named,
+                                    List<List<ObservedValue>> taken, IntFunction<Type> standing,
+                                    IntFunction<Type> listing, RuleReadingContext reading,
+                                    Building building, Set<Figure> stopped) {
+        int[] left = {MOST_VALUES};
+        // Values a run's observation was cut short at: said only where no value is found, since a
+        // value that was found makes what was not tried of no account to what is tried with.
+        Set<Figure> cut = new HashSet<>();
+        List<FixtureTemplate> stage = new ArrayList<>(named.get(parameter));
+        Built built = firstOf(parameter, stage, building, left, stopped);
+        if (built == null) {
+            stage = new ArrayList<>();
+            takenAt(parameter, types.get(parameter), taken, reading, stage, cut);
+            built = firstOf(parameter, stage, building, left, stopped);
+        }
+        if (built == null) {
+            built = firstOf(parameter, List.copyOf(
+                    Partitions.representativesOf(standing.apply(parameter), reading).values()),
+                    building, left, stopped);
+        }
+        if (built == null) {
+            stage = new ArrayList<>();
+            addListsOf(listing.apply(parameter), reading, stage);
+            built = firstOf(parameter, stage, building, left, stopped);
+        }
+        if (built == null) {
+            stopped.addAll(cut);
+        }
+        return built;
+    }
+
+    /** The first of {@code candidates} the boundary builds, spending from {@code left} one for
+     *  each it is asked to build; null where none is built or {@code left} ran out, which is said
+     *  as the figure. */
+    private static Built firstOf(int parameter, List<FixtureTemplate> candidates,
+                                 Building building, int[] left, Set<Figure> stopped) {
+        for (FixtureTemplate one : candidates) {
+            if (left[0] <= 0) {
+                stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+                return null;
+            }
+            left[0]--;
+            Optional<ObservedValue> value = building.build(parameter, one);
+            if (value.isPresent()) {
+                return new Built(one, value.get());
+            }
+        }
+        return null;
+    }
+
+    /** Adds to {@code into} what each row took at {@code parameter}, written back from what was
+     *  built, each once; and to {@code stopped} the figure a value a run's observation was cut
+     *  short at is one the search did not get to try. */
+    private static void takenAt(int parameter, Type type, List<List<ObservedValue>> taken,
+                                RuleReadingContext reading, List<FixtureTemplate> into,
+                                Set<Figure> stopped) {
+        for (List<ObservedValue> row : taken) {
+            if (row.get(parameter) instanceof ObservedValue.Truncated(Figure cut)) {
+                stopped.add(cut);
+            } else if (ObservedFixtures.of(row.get(parameter), type, reading)
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate fixture)
+                    && !into.contains(fixture)) {
+                into.add(fixture);
+            }
+        }
+    }
+
+    /** Adds to {@code into} a list of one of what stands for {@code element}, where it is a type:
+     *  what stands for a list holds nothing, and a walk of nothing gets to no comparison inside
+     *  it. */
+    private static void addListsOf(Type element, RuleReadingContext reading,
+                                   List<FixtureTemplate> into) {
+        if (element == null) {
+            return;
+        }
+        for (FixtureTemplate one : Partitions.representativesOf(element, reading).values()) {
+            FixtureTemplate holding = FixtureTemplate.collection(List.of(one));
+            if (!into.contains(holding)) {
+                into.add(holding);
+            }
+        }
+    }
+
     /** As many of {@code values} as the search tries, first first, with the figure added to
      *  {@code stopped} where some are left untried. */
     static <T> List<T> upTo(List<T> values, Set<Figure> stopped) {
@@ -134,32 +224,77 @@ public final class RowSearch {
         return values.subList(0, MOST_VALUES);
     }
 
-    /** Rows taking one value of each parameter, nearest first — every parameter at its first
-     *  before any at its second — and no more than the search tries, with the figure added to
-     *  {@code stopped} where some are left untried. */
+    /**
+     * Rows taking one value of each parameter, nearest first, and no more than the search tries,
+     * with the figure added to {@code stopped} where some are left untried.
+     *
+     * <p>Nearest is how far the values taken are from each parameter's first, added up: the row
+     * of every parameter at its first, then each row with one parameter at its second, and so on a
+     * step at a time. A row that needs one parameter at its fifth value and the others at their
+     * first is among the first rows however many values the others have; taken a parameter at a time
+     * in turn, as many values at the first parameter as there are rows to try would leave the rest
+     * at their firsts, and a parameter the question does not read would decide which of the others
+     * are ever tried.
+     */
     static List<List<Built>> rowsOf(List<List<Built>> each, Set<Figure> stopped) {
         List<List<Built>> out = new ArrayList<>();
-        int[] at = new int[each.size()];
-        while (true) {
-            if (out.size() == MOST_VALUES) {
-                stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+        int farthest = 0;
+        for (List<Built> values : each) {
+            farthest += values.size() - 1;
+        }
+        for (int distance = 0; distance <= farthest; distance++) {
+            if (!rowsAt(each, distance, out, stopped)) {
                 break;
             }
-            List<Built> row = new ArrayList<>();
-            for (int i = 0; i < each.size(); i++) {
-                row.add(each.get(i).get(at[i]));
-            }
-            out.add(row);
-            int moved = 0;
-            while (moved < at.length && at[moved] + 1 >= each.get(moved).size()) {
-                at[moved] = 0;
-                moved++;
-            }
-            if (moved == at.length) {
-                break;
-            }
-            at[moved]++;
         }
         return out;
+    }
+
+    /**
+     * The rows whose values are {@code distance} from the firsts in all, added to {@code out}
+     * while there is room for them; false where there was not.
+     *
+     * <p>The first parameter's value slowest, one parameter after another with the distance it
+     * leaves for the rest. Walked with the depth held in an array and not in calls, so that how
+     * many parameters a behavior takes is no depth of the stack.
+     */
+    private static boolean rowsAt(List<List<Built>> each, int distance, List<List<Built>> out,
+                                  Set<Figure> stopped) {
+        int parameters = each.size();
+        int[] at = new int[parameters];
+        int[] left = new int[parameters + 1];
+        left[0] = distance;
+        int depth = 0;
+        if (parameters > 0) {
+            at[0] = -1;
+        }
+        while (depth >= 0) {
+            if (depth == parameters) {
+                if (left[depth] == 0) {
+                    if (out.size() == MOST_VALUES) {
+                        stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+                        return false;
+                    }
+                    List<Built> row = new ArrayList<>();
+                    for (int i = 0; i < parameters; i++) {
+                        row.add(each.get(i).get(at[i]));
+                    }
+                    out.add(row);
+                }
+                depth--;
+                continue;
+            }
+            at[depth]++;
+            if (at[depth] > Math.min(left[depth], each.get(depth).size() - 1)) {
+                depth--;
+                continue;
+            }
+            left[depth + 1] = left[depth] - at[depth];
+            depth++;
+            if (depth < parameters) {
+                at[depth] = -1;
+            }
+        }
+        return true;
     }
 }

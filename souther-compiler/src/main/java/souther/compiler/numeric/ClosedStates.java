@@ -293,6 +293,11 @@ public final class ClosedStates {
             return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null, false);
         }
 
+        /** The parts the rules fall into, which is none where they were closed in one piece. */
+        List<List<AffineConstraint<A>>> partsOfTheRules() {
+            return parts;
+        }
+
         /** What the rules leave. */
         public ClosedState<A> state() {
             ClosedState<A> had = state;

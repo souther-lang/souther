@@ -9,6 +9,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -265,9 +268,110 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
     @Test
     void whatIsProvedDoesNotDependOnWhatThePositionsAreCalled() {
         Random random = new Random(19);
-        List<String> moved = new ArrayList<>();
-        for (int round = 0; round < 250; round++) {
+        assertEquals(List.of(), movedByRenaming(random, 250, () -> system(random)));
+    }
+
+    /** A rule over the two positions beside the four, which none of the goals names. */
+    private static Row beside(Random random, boolean equality) {
+        List<Term> terms = new ArrayList<>();
+        for (int i = 0, size = 1 + random.nextInt(2); i < size; i++) {
+            int coef = random.nextInt(5) - 2;
+            terms.add(new Term(ATOMS + i, coef == 0 ? 1 : coef));
+        }
+        return new Row(terms, random.nextInt(9) - 4,
+                equality ? Rel.EQ : random.nextBoolean() ? Rel.LE : Rel.GE);
+    }
+
+    /**
+     * What is proved of rules is still proved beside rules over positions neither the goal nor
+     * those rules name. Held over the small systems this class asks, which are far from every
+     * bound a reading is limited by: past one of them a proof may be left unread, and for every
+     * naming alike.
+     */
+    @Test
+    void whatIsProvedIsStillProvedBesideRulesOverOtherPositions() {
+        Random random = new Random(37);
+        String[] withTheOthers = {"a", "b", "c", "d", "e", "f"};
+        List<String> lost = new ArrayList<>();
+        int proved = 0;
+        for (int round = 0; round < 150; round++) {
             List<Row> rules = system(random);
+            List<Row> beside = new ArrayList<>(rules);
+            beside.add(beside(random, true));
+            beside.add(beside(random, true));
+            beside.add(beside(random, false));
+            NumericDomain<String> alone = domain(rules);
+            NumericDomain<String> together = domain(beside, withTheOthers);
+            for (int i = 0; i < 10; i++) {
+                Row goal = random(random, 3, false);
+                if (alone.entails(form(goal), goal.rel())) {
+                    proved++;
+                    if (!together.entails(form(goal, withTheOthers), goal.rel())) {
+                        lost.add(rules + " proves " + goal + " and not beside " + beside);
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), lost);
+        assertTrue(proved > 0, "nothing was proved, so nothing was held beside the others");
+    }
+
+    /**
+     * The same where the rules are unchanged by exchanging two positions: nothing in the rules
+     * tells the two apart, so the names would decide which one an equality is solved for, and a
+     * goal written over what is left was proved in one writing and not in the other.
+     */
+    @Test
+    void whatIsProvedDoesNotDependOnWhatTwoInterchangeablePositionsAreCalled() {
+        Random random = new Random(29);
+        assertEquals(List.of(), movedByRenaming(random, 150, () -> symmetric(random)));
+    }
+
+    /**
+     * {@code a + b = 4} with {@code d} at least each of them and {@code 2d + 2a + c + 1 <= 0} and
+     * the same of {@code b}: unchanged by exchanging {@code a} and {@code b}. Solved for {@code a}
+     * or for {@code b} by their names, the goal over what is left was proved in one writing and
+     * not in the other.
+     */
+    @Test
+    void aSystemUnchangedByExchangingTwoPositionsIsAnsweredTheSameWhateverTheyAreCalled() {
+        List<Row> rules = List.of(
+                new Row(List.of(new Term(1, 1), new Term(0, 1)), -4, Rel.EQ),
+                new Row(List.of(new Term(1, -1), new Term(3, 1)), 0, Rel.GE),
+                new Row(List.of(new Term(3, 2), new Term(0, 2), new Term(2, 1)), 1, Rel.LE),
+                new Row(List.of(new Term(0, 1), new Term(1, 1)), -4, Rel.EQ),
+                new Row(List.of(new Term(0, -1), new Term(3, 1)), 0, Rel.GE),
+                new Row(List.of(new Term(3, 2), new Term(1, 2), new Term(2, 1)), 1, Rel.LE));
+        Row goal = new Row(List.of(new Term(2, -2), new Term(0, 2), new Term(3, -2)), -3, Rel.GE);
+        String[] renamed = {"n2", "n1", "n3", "n0"};
+
+        assertEquals(domain(rules).entails(form(goal), goal.rel()),
+                domain(rules, renamed).entails(form(goal, renamed), goal.rel()));
+    }
+
+    /** A system and its image with positions {@code a} and {@code b} exchanged. */
+    private static List<Row> symmetric(Random random) {
+        List<Row> rules = new ArrayList<>();
+        rules.add(random(random, 3, true));
+        for (int i = 0; i < 2; i++) {
+            rules.add(random(random, 3, false));
+        }
+        for (Row each : List.copyOf(rules)) {
+            List<Term> exchanged = new ArrayList<>();
+            for (Term term : each.terms()) {
+                exchanged.add(new Term(term.atom() < 2 ? 1 - term.atom() : term.atom(), term.coef()));
+            }
+            rules.add(new Row(exchanged, each.constant(), each.rel()));
+        }
+        return rules;
+    }
+
+    /** What was asked that was answered differently once the positions were called other things. */
+    private static List<String> movedByRenaming(Random random, int rounds,
+                                                Supplier<List<Row>> systems) {
+        List<String> moved = new ArrayList<>();
+        for (int round = 0; round < rounds; round++) {
+            List<Row> rules = systems.get();
             NumericDomain<String> plain = domain(rules);
             if (plain.isBottom()) {
                 continue;
@@ -292,7 +396,7 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
                 }
             }
         }
-        assertEquals(List.of(), moved);
+        return moved;
     }
 
     /**
@@ -306,7 +410,7 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
         CanonicalOrder<String> order = CanonicalOrder.asTheyAreSpelled();
         for (int round = 0; round < 300; round++) {
             List<AffineConstraint<String>> rules = domain(system(random)).rulesRead();
-            ReducedRules<String> one = ReducedRules.of(rules, order);
+            List<ReducedRules<String>> one = ReducedRules.of(rules, order);
             List<AffineConstraint<String>> written = new ArrayList<>();
             for (AffineConstraint<String> each : rules) {
                 written.add(each instanceof AffineConstraint.Equality<String> equality
@@ -316,13 +420,12 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
                         : each);
             }
             Collections.shuffle(written, random);
-            ReducedRules<String> other = ReducedRules.of(written, order);
-            assertEquals(one == null, other == null, rules.toString());
-            if (one == null) {
+            List<ReducedRules<String>> other = ReducedRules.of(written, order);
+            assertEquals(one.size(), other.size(), rules.toString());
+            if (one.isEmpty()) {
                 continue;
             }
-            assertEquals(new HashSet<>(one.rules()), new HashSet<>(other.rules()),
-                    rules + " written as " + written);
+            assertEquals(rulesOf(one), rulesOf(other), rules + " written as " + written);
             for (int i = 0; i < 8; i++) {
                 Row goal = random(random, 3, false);
                 Map<String, ExactRatio> coefs = new LinkedHashMap<>();
@@ -331,8 +434,23 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
                 }
                 ReducedRules.Goal<String> asked =
                         new ReducedRules.Goal<>(coefs, ExactRatio.of(goal.constant()));
-                assertEquals(one.put(asked), other.put(asked), rules.toString());
+                assertEquals(goalsOf(one, asked), goalsOf(other, asked), rules.toString());
             }
         }
+    }
+
+    /** What each reduction says, as a set: the reductions are not in an order. */
+    private static Set<Set<ReducedRules.Rule<String>>> rulesOf(List<ReducedRules<String>> each) {
+        return each.stream().map(one -> Set.copyOf(one.rules())).collect(Collectors.toSet());
+    }
+
+    /** The goal as each reduction writes it, as a set. */
+    private static Set<ReducedRules.Goal<String>> goalsOf(List<ReducedRules<String>> each,
+                                                         ReducedRules.Goal<String> asked) {
+        Set<ReducedRules.Goal<String>> out = new HashSet<>();
+        for (ReducedRules<String> one : each) {
+            out.add(one.put(asked));
+        }
+        return out;
     }
 }

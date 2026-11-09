@@ -2723,8 +2723,8 @@ public final class LevelRealizer {
          * one of them is unbounded and there is nothing to say.
          */
         private ExactRatio[] reach(int i) {
-            ExactRatio least = ExactRatio.ZERO;
-            ExactRatio most = ExactRatio.ZERO;
+            List<ExactRatio> leasts = new ArrayList<>();
+            List<ExactRatio> mosts = new ArrayList<>();
             for (int j = i; j < terms.size(); j++) {
                 NumericDomain.Bounds within = runsBetween[j];
                 ExactRatio coef = terms.get(j).getValue();
@@ -2742,12 +2742,16 @@ public final class LevelRealizer {
                 // arithmetic cannot carry the product or the sum this narrowing is built from.
                 // Nothing to say is already this method's own answer for an end nothing bounds, so
                 // an unheld number reads the same way: `leaving` narrows by nothing rather than by
-                // a value this cannot hold.
-                least = least.plus(one.compareTo(other) <= 0 ? one : other).orNull();
-                most = most.plus(one.compareTo(other) <= 0 ? other : one).orNull();
-                if (least == null || most == null) {
-                    return null;
-                }
+                // a value this cannot hold. The terms are summed as one sum each, which holds no
+                // partial sum: the order they come in is the positions' names, and a run of
+                // additions would be refused or not by it.
+                leasts.add(one.compareTo(other) <= 0 ? one : other);
+                mosts.add(one.compareTo(other) <= 0 ? other : one);
+            }
+            ExactRatio least = ExactRatio.sum(leasts).orNull();
+            ExactRatio most = ExactRatio.sum(mosts).orNull();
+            if (least == null || most == null) {
+                return null;
             }
             return new ExactRatio[] {least, most};
         }

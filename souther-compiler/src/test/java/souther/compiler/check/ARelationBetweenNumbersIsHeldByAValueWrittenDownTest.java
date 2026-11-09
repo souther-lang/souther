@@ -67,6 +67,21 @@ class ARelationBetweenNumbersIsHeldByAValueWrittenDownTest {
                 "invariant net = " + PRODUCT.replace("\n", " ")));
     }
 
+    /**
+     * A field no rule reads is any value: the search is over the fields the rules read, so fields
+     * beside them that they do not read cannot use up what the search is allowed to try.
+     */
+    @Test
+    void aFieldNoRuleReadsDoesNotCostTheValueTheRulesAreHeldBy() {
+        StringBuilder fields = new StringBuilder("a: Int, b: Int");
+        for (int i = 0; i < 24; i++) {
+            fields.append(", e").append(i).append(": Int");
+        }
+        assertTrue(holdsAValue("", fields.toString(),
+                "invariant sum = a + b == 2401",
+                "invariant order = a > b"));
+    }
+
     /** A rule a value written down does not hold is a rule nothing is shown of. */
     @Test
     void aRuleOnlyAValueNoneOfTheLeastOnesIsHeldByIsNotShown() {

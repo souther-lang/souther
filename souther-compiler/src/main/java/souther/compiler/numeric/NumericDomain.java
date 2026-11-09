@@ -8,13 +8,17 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -122,9 +126,16 @@ public final class NumericDomain<A> {
     private FormReach<A> reach;
     private Systems<A> systems;
     private ProjectionCertification certification;
-    /** The reduction of the rules, or empty where there is none to use; null until asked for. One
-     *  reference decides whether it was worked out and what it came to. */
-    private Optional<Reduction<A>> reduction;
+    /** What the equalities of some parts come to together, or empty where there are none to use,
+     *  by which parts those are; null until asked for. A table that more than one thread may fill:
+     *  what is filled in it is worked out the same by each, and the one that is lost is worked
+     *  out again. */
+    private Map<Set<Integer>, Optional<Span<A>>> spans;
+    /** The reductions of the rules of some parts, by which parts those are; null until asked for,
+     *  and filled as {@link #spans} is. */
+    private Map<Set<Integer>, List<Reduction<A>>> reductions;
+    /** The parts the rules fall into; null until asked for. */
+    private Split<A> split;
     private Boolean noRow;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, NumberSpace> spaces,
@@ -817,63 +828,338 @@ public final class NumericDomain<A> {
         if (!withRules) {
             return false;   // asked of the box and its differences alone, which no equality adds to
         }
-        return provenOverThePositionsTheEqualitiesLeaveFree(coefs, f.constant(), rel);
+        return provenFromTheEqualities(coefs, f.constant(), rel);
     }
 
     /**
-     * What the rules, written over the positions their equalities leave free, prove of the same
-     * goal written so: a query takes one rule as its premise, and written over the free positions
-     * the premise it needs is the one it is given.
-     *
-     * <p>A further way to prove a goal and never a second account of what the rules leave. The
-     * reduced rules follow from the rules and say less ({@link ReducedRules}), so what they prove is
-     * proven, and what they do not says nothing. The ranges, the closed differences, the certificate
-     * and whether anything is left at all are the rules' own and are asked of them alone: this is
-     * asked of by {@link #entails} after they have not proved the goal, and by nothing else.
+     * What the equalities of the rules a goal reaches come to together, and the bounds beside them
+     * written as what is left of them.
      */
-    private boolean provenOverThePositionsTheEqualitiesLeaveFree(Map<A, ExactRatio> coefs,
-                                                                 ExactRatio constant, Rel rel) {
-        Reduction<A> reduced = reduction();
-        if (reduced == null) {
+    private record Span<A>(EqualitySpan<A> equalities, List<Bound<A>> bounds) {
+
+        /**
+         * Whether {@code form + constant <= 0} (or {@code < 0}) is a combination of the
+         * equalities, or a bound scaled up beside them.
+         *
+         * <p>What the equalities come to is asked, and not what is left over the positions they
+         * were solved for: a sum that is a combination of the equalities is written as a constant,
+         * and one that is a bound scaled up is written as that bound's own rest, whichever positions
+         * were solved for. So this answers the same under any naming of the positions and under any
+         * rules the goal and the bound do not reach.
+         */
+        boolean proves(CanonicalForm<A> form, ExactRatio constant, boolean strict) {
+            EqualitySpan.Residue<A> rest = equalities.residue(form, constant);
+            if (rest == null) {
+                return false;
+            }
+            if (rest.coefs().isEmpty()) {
+                int sign = rest.constant().signum();
+                return sign < 0 || (sign == 0 && !strict);
+            }
+            for (Bound<A> bound : bounds) {
+                ExactRatio scale = scaleOf(rest.coefs(), bound.coefs());
+                ExactRatio carried = scale == null ? null
+                        : scale.times(bound.constant()).orNull();
+                ExactRatio over = carried == null ? null : rest.constant().minus(carried).orNull();
+                if (over == null) {
+                    continue;
+                }
+                int sign = over.signum();
+                if (sign < 0 || (sign == 0 && (!strict || bound.strict()))) {
+                    return true;
+                }
+            }
             return false;
         }
-        ReducedRules.Goal<A> freed = reduced.rules().put(new ReducedRules.Goal<>(coefs, constant));
-        return freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)
-                && reduced.over().entailsOver(freed.coefs(), freed.constant(), rel, true);
+    }
+
+    /** {@code Σ coefs + constant <= 0}, or {@code < 0} where it is strict. */
+    private record Bound<A>(Map<A, ExactRatio> coefs, ExactRatio constant, boolean strict) {}
+
+    /**
+     * Whether the equalities prove the goal, either together with at most one bound beside them or
+     * through the reductions of the rules over the positions they leave free.
+     *
+     * <p>A further way to prove a goal and never a second account of what the rules leave. What the
+     * equalities come to follows from the rules, and so do the reduced rules, which say less
+     * ({@link ReducedRules}); so what either proves is proved, and what neither does says nothing.
+     * The ranges, the closed differences, the certificate and whether anything is left at all are
+     * the rules' own and are asked of them alone: this is asked after they have not proved the goal
+     * ({@link #entails}), and by nothing else.
+     */
+    private boolean provenFromTheEqualities(Map<A, ExactRatio> coefs, ExactRatio constant,
+                                            Rel rel) {
+        if (rules().stream().noneMatch(AffineConstraint.Equality.class::isInstance)
+                || !(AffineConstraint.of(coefs, constant, rel, this::spacingOf)
+                        instanceof AffineConstraint.Read.Stated<A> stated)) {
+            return false;
+        }
+        Split<A> split = split();
+        if (stated.constraint() instanceof AffineConstraint.Disequality<A> hole) {
+            return belowFromTheEqualities(split, hole.form(), hole.at().negated(), true)
+                    || belowFromTheEqualities(split, hole.form().negated(), hole.at(), true);
+        }
+        for (AffineConstraint.HalfSpace<A> half : stated.constraint().halfSpaces()) {
+            if (!belowFromTheEqualities(split, half.form(), half.bound().at().negated(),
+                    !half.bound().inclusive())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code form + constant <= 0} (or {@code < 0}) follows from the equalities. */
+    private boolean belowFromTheEqualities(Split<A> split, CanonicalForm<A> form,
+                                           ExactRatio constant, boolean strict) {
+        Map<A, ExactRatio> coefs = new LinkedHashMap<>();
+        for (Map.Entry<A, ExactRatio> each : form.entriesIn(order)) {
+            coefs.put(each.getKey(), each.getValue());
+        }
+        Span<A> span = spanOver(split, split.partsWeighingAny(coefs.keySet()));
+        return (span != null && span.proves(form, constant, strict))
+                || boundedByEachPart(split, coefs, constant, strict);
+    }
+
+    /**
+     * Whether {@code Σ coefs + constant <= 0} (or {@code < 0}) is shown by what each part of the
+     * rules bounds its own positions' share by, the shares added up.
+     *
+     * <p>The parts weigh no position in common, so the goal is the sum of one piece for each of
+     * them, and each piece is bounded on its own: by the rules as they stand and by every reduction
+     * of the rules of that part. The pieces' bounds add up to a bound of the goal whichever of them
+     * is the stronger for each part. A goal reaching several parts is so answered by the best of
+     * each and never by the best of every combination of them, which is as many as the ways of one
+     * part multiplied by those of the next.
+     */
+    private boolean boundedByEachPart(Split<A> split, Map<A, ExactRatio> coefs,
+                                      ExactRatio constant, boolean strict) {
+        Map<Integer, Map<A, ExactRatio>> pieces = new TreeMap<>();
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            Set<Integer> part = split.partsWeighingAny(List.of(each.getKey()));
+            int at = part.isEmpty() ? NO_PART : part.iterator().next();
+            pieces.computeIfAbsent(at, _ -> new LinkedHashMap<>())
+                    .put(each.getKey(), each.getValue());
+        }
+        List<ExactRatio> total = new ArrayList<>();
+        total.add(constant);
+        boolean reached = true;
+        for (Map.Entry<Integer, Map<A, ExactRatio>> piece : pieces.entrySet()) {
+            ExactCut bound = tightestBound(split, piece.getKey(), piece.getValue());
+            if (bound == null) {
+                return false;
+            }
+            total.add(bound.at());
+            reached &= bound.inclusive();
+        }
+        ExactRatio sum = ExactRatio.sum(total).orNull();
+        if (sum == null) {
+            return false;
+        }
+        int sign = sum.signum();
+        return sign < 0 || (sign == 0 && (!strict || !reached));
+    }
+
+    /** What stands for the part of a position that no rule weighs. */
+    private static final int NO_PART = -1;
+
+    /**
+     * The least the upper end of {@code piece} is shown to be, by the rules as they stand and by
+     * each reduction of the rules of the part it is of; null where none of them bounds it above.
+     */
+    private ExactCut tightestBound(Split<A> split, int part, Map<A, ExactRatio> piece) {
+        ExactCut best = highestProven(new Goal<>(piece, ExactRatio.ZERO), true);
+        if (part == NO_PART) {
+            return best;
+        }
+        for (Reduction<A> reduced : reductionsOver(split, Set.of(part))) {
+            ReducedRules.Goal<A> freed =
+                    reduced.rules().put(new ReducedRules.Goal<>(piece, ExactRatio.ZERO));
+            if (freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)) {
+                ExactCut bound = reduced.over().highestProven(
+                        new Goal<>(freed.coefs(), freed.constant()), true);
+                best = tighter(best, bound);
+            }
+        }
+        return best;
+    }
+
+    /** The lower of two upper ends, one that is not reached before one that is; null is none. */
+    private static ExactCut tighter(ExactCut one, ExactCut other) {
+        if (one == null || other == null) {
+            return one == null ? other : one;
+        }
+        int by = one.at().compareTo(other.at());
+        if (by != 0) {
+            return by < 0 ? one : other;
+        }
+        return one.inclusive() ? other : one;
+    }
+
+    /**
+     * What the equalities of the rules in the parts {@code reached} come to together, or null where
+     * there is nothing to read. Worked out when first asked for and kept.
+     */
+    private Span<A> spanOver(Split<A> split, Set<Integer> reached) {
+        if (spans == null) {
+            spans = new ConcurrentHashMap<>();
+        }
+        Optional<Span<A>> had = spans.get(reached);
+        if (had == null) {
+            had = Optional.ofNullable(spanOf(split.rulesOf(reached)));
+            spans.put(reached, had);
+        }
+        return had.orElse(null);
+    }
+
+    /**
+     * The rules in the parts that weigh no position in common
+     * ({@link ClosureQuestion#independentRules}), and which part weighs each position.
+     *
+     * <p>The parts the closure of the rules is made of where it was made of parts, which are worked
+     * out once for it; made here where it was worked out in one piece.
+     */
+    private static final class Split<A> {
+
+        private final List<List<AffineConstraint<A>>> parts;
+        private final Map<A, Integer> partOf = new HashMap<>();
+
+        private Split(List<List<AffineConstraint<A>>> parts, CanonicalOrder<A> order) {
+            this.parts = parts;
+            for (int at = 0; at < parts.size(); at++) {
+                for (AffineConstraint<A> rule : parts.get(at)) {
+                    for (A position : rule.form().atomsIn(order)) {
+                        partOf.put(position, at);
+                    }
+                }
+            }
+        }
+
+        /** Which parts weigh any of {@code positions}, in the order the parts are in. */
+        Set<Integer> partsWeighingAny(Collection<A> positions) {
+            Set<Integer> out = new TreeSet<>();
+            for (A position : positions) {
+                Integer at = partOf.get(position);
+                if (at != null) {
+                    out.add(at);
+                }
+            }
+            return out;
+        }
+
+        /** The rules of the parts at {@code at}. */
+        List<AffineConstraint<A>> rulesOf(Set<Integer> at) {
+            List<AffineConstraint<A>> out = new ArrayList<>();
+            at.forEach(part -> out.addAll(parts.get(part)));
+            return out;
+        }
+    }
+
+    /**
+     * Which connected part of the rules weighs {@code position}, or {@link #NO_PART} where none
+     * does. Two positions are in one part where the rules relate them, however indirectly, and
+     * what the rules leave one of them is what the part leaves it: a position of another part
+     * cannot narrow it nor refuse it. The numbers of a part are the one place these rules say two
+     * positions are related, so a reader asking which positions an answer can turn on asks here.
+     * The part is named by a number that means something only against this domain.
+     */
+    public int partOf(A position) {
+        Integer at = split().partOf.get(position);
+        return at == null ? NO_PART : at;
+    }
+
+    private Split<A> split() {
+        Split<A> had = split;
+        if (had == null) {
+            List<List<AffineConstraint<A>>> parts = parted().partsOfTheRules();
+            had = new Split<>(parts.isEmpty() ? ClosureQuestion.independentRules(rules()) : parts,
+                    order);
+            split = had;
+        }
+        return had;
+    }
+
+    private Span<A> spanOf(List<AffineConstraint<A>> reachedRules) {
+        EqualitySpan<A> equalities = EqualitySpan.of(reachedRules, order);
+        if (equalities == null) {
+            return null;
+        }
+        List<Bound<A>> bounds = new ArrayList<>();
+        for (AffineConstraint<A> each : reachedRules) {
+            if (each instanceof AffineConstraint.HalfSpace<A> half) {
+                EqualitySpan.Residue<A> left =
+                        equalities.residue(half.form(), half.bound().at().negated());
+                if (left != null && !left.coefs().isEmpty()) {
+                    bounds.add(new Bound<>(left.coefs(), left.constant(),
+                            !half.bound().inclusive()));
+                }
+            }
+        }
+        return new Span<>(equalities, List.copyOf(bounds));
+    }
+
+    /** What {@code of} is {@code than} times, where it is a positive multiple of it; null where it
+     *  is not. */
+    private static <A> ExactRatio scaleOf(Map<A, ExactRatio> of, Map<A, ExactRatio> than) {
+        if (!of.keySet().equals(than.keySet())) {
+            return null;
+        }
+        ExactRatio scale = null;
+        for (Map.Entry<A, ExactRatio> each : of.entrySet()) {
+            ExactRatio unit = each.getValue().dividedBy(than.get(each.getKey())).orNull();
+            if (unit == null || unit.signum() <= 0 || (scale != null && !scale.equals(unit))) {
+                return null;
+            }
+            scale = unit;
+        }
+        return scale;
     }
 
     /** The rules over the positions their equalities leave free, and what they leave. */
     private record Reduction<A>(ReducedRules<A> rules, NumericDomain<A> over) {}
 
     /**
-     * The reduction of these rules, worked out when first asked for and kept — or null where there
-     * is nothing to reduce, or where what is left leaves nothing.
+     * The reductions of the rules in the parts {@code reached}, one for each way of choosing among
+     * the positions those rules use alike, worked out when first asked for and kept; {@code reached}
+     * is null where the rules were closed in one piece and are one part. None where there is
+     * nothing to reduce. What any of them proves is proved, so the choice among positions nothing
+     * tells apart is not the names' to make.
      *
-     * <p>Not used where it leaves nothing. That the rules leave nothing is what {@link #isBottom}
-     * says of them, and it is that answer's to give: a path is unreachable when the rules as they
-     * stand show it, and one whose reduction alone found the rules empty would prove everything and
-     * be reached all the same, so {@link #refutes} could say both of a goal and of its denial.
+     * <p>Asked a part at a time, and never of the parts a goal reaches together: a part's ways of
+     * choosing are counted for it, and the parts' own bounds are added ({@link #boundedByEachPart}),
+     * so equalities in another part cannot make the ways too many, and a goal reaching several parts
+     * is not asked of every combination of their ways.
+     *
+     * <p>A reduction that leaves nothing is not one of them. That the rules leave nothing is what
+     * {@link #isBottom} says of them, and it is that answer's to give: a path is unreachable when
+     * the rules as they stand show it, and one whose reduction alone found the rules empty would
+     * prove everything and be reached all the same, so {@link #refutes} could say both of a goal
+     * and of its denial.
      */
-    private Reduction<A> reduction() {
-        Optional<Reduction<A>> had = reduction;
-        if (had == null) {
-            had = Optional.ofNullable(reductionOfTheRules());
-            reduction = had;
+    private List<Reduction<A>> reductionsOver(Split<A> split, Set<Integer> reached) {
+        if (reductions == null) {
+            reductions = new ConcurrentHashMap<>();
         }
-        return had.orElse(null);
+        List<Reduction<A>> had = reductions.get(reached);
+        if (had == null) {
+            had = reductionsOf(split.rulesOf(reached));
+            reductions.put(reached, had);
+        }
+        return had;
     }
 
-    private Reduction<A> reductionOfTheRules() {
-        ReducedRules<A> rules = ReducedRules.of(rules(), order);
-        if (rules == null) {
-            return null;
+    private List<Reduction<A>> reductionsOf(List<AffineConstraint<A>> reachedRules) {
+        List<Reduction<A>> out = new ArrayList<>();
+        for (ReducedRules<A> rules : ReducedRules.of(reachedRules, order)) {
+            NumericDomain<A> over = new NumericDomain<>(StatedRules.none(), spaces, false, order,
+                    closedStates, null, null);
+            for (ReducedRules.Rule<A> each : rules.rules()) {
+                over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
+            }
+            if (!over.isBottom()) {
+                out.add(new Reduction<>(rules, over));
+            }
         }
-        NumericDomain<A> over = new NumericDomain<>(StatedRules.none(), spaces, false, order,
-                closedStates, null, null);
-        for (ReducedRules.Rule<A> each : rules.rules()) {
-            over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
-        }
-        return over.isBottom() ? null : new Reduction<>(rules, over);
+        return List.copyOf(out);
     }
 
     private boolean entailsOver(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
