@@ -356,6 +356,37 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     }
 
     /**
+     * Several keys asked over one value are several entries of the map, a map holding one value
+     * under more than one key: the values a map must hold are asked once, and what is filed under
+     * each key is asked of each. Whichever order the values and the entries come in.
+     */
+    @Test
+    void severalKeysAskedOverOneValueAreEveryOneAnEntry() {
+        FixtureTemplate a = FixtureTemplate.string("a");
+        FixtureTemplate b = FixtureTemplate.string("b");
+        FixtureTemplate c = FixtureTemplate.string("c");
+        FixtureTemplate p = FixtureTemplate.string("p");
+        FixtureTemplate q = FixtureTemplate.string("q");
+        List<Witnesses.Filed> filed = List.of(new Witnesses.Filed(a, p),
+                new Witnesses.Filed(b, q), new Witnesses.Filed(c, q));
+
+        for (List<FixtureTemplate> values : List.of(List.of(p, q), List.of(q, p))) {
+            for (List<Witnesses.Filed> order : List.of(filed,
+                    List.of(filed.get(2), filed.get(1), filed.get(0)),
+                    List.of(filed.get(1), filed.get(0), filed.get(2)))) {
+                Proposals built = Witnesses.holding(map(), values, List.of(), null, order,
+                        List.of(), new DeclaredBounds.CountRange(0, Integer.MAX_VALUE), READING);
+                assertFalse(built.isEmpty(), () -> "values " + values + " entries " + order);
+                String map = built.values().getFirst().text();
+                for (Witnesses.Filed each : filed) {
+                    assertTrue(map.contains("(" + each.key().text() + ", "
+                            + each.value().text() + ")"), map);
+                }
+            }
+        }
+    }
+
+    /**
      * Entries asked under one key are one entry where they name one value or only one names any,
      * and no map where they name two: a map holding both values is not one the second was asked
      * of. Held by the one place entries are made one by key, so a map built to hold entries and

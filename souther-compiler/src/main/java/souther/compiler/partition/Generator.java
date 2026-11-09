@@ -7626,10 +7626,12 @@ public final class Generator {
                 countsAsked.put(target, NumbersAskedFor.of(left));
             }
         });
-        // Counts a relation holds to one another and to how many the container holds are composed
-        // at the fewest the relation leaves them within what every condition on each leaves, and
-        // not at the fewest each leaves alone: that is what the relation may not hold of.
-        Map<CountedElements.Identity, LevelRegion> fewestForRelations = new LinkedHashMap<>();
+        // Counts a relation holds to one another and to how many the container holds are asked at
+        // every count the conditions on each leave, and composed at the fewest the relation leaves
+        // them together within that: the one place a container is composed at where another
+        // container is handed what makes so many meet. The region is not narrowed to it, so a
+        // composer that shares the elements out is left every way the relation allows.
+        Map<CountedElements.Identity, Count> relatedAt = new LinkedHashMap<>();
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
             if (cut.demand() instanceof RowDemand.ForTheRun(var _, var _, var _, var _,
                     Optional<RowDemand.ForTheRun.ComposedAs> composedAs) && composedAs.isPresent()) {
@@ -7637,11 +7639,7 @@ public final class Generator {
                         leftOfACount).forEach((identity, count) -> {
                             RealizationTarget.ACount target =
                                     new RealizationTarget.ACount(countedBefore.get(identity));
-                            // Asked from that count up, which is what a container is composed at
-                            // where no number was named.
-                            fewestForRelations.put(identity, LevelRegion.of(new LevelInterval(
-                                    Bound.at(new Level.OfTheQuantity(
-                                            Count.number(count).exactly()), true), null)));
+                            relatedAt.put(identity, count);
                             if (countsToCome.containsKey(target)) {
                                 countsToCome.put(target, count);
                             }
@@ -7721,10 +7719,6 @@ public final class Generator {
                     }
                 } else {
                     counts = many.counts().values();
-                    LevelRegion fewest = fewestForRelations.get(count.identity());
-                    if (fewest != null) {
-                        counts = counts.meet(fewest);
-                    }
                 }
                 countsOnTheWay.merge(count.identity(),
                         new CountsAsked(count, counts, many.againstNumbers(), cut),
@@ -7890,6 +7884,11 @@ public final class Generator {
             if (itemCount != null) {
                 counted.put(target, NumbersAskedFor.of(asked));
                 continue;
+            }
+            Count relatedTo = relatedAt.get(each.getKey());
+            if (relatedTo != null && asked.contains(new Level.OfTheQuantity(
+                    Count.number(relatedTo).exactly()))) {
+                least = relatedTo;
             }
             // Another number already written at the container, which the count is composed beside
             // or not at all — asked as a condition's numbers are asked ({@link #writtenTogether}).

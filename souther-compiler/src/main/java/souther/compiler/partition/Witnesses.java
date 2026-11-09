@@ -917,12 +917,34 @@ final class Witnesses {
         // A key chosen over no value in particular needs an entry to be the key of, so the map holds
         // at least one value for each such key whatever else is asked of it.
         int keyed = filedKeys.size();
+        // Each key asked over a value is an entry of its own, so a value several keys are asked
+        // over is held that many times: what the map must hold is each value once, and what is
+        // filed under each key is asked of each key.
+        Map<String, Integer> filedOver = new LinkedHashMap<>();
+        List<Filed> withValues = new ArrayList<>(apart);
+        if (placed != null) {
+            withValues.add(placed);
+        }
+        for (Filed each : withValues) {
+            if (each.value() != null) {
+                filedOver.merge(each.value().text(), 1, Integer::sum);
+            }
+        }
+        Set<String> held = new LinkedHashSet<>();
+        int copies = 0;
+        for (FixtureTemplate each : holding) {
+            if (held.add(each.text())) {
+                copies += Math.max(1, filedOver.getOrDefault(each.text(), 0));
+            }
+        }
         DeclaredBounds.CountRange room = keyed > 0
-                ? new DeclaredBounds.CountRange(Math.max(keyed, holds.least()), holds.most())
+                ? new DeclaredBounds.CountRange(Math.max(Math.max(keyed, copies), holds.least()),
+                        holds.most())
                 : holds;
         Elements filled = elementsHolding(map.value(), List.of(), holding, keptOut, room, reading);
         CompositionShortfall met = filled.met();
-        List<FixtureTemplate> values = filled.held();
+        List<FixtureTemplate> values = filled.held() == null ? null
+                : eachHeldAsOftenAsFiled(filled.held(), filedOver);
         if (values == null) {
             return Proposals.NONE.meeting(met);
         }
@@ -1001,6 +1023,28 @@ final class Witnesses {
             entries.add(FixtureTemplate.entry(filedUnder[i], values.get(i)));
         }
         return Proposals.of(List.of(FixtureTemplate.collection(entries))).meeting(met);
+    }
+
+    /**
+     * {@code values}, each distinct one as often as {@code filedOver} says keys are filed over it
+     * and at least once, and as many of the first again as there were before.
+     */
+    private static List<FixtureTemplate> eachHeldAsOftenAsFiled(List<FixtureTemplate> values,
+                                                                Map<String, Integer> filedOver) {
+        Map<String, FixtureTemplate> distinct = new LinkedHashMap<>();
+        for (FixtureTemplate each : values) {
+            distinct.putIfAbsent(each.text(), each);
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        distinct.forEach((text, value) -> {
+            for (int i = 0; i < Math.max(1, filedOver.getOrDefault(text, 0)); i++) {
+                out.add(value);
+            }
+        });
+        while (out.size() < values.size()) {
+            out.add(values.getFirst());
+        }
+        return out.size() == values.size() ? out : null;
     }
 
     /**

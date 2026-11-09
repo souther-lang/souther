@@ -97,6 +97,7 @@ class AnElementCountedForFailingAMembershipIsComposedTest {
 
     /** The rules of the decision no search could settle. */
     private static List<DecisionRule> whatNothingCouldShow(String guard) {
-        return DecisionRulesTheSearchLeftUnsettled.in(DEALS.replace("GUARD", guard), "probe");
+        return DecisionRulesTheSearchLeftUnsettled.notShownIn(DEALS.replace("GUARD", guard),
+                "probe");
     }
 }

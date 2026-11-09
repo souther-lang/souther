@@ -26,6 +26,28 @@ final class DecisionRulesTheSearchLeftUnsettled {
 
     /** Every such rule of every behavior of the module {@code module} of {@code model}. */
     static List<DecisionRule> in(String model, String module) {
+        return settledAs(RuleRequirement.Unsettled.class, model, module);
+    }
+
+    /**
+     * Every rule the search excluded: shown to have no row at all. A rule a row was composed for
+     * and a run took is {@link RuleRequirement.Required}, and neither of these; so a model whose
+     * every rule is taken by some row has none here and none in {@link #in}.
+     */
+    static List<DecisionRule> excludedIn(String model, String module) {
+        return settledAs(RuleRequirement.Excluded.class, model, module);
+    }
+
+    /** The rules of the model that no run took: those left unsettled and those excluded. For a
+     *  model whose every rule some row takes, none. */
+    static List<DecisionRule> notShownIn(String model, String module) {
+        List<DecisionRule> out = new ArrayList<>(in(model, module));
+        out.addAll(excludedIn(model, module));
+        return out;
+    }
+
+    private static List<DecisionRule> settledAs(Class<? extends RuleRequirement> kind,
+                                                String model, String module) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -38,7 +60,7 @@ final class DecisionRulesTheSearchLeftUnsettled {
         for (String behavior : decisions.keySet()) {
             compilation.db().ask(new Adequacy.DecisionSearch(module, behavior)).value()
                     .forEach((rule, across) -> {
-                        if (across.requirement() instanceof RuleRequirement.Unsettled) {
+                        if (kind.isInstance(across.requirement())) {
                             unsettled.add(rule);
                         }
                     });

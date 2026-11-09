@@ -72,8 +72,45 @@ class CountsOfAnElementsOwnValueAreComposedWithTheirRelationTest {
         assertEquals(List.of(), whatNothingCouldShow(either, OVER_A_HUNDRED + " == 0"));
     }
 
+    /**
+     * A relation is composed at every way of sharing the elements among the counts, and not at
+     * the first that the counts alone allow: where the elements' own rules leave none meeting one
+     * statement, the elements go to the other, whichever the relation names first.
+     */
+    @Test
+    void aRelationIsComposedAtTheWaysTheElementsLeaveAndNotTheFirstTheCountsAllow() {
+        String under = "List.length(List.filter(d -> d.amount < 50, deals))";
+        String either = OVER_A_HUNDRED + " + " + under + " == 1";
+        String noneUnder = DEALS.replace("data Deal = { amount: Int }",
+                "data Deal = { amount: Int }\n    invariant atLeastFifty = amount >= 50");
+        String noneOver = DEALS.replace("data Deal = { amount: Int }",
+                "data Deal = { amount: Int }\n    invariant atMostAHundred = amount <= 100");
+        assertEquals(List.of(), DecisionRulesTheSearchLeftUnsettled.notShownIn(
+                noneUnder.replace("GUARD", either), "probe"));
+        assertEquals(List.of(), DecisionRulesTheSearchLeftUnsettled.notShownIn(
+                noneOver.replace("GUARD", either), "probe"));
+    }
+
+    /** More counts than a pair are held to the same relation, and are composed the same. */
+    @Test
+    void moreThanTwoCountsAreComposedWithTheirRelation() {
+        String under = "List.length(List.filter(d -> d.amount < 50, deals))";
+        assertEquals(List.of(), whatNothingCouldShow(
+                OVER_A_HUNDRED + " + " + under + " + " + OVER_TWO_HUNDRED + " == 2"));
+    }
+
+    /**
+     * A relation only a container larger than any a count is composed with meets is no relation
+     * the model leaves no row: what stopped the search is not shown as the model's own rules.
+     */
+    @Test
+    void aRelationNoContainerComposedMeetsIsNotShownImpossible() {
+        assertEquals(List.of(), DecisionRulesTheSearchLeftUnsettled.excludedIn(
+                DEALS.replace("GUARD", LENGTH + " - " + OVER_A_HUNDRED + " >= 40"), "probe"));
+    }
+
     private static List<DecisionRule> whatNothingCouldShow(String first, String second) {
-        return DecisionRulesTheSearchLeftUnsettled.in(
+        return DecisionRulesTheSearchLeftUnsettled.notShownIn(
                 TWO_GUARDS.replace("FIRST", first).replace("SECOND", second), "probe");
     }
 
@@ -98,6 +135,7 @@ class CountsOfAnElementsOwnValueAreComposedWithTheirRelationTest {
 
     /** The rules of the decision no search could settle. */
     private static List<DecisionRule> whatNothingCouldShow(String guard) {
-        return DecisionRulesTheSearchLeftUnsettled.in(DEALS.replace("GUARD", guard), "probe");
+        return DecisionRulesTheSearchLeftUnsettled.notShownIn(DEALS.replace("GUARD", guard),
+                "probe");
     }
 }
