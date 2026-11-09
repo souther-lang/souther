@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.RulesAsWritten.Written;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -12,10 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static souther.compiler.numeric.RulesAsWritten.admits;
 import static souther.compiler.numeric.RulesAsWritten.boxed;
-import static souther.compiler.numeric.RulesAsWritten.everyOrder;
 import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
 import static souther.compiler.numeric.RulesAsWritten.rules;
-import static souther.compiler.numeric.RulesAsWritten.twice;
 
 /**
  * Everything the closure says is checked against the points themselves.
@@ -39,8 +36,9 @@ import static souther.compiler.numeric.RulesAsWritten.twice;
  * so a path that reaches no value cannot come back looking satisfiable. Tightness is what says the
  * bounds are the rules' own and not merely implied by them.
  *
- * <p>And the same answers whatever order the rules arrived in, which is the property this whole
- * arrangement exists to restore.
+ * <p>That the same answers come whatever order the rules arrived in, and however often each was
+ * said, is asked of these systems for every reader of rules, this one among them, in
+ * {@code EveryReaderOfRulesAnswersByTheRulesAloneTest}.
  *
  * <p>The systems are the ones the closure has a step for ({@link #SYSTEMS}): a bound carried onto a
  * position along differences above and below, through more than one position between; a difference
@@ -56,7 +54,7 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
     private static final int HIGH = 4;
 
     /** Each system with what it is for; every position it names is held to the range. */
-    private static final List<List<Written>> SYSTEMS = List.of(
+    static final List<List<Written>> SYSTEMS = List.of(
             // A bound above carried onto a through two differences.
             rules("a - b <= 1", "b - c <= 1", "c <= 0"),
             // A bound below carried onto a through two differences.
@@ -118,59 +116,6 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
         assertTrue(empties > 0 && empties < SYSTEMS.size(),
                 () -> "the systems have to come out both ways to check both, and " + empty
                         + " of " + SYSTEMS.size() + " were empty");
-    }
-
-    /**
-     * The same rules in any order are the same answers.
-     *
-     * <p>Every order of a system's own rules, said after the range and before it. The range holds a
-     * position each and nothing between two, so where it stands against the rules is the one thing
-     * about its order a reader could answer differently for.
-     */
-    @Test
-    void theOrderTheRulesArrivedInIsNotPartOfTheAnswer() {
-        for (List<Written> system : SYSTEMS) {
-            List<Written> written = bounded(system);
-            DifferenceBounds<String> asWritten = closed(written);
-            List<Written> range = written.subList(0, written.size() - system.size());
-            for (List<Written> order : everyOrder(system)) {
-                List<Written> rangeFirst = new ArrayList<>(range);
-                rangeFirst.addAll(order);
-                List<Written> rangeLast = new ArrayList<>(order);
-                rangeLast.addAll(range);
-                assertSameAnswers(rangeFirst, asWritten, closed(rangeFirst));
-                assertSameAnswers(rangeLast, asWritten, closed(rangeLast));
-            }
-        }
-    }
-
-    /** And asserting a rule twice says what asserting it once says. */
-    @Test
-    void sayingARuleTwiceSaysWhatSayingItOnceSays() {
-        for (List<Written> system : SYSTEMS) {
-            List<Written> written = bounded(system);
-            assertSameAnswers(written, closed(written), closed(twice(written)));
-        }
-    }
-
-    private static void assertSameAnswers(List<Written> written, DifferenceBounds<String> one,
-                                          DifferenceBounds<String> other) {
-        assertEquals(one.holdsNothing(), other.holdsNothing(), written::toString);
-        if (one.holdsNothing()) {
-            return;   // where nothing is left there is no tightest bound to compare
-        }
-        List<String> positions = positionsOf(written);
-        for (String position : positions) {
-            assertEquals(one.upperBoundOf(position), other.upperBoundOf(position),
-                    () -> "upper bound of " + position + " moved under " + written);
-            assertEquals(one.lowerBoundOf(position), other.lowerBoundOf(position),
-                    () -> "lower bound of " + position + " moved under " + written);
-            for (String apart : positions) {
-                assertEquals(one.differenceBound(position, apart),
-                        other.differenceBound(position, apart),
-                        () -> position + " - " + apart + " moved under " + written);
-            }
-        }
     }
 
     private static void assertSoundAndTight(List<Written> written, List<String> positions,

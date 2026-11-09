@@ -26,8 +26,8 @@ import java.util.regex.Pattern;
  * against this list again.
  *
  * <pre>
- *   DifferenceBounds  a cycle summing to nought read as empty     WhatTheDifference…, ARuleOver…, OneState… (the points)
- *   DifferenceBounds  ends meeting at one value read as crossed   the same three
+ *   DifferenceBounds  a cycle summing to nought read as empty     WhatTheDifference…, EveryReader… (the points)
+ *   DifferenceBounds  ends meeting at one value read as crossed   the same two
  *   DifferenceBounds  an edge keeps the first bound found for it  WhatTheDifference… (the path through a third)
  *   DifferenceBounds  a carried bound above: the last one wins    WhatTheDifference… (the points)
  *   DifferenceBounds  a difference not read through nought        WhatTheDifference… (the points)
@@ -35,10 +35,10 @@ import java.util.regex.Pattern;
  *   ClosedState       a product forgets that the rounds ran out   RulesNaming…theClosureOfBothHalves…
  *   ClosureQuestion   a rule joining two parts loses the first    the build itself (prove-the-library)
  *   AffineReduction   a hole at the floor not sided               ARuleOver…, TheSameRules… (written cases)
- *   AffineReduction   a bound above: the last one wins            the order tests of ARuleOver…, OneState…, TheSameRules…
- *   AffineReduction   the middle one of three rules passed over   ARuleOver…theOrder… (every order; a reversal misses it)
+ *   AffineReduction   a bound above: the last one wins            the order test of EveryReader…, and TheSameRules…
+ *   AffineReduction   the middle one of three rules passed over   EveryReader…theOrder… (every order; a reversal misses it)
  *   AffineReduction   a rest never reached not made strict        ARuleOver…aBoundReachedByNothingMakesWhatFollowsStrict
- *   AffineReduction   ends meeting at one value read as empty     ARuleOver…, OneState… (the points)
+ *   AffineReduction   ends meeting at one value read as empty     EveryReader… (the points)
  *   AffineReduction   a hole at the only value left kept          ARuleOver…, TheSameRules… (written cases)
  * </pre>
  *
