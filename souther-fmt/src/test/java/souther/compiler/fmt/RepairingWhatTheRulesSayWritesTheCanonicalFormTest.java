@@ -67,6 +67,26 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
     }
 
     /**
+     * The canonical form of a source has nothing against it, whichever rule is asked.
+     *
+     * <p>Every rule's report on text the formatter wrote is empty, so a rule that finds a decision
+     * the formatter itself took is a rule that disagrees with the formatter. This is each rule's
+     * claim that the canonical form of a source has no witness, over every source this repository
+     * has rather than over one source written for the rule.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("sources")
+    void theCanonicalFormOfEverySourceHasNothingAgainstIt(Path path) {
+        String canonical = Formatter.format(FormatterCorpus.textOf(path));
+
+        Deviations.Report report = Deviations.of(canonical);
+
+        assertEquals(List.of(), report.deviations(),
+                "the rules have something against the canonical form of " + path);
+        assertTrue(report.whole());
+    }
+
+    /**
      * And some of them are not in canonical form, so the sweep above is answering a question.
      *
      * <p>A corpus every file of which is already canonical would pass with no rule written at all:

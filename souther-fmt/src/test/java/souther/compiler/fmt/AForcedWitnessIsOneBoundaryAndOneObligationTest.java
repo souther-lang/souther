@@ -28,20 +28,6 @@ class AForcedWitnessIsOneBoundaryAndOneObligationTest {
                 .map(w -> ((Witness.Forced) w).unit().obligation()).toList();
     }
 
-    /** The canonical form of a source has nothing against it. */
-    @Test
-    void aSourceInItsCanonicalFormHasNoWitness() {
-        assertEquals(List.of(), witnesses(Formatter.format("""
-                module fmtprobe exposing ( f )
-
-                let f (x: Int): Int =
-                    {
-                        let a = x
-                        a
-                    }
-                """)));
-    }
-
     /** Two statements of a block on one line: the pair takes two lines and the closing brace takes
      * one of its own, and each is named by its own obligation. */
     @Test

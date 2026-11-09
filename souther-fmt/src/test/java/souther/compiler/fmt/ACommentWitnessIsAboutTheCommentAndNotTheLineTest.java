@@ -26,17 +26,6 @@ class ACommentWitnessIsAboutTheCommentAndNotTheLineTest {
         return Witnesses.comments(source, Formatter.canonicalize(CstParser.parse(source).root()));
     }
 
-    /** The canonical form of a source has nothing against it. */
-    @Test
-    void aSourceInItsCanonicalFormHasNoWitness() {
-        assertEquals(List.of(), witnesses(Formatter.format("""
-                module fmtprobe exposing ( Alpha )
-
-                // what Alpha is
-                data Alpha = Int
-                """)));
-    }
-
     /** A blank line under a comment is one witness, and it counts lines rather than naming text. */
     @Test
     void aBlankLineUnderACommentIsOneWitness() {
