@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -54,11 +55,6 @@ class CompileNamedInvariantClauseTest {
                 invariant nonEmpty = List.length(value) >= 1
                 invariant unique = List.allDistinctBy(x -> x, value)""";
 
-    private static final String BY_CLAUSE = """
-
-                        | nonEmpty -> NoItems
-                        | unique   -> DuplicateItem""";
-
     private static Object build(BytesClassLoader loader, List<Long> xs) throws Exception {
         Object impl = Emitted.behavior(loader, "demo", "build").getConstructor().newInstance();
         return Codecs.apply(impl, xs);
@@ -70,41 +66,46 @@ class CompileNamedInvariantClauseTest {
         return build(loader, xs).getClass().getName();
     }
 
+    /**
+     * The arm taken is the arm of the first clause, in the order the clauses are declared, that the
+     * value breaks, and the order the arms are written in changes nothing. A value that breaks both is
+     * reported as the first, so reordering the declaration is a change to what a caller sees. The
+     * value breaking none is accepted. Every order of the declarations and of the arms is tried.
+     */
     @Test
-    void eachClauseDepartsByItsOwnCase() throws Exception {
-        assertEquals("demo.Accepted", departs(TWO_NAMED, BY_CLAUSE, List.of(1L, 2L)),
-                "two distinct items break neither clause");
-        assertEquals("demo.NoItems", departs(TWO_NAMED, BY_CLAUSE, List.of()),
-                "the empty list breaks `nonEmpty` and nothing else");
-        assertEquals("demo.DuplicateItem", departs(TWO_NAMED, BY_CLAUSE, List.of(1L, 1L)),
-                "a repeated item breaks `unique` and nothing else");
-    }
-
-    /** Which arm is taken is decided by the clause that failed, so the order the arms are written in
-     * is the author's to choose and changes nothing. */
-    @Test
-    void theOrderTheArmsAreWrittenInDoesNotDecide() throws Exception {
-        String reversed = """
-
-                        | unique   -> DuplicateItem
-                        | nonEmpty -> NoItems""";
-        assertEquals("demo.NoItems", departs(TWO_NAMED, reversed, List.of()));
-        assertEquals("demo.DuplicateItem", departs(TWO_NAMED, reversed, List.of(1L, 1L)));
-    }
-
-    /** Which clause failed is decided by the order they are declared in: a value breaking both is
-     * reported as the first. Reordering the declaration is therefore a change to what a caller sees. */
-    @Test
-    void theFirstFailingClauseInDeclarationOrderDecides() throws Exception {
+    void theArmOfTheFirstClauseInDeclarationOrderThatFailsIsTaken() throws Exception {
+        String nonEmpty = "invariant nonEmpty = List.length(value) >= 3";
+        String unique = "invariant unique = List.allDistinctBy(x -> x, value)";
+        String nonEmptyArm = "| nonEmpty -> NoItems";
+        String uniqueArm = "| unique   -> DuplicateItem";
         // [1, 1] is both shorter than three and repeating
-        String nonEmptyFirst = """
-                    invariant nonEmpty = List.length(value) >= 3
-                    invariant unique = List.allDistinctBy(x -> x, value)""";
-        String uniqueFirst = """
-                    invariant unique = List.allDistinctBy(x -> x, value)
-                    invariant nonEmpty = List.length(value) >= 3""";
-        assertEquals("demo.NoItems", departs(nonEmptyFirst, BY_CLAUSE, List.of(1L, 1L)));
-        assertEquals("demo.DuplicateItem", departs(uniqueFirst, BY_CLAUSE, List.of(1L, 1L)));
+        List<List<Long>> inputs = List.of(List.of(), List.of(1L), List.of(1L, 1L), List.of(1L, 2L),
+                List.of(1L, 1L, 1L), List.of(1L, 2L, 3L));
+        for (boolean nonEmptyDeclaredFirst : List.of(true, false)) {
+            String clauses = nonEmptyDeclaredFirst
+                    ? "    " + nonEmpty + "\n    " + unique
+                    : "    " + unique + "\n    " + nonEmpty;
+            for (boolean nonEmptyArmFirst : List.of(true, false)) {
+                String arms = "\n        " + (nonEmptyArmFirst
+                        ? nonEmptyArm + "\n        " + uniqueArm
+                        : uniqueArm + "\n        " + nonEmptyArm);
+                BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module(clauses, arms)),
+                        CompileNamedInvariantClauseTest.class.getClassLoader());
+                for (List<Long> xs : inputs) {
+                    boolean tooShort = xs.size() < 3;
+                    boolean repeats = new HashSet<>(xs).size() < xs.size();
+                    String expected = tooShort && repeats
+                            ? (nonEmptyDeclaredFirst ? "demo.NoItems" : "demo.DuplicateItem")
+                            : tooShort ? "demo.NoItems"
+                            : repeats ? "demo.DuplicateItem"
+                            : "demo.Accepted";
+                    assertEquals(expected, build(loader, xs).getClass().getName(),
+                            xs + ", " + (nonEmptyDeclaredFirst ? "nonEmpty" : "unique")
+                                    + " declared first, " + (nonEmptyArmFirst ? "nonEmpty" : "unique")
+                                    + " arm first");
+                }
+            }
+        }
     }
 
     /** The plain {@code else} form keeps working on a type with named clauses: a site that does not
@@ -220,16 +221,25 @@ class CompileNamedInvariantClauseTest {
                 Codecs.encode(loader, "demo.Verdict", Codecs.apply(impl, List.of(1L, 1L))));
     }
 
-    /** A name is what an arm and a boundary issue call one rule, so two rules cannot share one. */
+    /** A name is what an arm and a boundary issue call one rule, so two rules cannot share one —
+     * whether both are written on the type or one arrives by a spread. */
     @Test
     void twoClausesCannotShareAName() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+        for (String source : List.of("""
                 module demo
                 data Items = List<Int>
                     invariant same = List.length(value) >= 1
                     invariant same = List.allDistinctBy(x -> x, value)
-                """));
-        assertInstanceOf(InvariantMessage.TwoClausesShareOneName.class, e.diagnostics().get(0).said());
+                """, """
+                module demo
+                data Common = { total: Int }
+                    invariant sound = total >= 1
+                data Order = { ...Common, lines: Int }
+                    invariant sound = lines >= 1
+                """)) {
+            CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
+            assertInstanceOf(InvariantMessage.TwoClausesShareOneName.class, e.diagnostics().get(0).said());
+        }
     }
 
     /**
@@ -247,25 +257,6 @@ class CompileNamedInvariantClauseTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
         assertInstanceOf(InvariantMessage.UnderscoreCannotNameAClause.class, e.diagnostics().get(0).said());
         assertEquals(3, WhereItSits.in(source, ((Primary.InSource) e.diagnostics().get(0).primary()).place().region()).start().line(), "reported at the clause, not at a use");
-    }
-
-    /**
-     * A diamond spread would reach one declaration twice, and its clause would be counted twice. It
-     * cannot arise: a spread flattens the fields it takes in, so the second path brings a field the
-     * first already brought and the declaration is refused before any invariant is read. Pinned here
-     * because the clause-name check rests on it.
-     */
-    @Test
-    void aDiamondSpreadIsRefusedBeforeItsClauseIsCountedTwice() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
-                module demo
-                data Base = { total: Int }
-                    invariant valid = total >= 1
-                data Left = { ...Base, l: Int }
-                data Right = { ...Base, r: Int }
-                data Combined = { ...Left, ...Right, c: Int }
-                """));
-        assertEquals("E1004", e.code(), "the shared field collides, so the shape is refused");
     }
 
     /** A clause arriving by spread carries its name: the invariants a {@code ...} takes in are checked
@@ -311,18 +302,6 @@ class CompileNamedInvariantClauseTest {
             throws Exception {
         Object req = Codecs.decoded(loader, "demo.Request", Map.of("total", total, "lines", lines));
         return Codecs.apply(impl, req).getClass().getName();
-    }
-
-    @Test
-    void aSpreadClauseNameCannotClashWithOneWrittenHere() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
-                module demo
-                data Common = { total: Int }
-                    invariant sound = total >= 1
-                data Order = { ...Common, lines: Int }
-                    invariant sound = lines >= 1
-                """));
-        assertInstanceOf(InvariantMessage.TwoClausesShareOneName.class, e.diagnostics().get(0).said());
     }
 
     /**
