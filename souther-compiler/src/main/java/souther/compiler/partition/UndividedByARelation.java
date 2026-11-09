@@ -4233,6 +4233,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * value this relation reads. What it shows of them is kept, since a value that gets there is
      * left as it says.
      *
+     * <p>Asked of each place apart ({@link #mayStopOnValueAt}): a place the stops on the way do
+     * not turn on is left as it is shown, and only the places a stop may turn on are said not to
+     * be shown getting there.
+     *
      * <p>Not asked of a relation that comes out one way wherever a row gets to it, which divides
      * none of its places whichever values get there. And no line is drawn where a run may stop:
      * that is no line of the model, and where it falls is what nothing here says.
