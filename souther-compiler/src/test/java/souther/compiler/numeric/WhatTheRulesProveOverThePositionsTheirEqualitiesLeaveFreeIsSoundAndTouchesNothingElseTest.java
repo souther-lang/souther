@@ -271,6 +271,51 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
         assertEquals(List.of(), movedByRenaming(random, 250, () -> system(random)));
     }
 
+    /** A rule over the two positions beside the four, which none of the goals names. */
+    private static Row beside(Random random, boolean equality) {
+        List<Term> terms = new ArrayList<>();
+        for (int i = 0, size = 1 + random.nextInt(2); i < size; i++) {
+            int coef = random.nextInt(5) - 2;
+            terms.add(new Term(ATOMS + i, coef == 0 ? 1 : coef));
+        }
+        return new Row(terms, random.nextInt(9) - 4,
+                equality ? Rel.EQ : random.nextBoolean() ? Rel.LE : Rel.GE);
+    }
+
+    /**
+     * What is proved of rules is still proved beside rules over positions neither the goal nor
+     * those rules name. Held over the small systems this class asks, which are far from every
+     * bound a reading is limited by: past one of them a proof may be left unread, and for every
+     * naming alike.
+     */
+    @Test
+    void whatIsProvedIsStillProvedBesideRulesOverOtherPositions() {
+        Random random = new Random(37);
+        String[] withTheOthers = {"a", "b", "c", "d", "e", "f"};
+        List<String> lost = new ArrayList<>();
+        int proved = 0;
+        for (int round = 0; round < 150; round++) {
+            List<Row> rules = system(random);
+            List<Row> beside = new ArrayList<>(rules);
+            beside.add(beside(random, true));
+            beside.add(beside(random, true));
+            beside.add(beside(random, false));
+            NumericDomain<String> alone = domain(rules);
+            NumericDomain<String> together = domain(beside, withTheOthers);
+            for (int i = 0; i < 10; i++) {
+                Row goal = random(random, 3, false);
+                if (alone.entails(form(goal), goal.rel())) {
+                    proved++;
+                    if (!together.entails(form(goal, withTheOthers), goal.rel())) {
+                        lost.add(rules + " proves " + goal + " and not beside " + beside);
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), lost);
+        assertTrue(proved > 0, "nothing was proved, so nothing was held beside the others");
+    }
+
     /**
      * The same where the rules are unchanged by exchanging two positions: nothing in the rules
      * tells the two apart, so the names would decide which one an equality is solved for, and a

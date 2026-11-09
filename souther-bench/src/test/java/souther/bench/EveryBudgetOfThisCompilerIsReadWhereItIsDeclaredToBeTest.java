@@ -903,7 +903,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the values of a parameter a witness is sought among, and adds the"
                             + " figure to what the search came to"),
             Map.entry("souther.compiler.partition.RowSearch#rowsAt("
-                            + "Ljava/util/List;[IIILjava/util/List;Ljava/util/Set;)Z",
+                            + "Ljava/util/List;ILjava/util/List;Ljava/util/Set;)Z",
                     "stops at the rows a witness is sought among, nearest the firsts first, and"
                             + " adds the figure to what the search came to"),
             // What a path takes in of a condition: the parts of a disjunction taken alone, across

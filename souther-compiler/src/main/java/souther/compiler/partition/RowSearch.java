@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.IntFunction;
+import java.util.function.IntPredicate;
 
 /**
  * The rows of a behavior's inputs a search for a witness tries, nearest first, each value built
@@ -80,11 +81,15 @@ public final class RowSearch {
      *                 parameter's own where nothing else takes its place
      * @param listing  the element of the list each parameter is, as the reading of the input
      *                 says, or null where it is no list or a list of one is not tried there
+     * @param atItsFirst which parameters are tried with their first value alone: the ones a run
+     *                 of the behavior does not turn on, since another value of one of them is the
+     *                 same run, and the rows of the others are not to be spent on them
      */
     static List<List<Built>> tried(List<Type> types, List<List<FixtureTemplate>> named,
                                    List<List<ObservedValue>> taken, IntFunction<Type> standing,
-                                   IntFunction<Type> listing, RuleReadingContext reading,
-                                   Building building, Set<Figure> stopped) {
+                                   IntFunction<Type> listing, IntPredicate atItsFirst,
+                                   RuleReadingContext reading, Building building,
+                                   Set<Figure> stopped) {
         List<List<Built>> each = new ArrayList<>();
         for (int i = 0; i < types.size(); i++) {
             List<FixtureTemplate> tried = new ArrayList<>(named.get(i));
@@ -119,7 +124,7 @@ public final class RowSearch {
             if (made.isEmpty()) {
                 return null;
             }
-            each.add(made);
+            each.add(atItsFirst.test(i) ? made.subList(0, 1) : made);
         }
         return each;
     }
@@ -153,37 +158,56 @@ public final class RowSearch {
             farthest += values.size() - 1;
         }
         for (int distance = 0; distance <= farthest; distance++) {
-            if (!rowsAt(each, new int[each.size()], 0, distance, out, stopped)) {
+            if (!rowsAt(each, distance, out, stopped)) {
                 break;
             }
         }
         return out;
     }
 
-    /** The rows whose values are {@code distance} from the firsts in all, added to {@code out}
-     *  while there is room for them; false where there was not. */
-    private static boolean rowsAt(List<List<Built>> each, int[] at, int parameter, int distance,
-                                  List<List<Built>> out, Set<Figure> stopped) {
-        if (parameter == at.length) {
-            if (distance != 0) {
-                return true;
-            }
-            if (out.size() == MOST_VALUES) {
-                stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
-                return false;
-            }
-            List<Built> row = new ArrayList<>();
-            for (int i = 0; i < at.length; i++) {
-                row.add(each.get(i).get(at[i]));
-            }
-            out.add(row);
-            return true;
+    /**
+     * The rows whose values are {@code distance} from the firsts in all, added to {@code out}
+     * while there is room for them; false where there was not.
+     *
+     * <p>The first parameter's value slowest, one parameter after another with the distance it
+     * leaves for the rest. Walked with the depth held in an array and not in calls, so that how
+     * many parameters a behavior takes is no depth of the stack.
+     */
+    private static boolean rowsAt(List<List<Built>> each, int distance, List<List<Built>> out,
+                                  Set<Figure> stopped) {
+        int parameters = each.size();
+        int[] at = new int[parameters];
+        int[] left = new int[parameters + 1];
+        left[0] = distance;
+        int depth = 0;
+        if (parameters > 0) {
+            at[0] = -1;
         }
-        int farthest = each.get(parameter).size() - 1;
-        for (int value = 0; value <= Math.min(distance, farthest); value++) {
-            at[parameter] = value;
-            if (!rowsAt(each, at, parameter + 1, distance - value, out, stopped)) {
-                return false;
+        while (depth >= 0) {
+            if (depth == parameters) {
+                if (left[depth] == 0) {
+                    if (out.size() == MOST_VALUES) {
+                        stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+                        return false;
+                    }
+                    List<Built> row = new ArrayList<>();
+                    for (int i = 0; i < parameters; i++) {
+                        row.add(each.get(i).get(at[i]));
+                    }
+                    out.add(row);
+                }
+                depth--;
+                continue;
+            }
+            at[depth]++;
+            if (at[depth] > Math.min(left[depth], each.get(depth).size() - 1)) {
+                depth--;
+                continue;
+            }
+            left[depth + 1] = left[depth] - at[depth];
+            depth++;
+            if (depth < parameters) {
+                at[depth] = -1;
             }
         }
         return true;

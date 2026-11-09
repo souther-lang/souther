@@ -1,6 +1,7 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,10 +26,18 @@ import java.util.Map;
  * said in, which is what asking each way of solving for each position and counting the ways is not
  * able to.
  *
+ * <p>What is read does not turn on the naming, and neither does what it costs to read. An equality
+ * is solved for the position that the fewest equalities of the set name, so a position a single
+ * equality names is taken out of it and out of nothing else: a chain whose every equality has a
+ * position of its own costs its length, whichever of the positions it names carry the lower names.
+ * Which of positions that the same number of equalities name is solved for is the last of them in
+ * the order, which decides nothing about the cost where they are alike in the set.
+ *
  * <p>An equality is left out where the numbers it needs cannot be held, which says less and nothing
- * false. Past {@link #MOST_UPDATES} updates of a weight in all, or where the equalities contradict
- * each other, there is nothing to read: either is a fact about the whole set and not about any one
- * equality of it.
+ * false. Where the equalities contradict each other there is nothing to read. Past
+ * {@link #MOST_UPDATES} updates of a weight in all, the equalities held until then are what is
+ * read: each of them is a consequence of the set, so a sum shown from them is shown, and the ones
+ * not reached are no more than left out.
  *
  * @param <A> what a position is
  */
@@ -53,14 +62,32 @@ final class EqualitySpan<A> {
 
     /**
      * What the equalities among {@code rules} come to, or null where there is nothing to read: none
-     * of them could be taken, they contradict each other, or they are more work than
-     * {@link #MOST_UPDATES}.
+     * of them could be taken, or they contradict each other. Those held when the work ran out
+     * ({@link #MOST_UPDATES}) are what is read.
      */
     static <A> EqualitySpan<A> of(List<AffineConstraint<A>> rules, CanonicalOrder<A> order) {
-        Building<A> building = new Building<>(order);
+        Map<A, Integer> named = new HashMap<>();
         for (AffineConstraint<A> each : rules) {
-            if (each instanceof AffineConstraint.Equality<A> equality && !building.take(equality)) {
-                return null;
+            if (each instanceof AffineConstraint.Equality<A> equality) {
+                for (Map.Entry<A, ExactRatio> position : equality.form().entriesIn(order)) {
+                    named.merge(position.getKey(), 1, Integer::sum);
+                }
+            }
+        }
+        Building<A> building = new Building<>(order, named);
+        for (AffineConstraint<A> each : rules) {
+            if (!(each instanceof AffineConstraint.Equality<A> equality)) {
+                continue;
+            }
+            switch (building.take(equality)) {
+                case CONTRADICTS -> {
+                    return null;
+                }
+                case OUT_OF_WORK -> {
+                    return building.solvings.isEmpty() ? null
+                            : new EqualitySpan<>(order, building.solvings);
+                }
+                case HELD -> { }
             }
         }
         return building.solvings.isEmpty() ? null : new EqualitySpan<>(order, building.solvings);
@@ -119,43 +146,66 @@ final class EqualitySpan<A> {
     /** The equalities being taken, one at a time. */
     private static final class Building<A> {
 
+        /** What taking one equality came to. */
+        private enum Taken {
+            /** It is held, or said already, or left out for numbers that cannot be held. */
+            HELD,
+            /** It is false beside the ones held. */
+            CONTRADICTS,
+            /** There was no work left to put it in terms of the ones held. */
+            OUT_OF_WORK
+        }
+
         private final CanonicalOrder<A> order;
+        /** How many equalities of the whole set name each position. */
+        private final Map<A, Integer> named;
         private final List<Solving<A>> solvings = new ArrayList<>();
         private final int[] updates = {MOST_UPDATES};
 
-        private Building(CanonicalOrder<A> order) {
+        private Building(CanonicalOrder<A> order, Map<A, Integer> named) {
             this.order = order;
+            this.named = named;
         }
 
-        /** False where the set is past what is read: it contradicts itself or is too much work. */
-        private boolean take(AffineConstraint.Equality<A> equality) {
+        private Taken take(AffineConstraint.Equality<A> equality) {
             Map<A, ExactRatio> coefs = new LinkedHashMap<>();
             for (Map.Entry<A, ExactRatio> each : equality.form().entriesIn(order)) {
                 coefs.put(each.getKey(), each.getValue());
             }
             Residue<A> left = reducedBy(solvings, coefs, equality.at().negated(), updates);
             if (updates[0] < 0) {
-                return false;
+                return Taken.OUT_OF_WORK;
             }
             if (left == null) {
                 // The numbers this equality needs cannot be held, so it is left out.
-                return true;
+                return Taken.HELD;
             }
             if (left.coefs().isEmpty()) {
                 // Said already, or said against itself.
-                return left.constant().isZero();
+                return left.constant().isZero() ? Taken.HELD : Taken.CONTRADICTS;
             }
-            // Solved for the position the order walks last: which one is of no account to what is
-            // read, and the same one for the same rules is what keeps the solvings the same.
+            // Solved for a position the fewest equalities of the set name, and among those the one
+            // the order walks last. Which one is of no account to what is read; fewest is what
+            // leaves a position only this equality names out of every later one, and so the
+            // updates of a chain to its length whatever the positions are called.
             List<Map.Entry<A, ExactRatio>> walked = order.walking(left.coefs().entrySet(),
                     Map.Entry::getKey);
-            Map.Entry<A, ExactRatio> last = walked.getLast();
+            int fewest = Integer.MAX_VALUE;
+            for (Map.Entry<A, ExactRatio> each : walked) {
+                fewest = Math.min(fewest, named.getOrDefault(each.getKey(), 0));
+            }
+            Map.Entry<A, ExactRatio> last = null;
+            for (Map.Entry<A, ExactRatio> each : walked) {
+                if (named.getOrDefault(each.getKey(), 0) == fewest) {
+                    last = each;
+                }
+            }
             Map<A, ExactRatio> rest = new LinkedHashMap<>();
             for (Map.Entry<A, ExactRatio> each : walked) {
                 if (!each.getKey().equals(last.getKey())) {
                     ExactRatio scaled = each.getValue().dividedBy(last.getValue()).orNull();
                     if (scaled == null) {
-                        return true;
+                        return Taken.HELD;
                     }
                     rest.put(each.getKey(), scaled);
                 }
@@ -164,7 +214,7 @@ final class EqualitySpan<A> {
             if (at != null) {
                 solvings.add(new Solving<>(last.getKey(), rest, at));
             }
-            return true;
+            return Taken.HELD;
         }
     }
 }

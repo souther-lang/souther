@@ -3687,6 +3687,12 @@ public final class Generator {
     private record GoingOn(CoverageRead.Read read, RunOnce trial, HeldOutcome.Of holding,
                            WhereNothingIsAnswered answersNothing) {
 
+        /** Which parameters a walk for a row a run is asked about moves: the ones the body never
+         *  reads stand where the origin has them. */
+        MoveScope scope() {
+            return MoveScope.leavingStanding(trial.parametersTheBodyDoesNotRead());
+        }
+
         /** The row {@code found} took, or a row for the same requirement that got further in —
          *  with what looking further came to, where the row goes out stopped at a guard. */
         Composed past(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
@@ -3805,7 +3811,7 @@ public final class Generator {
                                             && answer instanceof AnswerObservation.Answered ->
                                             Acceptance.TAKEN;
                                     default -> Acceptance.PASSED;
-                                }, answersNothing);
+                                }, false, scope(), answersNothing);
                         if (searched.row() != null) {
                             further = searched.row();
                             held = List.copyOf(both);
@@ -11398,7 +11404,8 @@ public final class Generator {
         if (taking.take(first) == Acceptance.TAKEN) {
             return first;
         }
-        composed(axes, where, HeldTogether.Asked.NOTHING, check, given, taking);
+        composed(axes, where, HeldTogether.Asked.NOTHING, check, given, taking,
+                MoveScope.leavingStanding(trial.parametersTheBodyDoesNotRead()));
         List<FixtureTemplate> kept = preferring.taken();
         return kept == null ? first : kept;
     }
@@ -11503,7 +11510,8 @@ public final class Generator {
                         List<ResolvedOrigin> origins,
                         FixtureReferences references, List<StoodInAnswer> answers) {
             this.axes = axes;
-            this.requires = new WhatEachClassRequires(axes.axes());
+            this.scope = MoveScope.leavingStanding(trial.parametersTheBodyDoesNotRead());
+            this.requires = new WhatEachClassRequires(axes.axes(), scope);
             this.selection = selection;
             this.check = check;
             this.trial = trial;
@@ -11513,6 +11521,10 @@ public final class Generator {
             this.references = references;
             this.answers = answers;
         }
+
+        /** Which parameters a walk for a row seen filling the combination moves: a run is what
+         *  says it, so the ones the body never reads stand. */
+        private final MoveScope scope;
 
         /** What each class of this combination's positions requires, read once for every reading
          *  of it. */
@@ -11783,7 +11795,7 @@ public final class Generator {
                                 found = new Witness.Certified(named, seen.get());
                             }
                             return asked;
-                        });
+                        }, scope);
                 return switch (came) {
                     case RowComposed.Taken _ -> Taken.AND_DONE;
                     // Not a refusal, and what the walk found out on the way to the rows passed over
