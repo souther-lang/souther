@@ -6,6 +6,7 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedMap;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
 
 /**
  * A relation among how many elements of one container meet statements, and how many that container
@@ -44,10 +46,6 @@ import java.util.function.Function;
  */
 record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, ExactRatio> counts,
                          ExactRatio sizeWeight, ExactRatio constant, Rel rel) {
-
-    /** The most counts a relation is composed for: every sharing of the elements among the ways
-     *  they meet the counts is walked, and there are more of them with each count. */
-    private static final int MOST_COUNTS = 2;
 
     AggregateRelation {
         Objects.requireNonNull(container, "a relation over the elements of some container");
@@ -143,20 +141,23 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
 
     /**
      * The fewest elements of each count's statement a container of at most {@code most} elements
-     * can have where the relation holds, taking the first count's fewest before the second's, in
-     * the order of {@link #counts} — or null where no container that large holds it, and where
-     * more counts are weighed than a container is composed for.
+     * can have where the relation holds and each count is one {@code allowed} says, taking the
+     * first count's fewest before the second's, in the order of {@link #counts} — or null where no
+     * container that large has them.
      *
      * <p>A figure of the walk and not of the relation: a container with more elements may hold it
      * where none with so many does, so null is what composing reaches and no answer about the
      * relation.
+     *
+     * @param allowed for each count, in the order of {@link #counts}, which numbers of elements it
+     *                may be
      */
-    int[] fewestWithin(int most) {
+    int[] fewestWithin(int most, List<IntPredicate> allowed) {
         int[] meeting = new int[counts.size()];
-        return meeting.length <= MOST_COUNTS && fewest(meeting, 0, most) ? meeting : null;
+        return fewest(meeting, 0, most, allowed) ? meeting : null;
     }
 
-    private boolean fewest(int[] meeting, int at, int most) {
+    private boolean fewest(int[] meeting, int at, int most, List<IntPredicate> allowed) {
         if (at == meeting.length) {
             int largest = 0;
             for (int each : meeting) {
@@ -171,8 +172,65 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
             return false;
         }
         for (int n = 0; n <= most; n++) {
+            if (!allowed.get(at).test(n)) {
+                continue;
+            }
             meeting[at] = n;
-            if (fewest(meeting, at + 1, most)) {
+            if (mayBeCompleted(meeting, at + 1, most) && fewest(meeting, at + 1, most, allowed)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Where each count is composed: the fewest the relation leaves it within the counts each is
+     * left by every condition on it ({@code left}, by which count it is), taking the first
+     * count's fewest before the second's — or nothing where one of them is no count composed for
+     * or no container of the most elements a count is composed with has them.
+     *
+     * @param composedFor the counts composed for, by which count each is
+     */
+    Map<CountedElements.Identity, Count> fewestAt(
+            String behavior, Map<CountedElements.Identity, CountedElements> composedFor,
+            Map<CountedElements.Identity, LevelRegion> left) {
+        List<CountedElements.Identity> identities = new ArrayList<>();
+        List<IntPredicate> allowed = new ArrayList<>();
+        for (Quantity.HowManyMeet each : counts.keySet()) {
+            CountedElements.Identity identity = CountedElements.identityOf(behavior, each);
+            LevelRegion region = left.get(identity);
+            if (!composedFor.containsKey(identity) || region == null) {
+                return Map.of();
+            }
+            identities.add(identity);
+            allowed.add(n -> region.contains(new Level.OfTheQuantity(ExactRatio.of(n))));
+        }
+        int[] fewest = fewestWithin(
+                CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum(), allowed);        if (fewest == null) {
+            return Map.of();
+        }
+        Map<CountedElements.Identity, Count> out = new LinkedHashMap<>();
+        for (int i = 0; i < fewest.length; i++) {
+            out.put(identities.get(i), Count.of(fewest[i]));
+        }
+        return out;
+    }
+
+    /** Whether some container of at most {@code most} elements may hold the relation with the
+     *  first {@code fixed} counts as {@code meeting} says and the rest any. */
+    private boolean mayBeCompleted(int[] meeting, int fixed, int most) {
+        int largest = 0;
+        for (int i = 0; i < fixed; i++) {
+            largest = Math.max(largest, meeting[i]);
+        }
+        for (int size = largest; size <= most; size++) {
+            int[] least = new int[meeting.length];
+            int[] atMost = new int[meeting.length];
+            for (int i = 0; i < meeting.length; i++) {
+                least[i] = i < fixed ? meeting[i] : 0;
+                atMost[i] = i < fixed ? meeting[i] : size;
+            }
+            if (mayHoldWith(size, least, atMost)) {
                 return true;
             }
         }

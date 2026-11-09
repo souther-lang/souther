@@ -86,6 +86,15 @@ class AnElementCountedForFailingAMembershipIsComposedTest {
         assertEquals(List.of(), whatNothingCouldShow(PRICED + " == " + UNPRICED));
     }
 
+    /**
+     * A relation only a container of many elements meets is composed at that size, past the
+     * sizes a count is composed at before it, and past the containers offered for them.
+     */
+    @Test
+    void aRelationOnlyALargeContainerMeetsIsComposed() {
+        assertEquals(List.of(), whatNothingCouldShow("List.length(deals) - " + PRICED + " >= 6"));
+    }
+
     /** The rules of the decision no search could settle. */
     private static List<DecisionRule> whatNothingCouldShow(String guard) {
         return DecisionRulesTheSearchLeftUnsettled.in(DEALS.replace("GUARD", guard), "probe");

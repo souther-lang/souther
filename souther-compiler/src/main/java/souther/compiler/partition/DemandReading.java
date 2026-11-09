@@ -2491,15 +2491,9 @@ final class DemandReading {
                 AStatementAtARow.askable(AStatementAtARow.meetingOf(count)))) {
             return null;
         }
-        int[] fewest = relation.fewestWithin(
-                CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum());
-        if (fewest == null) {
-            return null;
-        }
         List<RowDemand.SoMany> counts = new ArrayList<>();
-        int at = 0;
         for (Quantity.HowManyMeet each : relation.counts().keySet()) {
-            counts.add(new RowDemand.SoMany(each, Rel.GE, ExactRatio.of(fewest[at++]),
+            counts.add(new RowDemand.SoMany(each, Rel.GE, ExactRatio.ZERO,
                     new LinearForm<>(ExactRatio.ZERO, Map.of()), anElementMeeting(each, read)));
         }
         return new RowDemand.ForTheRun.ComposedAs(relation, counts);

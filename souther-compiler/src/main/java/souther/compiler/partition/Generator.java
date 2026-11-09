@@ -7626,6 +7626,28 @@ public final class Generator {
                 countsAsked.put(target, NumbersAskedFor.of(left));
             }
         });
+        // Counts a relation holds to one another and to how many the container holds are composed
+        // at the fewest the relation leaves them within what every condition on each leaves, and
+        // not at the fewest each leaves alone: that is what the relation may not hold of.
+        Map<CountedElements.Identity, LevelRegion> fewestForRelations = new LinkedHashMap<>();
+        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var _, var _, var _,
+                    Optional<RowDemand.ForTheRun.ComposedAs> composedAs) && composedAs.isPresent()) {
+                composedAs.get().relation().fewestAt(subject.behavior(), countedBefore,
+                        leftOfACount).forEach((identity, count) -> {
+                            RealizationTarget.ACount target =
+                                    new RealizationTarget.ACount(countedBefore.get(identity));
+                            // Asked from that count up, which is what a container is composed at
+                            // where no number was named.
+                            fewestForRelations.put(identity, LevelRegion.of(new LevelInterval(
+                                    Bound.at(new Level.OfTheQuantity(
+                                            Count.number(count).exactly()), true), null)));
+                            if (countsToCome.containsKey(target)) {
+                                countsToCome.put(target, count);
+                            }
+                        });
+            }
+        }
         // And the values the counts a condition asks for are counts of, which the container is
         // composed holding as it is for the item's own.
         here = placeKeysAskedFor(countsToCome.entrySet(), here, subject, out, routed, chosen, gaps,
@@ -7699,6 +7721,10 @@ public final class Generator {
                     }
                 } else {
                     counts = many.counts().values();
+                    LevelRegion fewest = fewestForRelations.get(count.identity());
+                    if (fewest != null) {
+                        counts = counts.meet(fewest);
+                    }
                 }
                 countsOnTheWay.merge(count.identity(),
                         new CountsAsked(count, counts, many.againstNumbers(), cut),

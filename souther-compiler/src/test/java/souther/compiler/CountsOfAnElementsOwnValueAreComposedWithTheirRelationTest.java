@@ -58,6 +58,44 @@ class CountsOfAnElementsOwnValueAreComposedWithTheirRelationTest {
                 whatNothingCouldShow(OVER_A_HUNDRED + " == " + OVER_TWO_HUNDRED));
     }
 
+    /**
+     * What another condition leaves of one count is what the relation is composed within: the
+     * counts it holds are placed at the fewest it leaves them together, and not at the fewest
+     * each leaves alone, so a relation that holds only where another count is not nought is met
+     * where that other condition says it is nought.
+     */
+    @Test
+    void aRelationIsComposedWithinWhatAnotherConditionLeavesOfACount() {
+        String under = "List.length(List.filter(d -> d.amount < 50, deals))";
+        String either = OVER_A_HUNDRED + " + " + under + " == 1";
+        assertEquals(List.of(), whatNothingCouldShow(either, under + " == 0"));
+        assertEquals(List.of(), whatNothingCouldShow(either, OVER_A_HUNDRED + " == 0"));
+    }
+
+    private static List<DecisionRule> whatNothingCouldShow(String first, String second) {
+        return DecisionRulesTheSearchLeftUnsettled.in(
+                TWO_GUARDS.replace("FIRST", first).replace("SECOND", second), "probe");
+    }
+
+    private static final String TWO_GUARDS = """
+            module probe
+
+            data Deal = { amount: Int }
+            data Big = { n: Int }
+            data Small = { n: Int }
+
+            behavior sized : (deals: List<Deal>) -> Big | Small
+                constructs Big, Small
+
+            let sized (deals) = {
+                guard FIRST
+                    else Small { n = 0 }
+                guard SECOND
+                    else Small { n = 2 }
+                Big { n = 1 }
+            }
+            """;
+
     /** The rules of the decision no search could settle. */
     private static List<DecisionRule> whatNothingCouldShow(String guard) {
         return DecisionRulesTheSearchLeftUnsettled.in(DEALS.replace("GUARD", guard), "probe");

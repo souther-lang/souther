@@ -322,13 +322,13 @@ final class TermRealizations {
         // and so is a statement its elements meet together, which is answered the same way.
         List<RealizationTarget.ACount> counts = new ArrayList<>();
         List<RealizationTarget.ElementsMeetingTogether> together = new ArrayList<>();
-        List<AggregateRelation> related = new ArrayList<>();
+        List<RealizationTarget.CountsRelated> related = new ArrayList<>();
         List<RealizationTarget.OfANumber> numbers = new ArrayList<>();
         for (RealizationTarget target : targets) {
             switch (target) {
                 case RealizationTarget.ACount count -> counts.add(count);
                 case RealizationTarget.ElementsMeetingTogether stated -> together.add(stated);
-                case RealizationTarget.CountsRelated relation -> related.add(relation.relation());
+                case RealizationTarget.CountsRelated relation -> related.add(relation);
                 case RealizationTarget.OfANumber number -> numbers.add(number);
             }
         }
@@ -775,15 +775,15 @@ final class TermRealizations {
                                                      List<RealizationTarget.ACount> counts,
                                                      List<RealizationTarget.ElementsMeetingTogether>
                                                              together,
-                                                     List<AggregateRelation> related,
+                                                     List<RealizationTarget.CountsRelated> related,
                                                      List<RealizationTarget.OfANumber> numbers) {
         for (RealizationTarget.ACount each : counts) {
             if (!each.count().container().equals(container)) {
                 return nothingSolvesAGroup();
             }
         }
-        for (AggregateRelation each : related) {
-            if (!each.container().equals(container)) {
+        for (RealizationTarget.CountsRelated each : related) {
+            if (!each.relation().container().equals(container)) {
                 return nothingSolvesAGroup();
             }
         }
@@ -817,10 +817,11 @@ final class TermRealizations {
         List<RealizationTarget> answered = new ArrayList<>(counts);
         answered.addAll(together);
         answered.addAll(numbers);
-        group.stream().filter(RealizationTarget.CountsRelated.class::isInstance)
-                .forEach(answered::add);
+        answered.addAll(related);
+        List<AggregateRelation> relations =
+                related.stream().map(RealizationTarget.CountsRelated::relation).toList();
         return wholly(group, answered, () -> new JointBuilder.ElementByElement(container, counts,
-                together, related, many, elements, totals));
+                together, relations, many, elements, totals));
     }
 
     /**
