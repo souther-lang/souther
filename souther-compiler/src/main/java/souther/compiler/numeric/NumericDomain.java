@@ -1054,6 +1054,19 @@ public final class NumericDomain<A> {
         }
     }
 
+    /**
+     * Which connected part of the rules weighs {@code position}, or {@link #NO_PART} where none
+     * does. Two positions are in one part where the rules relate them, however indirectly, and
+     * what the rules leave one of them is what the part leaves it: a position of another part
+     * cannot narrow it nor refuse it. The numbers of a part are the one place these rules say two
+     * positions are related, so a reader asking which positions an answer can turn on asks here.
+     * The part is named by a number that means something only against this domain.
+     */
+    public int partOf(A position) {
+        Integer at = split().partOf.get(position);
+        return at == null ? NO_PART : at;
+    }
+
     private Split<A> split() {
         Split<A> had = split;
         if (had == null) {

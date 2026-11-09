@@ -90,7 +90,7 @@ class AQuestionOverManyContainersIsAskedOfAFewOfThemEachWayTest {
     @Test
     void anEmptinessIsShownBesideContainersNothingRelatesToItInAnyOrder() {
         for (boolean relatedFirst : new boolean[] {true, false}) {
-            for (int unrelated : new int[] {0, 2, 3, 5, 7}) {
+            for (int unrelated : new int[] {0, 2, 3, 5, 7, 8, 11}) {
                 StringBuilder fields = new StringBuilder("x0: List<Int>");
                 for (int each = 1; each <= unrelated; each++) {
                     fields.append(", x").append(each).append(": List<Int>");

@@ -48,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -2332,10 +2333,100 @@ final class ReadQuantities implements Quantities {
                                               Collection<NumericTerm> terms, boolean[] settled) {
         List<TermPath> open = openContainers(under, terms);
         if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
+            // Only the containers the question can turn on: what the rules leave a number is what
+            // the part of them that weighs it leaves, so a container walked only by numbers of
+            // other parts is no case of what is asked, however many there are.
+            open = openContainersByPart(under, terms).stream().filter(OpenGroup::reached)
+                    .flatMap(each -> each.containers().stream()).toList();
+        }
+        if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
             settled[0] = false;
         }
         return holdingEachWay(under,
                 open.stream().limit(MOST_CONTAINERS_ASKED_BOTH_WAYS).toList());
+    }
+
+    /**
+     * Containers that are asked about together, and whether the question names a number of them.
+     *
+     * @param containers the containers, in the order the terms that walk them are held in
+     * @param reached    whether a number the question is about is weighed by the part of the rules
+     *                   that reaches any of them, or walks one of them
+     */
+    private record OpenGroup(List<TermPath> containers, boolean reached) {}
+
+    /**
+     * The containers a question over {@code terms} walks that {@code under} says nothing of, in
+     * groups: two are in one group where a number walking one and a number walking the other are
+     * weighed by one connected part of the rules ({@link NumericDomain#partOf}), or where one
+     * number walks both.
+     *
+     * <p>What the rules leave the numbers of one part does not turn on the other parts, since no
+     * rule relates them, so a container that only the numbers of other parts walk cannot change it,
+     * and a contradiction is in one part. Every group is asked of by itself.
+     */
+    private List<OpenGroup> openContainersByPart(StructuralContext under,
+                                                 Collection<NumericTerm> terms) {
+        NumericDomain<InputAtom> numbers = effectiveConstraints(under).numbers();
+        List<NumericTerm> every = new ArrayList<>(terms);
+        every.addAll(fixed.keySet());
+        assumed.forEach(each -> every.addAll(each.terms()));
+        Set<NumericTerm> asked = new HashSet<>(terms);
+        Map<Object, Object> joined = new HashMap<>();
+        Set<TermPath> containers = new LinkedHashSet<>();
+        Set<Object> askedKeys = new HashSet<>();
+        for (NumericTerm each : every) {
+            Object part = null;
+            if (stands(Set.of(each), under)) {
+                int at = numbers.partOf(called(each, under));
+                part = at < 0 ? each : (Object) at;
+            }
+            TermPath walked = each.walkedOver();
+            boolean opens = walked != null && !under.says(walked);
+            if (part != null && asked.contains(each)) {
+                askedKeys.add(part);
+            }
+            if (opens) {
+                containers.add(walked);
+                if (asked.contains(each)) {
+                    askedKeys.add(walked);
+                }
+                if (part != null) {
+                    join(joined, walked, part);
+                }
+            }
+        }
+        Map<Object, List<TermPath>> groups = new LinkedHashMap<>();
+        for (TermPath container : containers) {
+            groups.computeIfAbsent(rootOf(joined, container), _ -> new ArrayList<>())
+                    .add(container);
+        }
+        Set<Object> reached = new HashSet<>();
+        for (Object key : askedKeys) {
+            reached.add(rootOf(joined, key));
+        }
+        List<OpenGroup> out = new ArrayList<>();
+        groups.forEach((root, held) -> out.add(new OpenGroup(List.copyOf(held),
+                reached.contains(root))));
+        return out;
+    }
+
+    /** One group of {@code a} and {@code b}, in {@code joined}. */
+    private static void join(Map<Object, Object> joined, Object a, Object b) {
+        Object first = rootOf(joined, a);
+        Object second = rootOf(joined, b);
+        if (!first.equals(second)) {
+            joined.put(second, first);
+        }
+    }
+
+    /** The one the group of {@code key} is called by. */
+    private static Object rootOf(Map<Object, Object> joined, Object key) {
+        Object at = key;
+        while (joined.containsKey(at)) {
+            at = joined.get(at);
+        }
+        return at;
     }
 
     /** The containers a question over {@code terms} walks that {@code under} says nothing of,
@@ -2897,10 +2988,18 @@ final class ReadQuantities implements Quantities {
         // and taken in can be ({@link #eitherWay}), as a sum is asked of its cases: the input is
         // empty only where every one of them is, and the proof is the first one's.
         List<TermPath> open = openContainers(under, List.of());
+        Set<List<TermPath>> choices = new LinkedHashSet<>();
         if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
             settled[0] = false;
+            // Each group of containers by itself: a contradiction is in one part of the rules, so
+            // the containers of the others are no part of what shows it, and what is asked of one
+            // group does not turn on how many containers stand beside it.
+            for (OpenGroup each : openContainersByPart(under, List.of())) {
+                choices.addAll(choicesOfContainers(each.containers()));
+            }
         }
-        for (List<TermPath> chosen : choicesOfContainers(open)) {
+        choices.addAll(choicesOfContainers(open));
+        for (List<TermPath> chosen : choices) {
             Optional<EmptyInput> proof = Optional.empty();
             boolean everyWayRefused = true;
             for (StructuralContext each : holdingEachWay(under, chosen)) {
