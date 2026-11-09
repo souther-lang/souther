@@ -1408,11 +1408,11 @@ final class ContainersAddingUp {
 
         /**
          * The field a choice by a comparison of one field is solved for, where one of its answers
-         * is a form of that same field and the other a number of none — or null where it is any
-         * other choice, or where the comparison leaves a hole and not an end.
+         * is a form of that same field and the other adds nothing (nought) — or null where it is
+         * any other choice, or where the comparison leaves a hole and not an end.
          *
          * <p>The elements are all asked to stand where the form is taken, so each comes to it and
-         * the others, which the choice leaves at the number of none, are not written.
+         * the others, which the choice leaves at nought, are not written.
          */
         private static FieldSolved byTestOfItsField(ElementValue.Choose choice,
                                                     ElementValue.Test.Compared test,
@@ -1424,7 +1424,11 @@ final class ContainersAddingUp {
             }
             boolean formWhereItHolds = not.form().coefs().isEmpty();
             ElementValue.Affine form = formWhereItHolds ? holds : not;
-            if (!(formWhereItHolds ? not : holds).form().coefs().isEmpty()) {
+            // The other answer adds nothing: an element it leaves does not come to the total, which
+            // is what writing none of them relies on. A number it adds is another weight for the
+            // elements not chosen, which this does not solve for.
+            ElementValue.Affine rest = formWhereItHolds ? not : holds;
+            if (!rest.form().coefs().isEmpty() || !rest.form().constant().isZero()) {
                 return null;
             }
             FieldSolved solved = ofAForm(form, null, elements, orders);

@@ -2,11 +2,20 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecisionRule;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.DecisionEvidence;
+import souther.compiler.query.RuleRequirement;
+import souther.compiler.query.RuleSettlement;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A guard tying a key of a map to a value a row holds, or a part of a date to a part of another
@@ -158,6 +167,71 @@ class AGuardTyingWhatIsTakenOfTwoValuesIsComposedTest {
         String inner = "List.length(List.filter(d -> d.amount == 5, g.deals)) == 1";
         assertEquals(List.of(), whatNothingCouldShow("List.any(g -> " + inner + ", groups)"));
         assertEquals(List.of(), whatNothingCouldShow("List.all(g -> " + inner + ", groups)"));
+    }
+
+    private static final String BAGS = """
+            module probe
+
+            data Bag = { xs: List<Int> }
+            data Priced = { n: Int }
+            data Unpriced = { n: Int }
+
+            behavior named : (bags: List<Bag>) -> Priced | Unpriced
+                constructs Priced, Unpriced
+
+            let named (bags) = {
+                guard GUARD
+                    else Unpriced { n = 0 }
+                Priced { n = 1 }
+            }
+            """;
+
+    /**
+     * An inner container listed up to a figure is a search that stopped at it: what no listed size
+     * meets is not shown to be met by no container.
+     */
+    @Test
+    void aSizeThePartsAreNotListedAtIsAFigureTheSearchStoppedAtAndNotAnExclusion() {
+        String guard = "List.length(List.filter(b -> List.length(List.filter("
+                + "x -> x == 5, b.xs)) == 4, bags)) == 1";
+        String model = BAGS.replace("GUARD", guard);
+        assertEquals(List.of(), DecisionRulesTheSearchLeftUnsettled.excludedIn(model, "probe"));
+        assertTrue(whatTheSearchSaid(model).contains(
+                CompositionBudget.ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH.name()));
+    }
+
+    /**
+     * A total over the elements a statement of their field keeps is solved only where the others
+     * add nothing: elements the statement leaves are weighed too where they add a number, which is
+     * said as a way this compiler does not write and not solved as if they added none.
+     */
+    @Test
+    void aTotalWhoseOtherElementsAddANumberIsNotSolvedAsIfTheyAddedNone() {
+        String model = DEALS.replace("GUARD", "List.sum(List.map(d -> "
+                + "if d.amount > 3 then d.amount else 2, deals)) == 2");
+        assertEquals(List.of(), DecisionRulesTheSearchLeftUnsettled.excludedIn(model, "probe"));
+        assertTrue(whatTheSearchSaid(model).contains(
+                CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR.name()));
+    }
+
+    /** What the search said of every rule it left unsettled, in the words it keeps. */
+    private static String whatTheSearchSaid(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        StringBuilder said = new StringBuilder();
+        Map<String, DecisionEvidence> decisions =
+                compilation.db().ask(new Adequacy.Decides("probe")).value();
+        for (String behavior : decisions.keySet()) {
+            compilation.db().ask(new Adequacy.DecisionSearch("probe", behavior)).value()
+                    .forEach((rule, across) -> {
+                        RuleSettlement settlement = across.answer().settlement();
+                        if (settlement.requirement() instanceof RuleRequirement.Unsettled) {
+                            said.append(settlement.search()).append(settlement.account());
+                        }
+                    });
+        }
+        return said.toString();
     }
 
     /** The rules of the decision no search could settle. */

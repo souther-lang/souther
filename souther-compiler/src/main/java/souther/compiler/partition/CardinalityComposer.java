@@ -613,14 +613,14 @@ final class CardinalityComposer {
                 listedAt.add(at);
                 return numbersAt(at, OfTheType.of(part, reading), asked, apartAt, measuring,
                         within, beside, keptApartByItsRules ? MOST_ELEMENTS : 1, unheld, unnamed,
-                        reading.today(), part, reading);
+                        refused, reading.today(), part, reading);
             };
             ListedByValue byValue = listedByValue(container, holding.element(), reading, apartAt,
                     numbers, (at, part) -> {
                         listedAt.add(at);
                         return numbersAt(at, OfTheType.manyOf(part, reading), asked, apartAt,
                                 measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
-                                reading.today(), part, reading);
+                                refused, reading.today(), part, reading);
                     });
             List<TermPath> parts = List.copyOf(listedAt);
             if (byValue == null || (apartAt != null && byValue.values().isEmpty())) {
@@ -1110,13 +1110,17 @@ final class CardinalityComposer {
                                                  Quantity.TheValue apartAt, Quantities measuring,
                                                  SearchRegion within,
                                                  Map<NumericTerm, Place> beside, int each, Set<CompositionCapacity> unheld,
-                                                 Set<CompositionRepertoire> unnamed, Today today,
+                                                 Set<CompositionRepertoire> unnamed,
+                                                 Set<CompositionBudget> refused, Today today,
                                                  TypeView view, RuleReadingContext reading) {
         asked = withWhatIsSaidOfTheInnerElements(asked, at);
         // What stands at a container is read as how many it holds, a count.
         boolean howMany = view.shape() instanceof Shape.Sequence;
         NumericTerm term = howMany ? sizeAsked(at, asked) : new NumericTerm.ValueOf(at);
         if (howMany && term == null) {
+            // The sizes past the figure are not listed, and a statement over how many of its
+            // elements meet something may be met only at one of them.
+            refused.add(CompositionBudget.ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH);
             return sizesNoneIsAskedOf();
         }
         if (term == null) {
@@ -1183,7 +1187,7 @@ final class CardinalityComposer {
             out.add(carrier.valueOf(place));
         }
         for (ObservedValue value : whereWhatIsTakenTurns(at, view, asked, measuring, within,
-                beside, reading)) {
+                beside, unheld, unnamed, refused, reading)) {
             if (!out.contains(value)) {
                 out.add(value);
             }
@@ -1259,7 +1263,9 @@ final class CardinalityComposer {
      */
     private static List<ObservedValue> whereWhatIsTakenTurns(
             TermPath at, TypeView view, List<Asked> asked, Quantities measuring,
-            SearchRegion within, Map<NumericTerm, Place> beside, RuleReadingContext reading) {
+            SearchRegion within, Map<NumericTerm, Place> beside,
+            Set<CompositionCapacity> unheld, Set<CompositionRepertoire> unnamed,
+            Set<CompositionBudget> refused, RuleReadingContext reading) {
         Set<NumericTerm> taken = new LinkedHashSet<>();
         for (Asked one : view.shape() instanceof Shape.Sequence ? List.<Asked>of() : asked) {
             if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
@@ -1290,6 +1296,10 @@ final class CardinalityComposer {
             if (orders != null && orders.answered() != null && !levels.isEmpty()) {
                 turns.put(number, List.copyOf(levels));
                 answeredOn.put(number, orders.answered());
+            } else {
+                // Where a statement turns on it could not be worked out, so no value is built for
+                // it.
+                unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
             }
         }
         Type bare = TypeOps.base(view.declared(), reading.source().inners());
@@ -1299,7 +1309,11 @@ final class CardinalityComposer {
         // are composed with.
         List<NumericTerm> numbers = List.copyOf(turns.keySet());
         int[] choice = new int[numbers.size()];
-        for (int tried = 0; !numbers.isEmpty() && tried < MOST_ELEMENTS; tried++) {
+        for (int tried = 0; !numbers.isEmpty(); tried++) {
+            if (tried == MOST_ELEMENTS) {
+                refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+                break;
+            }
             SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
             for (int each = 0; each < numbers.size(); each++) {
                 NumericTerm number = numbers.get(each);
@@ -1308,17 +1322,29 @@ final class CardinalityComposer {
                         AskedAt.aNumberOutOf(new NumericSet.At(place), place,
                                 answeredOn.get(number)));
             }
-            if (TermRealizations.jointRealizationOf(demands.keySet())
-                    instanceof TermRealizations.JointRealization.Supported(var builder)
-                    && builder.from(bare, List.of(), demands, measuring, within, reading,
-                            DemandsInside.NOTHING)
-                            instanceof TermRealizations.Realization.Built built) {
+            TermRealizations.Realization realized =
+                    TermRealizations.jointRealizationOf(demands.keySet())
+                            instanceof TermRealizations.JointRealization.Supported(var builder)
+                            ? builder.from(bare, List.of(), demands, measuring, within, reading,
+                                    DemandsInside.NOTHING)
+                            : null;
+            if (realized != null) {
+                CompositionShortfall met = realized.shortfall();
+                refused.addAll(met.figures());
+                unnamed.addAll(met.populations());
+                unheld.addAll(met.unheld());
+            }
+            if (realized instanceof TermRealizations.Realization.Built built) {
                 for (FixtureTemplate each : built.values()) {
                     ObservedValue value = each.observed();
-                    if (value != null && !out.contains(value)) {
+                    if (value == null) {
+                        unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
+                    } else if (!out.contains(value)) {
                         out.add(value);
                     }
                 }
+            } else {
+                unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
             }
             if (!nextChoice(choice, numbers, turns)) {
                 break;
@@ -1511,16 +1537,17 @@ final class CardinalityComposer {
                         Optional.empty()));
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
+        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         Map<NumericTerm, Place> beside = settledOutside(asked, container, within);
         List<List<String>> apart = ElementsKeptApart.at(view, keptApart, reading);
         Quantity.TheValue value = new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(place));
         ListedByValue byValue = listedByValue(container, holding.element(), reading, value,
                 (at, part) -> numbersAt(at, OfTheType.of(part, reading), asked, null, measuring,
                         within, beside, apart.isEmpty() ? 1 : MOST_ELEMENTS, unheld, unnamed,
-                        reading.today(), part, reading),
+                        refused, reading.today(), part, reading),
                 (at, part) -> numbersAt(at, OfTheType.manyOf(part, reading), asked, null,
                         measuring, within, beside, MOST_ELEMENTS, unheld, unnamed,
-                        reading.today(), part, reading));
+                        refused, reading.today(), part, reading));
         if (byValue == null) {
             return notChosen(new SearchMessage.APartNeitherOneOfSoManyNorNumbers(
                     String.valueOf(container)));
@@ -1530,7 +1557,6 @@ final class CardinalityComposer {
                     String.valueOf(place)));
         }
         ElementValues ofTheElement = byValue.first();
-        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         if (!ofTheElement.listed().all()) {
             refused.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG);
         }
