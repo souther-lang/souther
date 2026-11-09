@@ -754,14 +754,6 @@ public final class OperationFacts {
                                     equal(sizeOf(carried(1)), sizeOf(WALKED), 0)),
                             all(atLeast(sizeOf(WALKED), 1, sizeOf(at(1)), -1, -1),
                                     equal(sizeOf(carried(1)), sizeOf(at(1)), 0))))),
-            about("List", "zipShortest", lemma(related(equal(
-                    sizeOf(answerOf("List", "zipShortest", the(at(0)), the(at(1)))),
-                    sizeOf(answerOf("List", "zipShortest", the(at(1)), the(at(0)))), 0)),
-                    equal(number(carried(0)), sizeOf(WALKED), 0),
-                    any(all(atLeast(sizeOf(at(1)), 1, sizeOf(WALKED), -1, 0),
-                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0)),
-                            all(atLeast(sizeOf(WALKED), 1, sizeOf(at(1)), -1, -1),
-                                    equal(sizeOf(carried(1)), sizeOf(at(1)), 0))))),
             // Every whole number from the first to the last, where the last is not below the
             // first, and none where it is.
             about("List", "rangeInclusive", sizeInCases(

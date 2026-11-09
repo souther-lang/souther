@@ -38,10 +38,6 @@ class TheSizesOfTwoAnswersOverTheSameArgumentsAreRelatedTest {
                     let f%1$d (i) = D%1$d(%2$s)
                     """.formatted(id, count);
         }
-
-        String data() {
-            return "D" + id;
-        }
     }
 
     /** The rows whose construction is owed a row or refused. */
