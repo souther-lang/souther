@@ -106,6 +106,26 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "Digit(String.length(t) - String.length(s)) else Digit(0)", true),
             new Row("if String.endsWith(t, s) then Digit(0) "
                     + "else Digit(String.length(s) - String.length(t))", true),
+            // The empty string stands inside every string, so one that does not is not empty —
+            // and that is all the denial says of it.
+            new Row("if String.contains(t, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
+            new Row("if String.startsWith(t, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
+            new Row("if String.endsWith(t, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
+            new Row("if String.contains(t, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 2)", true),
+            new Row("if String.contains(t, s) then Digit(0) "
+                    + "else Digit(String.length(s) - String.length(t))", true),
+            new Row("if String.contains(t, s) then Digit(String.length(t) - 1) "
+                    + "else Digit(0)", true),
+            // A conjunction that does not hold leaves either part possible, so neither part's
+            // denial is taken.
+            new Row("if String.contains(t, s) && String.contains(u, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", true),
+            new Row("if String.contains(t, s) || String.contains(u, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
             // How many some element of another set is not, as how many there are less those.
             new Row("Digit(Set.size(Set.union(a, b)) - Set.size(a))", false),
             new Row("Digit(Set.size(a) - Set.size(Set.union(a, b)))", true),
@@ -483,10 +503,10 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
 
                 behavior f : (xs: List<Int>, ys: List<Int>, xss: List<List<Int>>,
                               a: Set<Int>, b: Set<Int>, ma: Map<String, Int>, mb: Map<String, Int>,
-                              s: String, t: String, x: Int)
+                              s: String, t: String, u: String, x: Int)
                     -> Digit
                     constructs Digit
-                let f (xs, ys, xss, a, b, ma, mb, s, t, x) =
+                let f (xs, ys, xss, a, b, ma, mb, s, t, u, x) =
                     %s
                 """.formatted(body), body);
     }

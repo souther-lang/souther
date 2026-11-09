@@ -73,7 +73,8 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
      *  nothing on any path. */
     private static boolean namesNothing(Holding holding) {
         return switch (holding) {
-            case Holding.Unnamed _ -> true;
+            case Holding.Unnamed(var _, var ifHolds, var ifDenied) ->
+                    ifHolds.isEmpty() && ifDenied.isEmpty();
             case Holding.Not(Holding denied) -> namesNothing(denied);
             case Holding.AllOf(var ways) -> !ways.isEmpty()
                     && ways.stream().allMatch(LawOverAtoms::namesNothing);
@@ -359,8 +360,10 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                 yield true;
             }
             case Holding.Not(Holding denied) -> certain(denied, !positive, out);
-            // It may come out either way, and either way it says nothing of the numbers.
-            case Holding.Unnamed _ -> true;
+            // It may come out either way, and says of the numbers what its law makes certain of
+            // the side it comes out on. A side that cannot come out is one it cannot be on.
+            case Holding.Unnamed(var _, var ifHolds, var ifDenied) ->
+                    every(positive ? ifHolds : ifDenied, true, out);
             // Each of them where all hold, and some one where any does not: the same two, turned.
             case Holding.AllOf(var ways) -> positive ? every(ways, true, out)
                     : oneOf(ways, false, out);
@@ -499,20 +502,23 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     }
 
     /**
-     * One string standing inside another where the law says: a part unnamed, and the one inside
-     * holding no more code points than the one around it, where both are strings this names a
-     * length of. Where it does not stand inside, either.
+     * One string standing inside another where the law says: a part unnamed, which makes certain
+     * on each side of itself what that side alone has. Where it stands inside, the one inside
+     * holds no more code points than the one around it. Where it does not, the one inside holds
+     * some, because the empty string stands inside every string, in each place the law names.
+     * Each is named where this names a length of the strings it is over.
      */
     @Override
     public Holding inside(LawProposition.Inside<DeclaredArgument> inside) {
         LawProposition.Inside<DeclaredArgument> standing = new LawProposition.Inside<>(
                 inside.inner(), inside.outer(), inside.where(), true);
-        Holding unnamed = new Holding.Unnamed(standing);
         FactSubject within = lengthOf(standing.inner());
         FactSubject around = lengthOf(standing.outer());
-        Holding holds = within == null || around == null ? unnamed
-                : new Holding.AllOf(List.of(unnamed,
-                        new Holding.Stands(LinearForm.difference(within, around), Rel.LE)));
+        List<Holding> ifHolds = within == null || around == null ? List.of()
+                : List.of(new Holding.Stands(LinearForm.difference(within, around), Rel.LE));
+        List<Holding> ifDenied = within == null ? List.of()
+                : List.of(new Holding.Something(LinearForm.atom(within)));
+        Holding holds = new Holding.Unnamed(standing, ifHolds, ifDenied);
         return inside.holds() ? holds : new Holding.Not(holds);
     }
 

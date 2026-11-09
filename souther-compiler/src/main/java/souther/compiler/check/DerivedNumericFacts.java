@@ -771,8 +771,28 @@ final class DerivedNumericFacts {
                     case Boolean holds -> holds ? Shown.YES : Shown.NO;
                 };
             }
-            case Derivation.HoldsSomethingWhere.Holding.Unnamed _ -> Shown.UNSETTLED;
+            // A side whose conditions do not hold is a side it is not on.
+            case Derivation.HoldsSomethingWhere.Holding.Unnamed(
+                    var _, var ifHolds, var ifDenied) -> {
+                if (holdsNowhere(ifHolds, base, terms, done, deriving, copies)) {
+                    yield Shown.NO;
+                }
+                yield holdsNowhere(ifDenied, base, terms, done, deriving, copies)
+                        ? Shown.YES : Shown.UNSETTLED;
+            }
         };
+    }
+
+    /** Whether some one of {@code conditions} is shown not to hold under this reading. */
+    private static boolean holdsNowhere(List<Derivation.HoldsSomethingWhere.Holding> conditions,
+                                        ReadingDomain base, Terms terms, Memo done,
+                                        Deriving deriving, ContextMultiplicity copies) {
+        for (Derivation.HoldsSomethingWhere.Holding condition : conditions) {
+            if (holds(condition, base, terms, done, deriving, copies) == Shown.NO) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
