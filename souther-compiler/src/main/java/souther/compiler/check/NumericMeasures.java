@@ -185,6 +185,10 @@ public final class NumericMeasures {
         return new TakenArguments(read);
     }
 
+    /** The operation that counts what a list holds. */
+    static final ValueName.Stdlib HOW_MANY_A_LIST_HOLDS =
+            ValueName.Stdlib.operation("List", "length");
+
     /**
      * The operation that counts what a value of {@code type} holds, or null where nothing counts it.
      *
@@ -198,7 +202,7 @@ public final class NumericMeasures {
             return ValueName.Stdlib.operation("String", "length");
         }
         if (carried instanceof Type.ListOf) {
-            return ValueName.Stdlib.operation("List", "length");
+            return HOW_MANY_A_LIST_HOLDS;
         }
         if (carried instanceof Type.SetOf) {
             return ValueName.Stdlib.operation("Set", "size");

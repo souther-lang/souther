@@ -367,9 +367,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " grouped"),
             new Held("souther.compiler.check.WhatATotalIsMadeOf.multiplied",
                     "the same, for each factor of one"),
-            new Held("souther.compiler.check.WhatATotalIsMadeOf.lineIn",
-                    "reads the sum, the difference and the product by a written number a closure"
-                            + " answers as a line of what it is handed"),
             new Held("souther.compiler.check.Terms.recipeFor", "the same, for the recipe it names"),
             new Held("souther.compiler.check.NumericMeanings.of",
                     "keys an arithmetic meaning by the operator a library operation computes"),

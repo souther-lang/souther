@@ -203,6 +203,15 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     true),
             new Row("Digit(List.sum(List.reverse(xs)) - List.product(xs))", true),
             new Row("Digit(List.sum(xs ++ []) - List.sum(xs))", false),
+            // The same through a name the list was given.
+            new Row("{ let zs = xs ++ ys\n Digit(List.sum(zs) - List.sum(xs) - List.sum(ys)) }",
+                    false),
+            new Row("{ let zs = xs ++ ys\n Digit(List.sum(List.reverse(zs)) - List.sum(ys ++ xs)) }",
+                    false),
+            new Row("{ let zs = List.filter(n -> n > 2, xs)\n "
+                    + "Digit(List.sum(List.map(n -> n * 2, zs)) - 2 * List.sum(zs)) }", false),
+            new Row("{ let zs = xs ++ ys\n Digit(List.sum(zs) - List.sum(xs) - List.sum(ys) - 1) }",
+                    true),
             new Row("Digit(List.product(xs ++ ys ++ xs) "
                     + "- List.product(xs) * List.product(xs) * List.product(ys))", false),
             new Row("Digit(List.product(xs ++ ys ++ xs) - List.product(xs ++ ys) * List.product(xs))",

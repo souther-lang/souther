@@ -113,7 +113,7 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
     private static final String INPUT_OF_TOTALS = """
             module demo
 
-            data In = { xs: List<Int>, ys: List<Int> }
+            data In = { xs: List<Int>, ys: List<Int>, x: Int }
 
             """;
 
@@ -193,6 +193,8 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
             Map<String, Object> in = new LinkedHashMap<>();
             in.put("xs", ints(random, 4));
             in.put("ys", ys);
+            // A count to take and drop by that is also below nought and past the end.
+            in.put("x", (long) random.nextInt(8) - 2);
             out.add(in);
         }
         return out;
@@ -328,6 +330,9 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
             "List.sum(List.drop(2, xs))",
             "List.sum(List.take(2, ys))",
             "List.sum(List.drop(2, ys))",
+            "List.sum(List.take(x, xs))",
+            "List.sum(List.drop(x, xs))",
+            "List.sum(List.take(x, xs)) + List.sum(List.drop(x, xs))",
             "List.sum(List.map(n -> n * 2, List.filter(n -> n > 2, xs)))",
             "List.sum(List.map(n -> n * 2, List.filter(n -> n <= 2, xs)))",
             "List.length(xs)",
@@ -376,8 +381,15 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
             }
         }
         assertEquals(List.of(), unsound, "proved, and broken by an input");
-        // Rows the discharge proves nothing of say nothing about its readings.
-        assertTrue(proved.size() >= 40, () -> "the totals proved against each other: " + proved);
+        // A row the discharge owes is no claim, so these are what the runs above held it to: one of
+        // each way a list is taken apart.
+        assertTrue(proved.containsAll(List.of(
+                "List.sum(xs) - (List.sum(List.reverse(xs))) - 0",
+                "List.sum(xs) - (List.sum(List.take(2, xs)) + List.sum(List.drop(2, xs))) - 0",
+                "List.sum(xs) - (List.sum(List.take(x, xs)) + List.sum(List.drop(x, xs))) - 0",
+                "List.sum(List.map(n -> n + 1, xs)) - (List.sum(xs)) - 0",
+                "List.product(xs ++ ys) - (List.product(xs) * List.product(ys)) - 0")),
+                () -> "the totals proved against each other: " + proved);
     }
 
     @Test

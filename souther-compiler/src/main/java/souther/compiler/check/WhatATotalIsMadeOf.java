@@ -8,7 +8,6 @@ import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -52,7 +51,6 @@ final class WhatATotalIsMadeOf {
     /** The operation putting the lists of a written list end to end, which an accumulation of
      *  appending does for lists and for strings alike and this reads for lists only. */
     private static final ValueName JOINING_LISTS = ValueName.Stdlib.operation("List", "concat");
-    private static final ValueName HOW_MANY = ValueName.Stdlib.operation("List", "length");
 
     WhatATotalIsMadeOf(Term.Interner interned, BiFunction<Term, FactSubject, FactSubject> named,
                        Function<Term, FactSubject> countNamed) {
@@ -314,18 +312,20 @@ final class WhatATotalIsMadeOf {
             return;
         }
         Term inner = leaf.parts().get(made.source().position());
-        LinearForm<Term> line = lineOf(leaf.parts().get(made.closure().position()));
-        if (line == null) {
+        LinearForm<List<String>> line =
+                leaf.parts().get(made.closure().position()).formAClosureOfOneAnswers();
+        // A form of the element itself: no field of it is read.
+        if (line == null || !Set.of(List.of()).containsAll(line.coefs().keySet())) {
             return;
         }
-        Term parameter = interned.bound(0, 0);
-        ExactRatio slope = line.coefs().getOrDefault(parameter, ExactRatio.ZERO);
+        ExactRatio slope = line.coefs().getOrDefault(List.of(), ExactRatio.ZERO);
         LinearForm<FactSubject> mapped = LinearForm.constant(ExactRatio.ZERO);
         if (!slope.isZero()) {
             mapped = LinearForm.weighing(named.apply(totalTerm(of, inner), like), slope);
         }
         if (!line.constant().isZero()) {
-            FactSubject howMany = countNamed.apply(interned.called(HOW_MANY, List.of(inner)));
+            FactSubject howMany = countNamed.apply(
+                    interned.called(NumericMeasures.HOW_MANY_A_LIST_HOLDS, List.of(inner)));
             out.add(new NumericConstraint(LinearForm.atom(howMany), Rel.GE));
             mapped = mapped.plus(LinearForm.weighing(howMany, line.constant())).orNull();
         }
@@ -334,44 +334,5 @@ final class WhatATotalIsMadeOf {
         if (gap != null) {
             out.add(new NumericConstraint(gap, Rel.EQ));
         }
-    }
-
-    /** What {@code closure} answers as a line of the one thing it is handed, or null where it is
-     *  not one. */
-    private LinearForm<Term> lineOf(Term closure) {
-        if (closure.shape() != Term.Shape.CLOSURE || !Integer.valueOf(1).equals(closure.carried())) {
-            return null;
-        }
-        return lineIn(closure.parts().getFirst(), interned.bound(0, 0));
-    }
-
-    private LinearForm<Term> lineIn(Term body, Term parameter) {
-        if (body.equals(parameter)) {
-            return LinearForm.atom(parameter);
-        }
-        return switch (body.shape()) {
-            case INT -> LinearForm.constant(ExactRatio.of((Long) body.carried()));
-            case DECIMAL -> LinearForm.constant(ExactRatio.of((BigDecimal) body.carried()));
-            case NEG -> {
-                LinearForm<Term> inside = lineIn(body.parts().getFirst(), parameter);
-                yield inside == null ? null : inside.negate();
-            }
-            case OP -> {
-                LinearForm<Term> left = lineIn(body.parts().get(0), parameter);
-                LinearForm<Term> right = lineIn(body.parts().get(1), parameter);
-                if (left == null || right == null) {
-                    yield null;
-                }
-                yield switch ((BinOp) body.carried()) {
-                    case ADD -> left.plus(right).orNull();
-                    case SUB -> left.minus(right).orNull();
-                    case MUL -> left.coefs().isEmpty() ? right.times(left.constant()).orNull()
-                            : right.coefs().isEmpty() ? left.times(right.constant()).orNull()
-                            : null;
-                    default -> null;
-                };
-            }
-            default -> null;
-        };
     }
 }
