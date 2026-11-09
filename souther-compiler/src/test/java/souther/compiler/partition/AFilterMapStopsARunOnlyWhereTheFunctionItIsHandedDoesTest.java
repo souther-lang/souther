@@ -19,9 +19,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * the value it holds, puts no more in than the list walked and stops nothing. A relation of the
  * code of each item and the keys of the prices, reached past it, is read at every value of both
  * ({@code rule_relating_two_values}), as past the {@code List.filter} keeping the same items. A
- * function taking a remainder by the length of the code may stop a run on the code, which ties
- * it, and the relation is not shown reached at every value of either; one taking a remainder by
- * the price stops a run on the price alone, which the relation does not read.
+ * function taking a remainder by the length of the code stops a run only where the prices hold the
+ * code, so a row holding the prices empty gets to the relation beside any code: the code is read
+ * at every value, and the keys of the prices, which an empty table holds none of, are not shown
+ * reached at every value. One taking a remainder by the price stops a run on the price alone,
+ * which the relation does not read.
  */
 class AFilterMapStopsARunOnlyWhereTheFunctionItIsHandedDoesTest {
 
@@ -42,23 +44,30 @@ class AFilterMapStopsARunOnlyWhereTheFunctionItIsHandedDoesTest {
             }
             """;
 
-    /** Each way of keeping the items, by name, and whether it leaves the relation read. */
+    private static final List<String> RELATION = List.of("items[*].code", "prices.known[key]");
+    private static final List<List<String>> READ = List.of(RELATION, List.of());
+    private static final List<List<String>> ONLY_THE_KEYS_STOPPED =
+            List.of(List.of("items[*].code"), List.of("prices.known[key]"));
+
+    /** Each way of keeping the items, by name, and the places it leaves read as the relation of
+     *  two values and those it leaves not shown reached at every value. */
     private static final Map<String, Case> CASES = cases();
 
-    private record Case(String kept, boolean read) {}
+    private record Case(String kept, List<List<String>> expected) {}
 
     private static Map<String, Case> cases() {
         Map<String, Case> out = new LinkedHashMap<>();
         out.put("viaFilter", new Case(
-                "List.filter(i -> Map.containsKey(i.code, prices.known), items)", true));
+                "List.filter(i -> Map.containsKey(i.code, prices.known), items)", READ));
         out.put("viaFilterMap", new Case(
-                "List.filterMap(i -> Map.get(i.code, prices.known), items)", true));
+                "List.filterMap(i -> Map.get(i.code, prices.known), items)", READ));
         out.put("viaFilterMapDividingByTheCode", new Case("List.filterMap(i ->"
                 + " Map.get(i.code, prices.known)"
-                + " |> Option.map(p -> Int.floorMod(p, String.length(i.code))), items)", false));
+                + " |> Option.map(p -> Int.floorMod(p, String.length(i.code))), items)",
+                ONLY_THE_KEYS_STOPPED));
         out.put("viaFilterMapDividingByThePrice", new Case("List.filterMap(i ->"
                 + " Map.get(i.code, prices.known)"
-                + " |> Option.map(p -> Int.floorMod(p, i.price)), items)", true));
+                + " |> Option.map(p -> Int.floorMod(p, i.price)), items)", READ));
         return out;
     }
 
@@ -87,12 +96,10 @@ class AFilterMapStopsARunOnlyWhereTheFunctionItIsHandedDoesTest {
 
     @Test
     void aFilterMapIsReadPastAsAFilterIsAndOneWhoseFunctionMayStopOnTheCodeTiesIt() {
-        List<String> relation = List.of("items[*].code", "prices.known[key]");
         Map<String, List<List<String>>> expected = new LinkedHashMap<>();
         Map<String, List<List<String>>> actual = new LinkedHashMap<>();
         CASES.forEach((name, each) -> {
-            expected.put(name, each.read() ? List.of(relation, List.of())
-                    : List.of(List.of(), relation));
+            expected.put(name, each.expected());
             actual.put(name, List.of(
                     readAs(name, UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
                     readAs(name, UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE)));

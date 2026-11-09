@@ -64,6 +64,7 @@ import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.DateTranslation;
@@ -2672,7 +2673,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     OnAWay.PartsLeftAlone.NONE,
                     taken.demand() instanceof RowDemand.ForTheRun run
                             && run.partedStrings().isPresent() ? run : null,
-                    taken.demand() instanceof RowDemand.OnARemainder on ? on : null));
+                    taken.demand() instanceof RowDemand.OnARemainder on ? on : null,
+                    taken.demand() instanceof RowDemand.ForTheRun run ? run.statement() : null));
         });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
@@ -2738,10 +2740,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                   TermPath elementsOf, RowDemand.AnElementMeets bySome,
                   PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces,
-                  RowDemand.OnARemainder onARemainder) {
+                  RowDemand.OnARemainder onARemainder, Proposition statedOfTheRun) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
+
+        OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
+               TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone,
+               RowDemand.ForTheRun ofThePieces, RowDemand.OnARemainder onARemainder) {
+            this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, ofThePieces,
+                    onARemainder, null);
+        }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf) {
@@ -2756,7 +2765,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
             return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts,
-                    ofThePieces, onARemainder);
+                    ofThePieces, onARemainder, statedOfTheRun);
         }
         /** Whether this says nothing of {@code term} because it is a part of a date this leaves
          *  alone. */
@@ -4224,6 +4233,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * value this relation reads. What it shows of them is kept, since a value that gets there is
      * left as it says.
      *
+     * <p>Asked of each place apart ({@link #mayStopOnValueAt}): a place the stops on the way do
+     * not turn on is left as it is shown, and only the places a stop may turn on are said not to
+     * be shown getting there.
+     *
      * <p>Not asked of a relation that comes out one way wherever a row gets to it, which divides
      * none of its places whichever values get there. And no line is drawn where a run may stop:
      * that is no line of the model, and where it falls is what nothing here says.
@@ -4256,8 +4269,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         ReachWitnesses.Sought sought = witnesses.reached();
         Map<FilingCoordinate, GettingThere> reached = new LinkedHashMap<>();
+        Set<FilingCoordinate> notShown = new LinkedHashSet<>();
         for (FilingCoordinate at : places()) {
             TermPath place = theValueAt(at);
+            if (place != null && !mayStopOnValueAt(place, past, read, region, conditions,
+                    declined, accountedFor, sought.found().isPresent())) {
+                continue;
+            }
+            notShown.add(at);
             List<String> written = sought.found()
                     .flatMap(row -> place == null ? Optional.empty() : row.shownAt(place, read))
                     .map(values -> writtenOut(values, place, read)).orElse(null);
@@ -4270,7 +4289,262 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         sought.runsStopped(), sought.stoppedAt()));
             }
         }
-        return shown.mayStopBefore(places(), reached);
+        return notShown.isEmpty() ? shown : shown.mayStopBefore(notShown, reached);
+    }
+
+    /**
+     * Whether a run working out {@code past} may stop on the way to the relation at some value of
+     * the place {@code place}, where {@code past} is already said to stop a run on what the
+     * relation reads ({@link #mayStopOnWhatItReads}).
+     *
+     * <p>A stop a run works out only inside a closure applied over containers
+     * ({@link Pullback.WorkedOutWhere}) stops no run where every container of one of the sets it
+     * says holds nothing. Such containers are left empty beside every value of {@code place}
+     * ({@link #leftEmptyBesideAnyValueAt}): a row holds any value there, the containers empty,
+     * and no such stop is worked out on it. Every other stop is asked as it is
+     * ({@link #mayStopOnWhatItReads}).
+     */
+    private boolean mayStopOnValueAt(TermPath place, DemandReading.Answered past,
+                                     InputReading read, SearchRegion region,
+                                     List<OnAWay> conditions, Optional<Set<String>> declined,
+                                     Set<TermPath> accountedFor, boolean aRowGotThere) {
+        if (aRowGotThere && theRunDoesNotTurnOn(place, past, read, region, conditions)) {
+            return false;
+        }
+        Set<TermPath> empty = leftEmptyBesideAnyValueAt(place, past, read, region, conditions,
+                declined);
+        if (empty.isEmpty()) {
+            return true;
+        }
+        DemandReading.Answered narrowed = past.withoutWhatIsWorkedOutWhere(where ->
+                where.oneHolds().stream().anyMatch(empty::containsAll));
+        return mayStopOnWhatItReads(narrowed, read, region, conditions, declined, accountedFor);
+    }
+
+    /**
+     * Whether the run to the relation, which a row got to, is the same run with any other value at
+     * {@code place}: nothing it stops on, narrows or decides by reads the place, and no rule names
+     * the place, so the row holds any value of its type there and is still a row of the way. A
+     * place inside a container is asked on a row holding the one element, as the relation is read
+     * at one.
+     *
+     * <p>What a statement of the way reads is known only where every part of it is a place
+     * ({@link PositionsAStatementReads#everyPlaceOf}); one reading anything else may turn on the
+     * place, and nothing is shown. An empty set of positions says nothing of what it turns on.
+     */
+    private boolean theRunDoesNotTurnOn(TermPath place, DemandReading.Answered past,
+                                        InputReading read, SearchRegion region,
+                                        List<OnAWay> conditions) {
+        if (reachedByTheDeclarations(place, read).named() != Named.NOT) {
+            return false;
+        }
+        for (TermPath container : place.containersHoldingIt()) {
+            if (!oneIsHeld(container, read, region)) {
+                return false;
+            }
+        }
+        if (relationTurnsOn(place, past.relationStands())) {
+            return false;
+        }
+        for (OnAWay each : conditions) {
+            Set<TermPath> turnsOn = new LinkedHashSet<>(each.positions());
+            if (each.statedOfTheRun() != null) {
+                Optional<List<TermPath>> stated =
+                        PositionsAStatementReads.everyPlaceItTurnsOn(each.statedOfTheRun());
+                if (stated.isEmpty()) {
+                    return false;
+                }
+                turnsOn.addAll(stated.get());
+            } else if (turnsOn.isEmpty()) {
+                return false;
+            }
+            if (touchesAny(turnsOn, List.of(place))
+                    || turnsOn.stream().anyMatch(place::bearsOn)) {
+                return false;
+            }
+        }
+        return !mayStopOnTheValueAt(place, past);
+    }
+
+    /** Whether a stop, a tie, a statement the operators narrow by, or what the applications before
+     *  work out may turn on the value at {@code place}. */
+    private static boolean mayStopOnTheValueAt(TermPath place, DemandReading.Answered past) {
+        if (past.unsaid()) {
+            return true;
+        }
+        for (DemandReading.Tie tie : past.tied()) {
+            if (stopTurnsOn(place, tie.places(), tie.where())) {
+                return true;
+            }
+        }
+        for (Pullback.StopObligation owed : past.owed()) {
+            if (owed.onWhatNoPlaceHolds() || stopTurnsOn(place, owed.places(), owed.where())) {
+                return true;
+            }
+        }
+        for (TakenConstraint narrowing : past.narrowing()) {
+            if (narrowing.terms().stream().anyMatch(term ->
+                    term.isReadOffAPlaceBearingOn(place))) {
+                return true;
+            }
+        }
+        return past.before().stream().anyMatch(each ->
+                mayStopOnTheValueAt(place, each.workedOut()));
+    }
+
+    /**
+     * Whether a stop on {@code reads}, worked out where {@code where} says, turns on the value at
+     * {@code place}: on a place it reads, or on whether it is worked out at all, which turns on
+     * what the containers it is worked out inside of hold and on what decides that. Where
+     * nothing is said of where it is worked out, on any.
+     */
+    static boolean stopTurnsOn(TermPath place, Set<TermPath> reads,
+                               Pullback.WorkedOutWhere where) {
+        if (!where.known()) {
+            return true;
+        }
+        Set<TermPath> turnsOn = new LinkedHashSet<>(reads);
+        turnsOn.addAll(where.turnsOn());
+        return touchesAny(turnsOn, List.of(place)) || turnsOn.stream().anyMatch(place::bearsOn);
+    }
+
+    /**
+     * Whether the relation being worked out at all turns on the value at {@code place}: a row
+     * that gets to it with one value there may not with another. The containers it is worked out
+     * inside of are not what it turns on here, since a row that gets to it holds the containers of
+     * the place to one entry; what decides whether they hold the entry looked for is.
+     */
+    static boolean relationTurnsOn(TermPath place, Pullback.WorkedOutWhere stands) {
+        return stopTurnsOn(place, Set.of(),
+                new Pullback.WorkedOutWhere(List.of(), stands.decidedBy(), stands.known()));
+    }
+
+    /** Whether nothing a rule says relates {@code one} to {@code other} and neither lies within
+     *  the other: a row may hold any value at one of them whatever it holds at the other. */
+    private static boolean apart(TermPath one, TermPath other, InputReading read) {
+        return !one.bearsOn(other) && !tiedByARule(one, other, read);
+    }
+
+    /**
+     * The containers a row holds no entry in, beside any value at {@code place}, such that the
+     * way is still met. Each is apart from {@code place}, from the containers that hold it, and
+     * from the others ({@link #apart}); the way declined nothing that may name it, and the count
+     * the region holds it at reaches nought ({@link #howManyAreHeld}). The way is met only where
+     * every statement of it is worked out on such a row ({@link #metBy}): a statement that is
+     * not is no statement known to hold with a container emptied, and nothing is emptied.
+     *
+     * <p>Of those the stops of {@code past} name as the ones an operator is worked out inside
+     * ({@link Pullback.WorkedOutWhere}).
+     */
+    private static Set<TermPath> leftEmptyBesideAnyValueAt(TermPath place,
+                                                           DemandReading.Answered past,
+                                                           InputReading read, SearchRegion region,
+                                                           List<OnAWay> conditions,
+                                                           Optional<Set<String>> declined) {
+        // The relation is reached only where a container of each set it stands inside holds an
+        // entry, and a row holding every container of a set empty gets to nothing. Where what the
+        // relation stands inside is not said, no container is emptied.
+        if (!past.relationStands().known()) {
+            return Set.of();
+        }
+        Set<TermPath> theRelationStandsInside = past.relationStands().containers();
+        List<TermPath> pinned = new ArrayList<>(place.containersHoldingIt());
+        pinned.add(place);
+        List<TermPath> empty = new ArrayList<>();
+        for (TermPath container : past.containersAnOperatorIsWorkedOutInside()) {
+            if (theRelationStandsInside.contains(container)
+                    || declined.isEmpty() || declined.get().contains(container.head())
+                    || !pinned.stream().allMatch(at -> apart(container, at, read))
+                    || !empty.stream().allMatch(other -> apart(container, other, read))
+                    || !fewestHeld(howManyAreHeld(container, read, region))
+                            .equals(Optional.of(BigInteger.ZERO))) {
+                continue;
+            }
+            empty.add(container);
+        }
+        if (empty.isEmpty()
+                || !conditions.stream().allMatch(each -> each.statedOfTheRun() != null
+                        && metBy(each.statedOfTheRun(), place, empty, read, region))) {
+            return Set.of();
+        }
+        return Set.copyOf(empty);
+    }
+
+    /** The fewest elements the container {@code held} bounds the count of holds, or nothing
+     *  where that is not worked out. */
+    private static Optional<BigInteger> fewestHeld(NumericDomain.Bounds held) {
+        if (held == null || !held.holdsAValue()) {
+            return Optional.empty();
+        }
+        if (held.min() == null) {
+            return Optional.of(BigInteger.ZERO);
+        }
+        return held.min().at() instanceof Count least
+                && least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
+                        BigInteger up)
+                ? Optional.of(held.min().inclusive() || !least.exactly().isWhole() ? up
+                        : up.add(BigInteger.ONE))
+                : Optional.empty();
+    }
+
+    /**
+     * Whether {@code statement}, a statement of how many elements meet something or how many a
+     * container holds against a number, holds on a row holding the containers of {@code empty}
+     * empty and one element in each container the one {@code place} is at holds — a row the
+     * relation is reached on, beside any value at {@code place}.
+     *
+     * <p>No element of a container meets what asks some element of an empty container to meet
+     * something, so such a count is nought. Every other number is not worked out, and then
+     * nothing is shown.
+     */
+    private static boolean metBy(Proposition statement, TermPath place, List<TermPath> empty,
+                                 InputReading read, SearchRegion region) {
+        if (!(statement instanceof Proposition.Compared(
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, var _, var _))) {
+            return false;
+        }
+        ExactRatio total = form.constant();
+        for (Map.Entry<Quantity, ExactRatio> term : form.coefs().entrySet()) {
+            ExactRatio value = switch (term.getKey()) {
+                case DecisionAtom.OfTheInput(NumericTerm.TakenOf taken, var _)
+                        when taken.takenAs() instanceof TakenAs.HowManyItHolds
+                        && place.containersHoldingIt().contains(taken.position())
+                        && oneIsHeld(taken.position(), read, region) -> ExactRatio.ONE;
+                case Quantity.HowManyMeet(DecisionSubject.AnInput(TermPath _, var _),
+                                          Proposition each)
+                        when noneMeetsInAnEmpty(each, empty) -> ExactRatio.ZERO;
+                default -> null;
+            };
+            if (value == null
+                    || !(term.getValue().times(value) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio product))
+                    || !(total.plus(product) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio sum))) {
+                return false;
+            }
+            total = sum;
+        }
+        return rel.holds(total.signum()) == holds;
+    }
+
+    /** Whether no element meets {@code statement}, because it asks some element of one of the
+     *  empty containers to meet something. */
+    private static boolean noneMeetsInAnEmpty(Proposition statement, List<TermPath> empty) {
+        return switch (statement) {
+            case Proposition.Some(DecisionSubject.AnInput(TermPath at, var _), var _, boolean holds,
+                                  var _) -> holds && empty.contains(at);
+            case Proposition.All all -> all.parts().stream()
+                    .anyMatch(part -> noneMeetsInAnEmpty(part, empty));
+            default -> false;
+        };
+    }
+
+    /** Whether the region leaves the container at {@code container} holding exactly one. */
+    private static boolean oneIsHeld(TermPath container, InputReading read, SearchRegion region) {
+        NumericDomain.Bounds held = howManyAreHeld(container, read, region);
+        return fewestHeld(held).filter(least -> least.compareTo(BigInteger.ONE) <= 0).isPresent()
+                && (held.max() == null || (held.max().at() instanceof Count most
+                        && most.exactly().compareTo(ExactRatio.ONE) >= 0));
     }
 
     /** Each of {@code values}, held at {@code place}, as the model writes a value of its type —

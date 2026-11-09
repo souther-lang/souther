@@ -108,12 +108,13 @@ class ARelationPastAStopIsShownReachedOnlyAtTheValuesARunGotThereAtTest {
 
             behavior everyUnpriced : (deals: List<Deal>, rates: Rates) -> Ok | Missing
             let everyUnpriced (deals, rates) = {
+                let spread = List.map(d -> Int.floorMod(d.amount, String.length(d.currency)), deals)
                 let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
                     |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
                 guard List.length(weighed) == List.length(deals)
                     else Missing { n = List.length(List.filter(
                         d -> Bool.not(Map.containsKey(d.currency, rates.rates)), deals)) }
-                Ok { n = List.length(weighed) }
+                Ok { n = List.length(weighed) + List.length(spread) }
             }
 
             example everyUnpriced
@@ -121,13 +122,14 @@ class ARelationPastAStopIsShownReachedOnlyAtTheValuesARunGotThereAtTest {
 
             behavior choosingUnpriced : (deals: List<Deal>, rates: Rates) -> Ok | Missing
             let choosingUnpriced (deals, rates) = {
+                let spread = List.map(d -> Int.floorMod(d.amount, String.length(d.currency)), deals)
                 let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
                     |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
                 guard List.length(weighed) == List.length(deals)
                     else Missing { n = List.length(List.filter(
                         d -> d.amount > 5 && Bool.not(Map.containsKey(d.currency, rates.rates)),
                         deals)) }
-                Ok { n = List.length(weighed) }
+                Ok { n = List.length(weighed) + List.length(spread) }
             }
 
             example choosingUnpriced
@@ -135,13 +137,14 @@ class ARelationPastAStopIsShownReachedOnlyAtTheValuesARunGotThereAtTest {
 
             behavior firstUnpriced : (deals: List<Deal>, rates: Rates) -> Ok | Missing
             let firstUnpriced (deals, rates) = {
+                let spread = List.map(d -> Int.floorMod(d.amount, String.length(d.currency)), deals)
                 let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
                     |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
                 guard List.length(weighed) == List.length(deals)
                     else Missing { n = List.length(List.filter(
                         d -> Bool.not(Map.containsKey(d.currency, rates.rates)),
                         List.take(1, deals))) }
-                Ok { n = List.length(weighed) }
+                Ok { n = List.length(weighed) + List.length(spread) }
             }
 
             example firstUnpriced

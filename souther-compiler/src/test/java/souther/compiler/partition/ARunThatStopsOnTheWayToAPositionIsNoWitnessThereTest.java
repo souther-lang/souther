@@ -102,7 +102,7 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
         String stop = "a + " + FIRST_SUM + " - d >= 0";
         assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS,
                 "{ let s = a + " + FIRST_SUM + " - d  s >= 0 && " + MEMBERSHIP + " }", "hs[*]"));
-        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+        assertEquals(List.of(READ), reasonsAt(NUMBERS,
                 "List.any(x -> x + " + FIRST_SUM + " - d >= 0 && Bool.not(Set.contains(x, hs)), xs)",
                 "hs[*]"));
         assertEquals(List.of(READ), reasonsAt(NUMBERS,
@@ -119,9 +119,31 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     @Test
     void aSumWorkedOutInAnArmTheMembershipIsReachedWithoutIsAStopTheMembershipIsNotShownPast() {
         String condition = "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || " + MEMBERSHIP;
-        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(PARAMETERS, condition, "hs[*]"));
-        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+        assertEquals(List.of(READ), reasonsAt(PARAMETERS, condition, "hs[*]"));
+        assertEquals(List.of(READ), reasonsAt(NUMBERS,
                 "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0", "b"));
+        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+                "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0", "a"));
+    }
+
+    /**
+     * A stop inside a closure over a container the input holds is worked out only where the
+     * container holds something, so a row holding it empty gets to the membership past no stop
+     * beside any value of {@code a}. Where the membership is itself inside a closure over the
+     * container, a row holding it empty gets to nothing, and {@code a} stays not shown.
+     */
+    @Test
+    void aStopInAClosureOverAContainerIsAvoidedByAnEmptyContainerOnlyWhereTheMembershipDoesNotNeedIt() {
+        String stop = "{ let s = List.map(x -> Int.floorMod(100, a - x - 1), xs)  ";
+        String used = " || List.length(s) < 0 }";
+        assertEquals(List.of(READ), reasonsAt(NUMBERS, stop + MEMBERSHIP + used, "a"));
+        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+                stop + "List.any(x -> x >= 0 && " + MEMBERSHIP + ", xs)" + used, "a"));
+        // A filter of the container holds something only where the container does, so a
+        // closure over it is entered only there, though no position holds what it holds.
+        assertEquals(List.of(READ), reasonsAt(NUMBERS,
+                "{ let s = List.map(x -> Int.floorMod(100, a - x - 1),"
+                        + " List.filter(x -> x > 0, xs))  " + MEMBERSHIP + used, "a"));
     }
 
     /** The same sum as the left arm of a choice, worked out on every run before the membership. */
