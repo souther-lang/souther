@@ -168,6 +168,15 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
                     + List.length(spread) }
             }
 
+            behavior inTheLookup : (deals: List<Deal>, rates: Rates) -> Out
+            let inTheLookup (deals, rates) = {
+                let spread = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(r -> Int.floorMod(r, String.length(d.currency) - 2)), deals)
+                Out { n = List.length(List.filter(
+                    d -> Bool.not(Map.containsKey(d.currency, rates.rates)), deals))
+                    + List.length(spread) }
+            }
+
             behavior ruled : (deals: List<Deal>, rates: Roomy) -> Out
             let ruled (deals, rates) = {
                 let spread = List.map(d -> Int.floorMod(d.amount, String.length(d.currency) - 2),
@@ -266,8 +275,9 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
                 currencyOf(evidence, "alone").get("rates.rates[key]").reason(),
                 currencyOf(evidence, "alone").toString());
 
-        // The stop reads the table as well, a rule names the table, or the way decides by it.
-        for (String behavior : List.of("onTheTable", "ruled", "decided")) {
+        // The stop reads the table as well, is worked out only where the table holds the currency
+        // (which turns on its keys), a rule names the table, or the way decides by it.
+        for (String behavior : List.of("onTheTable", "inTheLookup", "ruled", "decided")) {
             assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
                     currencyOf(evidence, behavior).get("rates.rates[key]").reason(),
                     behavior + " " + currencyOf(evidence, behavior));

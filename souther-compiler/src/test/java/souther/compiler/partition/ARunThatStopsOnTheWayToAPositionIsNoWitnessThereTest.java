@@ -102,7 +102,7 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
         String stop = "a + " + FIRST_SUM + " - d >= 0";
         assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS,
                 "{ let s = a + " + FIRST_SUM + " - d  s >= 0 && " + MEMBERSHIP + " }", "hs[*]"));
-        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+        assertEquals(List.of(READ), reasonsAt(NUMBERS,
                 "List.any(x -> x + " + FIRST_SUM + " - d >= 0 && Bool.not(Set.contains(x, hs)), xs)",
                 "hs[*]"));
         assertEquals(List.of(READ), reasonsAt(NUMBERS,
@@ -119,9 +119,11 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     @Test
     void aSumWorkedOutInAnArmTheMembershipIsReachedWithoutIsAStopTheMembershipIsNotShownPast() {
         String condition = "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || " + MEMBERSHIP;
-        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(PARAMETERS, condition, "hs[*]"));
-        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+        assertEquals(List.of(READ), reasonsAt(PARAMETERS, condition, "hs[*]"));
+        assertEquals(List.of(READ), reasonsAt(NUMBERS,
                 "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0", "b"));
+        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+                "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0", "a"));
     }
 
     /** The same sum as the left arm of a choice, worked out on every run before the membership. */

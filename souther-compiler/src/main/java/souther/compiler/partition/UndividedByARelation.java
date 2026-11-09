@@ -4367,8 +4367,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
         for (DemandReading.Tie tie : past.tied()) {
+            // Whether the operator is worked out at all turns on what the containers it is
+            // worked out inside of hold, so the stop turns on them as well as on its places.
             if (touchesAny(tie.places(), List.of(place))
-                    || tie.places().stream().anyMatch(place::bearsOn)) {
+                    || tie.places().stream().anyMatch(place::bearsOn)
+                    || touchesAny(tie.reachedOnlyWhereHolding(), List.of(place))
+                    || tie.reachedOnlyWhereHolding().stream().anyMatch(place::bearsOn)) {
                 return true;
             }
         }
