@@ -368,6 +368,7 @@ final class Terms {
             out.addAll(knowledgeOf(atom).intrinsic());
         }
         out.addAll(relationsAmongCounts(reached));
+        out.addAll(relationsAmongTotals(reached));
         return out;
     }
 
@@ -1540,6 +1541,105 @@ final class Terms {
         computedBy(atom, new AtomKnowledge.Computation.Reduction(new InductiveBounds.Walk(
                 seed, accumulator, step,
                 StepInputFacts.ofTheElement(elements, element, this, reached(step)))));
+        Map<Term, Integer> pieces = new HashMap<>();
+        if (addPiecesOf(accumulating.container(), at, pieces)) {
+            totalsOfPieces.putIfAbsent(atom,
+                    new TotalOfPieces(accumulating.what().combine(), pieces));
+        }
+    }
+
+    /** What an accumulation is over: the containers whose elements it walks, each as often as
+     *  they are put in the list it was handed. */
+    private record TotalOfPieces(Accumulation.Combine combine, Map<Term, Integer> pieces) {}
+
+    /** The accumulations named so far, by the atom. */
+    private final Map<FactSubject, TotalOfPieces> totalsOfPieces = new HashMap<>();
+
+    /**
+     * Adds to {@code into} the containers whose elements {@code container} holds, each as often as
+     * it holds them: the two sides of an append, and what a call listing every element of an
+     * argument once ({@code List.reverse}, {@code List.sort}) holds of that argument. Answers
+     * whether {@code container} was read all the way down to such containers.
+     */
+    private boolean addPiecesOf(Core container, Denotations at, Map<Term, Integer> into) {
+        ValueStanding.ReadThrough<Denotations> standing = signSides.standing(container, at);
+        Core value = standing.value();
+        Denotations in = standing.at();
+        AnOperationApplied applied = AnOperationApplied.of(value);
+        if (applied != null) {
+            if (applied.putsListsEndToEnd() && applied.args().size() == 2) {
+                return addPiecesOf(applied.args().get(0), in, into)
+                        && addPiecesOf(applied.args().get(1), in, into);
+            }
+            int listed = DefaultBoundOperationFacts.positionOfTheArgumentListedOnce(
+                    applied.operation());
+            if (listed >= 0 && listed < applied.args().size()) {
+                return addPiecesOf(applied.args().get(listed), in, into);
+            }
+        }
+        Term piece = bodyKey(value, in);
+        if (piece == null) {
+            return false;
+        }
+        into.merge(piece, 1, Integer::sum);
+        return true;
+    }
+
+    /**
+     * How the accumulations among {@code atoms} stand to each other where what they walk is the
+     * same elements: one over the elements of another in another order answers what that one does,
+     * and a sum over what two others walk between them is those two added.
+     *
+     * <p>Relations among values and not among runs. Each holds of the numbers the accumulations
+     * answer, wherever they answer them. Whether a run gets as far as answering is not said here:
+     * a library sum holds only its total to an {@code Int} where a sum of two sums holds each of
+     * its operands to one, so the three are not each other's evidence for getting through.
+     */
+    List<NumericConstraint> relationsAmongTotals(Collection<FactSubject> atoms) {
+        List<FactSubject> totals = new ArrayList<>();
+        for (FactSubject atom : atoms) {
+            if (totalsOfPieces.containsKey(atom)) {
+                totals.add(atom);
+            }
+        }
+        List<NumericConstraint> out = new ArrayList<>();
+        for (int i = 0; i < totals.size(); i++) {
+            TotalOfPieces one = totalsOfPieces.get(totals.get(i));
+            for (int j = i + 1; j < totals.size(); j++) {
+                TotalOfPieces other = totalsOfPieces.get(totals.get(j));
+                if (one.combine() == other.combine() && one.pieces().equals(other.pieces())) {
+                    out.add(new NumericConstraint(
+                            LinearForm.difference(totals.get(i), totals.get(j)), Rel.EQ));
+                }
+            }
+            if (one.combine() != Accumulation.Combine.ADD) {
+                continue;
+            }
+            for (int j = 0; j < totals.size(); j++) {
+                for (int k = j; k < totals.size(); k++) {
+                    TotalOfPieces left = totalsOfPieces.get(totals.get(j));
+                    TotalOfPieces right = totalsOfPieces.get(totals.get(k));
+                    if (left.combine() == Accumulation.Combine.ADD
+                            && right.combine() == Accumulation.Combine.ADD
+                            && one.pieces().equals(together(left.pieces(), right.pieces()))) {
+                        LinearForm<FactSubject> parts = LinearForm.atom(totals.get(j))
+                                .plus(LinearForm.atom(totals.get(k))).orNull();
+                        LinearForm<FactSubject> gap = parts == null ? null
+                                : LinearForm.atom(totals.get(i)).minus(parts).orNull();
+                        if (gap != null) {
+                            out.add(new NumericConstraint(gap, Rel.EQ));
+                        }
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    private static Map<Term, Integer> together(Map<Term, Integer> one, Map<Term, Integer> other) {
+        Map<Term, Integer> out = new HashMap<>(one);
+        other.forEach((piece, times) -> out.merge(piece, times, Integer::sum));
+        return out;
     }
 
     /** The value an accumulation starts from, as a number — or null where the domain carries no such

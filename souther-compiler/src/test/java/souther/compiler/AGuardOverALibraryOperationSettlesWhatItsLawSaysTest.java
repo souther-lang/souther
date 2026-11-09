@@ -170,6 +170,24 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             // A fold written out is not the library's sum: the sum gets through where the fold
             // stops at a step, so what is known of one is not known of the other.
             new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n, 0, xs))", true),
+            // A total over the same elements in another order is the same number, and a total over
+            // an append is the two totals added. The library's sum and product hold only their
+            // answer to an Int and not each step, so the relation is among the numbers they answer
+            // and says nothing of a fold, nor of a product of two products (not a line).
+            new Row("Digit(List.sum(List.reverse(xs)) - List.sum(xs))", false),
+            new Row("Digit(List.sum(xs) - List.sum(List.sort(xs)))", false),
+            new Row("Digit(List.sum(ys ++ xs) - List.sum(xs ++ ys))", false),
+            new Row("Digit(List.sum(xs ++ ys) - List.sum(xs) - List.sum(ys))", false),
+            new Row("Digit(List.sum(xs) + List.sum(ys) - List.sum(xs ++ ys))", false),
+            new Row("Digit(List.sum(xs ++ ys) - List.sum(xs) - List.sum(ys) - 1)", true),
+            new Row("Digit(List.sum(xs ++ ys) - List.sum(xs))", true),
+            new Row("Digit(List.sum(xs ++ xs) - List.sum(xs) - List.sum(xs))", false),
+            new Row("Digit(List.sum(xs ++ ys) - List.sum(List.reverse(xs) ++ ys))", false),
+            new Row("Digit(List.sum(xs) - List.sum(ys))", true),
+            new Row("Digit(List.product(List.reverse(xs)) - List.product(xs))", false),
+            new Row("Digit(List.product(ys ++ xs) - List.product(xs ++ ys))", false),
+            new Row("Digit(List.product(xs ++ ys) - List.product(xs) * List.product(ys))", true),
+            new Row("Digit(List.sum(List.reverse(xs)) - List.product(xs))", true),
             // A statement about how many an element holds is a statement over whole numbers like
             // any other: the elements that hold at least one are the elements that hold something,
             // and a sum of how many each holds is no less than the least each holds for as many
