@@ -99,6 +99,19 @@ class TheKeyAndTheMapOfALookupAreWhatTheLibraryDeclaresTest {
         assertFalse(facts.widensAWholeNumber(MAP_GET));
     }
 
+    /** What folds numbers is what the library declares to add up or multiply what a container
+     *  holds, and not what joins lists or strings. */
+    @Test
+    void onlyWhatAddsUpOrMultipliesFoldsNumbers() {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+
+        assertTrue(facts.foldsNumbers(ValueName.Stdlib.operation("List", "sum")));
+        assertTrue(facts.foldsNumbers(ValueName.Stdlib.operation("List", "product")));
+        assertFalse(facts.foldsNumbers(ValueName.Stdlib.operation("List", "concat")));
+        assertFalse(facts.foldsNumbers(ValueName.Stdlib.operation("String", "concat")));
+        assertFalse(facts.foldsNumbers(MAP_GET));
+    }
+
     /** What is said to be the key must be a key of what is said to file it. */
     @Test
     void aKeyThatIsNotAKeyOfTheMapIsRefused() {

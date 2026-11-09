@@ -18,6 +18,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -215,7 +216,7 @@ public final class WhereTheElementsCameFrom {
                     reading);
             for (Reading.Case each : reading.cases(reading.bodyOf(operation),
                     new Reading.Frame(params, Map.of()))) {
-                if (!building.keptWhereItHolds(each.is(), closure)) {
+                if (!building.keptWhereItHolds(each.is(), closure, false)) {
                     return new LibraryProver.Outcome.Open(new Unproved.DoesNotFollow(
                             Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
                 }
@@ -248,7 +249,7 @@ public final class WhereTheElementsCameFrom {
                     reading);
             for (Reading.Case each : reading.cases(reading.bodyOf(operation),
                     new Reading.Frame(params, Map.of()))) {
-                if (!building.keptEntriesWhereItHolds(each.is(), closure)) {
+                if (!building.keptWhereItHolds(each.is(), closure, true)) {
                     return new LibraryProver.Outcome.Open(new Unproved.DoesNotFollow(
                             Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
                 }
@@ -467,33 +468,47 @@ public final class WhereTheElementsCameFrom {
         }
 
         /**
-         * Whether {@code run} is a walk over the source's elements from the first, started from
-         * nothing, every way of every step of which puts the element it is handed in where the
-         * closure at {@code closure} holds of it, and carries what it has where it does not.
+         * Whether {@code run} is a walk over what the source holds from the first, started from
+         * nothing, every way of every step of which puts what it is handed in where the closure at
+         * {@code closure} holds of it, and carries what it has where it does not.
          *
-         * <p>What is put in and how is read as a walk's step reads it ({@link #putIn}), so a list
-         * put end to end and a set or a map put by what it holds are one statement.
+         * <p>What the source holds is its elements, which the closure is handed one at a time, or,
+         * where {@code entries}, its entries, which it is handed as the key and the value on the
+         * parameters the library says they arrive on. What is put in is read as a walk's step reads
+         * it ({@link #putIn}), so a list put end to end and a set or a map put by what it holds are
+         * one statement over the elements. An entry is put whole: that key, filed with that value,
+         * so a step that files the value under another key, or another value under the key, keeps
+         * no entry of the source, though it keeps as many and each value is one of the source's.
          */
-        boolean keptWhereItHolds(Value run, int closure) {
+        boolean keptWhereItHolds(Value run, int closure, boolean entries) {
             if (!(run instanceof Value.Made made) || !made.operation().equals(walk.operation())) {
                 return false;
             }
             List<Value> args = made.args();
             if (!(args.get(walk.index()) instanceof Value.Whole(long from)) || from != 0
                     || !empty(args.get(walk.seed()))
-                    || elementsOf(args.get(walk.container())) == null) {
+                    || !listsWhatTheSourceHolds(args.get(walk.container()), entries)) {
                 return false;
             }
             Value carried = new Value.Fresh(1, "what the walk carries");
-            Value next = new Value.Fresh(3, "the element the walk is handed next");
+            Value next = new Value.Fresh(3, "what the walk is handed next");
             List<Value> handed = new ArrayList<>(List.of(next, next));
             handed.set(walk.accumulator(), carried);
             handed.set(walk.element(), next);
+            Value key = Reading.componentOf(next, 0);
+            Value value = Reading.componentOf(next, 1);
+            List<Value> toTheClosure = entries ? keyAndValueAsTheClosureTakesThem(key, value)
+                    : List.of(next);
+            if (toTheClosure == null) {
+                return false;
+            }
             LawProposition<Value> holds = reading.side(
-                    new Value.AppliedTo(new Value.Argument(closure), List.of(next)),
+                    new Value.AppliedTo(new Value.Argument(closure), toTheClosure),
                     AnswerAspect.TRUTH);
             for (Reading.Case each : reading.applied(args.get(walk.step()), handed)) {
-                boolean kept = each.when().equals(holds) ? next.equals(putIn(each.is(), carried))
+                boolean put = entries ? putsTheEntry(each.is(), carried, key, value)
+                        : next.equals(putIn(each.is(), carried));
+                boolean kept = each.when().equals(holds) ? put
                         : each.when().equals(holds.denied()) && each.is().equals(carried);
                 if (!kept) {
                     return false;
@@ -502,50 +517,33 @@ public final class WhereTheElementsCameFrom {
             return true;
         }
 
-        /**
-         * Whether {@code run} is a walk over the source's entries from the first, started from
-         * nothing, every way of every step of which puts the entry it is handed — that key, filed
-         * with that value — where the closure at {@code closure} holds of the key and the value,
-         * and carries what it has where it does not.
-         *
-         * <p>The entry is put whole: a step that puts the value under another key, or another value
-         * under the key, keeps no entry of the source, though it keeps as many and each value is
-         * one of the source's.
-         */
-        boolean keptEntriesWhereItHolds(Value run, int closure) {
-            if (!(run instanceof Value.Made made) || !made.operation().equals(walk.operation())) {
-                return false;
+        /** Whether {@code list} is the source's elements, or where {@code entries} its entries. */
+        private boolean listsWhatTheSourceHolds(Value list, boolean entries) {
+            if (!entries) {
+                return elementsOf(list) != null;
             }
-            List<Value> args = made.args();
-            if (!(args.get(walk.index()) instanceof Value.Whole(long from)) || from != 0
-                    || !empty(args.get(walk.seed()))
-                    || !(args.get(walk.container()) instanceof Value.Made(
-                            ValueName.Stdlib.Operation lists, List<Value> listed))
+            if (!(list instanceof Value.Made(ValueName.Stdlib.Operation lists, List<Value> listed))
                     || !(library.listing(lists) instanceof AppliedClosures.Listing.EveryEntryOf(
                             int argument))
                     || !listed.get(argument).equals(source)) {
                 return false;
             }
             reading.took(new Proof.Used(lists, Proof.Taken.WHAT_IT_LISTS));
-            Value carried = new Value.Fresh(1, "what the walk carries");
-            Value next = new Value.Fresh(3, "the entry the walk is handed next");
-            List<Value> handed = new ArrayList<>(List.of(next, next));
-            handed.set(walk.accumulator(), carried);
-            handed.set(walk.element(), next);
-            Value key = Reading.componentOf(next, 0);
-            Value value = Reading.componentOf(next, 1);
-            LawProposition<Value> holds = reading.side(
-                    new Value.AppliedTo(new Value.Argument(closure), List.of(key, value)),
-                    AnswerAspect.TRUTH);
-            for (Reading.Case each : reading.applied(args.get(walk.step()), handed)) {
-                boolean kept = each.when().equals(holds)
-                        ? putsTheEntry(each.is(), carried, key, value)
-                        : each.when().equals(holds.denied()) && each.is().equals(carried);
-                if (!kept) {
-                    return false;
-                }
-            }
             return true;
+        }
+
+        /** {@code key} and {@code value} on the parameters of the closure this operation is handed
+         *  that they arrive on, or null where the library says none is a key's. */
+        private List<Value> keyAndValueAsTheClosureTakesThem(Value key, Value value) {
+            ClosurePositions positions = library.positions(operation);
+            if (positions == null || positions.keyParam() == Combinator.NO_KEY
+                    || positions.elementParam() < 0) {
+                return null;
+            }
+            Value[] taken = new Value[Math.max(positions.keyParam(), positions.elementParam()) + 1];
+            taken[positions.keyParam()] = key;
+            taken[positions.elementParam()] = value;
+            return Arrays.asList(taken);
         }
 
         /** Whether {@code after} is {@code before} with {@code value} put in under {@code key},

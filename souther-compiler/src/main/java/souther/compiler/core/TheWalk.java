@@ -21,14 +21,11 @@ import souther.compiler.types.ValueName;
  * @param element     the step's parameter the element at the index arrives on
  * @param reads       what the walk reads the element at its index with, handed the index first and
  *                    the list second
+ * @param arguments   how many arguments the walk is handed
  */
 public record TheWalk(ValueName.Stdlib.Operation operation, int step, int seed, int container,
-                      int index, int accumulator, int element, ValueName.Stdlib.Operation reads) {
-
-    /** How many arguments the walk is handed: its step, its seed, its list and its index. */
-    public int arguments() {
-        return Math.max(Math.max(step, seed), Math.max(container, index)) + 1;
-    }
+                      int index, int accumulator, int element, ValueName.Stdlib.Operation reads,
+                      int arguments) {
 
     /**
      * Whether the walk takes its arguments where an output's loop reads them — step, seed, list,

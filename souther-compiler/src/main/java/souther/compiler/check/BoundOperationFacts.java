@@ -1205,6 +1205,17 @@ public final class BoundOperationFacts {
     }
 
     /**
+     * Whether {@code operation} adds up or multiplies what a container holds, as the library
+     * declares ({@link Accumulation.Combine}): it folds numbers, where joining lists or strings
+     * folds something else.
+     */
+    public boolean foldsNumbers(ValueName operation) {
+        Accumulation how = accumulation(operation);
+        return how != null && (how.combine() == Accumulation.Combine.ADD
+                || how.combine() == Accumulation.Combine.MULTIPLY);
+    }
+
+    /**
      * The operation that adds up what a container holds from nought, as the library declares
      * ({@link Accumulation.Combine#ADD}): the one a total of numbers over the elements of a list
      * is filed as.
