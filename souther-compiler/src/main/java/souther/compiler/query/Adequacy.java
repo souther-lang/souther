@@ -2993,6 +2993,11 @@ public final class Adequacy {
                                 Set<ConditionOutcomeSite> reaching) {
                             return db.ask(new WitnessOfAReach(name, behavior, reaching)).value();
                         }
+
+                        @Override
+                        public BehaviorInputs.SameValue sameValue() {
+                            return ExampleExecutions.sameValue(db);
+                        }
                     });
             return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
                     read.rulesReachedAt()));

@@ -219,6 +219,8 @@ public sealed interface LinearQuantity extends BorderQuantity
 
     @Override
     default void lookAt(Observation row) {
-        read(row);
+        if (row.firstLookAt(this)) {
+            read(row);
+        }
     }
 }

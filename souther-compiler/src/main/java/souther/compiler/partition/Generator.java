@@ -837,6 +837,7 @@ public final class Generator {
                              TOTALS_A_COUNT_IS_TRIED_AT, RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO,
                              VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED, COUNTS_OF_KEYS_TRIED,
                              VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
+                             ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
                              // The cases past it were never planned under, so what the search came

@@ -620,6 +620,14 @@ public final class AnswerAsAnInput {
                 yield container == null || each == null ? null
                         : new Quantity.HowManyMeet(container, each);
             }
+            case Quantity.HowManyMeetAcross count -> {
+                DecisionSubject container = subject(count.container());
+                DecisionSubject inner = subject(count.inner());
+                Proposition each = proposition(count.ofTheElement());
+                yield container == null || inner == null || each == null
+                        || !Quantity.HowManyMeetAcross.insideEach(container, inner) ? null
+                        : new Quantity.HowManyMeetAcross(container, inner, each);
+            }
             case Quantity.HowManyHold held -> {
                 List<Proposition> each = propositions(held.each());
                 yield each == null ? null : new Quantity.HowManyHold(each);

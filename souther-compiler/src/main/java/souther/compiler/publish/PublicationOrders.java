@@ -338,6 +338,7 @@ public final class PublicationOrders {
                     CompositionBudget.VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED,
                     CompositionBudget.COUNTS_OF_KEYS_TRIED,
                     CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
+                    CompositionBudget.ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
                     CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,

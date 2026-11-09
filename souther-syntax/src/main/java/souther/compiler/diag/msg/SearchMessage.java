@@ -469,6 +469,8 @@ public sealed interface SearchMessage extends Message {
 
     record ValuesAnElementIsChosenAmong() implements SearchMessage, Prose {}
 
+    record ElementsAnInnerContainerIsListedWith() implements SearchMessage, Prose {}
+
     record WaysDownToATotalTried() implements SearchMessage, Prose {}
 
     record WaysUnderTheCasesTried() implements SearchMessage, Prose {}

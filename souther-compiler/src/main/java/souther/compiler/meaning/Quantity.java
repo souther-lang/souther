@@ -45,7 +45,8 @@ import java.util.function.Predicate;
  * and only the second leaves a comparison over it with nothing to say.
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
-        Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent,
+        Quantity.HowManyMeet, Quantity.HowManyMeetAcross, Quantity.HowManyHold,
+        Quantity.HowManyDifferent,
         Quantity.HowManyDifferentMeet, Quantity.HowManyDifferentBelow,
         Quantity.HowManyDifferentAcross, Quantity.SumOver, Quantity.TheKeptTotal,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
@@ -113,6 +114,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 case SumOver sum -> isIn(sum.ofTheElement());
                 case HowManyHold held -> held.each().stream().anyMatch(this::isIn);
                 case HowManyMeet count -> isIn(count.ofTheElement());
+                case HowManyMeetAcross count -> isIn(count.ofTheElement());
                 case HowManyDifferentMeet different -> isIn(different.meeting().statement());
             };
         }
@@ -1490,6 +1492,19 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         }
 
         /**
+         * What {@code number}, a number of each element of the container at {@code container},
+         * adds up to over all of them: where it is how many elements of a container inside each
+         * element meet a statement, the elements of every one of those containers that meet it
+         * ({@link HowManyMeetAcross}); the sum of it otherwise.
+         */
+        private static Quantity summed(DecisionSubject container, Quantity number) {
+            return number instanceof HowManyMeet(DecisionSubject inner, Proposition meeting)
+                    && HowManyMeetAcross.insideEach(container, inner)
+                    ? new HowManyMeetAcross(container, inner, meeting)
+                    : new SumOver(container, number);
+        }
+
+        /**
          * What {@code each}, a form over numbers of each element of the container at
          * {@code container}, adds up to over all of them: each number's weight on the sum of that
          * number, and the constant on {@code size}, how many elements there are — or null where
@@ -1498,7 +1513,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         public static LinearForm<Quantity> over(DecisionSubject container,
                                                 LinearForm<Quantity> each, Quantity size) {
             Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
-            each.coefs().forEach((number, by) -> coefs.put(new SumOver(container, number), by));
+            each.coefs().forEach((number, by) -> coefs.put(summed(container, number), by));
             if (each.constant().signum() != 0) {
                 if (size == null) {
                     return null;
@@ -1715,6 +1730,73 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         @Override
         public Spelling spelling() {
             return Spelling.of("#" + container + " [", ofTheElement.spelling(), Spelling.CLOSE);
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * How many elements meet {@code ofTheElement} over the containers at {@code inner}, one inside
+     * each element of the container at {@code container}, every element of all of them put end to
+     * end: what the lists of a list hold between them that meet it.
+     *
+     * <p>Beside {@link HowManyMeet} of {@code inner} and not the same number: that one is of the
+     * elements of the one container a row chose among the occurrences, and this is of every
+     * occurrence's. The sum of the first over the elements of {@code container}
+     * ({@link SumOver}) is this, which is why a sum so written is read as this.
+     *
+     * @param container where the elements holding the containers stand
+     * @param inner     the container inside each of those, one container further in
+     */
+    record HowManyMeetAcross(DecisionSubject container, DecisionSubject inner,
+                             Proposition ofTheElement) implements Quantity {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
+        public HowManyMeetAcross {
+            if (container == null || inner == null || ofTheElement == null) {
+                throw new IllegalArgumentException("a count is of the elements of the containers"
+                        + " inside the elements of a container");
+            }
+            if (!insideEach(container, inner)) {
+                throw new IllegalArgumentException(inner + " is no container inside each element"
+                        + " of " + container);
+            }
+        }
+
+        /** Whether {@code inner} is a container inside each element of {@code container}, one
+         *  container further in. */
+        public static boolean insideEach(DecisionSubject container, DecisionSubject inner) {
+            return container instanceof DecisionSubject.AnInput
+                    && inner instanceof DecisionSubject.AnInput
+                    && inner.isAtOrUnder(container.element())
+                    && inner.howManyContainersHoldIt() == container.howManyContainersHoldIt() + 1;
+        }
+
+        /**
+         * The count of the elements of the one container a row chose, which is what is counted of
+         * each occurrence and what one element meeting the statement is asked.
+         */
+        public HowManyMeet elementsMeetingIt() {
+            return new HowManyMeet(inner, ofTheElement);
+        }
+
+        @Override
+        public String spelled() {
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("#across " + container + " " + inner + " [",
+                    ofTheElement.spelling(), Spelling.CLOSE);
         }
 
         @Override

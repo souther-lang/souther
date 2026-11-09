@@ -406,6 +406,8 @@ public final class Conclusion {
     private long partsIn(Quantity quantity) {
         return switch (quantity) {
             case Quantity.HowManyMeet(DecisionSubject _, Proposition each) -> partsIn(each);
+            case Quantity.HowManyMeetAcross(DecisionSubject _, DecisionSubject _,
+                                            Proposition each) -> partsIn(each);
             case Quantity.HowManyDifferentMeet different ->
                     partsIn(different.meeting().statement());
             case Quantity.HowManyHold(List<Proposition> each) -> partsIn(each);

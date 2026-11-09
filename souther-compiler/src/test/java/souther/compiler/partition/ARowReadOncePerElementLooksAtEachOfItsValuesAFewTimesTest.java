@@ -35,8 +35,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -222,6 +225,62 @@ class ARowReadOncePerElementLooksAtEachOfItsValuesAFewTimesTest {
             }
             assertEquals(readFirst, walk.answersRead(), () -> "over " + length + " rows");
         }
+    }
+
+    /**
+     * The walk that finds which containers a row has to choose an element of is handed a quantity
+     * by every statement that holds it, and looks at it once: asking a row for the same positions
+     * again finds nothing the first asking did not. Two equal quantities are one, whichever of
+     * them is handed over.
+     */
+    @Test
+    void aQuantityHeldByManyStatementsIsLookedAtOnceByTheWalkFindingTheContainers() {
+        LinearQuantity one = quantityOverTheRowsKeys();
+        LinearQuantity equalToIt = quantityOverTheRowsKeys();
+        assertEquals(one, equalToIt);
+        assertNotSame(one, equalToIt, "two objects, so that what is spared is not by identity");
+        List<ObservedValue> rows = new ArrayList<>();
+        for (int each = 0; each < 8; each++) {
+            rows.add(new ObservedValue.Constructed(sym("Row"), Map.of(
+                    "sku", new ObservedValue.Text("sku" + each % 5),
+                    "qty", new ObservedValue.Integer(each))));
+        }
+        BehaviorInputs where = new BehaviorInputs(List.of("rows"),
+                List.of(new Type.ListOf(Type.ref(sym("Row")))), RuleReadings.ofSource(MODEL),
+                POLICY);
+        StandingAtAPoint.RowWalk walk = new StandingAtAPoint.RowWalk(where,
+                new ObservedInputs(List.of(new ObservedValue.Sequence(rows)),
+                        new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered()),
+                Set.of());
+        StandingAtAPoint.DiscoveringRow discovering = new StandingAtAPoint.DiscoveringRow(walk);
+
+        one.lookAt(discovering);
+        assertEquals(List.of(ROWS), List.copyOf(discovering.containers().keySet()),
+                "the first asking found the container");
+
+        assertFalse(discovering.firstLookAt(one), "the same quantity again");
+        assertFalse(discovering.firstLookAt(equalToIt), "an equal quantity, which is another object");
+        assertTrue(discovering.firstLookAt(quantityOverTheRowsQty()),
+                "a quantity that is another one is looked at");
+        assertTrue(new StandingAtAPoint.DiscoveringRow(walk).firstLookAt(one),
+                "and a walk that has not looked at it is asked for it");
+    }
+
+    /** A quantity over the qty of the rows. */
+    private static LinearQuantity quantityOverTheRowsQty() {
+        NumericTerm.ValueOf qty = new NumericTerm.ValueOf(ROWS.element().then("qty"));
+        return form(Map.of(qty, TermOrdersFixtures.itself(qty, WHOLE)));
+    }
+
+    /** A quantity over how often a sku occurs and the least qty under a sku. */
+    private static LinearQuantity quantityOverTheRowsKeys() {
+        NumericTerm.Multiplicity often = NumericTerm.Multiplicity.of(ROWS, SKU);
+        NumericTerm.ExtremeOfItsKey least = NumericTerm.ExtremeOfItsKey.of(ROWS, SKU,
+                ROWS.element().then("qty"), Extreme.LEAST);
+        return form(Map.of(
+                often, TermOrdersFixtures.orders(often, Carrier.TEXT, WHOLE),
+                least, TermOrdersFixtures.computed(least, WHOLE, WHOLE,
+                        Map.of(least.keyField(), Carrier.TEXT))));
     }
 
     /** A sum of each of {@code on}'s terms, each read on its own orders. */

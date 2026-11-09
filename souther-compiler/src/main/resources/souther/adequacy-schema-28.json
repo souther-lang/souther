@@ -139,6 +139,7 @@
         "values_an_element_is_moved_to_tried",
         "counts_of_keys_tried",
         "values_an_element_is_chosen_among",
+        "elements_an_inner_container_is_listed_with",
         "ways_down_to_a_total_tried",
         "ways_under_the_cases_tried",
         "cases_a_rule_above_is_planned_under",

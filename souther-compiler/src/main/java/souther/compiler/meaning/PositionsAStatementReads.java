@@ -264,6 +264,9 @@ public final class PositionsAStatementReads {
             case Quantity.IsAmongThePieces among -> reads(among.value()) && reads(among.string());
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     reads(counted) && reads(each);
+            case Quantity.HowManyMeetAcross(DecisionSubject counted, DecisionSubject inner,
+                                            Proposition each) ->
+                    reads(counted) && reads(inner) && reads(each);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .allMatch(this::reads);
             case Quantity.HowManyDifferent(DecisionSubject counted, Quantity.TheValue each) ->

@@ -349,7 +349,7 @@ final class TermRealizations {
         // a statement they meet together, a value some element stands at beside a number of the
         // container as a whole — is composed element by element, and nothing about one place
         // writes it.
-        TermPath byElement = composedElementByElement(counts, together, numbers);
+        TermPath byElement = composedElementByElement(counts, together, related, numbers);
         if (byElement != null) {
             return elementByElement(targets, byElement, counts, together, related, numbers);
         }
@@ -728,10 +728,13 @@ final class TermRealizations {
     }
 
     /**
-     * The container whose elements {@code counts}, {@code together} and {@code numbers} ask
-     * something of one by one, or null where they ask nothing of any one element.
+     * The container whose elements {@code counts}, {@code together}, {@code related} and
+     * {@code numbers} ask something of one by one, or null where they ask nothing of any one
+     * element.
      *
-     * <p>A count and a statement the elements meet together are of the container they name. A
+     * <p>A count, a relation among counts and a statement the elements meet together are of the
+     * container they name. A relation is asked beside the counts it weighs, and where nothing asks
+     * those the composer says so ({@link CardinalityComposer#compose}). A
      * value asked at a place inside an element is asked of some element where a number of that
      * container as a whole is asked beside it: the element is one of what the container is made
      * of, and the container is composed holding it. Without such a number the value is a place of
@@ -740,12 +743,16 @@ final class TermRealizations {
     private static TermPath composedElementByElement(
             List<RealizationTarget.ACount> counts,
             List<RealizationTarget.ElementsMeetingTogether> together,
+            List<RealizationTarget.CountsRelated> related,
             List<RealizationTarget.OfANumber> numbers) {
         if (!counts.isEmpty()) {
             return counts.getFirst().count().container();
         }
         if (!together.isEmpty()) {
             return together.getFirst().container();
+        }
+        if (!related.isEmpty()) {
+            return related.getFirst().relation().container();
         }
         for (RealizationTarget.OfANumber whole : numbers) {
             TermPath container = NumbersOfTheWhole.containerOf(whole.term());
@@ -1402,7 +1409,8 @@ final class TermRealizations {
                 implements JointBuilder {
 
             public ElementByElement {
-                if (counts.isEmpty() && together.isEmpty() && standingAt.isEmpty()) {
+                if (counts.isEmpty() && together.isEmpty() && related.isEmpty()
+                        && standingAt.isEmpty()) {
                     throw new IllegalArgumentException("a container composed element by element"
                             + " is asked something of its elements");
                 }
