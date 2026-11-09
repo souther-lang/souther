@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.function.BiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -91,6 +92,76 @@ final class TheCommitHook {
         }
         assertTrue(failures.isEmpty(), "Checkstyle failed: " + failures);
         return found;
+    }
+
+    /** How the hook stands to Error Prone over one source. */
+    enum Standing {
+        /** Error Prone refuses something in it, and the hook refuses it as many times. */
+        REFUSED_BY_BOTH,
+        /** Neither refuses anything in it. */
+        ACCEPTED_BY_BOTH,
+        /** Error Prone refuses something in it and the hook fewer times, because what Error Prone
+         *  reads there is what a parser cannot. The hook may refuse less and never more. */
+        HOOK_STANDS_ASIDE
+    }
+
+    /** A source, and how the hook stands to Error Prone over it. The counts are not written: Error
+     *  Prone's is what it gives when it is run over the source, and the hook's is held to it. */
+    record Filed(String name, String text, Standing standing) {
+
+        static Filed refusedByBoth(String name, String text) {
+            return new Filed(name, text, Standing.REFUSED_BY_BOTH);
+        }
+
+        static Filed acceptedByBoth(String name, String text) {
+            return new Filed(name, text, Standing.ACCEPTED_BY_BOTH);
+        }
+
+        static Filed hookStandsAside(String name, String text) {
+            return new Filed(name, text, Standing.HOOK_STANDS_ASIDE);
+        }
+    }
+
+    /**
+     * Where the hook's rule {@code hookRule} and Error Prone's {@code errorProneCheck} stand otherwise
+     * than the case says, over the same sources.
+     *
+     * <p>Each source is filed as {@code asFile} makes it, numbered so that the files do not share a
+     * class name, and both are run over all of them at once. Whatever the case, the hook refuses no
+     * more than Error Prone does: a hook that refuses more than CI stops a commit CI accepts. Where
+     * the case says they refuse alike it is held to that count, and a case that says Error Prone
+     * refuses nothing is held to that as well, so a case that has stopped being about a refusal is
+     * found and is not read as the two agreeing about nothing.
+     */
+    static List<String> disagreements(Path scratch, String errorProneCheck, String hookRule,
+                                      List<Filed> cases, BiFunction<Integer, String, String> asFile)
+            throws Exception {
+        Map<Path, Filed> filed = new LinkedHashMap<>();
+        for (int i = 0; i < cases.size(); i++) {
+            Path file = scratch.resolve("Fixture" + i + ".java");
+            Files.writeString(file, asFile.apply(i, cases.get(i).text()));
+            filed.put(file, cases.get(i));
+        }
+        List<Path> files = List.copyOf(filed.keySet());
+        Map<Path, Integer> byErrorProne = errorProneRefusals(errorProneCheck, scratch, files);
+        Map<Path, Integer> byTheHook = refusalsBy(hookRule, files);
+
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<Path, Filed> each : filed.entrySet()) {
+            int errorProne = byErrorProne.getOrDefault(each.getKey(), 0);
+            int hook = byTheHook.getOrDefault(each.getKey(), 0);
+            String said = each.getValue().name() + ": Error Prone refused " + errorProne
+                    + " and the hook " + hook;
+            boolean holds = hook <= errorProne && switch (each.getValue().standing()) {
+                case REFUSED_BY_BOTH -> errorProne > 0 && hook == errorProne;
+                case ACCEPTED_BY_BOTH -> errorProne == 0;
+                case HOOK_STANDS_ASIDE -> hook < errorProne;
+            };
+            if (!holds) {
+                out.add(said + ", and the case says " + each.getValue().standing());
+            }
+        }
+        return out;
     }
 
     /** How many times the hook's rule named {@code rule} refuses something in each of {@code files}. */

@@ -3,15 +3,14 @@ package souther.architecture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Files;
+import souther.architecture.TheCommitHook.Filed;
+
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static souther.architecture.TheCommitHook.Filed.acceptedByBoth;
+import static souther.architecture.TheCommitHook.Filed.refusedByBoth;
 
 /**
  * What the pre-commit hook says about a local that nothing reads, held against what Error Prone's
@@ -21,28 +20,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * stand when its name is {@code ignored}, begins with {@code unused} or is {@code _}, and it reads
  * a binding only where {@code x instanceof T name} introduces it, not where a switch case or a
  * record pattern does. A rule that read them would stop a commit CI accepts, so the hook's rule
- * stands aside for them, and each of those edges is a case here with the count Error Prone gives
+ * stands aside for them, and each of those edges is a case here, held to what Error Prone gives
  * when it is run over it ({@link TheCommitHook}).
  */
 class TheCommitHookRefusesAnUnusedLocalOnlyWhereErrorProneDoesTest {
 
-    /** A source and how many times each of the two refuses something in it. */
-    private record Case(String name, String members, int errorProne, int hook) {
-    }
-
-    private static Case refusedByBoth(String name, String members) {
-        return new Case(name, members, 1, 1);
-    }
-
-    private static Case acceptedByBoth(String name, String members) {
-        return new Case(name, members, 0, 0);
-    }
-
-    private static final List<Case> CASES = List.of(
+    /** Each case is the members of a class. */
+    private static final List<Filed> CASES = List.of(
             // What nothing reads.
             refusedByBoth("a local that is never read",
                     "void f() { int foo = 1; }"),
-            new Case("two of them", "void f() { int a = 1; int b = 2; }", 2, 2),
+            refusedByBoth("two of them", "void f() { int a = 1; int b = 2; }"),
             refusedByBoth("a variable of a for-each loop",
                     "void f(List<String> xs) { for (String y : xs) { } }"),
             refusedByBoth("a local that is only assigned",
@@ -110,40 +98,9 @@ class TheCommitHookRefusesAnUnusedLocalOnlyWhereErrorProneDoesTest {
     }
 
     @Test
-    void whatTheHookRefusesIsNeverMoreThanErrorProneRefuses() {
-        for (Case each : CASES) {
-            assertTrue(each.hook() <= each.errorProne(), each.name()
-                    + ": a hook that refuses more than CI stops a commit CI accepts");
-        }
-    }
-
-    @Test
-    void eachCaseIsRefusedAsManyTimesAsErrorProneAndTheHookEachSay(@TempDir Path dir)
-            throws Exception {
-        Map<Path, Case> filed = new LinkedHashMap<>();
-        for (int i = 0; i < CASES.size(); i++) {
-            Case each = CASES.get(i);
-            Path file = dir.resolve("Fixture" + i + ".java");
-            Files.writeString(file, "import java.util.*;\n\n"
-                    + inClass(each.members()).replace("Fixture", "Fixture" + i));
-            filed.put(file, each);
-        }
-        List<Path> files = List.copyOf(filed.keySet());
-
-        Map<Path, Integer> byErrorProne = TheCommitHook.errorProneRefusals("UnusedVariable", dir, files);
-        Map<Path, Integer> byTheHook = TheCommitHook.refusalsBy("UnusedLocalVariable", files);
-
-        List<String> disagreements = new ArrayList<>();
-        for (Map.Entry<Path, Case> each : filed.entrySet()) {
-            Case expected = each.getValue();
-            int errorProne = byErrorProne.getOrDefault(each.getKey(), 0);
-            int hook = byTheHook.getOrDefault(each.getKey(), 0);
-            if (errorProne != expected.errorProne() || hook != expected.hook()) {
-                disagreements.add(expected.name() + ": Error Prone refused " + errorProne
-                        + " (written " + expected.errorProne() + "), the hook refused " + hook
-                        + " (written " + expected.hook() + ")");
-            }
-        }
-        assertEquals(List.of(), disagreements);
+    void theHookStandsToErrorProneAsEachCaseSays(@TempDir Path dir) throws Exception {
+        assertEquals(List.of(), TheCommitHook.disagreements(dir, "UnusedVariable",
+                "UnusedLocalVariable", CASES, (i, members) -> "import java.util.*;\n\n"
+                        + inClass(members).replace("Fixture", "Fixture" + i)));
     }
 }
