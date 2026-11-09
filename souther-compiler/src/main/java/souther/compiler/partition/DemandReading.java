@@ -999,15 +999,13 @@ final class DemandReading {
      * @param before    what the applications a run walking one element does not make work out
      *                  ({@link PriorApplications}): until a reader shows a run with none, as much
      *                  the run's as the above
-     * @param relationNeedsOneOf what the closures the relation stands inside add to what a run
-     *                  needs to get to it: for each set, one of its containers holds an entry.
-     *                  Nothing for what states nothing of where the relation stands, and empty
-     *                  where it stands somewhere that is not said
+     * @param relationStands where the relation is worked out, as the closures it stands inside
+     *                  say: what a run needs to get to it. Nowhere in particular for what states
+     *                  nothing of where the relation stands
      */
     record Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
                     List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
-                    List<PriorApplications> before,
-                    Optional<List<Set<TermPath>>> relationNeedsOneOf) {
+                    List<PriorApplications> before, Pullback.WorkedOutWhere relationStands) {
 
         static final Answered NOTHING = new Answered(List.of(), List.of(), false);
 
@@ -1017,14 +1015,14 @@ final class DemandReading {
             tied = List.copyOf(tied);
             owed = List.copyOf(owed);
             before = List.copyOf(before);
-            relationNeedsOneOf = relationNeedsOneOf.map(List::copyOf);
         }
 
         /** What a run asks of a row, and says nothing of where the relation stands. */
         Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
                  List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
                  List<PriorApplications> before) {
-            this(onTheWay, ofTheRelation, tied, unsaid, owed, before, Optional.of(List.of()));
+            this(onTheWay, ofTheRelation, tied, unsaid, owed, before,
+                    Pullback.WorkedOutWhere.ALWAYS);
         }
 
         /** What the run to a relation asks of a row, with what the applications before it work
@@ -1073,31 +1071,24 @@ final class DemandReading {
                             .anyMatch(each -> each.workedOut().unsaidOrOwedOnWhatNoPlaceHolds());
         }
 
-        /** The same, where getting to the relation also needs what {@code more} says of the
-         *  closures it stands inside: not said where either is not. */
-        Answered alsoNeedingToGetToTheRelation(Optional<List<Set<TermPath>>> more) {
-            Optional<List<Set<TermPath>>> together = relationNeedsOneOf.flatMap(mine ->
-                    more.map(theirs -> {
-                        List<Set<TermPath>> both = new ArrayList<>(mine);
-                        both.addAll(theirs);
-                        return both;
-                    }));
-            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, before, together);
+        /** The same, where the relation is also worked out where {@code more} says. */
+        Answered alsoNeedingToGetToTheRelation(Pullback.WorkedOutWhere more) {
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, before,
+                    relationStands.and(more));
         }
 
         /** This, with {@code prior} worked out by the applications before it. */
         Answered after(PriorApplications prior) {
             List<PriorApplications> all = new ArrayList<>(before);
             all.add(prior);
-            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all,
-                    relationNeedsOneOf);
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all, relationStands);
         }
 
         /** The same, without the statements of {@code met} among what the operators narrow; what
          *  the run is owed and what the applications before work out stay. */
         Answered without(Collection<TakenConstraint.Affine> met) {
             return new Answered(notAmong(onTheWay, met), notAmong(ofTheRelation, met), tied,
-                    unsaid, owed, before, relationNeedsOneOf);
+                    unsaid, owed, before, relationStands);
         }
 
         /** Every container some tie or operator owed here, or among what the applications before
@@ -1120,7 +1111,7 @@ final class DemandReading {
                     owed.stream().filter(each -> !missed.test(each.where())).toList(),
                     before.stream().map(each -> new PriorApplications(each.walked(),
                             each.workedOut().withoutWhatIsWorkedOutWhere(missed))).toList(),
-                    relationNeedsOneOf);
+                    relationStands);
         }
 
         private static List<TakenConstraint> notAmong(List<TakenConstraint> narrowing,
@@ -1191,7 +1182,7 @@ final class DemandReading {
          *  handed are bound. */
         static Answered leavingUnsaid(Pullback.OperatorsAnswer operators, Core body) {
             if (operators.leavesNothingUnsaid()
-                    && operators.relationNeedsOneOf().equals(NOTHING.relationNeedsOneOf)) {
+                    && operators.relationStands().equals(Pullback.WorkedOutWhere.ALWAYS)) {
                 return NOTHING;
             }
             return new Answered(List.of(), List.of(),
@@ -1207,7 +1198,7 @@ final class DemandReading {
                                             each.reads()))),
                                     leavingUnsaid(each.workedOut(), body)))
                             .toList(),
-                    operators.relationNeedsOneOf());
+                    operators.relationStands());
         }
 
         /** This and {@code other}, both. */
@@ -1222,19 +1213,8 @@ final class DemandReading {
             both.addAll(other.owed);
             List<PriorApplications> priors = new ArrayList<>(before);
             priors.addAll(other.before);
-            Optional<List<Set<TermPath>>> relationNeeds = relationNeedsOneOf.flatMap(mine ->
-                    other.relationNeedsOneOf.map(theirs -> {
-                        if (theirs.isEmpty()) {
-                            return mine;
-                        } else if (mine.isEmpty()) {
-                            return theirs;
-                        }
-                        List<Set<TermPath>> together = new ArrayList<>(mine);
-                        together.addAll(theirs);
-                        return together;
-                    }));
             return new Answered(onTheWayBoth, ofTheRelationBoth, places, unsaid || other.unsaid,
-                    both, priors, relationNeeds);
+                    both, priors, relationStands.and(other.relationStands));
         }
     }
 

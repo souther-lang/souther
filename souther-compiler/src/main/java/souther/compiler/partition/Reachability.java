@@ -10,7 +10,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -336,8 +335,8 @@ public sealed interface Reachability {
      *                        ({@link DemandReading.Answered#owed})
      * @param before          what the applications a run walking one element does not make work
      *                        out ({@link DemandReading.Answered#before})
-     * @param relationNeedsOneOf what the closures the relation stands inside add to what a run
-     *                        needs to get to it ({@link DemandReading.Answered#relationNeedsOneOf})
+     * @param relationStands  where the relation is worked out
+     *                        ({@link DemandReading.Answered#relationStands})
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
@@ -347,7 +346,7 @@ public sealed interface Reachability {
                     List<DemandReading.Tie> tied, boolean unsaid,
                     List<Pullback.StopObligation> owed,
                     List<DemandReading.PriorApplications> before,
-                    Optional<List<Set<TermPath>>> relationNeedsOneOf)
+                    Pullback.WorkedOutWhere relationStands)
             implements Reachability {
 
         public Reaching {
@@ -355,11 +354,10 @@ public sealed interface Reachability {
                     || declined == null || narrowedBy == null || gotPast == null
                     || gotPastOfTheRelation == null
                     || tied == null || owed == null || before == null
-                    || relationNeedsOneOf == null) {
+                    || relationStands == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
-            relationNeedsOneOf = relationNeedsOneOf.map(List::copyOf);
             boundedOnTheWay = List.copyOf(boundedOnTheWay);
             declined = List.copyOf(declined);
             narrowedBy = narrowedBy.map(List::copyOf);
@@ -377,14 +375,14 @@ public sealed interface Reachability {
                         Optional<List<TakenConstraint>> narrowedBy) {
             this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
                     List.of(), List.of(), List.of(), false, List.of(), List.of(),
-                    Optional.of(List.of()));
+                    Pullback.WorkedOutWhere.ALWAYS);
         }
 
         /** What the run to the border asks of a row, as the readers of the relation there are
          *  handed it: the narrowing of the run and of the relation's own working kept apart. */
         DemandReading.Answered gotPastAsAsked() {
             return new DemandReading.Answered(gotPast, gotPastOfTheRelation, tied, unsaid, owed,
-                    before, relationNeedsOneOf);
+                    before, relationStands);
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -438,7 +436,7 @@ public sealed interface Reachability {
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
                     narrowedBy, gotPast, gotPastOfTheRelation, tied, unsaid, owed, before,
-                    relationNeedsOneOf);
+                    relationStands);
         }
 
         /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
@@ -527,16 +525,11 @@ public sealed interface Reachability {
             owedNow.addAll(answered.owed());
             List<DemandReading.PriorApplications> beforeNow = new ArrayList<>(before);
             beforeNow.addAll(answered.before());
-            Optional<List<Set<TermPath>>> relationNeedsNow = relationNeedsOneOf.flatMap(mine ->
-                    answered.relationNeedsOneOf().map(theirs -> {
-                        List<Set<TermPath>> together = new ArrayList<>(mine);
-                        together.addAll(theirs);
-                        return together;
-                    }));
+            Pullback.WorkedOutWhere relationNow = relationStands.and(answered.relationStands());
             if (past.leavesNone()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
                         declined, narrowedBy, gotPast, gotPastOfTheRelation, ties, unsaidNow,
-                        owedNow, beforeNow, relationNeedsNow);
+                        owedNow, beforeNow, relationNow);
             }
             List<TakenConstraint> gotPastNow = new ArrayList<>(gotPast);
             gotPastNow.addAll(past.onTheWay());
@@ -544,7 +537,7 @@ public sealed interface Reachability {
             ofTheRelationNow.addAll(past.ofTheRelation());
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
                     by, gotPastNow, ofTheRelationNow, ties, unsaidNow, owedNow, beforeNow,
-                    relationNeedsNow);
+                    relationNow);
         }
 
         /**

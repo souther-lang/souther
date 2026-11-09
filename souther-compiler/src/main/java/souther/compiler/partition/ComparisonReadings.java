@@ -677,7 +677,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walkedOneAfterAnother(first.entered(), reads),
                 new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed(),
                         before.before())))
-                .alsoNeedingToGetToTheRelation(before.relationNeedsOneOf());
+                .alsoNeedingToGetToTheRelation(before.relationStands());
     }
 
     /**

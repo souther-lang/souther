@@ -4297,13 +4297,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the place {@code place}, where {@code past} is already said to stop a run on what the
      * relation reads ({@link #mayStopOnWhatItReads}).
      *
-     * <p>A tie of an operator a run works out only inside a closure applied over containers
-     * ({@link DemandReading.Tie#reachedOnlyWhereOneHolds}) stops no run where every container of
-     * one of the sets it says holds nothing. A container holds nothing beside every value of
-     * {@code place} where it is no part of {@code place} and nor inside it, the rules and the way
-     * leave it no entry, and nothing relates it to {@code place}: a row holds any value there,
-     * the container empty, and no such operator is worked out on it. Every other stop is asked as
-     * it is ({@link #mayStopOnWhatItReads}).
+     * <p>A stop a run works out only inside a closure applied over containers
+     * ({@link Pullback.WorkedOutWhere}) stops no run where every container of one of the sets it
+     * says holds nothing. Such containers are left empty beside every value of {@code place}
+     * ({@link #leftEmptyBesideAnyValueAt}): a row holds any value there, the containers empty,
+     * and no such stop is worked out on it. Every other stop is asked as it is
+     * ({@link #mayStopOnWhatItReads}).
      */
     private boolean mayStopOnValueAt(TermPath place, DemandReading.Answered past,
                                      InputReading read, SearchRegion region,
@@ -4431,11 +4430,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // The relation is reached only where a container of each set it stands inside holds an
         // entry, and a row holding every container of a set empty gets to nothing. Where what the
         // relation stands inside is not said, no container is emptied.
-        if (past.relationNeedsOneOf().isEmpty()) {
+        if (!past.relationStands().known()) {
             return Set.of();
         }
-        Set<TermPath> theRelationStandsInside = new LinkedHashSet<>();
-        past.relationNeedsOneOf().get().forEach(theRelationStandsInside::addAll);
+        Set<TermPath> theRelationStandsInside = past.relationStands().containers();
         List<TermPath> pinned = new ArrayList<>(place.containersHoldingIt());
         pinned.add(place);
         List<TermPath> empty = new ArrayList<>();

@@ -1309,7 +1309,7 @@ final class Pullback {
                 answered == null ? Optional.empty()
                         : Optional.of(pulled(answered).proposition()),
                 told[0].unsaidGroups, told[0].unsaidGroupsWhere, told[0].unsaidElsewhere,
-                told[0].obligations, told[0].afterTheFirst, told[0].relationNeedsOneOf());
+                told[0].obligations, told[0].afterTheFirst, told[0].relationStandsWhere());
     }
 
     /**
@@ -2115,6 +2115,11 @@ final class Pullback {
 
         /** This, inside a closure applied over {@code other}'s containers as well. */
         WorkedOutWhere and(WorkedOutWhere other) {
+            if (other.equals(ALWAYS)) {
+                return this;
+            } else if (equals(ALWAYS)) {
+                return other;
+            }
             List<Set<TermPath>> both = new ArrayList<>(oneHolds);
             both.addAll(other.oneHolds);
             Set<TermPath> reads = new LinkedHashSet<>(decidedBy);
@@ -8204,13 +8209,9 @@ final class Pullback {
         private Core within;
         private Core leftOut;
 
-        /** What has to hold for a run to get to the comparison left out, as the closures it stands
-         *  inside say: for each set, one of its containers holds an entry. */
-        private final List<Set<TermPath>> relationNeeds = new ArrayList<>();
-        /** Whether the walk got to the comparison left out. */
-        private boolean relationReached;
-        /** Whether every closure the walk got to it inside is applied over something said. */
-        private boolean relationEnclosureKnown = true;
+        /** Where the comparison left out is worked out, as the closures it stands inside say, or
+         *  null while the walk has not got to it. */
+        private WorkedOutWhere relationStands;
 
         Operators() {
             unsaidGroups.add(unsaidAt);
@@ -8219,22 +8220,19 @@ final class Pullback {
 
         /** The walk got to the comparison left out, worked out where {@code inside} says. */
         void relationIsInside(WorkedOutWhere inside) {
-            relationNeeds.addAll(inside.oneHolds());
-            relationReached = true;
-            relationEnclosureKnown &= inside.known();
+            relationStands = relationStands == null ? inside : relationStands.and(inside);
         }
 
         /**
-         * What has to hold for a run to get to the comparison: nothing where none is left out of
-         * the part read; what its closures say where the walk got to it; and not said where one
-         * is left out and the walk did not get to it.
+         * Where a run works out the comparison: anywhere where none is left out of the part read;
+         * where its closures say where the walk got to it; and not said where one is left out and
+         * the walk did not get to it.
          */
-        Optional<List<Set<TermPath>>> relationNeedsOneOf() {
+        WorkedOutWhere relationStandsWhere() {
             if (leftOut == null) {
-                return Optional.of(List.of());
+                return WorkedOutWhere.ALWAYS;
             }
-            return relationReached && relationEnclosureKnown
-                    ? Optional.of(List.copyOf(relationNeeds)) : Optional.empty();
+            return relationStands == null ? WorkedOutWhere.ALWAYS.notSaid() : relationStands;
         }
 
         /**
@@ -8258,7 +8256,7 @@ final class Pullback {
         /** What is left unsaid and owed here, with nothing told of where an operator answers. */
         OperatorsAnswer leftUnsaid() {
             return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidGroupsWhere,
-                    unsaidElsewhere, obligations, afterTheFirst, relationNeedsOneOf());
+                    unsaidElsewhere, obligations, afterTheFirst, relationStandsWhere());
         }
 
         /** What has been told so far, which is the same only while nothing more has. */
@@ -8376,15 +8374,14 @@ final class Pullback {
      *                        run on, a group to an operator
      * @param unsaidElsewhere whether an operator not said may stop a run on something that is no
      *                        number of a place, or on operands no form says
-     * @param relationNeedsOneOf what has to hold for a run to get to the comparison left out of
-     *                        the part read, as the closures it stands inside say: for each set, one
-     *                        of its containers holds an entry; or empty where that is not said
+     * @param unsaidWhere     where each of those operators is worked out
+     * @param relationStands  where a run works out the comparison left out of the part read, as
+     *                        the closures it stands inside say; not said where it is not
      */
     record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
                            List<WorkedOutWhere> unsaidWhere,
                            boolean unsaidElsewhere, List<StopObligation> obligations,
-                           List<AfterTheFirst> afterTheFirst,
-                           Optional<List<Set<TermPath>>> relationNeedsOneOf) {
+                           List<AfterTheFirst> afterTheFirst, WorkedOutWhere relationStands) {
 
         OperatorsAnswer {
             if (unsaidAt.size() != unsaidWhere.size()) {
@@ -8403,7 +8400,6 @@ final class Pullback {
             unsaidWhere = List.copyOf(keptWhere);
             obligations = List.copyOf(obligations);
             afterTheFirst = List.copyOf(afterTheFirst);
-            relationNeedsOneOf = relationNeedsOneOf.map(List::copyOf);
         }
 
         /** Whether nothing here may stop a run that nothing says of. */
