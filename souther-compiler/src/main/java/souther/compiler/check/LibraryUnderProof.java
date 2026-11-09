@@ -105,9 +105,22 @@ final class LibraryUnderProof implements Library {
         return Combinators.positionsOf(operation);
     }
 
+    /**
+     * Every relation stated of {@code operation}'s answer but those of sizes alone, which are for
+     * the reader of numbers. A proof is given the law of each operation's size, and a relation
+     * between sizes beside those is an equation more among the atoms its search parts, which
+     * costs it several times over, over values it has already met as much as over ones the
+     * relation brings in. A relation of what an answer holds is not of sizes alone and is taken.
+     *
+     * <p>Here, where every relation a proof is handed passes, and not where they are stated: what
+     * is stated is also what the axioms of a kernel are checked against, which are of sizes too.
+     */
     @Override
     public List<LawProposition<Slot>> relations(ValueName.Stdlib.Operation operation) {
-        return relating.apply(operation);
+        return relating.apply(operation).stream()
+                .filter(each -> !(each instanceof LawProposition.Compared<Slot> compared
+                        && compared.ofSizesOnly()))
+                .toList();
     }
 
     @Override
