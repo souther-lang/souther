@@ -1201,6 +1201,10 @@ final class DemandReading {
          *  part they were read in standing in {@code body}, where the names an owed operator is
          *  handed are bound. */
         static Answered leavingUnsaid(Pullback.OperatorsAnswer operators, Core body) {
+            if (operators.leavesNothingUnsaid()
+                    && operators.relationNeedsOneOf().equals(NOTHING.relationNeedsOneOf)) {
+                return NOTHING;
+            }
             return new Answered(List.of(), List.of(),
                     IntStream.range(0, operators.unsaidAt().size())
                             .mapToObj(i -> Tie.between(operators.unsaidAt().get(i),
@@ -1231,6 +1235,11 @@ final class DemandReading {
             priors.addAll(other.before);
             Optional<List<Set<TermPath>>> relationNeeds = relationNeedsOneOf.flatMap(mine ->
                     other.relationNeedsOneOf.map(theirs -> {
+                        if (theirs.isEmpty()) {
+                            return mine;
+                        } else if (mine.isEmpty()) {
+                            return theirs;
+                        }
                         List<Set<TermPath>> together = new ArrayList<>(mine);
                         together.addAll(theirs);
                         return together;
