@@ -988,7 +988,8 @@ public final class InputReads {
     public long readingsASplitIsOneOf(List<Denotation> values) {
         Set<BindingId> turnedOn = new HashSet<>();
         for (Denotation each : values) {
-            each.at().applicationsRead(each.value(), new HashSet<>(), turnedOn);        }
+            each.at().applicationsRead(each.value(), new HashSet<>(), turnedOn);
+        }
         return applied.readings() / applied.applicationsNotThrough(turnedOn);
     }
 

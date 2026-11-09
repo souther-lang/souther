@@ -6132,7 +6132,8 @@ final class Pullback {
             Core value = over;
             InputReads where = in;
             while (true) {
-                DecisionSubject standing = subjectOf(value, where);                if (standing != null) {
+                DecisionSubject standing = subjectOf(value, where);
+                if (standing != null) {
                     ElementAt each = new ElementAt.AtASubject(standing);
                     settle(pending, each, null, located);
                     Type heldType = Core.withoutStanding(value).type();
@@ -7904,7 +7905,8 @@ final class Pullback {
         private Sized differentMeeting(DecisionSubject.AnInput held, Quantity.TheValue at,
                                        Derivation read, boolean ofEachValue) {
             Derivation meeting = ofItsOwnElement(held, e, reads, read);
-            Proposition stated = tried(meeting);            WhyUnread stopped = Proposition.firstStopIn(stated);
+            Proposition stated = tried(meeting);
+            WhyUnread stopped = Proposition.firstStopIn(stated);
             if (stopped != null) {
                 return new Sized.NotSized(stopped);
             }
@@ -9448,7 +9450,8 @@ final class Pullback {
         NumericTerm.GatheredUnderItsKey.Gathering by = gathered == null ? null
                 : gathering.apply(gathered);
         NumericTerm.GatheredUnderAKey term = by == null ? null
-                : gatheredUnderAKey(gathered, by, asked);        return term != null && readOnAnOrder(term)
+                : gatheredUnderAKey(gathered, by, asked);
+        return term != null && readOnAnOrder(term)
                 ? LinearForm.atom(new DecisionAtom.OfTheInput(term)) : null;
     }
 

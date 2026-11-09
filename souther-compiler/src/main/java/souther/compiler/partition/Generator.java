@@ -14084,7 +14084,8 @@ public final class Generator {
                 if (completed == null) {
                     continue;
                 }
-                Tried again = put(completed, budget, spent);                if (again instanceof Tried.Built || again instanceof Tried.OutOfBudget) {
+                Tried again = put(completed, budget, spent);
+                if (again instanceof Tried.Built || again instanceof Tried.OutOfBudget) {
                     return again;
                 }
             }
@@ -14242,7 +14243,8 @@ public final class Generator {
                     ? value : null;
         }
         ConstructionPlan.Slot position = positions.get(index);
-        TermPath where = position.at();        for (FixtureTemplate candidate
+        TermPath where = position.at();
+        for (FixtureTemplate candidate
                 : candidatesAt(position, settled, decided, candidates)) {
             // Refused by its own type, so refused in every assignment under this branch: the branch
             // is not walked ({@link Composing} says why).
