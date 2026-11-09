@@ -149,6 +149,30 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
             data Roomy = { rates: Map<String, Int> }
                 invariant keyed = List.all(k -> String.length(k) > 0, Map.keys(rates))
             data Out = { n: Int }
+            data Heavy = { xs: List<Int> }
+                invariant two = List.length(xs) >= 2
+                invariant big = List.all(x -> x >= 4611686018427387904, xs)
+            data Pass = { active: Bool, currency: String, rates: Map<String, Int> }
+                invariant zWhenPassive = active || Map.containsKey("Z", rates)
+                invariant zeroZ = Map.get("Z", rates) |> Option.map(r -> r == 0)
+                    |> Option.withDefault(true)
+
+            behavior totalUnderTheKey : (deals: List<Deal>, rates: Rates, h: Heavy) -> Out
+            let totalUnderTheKey (deals, rates, h) = {
+                let total = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(r -> List.sum(h.xs)), deals)
+                Out { n = List.length(List.filter(
+                    d -> Bool.not(Map.containsKey(d.currency, rates.rates)), deals))
+                    + List.length(total) }
+            }
+
+            behavior passive : (p: Pass) -> Out
+            let passive (p) = {
+                let spread = Map.get(p.currency, p.rates)
+                    |> Option.map(r -> Int.floorMod(100, r)) |> Option.withDefault(0)
+                if p.active then Out { n = 0 }
+                else Out { n = if Map.containsKey(p.currency, p.rates) then spread else 1 }
+            }
 
             behavior alone : (deals: List<Deal>, rates: Rates) -> Out
             let alone (deals, rates) = {
@@ -332,6 +356,22 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
             assertEquals(reasonsOf(currencyOf(evidence, twin)), reasonsOf(currencyOf(evidence,
                     twin + "OverWhatAFunctionKept")), twin);
         }
+
+        // A total that cannot fit is worked out only where the lookup finds the currency. A row
+        // holding the table empty never works it out, so the currency is reached at every value;
+        // the keys of the table are what the lookup is made in, and stay not shown.
+        assertNotEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                currencyOf(evidence, "totalUnderTheKey").get("deals[*].currency").reason(),
+                currencyOf(evidence, "totalUnderTheKey").toString());
+        assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                currencyOf(evidence, "totalUnderTheKey").get("rates.rates[key]").reason(),
+                currencyOf(evidence, "totalUnderTheKey").toString());
+
+        // A rule ties the way to the table: the way holds only where the table has a currency
+        // whose rate stops the run, so no row holding the table empty is a row of the way.
+        assertNotEquals(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
+                currencyOf(evidence, "passive").get("p.currency").reason(),
+                currencyOf(evidence, "passive").toString());
 
         // The stop reads the table as well, is worked out only where the table holds the currency
         // (which turns on its keys), a rule names the table, or the way decides by it.

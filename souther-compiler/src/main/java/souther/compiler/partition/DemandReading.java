@@ -944,46 +944,33 @@ final class DemandReading {
      * @param places the places the tie names, in the order they were met
      * @param by     what is stated of their numbers, or null where only the places are known — the
      *               numbers an operator not said may stop the run on
-     * @param reachedOnlyWhereOneHolds what has to hold for a run to work the operator out, as the
-     *               closures it is inside of say it: for each set, one of its containers holds an
-     *               entry, since the closure is applied only over what a container holds
+     * @param where  where a run works the operator out, as the closures it is inside of say it
      */
-    record Tie(Set<TermPath> places, TakenConstraint by,
-               List<Set<TermPath>> reachedOnlyWhereOneHolds) {
+    record Tie(Set<TermPath> places, TakenConstraint by, Pullback.WorkedOutWhere where) {
 
         Tie {
             places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
-            reachedOnlyWhereOneHolds = reachedOnlyWhereOneHolds.stream()
-                    .map(each -> Collections.unmodifiableSet(new LinkedHashSet<>(each)))
-                    .toList();
         }
 
         /** The tie a statement of numbers makes, between every place its numbers are read off
          *  ({@link RowDemand#placesReadOff}). */
         static Tie by(TakenConstraint constraint) {
-            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint, List.of());
+            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint,
+                    Pullback.WorkedOutWhere.ALWAYS);
         }
 
         Tie(Set<TermPath> places, TakenConstraint by) {
-            this(places, by, List.of());
+            this(places, by, Pullback.WorkedOutWhere.ALWAYS);
         }
 
         /** The tie of places an operator not said of may stop the run on. */
         static Tie between(Set<TermPath> places) {
-            return between(places, List.of());
+            return between(places, Pullback.WorkedOutWhere.ALWAYS);
         }
 
-        /** The same, of an operator a run works out only where, for each set of
-         *  {@code reachedOnlyWhereOneHolds}, one of its containers holds an entry. */
-        static Tie between(Set<TermPath> places, List<Set<TermPath>> reachedOnlyWhereOneHolds) {
-            return new Tie(places, null, reachedOnlyWhereOneHolds);
-        }
-
-        /** Every container named among what the operator is worked out only where one holds. */
-        Set<TermPath> containersItIsWorkedOutInside() {
-            Set<TermPath> out = new LinkedHashSet<>();
-            reachedOnlyWhereOneHolds.forEach(out::addAll);
-            return out;
+        /** The same, of an operator a run works out where {@code where} says. */
+        static Tie between(Set<TermPath> places, Pullback.WorkedOutWhere where) {
+            return new Tie(places, null, where);
         }
     }
 
@@ -1113,24 +1100,26 @@ final class DemandReading {
                     unsaid, owed, before, relationNeedsOneOf);
         }
 
-        /** Every container some tie here, or among what the applications before work out, names
-         *  as one an operator is worked out only where it or another of its set holds an
-         *  entry. */
+        /** Every container some tie or operator owed here, or among what the applications before
+         *  work out, names as one an operator is worked out only where it or another of its set
+         *  holds an entry. */
         Set<TermPath> containersAnOperatorIsWorkedOutInside() {
             Set<TermPath> out = new LinkedHashSet<>();
-            tied.forEach(each -> out.addAll(each.containersItIsWorkedOutInside()));
+            tied.forEach(each -> out.addAll(each.where().containers()));
+            owed.forEach(each -> out.addAll(each.where().containers()));
             before.forEach(each ->
                     out.addAll(each.workedOut().containersAnOperatorIsWorkedOutInside()));
             return out;
         }
 
-        /** The same, without the ties {@code missed} says a run is not stopped by, among what the
-         *  applications before work out as well. */
-        Answered withoutTies(Predicate<Tie> missed) {
+        /** The same, without the ties and the operators owed that are worked out where
+         *  {@code missed} says no run is, among what the applications before work out as well. */
+        Answered withoutWhatIsWorkedOutWhere(Predicate<Pullback.WorkedOutWhere> missed) {
             return new Answered(onTheWay, ofTheRelation,
-                    tied.stream().filter(each -> !missed.test(each)).toList(), unsaid, owed,
+                    tied.stream().filter(each -> !missed.test(each.where())).toList(), unsaid,
+                    owed.stream().filter(each -> !missed.test(each.where())).toList(),
                     before.stream().map(each -> new PriorApplications(each.walked(),
-                            each.workedOut().withoutTies(missed))).toList(),
+                            each.workedOut().withoutWhatIsWorkedOutWhere(missed))).toList(),
                     relationNeedsOneOf);
         }
 
@@ -1208,7 +1197,7 @@ final class DemandReading {
             return new Answered(List.of(), List.of(),
                     IntStream.range(0, operators.unsaidAt().size())
                             .mapToObj(i -> Tie.between(operators.unsaidAt().get(i),
-                                    operators.unsaidReachedOnlyWhereOneHolds().get(i)))
+                                    operators.unsaidWhere().get(i)))
                             .toList(),
                     operators.unsaidElsewhere(),
                     operators.obligations().stream().map(each -> each.readIn(body)).toList(),

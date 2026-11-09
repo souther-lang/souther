@@ -4317,8 +4317,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (empty.isEmpty()) {
             return true;
         }
-        DemandReading.Answered narrowed = past.withoutTies(tie ->
-                tie.reachedOnlyWhereOneHolds().stream().anyMatch(empty::containsAll));
+        DemandReading.Answered narrowed = past.withoutWhatIsWorkedOutWhere(where ->
+                where.oneHolds().stream().anyMatch(empty::containsAll));
         return mayStopOnWhatItReads(narrowed, read, region, conditions, declined, accountedFor);
     }
 
@@ -4371,18 +4371,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
         for (DemandReading.Tie tie : past.tied()) {
-            // Whether the operator is worked out at all turns on what the containers it is
-            // worked out inside of hold, so the stop turns on them as well as on its places.
-            if (touchesAny(tie.places(), List.of(place))
-                    || tie.places().stream().anyMatch(place::bearsOn)
-                    || touchesAny(tie.containersItIsWorkedOutInside(), List.of(place))
-                    || tie.containersItIsWorkedOutInside().stream().anyMatch(place::bearsOn)) {
+            if (stopTurnsOn(place, tie.places(), tie.where())) {
                 return true;
             }
         }
         for (Pullback.StopObligation owed : past.owed()) {
-            if (owed.onWhatNoPlaceHolds() || touchesAny(owed.places(), List.of(place))
-                    || owed.places().stream().anyMatch(place::bearsOn)) {
+            if (owed.onWhatNoPlaceHolds() || stopTurnsOn(place, owed.places(), owed.where())) {
                 return true;
             }
         }
@@ -4397,15 +4391,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * Whether a stop on {@code reads}, worked out where {@code where} says, turns on the value at
+     * {@code place}: on a place it reads, or on whether it is worked out at all, which turns on
+     * what the containers it is worked out inside of hold and on what decides that. Where
+     * nothing is said of where it is worked out, on any.
+     */
+    static boolean stopTurnsOn(TermPath place, Set<TermPath> reads,
+                               Pullback.WorkedOutWhere where) {
+        if (!where.known()) {
+            return true;
+        }
+        Set<TermPath> turnsOn = new LinkedHashSet<>(reads);
+        turnsOn.addAll(where.turnsOn());
+        return touchesAny(turnsOn, List.of(place)) || turnsOn.stream().anyMatch(place::bearsOn);
+    }
+
+    /** Whether nothing a rule says relates {@code one} to {@code other} and neither lies within
+     *  the other: a row may hold any value at one of them whatever it holds at the other. */
+    private static boolean apart(TermPath one, TermPath other, InputReading read) {
+        return !one.bearsOn(other) && !tiedByARule(one, other, read);
+    }
+
+    /**
      * The containers a row holds no entry in, beside any value at {@code place}, such that the
-     * way is still met: each is no part of {@code place} and nor inside it, the way declined
-     * nothing that may name it, no rule relates it to {@code place} or to another of them, and
-     * the count the region holds it at reaches nought ({@link #howManyAreHeld}). Nothing, where
-     * the way is not shown met by a row holding one value at every place a container holds the
-     * one {@code place} is at, and those containers none.
+     * way is still met. Each is apart from {@code place}, from the containers that hold it, and
+     * from the others ({@link #apart}); the way declined nothing that may name it, and the count
+     * the region holds it at reaches nought ({@link #howManyAreHeld}). The way is met only where
+     * every statement of it is worked out on such a row ({@link #metBy}): a statement that is
+     * not is no statement known to hold with a container emptied, and nothing is emptied.
      *
-     * <p>Of those the ties of {@code past} name as the ones an operator is worked out inside
-     * ({@link DemandReading.Tie#reachedOnlyWhereOneHolds}).
+     * <p>Of those the stops of {@code past} name as the ones an operator is worked out inside
+     * ({@link Pullback.WorkedOutWhere}).
      */
     private static Set<TermPath> leftEmptyBesideAnyValueAt(TermPath place,
                                                            DemandReading.Answered past,
@@ -4420,32 +4436,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Set<TermPath> theRelationStandsInside = new LinkedHashSet<>();
         past.relationNeedsOneOf().get().forEach(theRelationStandsInside::addAll);
+        List<TermPath> pinned = new ArrayList<>(place.containersHoldingIt());
+        pinned.add(place);
         List<TermPath> empty = new ArrayList<>();
         for (TermPath container : past.containersAnOperatorIsWorkedOutInside()) {
             if (theRelationStandsInside.contains(container)
-                    || container.isAtOrUnder(place) || place.isAtOrUnder(container)
                     || declined.isEmpty() || declined.get().contains(container.head())
-                    || tiedByARule(container, place, read)
-                    || empty.stream().anyMatch(other -> tiedByARule(container, other, read))
+                    || !pinned.stream().allMatch(at -> apart(container, at, read))
+                    || !empty.stream().allMatch(other -> apart(container, other, read))
                     || !fewestHeld(howManyAreHeld(container, read, region))
                             .equals(Optional.of(BigInteger.ZERO))) {
                 continue;
             }
             empty.add(container);
         }
-        if (empty.isEmpty()) {
+        if (empty.isEmpty()
+                || !conditions.stream().allMatch(each -> each.statedOfTheRun() != null
+                        && metBy(each.statedOfTheRun(), place, empty, read, region))) {
             return Set.of();
-        }
-        for (OnAWay each : conditions) {
-            if (each.statedOfTheRun() != null) {
-                if (!metBy(each.statedOfTheRun(), place, empty, read, region)) {
-                    return Set.of();
-                }
-            } else if (each.positions().isEmpty() || each.positions().stream().anyMatch(at ->
-                    at.bearsOn(place) || tiedByARule(at, place, read)
-                            || empty.stream().anyMatch(at::bearsOn))) {
-                return Set.of();
-            }
         }
         return Set.copyOf(empty);
     }
