@@ -417,9 +417,39 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
         assertEquals(List.of(), wrong, "each row is owed exactly what its law leaves open");
     }
 
+    /** The totals of lists of decimals are related as those of lists of integers are, and the
+     *  row beside each moves one side by one. */
+    private static final List<Row> ROWS_OF_DECIMALS = List.of(
+            new Row("Share(List.sum(xs ++ ys) - List.sum(xs) - List.sum(ys))", false),
+            new Row("Share(List.sum(xs ++ ys) - List.sum(xs) - List.sum(ys) - 1m)", true),
+            new Row("Share(List.sum(List.reverse(xs)) - List.sum(xs))", false),
+            new Row("Share(List.sum(List.reverse(xs)) - List.sum(ys))", true),
+            new Row("Share(List.sum(List.map(n -> n * 2m, xs ++ ys)) - 2m * List.sum(xs) "
+                    + "- 2m * List.sum(ys))", false),
+            new Row("Share(List.sum(List.map(n -> n * 2m, xs ++ ys)) - 2m * List.sum(xs) "
+                    + "- 3m * List.sum(ys))", true),
+            new Row("Share(List.sum(List.filter(n -> n > 2m, xs)) "
+                    + "+ List.sum(List.filter(n -> n <= 2m, xs)) - List.sum(xs))", false),
+            new Row("Share(List.sum(List.filter(n -> n > 2m, xs)) "
+                    + "+ List.sum(List.filter(n -> n < 2m, xs)) - List.sum(xs))", true),
+            new Row("Share(List.product(xs ++ ys) - List.product(xs) * List.product(ys))", false),
+            new Row("Share(List.product(xs ++ ys) - List.product(xs) * List.product(xs))", true));
+
+    @Test
+    void eachRowOfDecimalsIsOwedWhatItsLawLeavesOpen() {
+        List<String> wrong = new ArrayList<>();
+        for (Row row : ROWS_OF_DECIMALS) {
+            boolean owed = owedByDecimals(row.body());
+            if (owed != row.owed()) {
+                wrong.add(row.body() + ": owed " + owed + ", expected " + row.owed());
+            }
+        }
+        assertEquals(List.of(), wrong, "each row is owed exactly what its law leaves open");
+    }
+
     /** Whether the discharge leaves anything owed of a behavior with {@code body}. */
     private static boolean owedBy(String body) {
-        Compilation compilation = Compilation.ofSource("""
+        return owedBy("""
                 module demo
 
                 data Digit = Int
@@ -432,11 +462,32 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     constructs Digit
                 let f (xs, ys, xss, a, b, ma, mb, s, t, x) =
                     %s
-                """.formatted(body), "Main");
+                """.formatted(body), body);
+    }
+
+    /** The same over lists of decimals, which have no end to run over. */
+    private static boolean owedByDecimals(String body) {
+        return owedBy("""
+                module demo
+
+                data Share = Decimal
+                    invariant atLeastNought = value >= 0m
+
+                behavior f : (xs: List<Decimal>, ys: List<Decimal>) -> Share
+                    constructs Share
+                let f (xs, ys) =
+                    %s
+                """.formatted(body), body);
+    }
+
+    private static boolean owedBy(String source, String body) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         List<Located> refused = compilation.errors().stream()
                 .filter(each -> !"E2010".equals(each.diagnostic().code())).toList();
-        assertTrue(refused.isEmpty(), () -> body + " compiles: " + refused);
+        assertTrue(refused.isEmpty(), () -> body + " compiles: "
+                + refused.stream().map(each -> each.diagnostic().code() + " "
+                        + each.diagnostic().values()).toList());
         return compilation.errors().size() > refused.size()
                 || compilation.warnings().stream().anyMatch(each ->
                 each.diagnostic().severity() == Severity.WARNING
