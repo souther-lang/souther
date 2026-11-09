@@ -771,7 +771,17 @@ final class DerivedNumericFacts {
                     case Boolean holds -> holds ? Shown.YES : Shown.NO;
                 };
             }
-            case Derivation.HoldsSomethingWhere.Holding.Unnamed _ -> Shown.UNSETTLED;
+            // A side whose conditions do not hold is a side it is not on.
+            case Derivation.HoldsSomethingWhere.Holding.Unnamed it ->
+                    switch (it.outOf(condition -> switch (
+                            holds(condition, base, terms, done, deriving, copies)) {
+                        case YES -> Boolean.TRUE;
+                        case NO -> Boolean.FALSE;
+                        case UNSETTLED -> null;
+                    })) {
+                        case null -> Shown.UNSETTLED;
+                        case Boolean side -> side ? Shown.YES : Shown.NO;
+                    };
         };
     }
 

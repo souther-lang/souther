@@ -1,10 +1,13 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.check.Derivation.HoldsSomethingWhere.Holding;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.regex.WhatAStringSaysOfItsLength;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -69,11 +72,27 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return read == null || namesNothing(read) ? null : read;
     }
 
+    /**
+     * What {@code condition}, a call, coming out true is the same as: its law, and where the
+     * checker settled which strings it was given to accept, what the pattern says as well. The
+     * pattern is a value and no law of the operation is stated over it, so it is read off the call.
+     */
+    static Holding whereItHolds(Core condition, Denotations at, Terms terms) {
+        AnOperationApplied applied = AnOperationApplied.of(condition);
+        if (applied != null && Core.withoutStanding(condition) instanceof Core.PreservedCall kept
+                && kept.settled() instanceof Core.KernelFact.StringMatches matches) {
+            Holding accepting = new LawOverAtoms(applied, at, terms).accepting(matches.meaning());
+            return namesNothing(accepting) ? null : accepting;
+        }
+        return whereItHolds(applied, AnswerAspect.TRUTH, at, terms);
+    }
+
     /** Whether every part of {@code holding} is one this names by nothing, so that it settles
      *  nothing on any path. */
     private static boolean namesNothing(Holding holding) {
         return switch (holding) {
-            case Holding.Unnamed _ -> true;
+            case Holding.Unnamed(var _, var ifHolds, var ifDenied) ->
+                    ifHolds.isEmpty() && ifDenied.isEmpty();
             case Holding.Not(Holding denied) -> namesNothing(denied);
             case Holding.AllOf(var ways) -> !ways.isEmpty()
                     && ways.stream().allMatch(LawOverAtoms::namesNothing);
@@ -320,7 +339,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             }
             case Holding.Something(LinearForm<FactSubject> count) -> standing(count, Rel.GT);
             case Holding.Stands(LinearForm<FactSubject> form, Rel rel) -> standing(form, rel);
-            case Holding.Unnamed _ -> null;
+            case Holding.Unnamed it -> it.outOf(LawOverAtoms::settled);
         };
     }
 
@@ -333,8 +352,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     /**
      * The relations {@code holding} coming out {@code positive} makes certain over the counts and
      * numbers, each {@code form rel 0} — or null where it cannot come out that way at all. A
-     * disjunction of more than one way that may hold makes nothing certain, and is left out: what is
-     * taken is never more than the law says.
+     * disjunction of more than one way that may hold makes certain what every one of them does, at
+     * the weakest ({@link NumericConstraint#commonTo}): what is taken is never more than the law
+     * says.
      */
     static List<NumericConstraint> certain(Holding holding, boolean positive) {
         List<NumericConstraint> out = new ArrayList<>();
@@ -359,8 +379,10 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                 yield true;
             }
             case Holding.Not(Holding denied) -> certain(denied, !positive, out);
-            // It may come out either way, and either way it says nothing of the numbers.
-            case Holding.Unnamed _ -> true;
+            // It may come out either way, and says of the numbers what its law makes certain of
+            // the side it comes out on. A side that cannot come out is one it cannot be on.
+            case Holding.Unnamed(var _, var ifHolds, var ifDenied) ->
+                    every(positive ? ifHolds : ifDenied, true, out);
             // Each of them where all hold, and some one where any does not: the same two, turned.
             case Holding.AllOf(var ways) -> positive ? every(ways, true, out)
                     : oneOf(ways, false, out);
@@ -379,8 +401,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return true;
     }
 
-    /** The one of {@code ways} that can come out {@code positive}, where only one can; nothing
-     *  where more than one can; and false where none can. */
+    /** What the one of {@code ways} that can come out {@code positive} makes certain, where only
+     *  one can; what every one that can does, at the weakest, where more than one can; and false
+     *  where none can. */
     private static boolean oneOf(List<Holding> ways, boolean positive,
                                  List<NumericConstraint> out) {
         // One way written twice is one way: `s ++ s` holds something where `s` does.
@@ -393,7 +416,23 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         if (open.isEmpty()) {
             return false;
         }
-        return open.size() != 1 || certain(open.getFirst(), positive, out);
+        if (open.size() == 1) {
+            return certain(open.getFirst(), positive, out);
+        }
+        // More than one may be the way it is, and which is not said: what is certain is what every
+        // one of them makes certain, at the weakest. A way that cannot come out so is no way.
+        List<List<NumericConstraint>> each = new ArrayList<>();
+        for (Holding way : open) {
+            List<NumericConstraint> one = certain(way, positive);
+            if (one != null) {
+                each.add(one);
+            }
+        }
+        if (each.isEmpty()) {
+            return false;
+        }
+        out.addAll(each.size() == 1 ? each.getFirst() : NumericConstraint.commonTo(each));
+        return true;
     }
 
     @Override
@@ -499,21 +538,49 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     }
 
     /**
-     * One string standing inside another where the law says: a part unnamed, and the one inside
-     * holding no more code points than the one around it, where both are strings this names a
-     * length of. Where it does not stand inside, either.
+     * One string standing inside another where the law says: a part unnamed, which makes certain
+     * on each side of itself what that side alone has. Where it stands inside, the one inside
+     * holds no more code points than the one around it. Where it does not, the one inside holds
+     * some, because the empty string stands inside every string, in each place the law names.
+     * Each is named where this names a length of the strings it is over.
      */
     @Override
     public Holding inside(LawProposition.Inside<DeclaredArgument> inside) {
         LawProposition.Inside<DeclaredArgument> standing = new LawProposition.Inside<>(
                 inside.inner(), inside.outer(), inside.where(), true);
-        Holding unnamed = new Holding.Unnamed(standing);
-        FactSubject within = lengthOf(standing.inner());
-        FactSubject around = lengthOf(standing.outer());
-        Holding holds = within == null || around == null ? unnamed
-                : new Holding.AllOf(List.of(unnamed,
-                        new Holding.Stands(LinearForm.difference(within, around), Rel.LE)));
+        WhatAStringSaysOfItsLength.Sides<FactSubject> said = WhatAStringSaysOfItsLength.inside(
+                lengthOf(standing.inner()), lengthOf(standing.outer()));
+        Holding holds = new Holding.Unnamed(new Holding.Unnamed.Of.ALaw(standing),
+                standing(said.ifHolds()), standing(said.ifDenied()));
         return inside.holds() ? holds : new Holding.Not(holds);
+    }
+
+    /** What {@code conditions} of the lengths of strings state, each as the form it stands as. */
+    private static List<Holding> standing(
+            List<WhatAStringSaysOfItsLength.Condition<FactSubject>> conditions) {
+        List<Holding> out = new ArrayList<>();
+        for (WhatAStringSaysOfItsLength.Condition<FactSubject> each : conditions) {
+            NumericConstraint stated = NumericConstraint.of(each);
+            out.add(new Holding.Stands(stated.form(), stated.rel()));
+        }
+        return out;
+    }
+
+    /**
+     * A string coming out one {@code meaning} accepts: a statement unnamed, which makes certain on
+     * each side of itself what that side alone has. Where it is accepted, it holds as many code
+     * points as the strings the pattern accepts do, none where the pattern accepts none. Where it
+     * is not, it is not the empty string if the pattern accepts that, since nothing else of its
+     * length is left out.
+     */
+    private Holding accepting(PatternMeaning meaning) {
+        FactSubject count = countOf(applied.args().get(
+                StringPredicates.of(Kernel.STRING_MATCHES).subject()));
+        WhatAStringSaysOfItsLength.Sides<FactSubject> said = count == null
+                ? WhatAStringSaysOfItsLength.Sides.nothing()
+                : WhatAStringSaysOfItsLength.inALanguage(count, meaning);
+        return new Holding.Unnamed(new Holding.Unnamed.Of.APattern(meaning),
+                standing(said.ifHolds()), standing(said.ifDenied()));
     }
 
     /** How many code points the argument {@code subject} names holds, or null where it names no

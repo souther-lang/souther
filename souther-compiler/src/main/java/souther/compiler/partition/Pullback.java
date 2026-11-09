@@ -3343,6 +3343,17 @@ final class Pullback {
     }
 
     /**
+     * What a call the domain has no words for would be said as, where it is a string held to a
+     * pattern: the statement a way through the body may take what it makes certain of.
+     */
+    private Optional<Proposition.Unread.CouldBe> couldBeSaid(AnOperationApplied applied, Core e,
+                                                             InputReads reads) {
+        Derivation.AStringInALanguage held = new ALawRead(applied, e, reads).stringInALanguage();
+        return held == null ? Optional.empty() : Optional.of(new Proposition.Unread.CouldBe(
+                new Proposition.InTheStrings.Strings.AtAPosition(held.string()), held.accepts()));
+    }
+
+    /**
      * How {@code applied} coming out on {@code aspect} was read by what settles that side of its
      * answer: its law, read over the arguments it was handed, or the closing that names what the
      * domain has no words for, stopped at {@code stopsAt} — or null where nothing settles it.
@@ -3357,7 +3368,7 @@ final class Pullback {
             case null -> null;
             case BoundOperationFacts.Settled.Unsaid(Unsayable why) -> leaf(new Derivation.Stopped(
                     new WhyUnread.NoWordsFor(operation, OperationLaw.Observed.of(aspect), why),
-                    fixed(e, reads)), stopsAt);
+                    fixed(e, reads), couldBeSaid(applied, e, reads)), stopsAt);
             case BoundOperationFacts.Settled.Open _ -> leaf(new Derivation.Stopped(
                     new WhyUnread.NotProvedOfItsBody(operation, OperationLaw.Observed.of(aspect)),
                     fixed(e, reads)), stopsAt);
@@ -6385,6 +6396,21 @@ final class Pullback {
          * predicate it learns is a predicate of the string at a position too.
          */
         Derivation aStringInALanguage() {
+            Derivation.AStringInALanguage held = stringInALanguage();
+            // Only a string that is an element of a container being counted over is said here: a
+            // string standing at a position of a row is a statement the decision reads of the row.
+            return held != null && quantifying.stream().anyMatch(held::isAnElementOf)
+                    ? leaf(held, e, reads) : null;
+        }
+
+        /**
+         * The call as that string being one of the strings the predicate holds of, wherever the
+         * string stands — or null where it is no such call.
+         *
+         * <p>What the call would be said as, which is not what a reading divides a position by
+         * unless the string is an element being counted over ({@link #aStringInALanguage}).
+         */
+        Derivation.AStringInALanguage stringInALanguage() {
             StringPredicates.Stated stated = acceptingStatement();
             if (stated == null
                     || !(stated.reading() instanceof StringPredicates.Reading.Accepting(
@@ -6395,11 +6421,8 @@ final class Pullback {
                             instanceof PathResolution.At(TermPath at))) {
                 return null;
             }
-            Derivation.AStringInALanguage held = new Derivation.AStringInALanguage(at,
-                    new StringsLanguage(accepts), operation, written);
-            // Only a string that is an element of a container being counted over is said here: a
-            // string standing at a position of a row is a statement the decision reads of the row.
-            return quantifying.stream().anyMatch(held::isAnElementOf) ? leaf(held, e, reads) : null;
+            return new Derivation.AStringInALanguage(at, new StringsLanguage(accepts), operation,
+                    written);
         }
 
         /** What {@code e}, a string predicate applied, states and the strings it holds of. */

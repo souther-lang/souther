@@ -49,7 +49,7 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
 
     /** One it reads and will not build a machine for, which is the other way to be short. */
     private static final String MORE_THAN_A_WITNESS_MAY_SPEND =
-            "String.matches(\"a{60000}\", value)";
+            "String.matches(\"[ab]*a[ab]{20}\", value)";
 
     private static String model(String rule) {
         return """

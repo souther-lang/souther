@@ -144,7 +144,7 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
                     invariant String.length(value) >= 2 && String.length(value) <= 4
 
                 data C = { text: Text }
-                    invariant String.matches("xxx+", text.value)
+                    invariant String.matches("x|xxx|xxxx", text.value)
 
                 behavior label : (c: C, s: Size) -> Tag
 

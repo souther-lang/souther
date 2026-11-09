@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
@@ -8,6 +9,7 @@ import souther.compiler.semantics.LawProposition;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * How a value the affine fragment cannot carry was computed from values it can.
@@ -363,11 +365,68 @@ sealed interface Derivation {
             record Something(LinearForm<FactSubject> count) implements Holding {}
 
             /**
-             * {@code part} of a law, which this side names by no count or number: it holds on
-             * some runs and not on others as far as anything here can say, on either side of it.
-             * Told apart by the part, so two laws differing in one are two statements.
+             * A statement {@code of} a law or of a pattern, which this side names by no count or
+             * number: it holds on some runs and not on others as far as anything here can say, on
+             * either side of it. Told apart by what it is of and by what it makes certain, so two
+             * statements differing in either are two.
+             *
+             * <p>What it makes certain is stated for each side separately: {@code ifHolds} where the
+             * part holds, {@code ifDenied} where it does not, each a list whose members all hold.
+             * They are necessary conditions of a side, never the part itself, so neither is the
+             * denial of the other and a side with none says nothing.
              */
-            record Unnamed(LawProposition<DeclaredArgument> part) implements Holding {}
+            record Unnamed(Of of, List<Holding> ifHolds, List<Holding> ifDenied)
+                    implements Holding {
+                public Unnamed {
+                    ifHolds = List.copyOf(ifHolds);
+                    ifDenied = List.copyOf(ifDenied);
+                }
+
+                /** A part of a law that makes nothing certain on either side. */
+                public Unnamed(LawProposition<DeclaredArgument> part) {
+                    this(new Of.ALaw(part), List.of(), List.of());
+                }
+
+                /**
+                 * Which way this comes out where a reading says of a condition of a side that it
+                 * cannot hold: a side with a condition that cannot hold is a side it is not on.
+                 *
+                 * <p>Only that. That every condition of a side holds says nothing of the part, and
+                 * the one rule is here so that each reading of a holding, whatever it reads the
+                 * conditions in, takes a side out the same way.
+                 *
+                 * @param holds what the reading says of a condition: true where it holds, false
+                 *              where it cannot, null where it leaves it open
+                 * @return false where the holding side cannot be the one, true where the denied
+                 *         side cannot, null where neither is shown
+                 */
+                public Boolean outOf(Function<Holding, Boolean> holds) {
+                    if (someCannotHold(ifHolds, holds)) {
+                        return Boolean.FALSE;
+                    }
+                    return someCannotHold(ifDenied, holds) ? Boolean.TRUE : null;
+                }
+
+                private static boolean someCannotHold(List<Holding> conditions,
+                                                      Function<Holding, Boolean> holds) {
+                    for (Holding condition : conditions) {
+                        if (Boolean.FALSE.equals(holds.apply(condition))) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                /** What an unnamed statement is of. */
+                public sealed interface Of {
+
+                    /** A part of a law of an operation. */
+                    record ALaw(LawProposition<DeclaredArgument> part) implements Of {}
+
+                    /** Which strings a call was given to accept: what it means. */
+                    record APattern(PatternMeaning meaning) implements Of {}
+                }
+            }
 
             /** One of {@code ways} holds. */
             record AnyOf(List<Holding> ways) implements Holding {
@@ -415,7 +474,10 @@ sealed interface Derivation {
                 case Holding.AllOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
                 case Holding.Not(Holding denied) -> counts(denied, out);
                 case Holding.Stands(LinearForm<FactSubject> form, Rel _) -> out.add(form);
-                case Holding.Unnamed _ -> { }
+                case Holding.Unnamed(var _, List<Holding> ifHolds, List<Holding> ifDenied) -> {
+                    ifHolds.forEach(way -> counts(way, out));
+                    ifDenied.forEach(way -> counts(way, out));
+                }
             }
         }
 
@@ -432,8 +494,10 @@ sealed interface Derivation {
                 case Holding.Stands(LinearForm<FactSubject> form, Rel rel) ->
                         b instanceof Holding.Stands it && rel == it.rel()
                                 && same.forms(form, it.form());
-                case Holding.Unnamed(var part) ->
-                        b instanceof Holding.Unnamed it && part.equals(it.part());
+                case Holding.Unnamed(var of, List<Holding> ifHolds, List<Holding> ifDenied) ->
+                        b instanceof Holding.Unnamed it && of.equals(it.of())
+                                && same(ifHolds, it.ifHolds(), same)
+                                && same(ifDenied, it.ifDenied(), same);
             };
         }
 

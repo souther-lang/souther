@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -368,10 +369,32 @@ public final class ReadThroughNames {
         return ElementsNamed.of(found);
     }
 
+    /** The string at a position as {@code telling} names it, or null where its names meet. */
+    private static Proposition.InTheStrings.Strings.AtAPosition told(
+            Proposition.InTheStrings.Strings.AtAPosition string, Telling telling) {
+        ValueIdentity identity = telling.of(string.at(), string.identity());
+        return identity == null ? null : identity.equals(string.identity()) ? string
+                : new Proposition.InTheStrings.Strings.AtAPosition(string.at(), identity);
+    }
+
     private static Proposition told(Proposition stated, Telling telling,
                                     Supplier<Proposition> twoAsOne) {
         return switch (stated) {
-            case Proposition.Always _, Proposition.Unread _ -> stated;
+            case Proposition.Always _ -> stated;
+            // What a part would be said as is of whatever that statement is of, and says nothing
+            // where its names meet: the part itself is no less read for that.
+            case Proposition.Unread unread -> {
+                Optional<Proposition.Unread.CouldBe> said = unread.couldBe().map(
+                        could -> {
+                            Proposition.InTheStrings.Strings.AtAPosition string =
+                                    told(could.string(), telling);
+                            return string == null ? null : string == could.string() ? could
+                                    : new Proposition.Unread.CouldBe(string, could.accepts());
+                        });
+                yield said.equals(unread.couldBe()) ? stated : new Proposition.Unread(
+                        unread.where(), unread.ordinal(), unread.why(), unread.fixed(),
+                        unread.holds(), said);
+            }
             case Proposition.Compared compared -> {
                 Relation relation = told(compared.relation(), telling);
                 yield relation == null ? twoAsOne.get()
@@ -436,15 +459,13 @@ public final class ReadThroughNames {
             }
             // A string at a position is a subject as any other is.
             case Proposition.InTheStrings strings -> {
-                if (!(strings.of() instanceof Proposition.InTheStrings.Strings.AtAPosition(
-                        TermPath at, ValueIdentity had))) {
+                if (!(strings.of() instanceof Proposition.InTheStrings.Strings.AtAPosition at)) {
                     yield stated;
                 }
-                ValueIdentity identity = telling.of(at, had);
-                yield identity == null ? twoAsOne.get() : identity.equals(had) ? stated
-                        : new Proposition.InTheStrings(
-                                new Proposition.InTheStrings.Strings.AtAPosition(at, identity),
-                                strings.accepts(), strings.holds());
+                Proposition.InTheStrings.Strings.AtAPosition string = told(at, telling);
+                yield string == null ? twoAsOne.get() : string == at ? stated
+                        : new Proposition.InTheStrings(string, strings.accepts(),
+                                strings.holds());
             }
             // A string inside another is a relation of the two strings' values.
             case Proposition.StringInside inside -> {

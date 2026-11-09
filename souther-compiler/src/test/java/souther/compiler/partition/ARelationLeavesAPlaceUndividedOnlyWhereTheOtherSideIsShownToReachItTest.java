@@ -2043,10 +2043,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
     }
 
-    /** A string of two characters that is three letters, which no value is, and which the reading
-     *  of the declarations does not refuse on its own. */
-    private static final String NO_STRING = "data Never = String invariant String.length(value) == 2"
-            + " && String.matches(\"[a-z]{3}\", value)";
+    /** An integer whose square is two, which no value is, and which the reading of the
+     *  declarations does not refuse on its own: a product of two unknowns is not something it
+     *  reads. */
+    private static final String NO_VALUE = "data Never = Int invariant value * value == 2";
 
     /**
      * How many a container holds is a count rows take only where an element can be written. The
@@ -2058,10 +2058,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aCountOfElementsNoValueIsTakesNothingButNought() {
         String inputs = "xs: List<Never>";
         String body = STANDING.formatted("i == List.length(xs) - 1");
-        assertEquals(List.of(), classesAt(inputs, NO_STRING, "List<Int>", body,
+        assertEquals(List.of(), classesAt(inputs, NO_VALUE, "List<Int>", body,
                 "List.length(xs)"));
-        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, NO_STRING, "List<Int>",
-                body, atThe("==", NO_STRING, inputs, body)));
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, NO_VALUE, "List<Int>",
+                body, atThe("==", NO_VALUE, inputs, body)));
     }
 
     /**
@@ -2156,7 +2156,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(List.of(), classesAt("issues: List<Issue>, atLeast: Int",
                 LABELLED.replace("Set<String>", "Set<Never>")
                         .replace("Set.toList(i.labels)", "List.map(l -> l.value, Set.toList(i.labels))")
-                        + "\n" + NO_STRING, BUSY, "atLeast"));
+                        + "\n" + NO_VALUE, BUSY, "atLeast"));
     }
 
     /**

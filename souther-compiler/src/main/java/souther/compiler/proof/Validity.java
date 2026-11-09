@@ -6,6 +6,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.regex.WhatAStringSaysOfItsLength;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -540,9 +541,41 @@ final class Validity {
                     Props.either(new LawProposition.SomeElement<>(container, ofTheElement, false),
                             holds(container)));
             case Atom.Alike _ -> List.of();
-            // Nothing is taken of a string standing inside another beyond what the statements
-            // about it say: the facts a string being inside another carries are laws of their own.
-            case Atom.Inside _ -> List.of();
+            // What standing inside another says of how long a string is, on each side, is a
+            // condition of that side only: a string no longer than another need not stand inside
+            // it, and one holding some may.
+            case Atom.Inside(Value inner, Value outer, StringContainment place) -> {
+                WhatAStringSaysOfItsLength.Sides<Value> said =
+                        WhatAStringSaysOfItsLength.inside(inner, outer);
+                List<LawProposition<Value>> out = new ArrayList<>();
+                for (WhatAStringSaysOfItsLength.Condition<Value> each : said.ifHolds()) {
+                    out.add(Props.either(new LawProposition.Inside<>(
+                            new LawSubject.Argument<>(inner), new LawSubject.Argument<>(outer),
+                            place, false), stated(each)));
+                }
+                for (WhatAStringSaysOfItsLength.Condition<Value> each : said.ifDenied()) {
+                    out.add(Props.either(new LawProposition.Inside<>(
+                            new LawSubject.Argument<>(inner), new LawSubject.Argument<>(outer),
+                            place, true), stated(each)));
+                }
+                yield out;
+            }
+        };
+    }
+
+    /** What {@code condition} of the lengths of strings states, over the sizes of the values. */
+    private static LawProposition<Value> stated(
+            WhatAStringSaysOfItsLength.Condition<Value> condition) {
+        return switch (condition) {
+            case WhatAStringSaysOfItsLength.Condition.AtLeast<Value>(Value string, long length) ->
+                    Props.compared(sizeOf(string), Rel.GE, Props.constant(length));
+            case WhatAStringSaysOfItsLength.Condition.AtMost<Value>(Value string, long length) ->
+                    Props.compared(sizeOf(string), Rel.LE, Props.constant(length));
+            case WhatAStringSaysOfItsLength.Condition.NoLongerThan<Value>(
+                    Value inner, Value outer) ->
+                    Props.compared(sizeOf(inner), Rel.LE, sizeOf(outer));
+            case WhatAStringSaysOfItsLength.Condition.Impossible<Value> _ ->
+                    new LawProposition.Always<>(false);
         };
     }
 
