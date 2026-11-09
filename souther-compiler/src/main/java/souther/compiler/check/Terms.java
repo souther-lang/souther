@@ -1571,6 +1571,18 @@ final class Terms {
                 return addPiecesOf(applied.args().get(0), in, into)
                         && addPiecesOf(applied.args().get(1), in, into);
             }
+            if (applied.operation().equals(ValueName.Stdlib.operation("List", "concat"))
+                    && applied.args().size() == 1
+                    && Core.withoutStanding(signSides.standing(applied.args().get(0), in).value())
+                            instanceof Core.ListLit written) {
+                Denotations inside = signSides.standing(applied.args().get(0), in).at();
+                for (Core each : written.elements()) {
+                    if (!addPiecesOf(each, inside, into)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
             int listed = DefaultBoundOperationFacts.positionOfTheArgumentListedOnce(
                     applied.operation());
             if (listed >= 0 && listed < applied.args().size()) {
@@ -1612,14 +1624,29 @@ final class Terms {
                             LinearForm.difference(totals.get(i), totals.get(j)), Rel.EQ));
                 }
             }
-            if (one.combine() != Accumulation.Combine.ADD) {
-                continue;
-            }
             for (int j = 0; j < totals.size(); j++) {
                 for (int k = j; k < totals.size(); k++) {
                     TotalOfPieces left = totalsOfPieces.get(totals.get(j));
                     TotalOfPieces right = totalsOfPieces.get(totals.get(k));
-                    if (left.combine() == Accumulation.Combine.ADD
+                    if (one.combine() == Accumulation.Combine.MULTIPLY
+                            && left.combine() == Accumulation.Combine.MULTIPLY
+                            && right.combine() == Accumulation.Combine.MULTIPLY
+                            && one.pieces().equals(together(left.pieces(), right.pieces()))) {
+                        // Not a line in the totals, but a product written of the two is an atom
+                        // of its own, and the total is that atom.
+                        for (FactSubject made : List.of(
+                                FactSubject.of(interned.operator(BinOp.MUL,
+                                        totals.get(j).identity(), totals.get(k).identity())),
+                                FactSubject.of(interned.operator(BinOp.MUL,
+                                        totals.get(k).identity(), totals.get(j).identity())))) {
+                            if (atoms.contains(made)) {
+                                out.add(new NumericConstraint(
+                                        LinearForm.difference(totals.get(i), made), Rel.EQ));
+                            }
+                        }
+                    }
+                    if (one.combine() == Accumulation.Combine.ADD
+                            && left.combine() == Accumulation.Combine.ADD
                             && right.combine() == Accumulation.Combine.ADD
                             && one.pieces().equals(together(left.pieces(), right.pieces()))) {
                         LinearForm<FactSubject> parts = LinearForm.atom(totals.get(j))
