@@ -1219,9 +1219,15 @@ public sealed interface RowDemand {
      * @param partedStrings the string a statement about a piece of one is over, and how its
      *                  pieces were taken, where it is one: what it depends on, and not what it
      *                  places — a composer places nothing for it
+     * @param composedAs a statement a composer does write a row toward, which a row meets exactly
+     *                  where it meets this one, or none: what the run decides is still asked of the
+     *                  row, and a row composing it is composed for is one the run need not turn
+     *                  away. Said apart from the statement because a reader of what the way
+     *                  leaves reads the statement and not a way of writing a row for it
      */
     record ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past,
-                     Optional<Derivation.APieceInALanguage.PartedString> partedStrings)
+                     Optional<Derivation.APieceInALanguage.PartedString> partedStrings,
+                     Optional<SoMany> composedAs)
             implements OfACondition {
 
         public ForTheRun {
@@ -1229,10 +1235,16 @@ public sealed interface RowDemand {
             Objects.requireNonNull(why, "a statement no composer writes is of some kind");
             past = List.copyOf(new LinkedHashSet<>(past));
             Objects.requireNonNull(partedStrings, "a string it is over, or none");
+            Objects.requireNonNull(composedAs, "a statement composed for, or none");
         }
 
         public ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past) {
-            this(statement, why, past, Optional.empty());
+            this(statement, why, past, Optional.empty(), Optional.empty());
+        }
+
+        public ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past,
+                         Optional<Derivation.APieceInALanguage.PartedString> partedStrings) {
+            this(statement, why, past, partedStrings, Optional.empty());
         }
 
         /** The position of the string it is over, which it depends on and places nothing at. */

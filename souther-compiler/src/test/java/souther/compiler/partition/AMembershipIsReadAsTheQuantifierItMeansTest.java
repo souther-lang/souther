@@ -230,7 +230,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                                                             DecisionSubject.AnInput(TermPath other,
                                                                     var _),
                                                             var _, var _), var _, var _),
-                                            var _, var _, var _)
+                                            var _, var _, var _, var _)
                                     && over.equals(totals) && one.equals(totals.key())
                                     && other.equals(wanted)))),
                     () -> "the key is what is asked: " + stated);

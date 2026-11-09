@@ -6206,7 +6206,7 @@ public final class Generator {
         // the way settles nothing a rule is gone past by, so the first row built is not the row
         // taken where a later one meets the whole way. Where none does, the first built is.
         boolean apartFirst = elementsMayDiffer(reaching, fixing);
-        boolean counts = reaching.boundedOnTheWay().stream()
+        boolean counts = reaching.composing().stream()
                 .anyMatch(cut -> countedOf(cut.demand()).isPresent());
         List<BoundaryAttempt> builtShort = new ArrayList<>();
         if (apartFirst) {
@@ -6329,14 +6329,14 @@ public final class Generator {
                 composedForCounts.add(count.count().container());
             }
         }
-        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+        for (OnTheWay.TakenIn cut : reaching.composing()) {
             if (cut.demand() instanceof RowDemand.SoMany many) {
                 composedForCounts.add(AStatementAtARow.elementsOf(many.count()).container()
                         .inputPosition());
             }
         }
         Set<TermPath> quantified = new HashSet<>();
-        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+        for (OnTheWay.TakenIn cut : reaching.composing()) {
             if (countedOf(cut.demand()).isEmpty()) {
                 continue;
             }
@@ -6441,7 +6441,7 @@ public final class Generator {
         // And what the way asks the elements of its containers to be, which the elements are
         // written as. Where that is two things at one position inside an element, the elements are
         // written alike and no row is — which is this composer's answer and not the model's.
-        ElementWrites elements = ElementWrites.of(reaching.boundedOnTheWay());
+        ElementWrites elements = ElementWrites.of(reaching.composing());
         Requirements rowIs;
         switch (elements.requiredBeside(reaching.requirements())) {
             case Requirements.Merge.Merged(Requirements both) -> rowIs = both;
@@ -6519,7 +6519,7 @@ public final class Generator {
         // The order is one for every way of writing them under the cases, since which parameter a
         // container is handed a value of does not turn on the case it is written under. And what a
         // count composed above hands on for each element it counts, at the counts it was asked.
-        ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay(), numbers)
+        ContentsAsked asked = ContentsAsked.of(reaching.composing(), numbers)
                 .and(subject.membersTheRulesNeed());
         CompositionOrder order;
         switch (CompositionOrder.of(parametersOf(subject), asked)) {
@@ -6589,7 +6589,7 @@ public final class Generator {
             // of several ways split this into were each handed here apart. A way looked along whole
             // stays one that was, so what was not split is still said of its row.
             Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(),
-                    way.taken(), truths, reaching.boundedOnTheWay(),
+                    way.taken(), truths, reaching.composing(),
                     reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure,
                             var _, var _, var from)
                             ? new Reachability.Ways.Whole(unsplit, figure, List.of(), List.of(),
@@ -7298,11 +7298,11 @@ public final class Generator {
                 // Said against a condition on the way where there is one; a row held to none is
                 // composed with the key at no one value, which the composing says.
                 case NumericWitness.Standing.ProvedImpossible _ ->
-                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
+                        reaching.composing().stream().findFirst().ifPresent(cut ->
                                 gaps.add(new ReachabilityGap.Uncomposed(cut,
                                         new ReachabilityGap.Why.NoValueComposedForItsPositions())));
                 case NumericWitness.Standing.NotFound(CompositionShortfall met) ->
-                        reaching.boundedOnTheWay().stream().findFirst().ifPresent(cut ->
+                        reaching.composing().stream().findFirst().ifPresent(cut ->
                                 gaps.add(new ReachabilityGap.Uncomposed(cut,
                                         ReachabilityGap.Why.ofAWalkThatFoundNothing(met))));
             }
@@ -7532,7 +7532,7 @@ public final class Generator {
                         new Level.OfTheQuantity(ExactRatio.ONE))));
             }
         }
-        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+        for (OnTheWay.TakenIn cut : reaching.composing()) {
             if (countedOf(cut.demand()).isEmpty()) {
                 continue;
             }
@@ -7541,7 +7541,7 @@ public final class Generator {
             }
         }
         List<OnTheWay.TakenIn> cuts = new ArrayList<>();
-        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+        for (OnTheWay.TakenIn cut : reaching.composing()) {
             cuts.add(countedOf(cut.demand()).isPresent()
                     && byCounts.contains(containerOf(cut.demand())) ? asACount(cut) : cut);
         }
@@ -7737,7 +7737,8 @@ public final class Generator {
             }
             // A statement no composer writes toward: nothing is placed for it, and the run is what
             // says whether the row met it.
-            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why, var past, var _)) {
+            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why, var past, var _,
+                    var _)) {
                 gaps.add(new ReachabilityGap.Uncomposed(cut,
                         new ReachabilityGap.Why.NoComposerWritesIt(why, past)));
                 continue;
@@ -10238,7 +10239,7 @@ public final class Generator {
                 return known;
             }
             NumbersAskedFor asked = NumbersAskedFor.askedOf(at, reaching.region(),
-                    carrierOf(at, subject.quantities()), reaching.boundedOnTheWay());
+                    carrierOf(at, subject.quantities()), reaching.composing());
             said.put(at, asked);
             return asked;
         }
@@ -11942,7 +11943,7 @@ public final class Generator {
         Map<RealizationTarget, AskedAt> numbers = atThoseNumbers(where.at(),
                 whatEachOfThemIsANumberOf(itemAsks, where.routed(), where.counted(), leaves));
         return new HeldTogether.Asked(new LinkedHashMap<>(numbers), where.at(), required, reaching,
-                ContentsAsked.of(reaching.boundedOnTheWay(), numbers)
+                ContentsAsked.of(reaching.composing(), numbers)
                         .and(subject.membersTheRulesNeed()), where.someElement(),
                 where.composed(), where.bounds());
     }
@@ -12521,7 +12522,7 @@ public final class Generator {
         // this composer's answer and not the model's.
         ElementWrites elements = holding.reaching() == null
                 ? ElementWrites.of(List.of())
-                : ElementWrites.of(holding.reaching().boundedOnTheWay());
+                : ElementWrites.of(holding.reaching().composing());
         switch (elements.requiredBeside(withTheWay)) {
             case Requirements.Merge.Merged(Requirements both) -> withTheWay = both;
             case Requirements.Merge.Conflict conflict -> {

@@ -63,6 +63,19 @@ class AnElementCountedForFailingAMembershipIsComposedTest {
         assertEquals(List.of(), whatNothingCouldShow(PRICED + " == 1"));
     }
 
+    /**
+     * How many meet a statement against how many there are is how many fail to meet it, held
+     * against nought, so a row is composed for it as for any other count of the elements.
+     */
+    @Test
+    void theElementsMeetingAMembershipAgainstHowManyThereAreAreComposed() {
+        String length = "List.length(deals)";
+        assertEquals(List.of(), whatNothingCouldShow(PRICED + " == " + length));
+        assertEquals(List.of(), whatNothingCouldShow(PRICED + " < " + length));
+        assertEquals(List.of(), whatNothingCouldShow(UNPRICED + " == " + length));
+        assertEquals(List.of(), whatNothingCouldShow(length + " - 1 == " + PRICED));
+    }
+
     /** The points nothing could show a row can be written at. */
     private static List<String> whatNothingCouldShow(String guard) {
         Compilation compilation = Compilation.ofSource(DEALS.replace("GUARD", guard), "Main");

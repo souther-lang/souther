@@ -1992,7 +1992,7 @@ final class DemandReading {
                             ? AnElementsWay.ofTheRow(forTheRun(whole,
                                     RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE))
                             : AnElementsWay.ofTheRow(each));
-            case Read.Demands(RowDemand.ForTheRun(var _, var why, var past, var parted)) ->
+            case Read.Demands(RowDemand.ForTheRun(var _, var why, var past, var parted, var _)) ->
                     List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past, parted)));
             // Each way of each alternative: one alternative a figure stopped is said to be, and
             // the others are the ways they are.
@@ -2261,6 +2261,16 @@ final class DemandReading {
                 element.stream().anyMatch(term.subjectPath()::isAtOrUnder));
     }
 
+    /** How many the container at {@code held} holds, as the term that names it, or null where its
+     *  type measures none. */
+    private static NumericTerm.TakenOf sizeOf(TermPath held, InputReading read) {
+        Type container = read.domain().typeAt(held, read.rules());
+        ValueName.Stdlib size = container == null ? null
+                : NumericMeasures.takenOf(container, read.rules().inners());
+        return size == null ? null : NumericTerm.TakenOf.asItStands(size, held, container,
+                read.rules().inners(), read.rules().symbols());
+    }
+
     /**
      * That the container at {@code held} holds at least one, or none, as its size against one or
      * against nought.
@@ -2274,15 +2284,11 @@ final class DemandReading {
      */
     private static RowDemand.Relational sizeAgainst(TermPath held, InputReading read,
                                                     boolean atLeastOne) {
-        Type container = read.domain().typeAt(held, read.rules());
-        ValueName.Stdlib size = container == null ? null
-                : NumericMeasures.takenOf(container, read.rules().inners());
-        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.asItStands(size, held,
-                container, read.rules().inners(), read.rules().symbols());
+        NumericTerm.TakenOf count = sizeOf(held, read);
         if (count == null) {
             throw new IllegalStateException("a statement about the elements of `" + held
                     + "` was read, and the reading of the input measures no size of it: "
-                    + container);
+                    + read.domain().typeAt(held, read.rules()));
         }
         // `count - 1 >= 0`, or `count <= 0`.
         LinearForm<NumericTerm> form = atLeastOne
@@ -2338,6 +2344,13 @@ final class DemandReading {
             case Relation.Affine affine
                     when onARemainderAlone(affine, met, read) instanceof RowDemand.OnARemainder on ->
                     new Read.Demands(on);
+            // How many elements meet a statement against how many the container holds. The run
+            // decides it, and a row is composed for how many fail to meet it.
+            case Relation.Affine affine
+                    when failingOf(affine, met, read) instanceof RowDemand.SoMany failing ->
+                    new Read.Demands(new RowDemand.ForTheRun(compared,
+                            RowDemand.NoComposer.A_COUNT_OF_ELEMENTS, List.of(), Optional.empty(),
+                            Optional.of(failing)));
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);
                 if (against == null) {
@@ -2456,6 +2469,49 @@ final class DemandReading {
         WholeNumberRuns leaves = RowDemand.OnARemainder.meeting(affine, met);
         return leaves == null || leaves.isNone() ? null
                 : new RowDemand.OnARemainder(remainder, leaves);
+    }
+
+    /**
+     * How many elements of a container fail to meet a statement, held against a number, where
+     * {@code affine} weighs how many meet it against how many the container holds by the same
+     * weight the other way — or null where it is no such relation.
+     *
+     * <p>What a container holds less how many of it meet a statement is how many do not, so the
+     * relation is about that count alone. The size is no number a row writes beside the count: it
+     * is how many elements the container is composed with, which composing the count settles
+     * together with the count, so held as a number of the input it would be asked of the very thing
+     * it is composed with. Counts of elements of the same container only: the container's size is
+     * the sum of a count and the count of its denial, and of no two other counts.
+     */
+    private static RowDemand.SoMany failingOf(Relation.Affine affine, Rel met, InputReading read) {
+        Map<Quantity, ExactRatio> coefs = affine.form().coefs();
+        if (coefs.size() != 2) {
+            return null;
+        }
+        Quantity.HowManyMeet meeting = null;
+        for (Quantity each : coefs.keySet()) {
+            if (each instanceof Quantity.HowManyMeet one) {
+                meeting = one;
+            }
+        }
+        if (meeting == null
+                || !(meeting.container() instanceof DecisionSubject.AnInput(TermPath held, var _))) {
+            return null;
+        }
+        ExactRatio weight = coefs.get(meeting).negated();
+        NumericTerm size = sizeOf(held, read);
+        boolean againstItsSize = coefs.entrySet().stream().anyMatch(each ->
+                each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)
+                        && term.equals(size) && each.getValue().compareTo(weight) == 0);
+        Quantity.HowManyMeet failing = new Quantity.HowManyMeet(meeting.container(),
+                meeting.ofTheElement().denied());
+        if (!againstItsSize || !AStatementAtARow.askable(AStatementAtARow.meetingOf(failing))
+                || !(affine.form().constant().negated().dividedBy(weight)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+            return null;
+        }
+        return new RowDemand.SoMany(failing, weight.signum() > 0 ? met : met.turned(), level,
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), anElementMeeting(failing, read));
     }
 
     /**

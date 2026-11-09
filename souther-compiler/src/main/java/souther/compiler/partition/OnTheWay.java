@@ -140,6 +140,17 @@ public sealed interface OnTheWay {
             return "TakenIn[anchor=" + anchor + ", demand=" + demand + ", named=" + named + "]";
         }
 
+        /**
+         * What a composer is asked of a row for this: the statement it writes a row toward where
+         * the demand has one beside the run's ({@link RowDemand.ForTheRun#composedAs}), and this
+         * as it is otherwise.
+         */
+        public TakenIn forComposing() {
+            return demand instanceof RowDemand.ForTheRun(var _, var _, var _, var _,
+                    Optional<RowDemand.SoMany> composedAs) && composedAs.isPresent()
+                    ? new TakenIn(anchor, composedAs.get(), named) : this;
+        }
+
         /** The rest compared, the hash first: two entries that differ almost always differ in
          *  it. */
         @Override
