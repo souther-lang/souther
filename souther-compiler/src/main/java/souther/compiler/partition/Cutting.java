@@ -475,8 +475,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 || of instanceof BorderQuantity.RemainderOfAPair
                 || of instanceof BorderQuantity.ProductOfAPair) {
             for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
-                if (((each.getKey() instanceof Quantity.HowManyMeet
-                        || each.getKey() instanceof Quantity.HowManyDifferentMeet)
+                if ((AStatementAtARow.countsElements(each.getKey())
                         && of instanceof BorderQuantity.HowMany)
                         || (each.getKey() instanceof Quantity.RemainderOfADividend
                                 && of instanceof BorderQuantity.RemainderOfAForm)
@@ -1052,8 +1051,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static CountedElements countedAs(String behavior, Quantity quantity,
                                              InputReading read) {
-        return (quantity instanceof Quantity.HowManyMeet
-                || quantity instanceof Quantity.HowManyDifferentMeet)
+        return AStatementAtARow.countsElements(quantity)
                 && AStatementAtARow.askable(AStatementAtARow.meetingOf(quantity))
                 ? CountedElements.of(behavior, quantity, read.quantities(),
                         DemandReading.anElementMeeting(AStatementAtARow.elementsOf(quantity),
@@ -1259,8 +1257,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Quantity count = null;
         ExactRatio weight = null;
         for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
-            if (each.getKey() instanceof Quantity.HowManyMeet
-                    || each.getKey() instanceof Quantity.HowManyDifferentMeet) {
+            if (AStatementAtARow.countsElements(each.getKey())) {
                 if (count != null) {
                     return null;
                 }
@@ -1800,7 +1797,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         beyondTheForm.add(NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE);
                 case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
                      DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
-                     Quantity.HowManyMeet _,
+                     Quantity.HowManyMeet _, Quantity.HowManyMeetAcross _,
                      Quantity.HowManyHold _, Quantity.HowManyDifferent _,
                      Quantity.HowManyDifferentMeet _,
                      Quantity.HowManyDifferentBelow _, Quantity.HowManyDifferentAcross _,
@@ -1840,6 +1837,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             switch (each) {
                 case DecisionAtom.OfTheInput(NumericTerm term, var _) -> input.add(term);
                 case Quantity.HowManyMeet count
+                        when valuesItRelates(count.ofTheElement()) instanceof List<FilingCoordinate>
+                        values -> related.addAll(values);
+                case Quantity.HowManyMeetAcross count
                         when valuesItRelates(count.ofTheElement()) instanceof List<FilingCoordinate>
                         values -> related.addAll(values);
                 case Quantity.HowManyDifferent different -> different.ofTheElement().heldAt()
@@ -2219,6 +2219,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             for (Quantity each : affine.form().coefs().keySet()) {
                 switch (each) {
                     case Quantity.HowManyMeet count -> relations.add(oneValue(count.ofTheElement()));
+                    case Quantity.HowManyMeetAcross count ->
+                            relations.add(oneValue(count.ofTheElement()));
                     case Quantity.HowManyDifferent different -> different.ofTheElement().heldAt()
                             .forEach(at -> relations.add(UndividedByARelation.amongTheValuesAt(at)));
                     case Quantity.HowManyDifferentAcross across -> relations.add(

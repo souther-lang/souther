@@ -21,14 +21,16 @@ class AGuardTyingWhatIsTakenOfTwoValuesIsComposedTest {
             module probe
 
             data Deal = { currency: String, amount: Int, on: Date }
+            data Group = { deals: List<Deal> }
             data Rates = { rates: Map<String, Int>, since: Date, year: Int }
             data Priced = { n: Int }
             data Unpriced = { n: Int }
 
-            behavior named : (deals: List<Deal>, rates: Rates) -> Priced | Unpriced
+            behavior named : (deals: List<Deal>, groups: List<Group>, rates: Rates)
+                    -> Priced | Unpriced
                 constructs Priced, Unpriced
 
-            let named (deals, rates) = {
+            let named (deals, groups, rates) = {
                 guard GUARD
                     else Unpriced { n = 0 }
                 Priced { n = 1 }
@@ -113,6 +115,22 @@ class AGuardTyingWhatIsTakenOfTwoValuesIsComposedTest {
                 "d.amount <= 3", "d.amount == 5")) {
             assertEquals(List.of(), whatNothingCouldShow("List.sum(List.map(d -> d.amount, "
                     + "List.filter(d -> " + kept + ", deals))) == 10"), kept);
+        }
+    }
+
+    /**
+     * How many elements the lists inside a list hold between them that meet a statement is a count
+     * of all of them put end to end, whatever the statement reads of an element.
+     */
+    @Test
+    void aCountOfTheElementsOfTheListsInsideAListIsComposed() {
+        for (String statement : List.of("true", "d.amount == 5", "Date.day(d.on) == 5")) {
+            String kept = statement.equals("true") ? "g.deals"
+                    : "List.filter(d -> " + statement + ", g.deals)";
+            for (String held : List.of("== 1", "== 2", ">= 3")) {
+                assertEquals(List.of(), whatNothingCouldShow("List.length(List.flatMap(g -> "
+                        + kept + ", groups)) " + held), statement + " " + held);
+            }
         }
     }
 

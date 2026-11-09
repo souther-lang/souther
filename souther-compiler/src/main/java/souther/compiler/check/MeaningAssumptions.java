@@ -550,7 +550,8 @@ final class MeaningAssumptions {
             case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) ->
                     named = answerAtom(answer);
             case Quantity.OfABinding bound -> named = boundAtom(bound);
-            case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> {
+            case Quantity.HowManyMeet _, Quantity.HowManyMeetAcross _,
+                 Quantity.HowManyHold _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS);
             }

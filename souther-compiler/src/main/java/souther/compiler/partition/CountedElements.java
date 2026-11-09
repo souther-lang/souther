@@ -73,12 +73,15 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
             throw new IllegalArgumentException("the values counted are of the elements of "
                     + container + ", and " + differentAt.get() + " is none of theirs");
         }
-        if (across.isPresent() && (differentAt.isEmpty()
-                || !container.isAtOrUnder(across.get().element())
+        // Where it counts values, the container is where the values are of, and the places they
+        // stand at are inside its elements: it is the container the values are counted in. Where
+        // it counts elements, it is the container whose elements are counted. Either way it is one
+        // container inside each element of the one across.
+        if (across.isPresent() && (!container.isAtOrUnder(across.get().element())
                 || container.containersHoldingIt().size()
                         != across.get().containersHoldingIt().size() + 1)) {
-            throw new IllegalArgumentException("the values of every element of the containers at "
-                    + container + " are counted, one inside each element of " + across.get());
+            throw new IllegalArgumentException("every element of the containers at " + container
+                    + " is counted, one inside each element of " + across.get());
         }
         on = Map.copyOf(on);
         anElementMeeting = anElementMeeting.map(List::copyOf);

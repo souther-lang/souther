@@ -1008,8 +1008,7 @@ public sealed interface RowDemand {
 
         public SoMany {
             Objects.requireNonNull(count, "a count of the elements of some container");
-            if (!(count instanceof Quantity.HowManyMeet
-                    || count instanceof Quantity.HowManyDifferentMeet)) {
+            if (!AStatementAtARow.countsElements(count)) {
                 throw new IllegalArgumentException("a count of the elements meeting something, or"
                         + " of the values they hold, and not " + count);
             }

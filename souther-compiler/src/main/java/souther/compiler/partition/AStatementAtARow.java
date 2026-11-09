@@ -260,8 +260,15 @@ final class AStatementAtARow {
             return null;
         }
         Quantity only = affine.form().coefs().keySet().iterator().next();
-        return only instanceof Quantity.HowManyMeet || only instanceof Quantity.HowManyDifferentMeet
-                ? only : null;
+        return countsElements(only) ? only : null;
+    }
+
+    /** Whether {@code quantity} is a count of the elements of a container meeting something, or
+     *  of the different values they hold: the counts {@link #elementsOf} answers for. */
+    static boolean countsElements(Quantity quantity) {
+        return quantity instanceof Quantity.HowManyMeet
+                || quantity instanceof Quantity.HowManyMeetAcross
+                || quantity instanceof Quantity.HowManyDifferentMeet;
     }
 
     /** What an element of {@code count}, one {@link #countIn} answers, is counted for meeting. */
@@ -277,6 +284,7 @@ final class AStatementAtARow {
     static Quantity.HowManyMeet elementsOf(Quantity count) {
         return switch (count) {
             case Quantity.HowManyMeet meeting -> meeting;
+            case Quantity.HowManyMeetAcross across -> across.elementsMeetingIt();
             case Quantity.HowManyDifferentMeet different -> different.elementsMeetingIt();
             default -> throw new IllegalArgumentException(count + " is no count of elements");
         };
@@ -296,8 +304,13 @@ final class AStatementAtARow {
      * of one.
      */
     static Optional<TermPath> acrossOf(Quantity count) {
-        return count instanceof Quantity.HowManyDifferentMeet different && different.across()
-                ? Optional.of(different.container().inputPosition()) : Optional.empty();
+        return switch (count) {
+            case Quantity.HowManyDifferentMeet different when different.across() ->
+                    Optional.of(different.container().inputPosition());
+            case Quantity.HowManyMeetAcross across ->
+                    Optional.of(across.container().inputPosition());
+            default -> Optional.empty();
+        };
     }
 
     /**
@@ -1119,16 +1132,25 @@ final class AStatementAtARow {
      * @return null where the walk could not reach the container
      */
     HowManyAtARow howManyMeetIn(TermPath container, BorderQuantity.Observation row) {
-        return row.keptOf(new MeetingIn(this, container));
+        return howManyMeetIn(container, Optional.empty(), row);
     }
 
-    /** How many elements of a container meet one statement, by the statement and the container. */
-    private record MeetingIn(AStatementAtARow statement, TermPath container)
+    /** The same, of every element of the containers at {@code container} inside the elements of
+     *  the container at {@code across}, put end to end, where it names one. */
+    private HowManyAtARow howManyMeetIn(TermPath container, Optional<TermPath> across,
+                                        BorderQuantity.Observation row) {
+        return row.keptOf(new MeetingIn(this, container, across));
+    }
+
+    /** How many elements of a container meet one statement, by the statement, the container and
+     *  the container holding the containers, where every one of them is counted. */
+    private record MeetingIn(AStatementAtARow statement, TermPath container,
+                             Optional<TermPath> across)
             implements BorderQuantity.ReadAlike<HowManyAtARow> {
 
         @Override
         public HowManyAtARow readAt(BorderQuantity.Observation row) {
-            if (!(row.eachElementOf(container)
+            if (!(elementsIn(row, container, across)
                     instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
                 return null;
             }
@@ -1164,13 +1186,9 @@ final class AStatementAtARow {
      */
     HowManyAtARow howManyIn(TermPath container, Optional<Quantity.TheValue> differentAt,
                             Optional<TermPath> across, BorderQuantity.Observation row) {
-        if (across.isPresent() && differentAt.isEmpty()) {
-            throw new IllegalArgumentException("every element of the containers at " + container
-                    + " is counted for its value, and no place of one is named");
-        }
         return differentAt.isPresent()
                 ? row.keptOf(new DifferentMeetingIn(this, container, differentAt.get(), across))
-                : howManyMeetIn(container, row);
+                : howManyMeetIn(container, across, row);
     }
 
     /**

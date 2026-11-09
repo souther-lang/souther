@@ -2460,8 +2460,7 @@ final class DemandReading {
         }
         Quantity count = null;
         for (Quantity each : affine.form().coefs().keySet()) {
-            if ((each instanceof Quantity.HowManyMeet
-                    || each instanceof Quantity.HowManyDifferentMeet) && count == null) {
+            if (AStatementAtARow.countsElements(each) && count == null) {
                 count = each;
             } else if (each instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)
                     && term.atOnePosition() != null) {
@@ -2580,8 +2579,8 @@ final class DemandReading {
                      DecisionAtom.ComputedOverAnAnswer _ -> {
                     return anAnswerARowStandsIn(compared);
                 }
-                case Quantity.HowManyMeet _, Quantity.HowManyHold _,
-                     Quantity.HowManyDifferentMeet _ -> counted = true;
+                case Quantity.HowManyMeet _, Quantity.HowManyMeetAcross _,
+                     Quantity.HowManyHold _, Quantity.HowManyDifferentMeet _ -> counted = true;
                 case Quantity.HowManyDifferent _, Quantity.HowManyDifferentBelow _,
                      Quantity.HowManyDifferentAcross _, Quantity.SumOver _,
                      Quantity.CodePointsOfAPiece _ -> overElements = true;
