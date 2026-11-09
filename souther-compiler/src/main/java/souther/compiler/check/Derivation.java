@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
@@ -363,26 +364,36 @@ sealed interface Derivation {
             record Something(LinearForm<FactSubject> count) implements Holding {}
 
             /**
-             * {@code part} of a law, which this side names by no count or number: it holds on
-             * some runs and not on others as far as anything here can say, on either side of it.
-             * Told apart by the part and by what it makes certain, so two laws differing in either
-             * are two statements.
+             * A statement {@code of} a law or of a pattern, which this side names by no count or
+             * number: it holds on some runs and not on others as far as anything here can say, on
+             * either side of it. Told apart by what it is of and by what it makes certain, so two
+             * statements differing in either are two.
              *
              * <p>What it makes certain is stated for each side separately: {@code ifHolds} where the
              * part holds, {@code ifDenied} where it does not, each a list whose members all hold.
              * They are necessary conditions of a side, never the part itself, so neither is the
              * denial of the other and a side with none says nothing.
              */
-            record Unnamed(LawProposition<DeclaredArgument> part, List<Holding> ifHolds,
-                           List<Holding> ifDenied) implements Holding {
+            record Unnamed(Of of, List<Holding> ifHolds, List<Holding> ifDenied)
+                    implements Holding {
                 public Unnamed {
                     ifHolds = List.copyOf(ifHolds);
                     ifDenied = List.copyOf(ifDenied);
                 }
 
-                /** A part that makes nothing certain on either side. */
+                /** A part of a law that makes nothing certain on either side. */
                 public Unnamed(LawProposition<DeclaredArgument> part) {
-                    this(part, List.of(), List.of());
+                    this(new Of.ALaw(part), List.of(), List.of());
+                }
+
+                /** What an unnamed statement is of. */
+                public sealed interface Of {
+
+                    /** A part of a law of an operation. */
+                    record ALaw(LawProposition<DeclaredArgument> part) implements Of {}
+
+                    /** Which strings a call was given to accept: what it means. */
+                    record APattern(PatternMeaning meaning) implements Of {}
                 }
             }
 
@@ -452,8 +463,8 @@ sealed interface Derivation {
                 case Holding.Stands(LinearForm<FactSubject> form, Rel rel) ->
                         b instanceof Holding.Stands it && rel == it.rel()
                                 && same.forms(form, it.form());
-                case Holding.Unnamed(var part, List<Holding> ifHolds, List<Holding> ifDenied) ->
-                        b instanceof Holding.Unnamed it && part.equals(it.part())
+                case Holding.Unnamed(var of, List<Holding> ifHolds, List<Holding> ifDenied) ->
+                        b instanceof Holding.Unnamed it && of.equals(it.of())
                                 && same(ifHolds, it.ifHolds(), same)
                                 && same(ifDenied, it.ifDenied(), same);
             };

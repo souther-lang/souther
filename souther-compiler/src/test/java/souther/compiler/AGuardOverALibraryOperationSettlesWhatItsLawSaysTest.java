@@ -125,6 +125,36 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "else Digit(String.length(s) - 1)", false),
             new Row("if String.contains(\"a\", s) then Digit(0) "
                     + "else Digit(String.length(s) - 1)", true),
+            // A string a pattern accepts holds as many code points as its strings do, and one it
+            // does not accept is not empty where the pattern accepts that.
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(String.length(t) - 3) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(String.length(t) - 4) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(3 - String.length(t)) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(2 - String.length(t)) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", true),
+            new Row("if String.matches(\"[0-9]*\", t) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
+            new Row("if String.matches(\"[0-9]*\", t) then Digit(String.length(t) - 1) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[0-9]+\", t) then Digit(String.length(t) - 1) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[0-9]+\", t) then Digit(String.length(t) - 2) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[A-Z]{2,4}\", t) then Digit(String.length(t) - 2) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[A-Z]{2,4}\", t) then Digit(4 - String.length(t)) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[A-Z]{2,4}\", t) then Digit(3 - String.length(t)) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[0-9]{3}|[A-Z]{5}\", t) "
+                    + "then Digit(String.length(t) - 3) else Digit(0)", false),
+            new Row("if String.matches(\"[0-9]{3}|[A-Z]{5}\", t) "
+                    + "then Digit(String.length(t) - 4) else Digit(0)", true),
             // A conjunction that does not hold leaves either part possible, so neither part's
             // denial is taken.
             new Row("if String.contains(t, s) && String.contains(u, s) then Digit(0) "

@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
-import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
 import souther.compiler.numeric.ExactAnswer;
@@ -469,20 +468,26 @@ final class Predicates {
             new NumericConstraint(
                     LinearForm.constant(ExactRatio.ONE.negated()), Rel.GE),
             null, List.of(),
-            null, null);
+            null, null, List.of());
 
     /**
      * One clause of an invariant, and the two ways it can come out: a relation for the domain to
      * prove, and the key a guard restating it settles. Either may be absent, and where both are
      * present either one discharging the clause is enough — a guard is written one way and a clause
      * another, and which of the two routes carries it is not the author's concern.
+     *
+     * <p>{@code known} is what the values it names carry whether or not it holds, and
+     * {@code ifHolding} is what the law of the operation it states makes certain only where it does
+     * ({@link LawOverAtoms#certain}): a string a pattern accepts holds as many code points as its
+     * strings do, and a string it does not accept says nothing of its length. Taken where the
+     * clause is taken as holding and never where it is only owed.
      */
     record Clause(NumericConstraint numeric, Fact fact, List<NumericConstraint> known, Piecewise piecewise,
-                  Choice choice) {
+                  Choice choice, List<NumericConstraint> ifHolding) {
 
         /** This clause with what asking its choice of the path came to. */
         Clause choosing(Choice asked) {
-            return new Clause(numeric, fact, known, piecewise, asked);
+            return new Clause(numeric, fact, known, piecewise, asked, ifHolding);
         }
 
         /**
@@ -1010,7 +1015,8 @@ final class Predicates {
             }
         }
         if (parts.isEmpty()) {
-            parts.add(new Part.Carried(new Clause(null, null, List.of(), null, answer)));
+            parts.add(new Part.Carried(new Clause(null, null, List.of(), null, answer,
+                    List.of())));
         }
         return new Owed(List.copyOf(parts), owed.folded());
     }
@@ -1150,7 +1156,14 @@ final class Predicates {
         // atom files what it carries where it is named, so having read the clause into forms is
         // having read them ({@link IntrinsicNumericFacts}).
         List<NumericConstraint> known = terms.carriedBy(namedBy(numeric, fact));
-        return Owed.of(new Clause(numeric, fact, known, piecewise, null)).alsoFolded(fold);
+        // And what the law of the operation says of its arguments where the clause holds: the same
+        // reading a guard taking it is given, so a predicate says one thing wherever it stands.
+        Derivation.HoldsSomethingWhere.Holding law =
+                LawOverAtoms.whereItHolds(polar.expr(), at, terms);
+        List<NumericConstraint> ifHolding = law == null ? null
+                : LawOverAtoms.certain(law, polar.positive());
+        return Owed.of(new Clause(numeric, fact, known, piecewise, null,
+                ifHolding == null ? List.of() : ifHolding)).alsoFolded(fold);
     }
 
     /** What a clause folding to {@code folded}, read with polarity {@code positive}, comes to on its
@@ -1464,10 +1477,19 @@ final class Predicates {
     Assumed assumeMeaning(Proposition stated, Core cond, Known k, Denotations at, boolean positive,
                           MeaningAssumptions.InputPlaces places) {
         Assumed meant = MeaningAssumptions.assumed(stated, positive, k, terms, places, at);
+        // What the law of the operation says of its arguments is said once, of the call, and what
+        // the model states of the condition is no second account of it.
+        List<NumericConstraint> certain = certainOfTheLaw(cond, at, positive);
+        if (certain == null) {
+            return new Assumed(meant.known().reachingNothing(), true, true, meant.notTaken());
+        }
+        Known known = takingOnThePath(meant.known(), certain);
+        boolean said = !certain.isEmpty();
         FactSubject key = terms.subjectOf(cond, at);
-        return key == null ? meant
-                : new Assumed(meant.known().taking(key, positive, Known.Held.ON_THE_PATH), true,
-                        meant.shapeRead(), meant.notTaken());
+        return key == null ? new Assumed(known, meant.taken() || said, meant.shapeRead() || said,
+                meant.notTaken())
+                : new Assumed(known.taking(key, positive, Known.Held.ON_THE_PATH), true,
+                        meant.shapeRead() || said, meant.notTaken());
     }
 
     /** {@code k} with what {@code stated} states taken as holding, where it is what has to hold to
@@ -1712,17 +1734,11 @@ final class Predicates {
         // answered is entered by, and of it only what is certain this way. A condition read by
         // what the reading of the model says it states takes the same number in there
         // ({@link MeaningAssumptions}).
-        Derivation.HoldsSomethingWhere.Holding law = LawOverAtoms.whereItHolds(
-                AnOperationApplied.of(cond), AnswerAspect.TRUTH, at, terms);
-        List<NumericConstraint> certain = law == null ? List.of()
-                : LawOverAtoms.certain(law, positive);
+        List<NumericConstraint> certain = certainOfTheLaw(cond, at, positive);
         if (certain == null) {
             return new Assumed(out.reachingNothing(), true, true);
         }
-        for (NumericConstraint each : certain) {
-            out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
-                    terms.spacesOf(each.form()));
-        }
+        out = takingOnThePath(out, certain);
         // Two answers and not one, as everywhere here: what a proof may rest on, and what an
         // unsettled arm may be explained by. They move together on this route and are still asked
         // apart, because one of them coming to answer the other is how a limit of this compiler
@@ -1730,6 +1746,26 @@ final class Predicates {
         boolean taken = !known.isEmpty() || !quantified.isEmpty() || !certain.isEmpty();
         boolean shapeRead = !known.isEmpty() || !quantified.isEmpty() || !certain.isEmpty();
         return settling(out, Conditions.Polar.itself(cond, positive), at, taken, shapeRead);
+    }
+
+    /**
+     * What the law of the operation {@code cond} answers makes certain of its arguments where it
+     * comes out {@code positive} — or null where it cannot come out that way at all. The one
+     * reading of a predicate's law a path takes it by, whether the condition was read as it stands
+     * or by what the model says it states.
+     */
+    private List<NumericConstraint> certainOfTheLaw(Core cond, Denotations at, boolean positive) {
+        Derivation.HoldsSomethingWhere.Holding law = LawOverAtoms.whereItHolds(cond, at, terms);
+        return law == null ? List.of() : LawOverAtoms.certain(law, positive);
+    }
+
+    private Known takingOnThePath(Known k, List<NumericConstraint> certain) {
+        Known out = k;
+        for (NumericConstraint each : certain) {
+            out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
+                    terms.spacesOf(each.form()));
+        }
+        return out;
     }
 
     /**
@@ -2026,6 +2062,10 @@ final class Predicates {
             if (c.numeric() != null) {
                 out = out.taking(c.numeric().form(), c.numeric().rel(), held,
                         terms.spacesOf(c.numeric().form()));
+            }
+            for (NumericConstraint certain : c.ifHolding()) {
+                out = out.taking(certain.form(), certain.rel(), held,
+                        terms.spacesOf(certain.form()));
             }
             if (c.fact() != null) {
                 // What is guaranteed is guaranteed of the term as written; a container built from it

@@ -1,10 +1,14 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.check.Derivation.HoldsSomethingWhere.Holding;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.regex.Language;
+import souther.compiler.regex.LengthsOfAPattern;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -67,6 +71,21 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                         var _) && stated == aspect
                 ? LawAtACall.of(law, new LawOverAtoms(applied, at, terms)) : null;
         return read == null || namesNothing(read) ? null : read;
+    }
+
+    /**
+     * What {@code condition}, a call, coming out true is the same as: its law, and where the
+     * checker settled which strings it was given to accept, what the pattern says as well. The
+     * pattern is a value and no law of the operation is stated over it, so it is read off the call.
+     */
+    static Holding whereItHolds(Core condition, Denotations at, Terms terms) {
+        AnOperationApplied applied = AnOperationApplied.of(condition);
+        if (applied != null && Core.withoutStanding(condition) instanceof Core.PreservedCall kept
+                && kept.settled() instanceof Core.KernelFact.StringMatches matches) {
+            Holding accepting = new LawOverAtoms(applied, at, terms).accepting(matches.meaning());
+            return namesNothing(accepting) ? null : accepting;
+        }
+        return whereItHolds(applied, AnswerAspect.TRUTH, at, terms);
     }
 
     /** Whether every part of {@code holding} is one this names by nothing, so that it settles
@@ -518,8 +537,42 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                 : List.of(new Holding.Stands(LinearForm.difference(within, around), Rel.LE));
         List<Holding> ifDenied = within == null ? List.of()
                 : List.of(new Holding.Something(LinearForm.atom(within)));
-        Holding holds = new Holding.Unnamed(standing, ifHolds, ifDenied);
+        Holding holds = new Holding.Unnamed(new Holding.Unnamed.Of.ALaw(standing), ifHolds,
+                ifDenied);
         return inside.holds() ? holds : new Holding.Not(holds);
+    }
+
+    /**
+     * A string coming out one {@code meaning} accepts: a statement unnamed, which makes certain on
+     * each side of itself what that side alone has. Where it is accepted, it holds as many code
+     * points as the strings the pattern accepts do, none where the pattern accepts none. Where it
+     * is not, it is not the empty string if the pattern accepts that, since nothing else of its
+     * length is left out.
+     */
+    private Holding accepting(PatternMeaning meaning) {
+        FactSubject count = countOf(applied.args().get(
+                StringPredicates.of(Kernel.STRING_MATCHES).subject()));
+        List<Holding> ifHolds = new ArrayList<>();
+        List<Holding> ifDenied = new ArrayList<>();
+        Language.Ends lengths = LengthsOfAPattern.of(meaning);
+        if (count != null && lengths == null) {
+            ifHolds.add(new Holding.Stands(LinearForm.constant(ExactRatio.ONE.negated()), Rel.GE));
+        } else if (count != null) {
+            if (lengths.least() > 0) {
+                ifHolds.add(new Holding.Stands(
+                        LinearForm.atomMinusConstant(count, ExactRatio.of(lengths.least())),
+                        Rel.GE));
+            }
+            if (lengths.most() != null) {
+                ifHolds.add(new Holding.Stands(
+                        LinearForm.atomMinusConstant(count, ExactRatio.of(lengths.most())),
+                        Rel.LE));
+            }
+            if (lengths.least() == 0) {
+                ifDenied.add(new Holding.Something(LinearForm.atom(count)));
+            }
+        }
+        return new Holding.Unnamed(new Holding.Unnamed.Of.APattern(meaning), ifHolds, ifDenied);
     }
 
     /** How many code points the argument {@code subject} names holds, or null where it names no
