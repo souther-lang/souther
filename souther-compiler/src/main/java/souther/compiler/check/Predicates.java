@@ -394,9 +394,9 @@ final class Predicates {
      * disagreeing with itself about one value rather than an answer. The same holds when the cases
      * come to be multiplied out.
      *
-     * <p>One operation to a clause. Where a clause names two of them the cases multiply, and what
-     * that costs is a decision this does not have to make yet — such a clause is read as it stands,
-     * which proves less and states nothing false.
+     * <p>Where a clause names several such values the cases are the choices of an arm of each, up
+     * to {@link #MOST_CASES}; a clause that makes more is read as it stands, which proves less and
+     * states nothing false.
      */
     record Piecewise(List<Case> cases) {
 
@@ -2132,8 +2132,15 @@ final class Predicates {
     }
 
     /**
-     * {@code owed} read as the cases of the one value inside it that is one of several, or null
-     * where there is no such value, where there is more than one, or where a case could not be read.
+     * {@code owed} read as the cases of the values inside it that are each one of several, or null
+     * where there is no such value, where the cases they make together are more than
+     * {@link #MOST_CASES}, or where a case could not be read.
+     *
+     * <p>One case for each choice of an arm of each such value. Values that are decided by one
+     * condition ({@code List.take} and {@code List.drop} at one count over one list) make cases of
+     * which only the ones agreeing on it are reached; the rest each settle something the others
+     * contradict, and the domain drops them ({@link Piecewise#entailedBy}). Over the bound nothing
+     * is read: a part of the cases says nothing of the whole.
      *
      * <p>The cases are the arms of the recipe the value was recorded with ({@link Derivation.Chosen}):
      * one of the values a call was given, what a case of a library operation's definition computes
@@ -2148,37 +2155,76 @@ final class Predicates {
      * first and leave the second saying nothing.
      */
     private Piecewise piecewiseOf(NumericConstraint owed) {
-        FactSubject atom = null;
-        List<Derivation.Chosen.Arm> arms = null;
-        for (FactSubject each : owed.form().coefs().keySet()) {
-            List<Derivation.Chosen.Arm> its = armsOf(terms.knowledgeOf(each).computation());
-            if (its != null) {
-                if (atom != null) {
-                    return null;
-                }
-                atom = each;
-                arms = its;
-            }
-        }
-        if (atom == null) {
+        if (chosenIn(owed.form(), List.of(), Set.of()) == null) {
             return null;
         }
-        ExactRatio coefficient = owed.form().coefs().get(atom);
         List<Case> cases = new ArrayList<>();
-        for (Derivation.Chosen.Arm arm : arms) {
-            LinearForm<FactSubject> answered = arm.answer();
-            // The rule with the atom taken out and what this arm answers put in its place. A form
-            // no ratio holds is a reading this does not make, and the clause keeps the reading it
-            // has without the cases.
-            LinearForm<FactSubject> instead = owed.form()
-                    .minus(LinearForm.weighing(atom, coefficient))
-                    .flatMap(without -> answered.times(coefficient).flatMap(without::plus))
-                    .orNull();
-            if (instead == null) {
-                return null;
+        return expand(owed, owed.form(), List.of(), Set.of(), cases)
+                ? new Piecewise(List.copyOf(cases)) : null;
+    }
+
+    /**
+     * The most cases a clause is read as. Each is one closure of the domain, and what a clause
+     * costs is that many of them, no more and no less, so the bound is what reading a clause case
+     * by case may cost, stated once.
+     *
+     * <p>The clauses the library and the corpus make fall in two groups far apart: those of a few
+     * cases up to this many, and those of several times it, which cost several times as much for
+     * a clause. Any bound between leaves both groups as they are; this is the one that reads every
+     * clause of the first and none of the second.
+     */
+    private static final int MOST_CASES = 32;
+
+    /** An atom of {@code form} or of what {@code given} says, not in {@code done}, recorded as one
+     *  of several — or null where there is none. */
+    private FactSubject chosenIn(LinearForm<FactSubject> form, List<NumericConstraint> given,
+                                 Set<FactSubject> done) {
+        List<LinearForm<FactSubject>> read = new ArrayList<>();
+        read.add(form);
+        given.forEach(each -> read.add(each.form()));
+        for (LinearForm<FactSubject> one : read) {
+            for (FactSubject each : one.coefs().keySet()) {
+                if (!done.contains(each) && armsOf(terms.knowledgeOf(each).computation()) != null) {
+                    return each;
+                }
             }
-            List<NumericConstraint> given = new ArrayList<>();
-            Map<FactSubject, NumberSpace> spaces = new HashMap<>(terms.spacesOf(instead));
+        }
+        return null;
+    }
+
+    /**
+     * Adds to {@code cases} the cases of {@code owed} where {@code form}, what it has come to,
+     * has each value inside it that is one of several answer by one of its arms — or answers false
+     * where a form could not be held or the cases are more than {@link #MOST_CASES}.
+     *
+     * <p>{@code given} is what the arms chosen so far say, and {@code done} the values they were
+     * chosen for. The rule with the atom taken out and what its arm answers put in its place. What
+     * an arm answers, and what choosing it settles, may name another such value: which arm that one
+     * is stands to this one's by what it settles, so it is chosen too, or a case that cannot be
+     * reached would be reached for want of it.
+     * A form no ratio holds is a reading this does not make, and the clause keeps the reading it
+     * has without the cases.
+     */
+    private boolean expand(NumericConstraint owed, LinearForm<FactSubject> form,
+                           List<NumericConstraint> given, Set<FactSubject> done,
+                           List<Case> cases) {
+        FactSubject atom = chosenIn(form, given, done);
+        if (atom == null) {
+            Map<FactSubject, NumberSpace> spaces = new HashMap<>(terms.spacesOf(form));
+            given.forEach(each -> spaces.putAll(terms.spacesOf(each.form())));
+            cases.add(new Case(new NumericConstraint(form, owed.rel()), List.copyOf(given),
+                    Map.copyOf(spaces)));
+            return cases.size() <= MOST_CASES;
+        }
+        ExactRatio coefficient = form.coefs().get(atom);
+        Set<FactSubject> chosen = new HashSet<>(done);
+        chosen.add(atom);
+        for (Derivation.Chosen.Arm arm : armsOf(terms.knowledgeOf(atom).computation())) {
+            LinearForm<FactSubject> answered = arm.answer();
+            LinearForm<FactSubject> instead = coefficient == null ? form
+                    : form.minus(LinearForm.weighing(atom, coefficient))
+                            .flatMap(without -> answered.times(coefficient).flatMap(without::plus))
+                            .orNull();
             // What the call answers here, said of the call itself: in this case the two are one
             // value. Without it a guard written about the call would stand outside the cases, and a
             // clause could come out established by these and refused by that. It belongs to this
@@ -2186,19 +2232,17 @@ final class Predicates {
             // has nothing to tie back — which is why what is shared with that reader stops at the
             // arms and what they settle.
             LinearForm<FactSubject> answeredHere = LinearForm.atom(atom).minus(answered).orNull();
-            if (answeredHere == null) {
-                return null;
+            if (instead == null || answeredHere == null) {
+                return false;
             }
-            given.add(new NumericConstraint(answeredHere, Rel.EQ));
-            spaces.putAll(terms.spacesOf(answeredHere));
-            for (NumericConstraint stands : arm.settles()) {
-                given.add(stands);
-                spaces.putAll(terms.spacesOf(stands.form()));
+            List<NumericConstraint> now = new ArrayList<>(given);
+            now.add(new NumericConstraint(answeredHere, Rel.EQ));
+            now.addAll(arm.settles());
+            if (!expand(owed, instead, now, chosen, cases)) {
+                return false;
             }
-            cases.add(new Case(new NumericConstraint(instead, owed.rel()), List.copyOf(given),
-                    Map.copyOf(spaces)));
         }
-        return new Piecewise(List.copyOf(cases));
+        return true;
     }
 
     /** The arms of a value recorded as one of several, alone or beside another account of it
