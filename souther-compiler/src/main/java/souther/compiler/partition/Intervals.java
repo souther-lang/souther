@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
@@ -214,12 +215,23 @@ final class Intervals {
         // claims this compiler is in a position to make.
         return PartitionClass.of(id, label, is,
                 standingFor(orders, admits, null, type, reading, ruleReading,
-                        "a value whose " + measureOf(of) + " is in this range"));
+                        new SearchMessage.AValueWhoseMeasureIsInThisRange(measureOf(of))));
+    }
+
+    /** Where the string itself stands in the code written around it, which the catalog words. */
+    private static final String THE_STRING = "\u0000";
+
+    /** The code points counted in what is written around the string: the code before and after
+     *  it is carried as written, and the string itself is the catalog's to name. */
+    private static SearchMessage inTheString(String counted, String around) {
+        int at = around.indexOf(THE_STRING);
+        return new SearchMessage.NumberOfCodePointsThatAreIn(counted, around.substring(0, at),
+                around.substring(at + THE_STRING.length()));
     }
 
     /** What the range is a range of, in the words a reader of the report has: the operation where
      *  the number is what one answered, and the position's own value otherwise. */
-    static String measureOf(NumericTerm.FromOnePosition of) {
+    static SearchMessage measureOf(NumericTerm.FromOnePosition of) {
         // Exhaustive, with no `default`. What a range is a range of is a word per kind of number,
         // so a kind added is one a reader has to be given a word for rather than one that arrives
         // under whichever word the condition left it on.
@@ -229,16 +241,19 @@ final class Intervals {
             // the quotient by two and the quotient by three are two — and the line this stands in
             // names the place and the range, so a taking given nothing beside the value is already
             // said by the operation and repeating the place there would say nothing.
-            case NumericTerm.TakenOf taken ->
-                    taken.arguments().none() ? taken.operation().qualified() : taken.toString();
-            case NumericTerm.ValueOf _ -> "value";
+            case NumericTerm.TakenOf taken -> new SearchMessage.TheOperation(
+                    taken.arguments().none() ? taken.operation().qualified() : taken.toString());
+            case NumericTerm.ValueOf _ -> new SearchMessage.TheValueItself();
             // The class of code points counted, which the term says and the place does not.
-            case NumericTerm.CodePointClassCount count -> "number of code points that are "
-                    + count.counted() + (count.through().equals(CaseMapping.NONE) ? ""
-                    : " in " + count.through().writtenAround("the string"));
-            case NumericTerm.CodePointValueSum _ -> "sum of the code points";
-            case NumericTerm.CodePointAt point -> "code point at " + point.index();
-            case NumericTerm.WholeUnitsOf units -> units.operation().qualified();
+            case NumericTerm.CodePointClassCount count -> count.through().equals(CaseMapping.NONE)
+                    ? new SearchMessage.NumberOfCodePointsThatAre(String.valueOf(count.counted()))
+                    : inTheString(String.valueOf(count.counted()),
+                            count.through().writtenAround(THE_STRING));
+            case NumericTerm.CodePointValueSum _ -> new SearchMessage.SumOfTheCodePoints();
+            case NumericTerm.CodePointAt point ->
+                    new SearchMessage.CodePointAt(String.valueOf(point.index()));
+            case NumericTerm.WholeUnitsOf units ->
+                    new SearchMessage.TheOperation(units.operation().qualified());
         };
     }
 
@@ -273,7 +288,7 @@ final class Intervals {
      */
     static RepresentativeSource standingFor(TermOrders orders, NumericSet admits, Place named,
                                             Type type, Quantities reading,
-                                            RuleReadingContext ruleReading, String what) {
+                                            RuleReadingContext ruleReading, SearchMessage what) {
         TermRealizations.Realization made = TermRealizations.satisfying(type, orders, admits,
                 named, reading.region(), ruleReading);
         return switch (made) {
@@ -288,12 +303,13 @@ final class Intervals {
             // in it whichever of the two is why.
             case TermRealizations.Realization.NoNumberTheDeclarationsAdmit _,
                  TermRealizations.Realization.None _ ->
-                    new RepresentativeSource.NothingProducible("nothing here writes " + what);
+                    new RepresentativeSource.NothingProducible(
+                            new SearchMessage.NothingHereWrites(what));
             // Everything the search met, whichever of its vocabularies that was in: a number this
             // could not hold leaves the class unreached as surely as a figure does.
             case TermRealizations.Realization.Stopped _, TermRealizations.Realization.Unexhausted _ ->
                     new RepresentativeSource.NotArrivedAt(made.shortfall(),
-                            "nothing here composed " + what + ", which does not make one unwritable");
+                            new SearchMessage.NothingHereComposedIt(what));
         };
     }
 

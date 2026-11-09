@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -239,7 +240,7 @@ class EveryFormOfARuleHandleIsOneTheContractDescribesTest {
     /** The sentences this compiler writes, one per form. */
     private static Set<String> rendered() {
         return everyForm().stream()
-                .map(each -> RuleHandleProse.said(each, NAMED, null))
+                .map(each -> RuleHandleProse.said(each, NAMED, Locale.ENGLISH, null))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 

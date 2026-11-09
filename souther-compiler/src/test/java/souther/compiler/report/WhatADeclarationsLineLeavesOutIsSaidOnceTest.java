@@ -147,7 +147,7 @@ class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
     void aViewOfOneBehaviorSaysWhatItsLinesLeaveOut() {
         Compilation compilation = compiled(TWO_TYPES);
         String peek = AdequacyReport.of(compilation).only(null, "peek")
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> declarations = block(peek, "declarations");
 
         assertTrue(declarations.getFirst().startsWith("declarations   borders 2"),
@@ -328,7 +328,7 @@ class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
 
     private static String human(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /**

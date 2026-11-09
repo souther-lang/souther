@@ -40,7 +40,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     void aSourceWithNoObservationSaysThatAndNotWhyItHadNone() {
         String said = Reasons.said(Incompleteness.ofSource(
                 Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("1")).identity(),
-                new SourceRendering(id -> "trip.sou", SourceLayouts.NONE));
+                InEnglish.page(new SourceRendering(id -> "trip.sou", SourceLayouts.NONE)));
 
         assertEquals("no rows were read from `trip.sou`, so what they cover is unknown", said);
     }
@@ -59,7 +59,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
                 new Target.OfRow(new RowRef("take", new SourceId("1"),
                         new RowIdentity.Unnamed(2))),
                 java.util.Optional.empty(), java.util.Optional.empty()).identity(),
-                new SourceRendering(id -> "trip.sou", SourceLayouts.NONE));
+                InEnglish.page(new SourceRendering(id -> "trip.sou", SourceLayouts.NONE)));
 
         assertEquals("nothing was observed for `take #2 in trip.sou`, so what it covers is unknown",
                 said);
@@ -85,7 +85,8 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
                     java.util.Optional.empty(), java.util.Optional.empty()).identity();
 
             IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                    () -> Reasons.said(wrong, naming), () -> "what it says of " + target);
+                    () -> Reasons.said(wrong, InEnglish.page(naming)),
+                    () -> "what it says of " + target);
             assertTrue(refused.getMessage().contains("nothing observed is about a row or"),
                     () -> "what it says is: " + refused.getMessage());
         }
@@ -104,9 +105,9 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
         Incompleteness gap = Incompleteness.ofSource(
                 Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("1"));
 
-        String said = Reasons.said(gap.identity(),
+        String said = Reasons.said(gap.identity(), InEnglish.page(
                 new SourceRendering(id -> "1".equals(id.value()) ? "b/model.sou" : id.value(),
-                        SourceLayouts.NONE));
+                        SourceLayouts.NONE)));
 
         assertTrue(said.contains("`b/model.sou`"), said);
         assertFalse(said.contains("`1`"), "an id is not what a person is shown: " + said);
@@ -117,8 +118,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void aLinkageFailureDoesNotClaimTheRuntimeIsMissing() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
-                Incompleteness.Scope.BEHAVIOR, "submit").identity(),
-                SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                Incompleteness.Scope.BEHAVIOR, "submit").identity(), InEnglish.PAGE);
 
         assertFalse(said.contains("runtime"), said);
         assertTrue(said.contains("would not link"), said);
@@ -140,8 +140,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void aLinkageFailureSaysWhatItsOneProducerEstablishes() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
-                Incompleteness.Scope.BEHAVIOR, "submit").identity(),
-                SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                Incompleteness.Scope.BEHAVIOR, "submit").identity(), InEnglish.PAGE);
 
         assertEquals("the classes for `submit` would not link, so its rows did not run", said);
     }
@@ -158,8 +157,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void oneProducerLetsTheSentenceSayWhatThatProducerEstablishes() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.INSTRUMENTATION_ABSENT,
-                Incompleteness.Scope.MODULE, "example.trip").identity(),
-                SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                Incompleteness.Scope.MODULE, "example.trip").identity(), InEnglish.PAGE);
 
         assertEquals("the classes `example.trip` needed for arm coverage could not be made,"
                 + " so none of its rows were read", said);
@@ -185,8 +183,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
                     java.util.Optional.empty(),
                     code.runSensitivity() == RunSensitivity.MAY_CHANGE
                             ? java.util.Optional.of(Limits.DEFAULT.nodesFigure())
-                            : java.util.Optional.empty()).identity(),
-                    SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                            : java.util.Optional.empty()).identity(), InEnglish.PAGE);
 
             assertNotEquals("submit (" + code.name().toLowerCase(java.util.Locale.ROOT) + ")", said,
                     code + " is printed as itself");

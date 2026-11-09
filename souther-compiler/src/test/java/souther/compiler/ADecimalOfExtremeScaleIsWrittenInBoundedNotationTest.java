@@ -104,7 +104,7 @@ class ADecimalOfExtremeScaleIsWrittenInBoundedNotationTest {
         assertEquals(List.of(), compilation.errors(), "the model is one the language admits");
         AdequacyReport report = assertDoesNotThrow(() -> AdequacyReport.of(compilation));
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
-        String human = assertDoesNotThrow(() -> report.human(rendering));
+        String human = assertDoesNotThrow(() -> report.humanInEnglish(rendering));
         String json = assertDoesNotThrow(() -> report.json(rendering));
         assertTrue(human.length() < 100_000, "the human report stays short of the decimal's own"
                 + " scale: " + human.length() + " characters");

@@ -46,7 +46,7 @@ class ABoolTheCasesShareIsWrittenUnderTheCaseTheRowIsTest {
     @Test
     void aRowThroughTheTruthIsComposed() {
         Compilation c = measured();
-        String human = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
+        String human = AdequacyReport.of(c).humanInEnglish(SourceRendering.namedByIdentity(c.texts()));
         assertFalse(human.contains("nothing said which of them the value under it is"), human);
     }
 
@@ -56,7 +56,7 @@ class ABoolTheCasesShareIsWrittenUnderTheCaseTheRowIsTest {
         Compilation c = measured();
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(c.db(), OfferingRequest.overTheModule("probe.truth")),
-                Map.of(), SourceRendering.namedByIdentity(c.texts()), c.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(c.texts()), c.db()).textInEnglish();
         assertTrue(block.contains("urgent = true, amount = 51"),
                 () -> "a row at the line is written with the truth the way asks:\n" + block);
     }

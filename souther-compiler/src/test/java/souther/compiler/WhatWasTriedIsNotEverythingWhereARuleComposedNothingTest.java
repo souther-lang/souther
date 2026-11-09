@@ -65,7 +65,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return GeneratedRows.of(compilation, "example.offer", "look",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     /**
@@ -128,7 +128,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String block = GeneratedRows.of(compilation, "example.offer", "f",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertTrue(block.contains("every value tried was refused at construction"), block);
         assertFalse(block.contains("was not all there was to try"), block);
@@ -169,7 +169,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String block = GeneratedRows.of(compilation, "example.offer", "look",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         // The row whose search met the figure at one position and the unread rule at another. Both
         // are printed: naming the figure and going quiet about the rule sends an author to raise a
@@ -215,7 +215,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String block = GeneratedRows.of(compilation, "example.offer", "look",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertTrue(block.contains("invariant Code (unreadable) at `t.code` gave none of them"),
                 block);
@@ -250,7 +250,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String block = GeneratedRows.of(compilation, "example.offer", "place",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertTrue(block.contains("no row for `p.amount = 0`"), block);
         assertTrue(block.contains("invariant Code (shape) at `p.code` gave none of them"), block);

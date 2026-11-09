@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.inputs.TermPath;
 
 import java.util.Collections;
@@ -53,8 +54,8 @@ import java.util.SequencedMap;
  */
 record SearchShortfall(CompositionShortfall met,
                        SequencedMap<TermPath, StringOfferShortfall> offered,
-                       boolean uncertified, boolean unread, Optional<String> notHandedOn,
-                       Optional<String> notHeld) {
+                       boolean uncertified, boolean unread, Optional<SearchMessage> notHandedOn,
+                       Optional<SearchMessage> notHeld) {
 
     /** A search that found out nothing of the kind: what it came to is about the model. */
     static final SearchShortfall NONE = new SearchShortfall(CompositionShortfall.NONE,
@@ -118,14 +119,14 @@ record SearchShortfall(CompositionShortfall met,
 
     /** The same, with a candidate that built and had nothing to hand on, for {@code why}, where
      *  none was already said. */
-    SearchShortfall notHandedOn(String why) {
+    SearchShortfall notHandedOn(SearchMessage why) {
         return notHandedOn.isPresent() ? this
                 : new SearchShortfall(met, offered, uncertified, unread, Optional.of(why), notHeld);
     }
 
     /** The same, with a candidate built and passed over for not holding what two positions are
      *  asked to hold, for {@code why}, where none was already said. */
-    SearchShortfall notHeld(String why) {
+    SearchShortfall notHeld(SearchMessage why) {
         return notHeld.isPresent() ? this
                 : new SearchShortfall(met, offered, uncertified, unread, notHandedOn,
                         Optional.of(why));
@@ -181,7 +182,7 @@ record SearchShortfall(CompositionShortfall met,
      * proof published over a candidate turned away, or a search complete over a case nobody read.
      */
     CameToNothing published(List<String> classes, Generator.UnresolvedCombination.Reason said,
-                            String detail, Optional<String> sentence) {
+                            String detail, Optional<SearchMessage> sentence) {
         return new CameToNothing(new Generator.UnresolvedCombination(classes, wordFor(said),
                 detail, toldFor(said, sentence), offered), met, Set.of());
     }
@@ -191,7 +192,7 @@ record SearchShortfall(CompositionShortfall met,
      * what was found out changed the word, why a candidate was not handed on or not held. A reader
      * given only the word that nothing composed one is not told what stopped it.
      */
-    Optional<String> toldFor(Generator.UnresolvedCombination.Reason said, Optional<String> told) {
+    Optional<SearchMessage> toldFor(Generator.UnresolvedCombination.Reason said, Optional<SearchMessage> told) {
         return told.isEmpty() && wordFor(said) != said ? notHandedOn.or(() -> notHeld) : told;
     }
 }

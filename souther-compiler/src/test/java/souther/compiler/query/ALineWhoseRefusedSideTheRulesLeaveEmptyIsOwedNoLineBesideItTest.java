@@ -125,7 +125,7 @@ class ALineWhoseRefusedSideTheRulesLeaveEmptyIsOwedNoLineBesideItTest {
     private static String report(String model) {
         Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Each model measured once, whichever of its document and its report is read. */

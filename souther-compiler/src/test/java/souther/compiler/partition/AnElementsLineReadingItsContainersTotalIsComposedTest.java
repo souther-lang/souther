@@ -154,7 +154,7 @@ class AnElementsLineReadingItsContainersTotalIsComposedTest {
 
     private static List<Row> rowsOf(Compilation compilation) {
         String rows = GeneratedRows.of(compilation, "probe", null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         List<Row> out = new ArrayList<>();
         Map<String, Set<String>> fills = new LinkedHashMap<>();
         StringBuilder text = new StringBuilder();

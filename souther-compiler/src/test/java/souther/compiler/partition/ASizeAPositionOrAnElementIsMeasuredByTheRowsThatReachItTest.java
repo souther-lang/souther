@@ -34,7 +34,7 @@ class ASizeAPositionOrAnElementIsMeasuredByTheRowsThatReachItTest {
                 () -> compilation.errors().stream().map(each -> each.diagnostic().code())
                         .toList() + "\n" + source);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static void assertAdequate(String source) {

@@ -100,6 +100,6 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
     private static String generated() {
         return souther.compiler.report.GeneratedRows.of(measured(), "example.month",
                 "classifyMonth",
-                souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 }

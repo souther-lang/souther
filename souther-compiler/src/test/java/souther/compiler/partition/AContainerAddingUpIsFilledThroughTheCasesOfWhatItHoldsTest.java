@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
+import souther.compiler.diag.Messages;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
@@ -20,6 +21,7 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -236,7 +238,7 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.why());
         assertEquals("`ns[*].method@Card.amount`, `ns[*].method@Cash.amount` were ways down to"
                         + " `ns[*].method.amount`, and none of them composed a value",
-                came.detail(),
+                Messages.render(came.detail(), Locale.ENGLISH),
                 "and the ways that were walked are named, so a reader is not left to tell this"
                         + " from a demand nothing reaches");
     }
@@ -256,7 +258,7 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.why());
         assertEquals("nothing standing at `ns[*].settled` gives a way down to"
                         + " `ns[*].settled.amount`",
-                came.detail(),
+                Messages.render(came.detail(), Locale.ENGLISH),
                 "and what it says is that there was never a way, which is not that the ways came"
                         + " to nothing");
     }

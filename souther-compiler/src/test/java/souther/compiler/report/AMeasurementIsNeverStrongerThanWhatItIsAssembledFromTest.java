@@ -210,11 +210,11 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String humanOf(String source) {
-        return reportOf(source).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return reportOf(source).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static AdequacyReport reportOf(String source) {

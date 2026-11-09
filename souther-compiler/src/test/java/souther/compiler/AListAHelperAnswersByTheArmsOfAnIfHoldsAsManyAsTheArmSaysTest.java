@@ -44,7 +44,7 @@ class AListAHelperAnswersByTheArmsOfAnIfHoldsAsManyAsTheArmSaysTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** What the report says of a point no search shows a row can be written at. */

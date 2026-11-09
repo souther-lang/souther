@@ -788,7 +788,7 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
         // The codes the rows the search starts from hold: the examples', and the rows composed.
         Set<String> offered = new HashSet<>(keysIn(model, "code"));
         offered.addAll(keysIn(GeneratedRows.of(compilation, module, null,
-                SourceRendering.namedByIdentity(compilation.texts())).text(), "code"));
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish(), "code"));
         for (RowToRun row : found.values()) {
             List<String> codes = keysIn(row.inputs().get(1).text(), "code");
             assertEquals(codes.size(), Set.copyOf(codes).size(),

@@ -1,7 +1,11 @@
 package souther.compiler.publish;
 
+import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.ReportMessage;
 import souther.compiler.source.SourceId;
+
+import java.util.Locale;
 
 /**
  * What a rule handle reads as, which is one sentence per form of {@link PublishedRuleHandle}.
@@ -29,15 +33,32 @@ final class RuleHandleSentence {
      * one that arrives at a reader as a sentence about something else.
      */
     static String of(PublishedSentence sentence, SourceRendering sources, SourceId sectionSource) {
+        // A consumer matches on these strings, so they are the same whatever the reader of the page
+        // beside the document reads.
+        return of(sentence, sources, sectionSource, Messages.BASE_LANGUAGE);
+    }
+
+    /** The same, with the words of the handle in {@code language}. */
+    static String of(PublishedSentence sentence, SourceRendering sources, SourceId sectionSource,
+                     Locale language) {
         return switch (sentence) {
             case PublishedSentence.Words it -> it.said();
             case PublishedSentence.AroundAHandle it ->
-                    it.before() + said(it.handle(), sources, sectionSource) + it.after();
+                    Messages.render(it.around().with(
+                            said(it.handle(), sources, sectionSource, language)), language);
         };
     }
 
+    /**
+     * The same, with the words around the handle in {@code language}.
+     *
+     * <p>What identifies the rule — the declaration and the number, the clause's name, the kind of
+     * rule and where it is — is spelled alike in every language, which is what lets a reader of the
+     * page and a consumer of the document find the same rule by it. Only a word joining two of those
+     * is the language's.
+     */
     static String said(PublishedRuleHandle handle, SourceRendering sources,
-                       SourceId sectionSource) {
+                       SourceId sectionSource, Locale language) {
         return switch (handle) {
             case PublishedRuleHandle.NamedInvariant it ->
                     "invariant " + it.declaredOn() + " (" + it.clause() + ")";
@@ -51,11 +72,12 @@ final class RuleHandleSentence {
                     it.kind().word() + "@" + place(it.at(), sources, sectionSource);
             // Written somewhere else and reached from here: the rule is one and the reader is sent
             // to two places, which the sentence keeps apart.
-            case PublishedRuleHandle.Reached it -> it.kind().word() + " in `" + it.reachedBy() + "`"
-                    + ", reached at " + place(it.at(), sources, sectionSource);
+            case PublishedRuleHandle.Reached it -> Messages.render(new ReportMessage.ReachedRule(
+                    it.kind().word(), it.reachedBy(), place(it.at(), sources, sectionSource)),
+                    language);
             // And with no position to send them to, the declaration is the whole of it.
-            case PublishedRuleHandle.ReachedOutOfSight it ->
-                    it.kind().word() + " in `" + it.reachedBy() + "`";
+            case PublishedRuleHandle.ReachedOutOfSight it -> Messages.render(
+                    new ReportMessage.RuleOutOfSight(it.kind().word(), it.reachedBy()), language);
         };
     }
 

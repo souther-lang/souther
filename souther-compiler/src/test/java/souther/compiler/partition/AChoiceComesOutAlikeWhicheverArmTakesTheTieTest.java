@@ -259,7 +259,7 @@ class AChoiceComesOutAlikeWhicheverArmTakesTheTieTest {
 
     private static String human(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).toString();
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).toString();
     }
 
     private static List<BorderAssessment> linesOf(Compilation compilation) {

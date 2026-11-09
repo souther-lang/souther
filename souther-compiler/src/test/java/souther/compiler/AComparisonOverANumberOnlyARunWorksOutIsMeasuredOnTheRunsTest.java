@@ -87,7 +87,7 @@ class AComparisonOverANumberOnlyARunWorksOutIsMeasuredOnTheRunsTest {
     private static String report(String model, List<String> rows) {
         Compilation compilation = compiled(model, rows);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static List<String> and(List<String> rows, String row) {
@@ -135,7 +135,7 @@ class AComparisonOverANumberOnlyARunWorksOutIsMeasuredOnTheRunsTest {
         Compilation compilation = compiled(THROUGH_A_CALL, ROWS);
         String offered = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("m")), Map.of(),
-                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
 
         assertTrue(offered.contains("([0, 0, 0, 0])"), offered);
     }

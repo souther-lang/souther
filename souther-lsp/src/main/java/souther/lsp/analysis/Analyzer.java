@@ -1302,7 +1302,7 @@ public final class Analyzer {
         // why one landed somewhere surprising.
         Position end = new Position((int) text.lines().count(), 0);
         return new CodeAction.Edit(offer.uri(), new Range(end, end),
-                System.lineSeparator() + block.text());
+                System.lineSeparator() + block.text(EDITOR_LANGUAGE));
     }
 
     private static boolean overlaps(Range a, Range b) {

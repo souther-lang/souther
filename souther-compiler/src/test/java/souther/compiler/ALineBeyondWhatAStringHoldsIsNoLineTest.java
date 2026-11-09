@@ -63,7 +63,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
     private static String report(String parameters, String body) {
         Compilation compilation = measured(parameters, body);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static boolean noValueStands(ItemAssessment item) {
@@ -134,7 +134,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String report = AdequacyReport.of(compilation)
-                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
             assertFalse(report.contains("String.length(s): " + past + " <= x"), report);
         }
@@ -142,7 +142,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         within.measure(Adequacy.Asked.fullReport());
         within.answerEverything();
         assertTrue(AdequacyReport.of(within)
-                .human(SourceRendering.namedByIdentity(within.texts()))
+                .humanInEnglish(SourceRendering.namedByIdentity(within.texts()))
                 .contains("String.length(s): 7 <= x"), "the control: a class a string reaches");
     }
 
@@ -175,7 +175,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String report = AdequacyReport.of(compilation)
-                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
             assertFalse(report.contains(owedBoth), report);
             assertFalse(report.contains(owedTheArm), report);
@@ -185,7 +185,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String report = AdequacyReport.of(compilation)
-                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
             assertTrue(report.contains(owedBoth), within + " " + report);
             assertTrue(report.contains(owedTheArm), within + " " + report);
@@ -265,14 +265,14 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             assertFalse(AdequacyReport.of(compilation)
-                    .human(SourceRendering.namedByIdentity(compilation.texts()))
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                     .contains(owedTheArm), guard);
         }
         Compilation within = Compilation.ofSource(source.formatted("Date.year(d) < 2030"), "Main");
         within.measure(Adequacy.Asked.fullReport());
         within.answerEverything();
         assertTrue(AdequacyReport.of(within)
-                .human(SourceRendering.namedByIdentity(within.texts()))
+                .humanInEnglish(SourceRendering.namedByIdentity(within.texts()))
                 .contains(owedTheArm), "the control: a year a date has");
     }
 
@@ -308,7 +308,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String armReport(String source, String[] parts) {
@@ -317,7 +317,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     @Test

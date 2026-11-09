@@ -130,7 +130,7 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
         Generator.CandidateCheck refusedBesideTheOthers = new Generator.CandidateCheck() {
             @Override
             public Generator.CandidateCheck.Built build(int parameter, FixtureTemplate candidate) {
-                return new Generator.CandidateCheck.Built.Refused("the elements do not add up");
+                return Generator.CandidateCheck.Built.Refused.inItsOwnWords("the elements do not add up");
             }
 
             @Override
@@ -141,7 +141,7 @@ class TheRewritesOfAKeyOrderAreLookedAtInTheOrderThatReachesEveryValueTest {
         Generator.CandidateCheck refusedOnItsOwn = new Generator.CandidateCheck() {
             @Override
             public Generator.CandidateCheck.Built build(int parameter, FixtureTemplate candidate) {
-                return new Generator.CandidateCheck.Built.Refused("the type refuses it");
+                return Generator.CandidateCheck.Built.Refused.inItsOwnWords("the type refuses it");
             }
 
             @Override

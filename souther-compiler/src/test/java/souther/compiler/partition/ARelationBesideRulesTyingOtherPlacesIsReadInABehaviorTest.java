@@ -280,7 +280,7 @@ class ARelationBesideRulesTyingOtherPlacesIsReadInABehaviorTest {
         return GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("demo")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
     }
 
     /** The total and the cap of each row offered. */

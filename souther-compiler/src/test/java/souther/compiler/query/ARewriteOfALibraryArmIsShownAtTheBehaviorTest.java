@@ -170,7 +170,7 @@ class ARewriteOfALibraryArmIsShownAtTheBehaviorTest {
     @Test
     void thePageNamesTheArmsAndSaysTheForkIsOutOfSight() {
         Compilation c = measured();
-        String page = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
+        String page = AdequacyReport.of(c).humanInEnglish(SourceRendering.namedByIdentity(c.texts()));
 
         assertTrue(page.contains("no row would come out differently if `then` answered as `else`"
                         + " in a fork of `souther.int.max` this build holds no source of"),

@@ -950,7 +950,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
      */
     private static List<RowsOfABlock.Row> rowsOf(Compilation compilation) {
         return RowsOfABlock.of(GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text());
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish());
     }
 
     private static String report(String model) {
@@ -975,7 +975,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
 
     private static String reportOf(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /**

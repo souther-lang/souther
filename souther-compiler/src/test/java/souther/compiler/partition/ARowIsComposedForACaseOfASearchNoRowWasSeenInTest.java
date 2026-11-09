@@ -355,7 +355,7 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
         return GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule(module)),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 
     private static Set<CaseOfAStatement.Step> stepsOf(Map<CaseOfAStatement, RowToRun> found) {

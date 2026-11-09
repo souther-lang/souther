@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.msg.ReportMessage;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
@@ -94,12 +95,15 @@ class ARuleSaysWhatEachOfItsPlacesCameToTest {
     /** The page counts a rule once, where its answer is, with what left each of its places none. */
     @Test
     void thePageSaysWhatLeftEachPlaceNoRow() {
-        AdequacyReport.Said first = new AdequacyReport.Said(4, 0, "one reason");
-        AdequacyReport.Said second = new AdequacyReport.Said(5, 0, "another reason");
+        AdequacyReport.Said first =
+                new AdequacyReport.Said(4, 0, new ReportMessage.Verbatim("one reason"));
+        AdequacyReport.Said second =
+                new AdequacyReport.Said(5, 0, new ReportMessage.Verbatim("another reason"));
 
-        assertEquals(new AdequacyReport.Said(4, 0, "one reason; another reason"),
-                AdequacyReport.everyReason(List.of(first, second)),
-                "both reasons, counted where the first is");
+        AdequacyReport.Said both = AdequacyReport.everyReason(List.of(first, second));
+        assertEquals(List.of(4, 0), List.of(both.family(), both.within()),
+                "counted where the first is");
+        assertEquals("one reason; another reason", InEnglish.said(both.said()), "both reasons");
         assertEquals(first, AdequacyReport.everyReason(List.of(first, first)),
                 "and a reason two places share is said once");
     }

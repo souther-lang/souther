@@ -74,7 +74,7 @@ class ARuleReadShortIsSaidOfThatRuleOnEverySurfaceTest {
     void thePageWritesTheRulesAndDoesNotSayTheListWasNotRead() {
         Compilation measured = measured();
         String page = AdequacyReport.of(measured)
-                .human(SourceRendering.namedByIdentity(measured.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(measured.texts()));
         assertFalse(page.contains("decision    not fully read"),
                 () -> "the list of rules was read whole:\n" + page);
         assertTrue(page.contains("no row takes a decision rule"),

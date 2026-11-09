@@ -60,7 +60,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
     private static String block(String source) {
         Compilation compilation = compiled(source);
         return GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     private static Compilation compiled(String source) {
@@ -220,7 +220,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 "the checker could not read this behavior's clause");
 
         String block = GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         assertTrue(block.contains("""
                 // `ensures` written for `wrong`:
                 //     ensures nope = Other -> n.value > 0
@@ -280,7 +280,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                         souther.compiler.query.OfferingRequest.overTheModule("example.todo"),
                         Map.of("findTodo", nothingOffered()), null)),
                 Map.of("findTodo", List.of("ensures asked = NotFound -> id.value > 0")),
-                SourceRendering.namedByIdentity(SourceLayouts.NONE), compiled(TODO).db()).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE), compiled(TODO).db()).textInEnglish();
 
         assertEquals("", block);
     }

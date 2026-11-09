@@ -328,7 +328,7 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("demo")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
         assertTrue(block.contains("N { v = 200 }"), block);
         assertTrue(block.contains("N { v = 199 }"), block);
         assertFalse(block.contains("N { v = 100 }") || block.contains("N { v = 99 }"), block);
@@ -346,6 +346,6 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

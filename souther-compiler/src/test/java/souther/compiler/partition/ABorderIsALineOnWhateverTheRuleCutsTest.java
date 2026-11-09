@@ -776,12 +776,12 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
     private static String report(String model) {
         Compilation compilation = measured(model);
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String generated(String model) {
         Compilation compilation = measured(model);
-        return GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).text();
+        return GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     /** Each model measured once for the class: a test reads one model's report and the rows it is

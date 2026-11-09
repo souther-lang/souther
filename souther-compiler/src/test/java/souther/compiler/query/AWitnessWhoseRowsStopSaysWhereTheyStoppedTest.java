@@ -114,7 +114,7 @@ class AWitnessWhoseRowsStopSaysWhereTheyStoppedTest {
     void theReportNamesTheEnsuresBesideTheWordForThePlace() {
         Compilation compilation = compiled(model(ENSURES));
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertEquals(List.of("      · not read: comparison@21:29 — what it states was read, and it"
                         + " relates the value here to another value not shown to reach every"

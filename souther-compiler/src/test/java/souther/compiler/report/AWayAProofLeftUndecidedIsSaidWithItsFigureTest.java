@@ -222,7 +222,7 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
         assertEquals(FIGURE, way.figure());
         SourceRendering rendering = SourceRendering.namedByIdentity(bodies.texts());
 
-        String human = undecided.human(rendering);
+        String human = undecided.humanInEnglish(rendering);
         String positive = placeOf("Positive { n = n }");
         String demo = rendering.names().nameOf(bodies.sourceIdOf("demo"));
         assertTrue(human.lines().anyMatch(line -> line.startsWith("      ? whether any input takes"

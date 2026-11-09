@@ -151,6 +151,6 @@ class AClosureOverAContainerHoldingNoneReachesNothingInsideItTest {
         Compilation compilation = Compiler.analyzedModules(List.of(model), ModulePath.EMPTY,
                 warnings, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

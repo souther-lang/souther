@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ClassMembers;
 import souther.compiler.check.HeldClass;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -198,7 +199,7 @@ final class TermRealizations {
          *
          * @param detail what this walk found, or null where it has nothing to add
          */
-        record Unexhausted(CompositionShortfall met, String detail) implements Realization {
+        record Unexhausted(CompositionShortfall met, SearchMessage detail) implements Realization {
 
             public Unexhausted {
                 if (!met.figures().isEmpty() || met.nothing()) {
@@ -249,7 +250,7 @@ final class TermRealizations {
          *
          * <p>The word is how a reader downstream treats it and {@code detail} is what happened in
          * this attempt, which is the arrangement {@link Generator.UnresolvedCombination} has between
-         * its reason and what it said ({@link Generator.UnresolvedCombination#said()}). A
+         * its reason and what it said ({@link Generator.UnresolvedCombination#told()}). A
          * word read for the shape of the question outlives whatever made it true, so what a reader
          * is owed beyond it is evidence rather than another word.
          *
@@ -258,7 +259,7 @@ final class TermRealizations {
          *               reader told the same thing twice is the reader working the difference out
          *               from an absence
          */
-        record None(Generator.UnresolvedCombination.Reason why, String detail)
+        record None(Generator.UnresolvedCombination.Reason why, SearchMessage detail)
                 implements Realization {
 
             None(Generator.UnresolvedCombination.Reason why) {
@@ -1558,8 +1559,8 @@ final class TermRealizations {
                     if (key == null) {
                         return new Realization.Unexhausted(CompositionShortfall.writing(
                                 Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
-                                "`" + term.asked() + "` stands at no one value, so what is"
-                                        + " gathered for it is not known");
+                                new SearchMessage.WhatIsGatheredForItIsNotKnown(
+                                        String.valueOf(term.asked())));
                     }
                     int at = 0;
                     while (at < keys.size() && !keys.get(at).sameAs(key)) {
@@ -1586,7 +1587,7 @@ final class TermRealizations {
                     if (agreed == null) {
                         return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
                                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
-                                "two numbers are asked of the elements of one key");
+                                new SearchMessage.TwoNumbersAreAskedOfOneKey());
                     }
                     askedOfEachKey.set(at, agreed);
                 }
@@ -1601,8 +1602,8 @@ final class TermRealizations {
                     if (key == null) {
                         return new Realization.Unexhausted(CompositionShortfall.writing(
                                 Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
-                                "`" + askedOfTheKey + "` stands at no one value, so how many"
-                                        + " elements have it is not known");
+                                new SearchMessage.HowManyElementsHaveItIsNotKnown(
+                                        String.valueOf(askedOfTheKey)));
                     }
                     int at = 0;
                     while (at < keys.size() && !keys.get(at).sameAs(key)) {
@@ -1626,7 +1627,7 @@ final class TermRealizations {
                     if (!onlyCounted.get(at) && had != null && !had.equals(wanted)) {
                         return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
                                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
-                                "two counts are asked of the elements of one key");
+                                new SearchMessage.TwoCountsAreAskedOfOneKey());
                     }
                     howManyOfEachKey.set(at, wanted);
                 }
@@ -1665,8 +1666,7 @@ final class TermRealizations {
                     if (joined == null) {
                         return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
                                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
-                                "a container that is not a list written bare is not put together"
-                                        + " out of the elements of several keys");
+                                new SearchMessage.OnlyABareListIsPutTogetherOfSeveralKeys());
                     }
                     together.add(joined);
                 }
@@ -2346,9 +2346,8 @@ final class TermRealizations {
                                         CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(),
                                         UsualPlace.NONE),
                                 count -> nodesBelowARoot(count, sourceType, keptApart, reading))
-                        : treesNotWritten("nothing here writes a tree for how many values its"
-                                + " nodes hold in `" + String.join(".", nodes.container())
-                                + "`");
+                        : treesNotWritten(new SearchMessage.NothingWritesATreeForHowManyValues(
+                                String.join(".", nodes.container())));
             }
             case RunSource.ProjectedOccurrences _, RunSource.ComputedOccurrences _ ->
                     throw new IllegalStateException(orders.term() + " is a count of a run one"
@@ -2360,8 +2359,7 @@ final class TermRealizations {
             // than the one number is composed with ({@link JointBuilder.ALineToTheValue}).
             case RunSource.SearchedLine _ -> {
                 nothingInside(inside);
-                yield linesNotWritten("a line asked beside other numbers of the same tree is not"
-                        + " written");
+                yield linesNotWritten(new SearchMessage.ALineBesideOtherNumbersIsNotWritten());
             }
         };
     }
@@ -2388,8 +2386,8 @@ final class TermRealizations {
         Realization below = holdingExactly(sourceType, keptApart,
                 Count.of(BigDecimal.valueOf(many - 1)), ElementsHeldTo.NOTHING, reading);
         return below instanceof Realization.None
-                ? treesNotWritten("a tree of " + many + " nodes is deeper than a root and the"
-                        + " nodes below it")
+                ? treesNotWritten(new SearchMessage.ATreeOfSoManyNodesIsDeeper(
+                        Integer.toString(many)))
                 : below;
     }
 
@@ -2415,8 +2413,8 @@ final class TermRealizations {
                 new NumericTerm.ValueOf(line.key()));
         RuleReadingSource ruleSource = reading.source();
         if (orders == null || keyOrders == null || key == null) {
-            return linesNotWritten("`" + line.key() + "` stands at no one value, so the node the"
-                    + " search stops at is not known");
+            return linesNotWritten(new SearchMessage.TheNodeTheSearchStopsAtIsNotKnown(
+                    String.valueOf(line.key())));
         }
         if (line.matchAt().size() != 1
                 || !(sourceType instanceof Type.Ref named
@@ -2426,8 +2424,7 @@ final class TermRealizations {
                         instanceof Shape.Product(TypeSymbol _, SequencedMap<String, Type> fields))
                 || !(ruleSource.symbols().scope().reach(record)
                         instanceof TypeReachName.Written written)) {
-            return linesNotWritten("the node is not a record holding the value searched for at"
-                    + " one of its fields");
+            return linesNotWritten(new SearchMessage.TheNodeIsNotARecordHoldingTheValue());
         }
         Type matchType = fields.get(line.matchAt().getFirst());
         Type throughType = fields.get(line.through());
@@ -2435,11 +2432,11 @@ final class TermRealizations {
                 || !(TypeView.shapeOf(throughType, ruleSource.inners(), ruleSource.symbols(),
                         ruleSource.kinds(), ruleSource.sums()) instanceof Shape.Sequence below
                         && below.kind() == Shape.Sequence.Kind.LIST)) {
-            return linesNotWritten("the nodes below a node are not a list");
+            return linesNotWritten(new SearchMessage.TheNodesBelowANodeAreNotAList());
         }
         Place on = keyOrders.observed().onTheGrid(key);
         if (on == null || !(namesOf(matchType, ruleSource) instanceof WornNames.Spelled)) {
-            return linesNotWritten("the value searched for is not one this writes at the node");
+            return linesNotWritten(new SearchMessage.TheValueSearchedForIsNotWrittenAtTheNode());
         }
         TypeView matchView = TypeView.of(matchType, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
@@ -2468,9 +2465,9 @@ final class TermRealizations {
                     FixtureTemplate other = nodes == 1 ? null
                             : anotherValueThan(sought, matchType, reading);
                     if (nodes != 1 && other == null) {
-                        return linesNotWritten("no other value than the one searched for is there"
-                                + " to write " + (nodes == 0 ? "in a tree without it"
-                                        : "above the node the search stops at"));
+                        return linesNotWritten(nodes == 0
+                                ? new SearchMessage.NoOtherValueToWriteInATreeWithoutIt()
+                                : new SearchMessage.NoOtherValueToWriteAboveTheNode());
                     }
                     FixtureTemplate chain = null;
                     CompositionShortfall met = CompositionShortfall.NONE;
@@ -2486,8 +2483,7 @@ final class TermRealizations {
                         if (chosen.fields() == null) {
                             return new Realization.Unexhausted(met.and(CompositionShortfall
                                     .writing(Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_LINE))),
-                                    "a node of the line is not written inside what its rules leave"
-                                            + " the fields beside the two given");
+                                    new SearchMessage.ANodeOfTheLineIsNotWrittenInsideItsRules());
                         }
                         chain = FixtureTemplate.record(written, chosen.fields());
                     }
@@ -2504,13 +2500,13 @@ final class TermRealizations {
     }
 
     /** A tree whose search finds a line of a given length that this does not write. */
-    private static Realization linesNotWritten(String why) {
+    private static Realization linesNotWritten(SearchMessage why) {
         return new Realization.Unexhausted(CompositionShortfall.writing(
                 Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_LINE)), why);
     }
 
     /** What a tree this writes none of is said as: a population written in part. */
-    private static Realization treesNotWritten(String why) {
+    private static Realization treesNotWritten(SearchMessage why) {
         return new Realization.Unexhausted(CompositionShortfall.writing(
                 Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT)), why);
     }
@@ -2581,7 +2577,8 @@ final class TermRealizations {
                         if (had != null && !had.equals(held)) {
                             return new Realization.Unexhausted(CompositionShortfall.writing(
                                     Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
-                                    "`" + term.position() + "` is asked to hold two values");
+                                    new SearchMessage.AskedToHoldTwoValues(
+                                            String.valueOf(term.position())));
                         }
                     }
                 }
@@ -2608,8 +2605,7 @@ final class TermRealizations {
                 : new NumericSet.AwayFrom(List.of(Count.of(0)));
         if (oneElement != null && howMany != null && !howMany.holds(Count.of(1), Carrier.WHOLE)) {
             return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(oneElement)),
-                    "what the elements of a key come to is written as one element, and the key"
-                            + " is asked to have more");
+                    new SearchMessage.TheKeyIsAskedToHaveMoreThanOneElement());
         }
         // A key filed in a map has some element, so whatever count of them is asked, one or more
         // of the counts in it is the size.
@@ -2654,8 +2650,7 @@ final class TermRealizations {
         if (key == null) {
             return new Realization.Unexhausted(CompositionShortfall.writing(
                     Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
-                    "`" + term.asked() + "` stands at no one value, so what is gathered for it is"
-                            + " not known");
+                    new SearchMessage.WhatIsGatheredForItIsNotKnown(String.valueOf(term.asked())));
         }
         Carrier keyedOn = orders.fieldCarrier(term.key());
         if (keyedOn == null) {
@@ -2679,7 +2674,7 @@ final class TermRealizations {
         if (had != null && !had.equals(held)) {
             return new Realization.Unexhausted(CompositionShortfall.writing(
                     Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT)),
-                    "`" + keyAt + "` is asked to hold another value than the key");
+                    new SearchMessage.AskedToHoldAnotherValueThanTheKey(String.valueOf(keyAt)));
         }
         return underItsKey(sourceType, keptApart, orders, asked, within, reading,
                 new DemandsInside(among, inside.required()), howMany);

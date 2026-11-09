@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.report.InEnglish;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.execute.RunStop;
@@ -169,7 +170,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     private static Map<String, String> leftIn(Compilation compilation, String at) {
         // The report does not depend on the place asked of it, which only picks lines out of it.
         String report = REPORTS.computeIfAbsent(compilation, each -> AdequacyReport.of(each)
-                .human(SourceRendering.namedByIdentity(each.texts())));
+                .humanInEnglish(SourceRendering.namedByIdentity(each.texts())));
         Map<String, String> out = new LinkedHashMap<>();
         for (String line : report.lines().map(String::strip).toList()) {
             if (!line.contains("comparison@" + at + " ") || !line.contains("about `")) {
@@ -997,7 +998,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         compilation.answerEverything();
         assertEquals(0, compilation.errors().size());
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("adequacy: satisfied"), report);
         assertFalse(report.contains("not read"), report);
     }
@@ -1019,7 +1020,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     | ([]) -> false
                 """);
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertFalse(report.contains("equivalence partitions"), report);
         assertFalse(report.contains("borders"), report);
     }
@@ -1480,7 +1481,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 .get(length), model);
         String at = "comparison@" + whereWritten(model, "== List.length(") + " ";
         List<String> figures = new ArrayList<>();
-        AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()))
+        AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .lines().map(String::strip)
                 .filter(line -> line.startsWith("· not read: " + at)
                         && line.endsWith("about `" + length + "`"))
@@ -2424,7 +2425,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("p.a holds 4 classes"), report);
         assertTrue(report.contains("p.w holds 2 classes"), report);
     }
@@ -2472,7 +2473,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         for (String place : List.of("d.from", "d.to")) {
             assertTrue(report.lines().anyMatch(line -> line.contains("invariant Deal #1")
                     && line.contains("not shown to reach every value here")
@@ -2512,7 +2513,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("measurement: complete"), report);
         assertFalse(report.contains("not shown to reach every value here"), report);
         for (String place : List.of("deadline", "today")) {
@@ -2772,7 +2773,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("x", RELATES, "y", RELATES),
                 leftIn(compilation, "4:" + (from + body.indexOf("=="))));
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         for (int writing : List.of(body.indexOf(">="), body.lastIndexOf(">="))) {
             String at = "point (comparison@4:" + (from + writing) + ")";
             assertEquals(List.of("ON", "OFF", "IN", "OUT"), report.lines()
@@ -3062,7 +3063,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     @Test
     void aRelationShownNothingOfAWayPastTheFigureSaysTheFigureStoppedIt() {
-        String figure = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.counts();
+        String figure = InEnglish.said(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.countsSaid());
         String inputs = "x1: Int, x2: Int, x3: Int, x4: Int, x5: Int, y: Int";
         String body = "if (x1 >= 0 || x1 <= -5) && (x2 >= 0 || x2 <= -5) && (x3 >= 0 || x3 <= -5)"
                 + " && (x4 >= 0 || x4 <= -5) && (x5 >= 0 || x5 <= -5)"
@@ -3079,7 +3080,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /** The lines saying a rule at {@code place} is measured on what its runs worked out. */
     private static List<String> onItsRunsAbout(Compilation compilation, String place) {
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(
                         compilation.texts())).lines().map(String::strip)
                 .filter(line -> line.startsWith("· no line")
                         && line.contains(WhyAPlaceIsUndividedIsSaid.of(
@@ -3090,7 +3091,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /** The lines of a report about {@code place} that say it was not read. */
     private static List<String> linesAbout(Compilation compilation, String place) {
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(
                         compilation.texts())).lines().map(String::strip)
                 .filter(line -> line.startsWith("· not read") && line.endsWith("about `" + place + "`"))
                 .toList();
@@ -3240,7 +3241,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
         assertEquals(List.of(), compilation.errors(), "the rows hold");
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("adequacy: satisfied"), report);
     }
 
@@ -3402,7 +3403,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, Set<String>> out = new LinkedHashMap<>();
         Pattern about = Pattern.compile("about `([^`]+)`$");
         for (String line : report.lines().map(String::strip).toList()) {
@@ -3936,7 +3937,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String report = AdequacyReport.of(compilation)
-                    .human(SourceRendering.namedByIdentity(compilation.texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
             String said = apart.endsWith("7") ? "not shown to reach every value here"
                     : "it relates the value here to another value rather than dividing";
             for (String place : List.of("x.g", "x.d")) {
@@ -4291,7 +4292,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     private static Set<String> notReadIn(String source, String at) {
         Compilation compilation = measured(source);
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Set<String> out = new TreeSet<>();
         for (String line : report.lines().map(String::strip).toList()) {
             if (line.startsWith("· not read") && line.contains("comparison@" + at + " ")

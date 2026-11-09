@@ -65,7 +65,7 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
 
     private static String humanOf(String source) {
         Made made = reportOf(source);
-        return made.report().human(made.sources());
+        return made.report().humanInEnglish(made.sources());
     }
 
     private static JsonNode partitionOf(String source) {

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
@@ -66,7 +67,8 @@ class ANumberNoCandidateCouldHoldTravelsWithTheSearchesAnswerTest {
     @Test
     void aClassUnreachedOverANumberItCouldNotHoldIsARepresentativeNotArrivedAt() {
         RepresentativeSource.NotArrivedAt source = assertDoesNotThrow(
-                () -> new RepresentativeSource.NotArrivedAt(ONLY_UNHELD, "nothing here composed"),
+                () -> new RepresentativeSource.NotArrivedAt(ONLY_UNHELD,
+                        new SearchMessage.Code("nothing here composed")),
                 "a number this could not hold is what stopped the reaching, and is said");
         assertEquals(ONLY_UNHELD, source.met());
     }

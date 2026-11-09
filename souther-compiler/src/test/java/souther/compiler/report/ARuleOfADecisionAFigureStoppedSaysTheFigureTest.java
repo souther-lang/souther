@@ -92,7 +92,8 @@ class ARuleOfADecisionAFigureStoppedSaysTheFigureTest {
         List<String> lines = ruleLines(page);
 
         assertEquals(1, lines.size(), () -> "the rule through case Some is the one: " + page);
-        assertTrue(lines.get(0).contains(Reasons.met(CompositionShortfall.of(Set.of(figure)))),
+        assertTrue(lines.get(0).contains(InEnglish.said(Reasons.met(
+                        CompositionShortfall.of(Set.of(figure))))),
                 () -> "the rule's own line opens on the figure its search stopped at: "
                         + lines.get(0));
 
@@ -116,7 +117,7 @@ class ARuleOfADecisionAFigureStoppedSaysTheFigureTest {
 
     /** The page of a report, which is built once per compilation and read twice. */
     private static String human(AdequacyReport report) {
-        return report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** The lines the page says a rule of the decision nothing could show a row for in. */

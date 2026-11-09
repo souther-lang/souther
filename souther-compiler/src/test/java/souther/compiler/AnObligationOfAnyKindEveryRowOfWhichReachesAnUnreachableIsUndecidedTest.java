@@ -282,7 +282,7 @@ class AnObligationOfAnyKindEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
 
     private static String offeredFor(Compilation compilation) {
         return GeneratedRows.of(compilation, compilation.modules().get(0), "f",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     /**
@@ -335,7 +335,7 @@ class AnObligationOfAnyKindEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
                 .flatMap(premise -> premise.reasons().stream())
                 .collect(Collectors.toSet());
         assertEquals(Set.of("never On here", "never Off here"), open);
-        String page = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String page = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         assertTrue(page.contains("? undecided whether a row goes through `case Q` (null): a row"
                 + " there reaches `unreachable` (never On here; never Off here)"), page);
     }

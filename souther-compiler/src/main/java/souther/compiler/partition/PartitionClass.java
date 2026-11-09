@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.numeric.Place;
@@ -77,7 +78,7 @@ public record PartitionClass(String id, String label, Recognition recognises,
 
     /** A class nothing can produce a value for, and why. */
     public static PartitionClass ungeneratable(String id, String label,
-                                               Recognition recognises, String why) {
+                                               Recognition recognises, SearchMessage why) {
         return new PartitionClass(id, label, recognises,
                 new RepresentativeSource.NothingProducible(why), null, null, null);
     }

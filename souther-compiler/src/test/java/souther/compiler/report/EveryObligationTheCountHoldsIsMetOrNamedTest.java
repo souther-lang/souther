@@ -176,7 +176,7 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         int armsUnmet = 0;
         int armsUndecided = 0;
         for (Reported reported : reports()) {
-            String page = reported.report().human(reported.names());
+            String page = reported.report().humanInEnglish(reported.names());
             // Which block each obligation nobody could decide belongs to, so that what is checked is
             // the block naming its own and not the page holding the right number somewhere — and
             // by which question it is open on, each worded apart, so that a block saying one of

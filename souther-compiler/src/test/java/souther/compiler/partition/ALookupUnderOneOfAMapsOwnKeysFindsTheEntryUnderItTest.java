@@ -298,7 +298,7 @@ class ALookupUnderOneOfAMapsOwnKeysFindsTheEntryUnderItTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The source measured, which is a source that compiles. */

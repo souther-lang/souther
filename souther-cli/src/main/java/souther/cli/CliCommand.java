@@ -51,7 +51,11 @@ enum CliCommand {
     EXAMPLES("examples", "<file.sou>...", "how well the `example`s cover the model",
             Scope.PROJECT,
             Map.of(CliOption.FORMAT, "how to render the report, and any compile "
-                    + "error (default human)")),
+                    + "error (default human)",
+                    CliOption.LANG, "the language of the report, of the comments on the rows "
+                            + "--generate offers, and of any compile error, as a tag such as ja "
+                            + "or en; overrides SOUTHER_LANG, and with neither, en. A JSON report "
+                            + "is the same in every language")),
     DOC("doc", "[<anchor> | <error-code> | <set>/<topic>[/<section>]]",
             "read the language specification", Scope.INDEPENDENT),
     API("api", "[<Module>[.<name>]]", "the stdlib surface and its signatures",

@@ -175,7 +175,7 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
                 String block = GeneratedRows.of(
                         Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("demo")),
                         Map.of(), SourceRendering.namedByIdentity(offering.texts()),
-                        offering.db()).text();
+                        offering.db()).textInEnglish();
                 List<RowsOfABlock.Row> offered = RowsOfABlock.of(block);
                 assertFalse(offered.isEmpty(), () -> pattern + " " + body + " " + block);
 

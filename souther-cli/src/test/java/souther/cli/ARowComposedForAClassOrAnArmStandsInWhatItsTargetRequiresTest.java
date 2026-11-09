@@ -130,6 +130,6 @@ class ARowComposedForAClassOrAnArmStandsInWhatItsTargetRequiresTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return GeneratedRows.of(compilation, compilation.modules().get(0), "decides",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 }

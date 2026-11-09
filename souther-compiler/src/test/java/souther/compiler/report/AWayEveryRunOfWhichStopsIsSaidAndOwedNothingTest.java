@@ -80,7 +80,7 @@ class AWayEveryRunOfWhichStopsIsSaidAndOwedNothingTest {
         AdequacyReport stopping = withTheWay(bodies, own);
         SourceRendering rendering = SourceRendering.namedByIdentity(bodies.texts());
 
-        String human = stopping.human(rendering);
+        String human = stopping.humanInEnglish(rendering);
         int at = BODIES.indexOf("Positive { n = n }");
         String before = BODIES.substring(0, at);
         String place = (before.chars().filter(c -> c == '\n').count() + 1) + ":"

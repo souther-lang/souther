@@ -74,7 +74,7 @@ class ASearchHeldToAShareOfItsStepsSaysTheShareTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors());
         String said = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> stops = said.lines().filter(each -> each.contains(STEPS.name() + ","))
                 .toList();
         assertFalse(stops.isEmpty(), () -> "the search stops and says so: " + said);

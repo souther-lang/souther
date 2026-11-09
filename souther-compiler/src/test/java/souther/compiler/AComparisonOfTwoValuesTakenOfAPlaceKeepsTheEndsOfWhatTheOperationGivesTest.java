@@ -24,7 +24,7 @@ class AComparisonOfTwoValuesTakenOfAPlaceKeepsTheEndsOfWhatTheOperationGivesTest
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(0, compilation.errors().size(), report);
         return report;
     }

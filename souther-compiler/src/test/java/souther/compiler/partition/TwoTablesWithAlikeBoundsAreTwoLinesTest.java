@@ -180,7 +180,7 @@ class TwoTablesWithAlikeBoundsAreTwoLinesTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("1 behavior:"), "the model was measured: " + report);
         return report;
     }

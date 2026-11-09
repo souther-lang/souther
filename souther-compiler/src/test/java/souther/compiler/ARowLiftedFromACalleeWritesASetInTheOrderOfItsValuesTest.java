@@ -56,7 +56,7 @@ class ARowLiftedFromACalleeWritesASetInTheOrderOfItsValuesTest {
         String offered = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("repro.fallen")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         assertTrue(offered.contains("(Fallen([N(2), N(9), N(10)]))"), offered);
         assertFalse(offered.contains("N(10), N(2)"), offered);

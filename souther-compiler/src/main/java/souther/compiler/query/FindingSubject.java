@@ -1,5 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.SearchMessage;
+import souther.compiler.partition.AuthoredLine;
 import souther.compiler.types.TypeSymbol;
 
 /**
@@ -24,8 +27,16 @@ import souther.compiler.types.TypeSymbol;
  */
 public sealed interface FindingSubject {
 
-    /** What a report calls it, in English, the way every other word this writes is chosen. */
-    String named();
+    /** What a report calls it, in the words of whichever language the page is written in. */
+    SearchMessage told();
+
+    /**
+     * The same in the catalog's base language: what two findings are told apart by, and what a
+     * document writes.
+     */
+    default String named() {
+        return Messages.render(told(), Messages.BASE_LANGUAGE);
+    }
 
     /** A body of the module: what a row written for that behavior answers. */
     record OfABehavior(String name) implements FindingSubject {
@@ -34,6 +45,11 @@ public sealed interface FindingSubject {
             if (name == null) {
                 throw new IllegalArgumentException("a finding about a behavior says which");
             }
+        }
+
+        @Override
+        public SearchMessage told() {
+            return new SearchMessage.Code(name);
         }
 
         @Override
@@ -74,13 +90,12 @@ public sealed interface FindingSubject {
         /**
          * What a report calls them.
          *
-         * <p>Said where such a list is said ({@link
-         * souther.compiler.partition.AuthoredLine#naming}), because a reader meets this list and the
-         * one the line's own name carries about one line.
+         * <p>Said where such a list is said ({@link AuthoredLine#named}), because a reader meets
+         * this list and the one the line's own name carries about one line.
          */
         @Override
-        public String named() {
-            return souther.compiler.partition.AuthoredLine.naming(declarations);
+        public SearchMessage told() {
+            return AuthoredLine.named(declarations);
         }
     }
 

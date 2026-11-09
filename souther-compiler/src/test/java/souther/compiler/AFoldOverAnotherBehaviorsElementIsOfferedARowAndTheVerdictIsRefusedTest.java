@@ -78,7 +78,7 @@ class AFoldOverAnotherBehaviorsElementIsOfferedARowAndTheVerdictIsRefusedTest {
             String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                             OfferingRequest.overTheModule("repro.open")),
                     Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                    compilation.db()).text();
+                    compilation.db()).textInEnglish();
 
             List<RowsOfABlock.Row> offered = rowsForTheRewrite(block);
             assertEquals(1, offered.size(),
@@ -99,7 +99,7 @@ class AFoldOverAnotherBehaviorsElementIsOfferedARowAndTheVerdictIsRefusedTest {
             String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                             OfferingRequest.overTheModule("repro.open")),
                     Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                    compilation.db()).text();
+                    compilation.db()).textInEnglish();
             String offered = rowsForTheRewrite(block).getFirst().written();
             String stated = offered.replace("<?>", "0");
 

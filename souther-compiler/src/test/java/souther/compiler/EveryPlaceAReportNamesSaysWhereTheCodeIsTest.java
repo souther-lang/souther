@@ -427,7 +427,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         assertEquals(1, arms.size(), () -> "one arm is unreached: " + arms.size());
         Diagnostic arm = arms.get(0);
 
-        List<String> human = report.human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+        List<String> human = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
         List<String> armLines = human.stream()
                 // The sentence and not the mark it is printed under. What a build does about a
@@ -484,7 +484,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
                 id -> "0".equals(id.value()) ? "up.sou" : "down.sou", compilation.texts());
         AdequacyReport report = AdequacyReport.of(compilation);
 
-        List<String> lines = report.human(names).lines().map(String::strip)
+        List<String> lines = report.humanInEnglish(names).lines().map(String::strip)
                 // The sentence and not the mark it is printed under. What a build does about a
                 // finding is written down now and is somebody else's test; this one is about the
                 // place the sentence names, and reading the mark here would be a second holder of it.
@@ -502,7 +502,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         List<JsonNode> unreached = armsNoRowGoesThrough(down.get("behaviors").get(0));
         assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
         JsonNode at = unreached.get(0).get("at");
-        List<String> edges = report.human(names).lines().map(String::strip)
+        List<String> edges = report.humanInEnglish(names).lines().map(String::strip)
                 .filter(line -> line.contains("no row is at")).toList();
         List<String> jsonOrigins = new ArrayList<>();
         down.get("behaviors").get(0).get("partition").get("boundaries")

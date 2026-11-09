@@ -128,7 +128,7 @@ class CountsAddedUpAgainstNoughtDrawTheLinesOfTheChecksTheyComeToTest {
                     true
                 }
                 """.formatted(X, Y)), "probe", null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
         Set<Long> pastTheSumAt = new LinkedHashSet<>();
         Matcher row = Pattern.compile("\\(\\[([^\\]]*)\\], \\[([^\\]]*)\\], (-?\\d+)\\)")
                 .matcher(text);
@@ -260,7 +260,7 @@ class CountsAddedUpAgainstNoughtDrawTheLinesOfTheChecksTheyComeToTest {
 
     private static String rowsOf(String condition) {
         return GeneratedRows.of(compiled(guarding(condition)), "probe", null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     private static Compilation compiled(String source) {

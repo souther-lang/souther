@@ -76,7 +76,7 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
     }
 
     /** The places the report says nothing is read of. */

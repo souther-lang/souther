@@ -286,7 +286,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
     @Test
     void aComparisonOfThatNameDrawsItsLineUnderEachCase() {
         Compilation c = measured(MODEL);
-        String human = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
+        String human = AdequacyReport.of(c).humanInEnglish(SourceRendering.namedByIdentity(c.texts()));
         assertTrue(human.contains("read as busy/f.unit@Desk.count: = 4")
                         && human.contains("read as busy/f.unit@Ward.count: = 4"),
                 human);

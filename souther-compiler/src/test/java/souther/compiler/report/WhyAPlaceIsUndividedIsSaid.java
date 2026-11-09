@@ -15,7 +15,7 @@ public final class WhyAPlaceIsUndividedIsSaid {
 
     /** The words the report puts after the place's name for {@code reason}. */
     public static String of(UndividedPosition.Reason reason) {
-        return AdequacyReport.whyUnread(reason);
+        return InEnglish.said(AdequacyReport.whyUnread(reason));
     }
 
     private WhyAPlaceIsUndividedIsSaid() {}

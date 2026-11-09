@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.report.InEnglish;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -72,13 +73,14 @@ class AWayReadAgainPastItsPairsOfBoundsSaysSoTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors());
         List<String> aboutX = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip)
                 .filter(line -> line.startsWith("· not read") && line.endsWith("about `x`"))
                 .toList();
         assertFalse(aboutX.isEmpty());
         assertTrue(aboutX.stream().allMatch(line ->
-                line.contains(CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH.counts())),
+                line.contains(InEnglish.said(
+                        CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH.countsSaid()))),
                 aboutX::toString);
     }
 }

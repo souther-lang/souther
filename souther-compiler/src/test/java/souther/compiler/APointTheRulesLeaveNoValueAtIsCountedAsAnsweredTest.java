@@ -182,6 +182,6 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
     }
 
     private static String written() {
-        return ANALYSED.human(SourceRendering.namedByIdentity(compiled.texts()));
+        return ANALYSED.humanInEnglish(SourceRendering.namedByIdentity(compiled.texts()));
     }
 }

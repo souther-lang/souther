@@ -123,7 +123,7 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
 
     private static String human(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The statement of the issue: the sum of the string's length and a number of the row. */

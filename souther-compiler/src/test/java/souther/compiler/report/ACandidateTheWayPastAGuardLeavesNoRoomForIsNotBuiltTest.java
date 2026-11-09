@@ -75,7 +75,7 @@ class ACandidateTheWayPastAGuardLeavesNoRoomForIsNotBuiltTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         return GeneratedRows.of(compilation, null, null,
-                new SourceRendering(id -> "wide.sou", compilation.texts())).text();
+                new SourceRendering(id -> "wide.sou", compilation.texts())).textInEnglish();
     }
 
     @Test

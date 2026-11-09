@@ -70,7 +70,7 @@ class ACaseAnArmOpensIsReadAsAPlainInputIsWhenAStatementIsTakenAwayTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code().toString()).toList(), source);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The guard that makes a hole in the value and the one that bounds it are read alike. What

@@ -193,7 +193,7 @@ class AContainerOfStringsIsComposedWithSoManyElementsMeetingAStatementTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return GeneratedRows.of(compilation, "probe", null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     private static List<String> stringsIn(String written) {

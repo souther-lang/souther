@@ -128,8 +128,6 @@ class WhoMayAskTheJdkWhatACharacterIsTest {
             "souther/compiler/doc/TakenAsItStands#lines java/lang/String.isBlank",
             "souther/compiler/doc/TakenAsItStands#lines java/lang/String.strip",
             "souther/compiler/partition/FixtureTemplate#<init> java/lang/String.isBlank",
-            "souther/compiler/report/AdequacyReport#excluded java/lang/String.stripTrailing",
-            "souther/compiler/report/AdequacyReport#human java/lang/String.toLowerCase",
             "souther/compiler/report/AdequacyReport#word java/lang/String.toLowerCase",
             "souther/compiler/report/WrittenEnsures#indentOf java/lang/Character.isWhitespace",
             "souther/compiler/source/SourceId#<init> java/lang/String.isBlank");

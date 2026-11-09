@@ -147,7 +147,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String judge = behaviorBlock(
-                AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts())), "judge");
+                AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())), "judge");
 
         assertTrue(judge.contains("signature   not measured (no row names this behavior)"), judge);
     }
@@ -176,7 +176,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     private static String human() {
         if (rendered == null) {
             rendered = AdequacyReport.of(compiled())
-                    .human(SourceRendering.namedByIdentity(compiled().texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(compiled().texts()));
         }
         return rendered;
     }
@@ -447,7 +447,7 @@ class AMeasureWithNoNumberSaysWhyTest {
 
     private static String humanAt(Adequacy.Level level) {
         Compilation at = compiledAt(level);
-        return AdequacyReport.of(at).human(SourceRendering.namedByIdentity(at.texts()));
+        return AdequacyReport.of(at).humanInEnglish(SourceRendering.namedByIdentity(at.texts()));
     }
 
     private static Map<String, Adequacy.BranchEvidence> branchesAt(Adequacy.Level level) {

@@ -223,7 +223,7 @@ class TheMonthADateIsMovedIntoIsARemainderOfItsMonthTest {
     private static String human(String before, String comparison) {
         Compilation compilation = measured(before, comparison);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String json(String before, String comparison) {

@@ -55,7 +55,7 @@ class ChoicesAboutAnAnswerAreComposedAlongEveryWayOfTakingThemTogetherTest {
                         .map(e -> e.diagnostic().code().toString()).toList(),
                 "the model under test compiles");
         AdequacyReport report = AdequacyReport.of(compilation);
-        String page = report.human(SourceRendering.namedByIdentity(compilation.texts()));
+        String page = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         AdequacyReport.BehaviorReport decides = report.modules().stream()
                 .flatMap(module -> module.behaviors().stream())
                 .filter(each -> "decides".equals(each.name()))

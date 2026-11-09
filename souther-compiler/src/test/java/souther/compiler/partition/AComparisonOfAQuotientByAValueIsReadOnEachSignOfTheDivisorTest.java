@@ -797,7 +797,7 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
     private static String human(String model) {
         Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Each model measured once for the class: tests ask one model its lines and its report, and

@@ -72,7 +72,7 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                 "every way a condition goes unrepresented is one this asks for a sentence");
         List<String> said = new ArrayList<>();
         for (ConditionGap gap : ways.values()) {
-            String sentence = AdequacyReport.whyLeftOut(gap);
+            String sentence = InEnglish.said(AdequacyReport.whyLeftOut(gap));
             assertNotNull(sentence, () -> "a sentence for " + gap);
             assertFalse(sentence.isBlank(), () -> "a sentence for " + gap);
             said.add(sentence);
@@ -101,10 +101,10 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
      */
     @Test
     void aLocationAskedForNumbersNothingComposesOneValueForIsNotToldAsAPositionNothingBuiltAt() {
-        String numbers = AdequacyReport.whyLeftOut(ofTheInput(
-                new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
-        String positions = AdequacyReport.whyLeftOut(ofTheInput(
-                new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+        String numbers = InEnglish.said(AdequacyReport.whyLeftOut(ofTheInput(
+                new ReachabilityGap.Why.TwoNumbersAtOneLocation())));
+        String positions = InEnglish.said(AdequacyReport.whyLeftOut(ofTheInput(
+                new ReachabilityGap.Why.NoValueComposedForItsPositions())));
 
         assertTrue(numbers.contains(ABOUT_ANOTHER_NUMBER), () -> numbers);
         assertFalse(numbers.contains(ABOUT_THE_POSITIONS), () -> numbers);

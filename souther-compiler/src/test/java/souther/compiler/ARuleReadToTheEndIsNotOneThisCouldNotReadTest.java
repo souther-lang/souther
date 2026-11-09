@@ -117,7 +117,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
                 declaration.get("findings")
                         .forEach(each -> kinds.add(each.get("kind").asString())));
         return new Measured(behavior.get("status").asString(), weakening, kinds,
-                report.human(SourceRendering.namedByIdentity(compilation.texts())));
+                report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     /** A clause that draws a line, which is what the three below are read against. */
@@ -467,7 +467,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertFalse(human.contains("not accounted for"), human);
         assertTrue(human.contains("measurement: complete"), human);

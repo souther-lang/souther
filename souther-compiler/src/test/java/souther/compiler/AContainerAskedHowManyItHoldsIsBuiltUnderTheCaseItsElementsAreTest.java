@@ -54,7 +54,7 @@ class AContainerAskedHowManyItHoldsIsBuiltUnderTheCaseItsElementsAreTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Every point is offered a row, whichever case is declared first, and every row offered for

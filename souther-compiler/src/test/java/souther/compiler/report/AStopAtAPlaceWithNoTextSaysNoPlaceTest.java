@@ -26,6 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -85,11 +86,30 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
 
         assertEquals("the runs stopped at the construction, where invariant Positive #1 did not"
                         + " hold and at an `unreachable` (never this)",
-                GeneratedRows.stoppedAt(List.of(
+                InEnglish.said(GeneratedRows.stoppedAt(List.of(
                         new WhereARunStopped(new RunStop.AtAConstruction("demo", "Positive",
                                 Optional.empty(), 0, Optional.empty()), Optional.empty()),
                         new WhereARunStopped(new RunStop.AtAnUnreachable("never this",
-                                Optional.empty()), Optional.empty())), rendering));
+                                Optional.empty()), Optional.empty())),
+                        InEnglish.page(rendering))));
+    }
+
+    @Test
+    void aStopIsSaidInTheLanguageOfThePage() {
+        Page japanese = new Page(SourceRendering.namedByIdentity(compiled().texts()),
+                Locale.JAPANESE);
+        List<WhereARunStopped> stops = List.of(
+                new WhereARunStopped(new RunStop.AtAConstruction("demo", "Positive",
+                        Optional.empty(), 0, Optional.empty()), Optional.empty()),
+                new WhereARunStopped(new RunStop.AtAnUnreachable("never this",
+                        Optional.empty()), Optional.empty()));
+
+        String said = japanese.say(GeneratedRows.stoppedAt(stops, japanese));
+
+        assertTrue(!said.contains("the runs stopped") && !said.contains("did not hold"),
+                () -> "the sentence is in English: " + said);
+        // What is a name or what the runtime said is not translated.
+        assertTrue(said.contains("Positive") && said.contains("never this"), said);
     }
 
     @Test
@@ -112,7 +132,7 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
                           "declaredIn": "demo"}]"""),
                 entry.path("runsStopped"));
 
-        String human = stopping.human(rendering);
+        String human = stopping.humanInEnglish(rendering);
         assertTrue(human.lines().anyMatch(line -> line.equals("      · every run along a way"
                         + " through this body stops: the runs stopped at the construction, where"
                         + " invariant Positive #1 did not hold")),

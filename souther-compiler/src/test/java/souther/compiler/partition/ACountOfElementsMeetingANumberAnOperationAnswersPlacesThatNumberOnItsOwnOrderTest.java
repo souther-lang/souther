@@ -35,7 +35,7 @@ class ACountOfElementsMeetingANumberAnOperationAnswersPlacesThatNumberOnItsOwnOr
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code().toString()).toList());
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("#xs [String.length(xs[*]) >= 2 && label - xs[*] == 0]"),
                 () -> report);
     }

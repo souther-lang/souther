@@ -69,7 +69,7 @@ class ATotalOverTheCasesOfASumIsReadWhereTheCaseAnswersAnAmountTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** The rule is read: no part of it is left unread, and the rows are at its line. */

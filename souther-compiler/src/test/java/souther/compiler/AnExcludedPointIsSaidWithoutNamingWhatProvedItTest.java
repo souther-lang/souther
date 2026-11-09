@@ -94,7 +94,7 @@ class AnExcludedPointIsSaidWithoutNamingWhatProvedItTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String block(Compilation compilation) {
@@ -102,6 +102,6 @@ class AnExcludedPointIsSaidWithoutNamingWhatProvedItTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.sets")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 }

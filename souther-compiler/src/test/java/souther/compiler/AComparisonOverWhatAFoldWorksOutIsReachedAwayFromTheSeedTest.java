@@ -115,7 +115,7 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
     private static List<String> openPointsOf(String source, String behavior) {
         Compilation compilation = measured(source);
         List<String> lines = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
         int from = IntStream.range(0, lines.size())
                 .filter(at -> lines.get(at).startsWith(behavior + " ")
@@ -133,7 +133,7 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
         Map<String, List<List<Integer>>> out = new java.util.LinkedHashMap<>();
         Matcher row = OFFERED.matcher(block);
         while (row.find()) {
@@ -201,7 +201,7 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         // The guard is two comparisons of its own, with points of their own; the one the fold is
         // compared at is the last in the line.

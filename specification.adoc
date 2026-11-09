@@ -3924,6 +3924,32 @@ A function written where a call takes one is made there and run elsewhere. Evalu
 
 Most of it is borrowed rather than coined. Deriving partitions from a model's declarations, drawing a line where a rule places one and asking for a row at the line and at the value beside it is domain testing, which has a syllabus and a body of practice behind it (ISTQB CTAL-TA v4.0 §3.1.1, generalising equivalence partitioning and boundary value analysis). Where this report means what that vocabulary already means, it says it in that vocabulary — a reader who practises the technique should not have to translate, and a word this compiler invented for something with a published name is a word nothing can be looked up in.
 
+[[the-report-is-written-in-the-language-named]]*The page is written in the language its reader named, and the document is written in one language whatever was named.* `+--lang+` and `+SOUTHER_LANG+` select a language for the report as they do for a diagnostic (<<compile-errors>>), and the machine's locale never does. What follows them is what a person reads: every line of the report, and the comments `+--generate+` writes around the rows it offers. What does not is everything a consumer or a compiler reads back. The document `+--format json+` writes is the same bytes whichever language was named, because a consumer matches on its strings. The rows are Souther an author pastes, so a row, its values and the name it is given are the same in every language, and only the `+//+` lines around them are translated. A line also quotes code and does not translate it: a position, a declaration's or a behavior's name, a value, a rule handle — `+invariant UserId #1+`, `+ensures login (asked)+`, and the kind words `+comparison+`, `+predicate+` and `+fork+` a handle is written with — the keywords of the language (`+behavior+`, `+example+`, `+let+`, `+fake+`, `+match+`, `+if+`, `+case+`, `+else+`, `+fold+`, `+seed+`, `+unreachable+`, `+guard+`, `+invariant+`, `+ensures+`), and the point roles `+ON+`, `+OFF+`, `+IN+` and `+OUT+`.
+
+Which lines a page says, and in which order, is not a question of wording, in any language. Two lines are one line where they say one thing — the same statement about the same things — and lines a written order leaves side by side are ordered by which statement each is and then by what it says about which things, so a page in Japanese says the lines a page in English says, in the same order, and rewording the catalog in either language changes the words of a line and nothing else. Decided on words instead, two statements a language happened to word alike would be said once, and the same model would be read out in a different order in each language.
+
+The words fixed in this section are said in Japanese in the terms the JSTQB glossary gives them where it gives one. A row, which this section calls by what an author writes, is a テストケース on the page and in the comments of the rows; a diagnostic keeps its own word for it.
+
+[cols="1,1"]
+|===
+|English |Japanese
+
+|row |テストケース
+|equivalence partition |同値パーティション
+|border |境界
+|obligations (coverage items) |カバレッジアイテム
+|axes |軸
+|signature, partition, branch, decision, replacement, interaction |シグネチャ、同値分割、分岐、判定、置き換え、相互作用
+|arm (of a fork) |分岐
+|specified, observed, verified |期待、観測、検証
+|implemented, unimplemented, injected |実装あり、未実装、注入
+|measurement complete, partial, unavailable |測定 完了、一部のみ、できなかった
+|not applicable, not measured |該当なし、未測定
+|not read |読めず
+|adequacy satisfied, not satisfied, undetermined |十分性 充足、未充足、未確定
+|pending |保留
+|===
+
 [[the-report-claims-no-coverage-criterion]]What the report does not do is name a criterion as satisfied. The syllabus defines two — simplified domain coverage and reliable domain coverage — and either one, printed as a verdict, would be a single word standing for a whole report, which ADR-0089 refuses. So the report says which coverage items a border owes and which of them a row is at, and a reader working to one of those criteria decides for themselves whether it adds up. That is the honest reading while some coverage items cannot be produced at all. A point beside a border is derived only where the carrier names the neighbouring value, and a `+Decimal+` names none: the syllabus asks for the closest value "according to the given precision" and this language carries no precision for a decimal. Such a point is not counted as one a row is owed, because no row could be written at it — an item that cannot exist is not a gap.
 
 Which is a separate decision from what a build is told about. A row against the line is what simplified domain coverage asks for (<<e1916>>) and a row away from it is one of the two items reliable domain coverage adds (<<e1917>>); a build is told about all four, because all four are obligations (<<what-a-build-refuses-over-is-the-account>>). Both come off one measurement of one border, so what a build is held to is a reading of it rather than a second measure made to other rules.

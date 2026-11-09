@@ -240,13 +240,13 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
     private static String offered(String source, String behavior) {
         Compilation compilation = measured(source);
         return souther.compiler.report.GeneratedRows.of(compilation, "example.taken", behavior,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     private static String report(String source) {
         Compilation compilation = measured(source);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Compilation measured(String source) {

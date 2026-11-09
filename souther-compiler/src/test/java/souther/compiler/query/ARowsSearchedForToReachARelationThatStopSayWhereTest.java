@@ -115,7 +115,7 @@ class ARowsSearchedForToReachARelationThatStopSayWhereTest {
     void theReportNamesTheEnsuresBesideTheWordForEachPlace() {
         Compilation compilation = compiled(model(ENSURES));
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         for (String place : PLACES) {
             assertEquals(List.of("      · not read: comparison@24:29 — what it states was read,"

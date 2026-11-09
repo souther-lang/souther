@@ -146,6 +146,6 @@ class ARowLiftedFromACalleeIsNotSaidToFillAnythingTest {
                 .map(e -> e.diagnostic().code().toString()).toList());
         Offering offering = Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m"));
         return new Offered(offering, GeneratedRows.of(offering, Map.of(),
-                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text());
+                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish());
     }
 }

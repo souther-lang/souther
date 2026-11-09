@@ -150,7 +150,7 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         return report.lines().map(String::strip).filter(line -> line.startsWith("· read as"))
                 .collect(Collectors.toCollection(TreeSet::new));
     }

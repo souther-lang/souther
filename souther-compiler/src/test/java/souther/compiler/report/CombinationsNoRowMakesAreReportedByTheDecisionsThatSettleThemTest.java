@@ -123,7 +123,7 @@ class CombinationsNoRowMakesAreReportedByTheDecisionsThatSettleThemTest {
                 .map(each -> each.settled().hashCode()).distinct().count(),
                 "the combinations of a group hash apart");
 
-        String page = report.human(rendering);
+        String page = report.humanInEnglish(rendering);
         assertTrue(page.lines().count() < 20L * ELEMENTS,
                 () -> "a page about " + ELEMENTS + " decisions of " + page.lines().count()
                         + " lines");

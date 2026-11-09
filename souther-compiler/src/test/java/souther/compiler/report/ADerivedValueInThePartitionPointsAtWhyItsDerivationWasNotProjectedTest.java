@@ -54,7 +54,7 @@ class ADerivedValueInThePartitionPointsAtWhyItsDerivationWasNotProjectedTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), body);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
     }
 
     /** Each search the decision section shows with something left out, in the order it shows. */

@@ -164,7 +164,7 @@ final class LookupsOfOneValue {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
     }
 
     /** The lines of the report of {@code source} saying something is not read. */

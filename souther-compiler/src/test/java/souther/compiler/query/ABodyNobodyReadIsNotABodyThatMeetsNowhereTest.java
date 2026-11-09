@@ -139,7 +139,7 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
         AdequacyReport report = AdequacyReport.of(measured);
         SourceRendering rendering = SourceRendering.namedByIdentity(measured.texts());
 
-        String human = report.human(rendering);
+        String human = report.humanInEnglish(rendering);
         assertFalse(human.contains("combination"),
                 () -> "nothing read this body, so no page says what it is held to combine: "
                         + human);
@@ -164,7 +164,7 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
         Compilation measured = measured();
 
         String block = GeneratedRows.of(measured, null, null,
-                SourceRendering.namedByIdentity(measured.texts())).text();
+                SourceRendering.namedByIdentity(measured.texts())).textInEnglish();
 
         assertTrue(block.contains("example omitted"),
                 () -> "the positions of this body still ask for rows: " + block);

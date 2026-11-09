@@ -105,7 +105,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
         Generator.CandidateCheck refusingAnOpenGate = (parameter, candidate) -> {
             if (parameter == 0 && candidate.text().contains("Open")) {
                 open.incrementAndGet();
-                return new Generator.CandidateCheck.Built.Refused("the gate is open");
+                return Generator.CandidateCheck.Built.Refused.inItsOwnWords("the gate is open");
             }
             return new Generator.CandidateCheck.Built.NothingBuiltIt();
         };
@@ -239,7 +239,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
         Generator.CandidateCheck refusingTheGate = (parameter, candidate) -> {
             if (parameter == 0) {
                 gate.incrementAndGet();
-                return new Generator.CandidateCheck.Built.Refused("the gate is shut");
+                return Generator.CandidateCheck.Built.Refused.inItsOwnWords("the gate is shut");
             }
             return new Generator.CandidateCheck.Built.NothingBuiltIt();
         };

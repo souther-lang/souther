@@ -159,7 +159,7 @@ class ARuleThatDividedAPositionIsShownWithAPlaceTest {
     private static String page(String model) {
         Compilation compilation = compiled(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** What the model's positions came to, for an assertion about the readings themselves. */

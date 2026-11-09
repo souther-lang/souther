@@ -37,7 +37,7 @@ class AComparisonThatStoppedIsFiledWhereItsValuesCameFromTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String lineAbout(String report, String word) {

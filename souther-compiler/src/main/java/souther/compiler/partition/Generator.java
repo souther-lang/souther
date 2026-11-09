@@ -9,6 +9,8 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.Rewriting;
 import souther.compiler.coverage.RunRewrite;
 import souther.compiler.coverage.WalkRewrites;
+import souther.compiler.diag.msg.MessageOrder;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.flow.Ways;
 import souther.compiler.meaning.PieceDemand;
 import souther.compiler.meaning.Quantity;
@@ -452,7 +454,7 @@ public final class Generator {
      *             came to nothing at the same one, or null. A name and never a sentence: it is
      *             printed where the subject goes ({@link #subject()}), and a sentence there reads as
      *             the thing no row was found for. What a walk found out is {@code said}
-     * @param said what the class said about itself where it said anything, in its own words. Kept
+     * @param told what the class said about itself where it said anything, in its own words. Kept
      *             beside the reason rather than folded into it: the reason is the category a reader
      *             acts on, and this is the sentence that says which case of it this was. Folded into
      *             {@code detail} it would be printed where the subject goes.
@@ -466,7 +468,28 @@ public final class Generator {
      *             dropped for the other
      */
     public record UnresolvedCombination(List<String> classes, Reason reason, String detail,
-                                        Optional<String> said, BesideTheWord beside) {
+                                        Optional<SearchMessage> told, BesideTheWord beside) {
+
+        /**
+         * An order over what two of these say, where nothing a reader is told first parts them:
+         * the classes, the reason, what it is about, what the class said and what else the offer
+         * was short of.
+         *
+         * <p>What the class said is ordered as the message it is ({@link MessageOrder}) and never
+         * as a language words it, so a rewording of the catalog moves no search ahead of another.
+         */
+        public static final Comparator<UnresolvedCombination> IN_WHAT_IT_SAYS =
+                Comparator.<UnresolvedCombination, String>comparing(
+                                each -> String.valueOf(each.classes()))
+                        .thenComparing(UnresolvedCombination::reason)
+                        .thenComparing(each -> String.valueOf(each.detail()))
+                        .thenComparing(UnresolvedCombination::told,
+                                Comparator.comparing((Optional<SearchMessage> each) ->
+                                                each.isPresent())
+                                        .thenComparing(each -> each.orElse(null),
+                                                Comparator.nullsFirst(
+                                                        MessageOrder.OF_WHAT_IS_SAID)))
+                        .thenComparing(each -> String.valueOf(each.beside()));
 
         public enum Reason {
             /**
@@ -975,25 +998,25 @@ public final class Generator {
 
         public UnresolvedCombination {
             classes = List.copyOf(classes);
-            said = said == null ? Optional.empty() : said;
+            told = told == null ? Optional.empty() : told;
             Objects.requireNonNull(beside, "what is beside the word is something, if only nothing");
         }
 
         /** The same, of a search whose offer was short of {@code alsoShort} and nothing else. */
         public UnresolvedCombination(List<String> classes, Reason reason, String detail,
-                                     Optional<String> said,
+                                     Optional<SearchMessage> told,
                                      SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
-            this(classes, reason, detail, said, BesideTheWord.shortOf(alsoShort));
+            this(classes, reason, detail, told, BesideTheWord.shortOf(alsoShort));
         }
 
         public UnresolvedCombination(List<String> classes, Reason reason, String detail,
-                                     Optional<String> said) {
-            this(classes, reason, detail, said, BesideTheWord.NOTHING);
+                                     Optional<SearchMessage> told) {
+            this(classes, reason, detail, told, BesideTheWord.NOTHING);
         }
 
         /** The same, with where the runs of the rows composed for it stopped. */
         UnresolvedCombination stoppingAt(Collection<WhereARunStopped> where) {
-            return new UnresolvedCombination(classes, reason, detail, said,
+            return new UnresolvedCombination(classes, reason, detail, told,
                     beside.stopping(where));
         }
 
@@ -1009,14 +1032,14 @@ public final class Generator {
          * never where the point is named.
          */
         static UnresolvedCombination atAPoint(
-                String label, Reason reason, String said,
+                String label, Reason reason, SearchMessage said,
                 SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
             return new UnresolvedCombination(List.of(label), reason, null,
                     Optional.ofNullable(said), alsoShort);
         }
 
         /** The same, of a walk whose offer was short of nothing the rules leave. */
-        static UnresolvedCombination atAPoint(String label, Reason reason, String said) {
+        static UnresolvedCombination atAPoint(String label, Reason reason, SearchMessage said) {
             return atAPoint(label, reason, said, new LinkedHashMap<>());
         }
 
@@ -1173,9 +1196,9 @@ public final class Generator {
         Built build(int parameter, FixtureTemplate candidate);
 
         /** Whether the candidate was refused, for a caller that has nothing to do with what it is. */
-        default Optional<String> refuse(int parameter, FixtureTemplate candidate) {
+        default Optional<SearchMessage> refuse(int parameter, FixtureTemplate candidate) {
             return build(parameter, candidate) instanceof Built.Refused refused
-                    ? Optional.of(refused.why()) : Optional.empty();
+                    ? Optional.of(refused.told()) : Optional.empty();
         }
 
         /**
@@ -1234,7 +1257,8 @@ public final class Generator {
          */
         static CandidateCheck refusing(Refusal said) {
             return (parameter, candidate) -> said.at(parameter, candidate)
-                    .<Built>map(Built.Refused::new).orElseGet(Built.NothingBuiltIt::new);
+                    .<Built>map(Built.Refused::inItsOwnWords)
+                    .orElseGet(Built.NothingBuiltIt::new);
         }
 
         /** Which candidates are refused, and why. */
@@ -1252,7 +1276,14 @@ public final class Generator {
             record Value(souther.compiler.observe.ObservedValue observed) implements Built {}
 
             /** It did not, and why. Never a claim that no value of the shape can be built. */
-            record Refused(String why) implements Built {}
+            record Refused(SearchMessage told) implements Built {
+
+                /** Refused for {@code why}, which is what whoever refused it said and is told as
+                 *  it was said. */
+                public static Refused inItsOwnWords(String why) {
+                    return new Refused(new SearchMessage.RefusedInItsOwnWords(why));
+                }
+            }
 
             /**
              * Nothing built it, so nothing here can say what it is.
@@ -4214,7 +4245,7 @@ public final class Generator {
             // a search that failed to find it.
             case Completeness.Nothing.NO_READING -> found.published(pins.labels(),
                     UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
-                    Optional.of("nothing these classes can stand beside was left to try"));
+                    Optional.of(new SearchMessage.NothingTheseClassesCanStandBesideWasLeft()));
             // The search stopped in front of a candidate it did not build. Said so whatever the ones
             // it did build came to: the refusal of the sixty-fourth is a fact about that candidate,
             // and offered as the class's answer it stands for a space the search never entered.
@@ -5973,7 +6004,7 @@ public final class Generator {
 
             /** The same, of a search that has something to say about where it stopped, and that
              *  met more than a figure on the way. */
-            static Stopped at(String label, String said, CompositionShortfall met,
+            static Stopped at(String label, SearchMessage said, CompositionShortfall met,
                               CompositionAccount unrepresented) {
                 return at(label, said, new LinkedHashMap<>(), met, unrepresented);
             }
@@ -5986,7 +6017,7 @@ public final class Generator {
              * act on first is what the word is for — so neither is dropped for the other, and
              * neither is made into a second word.
              */
-            static Stopped at(String label, String said,
+            static Stopped at(String label, SearchMessage said,
                               SequencedMap<TermPath, StringOfferShortfall> alsoShort,
                               CompositionShortfall met, CompositionAccount unrepresented) {
                 return new Stopped(UnresolvedCombination.atAPoint(label,
@@ -6026,13 +6057,13 @@ public final class Generator {
             }
 
             /** One at the label given, of a search that has something to say about what it saw. */
-            static Unexhausted at(String label, String said, CompositionShortfall met,
+            static Unexhausted at(String label, SearchMessage said, CompositionShortfall met,
                                   CompositionAccount unrepresented) {
                 return at(label, said, new LinkedHashMap<>(), met, unrepresented);
             }
 
             /** The same, of one whose offer was also short of what the rules about it leave. */
-            static Unexhausted at(String label, String said,
+            static Unexhausted at(String label, SearchMessage said,
                                   SequencedMap<TermPath, StringOfferShortfall> alsoShort,
                                   CompositionShortfall met, CompositionAccount unrepresented) {
                 return new Unexhausted(UnresolvedCombination.atAPoint(label,
@@ -6069,7 +6100,7 @@ public final class Generator {
             }
 
             /** One at the label given, in the word the search itself came back with. */
-            static Limited at(String label, UnresolvedCombination.Reason why, String said,
+            static Limited at(String label, UnresolvedCombination.Reason why, SearchMessage said,
                               java.util.Set<CompositionBudget> by,
                               CompositionAccount unrepresented) {
                 return new Limited(UnresolvedCombination.atAPoint(label, why, said), by,
@@ -6582,7 +6613,8 @@ public final class Generator {
                 cameToNothing.add(new ParameterCameToNothing(
                         order.parameters().indexOf(twice.head()),
                         new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                                "`" + twice + "` would have to hold two values at once"),
+                                new SearchMessage.WouldHaveToHoldTwoValuesAtOnce(
+                                        String.valueOf(twice))),
                         SearchShortfall.NONE, Map.of()));
                 return false;
             }
@@ -6701,7 +6733,7 @@ public final class Generator {
                 case Outcome.Built _, Outcome.Stopped _, Outcome.Unexhausted _,
                      Outcome.OfferShort _, Outcome.Unplanned _, Outcome.PassedOver _,
                      Outcome.Halted _ -> tried;
-                case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) -> {
+                case Outcome.Unresolved(UnresolvedCombination.Reason word, SearchMessage said) -> {
                     UnresolvedCombination.Reason itsWord = failed.found().wordFor(word);
                     yield whatTheSearchCameTo(whatTheEdgeHeldBack(heldBack, here, itsWord),
                             new LinkedHashMap<>(), Set.of(),
@@ -6712,7 +6744,7 @@ public final class Generator {
                 // which is what the rule is asked in terms of. Handed over whole, the plan's
                 // figures would be beside an offer's without anything having decided that a reader
                 // is owed both.
-                case Outcome.Limited(UnresolvedCombination.Reason word, String said,
+                case Outcome.Limited(UnresolvedCombination.Reason word, SearchMessage said,
                                      Set<CompositionBudget> planCut) -> {
                     UnresolvedCombination.Reason itsWord = failed.found().wordFor(word);
                     yield whatTheSearchCameTo(whatTheEdgeHeldBack(heldBack, here, itsWord),
@@ -6722,32 +6754,32 @@ public final class Generator {
                 }
             };
             return switch (answered) {
-                case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) ->
+                case Outcome.Unresolved(UnresolvedCombination.Reason word, SearchMessage said) ->
                         new BoundaryAttempt.Unresolved(
                                 UnresolvedCombination.atAPoint(label, word, said),
                                 where.unrepresented());
                 case Outcome.Stopped(CompositionShortfall met,
                                      SequencedMap<TermPath, StringOfferShortfall> offered,
-                                     String said) ->
+                                     SearchMessage said) ->
                         BoundaryAttempt.Stopped.at(label, said, offered, met,
                                 where.unrepresented());
                 case Outcome.Unexhausted(CompositionShortfall met,
                                          SequencedMap<TermPath, StringOfferShortfall> offered,
-                                         String said) ->
+                                         SearchMessage said) ->
                         BoundaryAttempt.Unexhausted.at(label, said, offered, met,
                                 where.unrepresented());
                 // No figure stopped this, so it is not one of the two above: what a reader is told
                 // is the word for an offer short of the rules, and which rule is the sentence
                 // beside it.
                 case Outcome.OfferShort(
-                        SequencedMap<TermPath, StringOfferShortfall> offered, String said) ->
+                        SequencedMap<TermPath, StringOfferShortfall> offered, SearchMessage said) ->
                         new BoundaryAttempt.Unresolved(
                                 UnresolvedCombination.atAPoint(label,
                                         UnresolvedCombination.Reason
                                                 .NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
                                         said, offered),
                                 where.unrepresented());
-                case Outcome.Limited(UnresolvedCombination.Reason word, String said,
+                case Outcome.Limited(UnresolvedCombination.Reason word, SearchMessage said,
                                      Set<CompositionBudget> by) ->
                         BoundaryAttempt.Limited.at(label, word, said, by, where.unrepresented());
                 case Outcome.Unplanned(Set<CompositionBudget> by) ->
@@ -6940,12 +6972,6 @@ public final class Generator {
                 Math.max(holds.least(), to.least()), Math.min(holds.most(), to.most()));
     }
 
-    /** What is said of a point at which rows were composed and run and none came to an answer. */
-    private static final String NO_ROW_ANSWERED = "no row composed here was run to an answer";
-
-    /** The same, where a run of one of them went past what a run may spend. */
-    private static final String NO_ROW_ANSWERED_A_RUN_RAN_OUT = NO_ROW_ANSWERED
-            + ", and a run went past what a run may spend";
 
     /**
      * What a point comes to where rows were composed and run and none came to an answer, with
@@ -6964,7 +6990,8 @@ public final class Generator {
                                          CompositionAccount unrepresented) {
         BoundaryAttempt came = leftUntried(label, found,
                 UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
-                aRunRanOut ? NO_ROW_ANSWERED_A_RUN_RAN_OUT : NO_ROW_ANSWERED, unrepresented);
+                aRunRanOut ? new SearchMessage.NoRowWasRunToAnAnswerAndARunRanOut()
+                        : new SearchMessage.NoRowWasRunToAnAnswer(), unrepresented);
         if (stoppedAt.isEmpty()) {
             return came;
         }
@@ -6991,7 +7018,7 @@ public final class Generator {
      * is to say.
      */
     private static BoundaryAttempt leftUntried(String label, SearchShortfall found,
-                                               UnresolvedCombination.Reason otherwise, String said,
+                                               UnresolvedCombination.Reason otherwise, SearchMessage said,
                                                CompositionAccount unrepresented) {
         CompositionShortfall met = found.met();
         if (!met.figures().isEmpty()) {
@@ -7006,19 +7033,16 @@ public final class Generator {
     }
 
     /** What is said of a row no case of which holds every container and value it is asked of. */
-    private static final String NO_CASE_HOLDS_THEM = "no case the row can be holds every"
-            + " container and value the way asks to be written into one";
+    private static final SearchMessage NO_CASE_HOLDS_THEM = new SearchMessage.NoCaseHoldsThemAll();
 
     /** What is said of a row every way tried of which came to nothing, beside a case whose reading
      *  stopped before it put a container or a value anywhere. */
-    private static final String A_CASE_WAS_NOT_READ = "every way of writing the containers the"
-            + " way hands values to came to nothing, and a case of a sum they stand under was not"
-            + " read";
+    private static final SearchMessage A_CASE_WAS_NOT_READ = new SearchMessage.ACaseWasNotRead();
 
     /** What is said of a row whose parameters are each to hold a value of another of them. */
-    private static String circularly(CompositionOrder.Result.Circular circular) {
-        return "each of " + circular.parameters() + " is to hold a value of another of them, and"
-                + " they are composed one after another";
+    private static SearchMessage circularly(CompositionOrder.Result.Circular circular) {
+        return new SearchMessage.EachIsToHoldAValueOfAnother(
+                String.valueOf(circular.parameters()));
     }
 
     /**
@@ -9297,11 +9321,11 @@ public final class Generator {
             found = found.uncertifiedWhere(true);
         }
 
-        void notHandedOn(String why) {
+        void notHandedOn(SearchMessage why) {
             found = found.notHandedOn(why);
         }
 
-        void notHeld(String why) {
+        void notHeld(SearchMessage why) {
             found = found.notHeld(why);
         }
 
@@ -9372,7 +9396,7 @@ public final class Generator {
                     // though it were an answer about the value. The whole-row reading that
                     // follows is where not being able to tell is recorded.
                     if (readsBackAt(subject, parameter, observed, number, each.getValue(), views)
-                            instanceof RealizationReadback.Elsewhere(String why)) {
+                            instanceof RealizationReadback.Elsewhere(SearchMessage why)) {
                         found.turnedAway();
                         return new CandidateCheck.Built.Refused(why);
                     }
@@ -9670,8 +9694,8 @@ public final class Generator {
         if (ofAnotherShape) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
         }
-        return new RealizationReadback.Elsewhere("it was composed to put " + term + " at " + at
-                + " and does not stand there");
+        return new RealizationReadback.Elsewhere(new SearchMessage.ItDoesNotStandWhereItWasPut(
+                String.valueOf(term), String.valueOf(at)));
     }
 
     /**
@@ -9809,7 +9833,7 @@ public final class Generator {
         record AtRequestedPlace() implements RealizationReadback {}
 
         /** It reads back as some other number, and this is how that is said. */
-        record Elsewhere(String why) implements RealizationReadback {}
+        record Elsewhere(SearchMessage why) implements RealizationReadback {}
 
         /** Nothing here could say where it reads, and this is what stopped the saying. */
         record CouldNotTell(ReadbackGap why) implements RealizationReadback {}
@@ -10167,8 +10191,8 @@ public final class Generator {
             return null;
         }
         return new Attempt(null, UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                key.toString(), Optional.of("`" + key
-                        + "` is asked to stand where its class leaves it no room"));
+                key.toString(), Optional.of(new SearchMessage.ItsClassLeavesItNoRoom(
+                        String.valueOf(key))));
     }
 
     /**
@@ -10461,13 +10485,13 @@ public final class Generator {
 
         /** No reading to look at: the model does not have this combination. Never a search that
          *  failed. */
-        record NoCombination(String said) implements Witness {}
+        record NoCombination(SearchMessage said) implements Witness {}
 
         /** Every candidate of every reading was tried and none answered, and what the last of them
          *  came to. Read as the combination's answer, that is what it is: nothing was left untried
          *  behind it. */
         record Exhausted(List<String> classes, UnresolvedCombination.Reason reason, String detail,
-                         Optional<String> said, SearchShortfall found)
+                         Optional<SearchMessage> said, SearchShortfall found)
                 implements Witness {
 
             /**
@@ -11479,8 +11503,8 @@ public final class Generator {
                 // offered is one value — and both are the model not having this combination rather
                 // than a search that failed at it.
                 case Completeness.Nothing.NO_READING -> new Witness.NoCombination(offered
-                        ? "the positions this combination names are not in one value"
-                        : "a position this combination names has nothing left at it");
+                        ? new SearchMessage.ThePositionsAreNotInOneValue()
+                        : new SearchMessage.APositionHasNothingLeftAtIt());
                 // Something was left undone: a reading nobody looked at, or a candidate nobody ran.
                 // Said as that whatever the ones that were tried came to — the miss of the third of
                 // them is a fact about that candidate, and offered as the combination's answer it
@@ -11740,15 +11764,15 @@ public final class Generator {
      *                it stopped. One said of the row as a whole is not, and has none
      */
     private record Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail,
-                           Optional<String> said, SearchShortfall found, OptionalInt localTo) {
+                           Optional<SearchMessage> said, SearchShortfall found, OptionalInt localTo) {
 
         Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail,
-                Optional<String> said, SearchShortfall found) {
+                Optional<SearchMessage> said, SearchShortfall found) {
             this(row, reason, detail, said, found, OptionalInt.empty());
         }
 
         Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail,
-                Optional<String> said) {
+                Optional<SearchMessage> said) {
             this(row, reason, detail, said, SearchShortfall.NONE);
         }
 
@@ -11772,7 +11796,7 @@ public final class Generator {
          * <p>{@code said} is what the search said of itself, so it goes where a reader is told
          * which case of the word this was, and the combination stays what the attempt is about.
          */
-        static Attempt no(UnresolvedCombination.Reason reason, String said,
+        static Attempt no(UnresolvedCombination.Reason reason, SearchMessage said,
                           SearchShortfall found) {
             return new Attempt(null, reason, null, Optional.ofNullable(said), found);
         }
@@ -11787,7 +11811,7 @@ public final class Generator {
          * all refused by the model, said in the word it came to, would be read as one that was.
          */
         static Attempt over(UnresolvedCombination.Reason came, String detail,
-                            Optional<String> told, SearchShortfall found) {
+                            Optional<SearchMessage> told, SearchShortfall found) {
             return new Attempt(null, found.wordFor(came), detail, found.toldFor(came, told),
                     found);
         }
@@ -11940,8 +11964,9 @@ public final class Generator {
                 if (already != null && !already.equals(at.getValue())) {
                     return new HeldTogether.Refused(new Attempt(null,
                             UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                            at.getKey().toString(), Optional.of("`" + at.getKey()
-                                    + "` would have to stand at two places at once")));
+                            at.getKey().toString(), Optional.of(
+                                    new SearchMessage.WouldHaveToStandAtTwoPlacesAtOnce(
+                                            String.valueOf(at.getKey())))));
                 }
             }
         }
@@ -11972,8 +11997,9 @@ public final class Generator {
             case Reachability.Written.OffTheWay(RealizationTarget each) -> {
                 return new HeldTogether.Refused(new Attempt(null,
                         UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                        each.writeRoot().toString(), Optional.of("`" + each.writeRoot()
-                                + "` is written under a case the way to it does not take")));
+                        each.writeRoot().toString(), Optional.of(
+                                new SearchMessage.WrittenUnderACaseTheWayDoesNotTake(
+                                        String.valueOf(each.writeRoot())))));
             }
         }
         WhatTheWayLeaves leaves = new WhatTheWayLeaves(subject, reaching);
@@ -12287,12 +12313,12 @@ public final class Generator {
                 @Override
                 public ParameterCameToNothing carrying(ParameterCameToNothing said,
                                                        SearchShortfall found) {
-                    String detail = switch (said.tried()) {
-                        case Outcome.Unresolved(var _, String its) -> its;
+                    SearchMessage detail = switch (said.tried()) {
+                        case Outcome.Unresolved(var _, SearchMessage its) -> its;
                         case Outcome.Stopped stopped -> stopped.detail();
                         case Outcome.Unexhausted some -> some.detail();
-                        case Outcome.OfferShort(var _, String its) -> its;
-                        case Outcome.Limited(var _, String its, var _) -> its;
+                        case Outcome.OfferShort(var _, SearchMessage its) -> its;
+                        case Outcome.Limited(var _, SearchMessage its, var _) -> its;
                         case Outcome.Unplanned _, Outcome.Built _, Outcome.PassedOver _,
                              Outcome.Halted _ -> null;
                     };
@@ -12304,11 +12330,11 @@ public final class Generator {
                             ? new Outcome.OfferShort(found.offered(), detail)
                             : switch (said.tried()) {
                                 case Outcome.Unresolved(UnresolvedCombination.Reason why,
-                                                        String its) ->
+                                                        SearchMessage its) ->
                                         new Outcome.Unresolved(found.wordFor(why),
                                                 found.toldFor(why, Optional.ofNullable(its))
                                                         .orElse(null));
-                                case Outcome.Limited(UnresolvedCombination.Reason why, String its,
+                                case Outcome.Limited(UnresolvedCombination.Reason why, SearchMessage its,
                                                      Set<CompositionBudget> by) ->
                                         new Outcome.Limited(found.wordFor(why),
                                                 found.toldFor(why, Optional.ofNullable(its))
@@ -12479,9 +12505,9 @@ public final class Generator {
                 Requirements.Merge.Conflict against = (Requirements.Merge.Conflict) both;
                 return RowComposed.Failed.ofTheRow(new Attempt(null,
                         UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                        at, Optional.of("`" + against.at() + "` would have to be both "
-                                + against.one().spelled() + " and "
-                                + against.other().spelled())));
+                        at, Optional.of(new SearchMessage.WouldHaveToBeBoth(
+                                String.valueOf(against.at()), against.one().spelled(),
+                                against.other().spelled()))));
             }
             required = merged.requirements();
             PartitionClass cls = axes.get(i).classes().get(where[i]);
@@ -12562,8 +12588,7 @@ public final class Generator {
                 instanceof Requirements.Merge.Merged(Requirements withTheWay))) {
             return RowComposed.Failed.ofTheRow(new Attempt(null,
                     UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                    null, Optional.of("the way to a comparison the row is held to takes a case"
-                            + " its classes do not")));
+                    null, Optional.of(new SearchMessage.TheWayTakesACaseItsClassesDoNot())));
         }
         // And what the way asks the elements of its containers to be, which the elements are
         // written as. Where that is two things at one position inside an element, beside each
@@ -12635,8 +12660,8 @@ public final class Generator {
                 case TruthsAsked.Merge.Conflict(var at) -> {
                     cameToNothing.add(RowComposed.Failed.ofTheRow(new Attempt(null,
                             UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                            at.toString(), Optional.of("`" + at + "` is asked by the way to"
-                                    + " hold both values"))));
+                            at.toString(), Optional.of(new SearchMessage.AskedByTheWayToHoldBoth(
+                                    String.valueOf(at))))));
                     return false;
                 }
             }
@@ -12644,9 +12669,10 @@ public final class Generator {
             if (twice != null) {
                 cameToNothing.add(RowComposed.Failed.ofTheRow(new Attempt(null,
                         UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                        twice.toString(), Optional.of("`" + twice + "` is asked by the way to"
-                                + " hold " + truths.at().get(twice)
-                                + " and is written another value"))));
+                        twice.toString(), Optional.of(
+                                new SearchMessage.AskedByTheWayAndWrittenAnother(
+                                        String.valueOf(twice),
+                                        String.valueOf(truths.at().get(twice)))))));
                 return false;
             }
             // Then what the elements are asked, written beside it: two things at one position
@@ -12762,7 +12788,7 @@ public final class Generator {
             ContentsAsked.ToHandOn read = row.contents().handedOnFrom(head);
             boolean stood = false;
             List<RowComposed.Failed> cameToNothing = new ArrayList<>();
-            Optional<String> refused = Optional.empty();
+            Optional<SearchMessage> refused = Optional.empty();
             // A way that built and had nothing to hand on is one more way this did not go on
             // with, and is said with whatever the others came to: not every way refused, and not
             // the ways that stood being every way there was.
@@ -12772,11 +12798,11 @@ public final class Generator {
                 switch (HandedOn.of(check.build(p, way.value()), way::at, read, subject.inputs(),
                         subject.ruleReading())) {
                     case HandedOn.Came.Values(var at) -> handedOn = at;
-                    case HandedOn.Came.Refused(String why) -> {
+                    case HandedOn.Came.Refused(SearchMessage why) -> {
                         refused = Optional.of(why);
                         continue;
                     }
-                    case HandedOn.Came.NotWritable(String why) -> {
+                    case HandedOn.Came.NotWritable(SearchMessage why) -> {
                         found.notHandedOn(why);
                         continue;
                     }
@@ -12869,7 +12895,7 @@ public final class Generator {
             // The word alone, because there was nothing of this compiler's beside it. A search that
             // met no figure and walked to the end of what this writes has nothing for a reader to
             // raise, and an empty account of what it met is what says so.
-            case Outcome.Unresolved(UnresolvedCombination.Reason why, String said) ->
+            case Outcome.Unresolved(UnresolvedCombination.Reason why, SearchMessage said) ->
                     RowComposed.Failed.at(p, atThis(Attempt.over(why, null,
                             Optional.ofNullable(said), found.shortfall()), p, alone));
             // The figure's word, and beside it both what the offer was short of and what the search
@@ -12886,7 +12912,7 @@ public final class Generator {
             // author rewriting a rule and an author allowing more act on the same category and go
             // to different places, and which rule it was is what sends them.
             case Outcome.OfferShort(
-                    SequencedMap<TermPath, StringOfferShortfall> offered, String said) ->
+                    SequencedMap<TermPath, StringOfferShortfall> offered, SearchMessage said) ->
                     RowComposed.Failed.at(p, atThis(Attempt.no(
                             UnresolvedCombination.Reason.NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
                             said, SearchShortfall.of(CompositionShortfall.NONE, offered)
@@ -12895,7 +12921,7 @@ public final class Generator {
             // short of the position. Neither half follows from the other — a search that refused
             // everything it was given did so over less than there was — so a reader is told both
             // what happened and that a number of this compiler's is why it happened over so little.
-            case Outcome.Limited(UnresolvedCombination.Reason why, String said,
+            case Outcome.Limited(UnresolvedCombination.Reason why, SearchMessage said,
                                  Set<CompositionBudget> by) ->
                     RowComposed.Failed.at(p, atThis(Attempt.over(why, null,
                             Optional.ofNullable(said),
@@ -13354,7 +13380,7 @@ public final class Generator {
         ContentsAsked.Here here;
         switch (handed.asked().resolvedFor(root.head(), handed.elsewhere())) {
             case ContentsAsked.Resolution.Resolved(ContentsAsked.Here resolved) -> here = resolved;
-            case ContentsAsked.Resolution.Unresolved(String why) -> {
+            case ContentsAsked.Resolution.Unresolved(SearchMessage why) -> {
                 return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                         why);
             }
@@ -13410,15 +13436,16 @@ public final class Generator {
                     case ConstructionPlan.ModelRefusal.Conflict against ->
                             new Outcome.Unresolved(
                                     UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                                    "`" + against.at() + "` would have to be both "
-                                            + against.one().spelled() + " and "
-                                            + against.other().spelled());
+                                    new SearchMessage.WouldHaveToBeBoth(
+                                            String.valueOf(against.at()), against.one().spelled(),
+                                            against.other().spelled()));
                     case ConstructionPlan.ModelRefusal.NoRoom noRoom ->
                             new Outcome.Unresolved(
                                     UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                                    "`" + noRoom.at() + "` would have to hold " + noRoom.needed()
-                                            + " for the value placed in it, and the rules leave"
-                                            + " room for " + noRoom.holds().most());
+                                    new SearchMessage.TheRulesLeaveNoRoomForTheValue(
+                                            String.valueOf(noRoom.at()),
+                                            String.valueOf(noRoom.needed()),
+                                            String.valueOf(noRoom.holds().most())));
                 };
             }
             // What the caller asked for is under a position the plan stopped short of reading, so
@@ -13438,11 +13465,12 @@ public final class Generator {
             case ConstructionPlan.Result.Unnarrowed(TermPath where, List<Refinement> narrowings) -> {
                 return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                         narrowings.isEmpty()
-                                ? "`" + where + "` holds nothing that could be built under it"
-                                : "`" + where + "` stands at "
-                                        + narrowings.stream().map(Refinement::spelled)
-                                                .collect(java.util.stream.Collectors.joining(" or "))
-                                        + ", and nothing said which of them the value under it is");
+                                ? new SearchMessage.HoldsNothingThatCouldBeBuiltUnderIt(
+                                        String.valueOf(where))
+                                : new SearchMessage.NothingSaidWhichOfThemItIs(
+                                        String.valueOf(where), AuthoredLine.eitherOf(
+                                                narrowings.stream().map(Refinement::spelled)
+                                                        .toList())));
             }
             // A rule of a value above names a field under a position that holds nothing until a
             // narrowing says what stands there, and nobody asked which. Planned under each case in
@@ -13493,7 +13521,8 @@ public final class Generator {
                 cases.leftNothing = !firstSearched;
                 return first != null ? first
                         : new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                                "`" + where + "` stands at no case the row can be");
+                                new SearchMessage.StandsAtNoCaseTheRowCanBe(
+                                        String.valueOf(where)));
             }
         }
         // A position a container of this value is handed the value at, which this plan holds no
@@ -13508,8 +13537,8 @@ public final class Generator {
         for (TermPath read : handed.asked().readWithin(root.head())) {
             if (plan.at(read) == null) {
                 return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        "a container is handed the value at `" + read + "`, which is inside a"
-                                + " value composed whole");
+                        new SearchMessage.HandedAValueInsideAValueComposedWhole(
+                                String.valueOf(read)));
             }
         }
         // And a container handed values that the plan does not build: one fixed at a value this
@@ -13519,8 +13548,8 @@ public final class Generator {
             if (contents.handedTo(container)
                     && !(plan.at(container) instanceof ConstructionPlan.Held)) {
                 return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        "`" + container + "` is to hold a value handed to it, and is written as a"
-                                + " whole value this does not build");
+                        new SearchMessage.WrittenAsAWholeValueThisDoesNotBuild(
+                                String.valueOf(container)));
             }
         }
         Choices choices = choicesOf(subject, plan, fixed, rules);
@@ -13593,10 +13622,10 @@ public final class Generator {
             // further is owed every budget that would — and, in every other vocabulary, whatever
             // either pass walked in part or could not hold, which is not shown to be nothing by
             // the other pass having met a figure.
-            if (each instanceof Outcome.Stopped(CompositionShortfall its, var _, String _)) {
+            if (each instanceof Outcome.Stopped(CompositionShortfall its, var _, SearchMessage _)) {
                 met = met.and(its);
             }
-            if (each instanceof Outcome.Unexhausted(CompositionShortfall its, var _, String _)) {
+            if (each instanceof Outcome.Unexhausted(CompositionShortfall its, var _, SearchMessage _)) {
                 met = met.and(its);
             }
         }
@@ -13638,7 +13667,7 @@ public final class Generator {
                                                SequencedMap<TermPath, StringOfferShortfall> offered,
                                                Set<CompositionBudget> planCut, Outcome came) {
         return switch (came) {
-            case Outcome.Unresolved(UnresolvedCombination.Reason why, String detail) -> {
+            case Outcome.Unresolved(UnresolvedCombination.Reason why, SearchMessage detail) -> {
                 // An offer still holding values outranks a plan short of the point, and does not
                 // join it. A position that was never offered everything its rules allow leaves a
                 // search that has not tried what it had — so nothing here has been exhausted, and
@@ -13940,7 +13969,7 @@ public final class Generator {
 
         /** Why each value built and passed over for not holding what two positions are asked to
          *  hold did not, in the order they were built. */
-        private final List<String> notHeld = new ArrayList<>();
+        private final List<SearchMessage> notHeld = new ArrayList<>();
 
         /** What the last of those was built as at each position held to another, or null where
          *  none was. */
@@ -14013,7 +14042,7 @@ public final class Generator {
 
         /** Why each value built and passed over for not holding what two positions are asked to
          *  hold did not; empty where none was. */
-        List<String> notHeld() {
+        List<SearchMessage> notHeld() {
             return List.copyOf(notHeld);
         }
 
@@ -14143,7 +14172,7 @@ public final class Generator {
                     // to. Not the model refusing it: another value of the same classes may hold it.
                     Map<TermPath, FixtureTemplate> builtAt = new LinkedHashMap<>();
                     read.chosen().forEach((at, standing) -> builtAt.put(at, standing.value()));
-                    if (here.notHeldBy(builtAt) instanceof String why) {
+                    if (here.notHeldBy(builtAt) instanceof SearchMessage why) {
                         refused.add(written);
                         notHeld.add(why);
                         lastBuilt = builtAt;
@@ -14157,7 +14186,7 @@ public final class Generator {
                     refused.add(written);
                     yield new Tried.Refused();
                 }
-                case HandedOn.Came.NotWritable(String why) -> {
+                case HandedOn.Came.NotWritable(SearchMessage why) -> {
                     refused.add(written);
                     found.notHandedOn(why);
                     yield new Tried.NotHandedOn();
@@ -14272,7 +14301,7 @@ public final class Generator {
      */
     private record Choices(ConstructionPlan plan, List<TermPath> at,
                            List<List<FixtureTemplate>> values,
-                           List<List<FixtureTemplate>> reserves, String missingAt,
+                           List<List<FixtureTemplate>> reserves, SearchMessage missingAt,
                            TermPath leftNothingAt,
                            Set<CompositionBudget> missingUnderAFigure,
                            List<Displacing> displacing, CompositionShortfall met) {
@@ -14282,7 +14311,7 @@ public final class Generator {
             displacing = Collections.unmodifiableList(new ArrayList<>(displacing));
         }
 
-        static Choices missing(ConstructionPlan plan, String at,
+        static Choices missing(ConstructionPlan plan, SearchMessage at,
                                Set<CompositionBudget> under, CompositionShortfall met) {
             return new Choices(plan, List.of(), List.of(), List.of(), at, null, under, List.of(),
                     met);
@@ -14292,7 +14321,7 @@ public final class Generator {
          *  was made with. */
         static Choices leavingNothingAt(ConstructionPlan plan, TermPath at) {
             return new Choices(plan, List.of(), List.of(), List.of(),
-                    "the rules leave no value at `" + at + "`", at, Set.of(), List.of(),
+                    new SearchMessage.NoValueAt(String.valueOf(at)), at, Set.of(), List.of(),
                     CompositionShortfall.NONE);
         }
 
@@ -14395,7 +14424,8 @@ public final class Generator {
                 // leaf and not off whether the plan was cut anywhere, so a figure reached at one
                 // position is never the reason given for another having nothing — and for the same
                 // reason, what building the offer met is this position's own.
-                return Choices.missing(plan, slot.at() + ": " + Type.show(slot.type()),
+                return Choices.missing(plan,
+                        new SearchMessage.Code(slot.at() + ": " + Type.show(slot.type())),
                         slot.leaf() instanceof ConstructionPlan.Leaf.Beneath(var cutBy)
                                 ? cutBy : Set.of(), stands.met());
             }
@@ -14597,7 +14627,7 @@ public final class Generator {
         record Halted() implements Outcome {}
 
         /** None was, and no figure of this compiler's is why. */
-        record Unresolved(UnresolvedCombination.Reason why, String detail) implements Outcome {}
+        record Unresolved(UnresolvedCombination.Reason why, SearchMessage detail) implements Outcome {}
 
         /**
          * Every value the search was given was refused, and it was not given everything the
@@ -14615,7 +14645,7 @@ public final class Generator {
          *                under the position it is about
          * @param detail  where the search was, in the words the rest of these use
          */
-        record OfferShort(SequencedMap<TermPath, StringOfferShortfall> offered, String detail)
+        record OfferShort(SequencedMap<TermPath, StringOfferShortfall> offered, SearchMessage detail)
                 implements Outcome {
 
             public OfferShort {
@@ -14635,7 +14665,7 @@ public final class Generator {
          */
         record Stopped(CompositionShortfall met,
                        SequencedMap<TermPath, StringOfferShortfall> offered,
-                       String detail) implements Outcome {
+                       SearchMessage detail) implements Outcome {
 
             public Stopped {
                 offered = new LinkedHashMap<>(offered);
@@ -14669,7 +14699,7 @@ public final class Generator {
          * room ran out, and nothing where no representation of the number exists.
          */
         record Unexhausted(CompositionShortfall met,
-                           SequencedMap<TermPath, StringOfferShortfall> offered, String detail)
+                           SequencedMap<TermPath, StringOfferShortfall> offered, SearchMessage detail)
                 implements Outcome {
 
             public Unexhausted {
@@ -14726,7 +14756,7 @@ public final class Generator {
          * point this compiler declined to plan for is counted as one the model admits no row at;
          * told only the figure, a reader is looking for a search that never stopped.
          */
-        record Limited(UnresolvedCombination.Reason why, String detail,
+        record Limited(UnresolvedCombination.Reason why, SearchMessage detail,
                        Set<CompositionBudget> by) implements Outcome {
 
             public Limited {
@@ -14763,7 +14793,7 @@ public final class Generator {
             return walked;
         }
         Outcome displaced = over(choices.at(), choices.displaced(reading), composing, taking);
-        return displaced instanceof Outcome.Unresolved(UnresolvedCombination.Reason why, String _)
+        return displaced instanceof Outcome.Unresolved(UnresolvedCombination.Reason why, SearchMessage _)
                 && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED ? walked : displaced;
     }
 
@@ -14779,7 +14809,7 @@ public final class Generator {
         // is for.
         boolean ranOut = tried instanceof Outcome.PassedOver
                 || (tried instanceof Outcome.Unresolved(UnresolvedCombination.Reason why,
-                        String _) && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
+                        SearchMessage _) && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
         if (!ranOut || !choices.anythingHeldBack()) {
             return tried;
         }
@@ -14790,7 +14820,7 @@ public final class Generator {
         // values the model takes, and saying every candidate was refused would be saying it did not.
         return tried instanceof Outcome.PassedOver
                 && widened instanceof Outcome.Unresolved(UnresolvedCombination.Reason why,
-                        String _) && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
+                        SearchMessage _) && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
                 ? tried : widened;
     }
 
@@ -15060,7 +15090,7 @@ public final class Generator {
          * <p>A sentence, so what an account carries it as is what the point said, and never the
          * position several combinations share ({@link UnresolvedCombination#detail()}).
          */
-        String said() {
+        SearchMessage said() {
             return switch (came) {
                 case TermRealizations.Realization.None none -> none.detail();
                 case TermRealizations.Realization.Unexhausted some -> some.detail();

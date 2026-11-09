@@ -627,7 +627,7 @@ class HowLongThePathASearchAnswersIsReadTest {
 
     private static String humanOf(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** A behavior that answers a case holding the line, and a behavior that asks how long it is. */
@@ -665,7 +665,7 @@ class HowLongThePathASearchAnswersIsReadTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** The number is what the case a behavior answers holds in one field, wherever the behavior
@@ -777,7 +777,7 @@ class HowLongThePathASearchAnswersIsReadTest {
                 .map(each -> each.diagnostic().code()).toList());
         AdequacyReport report = AdequacyReport.of(compilation);
         String json = report.json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
-        String human = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         assertFalse(json.contains("rule_about_a_derived_value"), human);
         assertTrue(json.contains("searched_line"), human);
         String ofTheChain = human.substring(human.indexOf("  approvalChainFor "));

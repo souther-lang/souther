@@ -64,7 +64,7 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code().toString()).toList(), source);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Whether a row is owed at each point the comparison on {@code line} draws. */
@@ -373,7 +373,7 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code().toString()).toList(), source);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static int lineWith(String source, String text) {

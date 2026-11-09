@@ -131,7 +131,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
                                               ToLongFunction<Row> held, Consumer<Row> every) {
         Compilation compilation = measured(source);
         String rows = GeneratedRows.of(compilation, "probe", null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         StringBuilder examples = new StringBuilder("\nexample f\n");
         StringBuilder text = new StringBuilder();
         Set<Long> counts = new HashSet<>();
@@ -380,7 +380,7 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
                 "if " + listCount("f.amount > 100 && " + HALF) + " == 2 then 1 else 0");
         Compilation compilation = measured(source);
         String rows = GeneratedRows.of(compilation, "probe", null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         StringBuilder examples = new StringBuilder("\nexample f\n");
         StringBuilder text = new StringBuilder();
         Set<Long> counts = new HashSet<>();

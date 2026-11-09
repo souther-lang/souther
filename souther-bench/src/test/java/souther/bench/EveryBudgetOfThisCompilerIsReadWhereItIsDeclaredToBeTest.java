@@ -1157,8 +1157,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Collection;)"
                             + "Lsouther/compiler/partition/Generator$UnresolvedCombination$Reason;",
                     "the word a search stopped by these comes back with"),
-            Map.entry("souther.compiler.report.Reasons#said("
-                            + "Lsouther/compiler/publish/CanonicalSelection;)Ljava/lang/String;",
+            Map.entry("souther.compiler.report.Reasons#budgets("
+                            + "Lsouther/compiler/publish/CanonicalSelection;)"
+                            + "Lsouther/compiler/diag/msg/Message;",
                     "what a figure is called where a reader meets one"),
             // The order. It reaches every figure and hands none of them anywhere: what it decides
             // is which of them a reader is told about first, where two were reached.
@@ -1171,7 +1172,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // it counts and what it stands at, read off the budget and handed on with it.
             Map.entry("souther.compiler.observe.Figure$Budget#name()Ljava/lang/String;",
                     "what a budget reached is called where a reader is told it stopped something"),
-            Map.entry("souther.compiler.observe.Figure$Budget#counts()Ljava/lang/String;",
+            Map.entry("souther.compiler.observe.Figure$Budget#countsSaid()"
+                            + "Lsouther/compiler/diag/msg/Message;",
                     "what a budget reached counts, in a reader's words"),
             Map.entry("souther.compiler.partition.NearbyValues#shapesOf("
                             + "Ljava/lang/String;Lsouther/compiler/meaning/PieceDemand;"
@@ -1204,7 +1206,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "the figure each reason a condition was not taken in stopped at, the same"
                             + " way"),
             Map.entry("souther.compiler.report.AdequacyReport#whyDeclined("
-                            + "Lsouther/compiler/meaning/WhyNotTaken;)Ljava/lang/String;",
+                            + "Lsouther/compiler/meaning/WhyNotTaken;)"
+                            + "Lsouther/compiler/diag/msg/Message;",
                     "what the figure a path stopped taking a disjunction at counts, in the words"
                             + " a reader is told why a condition was not taken in")));
 

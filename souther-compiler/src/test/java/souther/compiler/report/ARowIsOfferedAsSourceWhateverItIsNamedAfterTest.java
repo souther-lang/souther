@@ -51,7 +51,7 @@ class ARowIsOfferedAsSourceWhateverItIsNamedAfterTest {
         assertEquals(java.util.List.of(), compilation.errors(),
                 "the model under test compiles");
         return GeneratedRows.of(compilation, null, null,
-                new SourceRendering(id -> "esc.sou", compilation.texts())).text();
+                new SourceRendering(id -> "esc.sou", compilation.texts())).textInEnglish();
     }
 
     /** The name is written as a string the language reads back. */

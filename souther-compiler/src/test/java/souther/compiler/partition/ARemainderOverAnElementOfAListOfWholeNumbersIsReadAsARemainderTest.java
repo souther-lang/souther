@@ -502,7 +502,7 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The one remainder the last comparison of {@code m} states. */

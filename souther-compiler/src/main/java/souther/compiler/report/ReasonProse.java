@@ -1,5 +1,7 @@
 package souther.compiler.report;
 
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.ReasonMessage;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BoundaryDerivation;
@@ -53,21 +55,26 @@ import souther.compiler.query.ReplacementEvidence;
  * fold over the readings of one line — which needs the same fact to tell two readings saying one
  * thing from two readings saying two — had no table to read and worked from a different question.
  *
+ * <p><b>Which message, and not the words of it.</b> What is chosen here is the catalog entry; the
+ * words are the catalog's, in whichever language the page is written in. So two states that say one
+ * thing name one entry, and a translation cannot tell apart what the base language says alike.
+ *
  * @param introduction how the sentence opens, which the family settles
  * @param said         what this state says
  */
-record ReasonProse(Introduction introduction, String said) {
+record ReasonProse(Introduction introduction, Message said) {
 
     /** How a sentence opens, which is the whole of what the family says to a reader. */
     enum Introduction {
 
-        NOT_APPLICABLE("not applicable"),
-        NOT_MEASURED("not measured");
+        NOT_APPLICABLE,
+        NOT_MEASURED;
 
-        private final String word;
-
-        Introduction(String word) {
-            this.word = word;
+        Message opening(Message clause) {
+            return switch (this) {
+                case NOT_APPLICABLE -> new ReasonMessage.NotApplicable(clause);
+                case NOT_MEASURED -> new ReasonMessage.NotMeasured(clause);
+            };
         }
     }
 
@@ -95,8 +102,8 @@ record ReasonProse(Introduction introduction, String said) {
     }
 
     /** The whole sentence, for a line whose subject is this measure and nothing else. */
-    String sentence() {
-        return introduction.word + " (" + clause() + ")";
+    Message sentence() {
+        return introduction.opening(said);
     }
 
     /**
@@ -106,131 +113,129 @@ record ReasonProse(Introduction introduction, String said) {
      * met is a clause under a line that would be there without it. The opening belongs to a line
      * whose whole subject is one measure.
      */
-    String clause() {
+    Message clause() {
         return said;
     }
 
-    private static String nothingToBeAbout(NotApplicableReason reason) {
+    private static Message nothingToBeAbout(NotApplicableReason reason) {
         return switch (reason) {
             case Adequacy.BranchEvidence.NoArms it -> switch (it) {
-                case NO_BODY -> "this behavior has no body";
-                case NO_ARM_OBLIGATIONS -> "this body owes no arm";
+                case NO_BODY -> new ReasonMessage.TheBehaviorHasNoBody();
+                case NO_ARM_OBLIGATIONS -> new ReasonMessage.TheBodyOwesNoArm();
             };
             case Adequacy.SignatureEvidence.NotASum it -> switch (it) {
-                case NOT_A_SUM -> "this behavior's output is not a sum";
+                case NOT_A_SUM -> new ReasonMessage.TheOutputIsNotASum();
             };
             // Said of the rules and not of their absence, here and at the partition below. A
             // behavior whose only rule about a pair of positions relates them has rules — printed a
             // line above, by name — and they divide no position and draw no line; a sentence saying
             // the model has none would read as contradicting the rule beside it.
-            case BoundaryDerivation.NoRuleDrawsALine _ ->
-                    "the rules of this behavior draw no line";
+            case BoundaryDerivation.NoRuleDrawsALine _ -> new ReasonMessage.TheRulesDrawNoLine();
             case BoundaryDerivation.NoSubject it -> switch (it) {
-                case NO_SUBJECT -> "this behavior is measured at its stages";
+                case NO_SUBJECT -> new ReasonMessage.TheBehaviorIsMeasuredAtItsStages();
             };
             case InputCaseEvidence.NotASum it -> switch (it) {
-                case NOT_A_SUM -> "this position is one data rather than a sum";
+                case NOT_A_SUM -> new ReasonMessage.ThePositionIsOneDataRatherThanASum();
             };
-            case NoFeasibleInput _ ->
-                    "the rules reaching this behavior's input leave it no value";
+            case NoFeasibleInput _ -> new ReasonMessage.TheRulesLeaveTheInputNoValue();
             case OutputCaseEvidence.NotASum it -> switch (it) {
-                case NOT_A_SUM -> "what this behavior answers with is not a sum";
+                case NOT_A_SUM -> new ReasonMessage.WhatItAnswersWithIsNotASum();
             };
             case PartitionDerivation.NoSubject it -> switch (it) {
-                case NO_SUBJECT -> "this behavior is measured at its stages";
+                case NO_SUBJECT -> new ReasonMessage.TheBehaviorIsMeasuredAtItsStages();
             };
             case PartitionDerivation.NothingIsDivided _ ->
-                    "the rules of this behavior divide no position";
+                    new ReasonMessage.TheRulesDivideNoPosition();
             case ReplacementEvidence.NoBody it -> switch (it) {
-                case NO_BODY -> "this behavior has no body";
+                case NO_BODY -> new ReasonMessage.TheBehaviorHasNoBody();
             };
         };
     }
 
-    private static String neverMade(NotMeasuredReason reason) {
+    private static Message neverMade(NotMeasuredReason reason) {
         return switch (reason) {
             case Adequacy.BranchEvidence.NotAsked it -> switch (it) {
-                case NOT_ASKED -> "the build did not ask for the arms";
-                case NO_ROWS -> "no row names this behavior";
+                case NOT_ASKED -> new ReasonMessage.TheBuildDidNotAskForTheArms();
+                case NO_ROWS -> new ReasonMessage.NoRowNamesTheBehavior();
             };
             case Adequacy.RowReading.NotAsked it -> switch (it) {
-                case ROWS_NOT_ASKED -> "this build does not read rows";
+                case ROWS_NOT_ASKED -> new ReasonMessage.ThisBuildDoesNotReadRows();
             };
             case DecisionEvidence.NotAsked it -> switch (it) {
-                case NOT_ASKED -> "the build did not ask where the rows went";
+                case NOT_ASKED -> new ReasonMessage.TheBuildDidNotAskWhereTheRowsWent();
             };
             case InteractionEvidence.NotAsked it -> switch (it) {
-                case NOT_ASKED -> "the build did not ask where the rows went";
+                case NOT_ASKED -> new ReasonMessage.TheBuildDidNotAskWhereTheRowsWent();
             };
             case Adequacy.SignatureEvidence.NoRows it -> switch (it) {
-                case NO_ROWS -> "no row names this behavior";
+                case NO_ROWS -> new ReasonMessage.NoRowNamesTheBehavior();
             };
             case InputCaseEvidence.NoRows it -> switch (it) {
-                case NO_ROWS -> "no row names this behavior";
+                case NO_ROWS -> new ReasonMessage.NoRowNamesTheBehavior();
             };
             case ItemAssessment.Coverage.NotAsked it -> switch (it) {
-                case NOT_ASKED -> "nothing was asked for";
-                case ARMS_NOT_ASKED -> "the arms were not asked for";
-                case NO_ROWS -> "no row names this behavior";
+                case NOT_ASKED -> new ReasonMessage.NothingWasAskedFor();
+                case ARMS_NOT_ASKED -> new ReasonMessage.TheArmsWereNotAskedFor();
+                case NO_ROWS -> new ReasonMessage.NoRowNamesTheBehavior();
             };
             case NothingWasAsked it -> switch (it) {
-                case NOT_ASKED -> "nothing was asked for";
+                case NOT_ASKED -> new ReasonMessage.NothingWasAskedFor();
             };
             case OutputCaseEvidence.NoRows it -> switch (it) {
-                case NO_ROWS -> "no row names this behavior";
+                case NO_ROWS -> new ReasonMessage.NoRowNamesTheBehavior();
             };
             case PartitionEvidence.AxisCoverage.NoRows it -> switch (it) {
-                case NO_ROWS -> "no row names this behavior";
+                case NO_ROWS -> new ReasonMessage.NoRowNamesTheBehavior();
             };
             case PartitionEvidence.PairSpace.NoRows it -> switch (it) {
-                case NO_ROWS -> "no row names this behavior";
+                case NO_ROWS -> new ReasonMessage.NoRowNamesTheBehavior();
             };
             case ReplacementEvidence.NotAsked it -> switch (it) {
-                case NOT_ASKED -> "the build did not ask for the rows to be run under a rewrite";
-                case NO_ROWS -> "no row names this behavior";
+                case NOT_ASKED -> new ReasonMessage.TheBuildDidNotAskForARewrite();
+                case NO_ROWS -> new ReasonMessage.NoRowNamesTheBehavior();
             };
         };
     }
 
-    private static String couldNotBeFinished(FailureReason reason) {
+    private static Message couldNotBeFinished(FailureReason reason) {
         return switch (reason) {
             // The model says this behavior writes a body. What it owes is unknown rather than
             // nothing, which is the difference the line saying this exists to show.
             case Adequacy.BranchEvidence.BodyWasNotRead it -> switch (it) {
-                case BODY_WAS_NOT_READ ->
-                        "nothing read this behavior's body, so what arms it has is unknown";
+                case BODY_WAS_NOT_READ -> new ReasonMessage.WhatArmsTheUnreadBodyHasIsUnknown();
             };
             case Adequacy.BranchEvidence.Unreadable it -> switch (it) {
-                case UNREADABLE -> "the arms could not be read";
+                case UNREADABLE -> new ReasonMessage.TheArmsCouldNotBeRead();
             };
             case ReplacementEvidence.BodyWasNotRead it -> switch (it) {
                 case BODY_WAS_NOT_READ ->
-                        "nothing read this behavior's body, so what it could be rewritten as is"
-                                + " unknown";
+                        new ReasonMessage.WhatTheUnreadBodyCouldBeRewrittenAsIsUnknown();
             };
             case ReplacementEvidence.Unreadable it -> switch (it) {
-                case UNREADABLE -> "the rows could not be run under a rewrite";
+                case UNREADABLE -> new ReasonMessage.TheRowsCouldNotBeRunUnderARewrite();
             };
             case Adequacy.RowReading.Unavailable it -> switch (it) {
-                case ROWS_UNAVAILABLE -> "nothing came back from the rows";
+                case ROWS_UNAVAILABLE -> new ReasonMessage.NothingCameBackFromTheRows();
             };
             case PartitionEvidence.PairSpace.TooLarge it -> switch (it) {
-                case TOO_MANY_COMBINATIONS ->
-                        "this behavior has more combinations of two classes than the build counts";
+                case TOO_MANY_COMBINATIONS -> new ReasonMessage.MoreCombinationsThanTheBuildCounts();
             };
             case InteractionEvidence.Unreadable it -> switch (it) {
-                case NO_ROW_CAME_BACK -> "no row of this behavior came back to be read";
-                case THE_ROWS_CARRY_NO_ACCOUNT -> "the rows carry no account of where they went";
+                case NO_ROW_CAME_BACK -> new ReasonMessage.NoRowCameBackToBeRead();
+                case THE_ROWS_CARRY_NO_ACCOUNT ->
+                        new ReasonMessage.TheRowsCarryNoAccountOfWhereTheyWent();
             };
             case DecisionEvidence.Unreadable it -> switch (it) {
-                case THE_BODY_WAS_NOT_READ -> "this behavior's body was not elaborated";
-                case NO_ROW_CAME_BACK -> "no row of this behavior came back to be read";
-                case THE_ROWS_CARRY_NO_ACCOUNT -> "the rows carry no account of where they went";
+                case THE_BODY_WAS_NOT_READ -> new ReasonMessage.TheBodyWasNotElaborated();
+                case NO_ROW_CAME_BACK -> new ReasonMessage.NoRowCameBackToBeRead();
+                case THE_ROWS_CARRY_NO_ACCOUNT ->
+                        new ReasonMessage.TheRowsCarryNoAccountOfWhereTheyWent();
                 case NO_RULE_IS_RECOGNISABLE ->
-                        "no run through any of these rules can be recognised";
+                        new ReasonMessage.NoRunThroughTheseRulesCanBeRecognised();
             };
             case BoundaryDerivation.TheReadingDidNotRunOut it -> switch (it) {
-                case THE_READING_DID_NOT_RUN_OUT -> "no line was derived at any position";
+                case THE_READING_DID_NOT_RUN_OUT ->
+                        new ReasonMessage.NoLineWasDerivedAtAnyPosition();
             };
             // The two halves of one boundary, and an author acts on them in different places. A
             // behavior whose boundary was not derived has a name in its own declaration that
@@ -238,37 +243,30 @@ record ReasonProse(Introduction introduction, String said) {
             // input, which a hole anywhere in the module refuses the reading of. Which name
             // resolved to nothing is reported where it was written, on the line the author edits.
             case BoundaryForMeasurement.NotDerived it -> switch (it) {
-                case BEHAVIOR_BOUNDARY_NOT_DERIVED ->
-                        "this behavior's signature could not be read";
-                case BEHAVIOR_INPUT_NOT_READ -> "what this behavior takes was not read";
+                case BEHAVIOR_BOUNDARY_NOT_DERIVED -> new ReasonMessage.TheSignatureCouldNotBeRead();
+                case BEHAVIOR_INPUT_NOT_READ -> new ReasonMessage.WhatTheBehaviorTakesWasNotRead();
             };
             case ItemAssessment.Coverage.CouldNotAsk it -> switch (it) {
-                case ARMS_UNREADABLE -> "the arms could not be measured";
+                case ARMS_UNREADABLE -> new ReasonMessage.TheArmsCouldNotBeMeasured();
             };
             case ItemAssessment.PlaceCouldNotBeWorkedOut it -> switch (it) {
-                case PLACE_COULD_NOT_BE_WORKED_OUT ->
-                        "this point's own place on the order could not be read";
+                case PLACE_COULD_NOT_BE_WORKED_OUT -> new ReasonMessage.ThePointsPlaceCouldNotBeRead();
             };
             case ItemAssessment.NotTiedToTheAuthorsLine it -> switch (it) {
-                case NOT_TIED_TO_THE_AUTHORS_LINE ->
-                        "a reading of this comparison turns where a caller's choice does, and is"
-                                + " not shown to be at this point of the line its author wrote";
+                case NOT_TIED_TO_THE_AUTHORS_LINE -> new ReasonMessage.NotTiedToTheAuthorsLine();
             };
             // One sentence for both measures. What is missing is the reading of the body, which
             // is the same fact whichever of the two was asking — and a reader told it twice in two
             // wordings would go looking for two things.
             case BoundaryDerivation.BodyWasNotRead it -> switch (it) {
-                case BODY_WAS_NOT_READ ->
-                        "nothing read this behavior's body, so what lines its own rules draw is"
-                                + " unknown";
+                case BODY_WAS_NOT_READ -> new ReasonMessage.WhatLinesTheUnreadBodyDrawsIsUnknown();
             };
             case PartitionDerivation.BodyWasNotRead it -> switch (it) {
-                case BODY_WAS_NOT_READ ->
-                        "nothing read this behavior's body, so what its own rules divide is unknown";
+                case BODY_WAS_NOT_READ -> new ReasonMessage.WhatTheUnreadBodyDividesIsUnknown();
             };
             case PartitionDerivation.TheReadingDidNotRunOut it -> switch (it) {
                 case THE_READING_DID_NOT_RUN_OUT ->
-                        "no partition axis was derived at any position";
+                        new ReasonMessage.NoPartitionAxisWasDerivedAtAnyPosition();
             };
         };
     }

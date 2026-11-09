@@ -56,7 +56,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String about(String body) {
@@ -206,7 +206,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
 
         List<int[]> yearsOfEach = new ArrayList<>();
         offered.lines().filter(each -> each.contains("Date(\"")).forEach(each -> {
@@ -247,7 +247,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
 
         assertFalse(offered.contains("answer several of their own numbers"), offered);
         // A date in the year nearest the day that the line on the year leaves, on the month of the
@@ -276,7 +276,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
 
         assertTrue(report.contains("measurement: complete"), report);
         assertFalse(offered.contains("THREW"), offered);
@@ -319,7 +319,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(past.db(), OfferingRequest.overTheModule("p")), Map.of(),
-                SourceRendering.namedByIdentity(past.texts()), past.db()).text();
+                SourceRendering.namedByIdentity(past.texts()), past.db()).textInEnglish();
         assertFalse(offered.contains("+999999999-12-31"),
                 "no row is offered at the date whose first shift aborts: " + offered);
     }

@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.SourceLayouts;
+import souther.compiler.report.InEnglish;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -498,7 +499,7 @@ class EveryFindingHasAGenerationDispositionTest {
         Compilation compilation = compiled(NARROWED);
 
         String block = GeneratedRows.of(compilation, "example.narrowed", "held",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertTrue(block.contains("in `held`"),
                 "what the reading this asked about came to, named as its own: " + block);
@@ -879,23 +880,27 @@ class EveryFindingHasAGenerationDispositionTest {
     void eachReasonSaysWhatIsMissingHereRatherThanWhatCannotExist() {
         assertEquals("a row is steered into an arm by the decisions that hold on the way there, and"
                         + " the fork this arm is of is one nothing could name a position for",
-                GenerationOutcome.NotSupported.Reason.NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED.said());
+                InEnglish.said(
+                        GenerationOutcome.NotSupported.Reason.NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED.told()));
         assertEquals("the ways into this arm run past what one reading of the body holds at once,"
                         + " so the reading stopped short of it rather than saying what steers a row"
                         + " there",
-                GenerationOutcome.NotSupported.Reason.MORE_WAYS_IN_THAN_THE_READING_HOLDS.said());
+                InEnglish.said(GenerationOutcome.NotSupported.Reason
+                        .MORE_WAYS_IN_THAN_THE_READING_HOLDS.told()));
         // Nothing about the rows composed: one of them may answer with the case once it runs, so
         // what is missing is a search aimed at the case and not a row that reaches it.
         assertEquals("rows here are composed for what the input positions divide into and not for"
                         + " the case they answer with, so which of them answers with it is what"
                         + " their runs say",
-                GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());
+                InEnglish.said(
+                        GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.told()));
         // A case whose parameter no axis was derived at has its cases in the declaration and in no
         // partition, so what is missing is a derivation and not the classes. Said as there being
         // none, the sentence is about the model again — the thing the other two stopped doing.
         assertEquals("no axis was derived at the position this case belongs to, so no classes were"
                         + " derived there to compose a row from",
-                GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION.said());
+                InEnglish.said(
+                        GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION.told()));
     }
 
     @Test
@@ -925,7 +930,7 @@ class EveryFindingHasAGenerationDispositionTest {
                                 Adequacy.Generated.RowsForCases.NOTHING,
                                 List.of(), List.of())), null)),
                 Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE),
-                compiled(KIND).db()).text();
+                compiled(KIND).db()).textInEnglish();
     }
 
     /** A run asked for nothing that came to a reason about itself, which is what a stopped
@@ -1003,7 +1008,7 @@ class EveryFindingHasAGenerationDispositionTest {
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
                                 "example.block")),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
 
         assertTrue(block.contains("nothing offers a row for `case Off`"),
                 "the arm nothing offers a row for is named: " + block);

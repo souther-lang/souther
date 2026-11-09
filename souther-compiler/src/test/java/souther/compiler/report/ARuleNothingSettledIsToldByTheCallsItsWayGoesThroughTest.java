@@ -166,7 +166,7 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
         for (SettledAt each : unsettled) {
             List<ConditionGap> gaps = each.leftOut();
             Set<String> reasons = new LinkedHashSet<>();
-            gaps.forEach(gap -> reasons.add(AdequacyReport.whyLeftOut(gap)));
+            gaps.forEach(gap -> reasons.add(InEnglish.said(AdequacyReport.whyLeftOut(gap))));
             someGapCameBackMoreThanOnce |= reasons.size() < gaps.size();
             // Every reason the search came back with is said under some entry, so nothing was
             // dropped in saying each once.
@@ -255,7 +255,7 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
     }
 
     private static String page(Compilation compilation) {
-        return reported(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        return reported(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String json(Compilation compilation) {

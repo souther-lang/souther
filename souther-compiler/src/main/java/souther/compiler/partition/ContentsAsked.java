@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
@@ -547,8 +548,9 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             }
             List<ElementsTaken> held = handed.elements().get(over);
             if (held == null) {
-                return new Resolution.Unresolved("nothing composed before hands on the elements `"
-                        + over + "` holds");
+                return new Resolution.Unresolved(
+                        new SearchMessage.NothingComposedBeforeHandsOnTheElements(
+                                String.valueOf(over)));
             }
             // Each element, and the one value read in it: two read in one element are no one
             // value for it, as one read outside every element is the same for each.
@@ -667,16 +669,15 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         return out;
     }
 
-    private static String nothingHandedOn(TermPath value) {
-        return "a container is handed the value at `" + value + "`, and nothing composed before"
-                + " handed it on";
+    private static SearchMessage nothingHandedOn(TermPath value) {
+        return new SearchMessage.NothingComposedBeforeHandedItOn(String.valueOf(value));
     }
 
-    private static String noOneValue(TermPath value, int found) {
+    private static SearchMessage noOneValue(TermPath value, int found) {
         return found == 0
-                ? "nothing stands at `" + value + "` in the value built"
-                : "`" + value + "` is at each of " + found
-                        + " elements of the value built, which is no one value";
+                ? new SearchMessage.NothingStandsThereInTheValueBuilt(String.valueOf(value))
+                : new SearchMessage.AtEachOfSeveralElements(String.valueOf(value),
+                        Integer.toString(found));
     }
 
     /** What putting the values handed on into the demands on a parameter's containers came to. */
@@ -686,7 +687,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         record Resolved(Here here) implements Resolution {}
 
         /** Why the values handed on do not say what one of them is to be handed. */
-        record Unresolved(String why) implements Resolution {}
+        record Unresolved(SearchMessage why) implements Resolution {}
     }
 
     /**
@@ -740,12 +741,15 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
          *
          * @param built what was built at each position of this parameter a value is read at
          */
-        String notHeldBy(Map<TermPath, FixtureTemplate> built) {
+        SearchMessage notHeldBy(Map<TermPath, FixtureTemplate> built) {
             for (HeldTo each : heldTo) {
                 FixtureTemplate here = built.get(each.at());
                 if (here != null && !each.heldBy(here)) {
-                    return "`" + each.at() + "` is to hold " + (each.same() ? "" : "a value other"
-                            + " than ") + each.value().text();
+                    return each.same()
+                            ? new SearchMessage.IsToHold(String.valueOf(each.at()),
+                                    each.value().text())
+                            : new SearchMessage.IsToHoldAValueOtherThan(String.valueOf(each.at()),
+                                    each.value().text());
                 }
             }
             for (RowDemand.OneValueAtBoth each : alongside) {
@@ -753,19 +757,22 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 FixtureTemplate other = built.get(each.other());
                 if (one != null && other != null
                         && one.text().equals(other.text()) != each.same()) {
-                    return "`" + each.one() + "` and `" + each.other() + "` are to hold "
-                            + (each.same() ? "one value" : "two values");
+                    return each.same()
+                            ? new SearchMessage.AreToHoldOneValue(String.valueOf(each.one()),
+                                    String.valueOf(each.other()))
+                            : new SearchMessage.AreToHoldTwoValues(String.valueOf(each.one()),
+                                    String.valueOf(each.other()));
                 }
             }
             return null;
         }
 
         /** Why what composing came to is not every row there is, or nothing where it is. */
-        Optional<String> notComposed() {
-            return leftOpen.stream().findFirst().map(each -> "`" + each.container() + "` is"
-                    + " asked about `" + each.value() + "` for each element of `"
-                    + each.around().orElseThrow().container() + "`, and nothing is built yet"
-                    + " to say which elements that is, so it is not handed the value");
+        Optional<SearchMessage> notComposed() {
+            return leftOpen.stream().findFirst().map(each ->
+                    new SearchMessage.NotHandedTheValueForEachElement(
+                            String.valueOf(each.container()), String.valueOf(each.value()),
+                            String.valueOf(each.around().orElseThrow().container())));
         }
 
         /**

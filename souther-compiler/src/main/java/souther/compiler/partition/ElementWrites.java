@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 
@@ -103,8 +104,7 @@ record ElementWrites(List<RowDemand.ATruth> truths, List<RowDemand.InCases> case
 
     /** The position named where these could not be written beside what the row is asked, as a
      *  sentence an author reads. */
-    static String writtenAlike(TermPath at) {
-        return "`" + at + "` is asked of elements written alike to hold two values at once;"
-                + " elements that differ may meet both";
+    static SearchMessage writtenAlike(TermPath at) {
+        return new SearchMessage.ElementsWrittenAlikeAreAskedTwoValues(String.valueOf(at));
     }
 }

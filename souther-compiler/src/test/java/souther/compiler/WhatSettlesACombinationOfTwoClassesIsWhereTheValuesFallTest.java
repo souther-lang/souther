@@ -77,7 +77,7 @@ class WhatSettlesACombinationOfTwoClassesIsWhereTheValuesFallTest {
 
         assertEquals(List.of(), gapsOf(compilation),
                 () -> "the rows sit in every combination, and no run was watched: "
-                        + AdequacyReport.of(compilation).human(
+                        + AdequacyReport.of(compilation).humanInEnglish(
                                 souther.compiler.diag.SourceRendering
                                         .namedByIdentity(compilation.texts())));
     }

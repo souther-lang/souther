@@ -43,7 +43,7 @@ class ASetOfEveryCaseOfASumIsSatisfiedByItsRowsTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         AdequacyReport report = AdequacyReport.of(compilation);
-        String human = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(), human);
         assertTrue(report.adequacyGaps().isEmpty(), human);
