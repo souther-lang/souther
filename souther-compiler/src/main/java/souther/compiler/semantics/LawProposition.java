@@ -98,6 +98,13 @@ public sealed interface LawProposition<A> {
         public LawProposition<A> denied() {
             return new Compared<>(form, states.denied());
         }
+
+        /** Whether every number it compares is how many some value holds: what it says is for a
+         *  reader of numbers, and a proof over what operations answer has the laws of those sizes
+         *  already. */
+        public boolean ofSizesOnly() {
+            return form.coefs().keySet().stream().allMatch(LawNumber.SizeOf.class::isInstance);
+        }
     }
 
     /**

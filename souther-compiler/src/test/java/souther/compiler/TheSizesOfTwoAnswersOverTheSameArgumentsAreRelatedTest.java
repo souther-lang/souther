@@ -21,7 +21,8 @@ class TheSizesOfTwoAnswersOverTheSameArgumentsAreRelatedTest {
     private static final String INPUT = """
             module demo
 
-            data In = { xs: List<Int>, ys: List<Int>, x: Int, a: Set<Int>, b: Set<Int> }
+            data In = { xs: List<Int>, ys: List<Int>, x: Int, y: Int, a: Set<Int>, b: Set<Int>,
+                        m: Map<String, Int>, k: Map<String, Int>, s: String }
 
             """;
 
@@ -52,12 +53,16 @@ class TheSizesOfTwoAnswersOverTheSameArgumentsAreRelatedTest {
         Set<String> out = new LinkedHashSet<>();
         List<Located> found = new ArrayList<>(compilation.errors());
         found.addAll(compilation.warnings());
+        List<String> other = new ArrayList<>();
         for (Located each : found) {
             if ("E2010".equals(each.diagnostic().code())
                     || "E2011".equals(each.diagnostic().code())) {
                 out.add(String.valueOf(each.diagnostic().values().get("data")));
+            } else {
+                other.add(each.diagnostic().code() + " " + each.diagnostic().said());
             }
         }
+        assertEquals(List.of(), other, "every row is a program the check reads");
         return out;
     }
 
@@ -129,10 +134,65 @@ class TheSizesOfTwoAnswersOverTheSameArgumentsAreRelatedTest {
     }
 
     @Test
+    void anEntryPutInIsAsManyAsTheUnionWithTheEntryAlone() {
+        List<Row> rows = List.of(
+                new Row(61, "Map.size(Map.insert(i.s, i.y, i.m)) - Map.size(Map.union(i.m,"
+                        + " Map.singleton(i.s, i.y)))"),
+                new Row(62, "Map.size(Map.union(i.m, Map.singleton(i.s, i.y)))"
+                        + " - Map.size(Map.insert(i.s, i.y, i.m))"),
+                new Row(63, "Map.size(Map.insert(i.s, i.y, i.m)) - Map.size(Map.union(i.m,"
+                        + " Map.singleton(i.s, i.y))) - 1"),
+                new Row(64, "Map.size(Map.insert(i.s, i.y, i.m)) - Map.size(Map.union(i.k,"
+                        + " Map.singleton(i.s, i.y)))"),
+                new Row(65, "Map.size(Map.insert(i.s, i.y, i.m)) - Map.size(Map.union(i.m,"
+                        + " Map.singleton(i.s ++ \"x\", i.y)))"));
+        assertEquals(Set.of("D63", "D64", "D65"), notProved(rows));
+    }
+
+    /** Values that are each one of several and are decided by one condition: the cases that
+     *  disagree on it are not reached, so a clause over both is read in the cases that are. */
+    @Test
+    void valuesDecidedByOneConditionAreReadInTheCasesThatAgreeOnIt() {
+        List<Row> proved = List.of(
+                new Row(71, "Int.max(i.x, i.y) + Int.min(i.x, i.y) - i.x - i.y"),
+                new Row(72, "i.x + i.y - Int.max(i.x, i.y) - Int.min(i.x, i.y)"),
+                new Row(73, "Int.abs(i.x) - Int.max(i.x, 0 - i.x)"),
+                new Row(74, "Int.clamp(0, 10, i.x) - Int.min(10, Int.max(0, i.x))"),
+                new Row(75, "Int.min(10, Int.max(0, i.x)) - Int.clamp(0, 10, i.x)"),
+                new Row(76, "List.length(List.take(i.x, i.xs))"
+                        + " - List.length(List.take(i.x, List.take(i.y, i.xs)))"),
+                new Row(77, "List.length(List.take(i.x, List.reverse(i.xs)))"
+                        + " - List.length(List.take(i.x, i.xs))"),
+                new Row(78, "List.length(List.take(i.x, List.sort(i.xs)))"
+                        + " - List.length(List.take(i.x, i.xs))"),
+                new Row(79, "List.length(List.take(i.x, i.xs) ++ List.drop(i.x, i.xs))"
+                        + " - List.length(i.xs)"));
+        assertEquals(Set.of(), notProved(proved));
+    }
+
+    @Test
+    void valuesDecidedByOneConditionAreNotMoreThanTheCasesThatAgreeSay() {
+        List<Row> notProved = List.of(
+                new Row(81, "Int.max(i.x, i.y) + Int.min(i.x, i.y) - i.x - i.y - 1"),
+                new Row(82, "Int.max(i.x, i.y) - Int.min(i.x, i.y) - 1"),
+                new Row(83, "Int.min(i.x, i.y) - Int.max(i.x, i.y)"),
+                new Row(84, "Int.abs(i.x) - Int.max(i.x, 0 - i.x) - 1"),
+                new Row(85, "Int.clamp(0, 10, i.x) - Int.min(10, Int.max(0, i.x)) - 1"),
+                new Row(86, "List.length(List.take(i.x, i.xs))"
+                        + " - List.length(List.take(i.x, List.take(i.y, i.xs))) - 1"),
+                new Row(87, "List.length(List.take(i.x, List.take(i.y, i.xs)))"
+                        + " - List.length(List.take(i.x, i.xs))"),
+                new Row(88, "List.length(List.take(i.x, i.xs))"
+                        + " - List.length(List.take(i.y, i.xs))"));
+        assertEquals(Set.of("D81", "D82", "D83", "D84", "D85", "D86", "D87", "D88"),
+                notProved(notProved));
+    }
+
+    @Test
     void twoListsPairedAreNotLongerThanTheSwappedPairingByAnything() {
         List<Row> notProved = List.of(
                 new Row(31, PAIRED + " - " + PAIRED_SWAPPED + " - 1"),
-                new Row(32, "List.length(List.zipShortest(i.xs, i.xs)) - " + PAIRED_SWAPPED));
+                new Row(32, PAIRED + " - List.length(List.zipShortest(i.xs, i.xs))"));
         assertEquals(Set.of("D31", "D32"), notProved(notProved));
     }
 }

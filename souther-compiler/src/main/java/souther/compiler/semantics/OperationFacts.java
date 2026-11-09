@@ -731,7 +731,9 @@ public final class OperationFacts {
                             all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
                                     atLeast(sizeOf(carried(1)), -1, 0))))),
             // What is taken and what is dropped, at one count over one list, are the whole list
-            // between them.
+            // between them. Stated as a relation between the two answers, so that it holds
+            // wherever either one's size is read, which the cases of each read apart do not give
+            // where the other is only reached through what is built from it.
             about("List", "take", lemma(related(equalToTheSum(sizeOf(at(1)),
                     sizeOf(answerOf("List", "take", the(at(0)), the(at(1)))),
                     sizeOf(answerOf("List", "drop", the(at(0)), the(at(1)))))),
@@ -752,7 +754,6 @@ public final class OperationFacts {
                                     equal(sizeOf(carried(1)), sizeOf(WALKED), 0)),
                             all(atLeast(sizeOf(WALKED), 1, sizeOf(at(1)), -1, -1),
                                     equal(sizeOf(carried(1)), sizeOf(at(1)), 0))))),
-            // Two lists paired are as many pairs whichever of them is first.
             about("List", "zipShortest", lemma(related(equal(
                     sizeOf(answerOf("List", "zipShortest", the(at(0)), the(at(1)))),
                     sizeOf(answerOf("List", "zipShortest", the(at(1)), the(at(0)))), 0)),
@@ -908,7 +909,8 @@ public final class OperationFacts {
                     any(alike(the(ANY), the(at(0))),
                             isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
             // Put in is as many as the union with the one value alone, and taken out is as many as
-            // the difference from it.
+            // the difference from it. A map put in is the same with the one entry alone: the first
+            // map's value stands where both have the key, and the count is of keys.
             about("Set", "insert", related(equal(
                     sizeOf(answerOf("Set", "insert", the(at(0)), the(at(1)))),
                     sizeOf(answerOf("Set", "union", the(at(1)),
@@ -917,6 +919,10 @@ public final class OperationFacts {
                     sizeOf(answerOf("Set", "remove", the(at(0)), the(at(1)))),
                     sizeOf(answerOf("Set", "difference", the(at(1)),
                             answerOf("Set", "singleton", the(at(0))))), 0))),
+            about("Map", "insert", related(equal(
+                    sizeOf(answerOf("Map", "insert", the(at(0)), the(at(1)), the(at(2)))),
+                    sizeOf(answerOf("Map", "union", the(at(2)),
+                            answerOf("Map", "singleton", the(at(0)), the(at(1))))), 0))),
             // A union holds exactly what either set held.
             about("Set", "union", related(iff(
                     isTrue(answerOf("Set", "contains", the(ANY),
