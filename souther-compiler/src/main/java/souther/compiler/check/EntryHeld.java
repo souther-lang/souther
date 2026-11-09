@@ -6,6 +6,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,30 +58,32 @@ public final class EntryHeld {
      *
      * @param container what the map is written as
      * @param key       what the key is written as
-     * @param valueIn   the numbers the value under the key is to be one of, as a range (one number
-     *                  being the range of that number), or null where the rule asks nothing of it
+     * @param valueIn   the numbers the value under the key is to be one of, at the places of it the
+     *                  rule names, or null where the rule asks nothing of it
      */
-    public record Stated(Core container, Core key, NumericDomain.Bounds valueIn) {}
+    public record Stated(Core container, Core key, ValueAsked valueIn) {}
 
     /**
      * What a rule asks of the map at {@code container}: the place standing at the key, and the
      * numbers the value under it is to be one of, or null where nothing is asked of the value.
      */
-    public record Requirement(RuleKey key, NumericDomain.Bounds valueIn) {}
+    public record Requirement(RuleKey key, ValueAsked valueIn) {}
 
     /**
      * {@code clause} read as asking a map for an entry, or null where it asks nothing of the kind.
      *
      * @param followed what a name is given, for a name bound to a part of the clause; the
      *                 expression itself where it is not such a name
+     * @param newtypes which names wear one value, for the places of the value a rule names
      */
-    public static Stated read(Core clause, Function<Core, Core> followed) {
+    public static Stated read(Core clause, Function<Core, Core> followed,
+                              DeclarationNewtypes newtypes) {
         Core here = Core.withoutStanding(followed.apply(Core.withoutStanding(clause)));
         Stated asked = membership(here, followed);
         if (asked != null) {
             return asked;
         }
-        return here instanceof Core.Match match ? readMatch(match, followed) : null;
+        return here instanceof Core.Match match ? readMatch(match, followed, newtypes) : null;
     }
 
     /**
@@ -119,7 +123,8 @@ public final class EntryHeld {
     }
 
     /** A match on what a lookup found, taking the absent arm as false. */
-    private static Stated readMatch(Core.Match match, Function<Core, Core> followed) {
+    private static Stated readMatch(Core.Match match, Function<Core, Core> followed,
+                                    DeclarationNewtypes newtypes) {
         Core.Case present = null;
         for (Core.Case arm : match.cases()) {
             if (!(arm.pattern() instanceof Core.ResolvedPattern.Single one)) {
@@ -151,14 +156,14 @@ public final class EntryHeld {
                 && Core.withoutStanding(args.getFirst()) instanceof Core.Block block
                 && block.params().size() == 1
                 && lookup(args.get(1)) instanceof AnOperationApplied(var _, var lookedUp)) {
-            NumericDomain.Bounds is =
-                    valueIn(block.body(), block.params().getFirst().binding(), followed);
+            ValueAsked is = valueIn(block.body(), block.params().getFirst().binding(), followed,
+                    newtypes);
             return is == null ? null : new Stated(lookedUp.get(1), lookedUp.get(0), is);
         }
         // The lookup matched on directly, the present arm stating what the value is.
         if (lookup(scrutinee) instanceof AnOperationApplied(var _, var lookedUp)) {
-            NumericDomain.Bounds is =
-                    valueIn(present.body(), payload.binder().binding(), followed);
+            ValueAsked is = valueIn(present.body(), payload.binder().binding(), followed,
+                    newtypes);
             return is == null ? null : new Stated(lookedUp.get(1), lookedUp.get(0), is);
         }
         return null;
@@ -174,14 +179,32 @@ public final class EntryHeld {
      * The numbers {@code statement} says the value bound to {@code value} is one of, or null where
      * it says anything else of it.
      *
-     * <p>A comparison of the value with a written number, in either order, or the comparison of two
-     * decimals written as the sign of their difference against nought. Not {@code !=}: the numbers
-     * it leaves are not one range.
+     * <p>Each statement the clause is made of, read as the shape reads it ({@link ClauseExpr}): a
+     * comparison of the value with a written number, in either order, or the comparison of two
+     * decimals written as the sign of their difference against nought, stated or denied. The
+     * numbers they leave together are the ones every one of them leaves, so a conjunction is the
+     * meet of its parts and a part of any other kind leaves the clause unread.
      */
-    private static NumericDomain.Bounds valueIn(Core statement, BindingId value,
-                                                Function<Core, Core> followed) {
-        StatedComparison stated = Core.withoutStanding(statement) instanceof Core.Binary compares
-                ? StatedComparison.of(compares, true) : null;
+    private static ValueAsked valueIn(Core statement, BindingId value,
+                                      Function<Core, Core> followed, DeclarationNewtypes newtypes) {
+        ValueAsked together = null;
+        for (ConjunctStatements.Stated each
+                : ConjunctStatements.statedBy(ClauseExpr.of(statement, true))) {
+            ValueAsked one = valueInStated(StatedComparison.of(each.said()), value, followed,
+                    newtypes);
+            if (one == null) {
+                return null;
+            }
+            together = together == null ? one : together.meet(one);
+        }
+        return together;
+    }
+
+    /** The numbers {@code stated} says the value bound to {@code value} is one of, at the place of
+     *  it the comparison names, or null where it says anything else of it. */
+    private static ValueAsked valueInStated(StatedComparison stated, BindingId value,
+                                            Function<Core, Core> followed,
+                                            DeclarationNewtypes newtypes) {
         if (stated == null) {
             return null;
         }
@@ -195,24 +218,26 @@ public final class EntryHeld {
             stated = new StatedComparison(stated.claim(), args.get(0), args.get(1),
                     stated.reading());
         }
-        StatedComparison.Numbered<Boolean> aboutTheValue =
-                stated.at(side -> isTheValue(side, value) ? Boolean.TRUE : null);
+        StatedComparison.Numbered<List<String>> aboutTheValue =
+                stated.at(side -> placeOfTheValue(side, value, newtypes));
         BigDecimal written = aboutTheValue == null ? null
                 : writtenNumber(aboutTheValue.other(), followed);
-        OrderedInterval left = written == null ? null
-                : OrderedInterval.leftBy(aboutTheValue.claim().statedRelation(), Count.of(written));
-        return left == null ? null : new NumericDomain.Bounds(left.low(), left.high());
+        return written == null ? null
+                : ValueAsked.at(aboutTheValue.number(), OrderedRuns.leftBy(
+                        aboutTheValue.claim().statedRelation(), Count.of(written)));
     }
 
-    /** Whether {@code e} is the value bound to {@code value}, or the value a name wraps. */
-    private static boolean isTheValue(Core e, BindingId value) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.Read read -> read.binding().equals(value);
-            case Core.FieldAccess access -> access.field().equals("value")
-                    && Core.withoutStanding(access.target()) instanceof Core.Read read
-                    && read.binding().equals(value);
-            default -> false;
-        };
+    /**
+     * The place of the value bound to {@code value} that {@code e} is: the value itself, the value
+     * a name wraps, or a field of it by the fields on the way. Null where {@code e} is no place of
+     * it.
+     */
+    private static List<String> placeOfTheValue(Core e, BindingId value,
+                                                DeclarationNewtypes newtypes) {
+        Location at = Location.of(e, newtypes,
+                binding -> binding.equals(value) ? Location.of(binding) : null,
+                projection -> Location.stepsOf(projection, newtypes));
+        return at == null ? null : at.path();
     }
 
     /** The number {@code e} is, read through the names bound to it, or null where it is none. */
@@ -279,12 +304,7 @@ public final class EntryHeld {
         Set<RuleKey> notKept = new HashSet<>();
         Map<RuleKey, List<InvariantStatement>> builtFor = new HashMap<>();
         for (InvariantStatement one : rules.statements()) {
-            Stated stated = switch (one) {
-                case InvariantStatement.HoldsAnEntry it -> it.held();
-                case InvariantStatement.Applies it -> read(it.call(), core -> core);
-                case InvariantStatement.Compares _, InvariantStatement.Unread _,
-                     InvariantStatement.BalancesSides _ -> null;
-            };
+            Stated stated = entryOf(one, source.newtypes());
             RuleKey where = stated == null ? null : rules.fieldAt(stated.container());
             RuleKey key = stated == null ? null : rules.fieldAt(stated.key());
             if (where != null && key != null) {
@@ -308,6 +328,74 @@ public final class EntryHeld {
         return new Held(Map.copyOf(held), Map.copyOf(builtFor), rules);
     }
 
+    /** What {@code one} asks a map for, or null where it asks nothing of the kind. */
+    private static Stated entryOf(InvariantStatement one, DeclarationNewtypes newtypes) {
+        return switch (one) {
+            case InvariantStatement.HoldsAnEntry it -> it.held();
+            case InvariantStatement.Applies it -> read(it.call(), core -> core, newtypes);
+            case InvariantStatement.Compares _, InvariantStatement.Unread _,
+                 InvariantStatement.BalancesSides _ -> null;
+        };
+    }
+
+    /**
+     * The maps of the record {@code named} that its rules ask for an entry no value of the map's
+     * value type can be, by the place of the map.
+     *
+     * <p>A proof and not the absence of one. The rules of a record all hold, so a statement asking
+     * for an entry that cannot stand is false of every value of the record, and the record has none:
+     * the numbers a rule asks of the value under a key contradict the ones another asks of it, the
+     * range its type leaves holds none of them, or the one it names is one the type refuses. A range
+     * the type leaves holding several numbers none of which was found is no such proof
+     * ({@link Among.NotFound}), and neither is a rule the record's other rules leave unread: the
+     * statements read are every one of them required of the record, whatever else is not read.
+     */
+    public static Set<RuleKey> askingForNoEntry(TypeSymbol.AtModule named,
+                                                RuleReadingContext world) {
+        RecordRules rules = RecordRules.of(named, world.source());
+        if (rules == null) {
+            return Set.of();
+        }
+        Map<RuleKey, List<Requirement>> asked = new LinkedHashMap<>();
+        for (InvariantStatement one : rules.statements()) {
+            Stated stated = entryOf(one, world.source().newtypes());
+            RuleKey where = stated == null ? null : rules.fieldAt(stated.container());
+            RuleKey key = stated == null ? null : rules.fieldAt(stated.key());
+            if (where != null && key != null) {
+                asked.computeIfAbsent(where, _ -> new ArrayList<>())
+                        .add(new Requirement(key, stated.valueIn()));
+            }
+        }
+        Set<RuleKey> out = new LinkedHashSet<>();
+        asked.forEach((map, requirements) -> {
+            Type value = valueTypeOf(map, named, world.source());
+            for (ValueAsked each : valuesAsked(requirements).values()) {
+                if (each.holdsNothing()
+                        || (value != null && numbersAmong(value, each, named, world)
+                                instanceof Among.NoneExists)) {
+                    out.add(map);
+                }
+            }
+        });
+        return Set.copyOf(out);
+    }
+
+    /** The type of the values the field {@code map} of {@code named} holds under its keys, or null
+     *  where it is no map. */
+    private static Type valueTypeOf(RuleKey map, TypeSymbol.AtModule named,
+                                    RuleReadingSource source) {
+        if (map.steps().size() != 1
+                || !(TypeView.shapeOf(Type.ref(named), source.inners(), source.symbols(),
+                        source.kinds(), source.sums()) instanceof Shape.Product(TypeSymbol _,
+                        var fields))
+                || !(fields.get(map.steps().getFirst()) instanceof Type mapType)
+                || !(TypeView.of(mapType, source.inners(), source.symbols(), source.kinds(),
+                        source.sums()).shape() instanceof Shape.Mapping(Type _, Type value))) {
+            return null;
+        }
+        return value;
+    }
+
     /**
      * Whether the map at {@code map} can be built holding the entries {@code requirements} ask of
      * it for every key the key's own place admits.
@@ -318,7 +406,7 @@ public final class EntryHeld {
      * two the record does not allow beside each other, or to more values than their type has, and
      * that is a question about the keys together which a reading of each place alone cannot ask.
      * And a number asked of the value is held only if the value's type admits it, by the answer the
-     * builders go by ({@link #valueTypeAdmits}), since a key is free only where the entry can be
+     * builders go by ({@link #numbersAmong}), since a key is free only where the entry can be
      * written.
      */
     private static boolean keysStayFree(RuleKey map, List<Requirement> requirements,
@@ -331,20 +419,28 @@ public final class EntryHeld {
         if (keys.size() != 1 || rules.readAtAll(built, map.steps().getFirst())) {
             return false;
         }
-        RuleReadingSource source = world.source();
-        if (!(TypeView.shapeOf(Type.ref(named), source.inners(), source.symbols(), source.kinds(),
-                source.sums()) instanceof Shape.Product(TypeSymbol _, var fields))
-                || !(fields.get(map.steps().getFirst()) instanceof Type mapType)
-                || !(TypeView.of(mapType, source.inners(), source.symbols(), source.kinds(),
-                        source.sums()).shape() instanceof Shape.Mapping(Type _, Type value))) {
+        Type value = valueTypeOf(map, named, world.source());
+        if (value == null) {
             return false;
         }
-        for (NumericDomain.Bounds asked : valuesAsked(requirements).values()) {
-            if (numberIn(value, asked, named, world) == null) {
+        for (ValueAsked asked : valuesAsked(requirements).values()) {
+            if (!(numbersAmong(value, asked, named, world) instanceof Among.Found)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /** What the names a position wears make of a number. */
+    private enum Admission {
+        /** It is among the position's values as far as the names say. */
+        ADMITTED,
+        /** The names refuse it: it is outside what they leave the position, which is a bound
+         *  every value of it is inside. */
+        REFUSED,
+        /** Neither shown: a number this cannot write, or a position whose names ask the record
+         *  being read. */
+        NOT_SHOWN
     }
 
     /**
@@ -357,35 +453,36 @@ public final class EntryHeld {
      * answer both the builders of a map and the reading of its keys go by, so a key is not called
      * free for an entry the builders cannot write.
      *
-     * <p>False for a type that wears {@code within}, the record being read, where one is given:
-     * asking its names asks the record, whose reading this is part of.
+     * <p>Not shown for a type that wears {@code within}, the record being read, where one is given:
+     * asking its names asks the record, whose reading this is part of. And for a number this cannot
+     * write as a count, which the names are then not asked about.
      */
-    public static boolean valueTypeAdmits(Type type, BigDecimal number, TypeSymbol.AtModule within,
-                                          RuleReadingContext reading) {
+    private static Admission admission(Type type, BigDecimal number, TypeSymbol.AtModule within,
+                                       RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         if (within != null && view.wrappers().contains(within)) {
-            return false;
+            return Admission.NOT_SHOWN;
         }
         ExactRatio exact = ExactRatio.of(number);
         DeclaredBounds.Range own = DeclaredBounds.of(view, reading);
         if (own != null && !new NumericDomain.Bounds(own.min(), own.max()).admits(exact)) {
-            return false;
+            return Admission.REFUSED;
         }
         Optional<Count> count = Count.written(exact).orNull();
         if (count == null || count.isEmpty()) {
-            return false;
+            return Admission.NOT_SHOWN;
         }
         Value value = Value.number(count.get().at());
         for (TypeSymbol each : view.wrappers()) {
             if (each instanceof TypeSymbol.AtModule named
                     && !FieldDomains.of(named, reading).admits(RuleKey.THE_VALUE).approximation()
                             .has(value)) {
-                return false;
+                return Admission.REFUSED;
             }
         }
-        return true;
+        return Admission.ADMITTED;
     }
 
     /**
@@ -407,68 +504,173 @@ public final class EntryHeld {
                 return false;
             }
         }
-        return valuesAsked(requirements).values().stream()
-                .allMatch(NumericDomain.Bounds::holdsAValue);
+        return valuesAsked(requirements).values().stream().noneMatch(ValueAsked::holdsNothing);
     }
 
     /**
      * The numbers every rule asking about a key leaves the value under it, by the key, for the
      * keys some rule asks anything of the value of.
      *
-     * <p>A conjunction of what the rules ask: the range the rules leave together, which holds no
-     * number where they contradict one another.
+     * <p>A conjunction of what the rules ask: the numbers the rules leave together at each place,
+     * which are none where they contradict one another.
      */
-    public static Map<RuleKey, NumericDomain.Bounds> valuesAsked(List<Requirement> requirements) {
-        Map<RuleKey, NumericDomain.Bounds> out = new LinkedHashMap<>();
+    public static Map<RuleKey, ValueAsked> valuesAsked(List<Requirement> requirements) {
+        Map<RuleKey, ValueAsked> out = new LinkedHashMap<>();
         for (Requirement each : requirements) {
             if (each.valueIn() != null) {
-                out.merge(each.key(), each.valueIn(), NumericDomain.Bounds::meet);
+                out.merge(each.key(), each.valueIn(), ValueAsked::meet);
             }
         }
         return out;
     }
 
     /**
-     * Whether no value is among both {@code one} and {@code other}: two keys asked these of their
-     * values are two entries, since one entry holds one value.
+     * Whether no value is what both {@code one} and {@code other} ask: two keys asked these of
+     * their values are two entries, since one entry holds one value.
      */
-    public static boolean leaveNoNumberInCommon(NumericDomain.Bounds one,
-                                                NumericDomain.Bounds other) {
-        return !one.meet(other).holdsAValue();
+    public static boolean leaveNoNumberInCommon(ValueAsked one, ValueAsked other) {
+        return one.excludes(other);
     }
 
     /**
-     * A number among {@code asked} that a value of {@code type} can be, or null where there is
-     * none this finds.
+     * What a search for the numbers a value of a type can be at the places asked came to.
+     *
+     * <p>Three answers and not two, because what a reader does with the third is not what it does
+     * with the second: a type that has no such number leaves the rules asking for it nothing to be
+     * built from, which is a fact about the model, and one whose numbers this did not find says
+     * only that this did not.
+     */
+    public sealed interface Among {
+
+        /** The number found at each place asked. */
+        record Found(Map<List<String>, BigDecimal> at) implements Among {
+
+            public Found {
+                at = Map.copyOf(at);
+            }
+        }
+
+        /** There is none: what is asked and what the type leaves share no number at some place, or
+         *  the one number they share is one the type refuses. */
+        record NoneExists() implements Among {}
+
+        /** None was found, and the numbers between the ones tried were not asked about. */
+        record NotFound() implements Among {}
+    }
+
+    /**
+     * A number at each place of {@code value} that {@code asked} names, which the type at the
+     * place can be.
+     *
+     * <p>None exists where it does at any one place: the value is asked to be what no value of the
+     * type is. Where none was found at some place and none is shown to be missing at another, none
+     * was found.
+     *
+     * @param within the record being read, where one is given ({@link #admission})
+     */
+    public static Among numbersAmong(Type value, ValueAsked asked, TypeSymbol.AtModule within,
+                                     RuleReadingContext reading) {
+        Map<List<String>, BigDecimal> found = new LinkedHashMap<>();
+        boolean notFound = false;
+        for (Map.Entry<List<String>, OrderedRuns> each : asked.at().entrySet()) {
+            Type there = typeAt(value, each.getKey(), reading.source());
+            if (there == null) {
+                notFound = true;
+                continue;
+            }
+            switch (numberAmong(there, each.getValue(), within, reading)) {
+                case Among.Found one -> found.put(each.getKey(), one.at().get(ValueAsked.THE_VALUE));
+                case Among.NotFound _ -> notFound = true;
+                case Among.NoneExists none -> {
+                    return none;
+                }
+            }
+        }
+        return notFound ? new Among.NotFound() : new Among.Found(found);
+    }
+
+    /** The type standing at {@code place} of a value of {@code type}, or null where the type has
+     *  no field there. */
+    private static Type typeAt(Type type, List<String> place, RuleReadingSource source) {
+        Type at = type;
+        for (String field : place) {
+            if (!(TypeView.of(at, source.inners(), source.symbols(), source.kinds(), source.sums())
+                    .shape() instanceof Shape.Product(TypeSymbol _, var fields))
+                    || !(fields.get(field) instanceof Type next)) {
+                return null;
+            }
+            at = next;
+        }
+        return at;
+    }
+
+    /**
+     * A number among {@code asked} that a value of {@code type} can be, which is a number and not
+     * a record: the one place of it is the value itself.
      *
      * <p>Chosen among the numbers a range is entered by: its ends, a step inside each end, and the
-     * middle. Each is held to the type's own rules ({@link #valueTypeAdmits}), so a number the
-     * type refuses is never the answer, and to the carrier's grain, so a whole-number type is
-     * offered whole numbers only. A type whose rules leave a gap in the range that none of those
-     * numbers is outside of is answered null, which says nothing is known and not that no number
-     * will do.
+     * middle. Each is held to the type's own rules ({@link #admission}), so a number the type
+     * refuses is never the answer, and to the carrier's grain, so a whole-number type is offered
+     * whole numbers only. A type whose rules leave a gap in the range that none of those numbers
+     * is outside of is answered {@link Among.NotFound}, which says nothing is known and not that
+     * no number will do. Where what is asked is one number, there is no other to find, and the
+     * type's refusing it is the answer that none exists.
      *
-     * @param within the record being read, where one is given ({@link #valueTypeAdmits})
+     * @param within the record being read, where one is given ({@link #admission})
      */
-    public static BigDecimal numberIn(Type type, NumericDomain.Bounds asked,
-                                      TypeSymbol.AtModule within, RuleReadingContext reading) {
+    private static Among numberAmong(Type type, OrderedRuns asked, TypeSymbol.AtModule within,
+                                     RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         DeclaredBounds.Range own = DeclaredBounds.of(view, reading);
-        NumericDomain.Bounds room = own == null ? asked
-                : asked.meet(new NumericDomain.Bounds(own.min(), own.max()));
-        if (!room.holdsAValue()) {
-            return null;
-        }
+        OrderedRuns room = own == null ? asked
+                : asked.meet(OrderedRuns.of(new OrderedInterval(own.min(), own.max())));
         boolean whole = view.shape() instanceof Shape.Scalar(Type.Prim prim)
                 && prim == Type.Prim.INT;
-        for (Count each : entering(room, whole)) {
-            if (room.admits(each) && valueTypeAdmits(type, each.at(), within, reading)) {
-                return each.at();
+        boolean noneInAnyRun = true;
+        for (OrderedInterval run : room.runs()) {
+            switch (numberAmong(type, new NumericDomain.Bounds(run.low(), run.high()), whole,
+                    within, reading)) {
+                case Among.Found found -> {
+                    return found;
+                }
+                case Among.NotFound _ -> noneInAnyRun = false;
+                case Among.NoneExists _ -> { }
             }
         }
-        return null;
+        return noneInAnyRun ? new Among.NoneExists() : new Among.NotFound();
+    }
+
+    /** The same within one run of the numbers asked, where {@code whole} says the carrier holds
+     *  whole numbers only. */
+    private static Among numberAmong(Type type, NumericDomain.Bounds room, boolean whole,
+                                     TypeSymbol.AtModule within, RuleReadingContext reading) {
+        boolean refused = true;
+        for (Count each : entering(room, whole)) {
+            if (!room.admits(each)) {
+                continue;
+            }
+            switch (admission(type, each.at(), within, reading)) {
+                case ADMITTED -> {
+                    return new Among.Found(Map.of(ValueAsked.THE_VALUE, each.at()));
+                }
+                case NOT_SHOWN -> refused = false;
+                case REFUSED -> { }
+            }
+        }
+        return refused && leavesOneNumber(room) ? new Among.NoneExists() : new Among.NotFound();
+    }
+
+    /** Whether {@code room} is one number, so that the refusal of the numbers tried is the
+     *  refusal of every number in it. */
+    private static boolean leavesOneNumber(NumericDomain.Bounds room) {
+        if (room.min() == null || room.max() == null || !room.min().inclusive()
+                || !room.max().inclusive() || !(room.min().at() instanceof Count low)
+                || !(room.max().at() instanceof Count high)) {
+            return false;
+        }
+        return low.exactly().equals(high.exactly());
     }
 
     /** The numbers a range is entered by, nearest the ends first. */

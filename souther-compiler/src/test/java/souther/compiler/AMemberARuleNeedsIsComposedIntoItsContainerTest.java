@@ -12,7 +12,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A container a rule needs to hold a member of the same value is composed holding it, and a value
@@ -239,19 +238,120 @@ class AMemberARuleNeedsIsComposedIntoItsContainerTest {
 
     @Test
     void ratesAskedForAboveAndBelowOneNumberOfOneKeyLeaveItsPointsOpen() {
-        List<String> open = whatNothingCouldShow(byKeys("base: CurrencyCode",
+        assertEquals(List.of("E1013"), errorsOf(byKeys("base: CurrencyCode",
                 "    invariant a = above(base, rates, 6.0m)",
-                "    invariant b = below(base, rates, 5.0m)"));
-        assertTrue(open.stream().anyMatch(line -> line.contains("the ON point")), open::toString);
+                "    invariant b = below(base, rates, 5.0m)")),
+                "no number is above six and below five, so no table is one of the rules' values");
     }
 
     @Test
-    void aRateNoValueOfItsTypeCanBeIsLeftOpenAndNotComposedAsAnother() {
-        List<String> open = whatNothingCouldShow(byAHelper("ConversionRate", "0.0m"));
-        assertFalse(open.isEmpty(), "no value a rate can be meets the rule, so the points are open");
-        assertTrue(open.stream().anyMatch(line -> line.contains("the ON point")));
-        assertTrue(open.stream().anyMatch(line -> line.contains("the OFF point")));
-        assertTrue(open.stream().anyMatch(line -> line.contains("the OUT point")));
+    void aRateNoValueOfItsTypeCanBeIsAnEntryNoTableHoldsAndTheTableHasNoValue() {
+        assertEquals(List.of("E1013"), errorsOf(byAHelper("ConversionRate", "0.0m")),
+                "no rate is nought, so no table holds one under the base");
+    }
+
+    /** A rate that is one or three, asked to be above one and below three. */
+    private static final String BETWEEN_TWO_RATES = "module probe\n\n" + DEALS + """
+
+            data Rate = Decimal
+                invariant value == 1.0m || value == 3.0m
+
+            data RateTable = { base: CurrencyCode, rates: Map<CurrencyCode, Rate> }
+                invariant a = above(base, rates)
+                invariant b = below(base, rates)
+
+            let above (base: CurrencyCode, rates: Map<CurrencyCode, Rate>): Bool =
+                Map.get(base, rates)
+                    |> Option.map(r -> Decimal.compare(r.value, 1.0m) > 0)
+                    |> Option.withDefault(false)
+
+            let below (base: CurrencyCode, rates: Map<CurrencyCode, Rate>): Bool =
+                Map.get(base, rates)
+                    |> Option.map(r -> Decimal.compare(r.value, 3.0m) < 0)
+                    |> Option.withDefault(false)
+
+            """ + BODY.formatted("", "", "");
+
+    /**
+     * Where the numbers asked are a range and none of those tried is one the type admits, it is not
+     * shown that no rate is among them: the table is not refused, and the points stay open.
+     */
+    @Test
+    void aRangeNoNumberTriedIsARateIsNotShownToHoldNoRate() {
+        assertEquals(List.of(), errorsOf(BETWEEN_TWO_RATES));
+        assertFalse(whatNothingCouldShow(BETWEEN_TWO_RATES).isEmpty(),
+                "no rate was found between them, which is not that there is none");
+    }
+
+    /** A table of quotes, each a record of two rates, and the rule asked of the quote under the
+     *  base. The first {@code %s} is what a rate is, the second the rule a quote holds its rates
+     *  to, and the third what the table's rule says of {@code q}. */
+    private static final String QUOTES = """
+            module probe
+
+            data CurrencyCode = String
+                invariant String.matches("[A-Z]{3}", value)
+
+            data Rate = Decimal
+                invariant %s
+
+            data Quote = { rate: Rate, floor: Rate }
+                invariant quoteHolds = %s
+
+            data Table = { base: CurrencyCode, quotes: Map<CurrencyCode, Quote> }
+                invariant baseQuoted = baseQuote(base, quotes)
+
+            data Big = { n: Int }
+            data Small = { n: Int }
+
+            behavior sized : (t: Table, k: Int) -> Big | Small
+                constructs Big, Small
+
+            let sized (t, k) = {
+                guard k > 1 else Small { n = 0 }
+                Big { n = 1 }
+            }
+
+            let baseQuote (base: CurrencyCode, quotes: Map<CurrencyCode, Quote>): Bool =
+                Map.get(base, quotes)
+                    |> Option.map(q -> %s)
+                    |> Option.withDefault(false)
+            """;
+
+    private static String quotes(String rateType, String quoteRule, String ofQuote) {
+        return QUOTES.formatted(rateType, quoteRule, ofQuote);
+    }
+
+    private static final String FLOOR_UNDER_RATE =
+            "Decimal.compare(floor.value, rate.value) < 0";
+
+    /** A field of the quote found is composed as a number the quote can hold, with the field
+     *  beside it chosen against the quote's own rule, so every point has a row. */
+    @Test
+    void aFieldOfTheValueFoundIsComposedIntoTheRowsOfTheBehavior() {
+        assertEquals(List.of(), whatNothingCouldShow(quotes("value > 0.0m", FLOOR_UNDER_RATE,
+                "Decimal.compare(q.rate.value, 2.5m) == 0")));
+    }
+
+    @Test
+    void aNumberAFieldOfTheValueFoundRefusesIsAnEntryNoTableHolds() {
+        assertEquals(List.of("E1013"), errorsOf(quotes("value > 0.0m", FLOOR_UNDER_RATE,
+                "Decimal.compare(q.rate.value, 0.0m) == 0")),
+                "no rate is nought, so no quote holds one, and no table holds a quote");
+    }
+
+    /** A rate asked to be away from the only number its type admits. */
+    @Test
+    void aRateAskedToBeAwayFromTheOnlyNumberItsTypeAdmitsIsAnEntryNoTableHolds() {
+        assertEquals(List.of("E1013"), errorsOf(quotes("value == 1.0m", "true",
+                "Decimal.compare(q.rate.value, 1.0m) /= 0")));
+    }
+
+    /** The codes of the errors {@code model} is refused with. */
+    private static List<String> errorsOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.answerEverything();
+        return compilation.errors().stream().map(e -> e.diagnostic().code().toString()).toList();
     }
 
     /** The points nothing could show a row can be written at. */

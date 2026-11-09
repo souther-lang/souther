@@ -12,7 +12,9 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.check.ValueAsked;
+import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 
@@ -49,18 +51,19 @@ class TheEntriesAMapIsAskedToHoldAreResolvedInOnePlaceTest {
                 NONE.symbols(), NONE.kinds(), NONE.sums()).shape();
     }
 
-    private static NumericDomain.Bounds exactly(String number) {
+    private static ValueAsked exactly(String number) {
         Count at = Count.of(new BigDecimal(number));
-        return new NumericDomain.Bounds(Endpoint.inclusive(at), Endpoint.inclusive(at));
+        return ValueAsked.at(ValueAsked.THE_VALUE, OrderedRuns.of(
+                new OrderedInterval(Endpoint.inclusive(at), Endpoint.inclusive(at))));
     }
 
-    private static NumericDomain.Bounds between(String low, String high) {
-        return new NumericDomain.Bounds(Endpoint.exclusive(Count.of(new BigDecimal(low))),
-                Endpoint.exclusive(Count.of(new BigDecimal(high))));
+    private static ValueAsked between(String low, String high) {
+        return ValueAsked.at(ValueAsked.THE_VALUE, OrderedRuns.of(new OrderedInterval(
+                Endpoint.exclusive(Count.of(new BigDecimal(low))),
+                Endpoint.exclusive(Count.of(new BigDecimal(high))))));
     }
 
-    private static ContainerContents.KeyAsked key(FixtureTemplate key,
-                                                  NumericDomain.Bounds range) {
+    private static ContainerContents.KeyAsked key(FixtureTemplate key, ValueAsked range) {
         return new ContainerContents.KeyAsked(key, Optional.ofNullable(range));
     }
 

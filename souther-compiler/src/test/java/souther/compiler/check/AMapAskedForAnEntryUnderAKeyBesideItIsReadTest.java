@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A rule asking a map for an entry under the key standing in another field is a rule of the two
@@ -87,10 +88,44 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
         }
     }
 
+    /** A denial of a comparison, a disequality and a conjunction of comparisons each leave the
+     *  numbers the value may be, and are read as the runs they leave. */
     @Test
-    void aLookupThatOnlyKeepsTheValueFoundAwayFromANumberStaysUnanswered() {
+    void aLookupThatKeepsTheValueFoundAwayFromANumberIsReadAtTheKeyAndTheMap() {
+        for (String away : List.of("Bool.not(Decimal.compare(r.value, 1.0m) == 0)",
+                "Decimal.compare(r.value, 1.0m) /= 0",
+                "Decimal.compare(r.value, 1.0m) > 0 && Decimal.compare(r.value, 9.0m) < 0")) {
+            String model = table(BASE_THEN_RATES, "baseAtRate(base, rates)", lookup(away));
+
+            assertEquals(Map.of("n.base", List.of(), "n.rates", List.of()),
+                    unansweredAtTheFields(model), away);
+        }
+    }
+
+    /** A field of the value found is a place of it the rule names, as the value itself is. */
+    @Test
+    void aLookupAskingAFieldOfTheValueFoundIsReadAtTheKeyAndTheMap() {
+        Map<String, List<String>> left = unansweredAtTheFields("""
+                module demo
+
+                data Quote = { rate: Int, floor: Int }
+                data N = { base: String, quotes: Map<String, Quote> }
+                    invariant quoted = baseQuote(base, quotes)
+
+                let baseQuote (base: String, quotes: Map<String, Quote>): Bool =
+                    Map.get(base, quotes)
+                        |> Option.map(q -> q.rate > 5 && q.floor == 1)
+                        |> Option.withDefault(false)
+                """ + BEHAVIOR.replace("n.rates", "n.quotes"));
+
+        assertEquals(Map.of("n.base", List.of(), "n.quotes", List.of()), left);
+    }
+
+    /** What the value is asked is read through a choice or a call no further. */
+    @Test
+    void aLookupWhoseValueIsAskedInAnyOtherWayStaysUnanswered() {
         String model = table(BASE_THEN_RATES, "baseAtRate(base, rates)",
-                lookup("Bool.not(Decimal.compare(r.value, 1.0m) == 0)"));
+                lookup("Decimal.compare(r.value, 1.0m) > 0 || Decimal.compare(r.value, 9.0m) < 0"));
 
         Map<String, List<String>> left = unansweredAtTheFields(model);
 
@@ -311,11 +346,12 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
     }
 
     /**
-     * A number asked of the value that the value's type refuses is an entry that cannot be written,
-     * and a key is not free for an entry nothing writes.
+     * A number asked of the value that the value's type refuses is an entry no map holds, so the
+     * rule is false of every value and is read as leaving the places it names nothing: no question
+     * of it stands at any of them.
      */
     @Test
-    void aKeyIsNotFreeForAValueItsTypeRefuses() {
+    void anEntryAValueItsTypeRefusesIsAskedForIsReadAsLeavingNothing() {
         Map<String, List<String>> left = unansweredAtTheFields("""
                 module demo
 
@@ -332,8 +368,8 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
                         |> Option.withDefault(false)
                 """ + BEHAVIOR);
 
-        assertFalse(left.get("n.key").isEmpty(), "no map holds a value of nought");
-        assertFalse(left.get("n.rates").isEmpty());
+        assertTrue(left.get("n.key").isEmpty(), "no map holds a value of nought, and that is read");
+        assertTrue(left.get("n.rates").isEmpty());
     }
 
     /**

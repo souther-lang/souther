@@ -4,7 +4,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.TakenAs;
@@ -523,13 +522,13 @@ final class Clauses {
          * per conjunct, and the bindings crossed are followed as every reader of a rule follows
          * them.
          */
-        private static List<EntryHeld.Stated> entriesStated(Core clause) {
+        private List<EntryHeld.Stated> entriesStated(Core clause) {
             List<EntryHeld.Stated> out = new ArrayList<>();
             for (ConjunctStatements.Stated each
                     : ConjunctStatements.statedBy(ClauseExpr.of(clause, true))) {
                 Map<BindingId, Core> given = new HashMap<>();
                 each.crossed().forEach(crossed -> entering(given, crossed.binding()));
-                EntryHeld.Stated entry = entryStated(each.said(), given);
+                EntryHeld.Stated entry = entryStated(each.said(), given, newtypes);
                 if (entry != null) {
                     out.add(entry);
                 }
@@ -612,7 +611,7 @@ final class Clauses {
             if (lookedFor == null) {
                 return Optional.empty();
             }
-            NumericDomain.Bounds valueIn = null;
+            ValueAsked valueIn = null;
             Location container = asAKey ? locationOf(args.get(1)) : null;
             for (EntryHeld.Stated entry : entries) {
                 if (container != null && entry.valueIn() != null
@@ -796,15 +795,7 @@ final class Clauses {
         /** The names of {@code p} that are steps: a newtype's own {@code value} is none
          *  ({@link Location#isStep}). */
         private FieldPath stepsOf(Core.FieldProjection p) {
-            List<String> out = new ArrayList<>();
-            Type from = p.base().type();
-            for (Core.FieldProjection.Step each : p.steps().inOrder()) {
-                if (Location.isStep(from, each.field(), newtypes)) {
-                    out.add(each.field());
-                }
-                from = each.type();
-            }
-            return FieldPath.of(out);
+            return Location.stepsOf(p, newtypes);
         }
 
         /** The argument of {@code call} it counts the elements of, where that is a place of the
@@ -839,8 +830,10 @@ final class Clauses {
      *
      * @param given what the bindings crossed to reach the statement give their names
      */
-    static EntryHeld.Stated entryStated(ClauseExpr.Part said, Map<BindingId, Core> given) {
-        return said.positive() ? EntryHeld.read(substituted(said.of(), given), core -> core) : null;
+    static EntryHeld.Stated entryStated(ClauseExpr.Part said, Map<BindingId, Core> given,
+                                        DeclarationNewtypes newtypes) {
+        return said.positive()
+                ? EntryHeld.read(substituted(said.of(), given), core -> core, newtypes) : null;
     }
 
     /** {@code e} with each binding {@code given} names replaced by the value it was given. */

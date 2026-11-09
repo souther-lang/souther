@@ -4,7 +4,7 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.check.ValueAsked;
 import souther.compiler.observe.ElementsTaken;
 
 import java.util.ArrayList;
@@ -91,7 +91,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
      *               element names no container further in ({@link RowDemand.WithinIt})
      */
     record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey,
-                 Optional<NumericDomain.Bounds> valueIn, Optional<Around> around) {
+                 Optional<ValueAsked> valueIn, Optional<Around> around) {
 
         Asked {
             Objects.requireNonNull(container, "what is asked is asked of some container");

@@ -156,7 +156,8 @@ public final class InvariantStatements {
         }
         // A lookup in a map followed to a statement about what it found: stated as the entry the
         // rule asks the map for, which no operation the representation kept standing says.
-        EntryHeld.Stated entry = Clauses.entryStated(reached.said(), given);
+        EntryHeld.Stated entry =
+                Clauses.entryStated(reached.said(), given, clauses.source().newtypes());
         if (entry != null) {
             return new InvariantStatement.HoldsAnEntry(reached.statement(), entry);
         }

@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.check.ValueAsked;
 
 import java.util.List;
 import java.util.Objects;
@@ -42,7 +42,7 @@ record ContainerContents(List<FixtureTemplate> holding, List<FixtureTemplate> ke
      * @param valueIn the numbers the value filed under it is to be among; empty where any value
      *                the rules admit will do
      */
-    record KeyAsked(FixtureTemplate key, Optional<NumericDomain.Bounds> valueIn) {
+    record KeyAsked(FixtureTemplate key, Optional<ValueAsked> valueIn) {
 
         KeyAsked {
             Objects.requireNonNull(key, "a key is asked for");

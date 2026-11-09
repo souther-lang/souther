@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Shape;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.check.ValueAsked;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -100,16 +100,16 @@ record EntriesAsked(Witnesses.Filed placed, List<Witnesses.Filed> others,
     }
 
     /** A key and the numbers its value is asked to be among, or null where nothing is asked. */
-    private record Wanted(FixtureTemplate key, NumericDomain.Bounds range) {
+    private record Wanted(FixtureTemplate key, ValueAsked range) {
 
-        Wanted meeting(NumericDomain.Bounds other) {
+        Wanted meeting(ValueAsked other) {
             return other == null ? this
                     : new Wanted(key, range == null ? other : range.meet(other));
         }
 
         /** Whether the demands on the key leave its value no number. */
         boolean contradictory() {
-            return range != null && !range.holdsAValue();
+            return range != null && range.holdsNothing();
         }
     }
 

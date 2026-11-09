@@ -65,6 +65,12 @@ class WhereAClauseIsReadIntoItsShapeIsWrittenDownTest {
                     "the shape a declaration's clause is described against, made where the parts a"
                             + " caller reads are chosen — which is every reader of a declaration's"
                             + " rules, so it is made once for all of them"),
+            new Licence("souther.compiler.check.EntryHeld.valueIn", 1,
+                    "the statement a lookup's present arm holds its value to, which is a clause of"
+                            + " its own: the body the lookup is followed through, whose truth the"
+                            + " rule asks for and so is read as stated, and whose parts are only"
+                            + " asked what they say of the value found — no part is numbered or"
+                            + " filed under a rule"),
             new Licence("souther.compiler.check.StatedByClauses.mirrors", 1,
                     "the shape of a clause a caller holds only as a tree, compared against one"
                             + " already read"));
