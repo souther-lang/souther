@@ -4,6 +4,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.LawProposition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -349,11 +350,24 @@ sealed interface Derivation {
          * A statement over the counts and numbers of some arguments: which counts are above nought,
          * and how forms over them stand against nought. A form a {@link Stands} holds may be over
          * numbers that go below nought, so it is no count and nothing about counts is said of it.
+         *
+         * <p>And a part of a law this side has no counts or numbers for ({@link Unnamed}), which
+         * holds or does not as the run has it and is settled by nothing here. A statement with such
+         * a part still says what its other parts make certain: where every part of a conjunction
+         * holds, each named one does.
          */
         sealed interface Holding {
 
-            /** The container {@code count} counts holds something. */
+            /** {@code count}, a whole number, is above nought: the container it counts holds
+             *  something, some element meets what it counts the elements meeting. */
             record Something(LinearForm<FactSubject> count) implements Holding {}
+
+            /**
+             * {@code part} of a law, which this side names by no count or number: it holds on
+             * some runs and not on others as far as anything here can say, on either side of it.
+             * Told apart by the part, so two laws differing in one are two statements.
+             */
+            record Unnamed(LawProposition<DeclaredArgument> part) implements Holding {}
 
             /** One of {@code ways} holds. */
             record AnyOf(List<Holding> ways) implements Holding {
@@ -401,6 +415,7 @@ sealed interface Derivation {
                 case Holding.AllOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
                 case Holding.Not(Holding denied) -> counts(denied, out);
                 case Holding.Stands(LinearForm<FactSubject> form, Rel _) -> out.add(form);
+                case Holding.Unnamed _ -> { }
             }
         }
 
@@ -417,6 +432,8 @@ sealed interface Derivation {
                 case Holding.Stands(LinearForm<FactSubject> form, Rel rel) ->
                         b instanceof Holding.Stands it && rel == it.rel()
                                 && same.forms(form, it.form());
+                case Holding.Unnamed(var part) ->
+                        b instanceof Holding.Unnamed it && part.equals(it.part());
             };
         }
 

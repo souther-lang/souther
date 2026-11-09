@@ -1,10 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.semantics.OperationFact;
 import souther.compiler.types.BinOp;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -26,17 +27,44 @@ public record AnOperationApplied(ValueName operation, List<Core> args) {
     public static AnOperationApplied of(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.PreservedCall kept ->
-                    new AnOperationApplied(kept.declared().operation(), kept.args());
+                    asTheOperationItAgreesWith(kept) instanceof AnOperationApplied agreed
+                    ? agreed : new AnOperationApplied(kept.declared().operation(), kept.args());
             case Core.Call call when call.fn() instanceof Core.Reached reached ->
                     new AnOperationApplied(reached.denotes(), call.args());
             // The checker types the operator over two strings or two lists and refuses it over
             // anything else, so a join that is no string's is a list's: the string's append and the
             // list's are the two operations it can be.
-            case Core.Binary joined when joined.op() == BinOp.CONCAT -> new AnOperationApplied(
-                    ValueName.Stdlib.operation(Type.STRING.equals(joined.type()) ? "String" : "List",
-                            "append"), List.of(joined.left(), joined.right()));
+            case Core.Binary joined when joined.op() == BinOp.CONCAT
+                    && DefaultBoundOperationFacts.get().operationFor(BinOp.CONCAT, joined.type())
+                    instanceof ValueName operation ->
+                    new AnOperationApplied(operation, List.of(joined.left(), joined.right()));
             case null, default -> null;
         };
+    }
+
+    /**
+     * {@code call} as the application of the operation it agrees with where it is given the string
+     * it is, with the arguments that remain; null where it is anything else. What is said of
+     * either is said of both ({@link OperationFact.AgreesWithAnotherWhereItIsGivenText}).
+     */
+    static AnOperationApplied asTheOperationItAgreesWith(Core.PreservedCall call) {
+        BoundOperationFact.AgreesWithAnotherWhereItIsGivenText agrees =
+                DefaultBoundOperationFacts.get().agreesWhereItIsGivenText(call.operation());
+        if (agrees == null || agrees.position() >= call.args().size()
+                || !(Core.withoutStanding(call.args().get(agrees.position()))
+                        instanceof Core.Str given)
+                || !given.value().equals(agrees.text())) {
+            return null;
+        }
+        List<Core> remaining = new ArrayList<>(call.args());
+        remaining.remove(agrees.position());
+        return new AnOperationApplied(agrees.other().operation(), remaining);
+    }
+
+    /** Whether it puts two lists end to end: the operation declared to be the operator
+     *  {@code ++}, over a list. */
+    public boolean putsListsEndToEnd() {
+        return DefaultBoundOperationFacts.get().putsListsEndToEnd(operation);
     }
 
     /** What it passes where {@code which} stands, or null where it passes nothing there. */

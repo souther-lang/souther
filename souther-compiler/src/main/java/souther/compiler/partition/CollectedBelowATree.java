@@ -173,7 +173,7 @@ final class CollectedBelowATree {
                                                                           List<Core> args))) {
                 return null;
             }
-            if (operation.equals(ValueName.Stdlib.operation("List", "append"))) {
+            if (new AnOperationApplied(operation, args).putsListsEndToEnd()) {
                 return eval(args.get(0), here, env) instanceof Abs.Elems left
                         && eval(args.get(1), here, env) instanceof Abs.Elems right
                         ? left.with(right) : null;

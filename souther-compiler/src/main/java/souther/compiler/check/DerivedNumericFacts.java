@@ -362,10 +362,14 @@ final class DerivedNumericFacts {
         Set<FactSubject> from = new LinkedHashSet<>(asked);
         from.addAll(base.atomsSpokenOf());
         NumericDomain<FactSubject> out = base;
-        for (FactSubject atom : terms.reachedFrom(from)) {
+        Collection<FactSubject> reached = terms.reachedFrom(from);
+        for (FactSubject atom : reached) {
             for (NumericConstraint fact : terms.knowledgeOf(atom).intrinsic()) {
                 out = out.assume(fact.form(), fact.rel(), terms.spacesOf(fact.form()));
             }
+        }
+        for (NumericConstraint fact : terms.relationsAmongCounts(reached)) {
+            out = out.assume(fact.form(), fact.rel(), terms.spacesOf(fact.form()));
         }
         return new ReadingDomain(out);
     }
@@ -764,6 +768,7 @@ final class DerivedNumericFacts {
                     case Boolean holds -> holds ? Shown.YES : Shown.NO;
                 };
             }
+            case Derivation.HoldsSomethingWhere.Holding.Unnamed _ -> Shown.UNSETTLED;
         };
     }
 

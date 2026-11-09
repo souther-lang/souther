@@ -575,6 +575,21 @@ final class OperationFactBinder {
                 yield new BoundOperationFact.AssemblesPieces(operation, source, closure,
                         assembles.piece());
             }
+            // What is kept of a container's elements is a container, and what keeps them a closure.
+            case OperationFact.KeepsTheElementsWhereItHolds keeps -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "what holds the elements of a container where a closure holds of them");
+                DeclaredArgument source = holdToTheDeclaration(declaration, keeps.source(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "what the elements are kept of");
+                DeclaredArgument closure = holdToTheDeclaration(declaration,
+                        new ArgumentRef.TheClosure(), new ArgumentRef.TheClosure(),
+                        TypeRequirement.CLOSURE, "what decides which are kept");
+                holdThePieceTo(declaration, source, closure,
+                        PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS);
+                yield new BoundOperationFact.KeepsTheElementsWhereItHolds(operation, source,
+                        closure);
+            }
             // The elements of a list kept by an index are a list's, and the index is a number.
             case OperationFact.HoldsTheElementsByIndex byIndex -> {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
@@ -617,6 +632,24 @@ final class OperationFactBinder {
             // declarations are held to each other.
             case OperationFact.MeansTheSameAsASizeOfNought means ->
                     holdSizeEquivalence(stdlib, declaration, means.size());
+            case OperationFact.AgreesWithAnotherWhereItIsGivenText agrees ->
+                    holdAgreement(stdlib, declaration, agrees);
+            // Two of one kind of value in and one of that kind out, which is what an operator
+            // over a kind of value is.
+            case OperationFact.IsTheOperator is -> {
+                String name = theLibraryOperation(operation.operation()).qualified();
+                List<Type> takes = declaration.params();
+                if (takes.size() != 2
+                        || !sameShape(takes.get(0), takes.get(1), new HashMap<>(), new HashMap<>())
+                        || !sameShape(takes.get(0), declaration.result(), new HashMap<>(),
+                                new HashMap<>())) {
+                    throw new IllegalStateException(name + " is said to be the operator "
+                            + is.operator() + ", and it does not take two values of one type and"
+                            + " answer one");
+                }
+                yield new BoundOperationFact.IsTheOperator(operation, is.operator(),
+                        new DeclaredArgument(operation, 0, takes.getFirst()));
+            }
             // Names nothing beyond the operation it is about, so there is nothing about it to hold
             // to a signature beyond the declaration every fact is held to above. What it comes to
             // bound is the fact about that declaration.
@@ -1491,6 +1524,44 @@ final class OperationFactBinder {
         Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
         return CompleteSignature.ofDeclaration(operation, entry.signature().params(),
                 entry.signature().result());
+    }
+
+    /**
+     * Holds an operation said to agree with another where it is given a string to their
+     * signatures: it takes a string at that place, and what remains of its arguments is what the
+     * other takes, answering what the other answers — so a call of the first is a call of the
+     * second.
+     */
+    private static BoundOperationFact.AgreesWithAnotherWhereItIsGivenText holdAgreement(
+            Stdlib stdlib, CompleteSignature declaration,
+            OperationFact.AgreesWithAnotherWhereItIsGivenText agrees) {
+        ValueName operation = declaration.declaring().operation();
+        CompleteSignature other = declaredSignature(stdlib, agrees.other());
+        String name = theLibraryOperation(operation).qualified();
+        if (agrees.position() >= declaration.params().size()
+                || declaration.params().get(agrees.position()) != Type.STRING) {
+            throw new IllegalStateException(name + " is said to agree with "
+                    + theLibraryOperation(agrees.other()).qualified() + " where it is given a"
+                    + " string at argument " + (agrees.position() + 1)
+                    + ", and it takes no string there");
+        }
+        List<Type> remaining = new ArrayList<>(declaration.params());
+        remaining.remove(agrees.position());
+        boolean alike = remaining.size() == other.params().size()
+                && sameShape(declaration.result(), other.result(), new HashMap<>(),
+                        new HashMap<>());
+        for (int at = 0; alike && at < remaining.size(); at++) {
+            alike = sameShape(remaining.get(at), other.params().get(at), new HashMap<>(),
+                    new HashMap<>());
+        }
+        if (!alike) {
+            throw new IllegalStateException(name + " is said to agree with "
+                    + theLibraryOperation(agrees.other()).qualified() + " where it is given a"
+                    + " string, and the arguments that remain and what it answers are not what the"
+                    + " other takes and answers");
+        }
+        return new BoundOperationFact.AgreesWithAnotherWhereItIsGivenText(declaration.declaring(),
+                other.declaring(), agrees.position(), agrees.text());
     }
 
     /**

@@ -5,6 +5,11 @@ import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -160,7 +165,31 @@ final class Term {
          * keys — over the two: how many an intersection of them holds, and what adding to either
          * moves by no more than what was added.
          */
-        HOW_MANY_ARE_IN(Payload.of(AddsWhatItDoesNotHold.Of.class));
+        HOW_MANY_ARE_IN(Payload.of(AddsWhatItDoesNotHold.Of.class)),
+        /**
+         * How many elements of a container come out on the holding side of an aspect — each
+         * element itself, over the container alone, or what a closure answers of each, over the
+         * container and the closure.
+         *
+         * <p>What some element meeting a statement is, read as a number: some element meets it
+         * exactly where this is above nought. Named by what it counts, so {@code List.any(p, xs)}
+         * and what {@code List.filter(p, xs)} holds are about one number.
+         */
+        HOW_MANY_MEET(Payload.of(AnswerAspect.class)),
+        /**
+         * How many different values the elements of a container come to — the elements or their
+         * keys as the payload says, over the container alone, or what a closure answers of each,
+         * over the container and the closure.
+         */
+        HOW_MANY_DIFFERENT(Payload.of(AddsWhatItDoesNotHold.Of.class)),
+        /**
+         * How many the elements of a container hold, added up over all of them — each element, over
+         * the container alone, or what a closure answers of each, over the container and the
+         * closure.
+         */
+        SUM_OF_SIZES(Payload.none()),
+        /** How many of the code points of a string are in a class, over the string. */
+        CODE_POINTS(Payload.of(CodePointClass.class));
 
         private final Payload payload;
 
@@ -702,6 +731,110 @@ final class Term {
     }
 
     /**
+     * Whether this is a closure of one parameter that answers what it is handed as it is. Counting
+     * what such a closure answers of each element is counting the elements, so a count that names
+     * it names the same number as one that names none.
+     */
+    boolean answersWhatItIsHanded() {
+        return shape == Shape.CLOSURE && Integer.valueOf(1).equals(of)
+                && parts.getFirst().shape == Shape.BOUND
+                && new At(0, 0).equals(parts.getFirst().of);
+    }
+
+    /**
+     * What a statement over whole numbers is about, and the numbers it holds of: {@code subject}
+     * is the value the statement compares, which is the parameter of the closure or how many it
+     * holds.
+     */
+    record StatementOverWholeNumbers(Term subject, WholeNumberRuns runs) {}
+
+    /**
+     * What a closure of one parameter answers true of, where it compares one thing about its
+     * parameter to whole numbers written out, joined and denied as it likes — or null where it is
+     * anything else.
+     */
+    StatementOverWholeNumbers statementOverWholeNumbers() {
+        if (shape != Shape.CLOSURE || !Integer.valueOf(1).equals(of)) {
+            return null;
+        }
+        Term[] subject = new Term[1];
+        WholeNumberRuns runs = parts.getFirst().runsOfAStatement(subject);
+        return runs == null || subject[0] == null ? null
+                : new StatementOverWholeNumbers(subject[0], runs);
+    }
+
+    /** The parameter of a closure, or how many it holds. */
+    private boolean canBeComparedToWholeNumbers() {
+        return (shape == Shape.BOUND && new At(0, 0).equals(of))
+                || (shape == Shape.CALLED && parts.size() == 1 && parts.getFirst().isTheParameter()
+                && DefaultBoundOperationFacts.get().answersHowManyItHolds(calledOperation()));
+    }
+
+    private boolean isTheParameter() {
+        return shape == Shape.BOUND && new At(0, 0).equals(of);
+    }
+
+    private Long writtenWholeNumber() {
+        return shape == Shape.INT ? (Long) of : null;
+    }
+
+    /** Whether {@code side} is what a statement compares, the first comparison deciding it: every
+     *  comparison after is of that one, or the statement is about two things. */
+    private static boolean isTheSubject(Term[] subject, Term side) {
+        if (subject[0] == null && side.canBeComparedToWholeNumbers()) {
+            subject[0] = side;
+        }
+        return side.equals(subject[0]);
+    }
+
+    /**
+     * The whole numbers this statement holds of, reading only through what joins and denies
+     * statements — a closure inside one has a parameter of its own, which is not the parameter of
+     * this one — and recording in {@code subject} the one thing it compares.
+     */
+    private WholeNumberRuns runsOfAStatement(Term[] subject) {
+        return switch (shape) {
+            case BOOL -> (Boolean) of ? WholeNumberRuns.EVERY : WholeNumberRuns.NONE;
+            case NOT -> {
+                WholeNumberRuns denied = parts.getFirst().runsOfAStatement(subject);
+                yield denied == null ? null : denied.others();
+            }
+            case EQ -> {
+                boolean numberFirst = parts.get(0).writtenWholeNumber() != null;
+                Long number = parts.get(numberFirst ? 0 : 1).writtenWholeNumber();
+                yield number == null || !isTheSubject(subject, parts.get(numberFirst ? 1 : 0))
+                        ? null : WholeNumberRuns.standing(Rel.EQ, ExactRatio.of(number));
+            }
+            case CHOICE -> {
+                WholeNumberRuns when = parts.get(0).runsOfAStatement(subject);
+                WholeNumberRuns then = parts.get(1).runsOfAStatement(subject);
+                WholeNumberRuns otherwise = parts.get(2).runsOfAStatement(subject);
+                yield when == null || then == null || otherwise == null ? null
+                        : when.and(then).or(when.others().and(otherwise));
+            }
+            case OP -> {
+                if (of == BinOp.LT) {
+                    Term left = parts.get(0);
+                    Term right = parts.get(1);
+                    if (right.writtenWholeNumber() != null && isTheSubject(subject, left)) {
+                        yield WholeNumberRuns.standing(Rel.LT,
+                                ExactRatio.of(right.writtenWholeNumber()));
+                    }
+                    yield left.writtenWholeNumber() != null && isTheSubject(subject, right)
+                            ? WholeNumberRuns.standing(Rel.GT,
+                                    ExactRatio.of(left.writtenWholeNumber())) : null;
+                }
+                ConditionJoin join = ConditionJoin.of((BinOp) of).orElse(null);
+                WholeNumberRuns left = join == null ? null : parts.get(0).runsOfAStatement(subject);
+                WholeNumberRuns right = join == null ? null : parts.get(1).runsOfAStatement(subject);
+                yield left == null || right == null ? null
+                        : join == ConditionJoin.BOTH ? left.and(right) : left.or(right);
+            }
+            default -> null;
+        };
+    }
+
+    /**
      * What a closure of one parameter answers of what it is handed, as a form of the fields it
      * reads off it — the value itself where the fields are none — or null where this is no such
      * closure, or what it answers is no such form.
@@ -944,6 +1077,14 @@ final class Term {
             case HOW_MANY_ARE_IN -> sb.append("howManyAreIn(").append(parts.get(0).rendered())
                     .append(", ").append(parts.get(1).rendered()).append(", ").append(of)
                     .append(')');
+            case HOW_MANY_MEET -> joined(sb.append("howManyMeet(").append(of).append(", "), ", ")
+                    .append(')');
+            case HOW_MANY_DIFFERENT ->
+                    joined(sb.append("howManyDifferent(").append(of).append(", "), ", ")
+                            .append(')');
+            case SUM_OF_SIZES -> joined(sb.append("sumOfSizes("), ", ").append(')');
+            case CODE_POINTS -> sb.append("codePoints(").append(parts.get(0).rendered())
+                    .append(", ").append(of).append(')');
         }
         return sb.toString();
     }
@@ -1344,6 +1485,111 @@ final class Term {
          *  its keys as {@code of} says. */
         Term howManyAreIn(Term counted, Term holder, AddsWhatItDoesNotHold.Of of) {
             return of(Shape.HOW_MANY_ARE_IN, of, List.of(counted, holder));
+        }
+
+        /** How many elements of {@code container} come out on the holding side of {@code aspect}:
+         *  each element itself where {@code closure} is null, and otherwise what it answers of
+         *  each. */
+        Term howManyMeet(Term container, Term closure, AnswerAspect aspect) {
+            return of(Shape.HOW_MANY_MEET, aspect, ofEach(container, closure));
+        }
+
+        /** How many different values the elements of {@code container} come to: the elements or
+         *  their keys as {@code of} says where {@code closure} is null, and otherwise what it
+         *  answers of each. */
+        Term howManyDifferent(Term container, Term closure, AddsWhatItDoesNotHold.Of of) {
+            return of(Shape.HOW_MANY_DIFFERENT, of, ofEach(container, closure));
+        }
+
+        /** How many the elements of {@code container} hold, added up: each element where
+         *  {@code closure} is null, and otherwise what it answers of each. */
+        Term sumOfSizes(Term container, Term closure) {
+            return of(Shape.SUM_OF_SIZES, null, ofEach(container, closure));
+        }
+
+        /** How many of the code points of {@code string} are in {@code counted}. */
+        Term codePoints(Term string, CodePointClass counted) {
+            return of(Shape.CODE_POINTS, counted, List.of(string));
+        }
+
+        /** What a count over each element is over: the container, and the closure whose answer is
+         *  counted unless that answer is the element itself, which the count of no closure is. */
+        private static List<Term> ofEach(Term container, Term closure) {
+            return closure == null || closure.answersWhatItIsHanded()
+                    ? List.of(container) : List.of(container, closure);
+        }
+
+        /** The closure of one parameter that answers true where both of two such closures do, or
+         *  null where either is any other. */
+        Term closureAnsweringBoth(Term one, Term other) {
+            return one != null && other != null && one.shape == Shape.CLOSURE
+                    && other.shape == Shape.CLOSURE && Integer.valueOf(1).equals(one.of)
+                    && Integer.valueOf(1).equals(other.of)
+                    ? closure(1, choice(one.parts.getFirst(), other.parts.getFirst(),
+                            written(false))) : null;
+        }
+
+        /**
+         * The closure of one parameter that answers true of exactly {@code runs}, written the one
+         * way: the runs one after another as a choice, each as the parameter being its one number,
+         * or not below its first and below the number after its last. {@code n > 2},
+         * {@code n >= 3} and {@code n > 2 && n > 1} are one term. Null where a number of the runs
+         * is past what a number written in a program is.
+         */
+        Term closureAnswering(Term subject, WholeNumberRuns runs) {
+            Term parameter = subject;
+            Term body = null;
+            for (WholeNumberRuns.Run run : runs.runs()) {
+                Term in = written(true);
+                if (run.isOneNumber()) {
+                    if (run.from().bitLength() > Long.SIZE - 1) {
+                        return null;
+                    }
+                    in = of(Shape.EQ, null, List.of(parameter, written(run.from().longValue())));
+                } else {
+                    if (run.from() != null) {
+                        if (run.from().bitLength() > Long.SIZE - 1) {
+                            return null;
+                        }
+                        in = not(of(Shape.OP, BinOp.LT,
+                                List.of(parameter, written(run.from().longValue()))));
+                    }
+                    if (run.to() != null) {
+                        if (run.to().bitLength() > Long.SIZE - 2) {
+                            return null;
+                        }
+                        Term below = of(Shape.OP, BinOp.LT,
+                                List.of(parameter, written(run.to().longValue() + 1)));
+                        in = run.from() == null ? below : choice(in, below, written(false));
+                    }
+                }
+                body = body == null ? in : choice(body, written(true), in);
+            }
+            return closure(1, body == null ? written(false) : body);
+        }
+
+        /**
+         * The closure of one parameter that answers true where {@code closure} answers false, or
+         * null where it is no such closure. The denial of a denial is the statement itself
+         * ({@link #not}), and a comparison is held as the statement it makes or the denial of one
+         * ({@link #comparison}).
+         */
+        Term closureDenying(Term closure) {
+            return closure.shape == Shape.CLOSURE && Integer.valueOf(1).equals(closure.of)
+                    ? closure(1, not(closure.parts.getFirst())) : null;
+        }
+
+        /**
+         * {@code closure} written the one way where it states something of whole numbers, so that
+         * two statements of one set are one term, and as it is where it does not — or null where
+         * there is none.
+         */
+        Term normalClosure(Term closure) {
+            Term.StatementOverWholeNumbers statement = closure == null ? null
+                    : closure.statementOverWholeNumbers();
+            Term written = statement == null ? null
+                    : closureAnswering(statement.subject(), statement.runs());
+            return written == null ? closure : written;
         }
 
         /** How many distinct terms this has been asked for — what a test measuring the sharing
