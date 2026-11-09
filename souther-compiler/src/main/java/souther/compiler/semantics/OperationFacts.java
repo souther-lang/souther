@@ -703,18 +703,11 @@ public final class OperationFacts {
             // taken is as many as were asked for where there are that many, and all of them where
             // there are fewer; what is dropped from is the rest. Walking a list, what is kept so
             // far stands so to what was walked.
-            about("List", "take", lemma(sizeInCases(
+            about("List", "take", lemmaOfWalkingToTake(sizeInCases(
                     sized(atLeast(number(at(0)), -1, 0), 0),
                     sized(all(atLeast(number(at(0)), 1, -1),
                             atLeast(sizeOf(at(1)), 1, number(at(0)), -1, 0)), number(at(0)), 0),
-                    sized(atLeast(number(at(0)), 1, sizeOf(at(1)), -1, -1), sizeOf(at(1)), 0)),
-                    equal(number(carried(0)), sizeOf(WALKED), 0),
-                    any(all(atLeast(number(at(0)), -1, 0), atLeast(sizeOf(carried(1)), -1, 0)),
-                            all(atLeast(number(at(0)), 1, -1),
-                                    atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
-                                    equal(sizeOf(carried(1)), number(at(0)), 0)),
-                            all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
-                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0))))),
+                    sized(atLeast(number(at(0)), 1, sizeOf(at(1)), -1, -1), sizeOf(at(1)), 0)))),
             about("List", "drop", lemma(sizeInCases(
                     sized(atLeast(number(at(0)), -1, 0), sizeOf(at(1)), 0),
                     sized(all(atLeast(number(at(0)), 1, -1),
@@ -734,16 +727,9 @@ public final class OperationFacts {
             // between them. Stated as a relation between the two answers, so that it holds
             // wherever either one's size is read, which the cases of each read apart do not give
             // where the other is only reached through what is built from it.
-            about("List", "take", lemma(related(equalToTheSum(sizeOf(at(1)),
+            about("List", "take", lemmaOfWalkingToTake(related(equalToTheSum(sizeOf(at(1)),
                     sizeOf(answerOf("List", "take", the(at(0)), the(at(1)))),
-                    sizeOf(answerOf("List", "drop", the(at(0)), the(at(1)))))),
-                    equal(number(carried(0)), sizeOf(WALKED), 0),
-                    any(all(atLeast(number(at(0)), -1, 0), atLeast(sizeOf(carried(1)), -1, 0)),
-                            all(atLeast(number(at(0)), 1, -1),
-                                    atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
-                                    equal(sizeOf(carried(1)), number(at(0)), 0)),
-                            all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
-                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0))))),
+                    sizeOf(answerOf("List", "drop", the(at(0)), the(at(1)))))))),
             // A pair for each element of the shorter: as many as the first where the second has
             // as many, and as many as the second where it has fewer.
             about("List", "zipShortest", lemma(sizeInCases(
@@ -1308,6 +1294,20 @@ public final class OperationFacts {
                                                              long constant) {
         return new OperationLaw.Size.Case<>(where, new LinearForm<>(ExactRatio.of(constant),
                 Map.of(a, ExactRatio.ONE, b, ExactRatio.of(-1))));
+    }
+
+    /** {@code stated} of {@code take}, proved of its body by what the walk of the list carries:
+     *  what is kept so far stands so to what was walked. The one account of that walk, so that
+     *  every lemma of {@code take} is proved over the same one. */
+    private static OperationFact lemmaOfWalkingToTake(OperationFact stated) {
+        return lemma(stated,
+                equal(number(carried(0)), sizeOf(WALKED), 0),
+                any(all(atLeast(number(at(0)), -1, 0), atLeast(sizeOf(carried(1)), -1, 0)),
+                        all(atLeast(number(at(0)), 1, -1),
+                                atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
+                                equal(sizeOf(carried(1)), number(at(0)), 0)),
+                        all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
+                                equal(sizeOf(carried(1)), sizeOf(WALKED), 0))));
     }
 
     /**
