@@ -1333,11 +1333,13 @@ final class DemandReading {
     static AnElementMeeting anElementMeeting(Quantity.HowManyMeet count, InputReading read) {
         List<Read> reads = asked(count.someMeets(), read);
         if (reads.size() != 1
-                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))
-                || !exists.ofAnElement().oneWay()) {
+                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))) {
             return AnElementMeeting.UNREAD;
         }
-        List<RowDemand.OfAnElement> way = exists.ofAnElement().theWay();
+        List<RowDemand.OfAnElement> way = theWayAnElementMeets(exists.ofAnElement(), read);
+        if (way == null) {
+            return AnElementMeeting.UNREAD;
+        }
         // Relations of the element itself, as the reading states the way: what some element of
         // a container inside it is asked is no relation of the element, though a row written
         // alike writes it into every one of them.
@@ -1348,6 +1350,36 @@ final class DemandReading {
                 way.size() == 1 && way.getFirst() instanceof RowDemand.WithinIt within
                         ? Optional.of(within) : Optional.empty();
         return new AnElementMeeting(heldTo, handedOn);
+    }
+
+    /**
+     * The one way an element meets {@code meets}, or null where it meets it several ways.
+     *
+     * <p>Two ways where every element of a container inside the element is to meet something: that
+     * they do, or that the container holds none. The second is no other way of meeting it — a
+     * container holding none is one every element of which meets anything — so the first is the
+     * one way, and what it asks of the container is met by one holding none as by any other.
+     */
+    private static List<RowDemand.OfAnElement> theWayAnElementMeets(
+            RowDemand.AnElementMeets meets, InputReading read) {
+        List<List<RowDemand.OfAnElement>> ways = meets.ways();
+        if (ways.size() == 1) {
+            return ways.getFirst();
+        }
+        if (ways.size() != 2) {
+            return null;
+        }
+        for (int each = 0; each < 2; each++) {
+            List<RowDemand.OfAnElement> every = ways.get(each);
+            if (every.size() == 1
+                    && every.getFirst() instanceof RowDemand.WithinIt(TermPath container,
+                            boolean some, var _)
+                    && !some
+                    && ways.get(1 - each).equals(List.of(sizeAgainst(container, read, false)))) {
+                return every;
+            }
+        }
+        return null;
     }
 
     /** What {@code way} asks, where it asks nothing but relations of the element itself. */
