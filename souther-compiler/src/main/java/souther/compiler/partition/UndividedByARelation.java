@@ -4278,8 +4278,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             notShown.add(at);
             List<String> written = sought.found()
-                    .flatMap(row -> place == null ? Optional.empty() : row.shownAt(place, read))
-                    .map(values -> writtenOut(values, place, read)).orElse(null);
+                    .flatMap(row -> writtenAt(row, at, read)).orElse(null);
             // Where no row got there, the figures the search stopped at and the places the runs of
             // the rows tried stopped are said at every place the relation compares, as what was
             // not shown is.
@@ -4564,6 +4563,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out.add(fixture.text());
         }
         return out;
+    }
+
+    /** What {@code row} is shown to have made the relation at {@code at}, written out: the values
+     *  it holds at a position, or the numbers it takes at a term. */
+    private static Optional<List<String>> writtenAt(ReachWitnesses.Witness row,
+                                                    FilingCoordinate at, InputReading read) {
+        return switch (at) {
+            case FilingCoordinate.AtPosition(TermPath path) -> row.shownAt(path, read)
+                    .map(values -> writtenOut(values, path, read));
+            case FilingCoordinate.OfTerm(NumericTerm.ValueOf(TermPath position)) ->
+                    row.shownAt(position, read)
+                            .map(values -> writtenOut(values, position, read));
+            case FilingCoordinate.OfTerm(NumericTerm term) -> row.takenAt(term, read);
+        };
     }
 
     /** The position {@code at} is the value at, or null where it is a number taken of one — how

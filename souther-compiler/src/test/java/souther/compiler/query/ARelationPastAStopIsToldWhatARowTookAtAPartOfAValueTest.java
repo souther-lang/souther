@@ -1,0 +1,142 @@
+package souther.compiler.query;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import souther.compiler.DocumentShape;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.UndividedPosition;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A relation a run may stop on the way to is told what a row run to it took at a place that is a
+ * part of a date, or a key a map is looked up by, as it is told what the row held at a place that
+ * is a value. The rates hold nought under one currency, so a deal in it stops every run at the
+ * remainder by its rate, and the relation is not shown reached at every value of what it reads.
+ */
+class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
+
+    private static final String RATES = """
+            module probe
+
+            data Deal = { currency: String, amount: Int, on: Date }
+            data Rates = { rates: Map<String, Int>, year: Int }
+                invariant zeroUnderZ = zeroAtZ(rates)
+            data Ok = { n: Int }
+            data Missing = { n: Int }
+
+            let zeroAtZ (rates: Map<String, Int>): Bool =
+                Map.get("Z", rates)
+                    |> Option.map(r -> r == 0)
+                    |> Option.withDefault(false)
+            """;
+
+    private static final String SEEDED = RATES + """
+
+            let zeroRates = Rates { rates = Map.fromList([ ("Z", 0) ]), year = 2000 }
+
+            behavior dated : (deals: List<Deal>, rates: Rates) -> Ok | Missing
+            let dated (deals, rates) = {
+                let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
+                guard List.length(weighed) == List.length(deals)
+                    else Missing { n = List.length(List.filter(
+                        d -> Date.year(d.on) == rates.year, deals)) }
+                Ok { n = List.length(weighed) }
+            }
+
+            behavior unpriced : (deals: List<Deal>, rates: Rates) -> Ok | Missing
+            let unpriced (deals, rates) = {
+                let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
+                guard List.length(weighed) == List.length(deals)
+                    else Missing { n = List.length(List.filter(
+                        d -> Bool.not(Map.containsKey(d.currency, rates.rates)), deals)) }
+                Ok { n = List.length(weighed) }
+            }
+            """;
+
+    /**
+     * No value of the model names rates, so no row is found that gets to the relation, and the
+     * relation compared with a count of the deals is a relation among counts of one container
+     * with nothing beside it that the container is composed for.
+     */
+    private static final String UNSEEDED = RATES + """
+
+            behavior priced : (deals: List<Deal>, rates: Rates) -> Ok | Missing
+            let priced (deals, rates) = {
+                let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
+                guard List.length(weighed) == List.length(deals)
+                    else Missing { n = List.length(List.filter(
+                        d -> d.currency == "Z" && Date.year(d.on) > rates.year, deals)) }
+                Ok { n = List.length(weighed) }
+            }
+            """;
+
+    @Test
+    void aPartOfADateAndAKeyAreToldWhatTheRowRunToTheRelationTookThere() {
+        Compilation compilation = Compilation.ofSource(SEEDED, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        Map<String, PartitionEvidence> evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value();
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+
+        PartitionEvidence.NotRead year = notRead(evidence, "dated").get("Date.year(deals[*].on)");
+        assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                year.reason(), year.toString());
+        assertEquals(List.of("2026"), year.shownReachedAt(), year.toString());
+
+        Map<String, PartitionEvidence.NotRead> unpriced = notRead(evidence, "unpriced");
+        PartitionEvidence.NotRead key = unpriced.get("rates.rates[key]");
+        assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                key.reason(), unpriced.toString());
+        assertEquals(List.of("\"Z\""), key.shownReachedAt(), key.toString());
+        assertEquals(List.of("\"x\""), unpriced.get("deals[*].currency").shownReachedAt(),
+                "a place that is a value is told as it was");
+
+        JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        DocumentShape.assertShapedLikeTheSchema(document);
+        List<String> written = new ArrayList<>();
+        document.findValues("shownReachedAt").forEach(values ->
+                values.forEach(each -> written.add(each.asString(""))));
+        assertTrue(written.containsAll(List.of("2026", "\"Z\"")), written.toString());
+    }
+
+    /**
+     * A relation among counts of one container, with nothing beside it that the container is
+     * composed for, is a group nothing here writes a row for: it says so, as every other group
+     * does, and tells no value for the places it leaves.
+     */
+    @Test
+    void aRelationAmongCountsAloneIsAGroupNothingSolvesAndNoValueIsToldForIt() {
+        Compilation compilation = Compilation.ofSource(UNSEEDED, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        Map<String, PartitionEvidence> evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value();
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+
+        Map<String, PartitionEvidence.NotRead> byPlace = notRead(evidence, "priced");
+        assertTrue(!byPlace.isEmpty(), byPlace.toString());
+        byPlace.forEach((at, each) -> assertEquals(List.of(), each.shownReachedAt(), at));
+    }
+
+    private static Map<String, PartitionEvidence.NotRead> notRead(
+            Map<String, PartitionEvidence> evidence, String behavior) {
+        Map<String, PartitionEvidence.NotRead> byPlace = new LinkedHashMap<>();
+        evidence.get(behavior).notRead().forEach(each -> byPlace.put(each.at(), each));
+        return byPlace;
+    }
+}

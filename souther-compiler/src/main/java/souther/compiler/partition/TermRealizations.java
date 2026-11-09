@@ -353,6 +353,12 @@ final class TermRealizations {
         if (byElement != null) {
             return elementByElement(targets, byElement, counts, together, related, numbers);
         }
+        // A relation among counts is held by the container composed for the counts beside it
+        // (JointBuilder.ElementByElement); with none beside it nothing writes the
+        // container, and the group is one nothing here solves.
+        if (numbers.isEmpty()) {
+            return nothingSolvesAGroup();
+        }
         if (numbers.stream().anyMatch(each -> amongOneContainer(each.term()) != null)) {
             return amongTheElements(targets, numbers);
         }

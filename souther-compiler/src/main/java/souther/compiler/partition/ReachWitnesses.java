@@ -2,7 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
@@ -80,27 +83,95 @@ public final class ReachWitnesses {
          * comparison is shown made on every element of ({@link #madeOnEvery}); otherwise none.
          */
         public Optional<List<ObservedValue>> shownAt(TermPath place, InputReading read) {
-            BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
-                    new StandingAtAPoint.RowWalk(BehaviorInputs.of(read), new ObservedInputs(built,
-                            new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
+            BorderQuantity.Observation row = observed(read);
             if (!(row.everyValueAt(place)
                     instanceof WalkResult.Reached<List<ObservedValue>>(List<ObservedValue> there))
                     || there.isEmpty()) {
                 return Optional.empty();
             }
+            return shownOf(there, place);
+        }
+
+        /**
+         * The numbers the row takes at {@code term} that a run of it is shown to have made the
+         * comparison at, as the term is read of a row everywhere else ({@link WhatATermRead}) — or
+         * empty where none is, or where the term is not one this reads.
+         *
+         * <p>Told by the same rule as {@link #shownAt}: one number is shown, and several only
+         * where the term's position stands inside exactly the containers the comparison is shown
+         * made on every element of. A number taken over a run of values is one per row. A term the
+         * row does not read to a number, whatever the cause, tells nothing: it is not a number of
+         * zero.
+         */
+        public Optional<List<String>> takenAt(NumericTerm term, InputReading read) {
+            TermOrders orders = read.quantities().ordersOf(term);
+            if (orders == null || orders.answered() == null
+                    || !(term instanceof NumericTerm.FromOnePosition
+                    || term instanceof NumericTerm.TakenOver)) {
+                return Optional.empty();
+            }
+            TermPath position = term instanceof NumericTerm.FromOnePosition one
+                    ? one.position() : null;
+            List<Place> there = new ArrayList<>();
+            List<TermPath> containers = position == null ? List.of()
+                    : position.containersHoldingIt();
+            if (!numbersAt(observed(read), containers, orders, there) || there.isEmpty()) {
+                return Optional.empty();
+            }
+            return shownOf(there.stream().map(orders.answered()::written).toList(), position);
+        }
+
+        private BorderQuantity.Observation observed(InputReading read) {
+            return new StandingAtAPoint.DiscoveringRow(
+                    new StandingAtAPoint.RowWalk(BehaviorInputs.of(read), new ObservedInputs(built,
+                            new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
+        }
+
+        /** What {@code there} shows of the values at {@code place}, which is null where what is
+         *  read is taken over a run of values and stands at no one place. */
+        private <T> Optional<List<T>> shownOf(List<T> there, TermPath place) {
             if (new LinkedHashSet<>(there).size() == 1) {
                 return Optional.of(List.of(there.getFirst()));
             }
             List<TermPath> inside = new ArrayList<>();
-            for (TermPath container : place.containersHoldingIt()) {
-                TermPath element = container.element();
-                if (!place.standsAtOrUnder(element)) {
-                    return Optional.empty();
+            if (place != null) {
+                for (TermPath container : place.containersHoldingIt()) {
+                    TermPath element = container.element();
+                    if (!place.standsAtOrUnder(element)
+                            && !place.standsAtOrUnder(container.key())) {
+                        return Optional.empty();
+                    }
+                    inside.add(element);
                 }
-                inside.add(element);
             }
             return inside.equals(madeOnEvery) ? Optional.of(List.copyOf(there))
                     : Optional.empty();
+        }
+
+        /** Adds to {@code out} the number {@code orders} reads at each element of the
+         *  {@code containers}, outermost first; false where some is not read to a number. */
+        private static boolean numbersAt(BorderQuantity.Observation row,
+                                         List<TermPath> containers, TermOrders orders,
+                                         List<Place> out) {
+            if (containers.isEmpty()) {
+                if (!(WhatATermRead.ofTerm(orders, row) instanceof WhatATermRead.Number(
+                        Place number))) {
+                    return false;
+                }
+                out.add(number);
+                return true;
+            }
+            if (!(row.eachElementOf(containers.getFirst())
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>>(
+                            List<BorderQuantity.Observation> each))) {
+                return false;
+            }
+            for (BorderQuantity.Observation element : each) {
+                if (!numbersAt(element, containers.subList(1, containers.size()), orders, out)) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 
