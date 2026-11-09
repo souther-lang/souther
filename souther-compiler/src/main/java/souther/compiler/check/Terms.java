@@ -25,6 +25,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -2394,7 +2395,7 @@ final class Terms {
             }
             List<NumericConstraint> carried = new ArrayList<>(IntrinsicNumericFacts.ofSize(
                     size, built.value(), atom, built.at(), this));
-            carried.addAll(sizesRelatedAtACall(size, built.value(), built.at()));
+            carried.addAll(sizesRelatedAtACall(built.value(), built.at()));
             carrying(atom, carried);
             Derivation held = IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(), atom,
                     built.at(), this);
@@ -2414,12 +2415,12 @@ final class Terms {
      * <p>Only a relation of sizes alone ({@link LawProposition.Compared#ofSizesOnly}) is read: one
      * that compares a size with a number of another kind is left, for what reads those numbers to
      * take, and is not half read here. Of those, only where each argument it names is a value
-     * this names. The size of an answer the relation names and the call does not
-     * is named as a call of that operation over the same arguments ({@link #sizeKeyOf}): the atom a
-     * clause reading that call names, which carries what it carries where that clause names it.
+     * this names. The size of an answer the relation names and the call does not is named as a
+     * call of that operation over the same arguments, counted by what that answer is counted by
+     * ({@link #sizeKeyOf}): the atom a clause reading that call names, which carries what it
+     * carries where that clause names it.
      */
-    private List<NumericConstraint> sizesRelatedAtACall(ValueName size, Core container,
-                                                        Denotations at) {
+    private List<NumericConstraint> sizesRelatedAtACall(Core container, Denotations at) {
         AnOperationApplied applied = AnOperationApplied.of(container);
         if (applied == null) {
             return List.of();
@@ -2430,7 +2431,7 @@ final class Terms {
             if (each instanceof LawProposition.Compared<Slot> compared
                     && compared.ofSizesOnly()) {
                 LinearForm<FactSubject> read = compared.form().over(
-                        number -> sizeNamedByARelation(size, number, applied, at));
+                        number -> sizeNamedByARelation(number, applied, at));
                 if (read != null) {
                     out.add(new NumericConstraint(read, compared.states()));
                 }
@@ -2441,7 +2442,7 @@ final class Terms {
 
     /** The size atom {@code number} names over the arguments {@code applied} was handed, or null
      *  where it is no size or names a value this cannot. */
-    private LinearForm<FactSubject> sizeNamedByARelation(ValueName size, LawNumber<Slot> number,
+    private LinearForm<FactSubject> sizeNamedByARelation(LawNumber<Slot> number,
                                                          AnOperationApplied applied,
                                                          Denotations at) {
         if (!(number instanceof LawNumber.SizeOf<Slot>(var of))) {
@@ -2453,9 +2454,23 @@ final class Terms {
                     ? sizeOfWhatItHolds(applied.args().get(position), at) : null;
         } else {
             Term answer = termOfARelatedValue(of, applied, at);
-            atom = answer == null ? null : sizeKeyOf(size, answer);
+            ValueName counts = answer == null ? null : whatItsAnswerIsCountedBy(of);
+            atom = counts == null ? null : sizeKeyOf(counts, answer);
         }
         return atom == null ? null : LinearForm.atom(atom);
+    }
+
+    /** What the answer a relation names is counted by, as what it is answers — or null where it
+     *  names no operation, or an answer nothing counts. Of the answer itself, and not of the call
+     *  the relation is read at: the two answers are not always of one kind. */
+    private ValueName whatItsAnswerIsCountedBy(LawSubject<Slot> answer) {
+        if (!(answer instanceof LawSubject.AnswerOf<Slot>(var operation, var _))) {
+            return null;
+        }
+        CompleteSignature signature = Preserved.byTheLanguagesOwnOperations()
+                .signatureOf(operation);
+        return signature == null ? null
+                : NumericMeasures.takenOf(signature.result(), newtypeInners());
     }
 
     /** What a value a relation names keys as over the arguments {@code applied} was handed, or
