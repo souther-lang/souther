@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -96,6 +97,49 @@ class WhatOnlyTheReducedRulesProveIsProvedAndAnEmptyReductionIsNotAnUnreachableP
         assertTrue(domain.entails(difference(atom("x"), constant(5)), Rel.LT));
         assertFalse(domain.entails(difference(atom("x"), constant(4)), Rel.LE),
                 "over decimals a sum under five is not at most four");
+    }
+
+    /**
+     * {@code x = 2y} with {@code y} between nought and one leaves {@code x} at nought or two, and
+     * not at one: the range {@code [0, 2]} is not the whole of what the rules leave it. Asked a goal
+     * the reduction answers, the domain still says so.
+     */
+    @Test
+    void aRangeWithAHoleInItIsNotCertifiedWhetherOrNotAGoalWasAsked() {
+        Map<String, NumberSpace> spaces = spaces(Granularity.DISCRETE, "x", "y");
+        NumericDomain<String> domain = top()
+                .assume(difference(atom("x"), atom("y").times(ExactRatio.of(2)).orNull()),
+                        Rel.EQ, spaces)
+                .assume(atom("y"), Rel.GE, spaces)
+                .assume(difference(atom("y"), constant(1)), Rel.LE, spaces);
+
+        assertEquals(new ProjectionCertification.NotEveryRuleIsProven(),
+                domain.projectionCertification());
+        domain.entails(difference(atom("x"), constant(2)), Rel.LE);
+        assertEquals(new ProjectionCertification.NotEveryRuleIsProven(),
+                domain.projectionCertification());
+    }
+
+    /**
+     * Whole numbers and decimals tied by an equality are spaced differently, and a box over them is
+     * not certified as the whole of what the rules leave.
+     */
+    @Test
+    void aWholeNumberTiedToADecimalIsNotCertified() {
+        Map<String, NumberSpace> spaces = new LinkedHashMap<>();
+        spaces.put("x", NumberSpace.spacedOnly(Granularity.DISCRETE));
+        spaces.put("d", NumberSpace.spacedOnly(Granularity.DENSE));
+        spaces.put("e", NumberSpace.spacedOnly(Granularity.DENSE));
+        NumericDomain<String> domain = top()
+                .assume(difference(atom("x"), sum(atom("d"), atom("e"))), Rel.EQ, spaces)
+                .assume(atom("d"), Rel.GE, spaces)
+                .assume(difference(atom("d"), constant(3)), Rel.LE, spaces);
+
+        assertEquals(new ProjectionCertification.PositionsSpacedDifferently(),
+                domain.projectionCertification());
+        domain.entails(difference(atom("x"), constant(9)), Rel.LE);
+        assertEquals(new ProjectionCertification.PositionsSpacedDifferently(),
+                domain.projectionCertification());
     }
 
     /** A rule over a position solved for is rewritten, whichever side of it the bound holds. */

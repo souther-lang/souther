@@ -122,8 +122,9 @@ public final class NumericDomain<A> {
     private FormReach<A> reach;
     private Systems<A> systems;
     private ProjectionCertification certification;
-    private Reduction<A> reduction;
-    private boolean reductionWorkedOut;
+    /** The reduction of the rules, or empty where there is none to use; null until asked for. One
+     *  reference decides whether it was worked out and what it came to. */
+    private Optional<Reduction<A>> reduction;
     private Boolean noRow;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, NumberSpace> spaces,
@@ -854,21 +855,25 @@ public final class NumericDomain<A> {
      * be reached all the same, so {@link #refutes} could say both of a goal and of its denial.
      */
     private Reduction<A> reduction() {
-        if (!reductionWorkedOut) {
-            ReducedRules<A> rules = ReducedRules.of(rules(), order);
-            if (rules != null) {
-                NumericDomain<A> over = new NumericDomain<>(StatedRules.none(), spaces, false,
-                        order, closedStates, null, null);
-                for (ReducedRules.Rule<A> each : rules.rules()) {
-                    over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
-                }
-                if (!over.isBottom()) {
-                    reduction = new Reduction<>(rules, over);
-                }
-            }
-            reductionWorkedOut = true;
+        Optional<Reduction<A>> had = reduction;
+        if (had == null) {
+            had = Optional.ofNullable(reductionOfTheRules());
+            reduction = had;
         }
-        return reduction;
+        return had.orElse(null);
+    }
+
+    private Reduction<A> reductionOfTheRules() {
+        ReducedRules<A> rules = ReducedRules.of(rules(), order);
+        if (rules == null) {
+            return null;
+        }
+        NumericDomain<A> over = new NumericDomain<>(StatedRules.none(), spaces, false, order,
+                closedStates, null, null);
+        for (ReducedRules.Rule<A> each : rules.rules()) {
+            over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
+        }
+        return over.isBottom() ? null : new Reduction<>(rules, over);
     }
 
     private boolean entailsOver(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
