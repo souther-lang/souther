@@ -43,6 +43,19 @@ class WhatAnInvariantSaysOfItsValueIsHeldOfEveryValueOfItsTypeTest {
             new Row("Digit(String.length(prefixed.value) - 3)", true),
             // A type with no rule of this kind says nothing of its length.
             new Row("Digit(String.length(plain.value) - 1)", true),
+            // Not accepting is a side of its own: what a pattern that accepts the empty string
+            // does not accept is not empty.
+            new Row("Digit(String.length(notDigits.value) - 1)", false),
+            new Row("Digit(String.length(notDigits.value) - 2)", true),
+            // Either of two patterns is held to the lengths either of them has, which is no more
+            // than the least of the two and no less than the most.
+            new Row("Digit(String.length(either.value) - 3)", false),
+            new Row("Digit(String.length(either.value) - 4)", true),
+            new Row("Digit(5 - String.length(either.value))", false),
+            new Row("Digit(4 - String.length(either.value))", true),
+            // A pattern written as a constant that is worked out is the pattern it comes to.
+            new Row("Digit(String.length(computed.value) - 3)", false),
+            new Row("Digit(String.length(computed.value) - 4)", true),
             // What one of them says of itself is not said of the other.
             new Row("Digit(String.length(three.value) + 1 - String.length(letters.value))", false),
             new Row("Digit(String.length(three.value) - String.length(letters.value))", true));
@@ -64,10 +77,20 @@ class WhatAnInvariantSaysOfItsValueIsHeldOfEveryValueOfItsTypeTest {
 
             data Plain = String
 
-            behavior f : (three: Three, letters: Letters, prefixed: Prefixed, plain: Plain)
+            data NotDigits = String
+                invariant notDigits = Bool.not(String.matches("[0-9]*", value))
+
+            data Either = String
+                invariant either = String.matches("A{3}", value) || String.matches("B{5}", value)
+
+            data Computed = String
+                invariant computed = String.matches("[0-9]" ++ "{3}", value)
+
+            behavior f : (three: Three, letters: Letters, prefixed: Prefixed, plain: Plain,
+                          notDigits: NotDigits, either: Either, computed: Computed)
                 -> Digit
                 constructs Digit
-            let f (three, letters, prefixed, plain) =
+            let f (three, letters, prefixed, plain, notDigits, either, computed) =
                 %s
             """;
 

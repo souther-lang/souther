@@ -14,8 +14,10 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.meaning.ValueIdentity;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.regex.WhatAStringSaysOfItsLength;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -462,12 +464,54 @@ final class MeaningAssumptions {
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT);
             case Proposition.SameValue _, Proposition.LastToHold _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES);
-            case Proposition.StringInside _ ->
-                    outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER);
-            // Which language a string is in is no fact a path holds of a place.
-            case Proposition.InTheStrings _ ->
-                    outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+            // One string inside another, or which language a string is in, is no fact a path holds
+            // of a place: what it holds is what the statement says of how long each string is.
+            case Proposition.StringInside(Quantity inner, Quantity outer, var _, boolean holds,
+                                          var _) -> {
+                takingTheLengths(WhatAStringSaysOfItsLength.inside(
+                        lengthOfAString(inner), lengthOfAString(outer)), holds);
+                outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER);
+            }
+            case Proposition.InTheStrings(var of, StringsLanguage accepts, boolean holds, var _) -> {
+                FactSubject length = of instanceof Proposition.InTheStrings.Strings.AtAPosition(
+                        TermPath at, ValueIdentity identity) ? lengthAt(at, identity) : null;
+                if (length != null) {
+                    takingTheLengths(WhatAStringSaysOfItsLength.inALanguage(length,
+                            accepts.meaning()), holds);
+                }
+                outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+            }
         }
+    }
+
+    /** What a statement about strings makes certain of their lengths, on the side it came out. */
+    private void takingTheLengths(WhatAStringSaysOfItsLength.Sides<FactSubject> said,
+                                  boolean holds) {
+        for (WhatAStringSaysOfItsLength.Condition<FactSubject> each
+                : holds ? said.ifHolds() : said.ifDenied()) {
+            NumericConstraint stated = NumericConstraint.of(each);
+            known = known.taking(stated.form(), stated.rel(), Known.Held.ON_THE_PATH,
+                    terms.spacesOf(stated.form()));
+            taken = true;
+        }
+    }
+
+    /** How many code points {@code string} holds, where it is a string of the input; or null. */
+    private FactSubject lengthOfAString(Quantity string) {
+        return string instanceof DecisionAtom.OfTheInput(
+                NumericTerm.ValueOf(TermPath at), ValueIdentity identity)
+                ? lengthAt(at, identity) : null;
+    }
+
+    /** How many code points the string at {@code at} holds, named as a guard on it names it. */
+    private FactSubject lengthAt(TermPath at, ValueIdentity identity) {
+        Type type = places.typeAt().apply(at);
+        ValueName size = type == null ? null : NumericMeasures.takenOf(type, terms.newtypeInners());
+        FactSubject count = size == null ? null : terms.sizeAtPlace(size, placeOf(at, identity));
+        if (count != null) {
+            carrying(count, size);
+        }
+        return count;
     }
 
     /**

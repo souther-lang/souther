@@ -35,9 +35,11 @@ class LengthsOfAPatternTest {
         return new PatternMeaning.EitherOf(List.of(arms));
     }
 
-    /** What the machine of {@code meaning} says, which is what this has to come to. */
-    private static Language.Ends machine(PatternMeaning meaning) {
-        return PatternPlan.of(meaning).compile(ROOMY).lengths();
+    /** What the machine of {@code meaning} says, which is what this has to come to wherever no
+     *  length passes what a string holds. */
+    private static LengthsOfAPattern.Bounds machine(PatternMeaning meaning) {
+        Language.Ends ends = PatternPlan.of(meaning).compile(ROOMY).lengths();
+        return ends == null ? null : new LengthsOfAPattern.Bounds(ends.least(), ends.most());
     }
 
     @Test
@@ -81,7 +83,7 @@ class LengthsOfAPatternTest {
     void aLengthPastWhatAStringHoldsIsNoCeilingAndTheFewestStaysBelowIt() {
         PatternMeaning huge = repeated(repeated(DIGIT, 1_000_000, 1_000_000), 1_000_000,
                 1_000_000);
-        Language.Ends ends = LengthsOfAPattern.of(huge);
+        LengthsOfAPattern.Bounds ends = LengthsOfAPattern.of(huge);
         assertNull(ends.most(), "a ceiling no string reaches is none");
         assertEquals(true, ends.least() > 0 && ends.least() < Long.MAX_VALUE / 2,
                 "and the fewest does not wrap: " + ends);

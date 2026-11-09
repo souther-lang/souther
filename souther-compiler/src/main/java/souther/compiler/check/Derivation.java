@@ -9,6 +9,7 @@ import souther.compiler.semantics.LawProposition;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * How a value the affine fragment cannot carry was computed from values it can.
@@ -384,6 +385,36 @@ sealed interface Derivation {
                 /** A part of a law that makes nothing certain on either side. */
                 public Unnamed(LawProposition<DeclaredArgument> part) {
                     this(new Of.ALaw(part), List.of(), List.of());
+                }
+
+                /**
+                 * Which way this comes out where a reading says of a condition of a side that it
+                 * cannot hold: a side with a condition that cannot hold is a side it is not on.
+                 *
+                 * <p>Only that. That every condition of a side holds says nothing of the part, and
+                 * the one rule is here so that each reading of a holding, whatever it reads the
+                 * conditions in, takes a side out the same way.
+                 *
+                 * @param holds what the reading says of a condition: true where it holds, false
+                 *              where it cannot, null where it leaves it open
+                 * @return false where the holding side cannot be the one, true where the denied
+                 *         side cannot, null where neither is shown
+                 */
+                public Boolean outOf(Function<Holding, Boolean> holds) {
+                    if (someCannotHold(ifHolds, holds)) {
+                        return Boolean.FALSE;
+                    }
+                    return someCannotHold(ifDenied, holds) ? Boolean.TRUE : null;
+                }
+
+                private static boolean someCannotHold(List<Holding> conditions,
+                                                      Function<Holding, Boolean> holds) {
+                    for (Holding condition : conditions) {
+                        if (Boolean.FALSE.equals(holds.apply(condition))) {
+                            return true;
+                        }
+                    }
+                    return false;
                 }
 
                 /** What an unnamed statement is of. */

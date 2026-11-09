@@ -7,8 +7,7 @@ import souther.compiler.core.Kernel;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-import souther.compiler.regex.Language;
-import souther.compiler.regex.LengthsOfAPattern;
+import souther.compiler.regex.WhatAStringSaysOfItsLength;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -340,7 +339,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             }
             case Holding.Something(LinearForm<FactSubject> count) -> standing(count, Rel.GT);
             case Holding.Stands(LinearForm<FactSubject> form, Rel rel) -> standing(form, rel);
-            case Holding.Unnamed _ -> null;
+            case Holding.Unnamed it -> it.outOf(LawOverAtoms::settled);
         };
     }
 
@@ -353,8 +352,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     /**
      * The relations {@code holding} coming out {@code positive} makes certain over the counts and
      * numbers, each {@code form rel 0} — or null where it cannot come out that way at all. A
-     * disjunction of more than one way that may hold makes nothing certain, and is left out: what is
-     * taken is never more than the law says.
+     * disjunction of more than one way that may hold makes certain what every one of them does, at
+     * the weakest ({@link NumericConstraint#commonTo}): what is taken is never more than the law
+     * says.
      */
     static List<NumericConstraint> certain(Holding holding, boolean positive) {
         List<NumericConstraint> out = new ArrayList<>();
@@ -401,8 +401,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return true;
     }
 
-    /** The one of {@code ways} that can come out {@code positive}, where only one can; nothing
-     *  where more than one can; and false where none can. */
+    /** What the one of {@code ways} that can come out {@code positive} makes certain, where only
+     *  one can; what every one that can does, at the weakest, where more than one can; and false
+     *  where none can. */
     private static boolean oneOf(List<Holding> ways, boolean positive,
                                  List<NumericConstraint> out) {
         // One way written twice is one way: `s ++ s` holds something where `s` does.
@@ -415,7 +416,23 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         if (open.isEmpty()) {
             return false;
         }
-        return open.size() != 1 || certain(open.getFirst(), positive, out);
+        if (open.size() == 1) {
+            return certain(open.getFirst(), positive, out);
+        }
+        // More than one may be the way it is, and which is not said: what is certain is what every
+        // one of them makes certain, at the weakest. A way that cannot come out so is no way.
+        List<List<NumericConstraint>> each = new ArrayList<>();
+        for (Holding way : open) {
+            List<NumericConstraint> one = certain(way, positive);
+            if (one != null) {
+                each.add(one);
+            }
+        }
+        if (each.isEmpty()) {
+            return false;
+        }
+        out.addAll(each.size() == 1 ? each.getFirst() : NumericConstraint.commonTo(each));
+        return true;
     }
 
     @Override
@@ -531,15 +548,22 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     public Holding inside(LawProposition.Inside<DeclaredArgument> inside) {
         LawProposition.Inside<DeclaredArgument> standing = new LawProposition.Inside<>(
                 inside.inner(), inside.outer(), inside.where(), true);
-        FactSubject within = lengthOf(standing.inner());
-        FactSubject around = lengthOf(standing.outer());
-        List<Holding> ifHolds = within == null || around == null ? List.of()
-                : List.of(new Holding.Stands(LinearForm.difference(within, around), Rel.LE));
-        List<Holding> ifDenied = within == null ? List.of()
-                : List.of(new Holding.Something(LinearForm.atom(within)));
-        Holding holds = new Holding.Unnamed(new Holding.Unnamed.Of.ALaw(standing), ifHolds,
-                ifDenied);
+        WhatAStringSaysOfItsLength.Sides<FactSubject> said = WhatAStringSaysOfItsLength.inside(
+                lengthOf(standing.inner()), lengthOf(standing.outer()));
+        Holding holds = new Holding.Unnamed(new Holding.Unnamed.Of.ALaw(standing),
+                standing(said.ifHolds()), standing(said.ifDenied()));
         return inside.holds() ? holds : new Holding.Not(holds);
+    }
+
+    /** What {@code conditions} of the lengths of strings state, each as the form it stands as. */
+    private static List<Holding> standing(
+            List<WhatAStringSaysOfItsLength.Condition<FactSubject>> conditions) {
+        List<Holding> out = new ArrayList<>();
+        for (WhatAStringSaysOfItsLength.Condition<FactSubject> each : conditions) {
+            NumericConstraint stated = NumericConstraint.of(each);
+            out.add(new Holding.Stands(stated.form(), stated.rel()));
+        }
+        return out;
     }
 
     /**
@@ -552,27 +576,11 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     private Holding accepting(PatternMeaning meaning) {
         FactSubject count = countOf(applied.args().get(
                 StringPredicates.of(Kernel.STRING_MATCHES).subject()));
-        List<Holding> ifHolds = new ArrayList<>();
-        List<Holding> ifDenied = new ArrayList<>();
-        Language.Ends lengths = LengthsOfAPattern.of(meaning);
-        if (count != null && lengths == null) {
-            ifHolds.add(new Holding.Stands(LinearForm.constant(ExactRatio.ONE.negated()), Rel.GE));
-        } else if (count != null) {
-            if (lengths.least() > 0) {
-                ifHolds.add(new Holding.Stands(
-                        LinearForm.atomMinusConstant(count, ExactRatio.of(lengths.least())),
-                        Rel.GE));
-            }
-            if (lengths.most() != null) {
-                ifHolds.add(new Holding.Stands(
-                        LinearForm.atomMinusConstant(count, ExactRatio.of(lengths.most())),
-                        Rel.LE));
-            }
-            if (lengths.least() == 0) {
-                ifDenied.add(new Holding.Something(LinearForm.atom(count)));
-            }
-        }
-        return new Holding.Unnamed(new Holding.Unnamed.Of.APattern(meaning), ifHolds, ifDenied);
+        WhatAStringSaysOfItsLength.Sides<FactSubject> said = count == null
+                ? WhatAStringSaysOfItsLength.Sides.nothing()
+                : WhatAStringSaysOfItsLength.inALanguage(count, meaning);
+        return new Holding.Unnamed(new Holding.Unnamed.Of.APattern(meaning),
+                standing(said.ifHolds()), standing(said.ifDenied()));
     }
 
     /** How many code points the argument {@code subject} names holds, or null where it names no
