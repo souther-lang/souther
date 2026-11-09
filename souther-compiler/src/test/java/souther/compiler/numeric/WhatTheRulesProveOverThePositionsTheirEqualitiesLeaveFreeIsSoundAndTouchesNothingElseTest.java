@@ -88,6 +88,16 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
         };
     }
 
+    /** Whether {@code at} satisfies every rule; a loop, since this is asked of every point of the box. */
+    private static boolean everyRuleHolds(List<Row> rules, int[] at) {
+        for (Row rule : rules) {
+            if (!holds(rule, at)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Whether some point of the box satisfies every rule and breaks the goal. */
     private static boolean breaks(List<Row> rules, Row goal) {
         int[] at = new int[ATOMS];
@@ -95,7 +105,7 @@ class WhatTheRulesProveOverThePositionsTheirEqualitiesLeaveFreeIsSoundAndTouches
             for (at[1] = -BOX; at[1] <= BOX; at[1]++) {
                 for (at[2] = -BOX; at[2] <= BOX; at[2]++) {
                     for (at[3] = -BOX; at[3] <= BOX; at[3]++) {
-                        if (rules.stream().allMatch(rule -> holds(rule, at)) && !holds(goal, at)) {
+                        if (!holds(goal, at) && everyRuleHolds(rules, at)) {
                             return true;
                         }
                     }
