@@ -1541,15 +1541,14 @@ public final class InputNumber {
     private static TermPath lookedUpBy(Core step, BindingId accumulator, BindingId value,
                                        BindingId key, Following names, InputReads reads,
                                        RuleReadingSource source) {
-        List<Core> sum = WrittenOperation.operandsOf(followed(step, names), BinOp.ADD,
-                source.symbols());
+        List<Core> sum = WrittenOperation.operandsOf(followed(step, names), BinOp.ADD);
         if (sum == null) {
             return null;
         }
         Core added = isTheName(sum.get(0), accumulator, names) ? sum.get(1)
                 : isTheName(sum.get(1), accumulator, names) ? sum.get(0) : null;
         List<Core> product = added == null ? null
-                : WrittenOperation.operandsOf(followed(added, names), BinOp.MUL, source.symbols());
+                : WrittenOperation.operandsOf(followed(added, names), BinOp.MUL);
         if (product == null) {
             return null;
         }
@@ -1572,9 +1571,9 @@ public final class InputNumber {
                 || !isTheName(some.body(), some.binding().binder().binding(), names)
                 || !(AnOperationApplied.of(followed(option.scrutinee(), names))
                         instanceof AnOperationApplied get)
-                || !GET.equals(get.operation()) || get.args().size() != 2
-                || !isTheName(get.args().get(0), key, names)
-                || !(followed(get.args().get(1), names) instanceof Core.Read map)) {
+                || !(get.lookup() instanceof AnOperationApplied.Lookup lookup)
+                || !isTheName(lookup.key(), key, names)
+                || !(followed(lookup.container(), names) instanceof Core.Read map)) {
             return null;
         }
         return reads.forkedOn(map, source.newtypes()) instanceof PathResolution.At(TermPath at)
@@ -1605,8 +1604,6 @@ public final class InputNumber {
                 && first.value() == second.value() && first.key().equals(second.key())
                 ? first.value() : null;
     }
-
-    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
 
     /**
      * How many values {@code run}, one no single container holds, holds — or null where it is
@@ -1648,8 +1645,7 @@ public final class InputNumber {
      * number of each taken and then summed, come to one total, and filed under one name a reader
      * is told it once.
      */
-    public static final ValueName.Stdlib.Operation SUM =
-            ValueName.Stdlib.operation("List", "sum");
+    public static final ValueName.Stdlib SUM = DefaultBoundOperationFacts.get().totalOf();
 
     /**
      * What the closure the elements of a list a dependency answered were handed to computes of one

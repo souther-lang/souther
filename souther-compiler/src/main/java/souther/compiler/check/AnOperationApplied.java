@@ -67,6 +67,154 @@ public record AnOperationApplied(ValueName operation, List<Core> args) {
         return DefaultBoundOperationFacts.get().putsListsEndToEnd(operation);
     }
 
+    /**
+     * Whether its answer is a sign that states which of its two arguments is the greater, and
+     * nought that they are equal ({@link BoundOperationFact.StatesTheOrderOfItsArguments}).
+     */
+    public boolean ordersItsTwoArguments() {
+        return args.size() == 2
+                && DefaultBoundOperationFacts.get().statesTheOrderOfItsArguments(operation) != null;
+    }
+
+    /** What an operation that answers a closure's answer on what an option holds is handed. */
+    public record Mapped(Core option, Core closure) {}
+
+    /**
+     * What it is handed where it answers the closure's answer on what an option holds, and holds
+     * a value exactly where the option does, or null where it does not — as the library declares
+     * it ({@link BoundOperationFact.AnswersTheClosureOnWhatItHolds}).
+     */
+    public Mapped mapsAnOption() {
+        BoundOperationFacts.ClosureOnWhatItHolds declared =
+                DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation);
+        Core option = declared == null ? null : argument(declared.option());
+        Core closure = declared == null ? null : argument(declared.closure());
+        return option == null || closure == null ? null : new Mapped(option, closure);
+    }
+
+    /**
+     * What it asks whether it holds nothing of, where it is an emptiness check, or null where it
+     * is not — as the library declares it ({@link BoundOperationFact.MeansTheSameAsASizeOfNought}).
+     */
+    public Core whoseEmptinessItAsks() {
+        BoundOperationFact.MeansTheSameAsASizeOfNought declared =
+                DefaultBoundOperationFacts.get().meansTheSameAsASizeOfNought(operation);
+        return declared == null ? null : argument(declared.of());
+    }
+
+    /** What a lookup is handed: the key the value is looked up under and the container that files
+     *  it. */
+    public record Lookup(Core key, Core container) {}
+
+    /**
+     * What it is handed where it looks a value up under a key, or null where the operation is no
+     * lookup — as the library declares it ({@link BoundOperationFact.AnswersTheValueFiledUnder}).
+     */
+    public Lookup lookup() {
+        BoundOperationFacts.Lookup declared = DefaultBoundOperationFacts.get().looksUp(operation);
+        Core key = declared == null ? null : argument(declared.key());
+        Core container = declared == null ? null : argument(declared.container());
+        return key == null || container == null ? null : new Lookup(key, container);
+    }
+
+    /**
+     * What a search for a member is handed: what is looked for, the container it is looked for in,
+     * and whether it is a key of a map that is looked for and not an element.
+     */
+    public record Searched(Core member, Core container, boolean aKey) {}
+
+    /**
+     * What it looks for and where, where it looks a value up under a key or asks whether a
+     * container holds a member, or null where it does neither — as the library declares it
+     * ({@link BoundOperationFact.AnswersTheValueFiledUnder},
+     * {@link BoundOperationFact.AnswersWhetherItHolds}).
+     */
+    public Searched searches() {
+        Lookup lookup = lookup();
+        if (lookup != null) {
+            return new Searched(lookup.key(), lookup.container(), true);
+        }
+        BoundOperationFacts.Membership declared =
+                DefaultBoundOperationFacts.get().holdsAMember(operation);
+        Core member = declared == null ? null : argument(declared.member());
+        Core container = declared == null ? null : argument(declared.container());
+        return member == null || container == null ? null
+                : new Searched(member, container, declared.aKey());
+    }
+
+    /** Whether it answers whether a container holds a member, as against looking a value up. */
+    public boolean asksWhetherItHolds() {
+        return DefaultBoundOperationFacts.get().holdsAMember(operation) != null;
+    }
+
+    /**
+     * The operator it computes, where the library declares it to answer what that operator does
+     * to its arguments and the language writes it as an operator too — or null where it does not.
+     */
+    public BinOp theOperatorItComputes() {
+        return DischargeRules.operator(operation);
+    }
+
+    /** What a run of whole numbers is handed: where it starts and where it ends. */
+    public record Between(Core from, Core to) {}
+
+    /**
+     * What it is handed where it answers every whole number from one to another, or null where it
+     * does not — as the library declares it ({@link BoundOperationFact.HoldsEachWholeNumberInTurn}).
+     */
+    public Between between() {
+        BoundOperationFacts.Between declared =
+                DefaultBoundOperationFacts.get().holdsEachWholeNumberInTurn(operation);
+        Core from = declared == null ? null : argument(declared.from());
+        Core to = declared == null ? null : argument(declared.to());
+        return from == null || to == null ? null : new Between(from, to);
+    }
+
+    /**
+     * The text whose code points it answers, each the number it is, or null where it answers no
+     * such list — as the library declares it ({@link BoundOperationFact.ListsTheCodePointsOf}).
+     */
+    public Core whoseCodePointsItLists() {
+        DeclaredArgument declared = DefaultBoundOperationFacts.get().codePointsListedOf(operation);
+        return declared == null ? null : argument(declared);
+    }
+
+    /** What a pick is handed: the place an element is picked at and the list it is picked from. */
+    public record Picked(Core index, Core list) {}
+
+    /**
+     * What it is handed where it picks the element of a list at a place, or null where it does
+     * not — as the library declares it ({@link BoundOperationFact.AnswersTheElementAt}).
+     */
+    public Picked picks() {
+        BoundOperationFacts.ElementAt declared =
+                DefaultBoundOperationFacts.get().elementAt(operation);
+        Core index = declared == null ? null : argument(declared.index());
+        Core list = declared == null ? null : argument(declared.list());
+        return index == null || list == null ? null : new Picked(index, list);
+    }
+
+    /** What a put under a key is handed: the key, the value filed under it, and the container it
+     *  is filed in. */
+    public record Put(Core key, Core value, Core into) {}
+
+    /**
+     * What it is handed where it files a value under a key in a container, or null where the
+     * operation puts nothing under a key — as the library declares it
+     * ({@link BoundOperationFact.PutsAValueIn}).
+     */
+    public Put put() {
+        BoundOperationFact.PutsAValueIn declared =
+                DefaultBoundOperationFacts.get().putsAValueIn(operation);
+        if (declared == null || declared.under().isEmpty()) {
+            return null;
+        }
+        Core key = argument(declared.under().get());
+        Core value = argument(declared.value());
+        Core into = argument(declared.into());
+        return key == null || value == null || into == null ? null : new Put(key, value, into);
+    }
+
     /** What it passes where {@code which} stands, or null where it passes nothing there. */
     public Core argument(DeclaredArgument which) {
         int at = CallArguments.positionOf(which, operation);

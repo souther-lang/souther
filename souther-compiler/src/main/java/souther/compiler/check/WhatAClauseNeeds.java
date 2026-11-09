@@ -4,12 +4,10 @@ import souther.compiler.core.Core;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
-import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Whether a clause cannot be true unless one part of it comes out a particular way: a lookup in a
@@ -29,14 +27,6 @@ import java.util.Set;
  * the clause states its opposite.
  */
 final class WhatAClauseNeeds {
-
-    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
-
-    /** The membership tests, which answer false where what is looked for is not there. */
-    private static final Set<ValueName> MEMBERSHIPS = Set.of(
-            ValueName.Stdlib.operation("Map", "containsKey"),
-            ValueName.Stdlib.operation("Set", "contains"),
-            ValueName.Stdlib.operation("List", "contains"));
 
     private enum Worked { FALSE, ABSENT, UNKNOWN }
 
@@ -99,20 +89,20 @@ final class WhatAClauseNeeds {
 
     /** What the lookup answers where it finds no member. */
     private static Worked answerOfNoMember(Core lookup) {
-        if (!(AnOperationApplied.of(lookup) instanceof AnOperationApplied(var operation, var _))) {
+        if (!(AnOperationApplied.of(lookup) instanceof AnOperationApplied applied)) {
             return Worked.UNKNOWN;
         }
-        if (MEMBERSHIPS.contains(operation)) {
+        if (applied.asksWhetherItHolds()) {
             return Worked.FALSE;
         }
-        return operation.equals(GET) ? Worked.ABSENT : Worked.UNKNOWN;
+        return applied.lookup() != null ? Worked.ABSENT : Worked.UNKNOWN;
     }
 
     /** {@code Option.map} of an absent option is absent. */
     private Worked workCall(Core.PreservedCall call) {
-        if (AnOperationApplied.of(call) instanceof AnOperationApplied(var operation, var args)
-                && operation.equals(ValueName.Stdlib.operation("Option", "map"))
-                && args.size() == 2 && work(args.get(1)) == Worked.ABSENT) {
+        if (AnOperationApplied.of(call) instanceof AnOperationApplied applied
+                && applied.mapsAnOption() instanceof AnOperationApplied.Mapped mapped
+                && work(mapped.option()) == Worked.ABSENT) {
             return Worked.ABSENT;
         }
         return Worked.UNKNOWN;

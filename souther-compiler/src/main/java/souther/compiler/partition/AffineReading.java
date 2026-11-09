@@ -9,6 +9,7 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.StatedComparison;
@@ -23,7 +24,6 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
-import souther.compiler.core.Kernel;
 import souther.compiler.inputs.DecimalAdditiveWalk;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.DecimalWork;
@@ -830,7 +830,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
                         || call.args().size() != 1
                         || !(call.operation() instanceof ValueName.Stdlib.Operation operation)
-                        || ruleSource.symbols().kernelOf(operation) != Kernel.LIST_LENGTH
+                        || NumericMeasures.counts(operation) != NumericMeasures.Counts.LIST
                         || !theListEndsOnlyWhereItHasNoPlace(
                                 new Denotation(call.args().get(0), at))) {
                     return false;
@@ -1815,8 +1815,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /** Whether {@code walk}'s step is the answer so far plus a whole number written out. */
             private boolean addsAWrittenWholeNumber(SeededWalk walk) {
-                List<Core> sum = WrittenOperation.operandsOf(walk.step().body(), BinOp.ADD,
-                        ruleSource.symbols());
+                List<Core> sum = WrittenOperation.operandsOf(walk.step().body(), BinOp.ADD);
                 BindingId carried = walk.accumulator().binding();
                 return sum != null && ((isTheAnswerSoFar(sum.get(0), carried)
                         && Core.withoutStanding(sum.get(1)) instanceof Core.Int)

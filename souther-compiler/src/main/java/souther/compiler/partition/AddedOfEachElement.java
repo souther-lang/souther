@@ -417,7 +417,7 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
         private Part partOf(Core e) {
             Core bare = Core.withoutStanding(e);
             for (BinOp op : List.of(BinOp.ADD, BinOp.SUB, BinOp.MUL)) {
-                List<Core> operands = WrittenOperation.operandsOf(bare, op, symbols);
+                List<Core> operands = WrittenOperation.operandsOf(bare, op);
                 if (operands != null) {
                     Part left = partOf(operands.get(0));
                     Part right = left == null ? null : partOf(operands.get(1));

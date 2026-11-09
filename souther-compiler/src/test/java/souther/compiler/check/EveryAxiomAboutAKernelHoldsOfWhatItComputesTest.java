@@ -78,6 +78,11 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
             if (facts.putsAValueIn(operation) instanceof BoundOperationFact.PutsAValueIn puts) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation, "puts a value in",
                         putsIn(puts.value().position(), puts.into().position())));
+                if (puts.under().isPresent()) {
+                    statements.add(new WhatTheLibraryComputes.Statement(operation,
+                            "files the value put in under " + puts.under().get().position(),
+                            filesUnder(puts.value().position(), puts.under().get().position())));
+                }
             }
             if (Combinators.listing(stdlib, facts, operation)
                     instanceof AppliedClosures.Listing listing) {
@@ -597,6 +602,14 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                         .denied(), false);
         return new LawProposition.All<>(List.of(compared(Rel.LE, -1, size(ANSWER),
                 size(at(into)).negate()), eachFromTheTwo));
+    }
+
+    /** Some element of the answer is the value at {@code value}, filed under the key at
+     *  {@code key}. */
+    private static LawProposition<Slot> filesUnder(int value, int key) {
+        return new LawProposition.SomeElement<>(new Slot.Answer(), new LawProposition.All<>(List.of(
+                same(new LawSubject.ElementOf<>(new Slot.Answer()), argument(value)),
+                same(new LawSubject.KeyOf<>(new Slot.Answer()), argument(key)))), true);
     }
 
     /** What an answer listing {@code listing} of an argument holds of it: every element of the

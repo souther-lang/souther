@@ -7,6 +7,7 @@ import souther.compiler.types.ValueName;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Which operations the library defines file one value under one key of a map and leave every other
@@ -21,7 +22,8 @@ import java.util.Map;
  * value filed under the key, where there is one; {@code Map.insert} files a value under a key in
  * place of what was there and changes no other key's value. So the answer holds, under the key, what
  * the closure made of the old value or the absent argument, and under every other key what it held
- * before.
+ * before. Which operations look a value up and which put one under a key, and at which arguments,
+ * is what the library declares of them ({@link Library#looksUp}, {@link Library#puts}).
  *
  * <p>Read off the body so that an operation written beside them in the library is read as the one it
  * is, whatever it is called.
@@ -38,18 +40,14 @@ public final class KeyedUpdates {
      */
     public record Update(int keyArg, int absentArg, int closureArg, int mapArg) {}
 
-    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
-
-    private static final ValueName.Stdlib.Operation INSERT =
-            ValueName.Stdlib.operation("Map", "insert");
-
     private KeyedUpdates() {}
 
-    /** The operations among {@code library}'s helpers that file one value under one key. */
-    public static Map<ValueName.Stdlib.Operation, Update> of(Stdlib library) {
+    /** The operations among {@code stdlib}'s helpers that file one value under one key, read as
+     *  {@code library} declares the operations they are written with. */
+    public static Map<ValueName.Stdlib.Operation, Update> of(Stdlib stdlib, Library library) {
         Map<ValueName.Stdlib.Operation, Update> updates = new LinkedHashMap<>();
-        library.helpers().forEach((operation, declaration) -> {
-            Update read = readOff(LibraryTerms.of(library, declaration));
+        stdlib.helpers().forEach((operation, declaration) -> {
+            Update read = readOff(LibraryTerms.of(stdlib, declaration), library);
             if (read != null) {
                 updates.put(operation, read);
             }
@@ -58,19 +56,18 @@ public final class KeyedUpdates {
     }
 
     /** The update {@code body} is, or null where it is none. */
-    private static Update readOff(LibraryTerm body) {
+    private static Update readOff(LibraryTerm body, Library library) {
         if (!(body instanceof LibraryTerm.OnAnOption(LibraryTerm option, BindingId found,
                 LibraryTerm present, LibraryTerm absent, var _))
                 || !(option instanceof LibraryTerm.Call(var looked, List<LibraryTerm> lookedAt))
-                || !looked.equals(GET) || lookedAt.size() != 2
-                || !(lookedAt.get(0) instanceof LibraryTerm.Parameter(int key))
-                || !(lookedAt.get(1) instanceof LibraryTerm.Parameter(int map))) {
+                || !(library.looksUp(looked) instanceof Library.Lookup lookup)
+                || !(lookedAt.get(lookup.key()) instanceof LibraryTerm.Parameter(int key))
+                || !(lookedAt.get(lookup.container()) instanceof LibraryTerm.Parameter(int map))) {
             return null;
         }
         // The key filed where the value was found, with what the closure made of the value found.
-        List<LibraryTerm> presented = insertedInto(present, key, map);
-        if (presented == null
-                || !(presented.get(1) instanceof LibraryTerm.Applied(
+        LibraryTerm presented = filedUnder(present, key, map, library);
+        if (!(presented instanceof LibraryTerm.Applied(
                         LibraryTerm function, List<LibraryTerm> appliedTo))
                 || !(function instanceof LibraryTerm.Parameter(int closure))
                 || appliedTo.size() != 1
@@ -79,22 +76,24 @@ public final class KeyedUpdates {
             return null;
         }
         // And filed where there was none, with the argument given for that case.
-        List<LibraryTerm> missing = insertedInto(absent, key, map);
-        if (missing == null || !(missing.get(1) instanceof LibraryTerm.Parameter(int whenAbsent))) {
-            return null;
-        }
-        return new Update(key, whenAbsent, closure, map);
+        return filedUnder(absent, key, map, library)
+                instanceof LibraryTerm.Parameter(int whenAbsent)
+                ? new Update(key, whenAbsent, closure, map) : null;
     }
 
     /**
-     * The arguments of {@code term}, where it files a value under the argument {@code key} of the
-     * map the argument {@code map} is — or null where it is anything else.
+     * The value {@code term} files under the argument {@code key} of the map the argument
+     * {@code map} is, where it is a put under a key — or null where it is anything else.
      */
-    private static List<LibraryTerm> insertedInto(LibraryTerm term, int key, int map) {
-        return term instanceof LibraryTerm.Call(var operation, List<LibraryTerm> args)
-                && operation.equals(INSERT) && args.size() == 3
-                && args.get(0) instanceof LibraryTerm.Parameter(int at) && at == key
-                && args.get(2) instanceof LibraryTerm.Parameter(int into) && into == map
-                ? args : null;
+    private static LibraryTerm filedUnder(LibraryTerm term, int key, int map, Library library) {
+        if (!(term instanceof LibraryTerm.Call(var operation, List<LibraryTerm> args))
+                || !(library.puts(operation) instanceof Library.Put(int value, int into,
+                        Optional<Integer> under))
+                || under.isEmpty()) {
+            return null;
+        }
+        return args.get(under.get()) instanceof LibraryTerm.Parameter(int at) && at == key
+                && args.get(into) instanceof LibraryTerm.Parameter(int held) && held == map
+                ? args.get(value) : null;
     }
 }

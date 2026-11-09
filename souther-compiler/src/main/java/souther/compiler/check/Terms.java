@@ -2459,8 +2459,7 @@ final class Terms {
         for (DischargeRules.KeptWhereItHolds kept = by == null || asked != AnswerAspect.TRUTH ? null
                 : keptBy(source); kept != null; kept = keptBy(source)) {
             Term both = interned.closureAnsweringBoth(bodyKey(kept.closure(), at), by);
-            Term handed = bodyKey(kept.source(), at);
-            if (both == null || handed == null) {
+            Term handed = bodyKey(kept.source(), at);            if (both == null || handed == null) {
                 break;
             }
             by = both;
@@ -2528,10 +2527,14 @@ final class Terms {
     }
 
     /** What {@code container} keeps of what it was handed and by what, where it is the answer of
-     *  an operation declared to keep the elements a closure holds of — and null where it is not. */
+     *  an operation declared to keep the elements a closure holds of, or the entries it holds of
+     *  the key and the value — and null where it is not. */
     private static DischargeRules.KeptWhereItHolds keptBy(Core container) {
-        return Core.withoutStanding(container) instanceof Core.PreservedCall call
-                ? DischargeRules.keptElements(call) : null;
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        DischargeRules.KeptWhereItHolds elements = DischargeRules.keptElements(call);
+        return elements != null ? elements : DischargeRules.keptEntries(call);
     }
 
     /** What a count of the elements that fall in a set of whole numbers is a count of: the

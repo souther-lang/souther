@@ -20,6 +20,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.UnaryOperator;
 
@@ -215,6 +216,39 @@ public final class WhereTheElementsCameFrom {
             for (Reading.Case each : reading.cases(reading.bodyOf(operation),
                     new Reading.Frame(params, Map.of()))) {
                 if (!building.keptWhereItHolds(each.is(), closure)) {
+                    return new LibraryProver.Outcome.Open(new Unproved.DoesNotFollow(
+                            Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
+                }
+            }
+            return new LibraryProver.Outcome.Proved(
+                    new Proof.ByWhatItsBodyBuilds(operation, reading.used()));
+        } catch (Reading.Stopped stopped) {
+            return LibraryProver.stoppedAt(stopped);
+        }
+    }
+
+    /**
+     * Whether {@code operation}'s answer holds the entries of its argument at {@code source} where
+     * the closure at {@code closure} holds of the key and the value, and no other: its body is a
+     * walk over those entries from nothing that, at each, puts that key with that value in where the
+     * closure holds of them and carries what it has where it does not.
+     *
+     * <p>Said of the entries, so the order they are walked in is no part of it, and a body that
+     * keeps the values the closure holds of but files them under other keys is not read.
+     */
+    public LibraryProver.Outcome keepsEntriesWhereItHolds(ValueName.Stdlib.Operation operation,
+                                                          int source, int closure) {
+        Reading reading = new Reading(library, readThrough);
+        try {
+            List<Value> params = new ArrayList<>();
+            for (int at = 0; at < library.takes(operation).size(); at++) {
+                params.add(new Value.Argument(at));
+            }
+            Building building = new Building(operation, new ElementLineage.Source<>(source, 1),
+                    reading);
+            for (Reading.Case each : reading.cases(reading.bodyOf(operation),
+                    new Reading.Frame(params, Map.of()))) {
+                if (!building.keptEntriesWhereItHolds(each.is(), closure)) {
                     return new LibraryProver.Outcome.Open(new Unproved.DoesNotFollow(
                             Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
                 }
@@ -468,6 +502,66 @@ public final class WhereTheElementsCameFrom {
             return true;
         }
 
+        /**
+         * Whether {@code run} is a walk over the source's entries from the first, started from
+         * nothing, every way of every step of which puts the entry it is handed — that key, filed
+         * with that value — where the closure at {@code closure} holds of the key and the value,
+         * and carries what it has where it does not.
+         *
+         * <p>The entry is put whole: a step that puts the value under another key, or another value
+         * under the key, keeps no entry of the source, though it keeps as many and each value is
+         * one of the source's.
+         */
+        boolean keptEntriesWhereItHolds(Value run, int closure) {
+            if (!(run instanceof Value.Made made) || !made.operation().equals(walk.operation())) {
+                return false;
+            }
+            List<Value> args = made.args();
+            if (!(args.get(walk.index()) instanceof Value.Whole(long from)) || from != 0
+                    || !empty(args.get(walk.seed()))
+                    || !(args.get(walk.container()) instanceof Value.Made(
+                            ValueName.Stdlib.Operation lists, List<Value> listed))
+                    || !(library.listing(lists) instanceof AppliedClosures.Listing.EveryEntryOf(
+                            int argument))
+                    || !listed.get(argument).equals(source)) {
+                return false;
+            }
+            reading.took(new Proof.Used(lists, Proof.Taken.WHAT_IT_LISTS));
+            Value carried = new Value.Fresh(1, "what the walk carries");
+            Value next = new Value.Fresh(3, "the entry the walk is handed next");
+            List<Value> handed = new ArrayList<>(List.of(next, next));
+            handed.set(walk.accumulator(), carried);
+            handed.set(walk.element(), next);
+            Value key = Reading.componentOf(next, 0);
+            Value value = Reading.componentOf(next, 1);
+            LawProposition<Value> holds = reading.side(
+                    new Value.AppliedTo(new Value.Argument(closure), List.of(key, value)),
+                    AnswerAspect.TRUTH);
+            for (Reading.Case each : reading.applied(args.get(walk.step()), handed)) {
+                boolean kept = each.when().equals(holds)
+                        ? putsTheEntry(each.is(), carried, key, value)
+                        : each.when().equals(holds.denied()) && each.is().equals(carried);
+                if (!kept) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** Whether {@code after} is {@code before} with {@code value} put in under {@code key},
+         *  and nothing else. */
+        private boolean putsTheEntry(Value after, Value before, Value key, Value value) {
+            if (!(after instanceof Value.Made(ValueName.Stdlib.Operation puts, List<Value> args))
+                    || !(library.puts(puts) instanceof Library.Put(int put, int into,
+                            Optional<Integer> under))
+                    || under.isEmpty()) {
+                return false;
+            }
+            reading.took(new Proof.Used(puts, Proof.Taken.WHAT_IT_PUTS_IN));
+            return args.get(into).equals(before) && args.get(put).equals(value)
+                    && args.get(under.get()).equals(key);
+        }
+
         /** Whether some case the body was read in may answer without an element of the source. */
         boolean leavesAnElementOut() {
             return leavesOut;
@@ -568,7 +662,7 @@ public final class WhereTheElementsCameFrom {
                 return one.getFirst();
             }
             if (after instanceof Value.Made(ValueName.Stdlib.Operation puts, List<Value> args)
-                    && library.puts(puts) instanceof Library.Put(int value, int into)
+                    && library.puts(puts) instanceof Library.Put(int value, int into, var _)
                     && args.get(into).equals(before)) {
                 reading.took(new Proof.Used(puts, Proof.Taken.WHAT_IT_PUTS_IN));
                 return args.get(value);
@@ -620,7 +714,7 @@ public final class WhereTheElementsCameFrom {
         private Accounts putOutsideAWalk(ValueName.Stdlib.Operation called, List<Value> args,
                                          ElementLineage<Integer> wanted) {
             if (!(wanted instanceof ElementLineage.OneOf<Integer>)
-                    || !(library.puts(called) instanceof Library.Put(int value, int into))
+                    || !(library.puts(called) instanceof Library.Put(int value, int into, var _))
                     || explained(args.get(into), wanted) == null) {
                 return null;
             }
@@ -710,10 +804,7 @@ public final class WhereTheElementsCameFrom {
                 return elements.isEmpty();
             }
             if (value instanceof Value.Made(ValueName.Stdlib.Operation made, var _)
-                    && library.settled(made, OperationLaw.Observed.EMPTINESS)
-                    instanceof Library.Settled.ByALaw(OperationLaw.Observation<Integer>(
-                            AnswerAspect aspect, LawProposition.Always<Integer>(boolean holds)))
-                    && aspect == AnswerAspect.EMPTINESS && !holds) {
+                    && library.answersNothing(made)) {
                 reading.took(Proof.Used.law(made, OperationLaw.Observed.EMPTINESS));
                 return true;
             }
