@@ -49,6 +49,19 @@ class AStopTurnsOnWhatDecidesWhetherItIsWorkedOutAsOnWhatItReadsTest {
                 inside(Set.of(RATES), Set.of(RATES, CURRENCY))));
     }
 
+    /** The relation is asked as a stop is, except of the containers it is inside of: the row it
+     *  is asked on holds the place's own containers to one entry. */
+    @Test
+    void theRelationTurnsOnWhatDecidesWhetherItIsWorkedOutButNotOnItsContainers() {
+        TermPath element = TermPath.of("holidays[*]");
+        assertTrue(UndividedByARelation.relationTurnsOn(CURRENCY,
+                inside(Set.of(RATES), Set.of(RATES, CURRENCY))));
+        assertFalse(UndividedByARelation.relationTurnsOn(element,
+                inside(Set.of(TermPath.of("holidays")), Set.of())));
+        assertTrue(UndividedByARelation.relationTurnsOn(element,
+                Pullback.WorkedOutWhere.ALWAYS.notSaid()));
+    }
+
     @Test
     void aStopInsideWhatIsNotSaidTurnsOnAnyPlace() {
         assertTrue(UndividedByARelation.stopTurnsOn(CURRENCY, Set.of(AMOUNT),

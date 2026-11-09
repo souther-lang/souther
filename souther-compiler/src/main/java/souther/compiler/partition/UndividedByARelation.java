@@ -4343,6 +4343,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return false;
             }
         }
+        if (relationTurnsOn(place, past.relationStands())) {
+            return false;
+        }
         for (OnAWay each : conditions) {
             Set<TermPath> turnsOn = new LinkedHashSet<>(each.positions());
             if (each.statedOfTheRun() != null) {
@@ -4403,6 +4406,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<TermPath> turnsOn = new LinkedHashSet<>(reads);
         turnsOn.addAll(where.turnsOn());
         return touchesAny(turnsOn, List.of(place)) || turnsOn.stream().anyMatch(place::bearsOn);
+    }
+
+    /**
+     * Whether the relation being worked out at all turns on the value at {@code place}: a row
+     * that gets to it with one value there may not with another. The containers it is worked out
+     * inside of are not what it turns on here, since a row that gets to it holds the containers of
+     * the place to one entry; what decides whether they hold the entry looked for is.
+     */
+    static boolean relationTurnsOn(TermPath place, Pullback.WorkedOutWhere stands) {
+        return stopTurnsOn(place, Set.of(),
+                new Pullback.WorkedOutWhere(List.of(), stands.decidedBy(), stands.known()));
     }
 
     /** Whether nothing a rule says relates {@code one} to {@code other} and neither lies within

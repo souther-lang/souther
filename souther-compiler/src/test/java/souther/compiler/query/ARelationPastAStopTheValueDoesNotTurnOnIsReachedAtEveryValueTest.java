@@ -166,6 +166,17 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
                     + List.length(total) }
             }
 
+            data Keyed = { currency: String, other: String, rates: Map<String, Int> }
+                invariant onlyX = List.all(k -> k == "x", Map.keys(rates))
+
+            behavior keyedRelation : (q: Keyed) -> Out
+            let keyedRelation (q) = {
+                let spread = Int.floorMod(100, String.length(q.other) - 2)
+                let found = Map.get(q.currency, q.rates)
+                    |> Option.map(rate -> q.currency == q.other)
+                Out { n = spread + (if Option.withDefault(false, found) then 1 else 0) }
+            }
+
             behavior passive : (p: Pass) -> Out
             let passive (p) = {
                 let spread = Map.get(p.currency, p.rates)
@@ -369,9 +380,16 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
 
         // A rule ties the way to the table: the way holds only where the table has a currency
         // whose rate stops the run, so no row holding the table empty is a row of the way.
-        assertNotEquals(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
+        assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE,
                 currencyOf(evidence, "passive").get("p.currency").reason(),
                 currencyOf(evidence, "passive").toString());
+
+        // The relation is worked out only where the lookup finds the currency, and the table
+        // holds no other: a row that gets to it at one currency does not at another, whatever
+        // the stop on the other string says.
+        assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                currencyOf(evidence, "keyedRelation").get("q.currency").reason(),
+                currencyOf(evidence, "keyedRelation").toString());
 
         // The stop reads the table as well, is worked out only where the table holds the currency
         // (which turns on its keys), a rule names the table, or the way decides by it.
