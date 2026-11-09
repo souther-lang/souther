@@ -97,7 +97,7 @@ public final class RowSearch {
                 // Its first value the boundary builds and nothing past it: another value of it is
                 // the same run, so none is built, and none is a figure the search stopped at.
                 Built first = firstBuilt(i, types, named, taken, standing, listing, reading,
-                        building);
+                        building, stopped);
                 if (first == null) {
                     return null;
                 }
@@ -124,35 +124,48 @@ public final class RowSearch {
      * The first value at {@code parameter} the boundary builds, going through what the model
      * names, what the rows took, what stands for the type and a list of one of what stands for its
      * element, each only as far as it takes to find one; or null where none is built.
+     *
+     * <p>No more than {@link #MOST_VALUES} are built in looking, which is the figure the values of
+     * a parameter are tried to: past it the figure is added to {@code stopped}, and there is
+     * nothing to say where one was found first.
      */
     private static Built firstBuilt(int parameter, List<Type> types,
                                     List<List<FixtureTemplate>> named,
                                     List<List<ObservedValue>> taken, IntFunction<Type> standing,
                                     IntFunction<Type> listing, RuleReadingContext reading,
-                                    Building building) {
+                                    Building building, Set<Figure> stopped) {
+        int[] left = {MOST_VALUES};
         List<FixtureTemplate> stage = new ArrayList<>(named.get(parameter));
-        Built built = firstOf(parameter, stage, building);
+        Built built = firstOf(parameter, stage, building, left, stopped);
         if (built == null) {
             stage = new ArrayList<>();
             takenAt(parameter, types.get(parameter), taken, reading, stage, new HashSet<>());
-            built = firstOf(parameter, stage, building);
+            built = firstOf(parameter, stage, building, left, stopped);
         }
         if (built == null) {
             built = firstOf(parameter, List.copyOf(
                     Partitions.representativesOf(standing.apply(parameter), reading).values()),
-                    building);
+                    building, left, stopped);
         }
         if (built == null) {
             stage = new ArrayList<>();
             addListsOf(listing.apply(parameter), reading, stage);
-            built = firstOf(parameter, stage, building);
+            built = firstOf(parameter, stage, building, left, stopped);
         }
         return built;
     }
 
+    /** The first of {@code candidates} the boundary builds, spending from {@code left} one for
+     *  each it is asked to build; null where none is built or {@code left} ran out, which is said
+     *  as the figure. */
     private static Built firstOf(int parameter, List<FixtureTemplate> candidates,
-                                 Building building) {
+                                 Building building, int[] left, Set<Figure> stopped) {
         for (FixtureTemplate one : candidates) {
+            if (left[0] <= 0) {
+                stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+                return null;
+            }
+            left[0]--;
             Optional<ObservedValue> value = building.build(parameter, one);
             if (value.isPresent()) {
                 return new Built(one, value.get());

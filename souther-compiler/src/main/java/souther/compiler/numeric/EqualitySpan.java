@@ -208,6 +208,9 @@ final class EqualitySpan<A> {
             toTry.sort(Comparator.comparingInt(each -> named.getOrDefault(each.getKey(), 0)));
             for (Map.Entry<A, ExactRatio> pivot : toTry) {
                 Solving<A> solving = solvedFor(pivot, walked, left.constant());
+                if (updates[0] < 0) {
+                    return Taken.OUT_OF_WORK;
+                }
                 if (solving != null) {
                     solvings.add(solving);
                     break;
@@ -217,18 +220,26 @@ final class EqualitySpan<A> {
         }
 
         /** {@code walked + constant} solved for {@code pivot}, or null where the weights cannot
-         *  be held divided by its. */
+         *  be held divided by its, or where the work ran out: every division is one of the weights
+         *  updated that {@link EqualitySpan#MOST_UPDATES} bounds, so what a position that cannot be solved for
+         *  costs is spent from the same work as reading the equalities is. */
         private Solving<A> solvedFor(Map.Entry<A, ExactRatio> pivot,
                                      List<Map.Entry<A, ExactRatio>> walked, ExactRatio constant) {
             Map<A, ExactRatio> rest = new LinkedHashMap<>();
             for (Map.Entry<A, ExactRatio> each : walked) {
                 if (!each.getKey().equals(pivot.getKey())) {
+                    if (--updates[0] < 0) {
+                        return null;
+                    }
                     ExactRatio scaled = each.getValue().dividedBy(pivot.getValue()).orNull();
                     if (scaled == null) {
                         return null;
                     }
                     rest.put(each.getKey(), scaled);
                 }
+            }
+            if (--updates[0] < 0) {
+                return null;
             }
             ExactRatio at = constant.negated().dividedBy(pivot.getValue()).orNull();
             return at == null ? null : new Solving<>(pivot.getKey(), rest, at);

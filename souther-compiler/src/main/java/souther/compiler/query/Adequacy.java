@@ -1194,8 +1194,7 @@ public final class Adequacy {
             ASearchForARow search = ASearchForARow.of(db, name, behavior, reaching);
             return Answer.of(search == null ? CountWitnesses.Sought.NOTHING
                     : CountWitnesses.of(count, behavior, search.read(), search.named(),
-                            search.taken(), search.building(), search.running(),
-                            search.unread()));
+                            search.taken(), search.building(), search.running()));
         }
     }
 

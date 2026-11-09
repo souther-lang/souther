@@ -115,6 +115,35 @@ class AParameterARunDoesNotTurnOnIsTriedAtItsFirstValueAloneTest {
         assertEquals(1, stopped.size(), "the one parameter that can decide was cut at its figure");
     }
 
+    /**
+     * Looking for the first value that builds is bounded by the figure the values of a parameter
+     * are tried to: where none is built by then the figure is said, and where one is built before
+     * it nothing is.
+     */
+    @Test
+    void lookingForTheFirstValueThatBuildsIsBoundedAndSaysWhereItStopped() {
+        int[] built = new int[3];
+        Set<Figure> stopped = new HashSet<>();
+
+        List<List<RowSearch.Built>> none = triedWith(at -> at == 1, RowSearch.MOST_VALUES + 50,
+                (at, fixture) -> {
+                    built[at]++;
+                    return at == 1 ? Optional.empty()
+                            : Optional.of(new ObservedValue.Text(fixture.text()));
+                }, stopped);
+
+        assertEquals(null, none, "no value of the parameter is built");
+        assertEquals(RowSearch.MOST_VALUES, built[1], "the figure and no more are built");
+        assertTrue(stopped.contains(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure()));
+
+        List<List<RowSearch.Built>> some = triedWith(at -> at == 1, 4,
+                (at, fixture) -> at == 1 && !fixture.equals(FixtureTemplate.string("v3"))
+                        ? Optional.empty()
+                        : Optional.of(new ObservedValue.Text(fixture.text())), new HashSet<>());
+
+        assertEquals(FixtureTemplate.string("v3"), some.get(1).getFirst().fixture());
+    }
+
     /** The first value that does not build is passed over for the next that does. */
     @Test
     void aParameterTheRunDoesNotTurnOnIsTriedWithTheFirstValueThatBuilds() {

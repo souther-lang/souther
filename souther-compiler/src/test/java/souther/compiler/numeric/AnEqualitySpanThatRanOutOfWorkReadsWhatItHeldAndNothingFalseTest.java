@@ -57,9 +57,54 @@ class AnEqualitySpanThatRanOutOfWorkReadsWhatItHeldAndNothingFalseTest {
         }
         sum.values().removeIf(ExactRatio::isZero);
         if (sum.isEmpty()) {
-            return new EqualitySpan.Residue<>(Map.of(), constant.negated());
+            return new EqualitySpan.Residue<>(Map.of(), constant);
         }
-        return span.residue(new CanonicalForm<>(sum), constant.negated());
+        return span.residue(new CanonicalForm<>(sum), constant);
+    }
+
+    private static AffineConstraint<String> pinned(String position, int at) {
+        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(position, ExactRatio.ONE);
+        return new AffineConstraint.Equality<>(new CanonicalForm<>(coefs), ExactRatio.of(at));
+    }
+
+    /** The oracle itself: {@code x = 2} and {@code y = 3} make {@code x + y - 5} nothing and
+     *  {@code x + y + 5} something, so a sum read with its constant the wrong way round would show
+     *  nothing true and every property over it would hold by there being nothing to find. */
+    @Test
+    void aSumOfEqualitiesIsNothingAtTheConstantTheyComeToAndNotAtItsNegation() {
+        List<AffineConstraint<String>> two = List.of(pinned("x", 2), pinned("y", 3));
+        EqualitySpan<String> span = EqualitySpan.of(two, CanonicalOrder.asTheyAreSpelled());
+
+        assertTrue(nothing(readAsTheSumOf(span, two)));
+        Map<String, ExactRatio> both = new LinkedHashMap<>();
+        both.put("x", ExactRatio.ONE);
+        both.put("y", ExactRatio.ONE);
+        assertTrue(!nothing(span.residue(new CanonicalForm<>(both), ExactRatio.of(5))),
+                "x + y + 5 is not what x = 2 and y = 3 make nothing");
+    }
+
+    /**
+     * An equality no position of which can be solved for costs the work it is given and no more:
+     * weights of two sizes too far apart to divide one by another make every position fail, and
+     * trying them is counted with the rest, so a set of such equalities is not more work than the
+     * span may spend however wide they are.
+     */
+    @Test
+    void tryingEveryPositionOfAnEqualityNoPositionCanBeSolvedForIsCountedAsWork() {
+        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+        for (int i = 0; i < 200; i++) {
+            coefs.put("p" + i, ExactRatio.tenTo(i % 2 == 0 ? Long.MIN_VALUE : Long.MAX_VALUE));
+        }
+        List<AffineConstraint<String>> rules = List.of(
+                new AffineConstraint.Equality<>(new CanonicalForm<>(coefs), ExactRatio.ZERO),
+                pinned("x", 2));
+
+        EqualitySpan<String> plenty = EqualitySpan.of(rules, CanonicalOrder.asTheyAreSpelled());
+        EqualitySpan<String> short_ = EqualitySpan.of(rules, CanonicalOrder.asTheyAreSpelled(), 50);
+
+        assertTrue(plenty != null, "left out and the next equality read, where the work suffices");
+        assertEquals(null, short_, "nothing is read where trying the positions spent the work");
     }
 
     /**

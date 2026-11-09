@@ -2268,8 +2268,7 @@ final class ReadQuantities implements Quantities {
         asked.add(term);
         asked.addAll(alongside);
         had = asking(asked) instanceof StructuralContext.Merge.Together(StructuralContext under)
-                ? across(eitherWay(under, asked),
-                        each -> runsIn(each, form, true, List.copyOf(alongside)))
+                ? acrossTheGroups(under, form, true, List.copyOf(alongside))
                 : projectionOf(form, true);
         projections.put(question, had);
         return had;
@@ -2306,8 +2305,7 @@ final class ReadQuantities implements Quantities {
         // with what was taken in, no row gives the form a value, and it runs nowhere.
         return switch (asking(form.coefs().keySet())) {
             case StructuralContext.Merge.Together(StructuralContext under) ->
-                    across(eitherWay(under, form.coefs().keySet()),
-                            each -> runsIn(each, form, andTheDeclared, List.of()));
+                    acrossTheGroups(under, form, andTheDeclared, List.of());
             case StructuralContext.Merge.Disagreeing _ ->
                     new NumericDomain.FormProjection.NothingIsLeft();
         };
@@ -2367,48 +2365,134 @@ final class ReadQuantities implements Quantities {
      */
     private List<OpenGroup> openContainersByPart(StructuralContext under,
                                                  Collection<NumericTerm> terms) {
+        return partsOf(under, terms).groups();
+    }
+
+    /** The groups the containers {@code under} says nothing of are kept in, for a question over
+     *  {@code terms}. */
+    private Parts partsOf(StructuralContext under, Collection<NumericTerm> terms) {
         NumericDomain<InputAtom> numbers = effectiveConstraints(under).numbers();
         List<NumericTerm> every = new ArrayList<>(terms);
         every.addAll(fixed.keySet());
         assumed.forEach(each -> every.addAll(each.terms()));
         Set<NumericTerm> asked = new HashSet<>(terms);
-        Map<Object, Object> joined = new HashMap<>();
         Set<TermPath> containers = new LinkedHashSet<>();
-        Set<Object> askedKeys = new HashSet<>();
+        Parts parts = new Parts();
         for (NumericTerm each : every) {
             Object part = null;
             if (stands(Set.of(each), under)) {
                 int at = numbers.partOf(called(each, under));
                 part = at < 0 ? each : (Object) at;
+                parts.partOf.put(each, part);
             }
             TermPath walked = each.walkedOver();
             boolean opens = walked != null && !under.says(walked);
             if (part != null && asked.contains(each)) {
-                askedKeys.add(part);
+                parts.askedKeys.add(part);
             }
             if (opens) {
                 containers.add(walked);
                 if (asked.contains(each)) {
-                    askedKeys.add(walked);
+                    parts.askedKeys.add(walked);
                 }
                 if (part != null) {
-                    join(joined, walked, part);
+                    join(parts.joined, walked, part);
                 }
             }
         }
-        Map<Object, List<TermPath>> groups = new LinkedHashMap<>();
         for (TermPath container : containers) {
-            groups.computeIfAbsent(rootOf(joined, container), _ -> new ArrayList<>())
+            parts.held.computeIfAbsent(rootOf(parts.joined, container), _ -> new ArrayList<>())
                     .add(container);
         }
-        Set<Object> reached = new HashSet<>();
-        for (Object key : askedKeys) {
-            reached.add(rootOf(joined, key));
+        return parts;
+    }
+
+    /**
+     * The groups the containers of a question are kept in, and which group each number is in.
+     *
+     * <p>A number is in the group of the part of the rules that weighs it and of the containers
+     * that numbers of the part walk; a number no rule weighs is in a group of its own. The
+     * question over a form is the sum of the questions over the pieces of it that are in one group
+     * each, and an emptiness is shown by any group.
+     */
+    private static final class Parts {
+
+        /** The part of the rules that weighs each number, or the number itself where none does. */
+        private final Map<NumericTerm, Object> partOf = new HashMap<>();
+        private final Map<Object, Object> joined = new HashMap<>();
+        private final Map<Object, List<TermPath>> held = new LinkedHashMap<>();
+        private final Set<Object> askedKeys = new HashSet<>();
+
+        private Parts() {}
+
+        /** What the group of {@code term} is called by. */
+        Object keyOf(NumericTerm term) {
+            Object part = partOf.get(term);
+            return part == null ? term : rootOf(joined, part);
         }
-        List<OpenGroup> out = new ArrayList<>();
-        groups.forEach((root, held) -> out.add(new OpenGroup(List.copyOf(held),
-                reached.contains(root))));
-        return out;
+
+        /** The containers of the group called {@code key}, the terms' own first. */
+        List<TermPath> containersOf(Object key) {
+            return held.getOrDefault(key, List.of());
+        }
+
+        List<OpenGroup> groups() {
+            Set<Object> reached = new HashSet<>();
+            for (Object key : askedKeys) {
+                reached.add(rootOf(joined, key));
+            }
+            List<OpenGroup> out = new ArrayList<>();
+            held.forEach((root, containers) -> out.add(new OpenGroup(List.copyOf(containers),
+                    reached.contains(root))));
+            return out;
+        }
+    }
+
+    /**
+     * What a form runs between, asked of each group its numbers are in by itself and added up.
+     *
+     * <p>The form is the sum of its pieces, one for each group, and what the rules leave a piece
+     * does not turn on how any other group's containers hold: the part of the rules that weighs it
+     * is not the others', and no number of it walks a container of another group. The pieces'
+     * ranges therefore add to what the form runs between, where asked of every combination of how
+     * the groups' containers hold they would be as many as two to the power of all of them. Each
+     * group is asked of {@link #MOST_CONTAINERS_ASKED_BOTH_WAYS} of its containers each way at most.
+     *
+     * <p>Where nothing is left for one piece there is nothing left for the form. A sum of ranges
+     * no number can be written for is left open on that side, which is wider and never narrower.
+     */
+    private NumericDomain.FormProjection acrossTheGroups(
+            StructuralContext under, LinearForm<NumericTerm> form, boolean andTheDeclared,
+            List<NumericTerm> alongside) {
+        Set<NumericTerm> asked = new LinkedHashSet<>(form.coefs().keySet());
+        asked.addAll(alongside);
+        Parts parts = partsOf(under, asked);
+        Map<Object, Map<NumericTerm, ExactRatio>> pieces = new LinkedHashMap<>();
+        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
+            pieces.computeIfAbsent(parts.keyOf(term), _ -> new LinkedHashMap<>())
+                    .put(term, form.coefs().get(term));
+        }
+        NumericDomain.Bounds total = null;
+        boolean first = true;
+        for (Map.Entry<Object, Map<NumericTerm, ExactRatio>> piece : pieces.entrySet()) {
+            LinearForm<NumericTerm> own = new LinearForm<>(
+                    first ? form.constant() : ExactRatio.ZERO, piece.getValue());
+            first = false;
+            List<StructuralContext> ways = holdingEachWay(under, parts.containersOf(piece.getKey())
+                    .stream().limit(MOST_CONTAINERS_ASKED_BOTH_WAYS).toList());
+            if (!(across(ways, each -> runsIn(each, own, andTheDeclared, alongside))
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within))) {
+                return new NumericDomain.FormProjection.NothingIsLeft();
+            }
+            if (total == null) {
+                total = within;
+            } else {
+                NumericDomain.Bounds added = total.plus(within);
+                total = added == null ? NumericDomain.Bounds.OPEN : added;
+            }
+        }
+        return new NumericDomain.FormProjection.Within(
+                total == null ? NumericDomain.Bounds.OPEN : total);
     }
 
     /** One group of {@code a} and {@code b}, in {@code joined}. */

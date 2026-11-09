@@ -109,13 +109,10 @@ public final class CountWitnesses {
      * @param taken what each row written for the behavior took, one value per parameter, as its
      *              run held it: tried next, each written back from what was built, and the
      *              elements of the container among them tried before what stands for the element
-     * @param parametersTheBodyDoesNotRead the parameters a run does not turn on, each tried with
-     *              its first value alone; never the container, which the count is of
      */
     public static Sought of(Quantity.HowManyMeet count, String behavior, InputReading read,
                             List<List<FixtureTemplate>> named, List<List<ObservedValue>> taken,
-                            RowSearch.Building building, RowSearch.Running running,
-                            Set<String> parametersTheBodyDoesNotRead) {
+                            RowSearch.Building building, RowSearch.Running running) {
         if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
                 || !container.steps().isEmpty()
                 || !read.domain().holdsAnElementOverAgain(container, read.rules())) {
@@ -135,10 +132,11 @@ public final class CountWitnesses {
         Set<WhereARunStopped> runs = new LinkedHashSet<>();
         // What each parameter may hold, as far as the boundary builds it: the container as what
         // stands for a list of its element, which the elements tried below take the place of.
+        // Every parameter is tried at all its values: what the statement counted turns on may name
+        // a parameter the body does not read, and no one has said which are named.
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
                 i -> i == at ? Type.list(element) : inputs.types().get(i), _ -> null,
-                i -> i != at && parametersTheBodyDoesNotRead.contains(inputs.parameters().get(i)),
-                reading, building, stopped);
+                _ -> false, reading, building, stopped);
         if (each == null) {
             return new Sought(Optional.empty(), stopped, runs);
         }
