@@ -197,16 +197,22 @@ public final class ReachWitnesses {
          *
          * <p>Every kind of term is named here, so a kind added is one this has to decide about. A
          * number answered by one position is one for each element of the containers the position
-         * is inside, and a number taken over a run of values is one for the row. The others are
-         * read of an element among its neighbours, or of the values under a key, and which
-         * elements a row's numbers are read across for them is not settled here.
+         * is inside, and a number taken over a run of values is one for the row, where the run is
+         * not inside an element of another container. The others are read of an element among its
+         * neighbours, or of the values under a key, and which elements a row's numbers are read
+         * across for them is not settled here.
          */
         private static Reading numbersAt(NumericTerm term, BorderQuantity.Observation row,
                                          InputReading read) {
             Optional<Across> across = switch (term) {
                 case NumericTerm.FromOnePosition one -> Optional.of(
                         new Across(one.position(), one.position().containersHoldingIt()));
-                case NumericTerm.TakenOver _ -> Optional.of(new Across(null, List.of()));
+                // One for the row where the run's outermost container is no element's: a run
+                // inside an element of another is one number for each element of it, which
+                // reading the row as a whole does not give.
+                case NumericTerm.TakenOver over -> over.walkedOver() != null
+                        && over.walkedOver().insideAContainer() ? Optional.empty()
+                        : Optional.of(new Across(null, List.of()));
                 case NumericTerm.OfAnElementsNeighbours _, NumericTerm.OccurrencesOfItsValue _,
                      NumericTerm.OccurrencesOfAKey _, NumericTerm.GatheredUnderItsKey _,
                      NumericTerm.GatheredUnderAKey _, NumericTerm.ProductOf _ -> Optional.empty();

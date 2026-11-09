@@ -245,12 +245,11 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
     }
 
     /**
-     * A relation among counts of one container, with nothing beside it that the container is
-     * composed for, is a group nothing here writes a row for: it says so, as every other group
-     * does, and tells no value for the places it leaves.
+     * A relation among counts of one container that nothing else asks counts beside is measured
+     * as any other is, and no row got to it, so no value is told for the places it leaves.
      */
     @Test
-    void aRelationAmongCountsAloneIsAGroupNothingSolvesAndNoValueIsToldForIt() {
+    void aRelationAmongCountsAskedAloneIsMeasuredAndNoValueIsToldForIt() {
         Compilation compilation = onTheDay(UNSEEDED);
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =

@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1191,11 +1190,8 @@ public final class StandingAtAPoint {
         /** How many elements each container was found to hold, in the order the walk met them,
          *  which is the order the readings are taken in. */
         private final Map<TermPath, Integer> containers = new LinkedHashMap<>();
-        /** The quantities looked at, by identity first: the same quantity is asked for by every
-         *  statement holding it, and what it costs to tell two equal ones apart is only paid for a
-         *  quantity not yet seen as an object. */
-        private final Set<LinearQuantity> lookedAtObjects =
-                Collections.newSetFromMap(new IdentityHashMap<>());
+        /** The quantities looked at: the same quantity is asked for by every statement holding
+         *  it. */
         private final Set<LinearQuantity> lookedAt = new HashSet<>();
 
         DiscoveringRow(RowWalk walk) {
@@ -1204,7 +1200,7 @@ public final class StandingAtAPoint {
 
         @Override
         public boolean firstLookAt(LinearQuantity quantity) {
-            return lookedAtObjects.add(quantity) && lookedAt.add(quantity);
+            return lookedAt.add(quantity);
         }
 
         @Override

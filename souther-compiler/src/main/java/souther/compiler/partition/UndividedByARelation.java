@@ -4330,7 +4330,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     .map(row -> row.toldAt(at, lookedForAt(at), read))
                     .map(told -> told instanceof ReachWitnesses.Told.Shown(List<String> values)
                             ? values : null)
-                    .orElse(null);            // Where no row got there, the figures the search stopped at and the places the runs of
+                    .orElse(null);
+            // Where no row got there, the figures the search stopped at and the places the runs of
             // the rows tried stopped are said at every place the relation compares, as what was
             // not shown is.
             if (written != null || !sought.runsStopped().isEmpty()
