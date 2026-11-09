@@ -91,6 +91,18 @@ class AGuardTyingWhatIsTakenOfTwoValuesIsComposedTest {
         }
     }
 
+    /**
+     * One element holds one value, so what is taken of it at two places is taken of one value: a
+     * date whose day is 5 and whose month is 3 is composed as a date, not as a day and a month.
+     */
+    @Test
+    void numbersTakenOfOneValueAreComposedForTheOneValue() {
+        assertEquals(List.of(), whatNothingCouldShow("List.length(List.filter(d -> "
+                + "Date.day(d.on) == 5 && Date.month(d.on) == 3, deals)) == 1"));
+        assertEquals(List.of(), whatNothingCouldShow("List.length(List.filter(d -> "
+                + "String.length(d.currency) == 3 && Date.year(d.on) == 1990, deals)) == 2"));
+    }
+
     /** The rules of the decision no search could settle. */
     private static List<DecisionRule> whatNothingCouldShow(String guard) {
         return DecisionRulesTheSearchLeftUnsettled.notShownIn(DEALS.replace("GUARD", guard),

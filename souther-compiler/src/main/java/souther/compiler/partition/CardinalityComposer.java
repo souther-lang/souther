@@ -1188,9 +1188,10 @@ final class CardinalityComposer {
      *
      * <p>A statement over what is taken of a value turns at a number of that, which is no place of
      * the value's own order, so the places above never name a value that meets it. What names one
-     * is what builds a value for that number ({@link TermRealizations#at}), asked at each place the
-     * statements turn at, and read through the bare type: the value comes back as the template
-     * {@link FixtureTemplate#on} writes, which {@link FixtureTemplate#observed} reads.
+     * is what builds a value for the numbers taken of one place together
+     * ({@link TermRealizations#jointRealizationOf}), asked at each place the statements turn at and
+     * read through the bare type: the value comes back as the template {@link FixtureTemplate#on}
+     * writes, which {@link FixtureTemplate#observed} reads.
      */
     private static List<ObservedValue> whereWhatIsTakenTurns(
             TermPath at, TypeView view, List<Asked> asked, Quantities measuring,
@@ -1207,35 +1208,72 @@ final class CardinalityComposer {
                 }
             }
         }
-        Type bare = TypeOps.base(view.declared(), reading.source().inners());
-        List<ObservedValue> out = new ArrayList<>();
+        // The places each number turns at, and the order it is answered on.
+        Map<NumericTerm, List<Place>> turns = new LinkedHashMap<>();
+        Map<NumericTerm, Carrier> answeredOn = new LinkedHashMap<>();
         for (NumericTerm number : taken) {
             TermOrders orders = measuring.ordersOf(number);
-            if (orders == null || orders.answered() == null) {
-                continue;
-            }
-            Set<ExactRatio> levels = new LinkedHashSet<>();
+            Set<Place> levels = new LinkedHashSet<>();
             for (Asked one : asked) {
-                List<ExactRatio> turns = one.turnsAt(number, beside);
-                if (turns != null) {
-                    levels.addAll(turns);
-                }
-            }
-            for (ExactRatio level : levels) {
-                if (Count.written(level) instanceof ExactAnswer.Held<Optional<Count>>(
-                        Optional<Count> written) && written.isPresent()
-                        && TermRealizations.at(bare, orders, written.get(), within, reading)
-                                instanceof TermRealizations.Realization.Built built) {
-                    for (FixtureTemplate each : built.values()) {
-                        ObservedValue value = each.observed();
-                        if (value != null && !out.contains(value)) {
-                            out.add(value);
-                        }
+                List<ExactRatio> where = one.turnsAt(number, beside);
+                for (ExactRatio level : where == null ? List.<ExactRatio>of() : where) {
+                    if (Count.written(level) instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> written) && written.isPresent()) {
+                        levels.add(written.get());
                     }
                 }
             }
+            if (orders != null && orders.answered() != null && !levels.isEmpty()) {
+                turns.put(number, List.copyOf(levels));
+                answeredOn.put(number, orders.answered());
+            }
+        }
+        Type bare = TypeOps.base(view.declared(), reading.source().inners());
+        List<ObservedValue> out = new ArrayList<>();
+        // One value answers every number taken of it at once, so what is built is a value for each
+        // choice of a place for each number, and the choices are walked no further than elements
+        // are composed with.
+        List<NumericTerm> numbers = List.copyOf(turns.keySet());
+        int[] choice = new int[numbers.size()];
+        for (int tried = 0; !numbers.isEmpty() && tried < MOST_ELEMENTS; tried++) {
+            SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
+            for (int each = 0; each < numbers.size(); each++) {
+                NumericTerm number = numbers.get(each);
+                Place place = turns.get(number).get(choice[each]);
+                demands.put(RealizationTarget.of(number),
+                        AskedAt.aNumberOutOf(new NumericSet.At(place), place,
+                                answeredOn.get(number)));
+            }
+            if (TermRealizations.jointRealizationOf(demands.keySet())
+                    instanceof TermRealizations.JointRealization.Supported(var builder)
+                    && builder.from(bare, List.of(), demands, measuring, within, reading,
+                            DemandsInside.NOTHING)
+                            instanceof TermRealizations.Realization.Built built) {
+                for (FixtureTemplate each : built.values()) {
+                    ObservedValue value = each.observed();
+                    if (value != null && !out.contains(value)) {
+                        out.add(value);
+                    }
+                }
+            }
+            if (!nextChoice(choice, numbers, turns)) {
+                break;
+            }
         }
         return out;
+    }
+
+    /** Steps {@code choice}, a place for each number, to the next of the choices; false where it
+     *  was the last. */
+    private static boolean nextChoice(int[] choice, List<NumericTerm> numbers,
+                                      Map<NumericTerm, List<Place>> turns) {
+        for (int each = 0; each < choice.length; each++) {
+            if (++choice[each] < turns.get(numbers.get(each)).size()) {
+                return true;
+            }
+            choice[each] = 0;
+        }
+        return false;
     }
 
     /**
