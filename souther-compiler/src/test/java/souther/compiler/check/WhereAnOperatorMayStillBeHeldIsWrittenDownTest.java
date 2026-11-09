@@ -361,9 +361,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Terms.asOperator",
                     "reads the operator an arithmetic meaning was keyed by"),
             new Held("souther.compiler.check.Terms.openedKey", "the same, for the term it keys"),
-            new Held("souther.compiler.check.Terms.relationsAmongTotals",
-                    "names the product two totals written multiplied are the atom of, which is"
-                            + " what a total over what both walk is equal to"),
+            new Held("souther.compiler.check.WhatATotalIsMadeOf.productOf",
+                    "asks whether a written value is a multiplication, which a total over what"
+                            + " several totals walk between them is equal to, however it was"
+                            + " grouped"),
+            new Held("souther.compiler.check.WhatATotalIsMadeOf.multiplied",
+                    "the same, for each factor of one"),
+            new Held("souther.compiler.check.WhatATotalIsMadeOf.lineIn",
+                    "reads the sum, the difference and the product by a written number a closure"
+                            + " answers as a line of what it is handed"),
             new Held("souther.compiler.check.Terms.recipeFor", "the same, for the recipe it names"),
             new Held("souther.compiler.check.NumericMeanings.of",
                     "keys an arithmetic meaning by the operator a library operation computes"),

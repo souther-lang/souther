@@ -171,9 +171,9 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             // stops at a step, so what is known of one is not known of the other.
             new Row("Digit(List.sum(xs) - List.fold((acc, n) -> acc + n, 0, xs))", true),
             // A total over the same elements in another order is the same number, and a total over
-            // an append is the two totals added. The library's sum and product hold only their
-            // answer to an Int and not each step, so the relation is among the numbers they answer
-            // and says nothing of a fold, nor of a product of two products (not a line).
+            // an append is the two totals added, or multiplied. The library's sum and product hold
+            // only their answer to an Int and not each step, so the relation is among the numbers
+            // they answer and says nothing of a fold.
             new Row("Digit(List.sum(List.reverse(xs)) - List.sum(xs))", false),
             new Row("Digit(List.sum(xs) - List.sum(List.sort(xs)))", false),
             new Row("Digit(List.sum(ys ++ xs) - List.sum(xs ++ ys))", false),
@@ -202,6 +202,54 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             new Row("Digit(List.sum(List.concat([xs, ys])) - List.sum(xs) - List.sum(ys) - 1)",
                     true),
             new Row("Digit(List.sum(List.reverse(xs)) - List.product(xs))", true),
+            new Row("Digit(List.sum(xs ++ []) - List.sum(xs))", false),
+            new Row("Digit(List.product(xs ++ ys ++ xs) "
+                    + "- List.product(xs) * List.product(xs) * List.product(ys))", false),
+            new Row("Digit(List.product(xs ++ ys ++ xs) - List.product(xs ++ ys) * List.product(xs))",
+                    false),
+            // What an element-wise call makes of each side of an append, or of a list in another
+            // order, is totalled the same way, and a total of a mapping by a line of the element is
+            // that line of the total.
+            new Row("Digit(List.sum(List.map(n -> n + 1, xs ++ ys)) "
+                    + "- List.sum(List.map(n -> n + 1, xs)) - List.sum(List.map(n -> n + 1, ys)))",
+                    false),
+            new Row("Digit(List.sum(List.map(n -> n + 1, List.reverse(xs))) "
+                    + "- List.sum(List.map(n -> n + 1, xs)))", false),
+            new Row("Digit(List.sum(List.map(n -> n + 1, xs ++ ys)) "
+                    + "- List.sum(List.map(n -> n + 2, xs)) - List.sum(List.map(n -> n + 1, ys)))",
+                    true),
+            new Row("Digit(List.sum(List.map(n -> n + 1, xs)) - List.sum(xs) - List.length(xs))",
+                    false),
+            new Row("Digit(List.sum(List.map(n -> n + 1, xs)) - List.sum(xs) - List.length(xs) - 1)",
+                    true),
+            new Row("Digit(List.sum(List.map(n -> n * 2, xs)) - 2 * List.sum(xs))", false),
+            new Row("Digit(List.sum(List.map(n -> n * 2, xs)) - 3 * List.sum(xs))", true),
+            new Row("Digit(List.sum(List.map(n -> 3 - n, xs)) - 3 * List.length(xs) + List.sum(xs))",
+                    false),
+            new Row("Digit(List.sum(List.map(n -> n * 2, xs ++ ys)) "
+                    + "- 2 * List.sum(xs) - 2 * List.sum(ys))", false),
+            // A list split into what holds each of its elements once is the total of what it is
+            // split into: a filter and the filter of its denial, a take and the drop of the same
+            // count, under what is done to each element.
+            new Row("Digit(List.sum(List.filter(n -> n > 2, xs)) "
+                    + "+ List.sum(List.filter(n -> n <= 2, xs)) - List.sum(xs))", false),
+            new Row("Digit(List.sum(List.filter(n -> n > 2, xs)) "
+                    + "+ List.sum(List.filter(n -> n <= 2, xs)) - List.sum(xs) - 1)", true),
+            new Row("Digit(List.sum(List.filter(n -> n > 2, xs)) "
+                    + "+ List.sum(List.filter(n -> n <= 3, xs)) - List.sum(xs))", true),
+            new Row("Digit(List.sum(List.take(3, xs)) + List.sum(List.drop(3, xs)) - List.sum(xs))",
+                    false),
+            new Row("Digit(List.sum(List.take(3, xs)) + List.sum(List.drop(4, xs)) - List.sum(xs))",
+                    true),
+            new Row("Digit(List.sum(List.map(n -> n * 2, List.filter(n -> n > 2, xs))) "
+                    + "+ List.sum(List.map(n -> n * 2, List.filter(n -> n <= 2, xs))) "
+                    + "- 2 * List.sum(xs))", false),
+            new Row("Digit(List.product(List.take(2, xs)) * List.product(List.drop(2, xs)) "
+                    + "- List.product(xs))", false),
+            new Row("Digit(List.product(List.filter(n -> n > 2, xs)) "
+                    + "* List.product(List.filter(n -> n <= 2, xs)) - List.product(xs))", false),
+            new Row("Digit(List.product(List.filter(n -> n > 2, xs)) "
+                    + "* List.product(List.filter(n -> n <= 3, xs)) - List.product(xs))", true),
             // A statement about how many an element holds is a statement over whole numbers like
             // any other: the elements that hold at least one are the elements that hold something,
             // and a sum of how many each holds is no less than the least each holds for as many

@@ -58,7 +58,7 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
             "Set.size(Set.intersection(a, b)) >= 1",
             "Set.size(Set.difference(a, b)) >= 1",
             "Set.contains(x, Set.difference(a, b))",
-            "List.any(ys -> List.length(ys) >= 2, xss)",
+            "List.any(zs -> List.length(zs) >= 2, xss)",
             "List.length(List.distinct(xs)) >= 2",
             "Map.size(List.groupBy(n -> n, xs)) >= 2",
             "List.sum(xs) >= 3",
@@ -98,13 +98,22 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
 
     /** The arguments a guard and a count are written over, read off the one input they are run
      *  with. */
-    private static final Pattern ARGUMENT = Pattern.compile("\\b(xss|xs|a|b|s|t|x)\\b(?![\"(])");
+    private static final Pattern ARGUMENT = Pattern.compile("\\b(xss|xs|ys|a|b|s|t|x)\\b(?![\"(])");
 
     private static final String INPUT = """
             module demo
 
             data In = { xs: List<Int>, xss: List<List<Int>>, a: Set<Int>, b: Set<Int>,
                         s: String, t: String, x: Int }
+
+            """;
+
+    /** What the totals are written over: two lists, since what a total is of one is not what it is
+     *  of another. */
+    private static final String INPUT_OF_TOTALS = """
+            module demo
+
+            data In = { xs: List<Int>, ys: List<Int> }
 
             """;
 
@@ -131,8 +140,8 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
         }
     }
 
-    private static String module(List<Row> rows) {
-        StringBuilder out = new StringBuilder(INPUT);
+    private static String module(List<Row> rows, String input) {
+        StringBuilder out = new StringBuilder(input);
         rows.forEach(each -> out.append(each.source()).append('\n'));
         return out.toString();
     }
@@ -171,6 +180,24 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
         return out;
     }
 
+    /** Two lists of small numbers, the second with some below nought, drawn the same way every
+     *  run. */
+    private static List<Map<String, Object>> inputsOfTotals(int count) {
+        Random random = new Random(3108);
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (int n = 0; n < count; n++) {
+            List<Long> ys = new ArrayList<>();
+            for (int each = random.nextInt(5); each > 0; each--) {
+                ys.add((long) random.nextInt(7) - 2);
+            }
+            Map<String, Object> in = new LinkedHashMap<>();
+            in.put("xs", ints(random, 4));
+            in.put("ys", ys);
+            out.add(in);
+        }
+        return out;
+    }
+
     /** What running {@code rows} over {@code inputs} came to, beside what the discharge said. */
     private record Judged(Set<String> owed, Set<String> broke) {
 
@@ -186,7 +213,12 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
     }
 
     private Judged judged(List<Row> rows, List<Map<String, Object>> inputs) throws Exception {
-        Compilation compilation = Compilation.ofSource(module(rows), "Main");
+        return judged(rows, inputs, INPUT);
+    }
+
+    private Judged judged(List<Row> rows, List<Map<String, Object>> inputs, String header)
+            throws Exception {
+        Compilation compilation = Compilation.ofSource(module(rows, header), "Main");
         compilation.answerEverything();
         Set<String> owed = new LinkedHashSet<>();
         Set<String> refused = new LinkedHashSet<>();
@@ -203,7 +235,7 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
         // without any is built from the checking just done, which a second compile would repeat.
         List<Row> built = rows.stream().filter(each -> !refused.contains(each.data())).toList();
         BytesClassLoader loader = new BytesClassLoader(refused.isEmpty() ? compilation.classes()
-                : Compiler.compile(module(built)), getClass().getClassLoader());
+                : Compiler.compile(module(built, header)), getClass().getClassLoader());
         List<Object> decoded = new ArrayList<>();
         for (Map<String, Object> input : inputs) {
             decoded.add(Codecs.decoded(loader, "demo.In", input));
@@ -262,6 +294,82 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
         assertEquals(List.of(), unsound, "proved, and broken by an input");
         // A guard that no input separates the rows of is one nothing was asked of.
         assertTrue(unreached.isEmpty(), () -> "guards no input breaks a row of: " + unreached);
+    }
+
+    /** Totals of lists put together and taken apart every way the library has, and the products of
+     *  totals a total of a split list is equal to. */
+    private static final List<String> TOTALS = List.of(
+            "List.sum(xs)",
+            "List.sum(ys)",
+            "List.sum(xs ++ ys)",
+            "List.sum(ys ++ xs)",
+            "List.sum(xs ++ ys ++ xs)",
+            "List.sum(List.reverse(xs))",
+            "List.sum(List.sort(ys))",
+            "List.sum(List.concat([xs, ys, ys]))",
+            "List.sum(List.map(n -> n + 1, xs))",
+            "List.sum(List.map(n -> n * 2, xs ++ ys))",
+            "List.sum(List.map(n -> 3 - n, ys))",
+            "List.sum(List.map(n -> n * 2, List.reverse(ys)))",
+            "List.sum(List.filter(n -> n > 2, xs))",
+            "List.sum(List.filter(n -> n <= 2, xs))",
+            "List.sum(List.filter(n -> n > 2, xs ++ ys))",
+            "List.sum(List.take(2, xs))",
+            "List.sum(List.drop(2, xs))",
+            "List.sum(List.take(2, ys))",
+            "List.sum(List.drop(2, ys))",
+            "List.sum(List.map(n -> n * 2, List.filter(n -> n > 2, xs)))",
+            "List.sum(List.map(n -> n * 2, List.filter(n -> n <= 2, xs)))",
+            "List.length(xs)",
+            "List.length(ys)",
+            "List.sum(xs) + List.sum(ys)",
+            "List.sum(xs) + List.sum(xs) + List.sum(ys)",
+            "List.sum(List.take(2, xs)) + List.sum(List.drop(2, xs))",
+            "List.sum(List.filter(n -> n > 2, xs)) + List.sum(List.filter(n -> n <= 2, xs))",
+            "2 * List.sum(xs)",
+            "List.sum(xs) + List.length(xs)",
+            "3 * List.length(ys) - List.sum(ys)",
+            "List.product(xs)",
+            "List.product(ys)",
+            "List.product(xs ++ ys)",
+            "List.product(ys ++ xs)",
+            "List.product(List.reverse(ys))",
+            "List.product(xs) * List.product(ys)",
+            "List.product(List.take(2, xs))",
+            "List.product(List.drop(2, xs))",
+            "List.product(List.take(2, xs)) * List.product(List.drop(2, xs))",
+            "List.product(List.filter(n -> n > 2, xs))",
+            "List.product(List.filter(n -> n <= 2, xs))",
+            "List.product(List.filter(n -> n > 2, xs)) * List.product(List.filter(n -> n <= 2, xs))");
+
+    @Test
+    void whatIsProvedOfOneTotalAgainstAnotherHoldsOfEveryInput() throws Exception {
+        List<Map<String, Object>> inputs = inputsOfTotals(600);
+        List<String> unsound = new ArrayList<>();
+        List<String> proved = new ArrayList<>();
+        int id = 200_000;
+        for (String left : TOTALS) {
+            List<Row> rows = new ArrayList<>();
+            for (String right : TOTALS) {
+                if (!left.equals(right)) {
+                    for (int below = 0; below <= 1; below++) {
+                        rows.add(new Row(id++, "true", true, left + " - (" + right + ")", below));
+                    }
+                }
+            }
+            Judged judged = judged(rows, inputs, INPUT_OF_TOTALS);
+            for (Row row : rows) {
+                if (judged.provedAndBroke().contains(row.data())) {
+                    unsound.add(row.count() + " - " + row.below());
+                }
+                if (!judged.owed().contains(row.data())) {
+                    proved.add(row.count() + " - " + row.below());
+                }
+            }
+        }
+        assertEquals(List.of(), unsound, "proved, and broken by an input");
+        // Rows the discharge proves nothing of say nothing about its readings.
+        assertTrue(proved.size() >= 40, () -> "the totals proved against each other: " + proved);
     }
 
     @Test
