@@ -363,7 +363,7 @@ final class ProvingTheLibrary implements LibraryProofs {
                 }
             }
         }
-        return BoundOperationFacts.asAProofTakesThem(out);
+        return out;
     }
 
     /** What {@code operation} builds its answer from, as a proof may take it: declared of a kernel,

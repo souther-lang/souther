@@ -62,6 +62,7 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
         Stdlib stdlib = DefaultStdlib.get();
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         List<WhatTheLibraryComputes.Statement> statements = new ArrayList<>();
+        Set<String> ofSizesAlone = new HashSet<>();
         for (ValueName.Stdlib.Operation operation : stdlib.entries().keySet()) {
             if (stdlib.intrinsicOf(operation) == null) {
                 continue;   // what is stated of a written operation is proved of its body
@@ -69,6 +70,10 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
             for (LawProposition<Slot> related : facts.relationsOf(operation)) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation, "related",
                         related));
+                if (related instanceof LawProposition.Compared<Slot> compared
+                        && compared.ofSizesOnly()) {
+                    ofSizesAlone.add(operation.qualified());
+                }
             }
             for (DeclaredArgument container : facts.resultIsNoSmallerThan(operation)) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation,
@@ -113,6 +118,11 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                         builds(operation, built)));
             }
         }
+        // A proof is not handed a relation of sizes alone, and an axiom of one is held to the
+        // kernel all the same: the ones among the statements run here, of the kernels that put a
+        // value in a container.
+        assertTrue(ofSizesAlone.containsAll(Set.of("Set.insert", "Set.remove", "Map.insert")),
+                "the axioms of sizes alone are among those run: " + ofSizesAlone);
         WhatTheLibraryComputes.Held held = WhatTheLibraryComputes.run(statements);
         assertEquals(List.of(), held.broken());
         assertEquals(List.of(), held.neverAnswered(), "an axiom held to no call that answered");
