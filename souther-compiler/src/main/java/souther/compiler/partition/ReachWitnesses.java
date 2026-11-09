@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
@@ -24,7 +25,7 @@ import java.util.Set;
  *
  * <p>What it shows is that row and nothing more. A relation the way to it may stop before is
  * shown reached at the values the row holds at the places it reads that a run of it is shown to
- * have made the relation at ({@link Witness#shownAt}), and at no other value: a second row is what
+ * have made the relation at ({@link Witness#toldAt}), and at no other value: a second row is what
  * shows a second value, and no row shows every value. A reader that says what
  * the relation leaves of a place says the values shown beside what was not shown, and never
  * reads the one as the other ({@code UndividedByARelation}).
@@ -72,38 +73,87 @@ public final class ReachWitnesses {
         }
 
         /**
-         * The values the row holds at {@code place} that a run of it is shown to have made the
-         * comparison at, as the behavior's inputs are walked by {@code read} — or empty where none
-         * is.
+         * What the row shows of a run of it having made the comparison at {@code at}, written out
+         * as the model writes a value of its type: the values it holds at a position, or the
+         * numbers it takes at a term of one ({@link WhatATermRead}), as the behavior's inputs are
+         * walked by {@code read} — or empty where none is shown.
          *
          * <p>That the run went through the comparison says it was made at some value the row
          * holds there, and not at which: a walk that stops early leaves the values after it
          * unasked. So a row holding one value there shows that one, and a row holding several
          * shows all of them only where the place stands inside exactly the containers the
-         * comparison is shown made on every element of ({@link #madeOnEvery}); otherwise none.
+         * comparison is shown made on every element of ({@link #madeOnEvery}).
+         *
+         * <p>Where it does not, a place held equal to another, {@code heldEqualTo}, shows the
+         * values of it that the other shows. The comparison is made at the other's value and reads
+         * the place only at what is equal to it, so a value the row holds at the place that the
+         * other shows is read there, whichever of the place's elements the run walked: a map's
+         * entry under the key the run looked it up by. A value the other does not show is shown at
+         * neither.
+         *
+         * <p>A term the row does not read to a number, whatever the cause, shows nothing: it is not
+         * a number of zero.
          */
-        public Optional<List<ObservedValue>> shownAt(TermPath place, InputReading read) {
+        public Optional<List<String>> toldAt(FilingCoordinate at,
+                                             Optional<FilingCoordinate> heldEqualTo,
+                                             InputReading read) {
             BorderQuantity.Observation row = observed(read);
-            if (!(row.everyValueAt(place)
+            Optional<Held> here = heldAt(at, row, read);
+            Optional<List<String>> shown = here.flatMap(this::shown);
+            if (shown.isPresent() || here.isEmpty() || heldEqualTo.isEmpty()) {
+                return shown;
+            }
+            Optional<List<String>> there = heldAt(heldEqualTo.get(), row, read)
+                    .flatMap(this::shown);
+            if (there.isEmpty()) {
+                return Optional.empty();
+            }
+            List<String> both = here.get().values().stream().filter(there.get()::contains)
+                    .distinct().toList();
+            return both.isEmpty() ? Optional.empty() : Optional.of(both);
+        }
+
+        /**
+         * Every value the row holds or takes at a coordinate, in the order the row writes them,
+         * and where they stand: the place a value is held at, or the position a number is taken
+         * of, and null where the number is taken over a run of values and stands at no one place.
+         */
+        private record Held(List<String> values, TermPath place) {}
+
+        private Optional<Held> heldAt(FilingCoordinate at, BorderQuantity.Observation row,
+                                      InputReading read) {
+            return switch (at) {
+                case FilingCoordinate.AtPosition(TermPath path) -> valuesAt(path, row, read);
+                case FilingCoordinate.OfTerm(NumericTerm.ValueOf(TermPath position)) ->
+                        valuesAt(position, row, read);
+                case FilingCoordinate.OfTerm(NumericTerm term) -> numbersAt(term, row, read);
+            };
+        }
+
+        private static Optional<Held> valuesAt(TermPath place, BorderQuantity.Observation row,
+                                               InputReading read) {
+            Type type = read.domain().typeAt(place, read.rules());
+            if (type == null || !(row.everyValueAt(place)
                     instanceof WalkResult.Reached<List<ObservedValue>>(List<ObservedValue> there))
                     || there.isEmpty()) {
                 return Optional.empty();
             }
-            return shownOf(there, place);
+            RuleReadingContext reading = RuleReadingContext.of(read.rules(),
+                    read.domain().policy(), read.domain().machines(), read.domain().today());
+            List<String> out = new ArrayList<>();
+            for (ObservedValue each : there) {
+                if (!(ObservedFixtures.of(each, type, reading)
+                        instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                FixtureTemplate fixture))) {
+                    return Optional.empty();
+                }
+                out.add(fixture.text());
+            }
+            return Optional.of(new Held(out, place));
         }
 
-        /**
-         * The numbers the row takes at {@code term} that a run of it is shown to have made the
-         * comparison at, as the term is read of a row everywhere else ({@link WhatATermRead}) — or
-         * empty where none is, or where the term is not one this reads.
-         *
-         * <p>Told by the same rule as {@link #shownAt}: one number is shown, and several only
-         * where the term's position stands inside exactly the containers the comparison is shown
-         * made on every element of. A number taken over a run of values is one per row. A term the
-         * row does not read to a number, whatever the cause, tells nothing: it is not a number of
-         * zero.
-         */
-        public Optional<List<String>> takenAt(NumericTerm term, InputReading read) {
+        private static Optional<Held> numbersAt(NumericTerm term, BorderQuantity.Observation row,
+                                                InputReading read) {
             TermOrders orders = read.quantities().ordersOf(term);
             if (orders == null || orders.answered() == null
                     || !(term instanceof NumericTerm.FromOnePosition
@@ -115,10 +165,11 @@ public final class ReachWitnesses {
             List<Place> there = new ArrayList<>();
             List<TermPath> containers = position == null ? List.of()
                     : position.containersHoldingIt();
-            if (!numbersAt(observed(read), containers, orders, there) || there.isEmpty()) {
+            if (!numbersAt(row, containers, orders, there) || there.isEmpty()) {
                 return Optional.empty();
             }
-            return shownOf(there.stream().map(orders.answered()::written).toList(), position);
+            return Optional.of(new Held(there.stream().map(orders.answered()::written).toList(),
+                    position));
         }
 
         private BorderQuantity.Observation observed(InputReading read) {
@@ -127,9 +178,11 @@ public final class ReachWitnesses {
                             new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
         }
 
-        /** What {@code there} shows of the values at {@code place}, which is null where what is
-         *  read is taken over a run of values and stands at no one place. */
-        private <T> Optional<List<T>> shownOf(List<T> there, TermPath place) {
+        /** What a run of the row is shown to have made the comparison at, of what the row holds
+         *  or takes there. */
+        private Optional<List<String>> shown(Held held) {
+            List<String> there = held.values();
+            TermPath place = held.place();
             if (new LinkedHashSet<>(there).size() == 1) {
                 return Optional.of(List.of(there.getFirst()));
             }

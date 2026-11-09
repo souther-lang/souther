@@ -80,7 +80,6 @@ import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
@@ -4256,7 +4255,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>Where a run may stop, a row a run of which is shown to get to the relation
      * ({@link ComparisonWitnesses.AtAComparison#reached}) shows the values it holds at a place
-     * that the run is shown to have made the relation at ({@link ReachWitnesses.Witness#shownAt}),
+     * that the run is shown to have made the relation at ({@link ReachWitnesses.Witness#toldAt}),
      * and nothing of any other value: the place is still not shown reached at every value.
      */
     private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
@@ -4278,8 +4277,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             notShown.add(at);
             List<String> written = sought.found()
-                    .flatMap(row -> writtenAt(row, at, read)).orElse(null);
-            // Where no row got there, the figures the search stopped at and the places the runs of
+                    .flatMap(row -> row.toldAt(at, heldEqualTo(at), read)).orElse(null);            // Where no row got there, the figures the search stopped at and the places the runs of
             // the rows tried stopped are said at every place the relation compares, as what was
             // not shown is.
             if (written != null || !sought.runsStopped().isEmpty()
@@ -4546,37 +4544,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         && most.exactly().compareTo(ExactRatio.ONE) >= 0));
     }
 
-    /** Each of {@code values}, held at {@code place}, as the model writes a value of its type —
-     *  or null where some is no value written out. */
-    private static List<String> writtenOut(List<ObservedValue> values, TermPath place,
-                                           InputReading read) {
-        Type type = read.domain().typeAt(place, read.rules());
-        RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
-                read.domain().machines(), read.domain().today());
-        List<String> out = new ArrayList<>();
-        for (ObservedValue each : values) {
-            if (type == null || !(ObservedFixtures.of(each, type, reading)
-                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                            FixtureTemplate fixture))) {
-                return null;
-            }
-            out.add(fixture.text());
+    /**
+     * The place this relation holds equal to {@code at}, where what it says is that the values at
+     * two places are one value ({@link #ofTwoPositions}) and nothing else — or empty.
+     *
+     * <p>Read off the relation's sides and not off how it was made: two places weighed alike and
+     * against each other, held at nought, are one value at both whatever they are numbers of.
+     */
+    private Optional<FilingCoordinate> heldEqualTo(FilingCoordinate at) {
+        if (kind != Kind.AFFINE || relation != Rel.EQ || remainder != null || sides.size() != 2
+                || constant == null || constant.signum() != 0) {
+            return Optional.empty();
         }
-        return out;
-    }
-
-    /** What {@code row} is shown to have made the relation at {@code at}, written out: the values
-     *  it holds at a position, or the numbers it takes at a term. */
-    private static Optional<List<String>> writtenAt(ReachWitnesses.Witness row,
-                                                    FilingCoordinate at, InputReading read) {
-        return switch (at) {
-            case FilingCoordinate.AtPosition(TermPath path) -> row.shownAt(path, read)
-                    .map(values -> writtenOut(values, path, read));
-            case FilingCoordinate.OfTerm(NumericTerm.ValueOf(TermPath position)) ->
-                    row.shownAt(position, read)
-                            .map(values -> writtenOut(values, position, read));
-            case FilingCoordinate.OfTerm(NumericTerm term) -> row.takenAt(term, read);
-        };
+        Side one = sides.get(0);
+        Side other = sides.get(1);
+        if (one.number() == null || other.number() == null || one.madeOf().size() != 1
+                || other.madeOf().size() != 1
+                || !(one.weight().plus(other.weight())
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio sum))
+                || sum.signum() != 0) {
+            return Optional.empty();
+        }
+        FilingCoordinate first = one.madeOf().getFirst();
+        FilingCoordinate second = other.madeOf().getFirst();
+        if (first.equals(second)) {
+            return Optional.empty();
+        }
+        return at.equals(first) ? Optional.of(second)
+                : at.equals(second) ? Optional.of(first) : Optional.empty();
     }
 
     /** The position {@code at} is the value at, or null where it is a number taken of one — how

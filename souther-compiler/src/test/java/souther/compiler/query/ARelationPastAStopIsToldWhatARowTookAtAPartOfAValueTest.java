@@ -66,6 +66,25 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
             """;
 
     /**
+     * Rates holding two currencies, one of them the currency the row's deal is in. The count of
+     * the deals the rates cover is made at the deal's currency, so of the two keys the rates hold
+     * only that one is a key the relation was read at. A deal in the currency held at nought stops
+     * a run before the count, so the relation is not shown reached at every value.
+     */
+    private static final String TWO_KEYS = RATES + """
+
+            let twoRates = Rates { rates = Map.fromList([ ("Z", 0), ("x", 1) ]), year = 2000 }
+
+            behavior covered : (deals: List<Deal>, rates: Rates) -> Ok
+            let covered (deals, rates) = {
+                let weighed = List.filterMap(d -> Map.get(d.currency, rates.rates)
+                    |> Option.map(rate -> Int.floorMod(d.amount, rate)), deals)
+                Ok { n = List.length(weighed) + List.length(List.filter(
+                    d -> Map.containsKey(d.currency, rates.rates), deals)) }
+            }
+            """;
+
+    /**
      * No value of the model names rates, so no row is found that gets to the relation, and the
      * relation compared with a count of the deals is a relation among counts of one container
      * with nothing beside it that the container is composed for.
@@ -112,6 +131,22 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         document.findValues("shownReachedAt").forEach(values ->
                 values.forEach(each -> written.add(each.asString(""))));
         assertTrue(written.containsAll(List.of("2026", "\"Z\"")), written.toString());
+    }
+
+    @Test
+    void aKeyIsToldOnlyAtTheKeysTheLookupWasMadeAt() {
+        Compilation compilation = Compilation.ofSource(TWO_KEYS, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        Map<String, PartitionEvidence> evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value();
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+
+        Map<String, PartitionEvidence.NotRead> covered = notRead(evidence, "covered");
+        assertEquals(List.of("\"x\""), covered.get("deals[*].currency").shownReachedAt(),
+                covered.toString());
+        assertEquals(List.of("\"x\""), covered.get("rates.rates[key]").shownReachedAt(),
+                covered.toString());
     }
 
     /**
