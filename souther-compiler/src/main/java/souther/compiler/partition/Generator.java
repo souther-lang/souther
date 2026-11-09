@@ -1324,6 +1324,15 @@ public final class Generator {
         }
 
         /**
+         * The parameters the body never reads, by name: a value of one answers as every other
+         * does. None where nothing is known of what the body reads, which is every parameter being
+         * read.
+         */
+        default Set<String> parametersTheBodyDoesNotRead() {
+            return Set.of();
+        }
+
+        /**
          * Whether the behavior answering {@code now} answered differently from {@code was}. Nothing
          * here can say unless a way to run rows has the declarations to read the two with.
          */
@@ -1461,6 +1470,11 @@ public final class Generator {
         @Override
         public boolean runsRows() {
             return trial.runsRows();
+        }
+
+        @Override
+        public Set<String> parametersTheBodyDoesNotRead() {
+            return trial.parametersTheBodyDoesNotRead();
         }
 
         @Override
@@ -2413,12 +2427,15 @@ public final class Generator {
                     }
                     GeneratedRow seen = taking(looking, grownFromEach);
                     for (int at = 0; at < axes.size() && seen == null; at++) {
+                        if (!looking.scope().moves(axes.get(at))) {
+                            continue;
+                        }
                         for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
                             Pins pins = Pins.of(axes, Map.of(at, cls));
                             seen = looking.tookFromSearching(() -> search(axes, pins, purposes,
                                     origins, (_, _) -> true, check, references, answers,
                                     HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
-                                    goingOn.answersNothing()));
+                                    looking.scope(), goingOn.answersNothing()));
                             if (seen != null) {
                                 break;
                             }
@@ -2440,16 +2457,19 @@ public final class Generator {
                     List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
                     List<FixtureTemplate> composedFirst = looking.tookFromComposing(() -> composed(
                             axes, composes(axes.axes()), HeldTogether.Asked.NOTHING, check,
-                            Map.of(), witnessedBy(looking, purposes, answers)));
+                            Map.of(), witnessedBy(looking, purposes, answers), looking.scope()));
                     GeneratedRow seen = composedFirst == null ? null
                             : new GeneratedRow(purposes, composedFirst, answers);
                     for (int at = 0; at < axes.size() && seen == null; at++) {
+                        if (!looking.scope().moves(axes.get(at))) {
+                            continue;
+                        }
                         for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
                             Pins pins = Pins.of(axes, Map.of(at, cls));
                             seen = looking.tookFromSearching(() -> search(axes, pins, purposes,
                                     origins, (_, _) -> true, check, references, answers,
                                     HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
-                                    goingOn.answersNothing()));
+                                    looking.scope(), goingOn.answersNothing()));
                             if (seen != null) {
                                 break;
                             }
@@ -2568,6 +2588,9 @@ public final class Generator {
             }
 
             private Iterator<GeneratedRow> composedWith(int position) {
+                if (!looking.scope().moves(subject.parameters().get(position))) {
+                    return Collections.emptyIterator();
+                }
                 Map<String, Written> kept = new LinkedHashMap<>();
                 for (int p = 0; p < written.size(); p++) {
                     if (p != position) {
@@ -2585,7 +2608,7 @@ public final class Generator {
                                 inputs -> {
                                     rows.add(new GeneratedRow(purposes, inputs, answers));
                                     return Acceptance.PASSED;
-                                })));
+                                }), looking.scope()));
                 return rows.iterator();
             }
         };
@@ -2804,21 +2827,32 @@ public final class Generator {
 
         private Examining(ReplacementWitness looking) {
             this(MOST_REPAIRS, () -> looking.composingStopped(
-                    List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(MOST_REPAIRS))));
+                    List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(MOST_REPAIRS))),
+                    looking.scope());
         }
 
         private final RowsBesideBudget shared;
 
-        private Examining(int most, Runnable whenSpent) {
+        /** Which parameters a candidate may move. */
+        private final MoveScope scope;
+
+        private Examining(int most, Runnable whenSpent, MoveScope scope) {
             this.left = most;
             this.whenSpent = whenSpent;
             this.shared = null;
+            this.scope = scope;
         }
 
         private Examining(RowsBesideBudget shared) {
             this.left = 0;
             this.whenSpent = () -> { };
             this.shared = shared;
+            this.scope = MoveScope.EVERYTHING;
+        }
+
+        /** Whether a candidate may move the value of the parameter {@code name}. */
+        boolean moves(String name) {
+            return scope.moves(name);
         }
 
         /** Whether one more candidate may be made, the first one past the bound said as stopped. */
@@ -3001,6 +3035,10 @@ public final class Generator {
             @Override
             public boolean hasNext() {
                 while (next == null && moved < seen.size()) {
+                    if (nearer == null && !examining.moves(subject.parameters().get(moved))) {
+                        moved++;
+                        continue;
+                    }
                     if (nearer == null) {
                         nearer = how.of(seen.get(moved), subject.types().get(moved),
                                 subject.ruleReading(), subject.parameters().get(moved));
@@ -3646,6 +3684,12 @@ public final class Generator {
     private record GoingOn(CoverageRead.Read read, RunOnce trial, HeldOutcome.Of holding,
                            WhereNothingIsAnswered answersNothing) {
 
+        /** Which parameters a walk for a row a run is asked about moves: the ones the body never
+         *  reads stand where the origin has them. */
+        MoveScope scope() {
+            return MoveScope.leavingStanding(trial.parametersTheBodyDoesNotRead());
+        }
+
         /** The row {@code found} took, or a row for the same requirement that got further in —
          *  with what looking further came to, where the row goes out stopped at a guard. */
         Composed past(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
@@ -3764,7 +3808,7 @@ public final class Generator {
                                             && answer instanceof AnswerObservation.Answered ->
                                             Acceptance.TAKEN;
                                     default -> Acceptance.PASSED;
-                                }, answersNothing);
+                                }, false, scope(), answersNothing);
                         if (searched.row() != null) {
                             further = searched.row();
                             held = List.copyOf(both);
@@ -4182,13 +4226,14 @@ public final class Generator {
                                    Function<GeneratedRow, Acceptance> accepts,
                                    WhereNothingIsAnswered answersNothing) {
         return search(axes, pins, purposes, origins, admits, check, references, answers, held,
-                accepts, false, answersNothing);
+                accepts, false, MoveScope.EVERYTHING, answersNothing);
     }
 
     /**
      * The same, and where {@code rechoosing}, a candidate whose row {@code accepts} passes over has
      * its values chosen again before the next candidate is built: what it asks of a row is then
-     * not something which classes the row stands at decides.
+     * not something which classes the row stands at decides. The positions {@code scope} does not
+     * move stand where the origin has them.
      */
     private static Searched search(MeasuredInput.MeasuredAxes axes, Pins pins,
                                    List<Purpose> purposes, List<ResolvedOrigin> origins,
@@ -4196,7 +4241,8 @@ public final class Generator {
                                    FixtureReferences references, List<StoodInAnswer> answers,
                                    HeldTogether held,
                                    Function<GeneratedRow, Acceptance> accepts,
-                                   boolean rechoosing, WhereNothingIsAnswered answersNothing) {
+                                   boolean rechoosing, MoveScope scope,
+                                   WhereNothingIsAnswered answersNothing) {
         String label = String.join(" with ", pins.labels());
         // What the pins ask for and nothing else, which is what every other position being free
         // means. Written as a reading, it goes through the same walk a combination's readings do.
@@ -4207,8 +4253,8 @@ public final class Generator {
         // question nobody asked it. What order they are walked in is {@link #nearestFirst}'s to
         // say; how many of them may be built is this class's own budget.
         Building building = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                references, answers, held, accepts, rechoosing, answersNothing);
-        WhatEachClassRequires requires = new WhatEachClassRequires(axes.axes());
+                references, answers, held, accepts, rechoosing, scope, answersNothing);
+        WhatEachClassRequires requires = new WhatEachClassRequires(axes.axes(), scope);
         Traversal stated = nearestFirst(requires, reading, origins, admits, building);
         if (stated == Traversal.SATISFIED) {
             return new Searched(building.found, building.foundAt, building.foundAgainst, null,
@@ -4216,7 +4262,7 @@ public final class Generator {
         }
         // The composition, whatever the stated values spent, and with a budget of its own.
         Building composing = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                references, answers, held, accepts, rechoosing, answersNothing);
+                references, answers, held, accepts, rechoosing, scope, answersNothing);
         Traversal composed = composing(requires, reading, origins, admits, composing);
         if (composed == Traversal.SATISFIED) {
             return new Searched(composing.found, composing.foundAt, composing.foundAgainst, null,
@@ -4364,6 +4410,9 @@ public final class Generator {
          *  next candidate is built. */
         private final boolean rechoosing;
 
+        /** Which parameters have their values chosen again where a row is passed over. */
+        private final MoveScope scope;
+
         /** Where the body answers nothing, which no row this takes may sit. */
         private final WhereNothingIsAnswered answersNothing;
 
@@ -4371,8 +4420,10 @@ public final class Generator {
                          String label, CandidateCheck check, int most,
                          FixtureReferences references, List<StoodInAnswer> answers,
                          HeldTogether held, Function<GeneratedRow, Acceptance> accepts,
-                         boolean rechoosing, WhereNothingIsAnswered answersNothing) {
+                         boolean rechoosing, MoveScope scope,
+                         WhereNothingIsAnswered answersNothing) {
             this.rechoosing = rechoosing;
+            this.scope = scope;
             this.answersNothing = answersNothing;
             this.axes = axes;
             this.pins = pins;
@@ -4502,7 +4553,7 @@ public final class Generator {
                     foundAgainst = Set.copyOf(given.keySet());
                 }
                 return asked;
-            });
+            }, scope);
             return switch (came) {
                 case RowComposed.Taken _ -> Taken.AND_DONE;
                 // Not a refusal, and what the walk found out on the way to the rows passed over is
@@ -4972,12 +5023,25 @@ public final class Generator {
         /** What the pair space says of two classes beside their requirements. */
         private final ClassCoexistence coexistence;
 
+        /** Which positions a walk over these classes may move. */
+        private final MoveScope scope;
+
         WhatEachClassRequires(List<Axis> axes) {
+            this(axes, MoveScope.EVERYTHING);
+        }
+
+        WhatEachClassRequires(List<Axis> axes, MoveScope scope) {
             this.axes = axes;
+            this.scope = scope;
             for (Axis axis : axes) {
                 read.add(new ArrayList<>(Collections.nCopies(axis.classes().size(), null)));
             }
             this.coexistence = ClassCoexistence.among(axes);
+        }
+
+        /** Whether a walk may move the position {@code axis}. */
+        boolean moves(int axis) {
+            return scope.moves(axes.get(axis));
         }
 
         /** What standing {@code axis} at its class {@code cls} requires. */
@@ -5134,7 +5198,7 @@ public final class Generator {
         int nearest = Integer.MAX_VALUE;
         int farthest = 0;
         for (Started origin : bases) {
-            int[] steps = movable(axes, about, origin.base());
+            int[] steps = movable(requires, about, origin.base());
             NearestAssignments walk = new NearestAssignments(origin.from().stands(), origin.base(),
                     steps, classes);
             walks.add(new Walking(origin, steps, walk));
@@ -5243,11 +5307,12 @@ public final class Generator {
      * in, a row one position from its origin was offered behind rows two away, and the number the
      * budget was spent by counted what the search reached for rather than what it moved.
      */
-    private static int[] movable(List<Axis> axes, int[] about, int[] base) {
-        int[] out = new int[axes.size()];
+    private static int[] movable(WhatEachClassRequires requires, int[] about, int[] base) {
+        int size = base.length;
+        int[] out = new int[size];
         int n = 0;
-        for (int i = 0; i < axes.size(); i++) {
-            if (!anchored(about, i) && base[i] != NOT_HERE) {
+        for (int i = 0; i < size; i++) {
+            if (!anchored(about, i) && base[i] != NOT_HERE && requires.moves(i)) {
                 out[n++] = i;
             }
         }
@@ -10641,6 +10706,15 @@ public final class Generator {
         }
 
         /**
+         * Which parameters a row is looked for by moving. What a row is looked for here is told by
+         * what the body answers, so the parameters it never reads stand where the row has them and
+         * spend none of what is built or run.
+         */
+        MoveScope scope() {
+            return MoveScope.leavingStanding(trial.parametersTheBodyDoesNotRead());
+        }
+
+        /**
          * Whether the rewrite answers {@code row} differently from the body, given what running
          * the body on it came to where a search already ran it, or null where it did not.
          */
@@ -11327,7 +11401,8 @@ public final class Generator {
         if (taking.take(first) == Acceptance.TAKEN) {
             return first;
         }
-        composed(axes, where, HeldTogether.Asked.NOTHING, check, given, taking);
+        composed(axes, where, HeldTogether.Asked.NOTHING, check, given, taking,
+                MoveScope.leavingStanding(trial.parametersTheBodyDoesNotRead()));
         List<FixtureTemplate> kept = preferring.taken();
         return kept == null ? first : kept;
     }
@@ -11432,7 +11507,8 @@ public final class Generator {
                         List<ResolvedOrigin> origins,
                         FixtureReferences references, List<StoodInAnswer> answers) {
             this.axes = axes;
-            this.requires = new WhatEachClassRequires(axes.axes());
+            this.scope = MoveScope.leavingStanding(trial.parametersTheBodyDoesNotRead());
+            this.requires = new WhatEachClassRequires(axes.axes(), scope);
             this.selection = selection;
             this.check = check;
             this.trial = trial;
@@ -11442,6 +11518,10 @@ public final class Generator {
             this.references = references;
             this.answers = answers;
         }
+
+        /** Which parameters a walk for a row seen filling the combination moves: a run is what
+         *  says it, so the ones the body never reads stand. */
+        private final MoveScope scope;
 
         /** What each class of this combination's positions requires, read once for every reading
          *  of it. */
@@ -11712,7 +11792,7 @@ public final class Generator {
                                 found = new Witness.Certified(named, seen.get());
                             }
                             return asked;
-                        });
+                        }, scope);
                 return switch (came) {
                     case RowComposed.Taken _ -> Taken.AND_DONE;
                     // Not a refusal, and what the walk found out on the way to the rows passed over
@@ -12389,6 +12469,18 @@ public final class Generator {
     private static RowComposed composed(MeasuredInput.MeasuredAxes axes, int[] where,
                                         HeldTogether held, CandidateCheck check,
                                         Map<String, Written> given, RowTaking taking) {
+        return composed(axes, where, held, check, given, taking, MoveScope.EVERYTHING);
+    }
+
+    /**
+     * The same, where the values of the parameters {@code scope} does not move are not chosen
+     * again: one value of such a parameter is composed and the rows written with it are the
+     * caller's to take or pass over, since another value of it answers as that one does.
+     */
+    private static RowComposed composed(MeasuredInput.MeasuredAxes axes, int[] where,
+                                        HeldTogether held, CandidateCheck check,
+                                        Map<String, Written> given, RowTaking taking,
+                                        MoveScope scope) {
         MeasuredInput subject = axes.subject();
         LocationWrites decided = new LocationWrites();
         HeldTogether.Asked holding;
@@ -12695,7 +12787,7 @@ public final class Generator {
             Set<TermPath> writtenAt = new LinkedHashSet<>(together.keySet());
             writtenAt.addAll(truths.at().keySet());
             RowComposed came = inputsFrom(new RowBeingComposed(axes, given, check, holding,
-                    way.contents(), writtenAt, writes, way.taken(), taking, order), 0,
+                    way.contents(), writtenAt, writes, way.taken(), taking, order, scope), 0,
                     new FixtureTemplate[order.parameters().size()], ValuesHandedOn.NONE);
             return switch (came) {
                 case RowComposed.Taken _, RowComposed.Halted _ -> {
@@ -12729,12 +12821,14 @@ public final class Generator {
      * @param contents what the containers are handed, written under the cases this row is being
      *                 tried as ({@link ContentsAsked.UnderTheCases#tryEach})
      * @param order    the order the parameters are composed in, and what each turns on
+     * @param scope    which parameters have their values chosen again where a row written with
+     *                 one was passed over
      */
     private record RowBeingComposed(MeasuredInput.MeasuredAxes axes, Map<String, Written> given,
                                     CandidateCheck check, HeldTogether.Asked holding,
                                     ContentsAsked contents, Set<TermPath> composedAt,
                                     LocationWrites decided, Requirements required,
-                                    RowTaking taking, CompositionOrder order) {}
+                                    RowTaking taking, CompositionOrder order, MoveScope scope) {}
 
     /**
      * The row from the {@code next}-th parameter in the order on, with {@code composed} holding
@@ -12869,7 +12963,10 @@ public final class Generator {
                         case RowComposed.Taken _ -> Acceptance.TAKEN;
                         case RowComposed.PassedOver(SearchShortfall thoseFound) -> {
                             passedOver[0] = joined(passedOver[0], thoseFound);
-                            yield Acceptance.PASSED;
+                            // Another value of a parameter nothing turns on and the caller's
+                            // answer does not turn on is a row passed over for the same reason.
+                            yield !row.scope().moves(head) && !awaited ? Acceptance.STOPPED
+                                    : Acceptance.PASSED;
                         }
                         case RowComposed.Halted _ -> Acceptance.STOPPED;
                         // A parameter after this one that does not turn on this one's value cannot

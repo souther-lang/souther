@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -102,11 +104,41 @@ public record Reach(ExactCut least, ExactCut most) {
             ExactRatio before = sum;
             sum = weight.times(end.at()).flatMap(before::plus).orNull();
             if (sum == null) {
-                return null;
+                return summedWhole(terms, constant, ends, upper);
             }
             reached &= end.inclusive();
         }
         return new ExactCut(sum, reached);
+    }
+
+    /**
+     * The same sum taken as one sum of every term, where adding them one at a time in the order
+     * they came in ran out of what the exact arithmetic holds.
+     *
+     * <p>The order they come in is the order of the names of the positions, and whether a running
+     * total can be held depends on which terms it has met: a large term and its opposite taken
+     * before a small one cancel, and taken after it do not. A sum of many is not a run of additions
+     * ({@link ExactRatio#sum}): it meets the terms by scale and holds no partial sum, so its answer
+     * is the terms' and not their order's. A sum held term by term is the same value, so what is
+     * answered is the one sum of the terms under any naming and any order, and is refused only where
+     * a term, or the sum, has no representation.
+     */
+    private static <A> ExactCut summedWhole(Iterable<? extends Map.Entry<A, ExactRatio>> terms,
+                                            ExactRatio constant, Ends<A> ends, boolean upper) {
+        List<ExactRatio> carried = new ArrayList<>();
+        carried.add(constant);
+        boolean reached = true;
+        for (Map.Entry<A, ExactRatio> each : terms) {
+            ExactCut end = ends.weighedBy(each.getKey(), each.getValue().signum(), upper);
+            ExactRatio product = end == null ? null : each.getValue().times(end.at()).orNull();
+            if (product == null) {
+                return null;
+            }
+            carried.add(product);
+            reached &= end.inclusive();
+        }
+        ExactRatio sum = ExactRatio.sum(carried).orNull();
+        return sum == null ? null : new ExactCut(sum, reached);
     }
 
     /**

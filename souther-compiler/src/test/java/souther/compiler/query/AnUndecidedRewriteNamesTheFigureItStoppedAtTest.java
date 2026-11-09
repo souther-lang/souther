@@ -93,9 +93,9 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
 
     /**
      * A search with runs to spare, cut short by a bound a search for a row holds itself to: four
-     * positions of four cases each are more candidates than a walk repairing a row builds, and that
-     * is named at the number written where the walk compared against it. Nothing the body answers
-     * tells the rewrite apart, so the walk runs to the bound.
+     * positions of four cases each, every one of them read by the body, are more candidates than a
+     * walk repairing a row builds, and that is named at the number written where the walk compared
+     * against it. Nothing the body answers tells the rewrite apart, so the walk runs to the bound.
      */
     @Test
     void aSearchCutShortByItsOwnBoundNamesTheBound() {
@@ -113,7 +113,17 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                         behavior f : (a: C, b: C, c: C, d: C, x: Int) -> Ok
                             constructs Ok
 
-                        let f (a, b, c, d, x) = Ok { odd = x * x == 2 }
+                        behavior flat : (k: C) -> Int
+
+                        let flat (k) =
+                            match k with
+                                | P -> 0
+                                | Q -> 0
+                                | R -> 0
+                                | S -> 0
+
+                        let f (a, b, c, d, x) =
+                            Ok { odd = x * x == 2 && flat(a) + flat(b) + flat(c) + flat(d) == 0 }
 
                         example f
                             | (P, P, P, P, 5) -> Ok { odd = false }

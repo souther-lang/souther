@@ -132,9 +132,11 @@ public final class CountWitnesses {
         Set<WhereARunStopped> runs = new LinkedHashSet<>();
         // What each parameter may hold, as far as the boundary builds it: the container as what
         // stands for a list of its element, which the elements tried below take the place of.
+        // Every parameter is tried at all its values: what the statement counted turns on may name
+        // a parameter the body does not read, and no one has said which are named.
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
-                i -> i == at ? Type.list(element) : inputs.types().get(i), _ -> null, reading,
-                building, stopped);
+                i -> i == at ? Type.list(element) : inputs.types().get(i), _ -> null,
+                _ -> false, reading, building, stopped);
         if (each == null) {
             return new Sought(Optional.empty(), stopped, runs);
         }

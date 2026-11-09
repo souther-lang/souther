@@ -38,7 +38,8 @@ import java.util.function.Function;
  */
 final class LengthsPastTheWay {
 
-    /** The most statements held at once, which taking numbers out multiplies. */
+    /** The most statements taking a number out may make of a lower and an upper, which is what it
+     *  multiplies. */
     private static final int MOST_ROWS = 256;
 
     private LengthsPastTheWay() { }
@@ -245,10 +246,13 @@ final class LengthsPastTheWay {
                 return null;
             }
         }
+        // Only the statements made of a lower and an upper are counted: the ones that name neither
+        // were held before and are held after, and multiply nothing.
+        int combined = 0;
         for (Inequality lower : below) {
             for (Inequality upper : above) {
                 out.add(lower.plus(upper));
-                if (out.size() > MOST_ROWS) {
+                if (++combined > MOST_ROWS) {
                     return null;
                 }
             }

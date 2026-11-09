@@ -388,10 +388,12 @@ public final class ReachWitnesses {
      *
      * @param named the values the model names at each parameter's type
      * @param taken what each row written for the behavior took, one value per parameter
+     * @param parametersTheBodyDoesNotRead the parameters a run does not turn on, each tried with
+     *              its first value alone
      */
     public static Sought of(InputReading read, List<List<FixtureTemplate>> named,
                             List<List<ObservedValue>> taken, RowSearch.Building building,
-                            RowSearch.Running running) {
+                            RowSearch.Running running, Set<String> parametersTheBodyDoesNotRead) {
         BehaviorInputs inputs = BehaviorInputs.of(read);
         RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
                 read.domain().machines(), read.domain().today());
@@ -399,7 +401,8 @@ public final class ReachWitnesses {
         Set<WhereARunStopped> runs = new LinkedHashSet<>();
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
                 i -> inputs.types().get(i), i -> elementOfAList(inputs.parameters().get(i), read),
-                reading, building, stopped);
+                i -> parametersTheBodyDoesNotRead.contains(inputs.parameters().get(i)), reading,
+                building, stopped);
         if (each == null) {
             return new Sought(Optional.empty(), stopped, runs);
         }

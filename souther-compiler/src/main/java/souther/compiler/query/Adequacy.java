@@ -85,6 +85,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.CalledBody;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.AtomSpace;
@@ -1223,7 +1224,7 @@ public final class Adequacy {
             ASearchForARow search = ASearchForARow.of(db, name, behavior, reaching);
             return Answer.of(search == null ? ReachWitnesses.Sought.NOTHING
                     : ReachWitnesses.of(search.read(), search.named(), search.taken(),
-                            search.building(), search.running()));
+                            search.building(), search.running(), search.unread()));
         }
     }
 
@@ -1241,7 +1242,7 @@ public final class Adequacy {
      */
     private record ASearchForARow(InputReading read, List<List<FixtureTemplate>> named,
                                   List<List<ObservedValue>> taken, RowSearch.Building building,
-                                  RowSearch.Running running) {
+                                  RowSearch.Running running, Set<String> unread) {
 
         /** The search for a row of {@code behavior} going through one of {@code reaching}, or
          *  null where the module did not build far enough to run one. */
@@ -1302,7 +1303,8 @@ public final class Adequacy {
                                     // stopped is said beside what it was tried for.
                                     : new RowSearch.Run(false,
                                             ran.stopped().map(stop -> whereItStopped(db, stop))))
-                            .orElseGet(() -> RowSearch.Run.stoppedNowhere(false)));
+                            .orElseGet(() -> RowSearch.Run.stoppedNowhere(false)),
+                    unreadParametersOf(db, new ValueName.Behavior(name, behavior)));
         }
 
         /** Whether the run {@code seen} is had some place of {@code reaching} come out either
@@ -7919,6 +7921,19 @@ public final class Adequacy {
                 return application.change(was, now);
             }
 
+            /** The parameters the body never reads, worked out once a search asks. */
+            private volatile Set<String> notRead;
+
+            @Override
+            public Set<String> parametersTheBodyDoesNotRead() {
+                Set<String> found = notRead;
+                if (found == null) {
+                    found = unreadParametersOf(db, new ValueName.Behavior(module, behavior));
+                    notRead = found;
+                }
+                return found;
+            }
+
             /** What the rows written say of the walks they entered, read once a row asks. */
             private volatile WalkedNoFurther walkedNoFurther;
 
@@ -7948,6 +7963,24 @@ public final class Adequacy {
                         .map(FixtureTemplate::value).toList();
             }
         });
+    }
+
+    /**
+     * The parameters of {@code behavior} its body never reads. None where the body or its
+     * parameters cannot be read, which is every parameter being read.
+     */
+    static Set<String> unreadParametersOf(Db db, ValueName.Behavior behavior) {
+        CalledBody called = db.ask(new BodyAtACall(behavior)).value();
+        if (called == null) {
+            return Set.of();
+        }
+        Set<String> unread = new LinkedHashSet<>();
+        for (Core.Binder parameter : called.parameters()) {
+            if (!WhatABodyReads.binding(called.body(), parameter.binding())) {
+                unread.add(parameter.name());
+            }
+        }
+        return unread;
     }
 
     /** A row, and what building it came to. */

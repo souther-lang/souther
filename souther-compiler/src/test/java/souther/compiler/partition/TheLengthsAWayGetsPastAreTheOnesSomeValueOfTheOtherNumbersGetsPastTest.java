@@ -63,6 +63,27 @@ class TheLengthsAWayGetsPastAreTheOnesSomeValueOfTheOtherNumbersGetsPastTest {
                 BigInteger.valueOf(TextExtents.LONGEST_STRING)), lengths.toString());
     }
 
+    /**
+     * Statements that name neither the length nor a number taken out are carried as they are and
+     * multiply nothing: however many there are, they are no part of how many statements the
+     * elimination holds at once.
+     */
+    @Test
+    void statementsOfOtherNumbersAreNoPartOfHowManyTheEliminationHolds() {
+        List<TakenConstraint> statements = new ArrayList<>(List.of(
+                statement(0, Rel.GT, Map.of(LENGTH, 1L, N, 1L)),
+                statement(1, Rel.LE, Map.of(LENGTH, 1L, N, 1L))));
+        for (int i = 0; i < 600; i++) {
+            statements.add(statement(0, Rel.GE,
+                    Map.of(new NumericTerm.ValueOf(TermPath.of("p" + i)), 1L)));
+        }
+
+        Lengths lengths = LengthsPastTheWay.of(LENGTH, statements, between(-100, 100));
+
+        assertNotNull(lengths, "the one number between the length and nought is taken out");
+        assertFalse(lengths.holds(BigInteger.ZERO, BigInteger.valueOf(10)), lengths.toString());
+    }
+
     /** The number held to the three greatest values of its type leaves only the lengths the
      *  sum can stay within the type at. */
     @Test

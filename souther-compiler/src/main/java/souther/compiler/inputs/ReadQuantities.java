@@ -2267,8 +2267,7 @@ final class ReadQuantities implements Quantities {
         asked.add(term);
         asked.addAll(alongside);
         had = asking(asked) instanceof StructuralContext.Merge.Together(StructuralContext under)
-                ? across(eitherWay(under, asked),
-                        each -> runsIn(each, form, true, List.copyOf(alongside)))
+                ? acrossTheGroups(under, form, true, List.copyOf(alongside))
                 : projectionOf(form, true);
         projections.put(question, had);
         return had;
@@ -2305,8 +2304,7 @@ final class ReadQuantities implements Quantities {
         // with what was taken in, no row gives the form a value, and it runs nowhere.
         return switch (asking(form.coefs().keySet())) {
             case StructuralContext.Merge.Together(StructuralContext under) ->
-                    across(eitherWay(under, form.coefs().keySet()),
-                            each -> runsIn(each, form, andTheDeclared, List.of()));
+                    acrossTheGroups(under, form, andTheDeclared, List.of());
             case StructuralContext.Merge.Disagreeing _ ->
                     new NumericDomain.FormProjection.NothingIsLeft();
         };
@@ -2330,6 +2328,104 @@ final class ReadQuantities implements Quantities {
      */
     private List<StructuralContext> eitherWay(StructuralContext under,
                                               Collection<NumericTerm> terms, boolean[] settled) {
+        List<TermPath> open = openContainers(under, terms);
+        if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
+            // Only the containers the question can turn on: what the rules leave a number is what
+            // the part of them that weighs it leaves, so a container walked only by numbers of
+            // other parts is no case of what is asked, however many there are.
+            open = groupsOf(under, terms).groups().stream().filter(ContainerGroups.Group::reached)
+                    .flatMap(each -> each.containers().stream()).toList();
+        }
+        if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
+            settled[0] = false;
+        }
+        return holdingEachWay(under,
+                open.stream().limit(MOST_CONTAINERS_ASKED_BOTH_WAYS).toList());
+    }
+
+    /**
+     * The groups the containers of a question over {@code terms} are kept in
+     * ({@link ContainerGroups}): a number is in the group of the part of the rules that weighs it
+     * ({@link NumericDomain#partOf}), and numbers walking one container are in one group, whether
+     * or not what {@code under} says of the container settles how it holds.
+     *
+     * <p>What the rules leave the numbers of one part does not turn on the other parts, since no
+     * rule relates them, so a container that only the numbers of other parts walk cannot change
+     * it, and a contradiction is in one part. But rules are not the only relations: what a total
+     * comes to as the totals of its places ({@link #withWhatItAddsUp}) is put on when a number is
+     * asked of, and relates numbers of one container whatever the rules say, so a container
+     * settled by {@code under} still keeps its numbers together.
+     */
+    private ContainerGroups groupsOf(StructuralContext under, Collection<NumericTerm> terms) {
+        NumericDomain<InputAtom> numbers = effectiveConstraints(under).numbers();
+        List<NumericTerm> every = new ArrayList<>(terms);
+        every.addAll(fixed.keySet());
+        assumed.forEach(each -> every.addAll(each.terms()));
+        Set<NumericTerm> asked = new HashSet<>(terms);
+        ContainerGroups groups = new ContainerGroups();
+        for (NumericTerm each : every) {
+            Object part = null;
+            if (stands(Set.of(each), under)) {
+                int at = numbers.partOf(called(each, under));
+                part = at < 0 ? each : (Object) at;
+            }
+            TermPath walked = each.walkedOver();
+            groups.say(each, part, walked, walked != null && under.says(walked),
+                    asked.contains(each));
+        }
+        return groups;
+    }
+
+    /**
+     * What a form runs between, asked of each group its numbers are in by itself and added up.
+     *
+     * <p>The form is the sum of its pieces, one for each group, and what the rules leave a piece
+     * does not turn on how any other group's containers hold: the part of the rules that weighs it
+     * is not the others', and no number of it walks a container of another group. The pieces'
+     * ranges therefore add to what the form runs between, where asked of every combination of how
+     * the groups' containers hold they would be as many as two to the power of all of them. Each
+     * group is asked of {@link #MOST_CONTAINERS_ASKED_BOTH_WAYS} of its containers each way at most.
+     *
+     * <p>Where nothing is left for one piece there is nothing left for the form. A sum of ranges
+     * no number can be written for is left open on that side, which is wider and never narrower.
+     */
+    private NumericDomain.FormProjection acrossTheGroups(
+            StructuralContext under, LinearForm<NumericTerm> form, boolean andTheDeclared,
+            List<NumericTerm> alongside) {
+        Set<NumericTerm> asked = new LinkedHashSet<>(form.coefs().keySet());
+        asked.addAll(alongside);
+        ContainerGroups groups = groupsOf(under, asked);
+        Map<Object, Map<NumericTerm, ExactRatio>> pieces = new LinkedHashMap<>();
+        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
+            pieces.computeIfAbsent(groups.keyOf(term), _ -> new LinkedHashMap<>())
+                    .put(term, form.coefs().get(term));
+        }
+        NumericDomain.Bounds total = null;
+        boolean first = true;
+        for (Map.Entry<Object, Map<NumericTerm, ExactRatio>> piece : pieces.entrySet()) {
+            LinearForm<NumericTerm> own = new LinearForm<>(
+                    first ? form.constant() : ExactRatio.ZERO, piece.getValue());
+            first = false;
+            List<StructuralContext> ways = holdingEachWay(under, groups.containersOf(piece.getKey())
+                    .stream().limit(MOST_CONTAINERS_ASKED_BOTH_WAYS).toList());
+            if (!(across(ways, each -> runsIn(each, own, andTheDeclared, alongside))
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within))) {
+                return new NumericDomain.FormProjection.NothingIsLeft();
+            }
+            if (total == null) {
+                total = within;
+            } else {
+                NumericDomain.Bounds added = total.plus(within);
+                total = added == null ? NumericDomain.Bounds.OPEN : added;
+            }
+        }
+        return new NumericDomain.FormProjection.Within(
+                total == null ? NumericDomain.Bounds.OPEN : total);
+    }
+
+    /** The containers a question over {@code terms} walks that {@code under} says nothing of,
+     *  the terms' own first. */
+    private List<TermPath> openContainers(StructuralContext under, Collection<NumericTerm> terms) {
         List<NumericTerm> every = new ArrayList<>(terms);
         every.addAll(fixed.keySet());
         assumed.forEach(each -> every.addAll(each.terms()));
@@ -2340,11 +2436,15 @@ final class ReadQuantities implements Quantities {
                 open.add(walked);
             }
         }
-        if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
-            settled[0] = false;
-        }
+        return List.copyOf(open);
+    }
+
+    /** {@code under} with each of {@code containers} holding something and holding none, in every
+     *  combination. */
+    private static List<StructuralContext> holdingEachWay(StructuralContext under,
+                                                          List<TermPath> containers) {
         List<StructuralContext> out = new ArrayList<>(List.of(under));
-        for (TermPath container : open.stream().limit(MOST_CONTAINERS_ASKED_BOTH_WAYS).toList()) {
+        for (TermPath container : containers) {
             List<StructuralContext> both = new ArrayList<>(out.size() * 2);
             for (StructuralContext each : out) {
                 both.add(each.holding(container));
@@ -2353,6 +2453,49 @@ final class ReadQuantities implements Quantities {
             out = both;
         }
         return out;
+    }
+
+    /**
+     * Which containers an emptiness is asked of each way of holding, one choice after another:
+     * every choice of {@link #MOST_CONTAINERS_ASKED_BOTH_WAYS} of the {@code open} ones where there
+     * are more than that and few enough to choose among, and none of them beyond that.
+     *
+     * <p>An emptiness shown with some containers asked each way and the rest as nothing says of
+     * them is shown, since the rest are asked as wider, so a choice that shows it is enough. Which
+     * containers come first is the order the fixed and the taken-in terms happen to be held in, and
+     * a proof that was there for a container only when it came among the first would be a proof
+     * the order decides; asked of every choice, it is the containers and not their order that does.
+     */
+    private static List<List<TermPath>> choicesOfContainers(List<TermPath> open) {
+        if (open.size() <= MOST_CONTAINERS_ASKED_BOTH_WAYS) {
+            return List.of(open);
+        }
+        if (open.size() > MOST_CONTAINERS_CHOSEN_AMONG) {
+            return List.of(List.of());
+        }
+        List<List<TermPath>> out = new ArrayList<>();
+        int[] at = new int[MOST_CONTAINERS_ASKED_BOTH_WAYS];
+        for (int i = 0; i < at.length; i++) {
+            at[i] = i;
+        }
+        while (true) {
+            List<TermPath> chosen = new ArrayList<>();
+            for (int each : at) {
+                chosen.add(open.get(each));
+            }
+            out.add(chosen);
+            int moved = at.length - 1;
+            while (moved >= 0 && at[moved] == open.size() - at.length + moved) {
+                moved--;
+            }
+            if (moved < 0) {
+                return out;
+            }
+            at[moved]++;
+            for (int i = moved + 1; i < at.length; i++) {
+                at[i] = at[i - 1] + 1;
+            }
+        }
     }
 
     /** The same, for a question that does not ask whether its answer settled. */
@@ -2367,6 +2510,10 @@ final class ReadQuantities implements Quantities {
      * narrow the answer is, and an emptiness so asked is said not to have looked to the end.
      */
     private static final int MOST_CONTAINERS_ASKED_BOTH_WAYS = 3;
+
+    /** How many containers an emptiness is asked of every choice of a few among; more than that
+     *  are asked of none each way, which is a choice no order of them can change. */
+    private static final int MOST_CONTAINERS_CHOSEN_AMONG = 8;
 
     /** What {@code each} answers across {@code contexts} together: the range spanning every one
      *  a value is left in, and nothing left where none is. */
@@ -2834,27 +2981,46 @@ final class ReadQuantities implements Quantities {
         // Asked of every way of holding something or none the containers walked by what was fixed
         // and taken in can be ({@link #eitherWay}), as a sum is asked of its cases: the input is
         // empty only where every one of them is, and the proof is the first one's.
-        Optional<EmptyInput> proof = Optional.empty();
-        for (StructuralContext each : eitherWay(under, List.of(), settled)) {
-            switch (viability(each, null, settled)) {
-                case Viability.ProvedImpossible it -> {
-                    if (proof.isEmpty()) {
-                        proof = Optional.of(new EmptyInput.ProvedByTheDeclarations(it.why()));
-                    }
-                }
-                // Neither of these is a proof. One says nothing showed the input empty and the
-                // other says this reading did not look, and a caller that read either as "there
-                // is a value" would be reading the absence of a proof as one.
-                case Viability.MayStand _ -> {
-                    return Optional.empty();
-                }
-                case Viability.NotRead _ -> {
-                    settled[0] = false;
-                    return Optional.empty();
-                }
+        List<TermPath> open = openContainers(under, List.of());
+        Set<List<TermPath>> choices = new LinkedHashSet<>();
+        if (open.size() > MOST_CONTAINERS_ASKED_BOTH_WAYS) {
+            settled[0] = false;
+            // Each group of containers by itself: a contradiction is in one part of the rules, so
+            // the containers of the others are no part of what shows it, and what is asked of one
+            // group does not turn on how many containers stand beside it.
+            for (ContainerGroups.Group each : groupsOf(under, List.of()).groups()) {
+                choices.addAll(choicesOfContainers(each.containers()));
             }
         }
-        return proof;
+        choices.addAll(choicesOfContainers(open));
+        for (List<TermPath> chosen : choices) {
+            Optional<EmptyInput> proof = Optional.empty();
+            boolean everyWayRefused = true;
+            for (StructuralContext each : holdingEachWay(under, chosen)) {
+                switch (viability(each, null, settled)) {
+                    case Viability.ProvedImpossible it -> {
+                        if (proof.isEmpty()) {
+                            proof = Optional.of(new EmptyInput.ProvedByTheDeclarations(it.why()));
+                        }
+                    }
+                    // Neither of these is a proof. One says nothing showed the input empty and
+                    // the other says this reading did not look, and a caller that read either as
+                    // "there is a value" would be reading the absence of a proof as one.
+                    case Viability.MayStand _ -> everyWayRefused = false;
+                    case Viability.NotRead _ -> {
+                        settled[0] = false;
+                        everyWayRefused = false;
+                    }
+                }
+                if (!everyWayRefused) {
+                    break;
+                }
+            }
+            if (everyWayRefused && proof.isPresent()) {
+                return proof;
+            }
+        }
+        return Optional.empty();
     }
 
     /**

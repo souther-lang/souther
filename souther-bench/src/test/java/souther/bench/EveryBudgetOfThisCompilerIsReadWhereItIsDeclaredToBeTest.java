@@ -929,10 +929,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;Ljava/util/Set;)Ljava/util/List;",
                     "stops at the values of a parameter a witness is sought among, and adds the"
                             + " figure to what the search came to"),
-            Map.entry("souther.compiler.partition.RowSearch#rowsOf("
-                            + "Ljava/util/List;Ljava/util/Set;)Ljava/util/List;",
-                    "stops at the rows a witness is sought among, and adds the figure to what the"
-                            + " search came to"),
+            Map.entry("souther.compiler.partition.RowSearch#firstOf("
+                            + "ILjava/util/List;Lsouther/compiler/partition/RowSearch$Building;"
+                            + "[ILjava/util/Set;)Lsouther/compiler/partition/RowSearch$Built;",
+                    "stops at the values built looking for the first one a parameter a run does"
+                            + " not turn on is tried with, and adds the figure to what the search"
+                            + " came to"),
+            Map.entry("souther.compiler.partition.RowSearch#rowsAt("
+                            + "Ljava/util/List;ILjava/util/List;Ljava/util/Set;)Z",
+                    "stops at the rows a witness is sought among, nearest the firsts first, and"
+                            + " adds the figure to what the search came to"),
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.
