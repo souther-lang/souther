@@ -10294,7 +10294,7 @@ public final class Generator {
             PartitionClass cls = axes.get(i).classes().get(where[i]);
             NumericSet admits = admitted(cls);
             if (admits != null) {
-                out.put(RealizationTarget.ofAHeld(cls.of()),
+                out.put(RealizationTarget.ofAPlace(cls.of()),
                         AskedAt.theClass(admits, carrierOf(cls.of(), measuring)));
             }
         }
@@ -10430,7 +10430,7 @@ public final class Generator {
             Map<TermPath, List<FixtureTemplate>> together, PartitionClass cls) {
         return admitted(cls) == null
                 ? null
-                : together.get(RealizationTarget.ofAHeld(cls.of()).writeRoot());
+                : together.get(RealizationTarget.ofAPlace(cls.of()).writeRoot());
     }
 
     /**

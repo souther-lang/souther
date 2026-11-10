@@ -149,9 +149,10 @@ public sealed interface RealizationTarget {
     }
 
     /**
-     * The target of a number the caller took out of a target it already holds, so that it has one.
-     * A product is one only where it is held at a value by one number, and the caller says it is
-     * by asking here.
+     * The target of a number the caller took from a target or a placing that already has one,
+     * where a product no row writes cannot be. Asked of any other number, a product with no target
+     * is a caller that did not ask {@link #of} first, and it is refused rather than answered with a
+     * place to write at.
      */
     static OfANumber ofAHeld(NumericTerm term) {
         return of(term).orElseThrow(() -> new IllegalArgumentException(
@@ -172,9 +173,10 @@ public sealed interface RealizationTarget {
 
         public OfAProduct {
             NumericTerm.ProductOf.AtAValue way = term == null ? null : term.atAValue();
-            if (way == null || carrier == null || !way.carrier().equals(carrier.term())) {
+            if (way == null || carrier == null || !way.carrier().equals(carrier.term())
+                    || RealizationTarget.of(way.fixed()).isEmpty()) {
                 throw new IllegalArgumentException(
-                        "a product is a target only with the number that carries it: " + term);
+                        "a product is a target only with the numbers that hold it: " + term);
             }
         }
 
@@ -186,6 +188,10 @@ public sealed interface RealizationTarget {
         static Optional<OfANumber> of(NumericTerm.ProductOf product) {
             NumericTerm.ProductOf.AtAValue way = product.atAValue();
             if (way == null) {
+                return Optional.empty();
+            }
+            // Held by two numbers, the one alone and the one beside it, and a row writes both.
+            if (RealizationTarget.of(way.fixed()).isEmpty()) {
                 return Optional.empty();
             }
             return RealizationTarget.of(way.carrier())

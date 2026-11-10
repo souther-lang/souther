@@ -7,7 +7,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ItemAssessment;
 
 import java.util.List;
 import java.util.Map;
@@ -15,6 +17,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -133,6 +136,111 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
                 "Decimal.multiply(Decimal.add(a, b), Decimal.add(rate, r2))"));
         assertMeasured(modelOf("a: Int, b: Int, c: Int, limit: Decimal",
                 "Decimal.fromInt((a + b) * c)"));
+    }
+
+    /**
+     * A line on the product is still owed its points, and none is said to be one nothing can be
+     * written at: each is left unresolved, which is what a point not shown to be reached is.
+     */
+    @Test
+    void thePointsOfALineOnTheProductAreOwedAndLeftUnresolved() {
+        String model = """
+                module demo
+
+                data Ok
+                data No
+
+                behavior f : (a: Int, b: Int, c: Int) -> Ok | No
+                let f (a, b, c) = {
+                    guard (a + b) * c >= 1000 else No
+                    Ok
+                }
+                """;
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<BorderAssessment> lines = Adequacy.readingsOf(compilation.db(), "demo").get("f");
+        List<BorderAssessment> product = lines.stream()
+                .filter(each -> each.axis().contains("(a + b) * c")).toList();
+        assertEquals(1, product.size(), lines.toString());
+        for (ItemAssessment item : product.get(0).items().values()) {
+            ItemAssessment.Owed owed = assertInstanceOf(ItemAssessment.Owed.class, item);
+            assertTrue(!owed.searches().each().isEmpty());
+            for (ItemAssessment.Attempt attempt : owed.searches().each()) {
+                ItemAssessment.Attempt.Unresolved unresolved =
+                        assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, attempt);
+                assertTrue(unresolved.uncomposed().onTheWay().stream().noneMatch(
+                        ReachabilityGap.ProvedImpossible.class::isInstance));
+            }
+        }
+    }
+
+    /**
+     * The same product put to every reader of a number a row search has: beside a number in a
+     * form, under a remainder, against another number, beside a condition on one factor, and as
+     * a factor of another product.
+     */
+    @Test
+    void aProductNoOneNumberHoldsIsMeasuredWhateverItIsPutBesideOrUnder() {
+        for (String condition : List.of(
+                "(a + b) * c >= 1000",
+                "(a + b) * c + d >= 1000",
+                "Int.floorMod((a + b) * c, 7) >= 1",
+                "(a + b) * c >= d",
+                "(a + b) * c >= 1000 && a >= 5",
+                "(a + b) * c >= 1000 && (a + b) * c <= 5000",
+                "d * ((a + b) * c) >= 1000")) {
+            String model = """
+                    module demo
+
+                    data Ok
+                    data No
+
+                    behavior f : (a: Int, b: Int, c: Int, d: Int) -> Ok | No
+                    let f (a, b, c, d) = {
+                        guard %s else No
+                        Ok
+                    }
+                    """.formatted(condition);
+            Compilation compilation = Compilation.ofSource(model, "Main");
+            assertDoesNotThrow(() -> {
+                compilation.measure(Adequacy.Asked.fullReport());
+                compilation.answerEverything();
+            }, condition);
+            assertNotNull(Adequacy.readingsOf(compilation.db(), "demo"), condition);
+            assertNotNull(compilation.db().ask(new Adequacy.Coverage("demo")).value(), condition);
+        }
+    }
+
+    /** A product whose factor is itself a product no one number holds: the pair is not held either. */
+    @Test
+    void aProductBesideAProductWithNoWayIsMeasuredWithoutAnInternalError() {
+        String params = "a: Decimal, b: Decimal, x: Decimal, limit: Decimal, rate: Decimal";
+        assertMeasured(modelOf(params,
+                "Decimal.multiply(x, Decimal.multiply(Decimal.add(a, b), rate))"));
+        assertMeasured(modelOf(params,
+                "Decimal.multiply(Decimal.multiply(Decimal.add(a, b), rate), x)"));
+    }
+
+    /** A product whose factor is itself a product that has a way, which keeps its target. */
+    @Test
+    void aProductBesideAProductWithAWayIsStillATarget() {
+        NumericTerm inner = NumericTerm.ProductOf.of(LinearForm.atom(number("p")),
+                LinearForm.atom(number("q")));
+        NumericTerm.ProductOf outer = NumericTerm.ProductOf.of(LinearForm.atom(number("x")),
+                LinearForm.atom(inner));
+        assertNotNull(outer.atAValue());
+        assertTrue(RealizationTarget.of(outer).isPresent());
+        NumericTerm innerNoWay = NumericTerm.ProductOf.of(sumOf("a", "b"),
+                LinearForm.atom(number("rate")));
+        // Whichever of the two the product orders first, the pair is held by two numbers and both
+        // have to be ones a row writes.
+        for (String factor : List.of("0", "x", "zz")) {
+            NumericTerm.ProductOf outerNoWay = NumericTerm.ProductOf.of(
+                    LinearForm.atom(number(factor)), LinearForm.atom(innerNoWay));
+            assertNotNull(outerNoWay, factor);
+            assertEquals(Optional.empty(), RealizationTarget.of(outerNoWay), factor);
+        }
     }
 
     /** The controls: a product that has a way, a sum beside a constant, and no product. */

@@ -458,7 +458,7 @@ public final class LevelRealizer {
                 return stoppedShort(stoppedBy);
             }
             Realization made =
-                    found(Map.of(RealizationTarget.ofAHeld(one.term()), at), within, tried);
+                    found(Map.of(RealizationTarget.ofAPlace(one.term()), at), within, tried);
             if (made instanceof Realization.Found) {
                 return made;
             }
@@ -572,14 +572,14 @@ public final class LevelRealizer {
                                 reading.settles() instanceof NumericTerm.ValueOf value
                                         ? within.classAt(value) : HeldClass.NONE,
                                 looking, within, tried,
-                                Map.of(RealizationTarget.ofAHeld(reading.anchors()), common),
+                                Map.of(RealizationTarget.ofAPlace(reading.anchors()), common),
                                 List.of(), stoppedBy);
                 if (at == null) {
                     continue;
                 }
                 Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-                fixing.put(RealizationTarget.ofAHeld(reading.settles()), at);
-                fixing.put(RealizationTarget.ofAHeld(reading.anchors()), common);
+                fixing.put(RealizationTarget.ofAPlace(reading.settles()), at);
+                fixing.put(RealizationTarget.ofAPlace(reading.anchors()), common);
                 if (found(fixing, within, tried) instanceof Realization.Found made) {
                     return made;
                 }
@@ -1078,6 +1078,11 @@ public final class LevelRealizer {
     private Realization ofARemainder(Standing.OfARemainder over, SearchRegion within,
                                      Map<NumericTerm, NumericDomain.Bounds> runs,
                                      WitnessSearch looking, ValuesTried tried) {
+        // The numbers of the dividend are what the walk places and the row is written at, so a
+        // dividend with a term no row writes is one this composes no row for.
+        if (targetsOf(new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs())).isEmpty()) {
+            return Realization.Unknown.nothingComposedOne();
+        }
         NumericWitness.Standing congruent = asACongruence(over, within, looking, tried);
         if (congruent instanceof NumericWitness.Standing.Found standing) {
             Map<NumericTerm, Place> placed = new LinkedHashMap<>();
@@ -1634,9 +1639,9 @@ public final class LevelRealizer {
                         continue;
                     }
                     Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-                    fixing.put(RealizationTarget.ofAHeld(over.dividend()),
+                    fixing.put(RealizationTarget.ofAPlace(over.dividend()),
                             Count.of(new BigDecimal(dividend)));
-                    fixing.put(RealizationTarget.ofAHeld(over.divisor()), divisorAt);
+                    fixing.put(RealizationTarget.ofAPlace(over.divisor()), divisorAt);
                     // A pair tried before proves nothing either way.
                     if (tried.holds(fixing)) {
                         bounded = false;
@@ -2853,7 +2858,7 @@ public final class LevelRealizer {
                                       SearchRegion region, ValuesTried tried,
                                       Map<RealizationTarget, Place> given,
                                       List<Place> refused, Set<CompositionBudget> stoppedBy) {
-        PlacesApart apart = tried.apartFor(RealizationTarget.ofAHeld(term), given);
+        PlacesApart apart = tried.apartFor(RealizationTarget.ofAPlace(term), given);
         if (!refused.isEmpty()) {
             List<Place> held = new ArrayList<>(apart.places());
             held.addAll(refused);
