@@ -506,7 +506,7 @@ public final class Conclusion {
 
     Proposition unread(Derivation.Stopped stopped) {
         return new Proposition.Unread(shared.where, shared.unread++, stopped.why(),
-                stopped.fixed(), true);
+                stopped.fixed(), true, stopped.couldBe());
     }
 
     /** What {@code carried} is supposed to have come out as, or itself where nothing supposes it. */

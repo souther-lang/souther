@@ -1457,10 +1457,32 @@ public sealed interface Proposition {
      * @param ordinal which unread part of the condition this is, in the order the reading met them
      * @param why     what stopped it, in the stopping reader's words
      * @param fixed   whether it is the same whatever the input, which is all that is known of it
+     * @param couldBe what the part would be said as were there words for it, or none where there is
+     *                no such statement. Not a statement held as a part: a part nothing read the
+     *                meaning of is no statement a reading divides by, and a reader of the parts
+     *                that met it would read the string it is of. It is what a way through the body
+     *                may take of the part, which is what the statement makes certain, on whichever
+     *                side the way comes out
      * @param spelling    spelled from where and which it is when it is made, whatever is handed in
      */
     record Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
-                  boolean holds, Spelling spelling) implements Proposition {
+                  boolean holds, Optional<CouldBe> couldBe, Spelling spelling)
+            implements Proposition {
+
+        /**
+         * A string at a position of the input being one of the strings of a language, as a part
+         * that was nothing but read would have it, on the side the part holds.
+         *
+         * @param string  the string
+         * @param accepts the strings it is one of
+         */
+        public record CouldBe(InTheStrings.Strings.AtAPosition string, StringsLanguage accepts) {
+
+            /** The statement it is, as it stands where it {@code holds}. */
+            public Proposition on(boolean holds) {
+                return new InTheStrings(string, accepts, holds);
+            }
+        }
 
         @Override
         public int hashCode() {
@@ -1468,12 +1490,18 @@ public sealed interface Proposition {
         }
 
         public Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
+                      boolean holds, Optional<CouldBe> couldBe) {
+            this(where, ordinal, why, fixed, holds, couldBe, null);
+        }
+
+        /** A part nothing could say as a statement. */
+        public Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
                       boolean holds) {
-            this(where, ordinal, why, fixed, holds, null);
+            this(where, ordinal, why, fixed, holds, Optional.empty(), null);
         }
 
         public Unread {
-            if (where == null || why == null) {
+            if (where == null || why == null || couldBe == null) {
                 throw new IllegalArgumentException("an unread part stopped somewhere, for a reason");
             }
             spelling = Spelling.of((holds ? "" : "!") + "unread "
@@ -1482,7 +1510,7 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return new Unread(where, ordinal, why, fixed, !holds);
+            return new Unread(where, ordinal, why, fixed, !holds, couldBe);
         }
     }
 

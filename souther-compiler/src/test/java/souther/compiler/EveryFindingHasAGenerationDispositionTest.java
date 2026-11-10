@@ -239,8 +239,8 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * A line the first reading composes nothing at is searched at the next.
      *
-     * <p>The whole of what a search over the readings is for. {@code Narrow} holds its field to three
-     * characters or more, so the reading of the line at {@code held} cannot stand a row at length 1
+     * <p>The whole of what a search over the readings is for. {@code Narrow} holds its field to one
+     * character or three, so the reading of the line at {@code held} cannot stand a row at length 2
      * — and a line one reading composes nothing at is not a line nothing composes a row for
      * (issue #1076). Stopping at the first reading, the module's own declaration was reported as
      * work nobody could do while the row was two behaviors further down.
@@ -367,12 +367,13 @@ class EveryFindingHasAGenerationDispositionTest {
             assertEquals(2, java.util.Set.copyOf(each.readings()).size(),
                     "and they are two readings, which is what a walk of them has to see");
         }
-        // The line, searched at both positions. No string of one character is three letters, so
-        // the row on the line is composable at neither, and is answered from both readings rather
-        // than from whichever the walk reached first. The run beside it is written with three
-        // letters, which is what the record's rules admit at each field.
+        // The line, searched at both positions. No string of two characters is one character or
+        // three, so the row on the line is composable at neither, and is answered from both
+        // readings rather than from whichever the walk reached first. The run beside it is
+        // searched at both as well, in its own words.
         assertEquals(List.of(
-                        List.of("String.length(x.a) = 1", "String.length(x.b) = 1")),
+                        List.of("String.length(x.a) = 2", "String.length(x.b) = 2"),
+                        List.of("2 < String.length(x.a) <= 3", "2 < String.length(x.b) <= 3")),
                 coverage.stream()
                         .map(each -> each.attempted().stream()
                                 .map(souther.compiler.partition.Generator
@@ -387,11 +388,11 @@ class EveryFindingHasAGenerationDispositionTest {
             module example.twice
 
             data Code = String
-                invariant nonempty = String.length(value) >= 1
+                invariant nonempty = String.length(value) >= 2
 
             data Both = { a: Code, b: Code }
-                invariant fixedA = String.matches("[a-z][a-z][a-z]+", a.value)
-                invariant fixedB = String.matches("[a-z][a-z][a-z]+", b.value)
+                invariant fixedA = String.matches("x|xxx", a.value)
+                invariant fixedB = String.matches("x|xxx", b.value)
 
             data Ok
 
@@ -402,9 +403,9 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * Two lines one clause drew are searched apart.
      *
-     * <p>A clause with both ends draws two lines — {@code >= 1 && <= 3} is one at each — and they
+     * <p>A clause with both ends draws two lines — {@code >= 2 && <= 3} is one at each — and they
      * are two debts, not one thing with two sides (issue #1062). So which reading composes the row
-     * for one of them says nothing about the other: {@code Narrow} takes three letters or more,
+     * for one of them says nothing about the other: {@code Narrow} takes one letter or three,
      * which refuses the value at the bottom of {@code Code}'s range and takes the one at the top.
      * Resolved per clause, a line would be handed to an author as a single piece of work whose two
      * ends are owed at different positions.
@@ -450,7 +451,7 @@ class EveryFindingHasAGenerationDispositionTest {
             module example.either
 
             data Code = String
-                invariant nonempty = String.length(value) >= 1
+                invariant nonempty = String.length(value) >= 2
 
             data A = { c: Code }
             data B = { c: Code }
@@ -469,10 +470,10 @@ class EveryFindingHasAGenerationDispositionTest {
             module example.ends
 
             data Code = String
-                invariant sized = String.length(value) >= 1 && String.length(value) <= 3
+                invariant sized = String.length(value) >= 2 && String.length(value) <= 3
 
             data Narrow = { c: Code }
-                invariant fixed = String.matches("[a-z][a-z][a-z]+", c.value)
+                invariant fixed = String.matches("x|xxx", c.value)
 
             data Wide = { c: Code }
 
@@ -518,10 +519,10 @@ class EveryFindingHasAGenerationDispositionTest {
             module example.held
 
             data Code = String
-                invariant nonempty = String.length(value) >= 1
+                invariant nonempty = String.length(value) >= 2
 
             data Narrow = { c: Code }
-                invariant fixed = String.matches("[a-z][a-z][a-z]+", c.value)
+                invariant fixed = String.matches("x|xxx", c.value)
 
             data Wide = { c: Code }
 
@@ -538,21 +539,21 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * One line, at a position one behavior can hold a row at and the other cannot.
      *
-     * <p>Both readings owe a row at {@code String.length(value) = 1} — the line cuts inside what
-     * either position admits — and only one of them can hold one: {@code Narrow} takes three
-     * letters or more, so every one-character value composed at {@code held} is refused where it is
+     * <p>Both readings owe a row at {@code String.length(value) = 2} — the line cuts inside what
+     * either position admits — and only one of them can hold one: {@code Narrow} takes one letter
+     * or three, so every two-character value composed at {@code held} is refused where it is
      * constructed, and the plain field at {@code anywhere} takes it.
      */
     private static final String NARROWED = """
             module example.narrowed
 
             data Code = String
-                invariant nonempty = String.length(value) >= 1
+                invariant nonempty = String.length(value) >= 2
 
             data Wide = { c: Code }
 
             data Narrow = { c: Code }
-                invariant fixed = String.matches("[a-z][a-z][a-z]+", c.value)
+                invariant fixed = String.matches("x|xxx", c.value)
 
             data Ok
 

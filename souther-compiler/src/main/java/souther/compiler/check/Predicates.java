@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
-import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
 import souther.compiler.numeric.ExactAnswer;
@@ -581,7 +580,20 @@ final class Predicates {
      * @param folded whether the clause came out one way on its own, before any construction was
      *               looked at
      */
-    record Owed(List<Part> parts, Fold folded) {
+    record Owed(List<Part> parts, Fold folded, List<NumericConstraint> following) {
+
+        Owed {
+            following = List.copyOf(following);
+        }
+
+        Owed(List<Part> parts, Fold folded) {
+            this(parts, folded, List.of());
+        }
+
+        /** This, with what holding the clause makes certain of its arguments. */
+        Owed stating(List<NumericConstraint> certain) {
+            return certain.isEmpty() ? this : new Owed(parts, folded, certain);
+        }
 
         /** Nothing is owed because the clause came out one way or the other on its own. */
         static Owed decided(boolean holds) {
@@ -665,15 +677,18 @@ final class Predicates {
          *  than instead of it: which of the two a caller acts on is the caller's, and a reading that
          *  answered only one of them decided that for every caller there will ever be. */
         Owed alsoFolded(Fold fold) {
-            return fold == Fold.NOT_DECIDED ? this : new Owed(parts, fold);
+            return fold == Fold.NOT_DECIDED ? this : new Owed(parts, fold, following);
         }
 
         /** Both conjuncts of one clause: every part either owes, in the order they were read, and
-         *  folded only as both of them together fold. */
+         *  folded only as both of them together fold; and what holding either makes certain, which
+         *  holding both does. */
         Owed and(Owed other) {
             List<Part> both = new ArrayList<>(parts);
             both.addAll(other.parts);
-            return new Owed(List.copyOf(both), folded.and(other.folded));
+            List<NumericConstraint> certain = new ArrayList<>(following);
+            certain.addAll(other.following);
+            return new Owed(List.copyOf(both), folded.and(other.folded), certain);
         }
 
         /**
@@ -967,6 +982,10 @@ final class Predicates {
         public Owed whole(ClauseExpr.Part part, Denotations at) {
             Owed owed = of.owing(Conditions.asSizeComparison(part.of()), at, unnamed,
                     part.positive(), decidesFalse, discharge);
+            // A choice taken whole still says what every way of it says.
+            if (part instanceof ClauseExpr.Joined join) {
+                owed = owed.stating(of.followingOf(join, at));
+            }
             return spending != null && part instanceof ClauseExpr.Joined join
                     && !of.namesAnyOf(spending.leftToTheRunTime(), part, at)
                     ? of.askedOfThePath(owed, join, at, spending.known()) : owed;
@@ -1012,7 +1031,7 @@ final class Predicates {
         if (parts.isEmpty()) {
             parts.add(new Part.Carried(new Clause(null, null, List.of(), null, answer)));
         }
-        return new Owed(List.copyOf(parts), owed.folded());
+        return new Owed(List.copyOf(parts), owed.folded(), owed.following());
     }
 
     /**
@@ -1143,14 +1162,59 @@ final class Predicates {
                 ? List.of() : factKeys(polar.expr(), at);
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
+        List<NumericConstraint> following = followingOf(polar.expr(), stated, at);
         if (numeric == null && fact == null) {
-            return Owed.unreadable(where).alsoFolded(fold);
+            return Owed.unreadable(where).stating(following).alsoFolded(fold);
         }
         // What the values this clause names carry, read off the atoms rather than off the tree: an
         // atom files what it carries where it is named, so having read the clause into forms is
         // having read them ({@link IntrinsicNumericFacts}).
         List<NumericConstraint> known = terms.carriedBy(namedBy(numeric, fact));
-        return Owed.of(new Clause(numeric, fact, known, piecewise, null)).alsoFolded(fold);
+        return Owed.of(new Clause(numeric, fact, known, piecewise, null)).stating(following)
+                .alsoFolded(fold);
+    }
+
+    /**
+     * What a condition coming out {@code positive} makes certain over the counts and numbers of its
+     * arguments, as the law of the operation it is says it of that side: the same conditions a
+     * guard on it takes ({@link LawOverAtoms#whereItHolds}).
+     *
+     * <p>Said of the condition and not of the clause that carries it: whether the check can read
+     * the clause as a relation or a fact is no part of what the condition says of its arguments,
+     * so an unread clause says it as well.
+     */
+    private List<NumericConstraint> followingOf(Core condition, boolean positive, Denotations at) {
+        Derivation.HoldsSomethingWhere.Holding law = LawOverAtoms.whereItHolds(condition, at,
+                terms);
+        List<NumericConstraint> certain = law == null ? null
+                : LawOverAtoms.certain(law, positive);
+        return certain == null ? List.of() : certain;
+    }
+
+    /**
+     * What holding {@code part} as stated makes certain: what each part of a conjunction does, and
+     * of a choice what every way of it does — one of them holds and which is not said, so what is
+     * certain is what each says of the same number, at the weakest of what they say
+     * ({@link NumericConstraint#commonTo}).
+     */
+    private List<NumericConstraint> followingOf(ClauseExpr part, Denotations at) {
+        return switch (part) {
+            case ClauseExpr.Leaf leaf -> followingOf(leaf.of(), leaf.positive(), at);
+            case ClauseExpr.Joined join -> switch (join.how()) {
+                case BOTH -> {
+                    List<NumericConstraint> both = new ArrayList<>(followingOf(join.left(), at));
+                    both.addAll(followingOf(join.right(), at));
+                    yield both;
+                }
+                case EITHER -> NumericConstraint.commonTo(List.of(followingOf(join.left(), at),
+                        followingOf(join.right(), at)));
+            };
+            // What a binding stands for says what its body says, read where the binding is entered
+            // as every reading of a clause enters it: a way stated through a helper says what the
+            // same way written out says.
+            case ClauseExpr.Scoped scoped ->
+                    followingOf(scoped.body(), terms.inside(scoped.binding(), at));
+        };
     }
 
     /** What a clause folding to {@code folded}, read with polarity {@code positive}, comes to on its
@@ -1712,8 +1776,7 @@ final class Predicates {
         // answered is entered by, and of it only what is certain this way. A condition read by
         // what the reading of the model says it states takes the same number in there
         // ({@link MeaningAssumptions}).
-        Derivation.HoldsSomethingWhere.Holding law = LawOverAtoms.whereItHolds(
-                AnOperationApplied.of(cond), AnswerAspect.TRUTH, at, terms);
+        Derivation.HoldsSomethingWhere.Holding law = LawOverAtoms.whereItHolds(cond, at, terms);
         List<NumericConstraint> certain = law == null ? List.of()
                 : LawOverAtoms.certain(law, positive);
         if (certain == null) {
@@ -2010,6 +2073,12 @@ final class Predicates {
         // saying nothing here would leave a value its own type guarantees something about looking
         // like one nothing is known of.
         out = out.speaking(subjectsIn(owed));
+        // What holding the clause makes certain of its arguments, as a guard saying the same says
+        // it. Of the clause as it was stated and not of the parts that were carried, so a clause
+        // left to the run-time check says it as well.
+        for (NumericConstraint each : owed.following()) {
+            out = out.taking(each.form(), each.rel(), held, terms.spacesOf(each.form()));
+        }
         // What could not be read says nothing here: a clause left to the run-time check is not one
         // the seeding may assume, and the flag saying so is the construction site's to act on.
         for (Part eachC : owed.parts()) {

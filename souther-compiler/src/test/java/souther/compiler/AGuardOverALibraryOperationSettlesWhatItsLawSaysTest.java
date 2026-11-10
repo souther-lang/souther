@@ -106,6 +106,61 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "Digit(String.length(t) - String.length(s)) else Digit(0)", true),
             new Row("if String.endsWith(t, s) then Digit(0) "
                     + "else Digit(String.length(s) - String.length(t))", true),
+            // The empty string stands inside every string, so one that does not is not empty —
+            // and that is all the denial says of it.
+            new Row("if String.contains(t, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
+            new Row("if String.startsWith(t, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
+            new Row("if String.endsWith(t, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
+            new Row("if String.contains(t, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 2)", true),
+            new Row("if String.contains(t, s) then Digit(0) "
+                    + "else Digit(String.length(s) - String.length(t))", true),
+            new Row("if String.contains(t, s) then Digit(String.length(t) - 1) "
+                    + "else Digit(0)", true),
+            // The empty string stands inside every string, so what is not inside is never it.
+            new Row("if String.contains(\"\", s) then Digit(0) "
+                    + "else Digit(String.length(s) - 1)", false),
+            new Row("if String.contains(\"a\", s) then Digit(0) "
+                    + "else Digit(String.length(s) - 1)", true),
+            // A string a pattern accepts holds as many code points as its strings do, and one it
+            // does not accept is not empty where the pattern accepts that.
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(String.length(t) - 3) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(String.length(t) - 4) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(3 - String.length(t)) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(2 - String.length(t)) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[0-9]{3}\", t) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", true),
+            new Row("if String.matches(\"[0-9]*\", t) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
+            new Row("if String.matches(\"[0-9]*\", t) then Digit(String.length(t) - 1) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[0-9]+\", t) then Digit(String.length(t) - 1) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[0-9]+\", t) then Digit(String.length(t) - 2) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[A-Z]{2,4}\", t) then Digit(String.length(t) - 2) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[A-Z]{2,4}\", t) then Digit(4 - String.length(t)) "
+                    + "else Digit(0)", false),
+            new Row("if String.matches(\"[A-Z]{2,4}\", t) then Digit(3 - String.length(t)) "
+                    + "else Digit(0)", true),
+            new Row("if String.matches(\"[0-9]{3}|[A-Z]{5}\", t) "
+                    + "then Digit(String.length(t) - 3) else Digit(0)", false),
+            new Row("if String.matches(\"[0-9]{3}|[A-Z]{5}\", t) "
+                    + "then Digit(String.length(t) - 4) else Digit(0)", true),
+            // A conjunction that does not hold leaves either part possible, so neither part's
+            // denial is taken.
+            new Row("if String.contains(t, s) && String.contains(u, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", true),
+            new Row("if String.contains(t, s) || String.contains(u, s) then Digit(0) "
+                    + "else Digit(String.length(t) - 1)", false),
             // How many some element of another set is not, as how many there are less those.
             new Row("Digit(Set.size(Set.union(a, b)) - Set.size(a))", false),
             new Row("Digit(Set.size(a) - Set.size(Set.union(a, b)))", true),
@@ -418,6 +473,41 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
         assertEquals(List.of(), wrong, "each row is owed exactly what its law leaves open");
     }
 
+    /**
+     * A condition stated through a helper makes certain what the same condition written out does:
+     * which pattern a call is written with, and which side of it the path is on, do not turn on
+     * whether a name stands between the guard and the call.
+     */
+    @Test
+    void aGuardStatedThroughAHelperSaysWhatTheSameGuardWrittenOutSays() {
+        List<String> wrong = new ArrayList<>();
+        for (String guard : List.of("String.matches(\"B{5}\", s)", "five(s)")) {
+            for (Row row : List.of(
+                    new Row("if %s then Digit(String.length(s) - 5) else Digit(0)", false),
+                    new Row("if %s then Digit(String.length(s) - 6) else Digit(0)", true),
+                    new Row("if %s then Digit(0) else Digit(String.length(s) - 5)", true))) {
+                String body = row.body().formatted(guard);
+                boolean owed = owedBy("""
+                        module demo
+
+                        data Digit = Int
+                            invariant atLeastNought = value >= 0
+
+                        let five (x: String): Bool = String.matches("B{5}", x)
+
+                        behavior f : (s: String) -> Digit
+                            constructs Digit
+                        let f (s) =
+                            %s
+                        """.formatted(body), body);
+                if (owed != row.owed()) {
+                    wrong.add(body + ": owed " + owed + ", expected " + row.owed());
+                }
+            }
+        }
+        assertEquals(List.of(), wrong, "a name between the guard and the call changes nothing");
+    }
+
     /** The totals of lists of decimals are related as those of lists of integers are, and the
      *  row beside each moves one side by one. */
     private static final List<Row> ROWS_OF_DECIMALS = List.of(
@@ -483,10 +573,10 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
 
                 behavior f : (xs: List<Int>, ys: List<Int>, xss: List<List<Int>>,
                               a: Set<Int>, b: Set<Int>, ma: Map<String, Int>, mb: Map<String, Int>,
-                              s: String, t: String, x: Int)
+                              s: String, t: String, u: String, x: Int)
                     -> Digit
                     constructs Digit
-                let f (xs, ys, xss, a, b, ma, mb, s, t, x) =
+                let f (xs, ys, xss, a, b, ma, mb, s, t, u, x) =
                     %s
                 """.formatted(body), body);
     }

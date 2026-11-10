@@ -80,6 +80,37 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
         return ReadThroughNames.readThrough(stated, names, () -> TWO_AS_ONE);
     }
 
+    private static Proposition unreadSaying(TermPath at, ValueIdentity identity) {
+        return new Proposition.Unread(Optional.empty(), 1, new WhyUnread.TwoElementsOfOneContainer(),
+                false, true, Optional.of(new Proposition.Unread.CouldBe(
+                        new Proposition.InTheStrings.Strings.AtAPosition(at, identity),
+                        new StringsLanguage(new PatternMeaning.Nothing()))));
+    }
+
+    /** What a part nothing read would be said as is of the same string it is, and is told the name
+     *  that stood for it as a statement of it is. */
+    @Test
+    void whatAPartNothingReadWouldBeSaidAsIsToldTheNameThatStoodForItsString() {
+        assertEquals(unreadSaying(TEXT, of(A)),
+                readThrough(unreadSaying(TEXT, ValueIdentity.AT_THE_POSITION), named(A)));
+    }
+
+    /** Where two names stood for the string it is of, the part is no less read and says nothing
+     *  of its length. */
+    @Test
+    void whereTwoNamesStoodForTheStringAPartWouldBeSaidAsItSaysNothing() {
+        assertEquals(new Proposition.Unread(Optional.empty(), 1,
+                        new WhyUnread.TwoElementsOfOneContainer(), false, true),
+                readThrough(unreadSaying(TEXT, ValueIdentity.AT_THE_POSITION), named(A, B)));
+    }
+
+    /** A string the names say nothing of is the one it was, and the same part. */
+    @Test
+    void aStringNoNameStoodForIsLeftAsItWas() {
+        Proposition stated = unreadSaying(GATE, ValueIdentity.AT_THE_POSITION);
+        assertEquals(stated, readThrough(stated, named(A)));
+    }
+
     /** A number and a truth at the element are told the one name that stood for it; the row's
      *  number is told nothing. */
     @Test
