@@ -70,7 +70,7 @@ class AnIntsEndsBoundOnlyAValueReadOffAnInputTest {
 
         @Override
         public boolean isAnInt(NumericTerm term) {
-            return ints && term instanceof NumericTerm.ValueOf;
+            return ints && !(term instanceof NumericTerm.ProductOf);
         }
     }
 

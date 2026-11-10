@@ -252,10 +252,12 @@ public interface SearchRegion {
     }
 
     /**
-     * Whether {@code term} is the value of a position an {@code Int} is read at, which lies
-     * between the ends of an {@code Int}. Not a product, a total or a count of any number: what
-     * the arithmetic of whole numbers works out to has no end this says. A region that reads no
-     * types says it of no term, which is what the default is.
+     * Whether {@code term} is a whole number a position or a fold over a container holds as an
+     * {@code Int}, which lies between the ends of an {@code Int}: a fold that passes them is a
+     * stop of its own, owed a witness, and is not asked again of a statement about its number.
+     * Not a product, which the arithmetic of two {@code Int} works out past the ends: its range
+     * is that of its factors. A region that reads no types says it of no term, which is what the
+     * default is.
      */
     default boolean isAnInt(NumericTerm term) {
         return false;

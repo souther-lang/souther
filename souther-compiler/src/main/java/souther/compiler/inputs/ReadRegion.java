@@ -107,7 +107,7 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
 
     @Override
     public boolean isAnInt(NumericTerm term) {
-        return term instanceof NumericTerm.ValueOf && within.answersFor(term)
+        return !(term instanceof NumericTerm.ProductOf) && within.answersFor(term)
                 && within.ordersOf(term).answered() instanceof Carrier.Whole;
     }
 
