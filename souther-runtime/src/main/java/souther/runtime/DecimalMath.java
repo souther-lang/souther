@@ -8,6 +8,7 @@ import souther.exact.ExactParts;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Every Decimal operation the language has (spec §stdlib-decimal), and the one place
@@ -175,8 +176,31 @@ public final class DecimalMath {
         try {
             return dividend.divide(divisor, places, toJava(mode));
         } catch (ArithmeticException _) {
-            throw noRoom("the quotient of " + describe(dividend) + " and " + describe(divisor)
-                    + " at scale " + scale);
+            return exactlyAt(RationalMath.divide(Rational.of(dividend), Rational.of(divisor)),
+                    places, mode, () -> "the quotient of " + describe(dividend) + " and "
+                            + describe(divisor) + " at scale " + scale);
+        }
+    }
+
+    /**
+     * {@code exact} at {@code places} by {@code mode}, where a {@code BigDecimal} gave up on the
+     * way to it.
+     *
+     * <p>A {@code BigDecimal} brings a number to another scale by building the power of ten between
+     * the two, so a value far nearer nought than the scale asked for — one at the end of its
+     * scales, rounded to a whole number — asks it for a number it has no room for, though the
+     * answer is nought or one step from it. That is an intermediate the representation chose, and
+     * not a reason to run short (spec
+     * §an-operation-refuses-only-what-its-own-answer-has-no-place-for). The exact narrowing builds
+     * only the answer's own digits; where it is short as well, the answer itself has no room, and
+     * {@code what} says which answer that was.
+     */
+    private static BigDecimal exactlyAt(Rational exact, int places, RoundingMode mode,
+                                        Supplier<String> what) {
+        try {
+            return exact.asDecimal(places, toJava(mode));
+        } catch (OutOfRoom _) {
+            throw noRoom(what.get());
         }
     }
 
@@ -230,7 +254,8 @@ public final class DecimalMath {
         try {
             whole = d.setScale(0, toJava(mode));
         } catch (ArithmeticException _) {
-            throw noRoom("the whole number " + describe(d) + " rounds to");
+            whole = exactlyAt(Rational.of(d), 0, mode,
+                    () -> "the whole number " + describe(d) + " rounds to");
         }
         try {
             return whole.longValueExact();
@@ -247,7 +272,8 @@ public final class DecimalMath {
         try {
             return d.setScale(places, toJava(mode));
         } catch (ArithmeticException _) {
-            throw noRoom(describe(d) + " rounded to scale " + scale);
+            return exactlyAt(Rational.of(d), places, mode,
+                    () -> describe(d) + " rounded to scale " + scale);
         }
     }
 
