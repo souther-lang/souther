@@ -160,6 +160,20 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
                 AbortSites.completionOfAnOperator(BinOp.SUB, Type.DECIMAL));
     }
 
+    /**
+     * A unit data named as a value works nothing out, so a body rounding by {@code HALF_UP}
+     * answers wherever the rounding does, which is always: the name is read as the value it is,
+     * and not as a name the reading has no word for.
+     */
+    @Test
+    void aUnitDataNamedInABodyIsItsValueAndEndsNothing() {
+        LibraryEndings endings = LibraryEndings.of(rewritten("if d < 0.0m then 0.0m - d else d",
+                "if d < 0.0m then 0.0m - Decimal.round(2, HALF_UP, d) else d"));
+
+        assertEquals(NONE, endings.apartFromWhatItIsHanded(ABS));
+        assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(ABS));
+    }
+
     /** A kernel's is what its contract says, and not read again here. */
     @Test
     void aKernelEndsARunForWhatItsContractSays() {

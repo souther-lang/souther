@@ -265,8 +265,8 @@ final class Collect {
                 visit(next, each);
             }
             case Value.AsEntries(Value entries) -> visit(entries, each);
-            case Value.Argument _, Value.Fresh _, Value.Whole _, Value.Decimal _, Value.Truth _,
-                 Value.Lambda _, Value.NothingYet _ -> { }
+            case Value.Argument _, Value.Fresh _, Value.Unit _, Value.Whole _, Value.Decimal _,
+                 Value.Truth _, Value.Lambda _, Value.NothingYet _ -> { }
         }
     }
 }

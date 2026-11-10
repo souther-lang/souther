@@ -424,7 +424,8 @@ final class LibraryEndings {
                                 NOT_KNOWN;
                     };
                     case LibraryTerm.Parameter _, LibraryTerm.Bound _, LibraryTerm.WholeNumber _,
-                         LibraryTerm.DecimalNumber _, LibraryTerm.Truth _, LibraryTerm.ListOf _,
+                         LibraryTerm.DecimalNumber _, LibraryTerm.Truth _, LibraryTerm.UnitValue _,
+                         LibraryTerm.ListOf _,
                          LibraryTerm.TupleOf _, LibraryTerm.Component _, LibraryTerm.Applied _,
                          LibraryTerm.Closure _, LibraryTerm.Let _, LibraryTerm.Fork _,
                          LibraryTerm.OnAnOption _ -> NONE;

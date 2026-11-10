@@ -97,6 +97,10 @@ public final class LibraryTerms {
                     library.entry(operation).signature().params().isEmpty()
                             ? new LibraryTerm.Call(operation, List.of())
                             : new LibraryTerm.Unread(LibraryTerm.Unwritten.AN_OPERATION_AS_A_VALUE);
+            // A unit data named as a value is its one value. A type named otherwise — a newtype
+            // handed over as the function that wraps a value — is not, and stays unread.
+            case ReachName.InScope(ValueName.OfType(var _, TypeSymbol type))
+                    when library.declaresAUnit(type) -> new LibraryTerm.UnitValue(type);
             case ReachName.InScope _, ReachName.Own _, ReachName.OfModule _,
                  ReachName.TheNamespace _ ->
                     new LibraryTerm.Unread(LibraryTerm.Unwritten.A_NAME_OF_NOTHING_HERE);
