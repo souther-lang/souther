@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.ValueTemplates;
 import souther.compiler.check.AnIndexedMap;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BoundOperationFacts;
@@ -474,6 +475,12 @@ public final class InputReads {
      */
     public InputReads whereValuesAreDefined() {
         return names.values().reading();
+    }
+
+    /** What the values this reading meets are defined as, which a reader of a tree that builds
+     *  one is read against. */
+    public ValueTemplates valueTemplates() {
+        return names.values().templates();
     }
 
     /**

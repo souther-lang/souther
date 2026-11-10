@@ -5,6 +5,7 @@ import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.LawNumber;
+import souther.compiler.types.BinOp;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -162,6 +163,14 @@ public final class KernelContracts {
             case SET_INSERT -> fits(GetsPast.together(1, 1));
             case MAP_INSERT -> fits(GetsPast.together(1, 2));
             case STRING_LOWERCASE, STRING_UPPERCASE -> new GetsPast.WhereTheTextFits(0);
+            case DECIMAL_ADD -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.ADD);
+            case DECIMAL_SUBTRACT -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.SUB);
+            case DECIMAL_MULTIPLY -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.MUL);
+            // Rounded to the places the call writes out, of the number it is handed last.
+            case DECIMAL_ROUND -> GetsPast.WhereTheScalesHaveRoom.ofARounding(0, 2);
+            // A quotient is worked at the scale asked and the greater of the two it divides, and
+            // is a number of the shape its law leaves, at the scale asked.
+            case DECIMAL_DIVIDE -> GetsPast.WhereTheScalesHaveRoom.ofADivision(0, 1, 2);
             default -> abortsOf(kernel).isEmpty() ? new GetsPast.Always()
                     : new GetsPast.NotKnown();
         };

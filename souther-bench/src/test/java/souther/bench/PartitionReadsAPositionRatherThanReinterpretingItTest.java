@@ -122,6 +122,9 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
                     Traversal.OPAQUE),
             new Authority("what is proved of the library's operations, read off their bodies",
                     "souther.compiler.check.OperationFactBinder#bindAll", Traversal.OPAQUE),
+            new Authority("whether the check of the declarations discharges every clause of a"
+                            + " construction from what they say of the parameters alone",
+                    "souther.compiler.check.InvariantChecker#discharges", Traversal.OPAQUE),
 
             // An owner all the same, walked through. It cannot stand as a boundary: it hands its
             // decision to whichever term it is about, so a stop here would leave the place that

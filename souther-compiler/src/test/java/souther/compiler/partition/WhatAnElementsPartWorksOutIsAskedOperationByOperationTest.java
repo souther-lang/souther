@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Core;
 import souther.compiler.inputs.DecimalOperation;
+import souther.compiler.inputs.DecimalOperation.Shape;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
@@ -136,25 +137,34 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
                 Map.of(), NAMED_D));
     }
 
-    /** The scale furthest from nought any operation worked out of an element is at: a path at
-     *  the places a row is built at, a number written out at its own, a product at the sum of its
-     *  factors', and every name's value counted whether it is read or not. */
+    /** The shape furthest from nought any operation worked out of an element is of: a path of the
+     *  shape of a place of a row, a number written out of its own, an operation of what its
+     *  operator makes of its operands', and every name's value counted whether it is read or
+     *  not. */
     @Test
-    void theScaleOfEveryPartIsTheFurthestAnyOperationIsAt() {
-        long row = DecimalOperation.PLACES_A_ROW_IS_BUILT_AT;
-        AddedOfEachElement.Part tenth = new AddedOfEachElement.Written(new BigDecimal("0.1"));
-        assertEquals(row, new AddedOfEachElement(PATH_P).scaleOfEveryPart());
-        assertEquals(row, new AddedOfEachElement(worked(BinOp.SUB, PATH_P, PATH_Q))
-                .scaleOfEveryPart());
-        assertEquals(2 * row, new AddedOfEachElement(worked(BinOp.ADD,
-                worked(BinOp.MUL, PATH_P, PATH_Q), PATH_P)).scaleOfEveryPart());
-        assertEquals(3 * row, new AddedOfEachElement(worked(BinOp.MUL,
-                worked(BinOp.MUL, PATH_P, PATH_Q), PATH_P)).scaleOfEveryPart());
-        assertEquals(row + 1, new AddedOfEachElement(worked(BinOp.MUL, PATH_P, tenth))
-                .scaleOfEveryPart());
-        assertEquals(2 * row, new AddedOfEachElement(List.of(new AddedOfEachElement.Bound(D,
-                worked(BinOp.MUL, PATH_P, PATH_Q))), Map.of(), PATH_P).scaleOfEveryPart());
-        assertEquals(2 * row, AddedOfEachElement.ofAJoin().scaleOfEveryPart());
+    void theShapeOfEveryPartIsTheFurthestAnyOperationIsOf() {
+        Shape place = Shape.OF_A_PLACE;
+        Shape twice = DecimalOperation.shapeOfTheAnswer(BinOp.MUL, place, place);
+        Shape thrice = DecimalOperation.shapeOfTheAnswer(BinOp.MUL, twice, place);
+        Shape tenth = Shape.of(new BigDecimal("0.1"));
+        AddedOfEachElement.Part written = new AddedOfEachElement.Written(new BigDecimal("0.1"));
+        assertEquals(place, new AddedOfEachElement(PATH_P).shapeOfEveryPart());
+        assertEquals(DecimalOperation.shapeOfTheAnswer(BinOp.SUB, place, place),
+                new AddedOfEachElement(worked(BinOp.SUB, PATH_P, PATH_Q)).shapeOfEveryPart());
+        assertEquals(twice.larger(DecimalOperation.shapeOfTheAnswer(BinOp.ADD, twice, place)),
+                new AddedOfEachElement(worked(BinOp.ADD, worked(BinOp.MUL, PATH_P, PATH_Q),
+                        PATH_P)).shapeOfEveryPart());
+        assertEquals(thrice, new AddedOfEachElement(worked(BinOp.MUL,
+                worked(BinOp.MUL, PATH_P, PATH_Q), PATH_P)).shapeOfEveryPart());
+        assertEquals(DecimalOperation.shapeOfTheAnswer(BinOp.MUL, place, tenth),
+                new AddedOfEachElement(worked(BinOp.MUL, PATH_P, written)).shapeOfEveryPart());
+        assertEquals(twice, new AddedOfEachElement(List.of(new AddedOfEachElement.Bound(D,
+                worked(BinOp.MUL, PATH_P, PATH_Q))), Map.of(), PATH_P).shapeOfEveryPart());
+        Shape total = new Shape(place.scale(),
+                place.digits() + DecimalOperation.DIGITS_OF_A_COUNT);
+        Shape product = DecimalOperation.shapeOfTheAnswer(BinOp.MUL, total, total);
+        assertEquals(product.larger(DecimalOperation.shapeOfTheAnswer(BinOp.ADD, Shape.NOUGHT,
+                product)), AddedOfEachElement.ofAJoin().shapeOfEveryPart());
     }
 
     private static AddedOfEachElement.Through through(AddedOfEachElement.Part part, long seed,

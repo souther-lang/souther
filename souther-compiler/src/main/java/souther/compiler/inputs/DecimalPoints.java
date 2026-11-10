@@ -60,16 +60,17 @@ public final class DecimalPoints {
 
     /**
      * A decimal in the run {@code near} bounds on one side and {@code far} on the other, nearest
-     * {@code near}: the end itself where it is held and a decimal, and otherwise the first multiple
-     * of the step the run's width asks for that is inside it. Null where no row is built in the
-     * run, or where {@code far} is not past {@code near}.
+     * {@code near}: the end itself where it is held and a decimal a row is built at
+     * ({@link #isBuiltAt}), and otherwise the first multiple of the step the run's width asks for
+     * that is inside it and is one too. Null where no row is built in the run, or where
+     * {@code far} is not past {@code near}.
      *
      * @param nearIsLower whether {@code near} is the lower end of the run, and so {@code far} the
      *                    upper; {@code far} is null where the run has no end that way
      */
     public static ExactRatio within(ExactCut near, ExactCut far, boolean nearIsLower) {
         ExactRatio at = near.at();
-        if (near.inclusive() && at.fitsWrittenDecimal() && lies(at, far, nearIsLower)) {
+        if (near.inclusive() && isBuiltAt(at) && lies(at, far, nearIsLower)) {
             return at;
         }
         int places = placesToFit(near, far);
@@ -80,7 +81,21 @@ public final class DecimalPoints {
         ExactRatio scaled = at.times(scale).orNull();
         BigInteger count = scaled == null ? null : countInside(scaled, near, nearIsLower);
         ExactRatio candidate = count == null ? null : ExactRatio.of(count).dividedBy(scale).orNull();
-        return candidate != null && lies(candidate, far, nearIsLower) ? candidate : null;
+        if (candidate == null || !lies(candidate, far, nearIsLower)) {
+            return null;
+        }
+        return isBuiltAt(candidate) ? candidate : theEdgeInside(near, far, nearIsLower);
+    }
+
+    /**
+     * Where the candidate nearest {@code near} is a number no row is built at, because it is
+     * further out than what is built, the point nearest it that is built: the edge of what is
+     * built on that side ({@link #edgeOfWhatIsBuilt}) where it lies inside the run, and null where
+     * the run lies wholly past it.
+     */
+    private static ExactRatio theEdgeInside(ExactCut near, ExactCut far, boolean nearIsLower) {
+        ExactRatio edge = edgeOfWhatIsBuilt(!nearIsLower);
+        return lies(edge, near, !nearIsLower) && lies(edge, far, nearIsLower) ? edge : null;
     }
 
     /**

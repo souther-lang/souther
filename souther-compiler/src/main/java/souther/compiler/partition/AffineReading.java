@@ -561,6 +561,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void composed(Core operation, LinearForm<NumericTerm> form,
                                  List<LinearForm<NumericTerm>> operands) {
+                if (Core.withoutStanding(operation) instanceof Core.Neg && operands.size() == 1) {
+                    told.negatedFrom(operands.get(0), form);
+                }
                 tell(operation, form, operands, AffineForms.whereItAnswers(operation));
             }
 
@@ -1128,7 +1131,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             told.exact = false;
                         } else if (Core.withoutStanding(node).type() == Type.DECIMAL) {
                             told.walksAddingDecimals(numbers, BigDecimal.ZERO,
-                                    asTheRelationNamesIt(total), each.scaleOfEveryPart());
+                                    asTheRelationNamesIt(total), each.shapeOfEveryPart());
                         } else if (!(total instanceof NumericTerm.TakenOver)
                                 || !tellAnIntTotalThrough(throughOverWholeNumbers(each,
                                         BigInteger.ZERO, closure.params().getFirst().binding(),
@@ -1687,7 +1690,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         return false;
                     }
                     told.walksAddingDecimals(answer, seed, asTheRelationNamesIt(total),
-                            each.scaleOfEveryPart());
+                            each.shapeOfEveryPart());
                     return true;
                 }
                 if (!(Core.withoutStanding(seeded.seed()) instanceof Core.Int seed)) {
@@ -2328,7 +2331,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         boolean addsDecimal(Core operation, LinearForm<NumericTerm> result,
                             List<LinearForm<NumericTerm>> operands) {
-            if (!(Core.withoutStanding(operation) instanceof Core.Binary binary)
+            if (!(AffineForms.asOperator(operation) instanceof Core.Binary binary)
                     || binary.type() != Type.DECIMAL
                     || (binary.op() != BinOp.ADD && binary.op() != BinOp.SUB
                     && binary.op() != BinOp.MUL)
@@ -2361,15 +2364,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /**
          * Tells a walk adding {@code added} to {@code seed}, every operation worked out of an
-         * element at a scale no further from nought than {@code scaleOfEveryPart}
+         * element of a shape no further from nought than {@code ofEveryPart}
          * ({@link DecimalAdditiveWalk}), as what {@code answer} is worked out by. The walk is
          * worked out of the seed and the input alone.
          */
         void walksAddingDecimals(LinearForm<NumericTerm> answer, BigDecimal seed,
-                                 LinearForm<NumericTerm> added, long scaleOfEveryPart) {
+                                 LinearForm<NumericTerm> added,
+                                 DecimalOperation.Shape ofEveryPart) {
             DecimalAdditiveWalk told = new DecimalAdditiveWalk(seed, new DecimalOperation.Formed(
                     new LinkedHashMap<Object, ExactRatio>(added.coefs()), added.constant()),
-                    scaleOfEveryPart);
+                    ofEveryPart);
             int at = decimals.indexOf(told);
             if (at < 0) {
                 at = decimals.size();
@@ -2467,6 +2471,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** That {@code form} is the number a row holds at a place of the input, read as it is. */
         void readsTheInput(LinearForm<NumericTerm> form) {
             inputReads.add(form);
+        }
+
+        /** That {@code form}, {@code operand} negated, is written at the places {@code operand}
+         *  is: a row holds the number it has at a place, and negating one leaves its places. */
+        void negatedFrom(LinearForm<NumericTerm> operand, LinearForm<NumericTerm> form) {
+            if (inputReads.contains(operand)) {
+                inputReads.add(form);
+            }
         }
 
 

@@ -834,7 +834,7 @@ public final class AffineForms {
         // may have an atom for, and taking the stop as the answer here would put the leaf question
         // out of reach — which is a rule about what a name may stand for, not about arithmetic.
         Stop<A, E> stopped = new Stop<>();
-        LinearForm<A> composed = composed(e, at, reading, following, stopped);
+        LinearForm<A> composed = composed(e, Core.withoutStanding(raw), at, reading, following, stopped);
         if (composed != null) {
             return new Outcome.Composed<>(composed);
         }
@@ -1217,17 +1217,24 @@ public final class AffineForms {
      * Where {@code operation}, an operator a walk composed and told a reading of
      * ({@link Reading#composed}), answers, as the operator's own account says
      * ({@link WhereAnOperatorAnswers}): a sum, a difference or a product as its operator and
-     * types say, and a negation as its type says. Every reading that asks where the operations
+     * types say — written as an operator or as the library call that is one — and a negation as
+     * its type says. Every reading that asks where the operations
      * it is told of answer asks it here.
      */
     public static WhereAnOperatorAnswers whereItAnswers(Core operation) {
-        return switch (Core.withoutStanding(operation)) {
+        return switch (Terms.asOperator(operation)) {
             case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
                     binary.type(), List.of(binary.left().type(), binary.right().type()));
             case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
             default -> throw new IllegalArgumentException(
                     "a walk composes an operator and nothing else: " + operation);
         };
+    }
+
+    /** {@code e} as the operator it is where it is a library call written as a function — the
+     *  walk reads it as that, and tells the reading of the call — and {@code e} itself otherwise. */
+    public static Core asOperator(Core e) {
+        return Terms.asOperator(e);
     }
 
     /** {@code form}, with the reading told {@code operation} came to it ({@link Reading#composed})
@@ -1240,14 +1247,17 @@ public final class AffineForms {
         return form;
     }
 
-    /** The sum, difference or product {@code b} writes, composed by {@code rule} and told. */
+    /** The sum, difference or product {@code b} writes, composed by {@code rule} and told of
+     *  {@code named}: the node the walk was asked about, which is {@code b} itself unless a call
+     *  is read as the operator it is. */
     private static <A, E> LinearForm<A> binaryTold(
-            Core.Binary b, E at, Reading<A, E> reading, Walk<A, E> following, Stop<A, E> stopped,
+            Core.Binary b, Core named, E at, Reading<A, E> reading, Walk<A, E> following,
+            Stop<A, E> stopped,
             BiFunction<LinearForm<A>, LinearForm<A>, Terms.Operated<A>> rule) {
         LinearForm<A> left = formOf(b.left(), at, reading, following, stopped);
         LinearForm<A> right = formOf(b.right(), at, reading, following, stopped);
         LinearForm<A> form = operated(b, at, left, right, rule, stopped);
-        return form == null ? null : told(b, form, reading, List.of(left, right));
+        return form == null ? null : told(named, form, reading, List.of(left, right));
     }
 
     /**
@@ -1270,7 +1280,8 @@ public final class AffineForms {
 
     /**
      * Where {@code call} answers, where it is an operation the library says answers a form of what
-     * it is handed ({@link BoundOperationFacts#answersAFormOfItsArguments}) and that ends a run only
+     * it is handed ({@link BoundOperationFacts#answersAFormOfItsArguments}), or computes what an
+     * operator does ({@link BoundOperationFacts#operatorComputedBy}), and that ends a run only
      * where that answer has no place: between the ends of the type it answers. Null for any other
      * call, which says nothing here of the arguments it ends a run on.
      *
@@ -1280,8 +1291,9 @@ public final class AffineForms {
     public static WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereAFormItIsHandedAnswers(
             Core call, DeclarationAccess declarations) {
         AnOperationApplied applied = AnOperationApplied.of(call);
-        if (applied == null || DefaultBoundOperationFacts.get()
-                .answersAFormOfItsArguments(applied.operation()) == null) {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        if (applied == null || (facts.answersAFormOfItsArguments(applied.operation()) == null
+                && facts.operatorComputedBy(applied.operation()) == null)) {
             return null;
         }
         return whereTheLibraryAnswers(call, declarations)
@@ -1420,8 +1432,8 @@ public final class AffineForms {
 
     /** {@code e} read as arithmetic over what its parts answer, or null where this has no rule for
      *  it or the rule it has does not compose. */
-    private static <A, E> LinearForm<A> composed(Core asPlaced, E at, Reading<A, E> reading,
-                                                 Walk<A, E> following,
+    private static <A, E> LinearForm<A> composed(Core asPlaced, Core named, E at,
+                                                 Reading<A, E> reading, Walk<A, E> following,
                                                  Stop<A, E> stopped) {
         Core e = Core.withoutStanding(asPlaced);
         LinearForm<A> written = literal(e, at, reading);
@@ -1451,14 +1463,14 @@ public final class AffineForms {
                 yield told(n, Terms.negate(operand), reading, operand == null ? List.of()
                         : List.of(operand));
             }
-            case Core.Binary b when b.op() == BinOp.ADD -> binaryTold(b, at, reading, following,
+            case Core.Binary b when b.op() == BinOp.ADD -> binaryTold(b, named, at, reading, following,
                     stopped, (left, right) -> Terms.sum(left, right, false));
-            case Core.Binary b when b.op() == BinOp.SUB -> binaryTold(b, at, reading, following,
+            case Core.Binary b when b.op() == BinOp.SUB -> binaryTold(b, named, at, reading, following,
                     stopped, (left, right) -> Terms.sum(left, right, true));
             // A scalar multiply by a constant (`Amount * 2`) is linear and a variable factor is
             // not, so a product of two atoms comes back here as one value rather than as arithmetic
             // over two — unless the caller's atoms make it one (`Reading.productOf`).
-            case Core.Binary b when b.op() == BinOp.MUL -> binaryTold(b, at, reading, following,
+            case Core.Binary b when b.op() == BinOp.MUL -> binaryTold(b, named, at, reading, following,
                     stopped, (left, right) -> productAsRead(left, right, reading));
             // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
             // is exact, so a third is what `x / 3` weighs its position by and not the nearest number

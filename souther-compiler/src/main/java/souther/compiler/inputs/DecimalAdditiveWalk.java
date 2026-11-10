@@ -17,50 +17,47 @@ import java.util.Objects;
  *
  * <p>That every step has room is shown by induction over the walk, and not by asking one sum of
  * the seed and the total: a sum of the same number worked out once lines up other scales than
- * the steps do. A number of a row is written at no more than
- * {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT} places before or after the point
- * ({@link DecimalOperation#writtenForARow}), a number written out is at its own scale, a product
- * is at the sum of its factors' scales, and a sum or a difference is at the greater of its
- * operands'. So every operation worked out of an element is at a scale no further from nought
- * than {@code scaleOfEveryPart}, which the step's tree says, and the answer so far, starting at
- * the seed's scale, after any number of steps is at a scale no further from nought than the
- * seed's or the parts', whichever is further. Where that is within what room is shown for, every
- * step has room, on every list a row is built with. The scale the walk ends at is how the list is
- * written and not a fact of the total, so what is worked out of the answer is asked as what is
- * worked out of a total is ({@link DecimalOperation#leavesNoCompletionToHowATotalIsWritten}).
+ * the steps do. A number of a row is of no more than the shape
+ * {@link DecimalOperation.Shape#OF_A_PLACE} ({@link DecimalOperation#writtenForARow}), a number
+ * written out is of its own, and a product, a sum and a difference are of the shapes
+ * {@link DecimalOperation#shapeOfTheAnswer} says. So every operation worked out of an element is
+ * of a shape no further from nought than {@code ofEveryPart}, which the step's tree says, and the
+ * answer so far, starting at the seed's, after any number of steps is of the shape
+ * {@link DecimalOperation#shapeOfAWalk} says: parts of at most {@code D} digits add up to fewer
+ * than {@code n * 10^D}, which is {@code D} and the digits of {@code n} however many elements
+ * there are. Where that is within what room is shown for, every step has room, on every list a
+ * row is built with. The scale the walk ends at is how the list is written and not a fact of the
+ * total, so what is worked out of the answer is asked as what is worked out of a total is
+ * ({@link DecimalOperation#leavesNoCompletionToHowATotalIsWritten}).
  *
  * <p>Told only where the step works out the part and the sum or difference and nothing else, the
  * seed is written out at the scale it is written, and the list is a place of the input: anything
  * else the walk works out is no step of this one.
  *
- * @param seed    the decimal the walk starts from, at the scale the program writes it
- * @param added   what the walk adds to the seed, over the terms of a row: the total it adds up, or
- *                that total taken away
- * @param scaleOfEveryPart the scale furthest from nought that any operation worked out of an
- *                         element is at, the answer so far apart
+ * @param seed        the decimal the walk starts from, at the scale the program writes it
+ * @param added       what the walk adds to the seed, over the terms of a row: the total it adds
+ *                    up, or that total taken away
+ * @param ofEveryPart the shape furthest from nought that any operation worked out of an element
+ *                    is of, the answer so far apart
  */
 public record DecimalAdditiveWalk(BigDecimal seed, DecimalOperation.Formed added,
-                                  long scaleOfEveryPart) implements DecimalWork {
+                                  DecimalOperation.Shape ofEveryPart) implements DecimalWork {
 
     public DecimalAdditiveWalk {
         Objects.requireNonNull(seed, "the decimal a walk starts from");
         Objects.requireNonNull(added, "the total a walk adds up");
-        if (scaleOfEveryPart < 0) {
-            throw new IllegalArgumentException("a scale furthest from nought is no less than"
-                    + " nought: " + scaleOfEveryPart);
-        }
+        Objects.requireNonNull(ofEveryPart, "the shape of what a walk works out of an element");
     }
 
-    /** The scale furthest from nought that the answer so far, or any operation worked out of an
-     *  element, is at, on every step of the walk. */
-    long scaleOfEveryStep() {
-        return Math.max(Math.abs((long) seed.scale()), scaleOfEveryPart);
+    /** The shape the answer so far is of, on every step of the walk. */
+    DecimalOperation.Shape shapeOfEveryStep() {
+        return DecimalOperation.shapeOfAWalk(DecimalOperation.Shape.of(seed), ofEveryPart);
     }
 
-    /** Whether every step of the walk has room on every row: what it works out is at no scale
-     *  further from nought than room is shown for. */
+    /** Whether every step of the walk has room on every row: what it works out is within room. */
     boolean everyStepHasRoom() {
-        return scaleOfEveryStep() <= DecimalOperation.SCALE_THE_ROOM_IS_SHOWN_FOR;
+        return DecimalOperation.isWithinRoom(shapeOfEveryStep())
+                && DecimalOperation.isWithinRoom(ofEveryPart);
     }
 
     @Override
