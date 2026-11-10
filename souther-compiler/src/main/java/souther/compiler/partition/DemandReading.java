@@ -925,7 +925,7 @@ final class DemandReading {
                 }
                 continue;
             }
-            if (endsOfTheInts(constraint)) {
+            if (endsOfTheInts(constraint, read.quantities().region())) {
                 continue;
             }
             // What a region carries it is told, and what it cannot is tied. Whether the way holds
@@ -989,7 +989,7 @@ final class DemandReading {
         return switch (each) {
             case Read.Settled(boolean thisWay) -> thisWay;
             case Read.Demands(RowDemand.Relational(TakenConstraint constraint)) ->
-                    endsOfTheInts(constraint) || heldOver(constraint, region);
+                    endsOfTheInts(constraint, region) || heldOver(constraint, region);
             case Read.OneOf oneOf -> oneOf.alternatives().stream()
                     .anyMatch(alternative -> alternative.stream()
                             .allMatch(part -> heldOver(part, region)));
@@ -1426,13 +1426,25 @@ final class DemandReading {
         record WalkedOver(Core container, InputReads reads) {}
     }
 
-    /** Whether {@code constraint} is an ordering of one number that holds at the least
+
+    /** Whether {@code constraint} is an ordering of one whole number that holds at the least
      *  {@code Int} and at the greatest, so at every one between them: what an operator over a
      *  number answers where it cannot pass either end, which every {@code Int} meets and no row is
-     *  narrowed by. A form is worked out at the two ends and the relation asked of each, so that
-     *  the side of the number it is on, whether it is strict and the sign of its weight are not
-     *  told apart by hand. */
-    static boolean endsOfTheInts(TakenConstraint constraint) {
+     *  narrowed by. A number that is not a whole one can pass the ends, so it is never met so. A
+     *  form is worked out at the two ends and the relation asked of each, so that the side of the
+     *  number it is on, whether it is strict and the sign of its weight are not told apart by
+     *  hand. */
+    static boolean endsOfTheInts(TakenConstraint constraint, SearchRegion region) {
+        return constraint instanceof TakenConstraint.Affine(
+                        LinearForm<NumericTerm> form, Rel _, var _)
+                && form.coefs().size() == 1
+                && region.isAnInt(form.coefs().keySet().iterator().next())
+                && heldAtBothEndsOfTheInts(constraint);
+    }
+
+    /** Whether {@code constraint} orders one number and holds at the least {@code Int} and at
+     *  the greatest, whatever the number is. */
+    static boolean heldAtBothEndsOfTheInts(TakenConstraint constraint) {
         if (!(constraint instanceof TakenConstraint.Affine(
                         LinearForm<NumericTerm> form, Rel rel, var _))
                 || form.coefs().size() != 1

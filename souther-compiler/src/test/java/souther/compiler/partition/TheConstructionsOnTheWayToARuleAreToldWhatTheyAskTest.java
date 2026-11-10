@@ -301,6 +301,25 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 .stream().map(one -> one.path("asked")).toList());
     }
 
+    /** A bound a {@code Decimal} can pass is asked of it, though both ends of an {@code Int}
+     *  meet it. */
+    @Test
+    void aDecimalBoundBeyondTheEndsOfAnIntIsAsked() {
+        Compilation compilation = compiled("""
+                module demo
+
+                data Wide = Decimal
+                    invariant value >= -100000000000000000000.0m
+                data Out = { v: Wide, within: Bool }
+
+                behavior f : (x: Decimal, c: Decimal) -> Out
+                    constructs Out, Wide
+                let f (x, c) = Out { v = Wide(x), within = Decimal.compare(x, c) <= 0 }
+                """);
+        assertEquals(List.of(is("x", "at_least", "-100000000000000000000")),
+                asksOf(compilation).stream().map(one -> one.path("asked")).toList());
+    }
+
     /** A guard met only after the construction does not leave anything out of what it asks. */
     @Test
     void aGuardAfterTheConstructionLeavesNothingOutOfWhatItAsks() {

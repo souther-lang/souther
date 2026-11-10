@@ -27,7 +27,7 @@ class AnOrderingHeldAtBothEndsOfTheIntsNarrowsNothingTest {
 
     /** {@code weight * x + constant rel 0}. */
     private static boolean vacuous(long weight, BigInteger constant, Rel rel) {
-        return DemandReading.endsOfTheInts(new TakenConstraint.Affine(
+        return DemandReading.heldAtBothEndsOfTheInts(new TakenConstraint.Affine(
                 new LinearForm<>(ExactRatio.of(constant),
                         Map.of(X, ExactRatio.of(BigInteger.valueOf(weight)))), rel));
     }

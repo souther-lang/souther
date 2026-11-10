@@ -252,6 +252,15 @@ public interface SearchRegion {
     }
 
     /**
+     * Whether {@code term} is a whole number of the width of an {@code Int}, which is what the
+     * ends of an {@code Int} bound it by. A region that reads no types says it of no term, which
+     * is what the default is.
+     */
+    default boolean isAnInt(NumericTerm term) {
+        return false;
+    }
+
+    /**
      * What the order leaves the value at {@code place} by its declarations — one run, runs apart,
      * or none — or null where no rule of the order stops it ({@link Position#orderedRegion}).
      *
