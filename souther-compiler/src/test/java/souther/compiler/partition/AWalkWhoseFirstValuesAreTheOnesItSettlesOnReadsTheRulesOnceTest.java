@@ -89,8 +89,8 @@ class AWalkWhoseFirstValuesAreTheOnesItSettlesOnReadsTheRulesOnceTest {
     }
 
     private static Map<RealizationTarget, Place> assignment(long x, long y, long z) {
-        return Map.of(RealizationTarget.of(X), at(x), RealizationTarget.of(Y), at(y),
-                RealizationTarget.of(Z), at(z));
+        return Map.of(RealizationTarget.ofATakenIn(X), at(x), RealizationTarget.ofATakenIn(Y), at(y),
+                RealizationTarget.ofATakenIn(Z), at(z));
     }
 
     /**

@@ -447,7 +447,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             boolean ofTheDay = axis.term() instanceof NumericTerm.WholeUnitsOf;
             long count = ofTheDay ? LocalDate.parse(day).toEpochDay()
                     : LocalDateTime.parse(at).toEpochSecond(ZoneOffset.UTC);
-            out.put(RealizationTarget.of(axis.term()), new NumericSet.At(Count.of(count)));
+            out.put(RealizationTarget.ofATakenIn(axis.term()), new NumericSet.At(Count.of(count)));
         }
         return out;
     }
@@ -483,7 +483,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
     void theDayBesideTheValueItselfIsAGroupWithAWayToBeWritten() {
         Model model = new Model(A_DATE_TIME_AND_ITS_DAY);
         List<RealizationTarget> group = new ArrayList<>();
-        model.partitioning.axes().forEach(axis -> group.add(RealizationTarget.of(axis.term())));
+        model.partitioning.axes().forEach(axis -> group.add(RealizationTarget.ofATakenIn(axis.term())));
 
         assertInstanceOf(TermRealizations.JointBuilder.ItsOwnValueAndWhatIsTakenOfIt.class,
                 assertInstanceOf(TermRealizations.JointRealization.Supported.class,
@@ -650,7 +650,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
             for (Axis axis : partitioning.axes()) {
                 PartitionClass upper = axis.classes().get(axis.classes().size() - 1);
-                out.put(RealizationTarget.of(upper.of()), upper.recognises().numbers());
+                out.put(RealizationTarget.ofATakenIn(upper.of()), upper.recognises().numbers());
             }
             return out;
         }
@@ -661,7 +661,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             List<Axis> axes = partitioning.axes();
             for (int i = 0; i < axes.size() && i < which.length; i++) {
                 PartitionClass cls = axes.get(i).classes().get(which[i]);
-                out.put(RealizationTarget.of(cls.of()), cls.recognises().numbers());
+                out.put(RealizationTarget.ofATakenIn(cls.of()), cls.recognises().numbers());
             }
             return out;
         }
@@ -682,7 +682,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
             List<Axis> axes = partitioning.axes();
             for (int i = 0; i < axes.size() && i < numbers.length; i++) {
-                out.put(RealizationTarget.of(axes.get(i).term()),
+                out.put(RealizationTarget.ofATakenIn(axes.get(i).term()),
                         new NumericSet.At(Count.of(BigDecimal.valueOf(numbers[i]))));
             }
             return out;
@@ -700,7 +700,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                         .orElseThrow(() -> new AssertionError("no class " + label + " among "
                                 + partitioning.axes().stream().flatMap(axis -> axis.classes()
                                         .stream()).map(PartitionClass::label).toList()));
-                out.put(RealizationTarget.of(cls.of()), cls.recognises().numbers());
+                out.put(RealizationTarget.ofATakenIn(cls.of()), cls.recognises().numbers());
             }
             return out;
         }
@@ -718,7 +718,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     if (cls.label().equals(label)) {
                         SequencedMap<RealizationTarget.OfANumber, NumericSet> one =
                                 new LinkedHashMap<>();
-                        one.put(RealizationTarget.of(cls.of()), cls.recognises().numbers());
+                        one.put(RealizationTarget.ofATakenIn(cls.of()), cls.recognises().numbers());
                         out.add(one);
                     }
                 }
@@ -746,7 +746,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         /** The value the container itself stands at, which is one number of its location. */
         private RealizationTarget theContainerItself() {
-            return RealizationTarget.of(new NumericTerm.ValueOf(theContainer()));
+            return RealizationTarget.ofATakenIn(new NumericTerm.ValueOf(theContainer()));
         }
 
         /** How many that container holds, which is a number read off the value standing there. */
@@ -757,7 +757,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     subject.ruleReading().source().inners(),
                     subject.ruleReading().source().symbols());
             assertNotNull(many, "how many a list holds is a number taken of the list");
-            return RealizationTarget.of(many);
+            return RealizationTarget.ofATakenIn(many);
         }
 
         private static TermPath theContainer() {
@@ -780,7 +780,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     subject.ruleReading().source().inners(),
                     subject.ruleReading().source().symbols());
             assertNotNull(over, "a total over the occurrences of a path is a number of the run");
-            return RealizationTarget.of(over);
+            return RealizationTarget.ofATakenIn(over);
         }
 
         /**
@@ -799,7 +799,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     Type.INT, subject.ruleReading().source().inners(),
                     subject.ruleReading().source().symbols());
             assertNotNull(over, "a total over what is computed of each element is a number of a run");
-            return RealizationTarget.of(over);
+            return RealizationTarget.ofATakenIn(over);
         }
 
         /**

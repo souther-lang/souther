@@ -186,6 +186,14 @@ public final class LevelRealizer {
                 case null -> runs.put(term, NumericDomain.Bounds.OPEN);
             }
         }
+        // What the rules prove of the item holds whether or not a row can be written for it, so it
+        // is answered above. Past it every search writes the numbers it places, and a number no row
+        // writes, a product no one number holds at a value, is one nothing below is asked about:
+        // an item over it is composed for by nothing here, and nothing is said of whether a row
+        // exists.
+        if (!RealizationTarget.writesEvery(termsOf(standing))) {
+            return Realization.Unknown.nothingComposedOne();
+        }
         // The values the rules name, where the item's quantity is one a value comes to, before any
         // walk: they are all there is, and where they settle the item no walk is asked. Where
         // they do not, what reading them fell short of is said beside what the walk comes to.
@@ -238,10 +246,7 @@ public final class LevelRealizer {
                                          Map<NumericTerm, NumericDomain.Bounds> runs,
                                          WitnessSearch looking, ValuesTried tried) {
         RealizationTarget.ACount counted = new RealizationTarget.ACount(over.count());
-        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = new ArrayList<>();
-        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.form())) {
-            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
-        }
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = targetsOf(over.form());
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         Set<CompositionCapacity> unheld = new HashSet<>();
         Set<CompositionRepertoire> notAllOf = EnumSet.noneOf(CompositionRepertoire.class);
@@ -289,7 +294,7 @@ public final class LevelRealizer {
                         fixing.put(counted, Count.of(many));
                         for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
                             if (over.count().standsBeside(each.term())) {
-                                fixing.putIfAbsent(RealizationTarget.of(each.term()),
+                                fixing.putIfAbsent(RealizationTarget.ofATakenIn(each.term()),
                                         each.place());
                             }
                         }
@@ -371,7 +376,7 @@ public final class LevelRealizer {
                     fixing.put(counted, asked);
                     for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
                         if (count.count().standsBeside(each.term())) {
-                            fixing.put(RealizationTarget.of(each.term()), each.place());
+                            fixing.put(RealizationTarget.ofATakenIn(each.term()), each.place());
                         }
                     }
                     Realization made = found(fixing, within, tried);
@@ -456,7 +461,7 @@ public final class LevelRealizer {
                 return stoppedShort(stoppedBy);
             }
             Realization made =
-                    found(Map.of(RealizationTarget.of(one.term()), at), within, tried);
+                    found(Map.of(RealizationTarget.ofAPlace(one.term()), at), within, tried);
             if (made instanceof Realization.Found) {
                 return made;
             }
@@ -570,14 +575,14 @@ public final class LevelRealizer {
                                 reading.settles() instanceof NumericTerm.ValueOf value
                                         ? within.classAt(value) : HeldClass.NONE,
                                 looking, within, tried,
-                                Map.of(RealizationTarget.of(reading.anchors()), common),
+                                Map.of(RealizationTarget.ofAPlace(reading.anchors()), common),
                                 List.of(), stoppedBy);
                 if (at == null) {
                     continue;
                 }
                 Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-                fixing.put(RealizationTarget.of(reading.settles()), at);
-                fixing.put(RealizationTarget.of(reading.anchors()), common);
+                fixing.put(RealizationTarget.ofAPlace(reading.settles()), at);
+                fixing.put(RealizationTarget.ofAPlace(reading.anchors()), common);
                 if (found(fixing, within, tried) instanceof Realization.Found made) {
                     return made;
                 }
@@ -948,7 +953,8 @@ public final class LevelRealizer {
             }
             cameToOne = true;
             Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-            each.numbers().forEach((term, number) -> fixing.put(RealizationTarget.of(term), number));
+            each.numbers().forEach(
+                    (term, number) -> fixing.put(RealizationTarget.ofATakenIn(term), number));
             Realization made = found(fixing, within, tried);
             if (made instanceof Realization.Found) {
                 return new AmongTheNamed.Settled(made);
@@ -968,16 +974,14 @@ public final class LevelRealizer {
      * depended on it would depend on nothing a reader can see.
      *
      * <p>Every number is realized by rebuilding one value, so what the walk assigns is a demand and
-     * there is one for each term of the form. Whether anything writes such a value is not asked here
-     * and is not this reader's to answer: a walk that turned a term away for being of the wrong kind
-     * would be deciding what is buildable from the shape of the number, which is the answer that
-     * went stale the first time something learned to build one.
+     * there is one for each term of the form. Whether a term has one is asked once, where the item
+     * is taken in ({@link #realize}), and this is asked only of an item that passed it.
      */
     private static List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> targetsOf(
             LinearForm<NumericTerm> form) {
         List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = new ArrayList<>();
         for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(form)) {
-            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
+            terms.add(Map.entry(RealizationTarget.ofATakenIn(each.getKey()), each.getValue()));
         }
         return terms;
     }
@@ -1207,7 +1211,7 @@ public final class LevelRealizer {
     /** Each number standing at its place, as the target a row is composed for. */
     private static Map<RealizationTarget, Place> fixingOf(Map<NumericTerm, Place> standing) {
         Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-        standing.forEach((term, at) -> fixing.put(RealizationTarget.of(term), at));
+        standing.forEach((term, at) -> fixing.put(RealizationTarget.ofATakenIn(term), at));
         return fixing;
     }
 
@@ -1517,7 +1521,7 @@ public final class LevelRealizer {
                 pair.forEach((at, value) -> {
                     Place place = Count.of(new BigDecimal(value));
                     standing.put(both.get(at), place);
-                    fixing.put(RealizationTarget.of(both.get(at)), place);
+                    fixing.put(RealizationTarget.ofATakenIn(both.get(at)), place);
                 });
                 // A pair outside where the region leaves a factor is refused by a proof, and says
                 // nothing of the others.
@@ -1611,9 +1615,9 @@ public final class LevelRealizer {
                         continue;
                     }
                     Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-                    fixing.put(RealizationTarget.of(over.dividend()),
+                    fixing.put(RealizationTarget.ofAPlace(over.dividend()),
                             Count.of(new BigDecimal(dividend)));
-                    fixing.put(RealizationTarget.of(over.divisor()), divisorAt);
+                    fixing.put(RealizationTarget.ofAPlace(over.divisor()), divisorAt);
                     // A pair tried before proves nothing either way.
                     if (tried.holds(fixing)) {
                         bounded = false;
@@ -2830,7 +2834,7 @@ public final class LevelRealizer {
                                       SearchRegion region, ValuesTried tried,
                                       Map<RealizationTarget, Place> given,
                                       List<Place> refused, Set<CompositionBudget> stoppedBy) {
-        PlacesApart apart = tried.apartFor(RealizationTarget.of(term), given);
+        PlacesApart apart = tried.apartFor(RealizationTarget.ofAPlace(term), given);
         if (!refused.isEmpty()) {
             List<Place> held = new ArrayList<>(apart.places());
             held.addAll(refused);
