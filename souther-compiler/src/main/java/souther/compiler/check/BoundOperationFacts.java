@@ -43,6 +43,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 
 /**
@@ -1196,6 +1197,43 @@ public final class BoundOperationFacts {
      *  list where it answers none of the values it was given. */
     public List<DefinitionCase<DeclaredArgument>> isDefinedByCases(ValueName operation) {
         return operation == null ? List.of() : cases.getOrDefault(operation, List.of());
+    }
+
+    /**
+     * Which arguments what {@code operation} answers is made of, counted from nought, where every
+     * answer it states is one of them or a sum or a difference of them, each once and nothing
+     * else added: {@code Decimal.max} answers one of its two, {@code Decimal.fromInt} the whole
+     * number it was given. Null where it states no answer, or one made any other way, which says
+     * nothing of what the answer is made of.
+     *
+     * <p>What a number made of these has places for is the owner's to read off the places of
+     * each: an answer that is one of them is at the places that one has, and one that is a sum or
+     * a difference of them at those of the one with the most.
+     */
+    public List<Integer> argumentsAnAnswerIsMadeOf(ValueName operation) {
+        List<LinearForm<DeclaredArgument>> answers = new ArrayList<>();
+        LinearForm<DeclaredArgument> form = answersAFormOfItsArguments(operation);
+        if (form != null) {
+            answers.add(form);
+        }
+        isDefinedByCases(operation).forEach(each -> answers.add(each.answers()));
+        if (answers.isEmpty()) {
+            return null;
+        }
+        Set<Integer> made = new TreeSet<>();
+        for (LinearForm<DeclaredArgument> each : answers) {
+            if (!each.constant().isZero()) {
+                return null;
+            }
+            for (Map.Entry<DeclaredArgument, ExactRatio> weighed : each.coefs().entrySet()) {
+                if (!weighed.getValue().equals(ExactRatio.ONE)
+                        && !weighed.getValue().equals(ExactRatio.ONE.negated())) {
+                    return null;
+                }
+                made.add(weighed.getKey().position());
+            }
+        }
+        return List.copyOf(made);
     }
 
     /** The operations that answer one of the values they were given. */

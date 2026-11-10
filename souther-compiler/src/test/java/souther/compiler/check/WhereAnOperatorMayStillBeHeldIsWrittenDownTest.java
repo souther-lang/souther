@@ -102,21 +102,18 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
      * <p>Written {@code owner#field} and {@code owner.method}.
      */
     private static final List<Held> HANDED_IN = List.of(
-            new Held("souther.compiler.abort.GetsPast.WhereTheScalesHaveRoom#op",
-                    "which of a sum, a difference and a product answers where the scales of the"
-                            + " decimals it is handed have room"),
-            new Held("souther.compiler.abort.GetsPast.WhereTheScalesHaveRoom.<init>",
-                    "makes where a decimal sum, difference or product answers, and refuses any"
-                            + " other operator"),
+            new Held("souther.compiler.abort.ScaleLaw.OfTheOperator#op",
+                    "which of a sum, a difference and a product leaves a scale the decimals it is"
+                            + " handed have room for"),
+            new Held("souther.compiler.abort.ScaleLaw.OfTheOperator.<init>",
+                    "makes how a decimal sum, difference or product leaves its scale, and refuses"
+                            + " any other operator"),
             new Held("souther.compiler.inputs.DecimalOperation.scaleOfTheAnswer",
                     "the scale an operator leaves from the scales of its operands, which a row and"
                             + " a witness are asked by alike"),
             new Held("souther.compiler.inputs.DecimalOperation.hasRoomAt",
                     "whether an operator has room for operands at the scales given, which a row"
                             + " and a witness are asked by alike"),
-            new Held("souther.compiler.check.ContainerSizesUnderAWitness.scaleOfTheAnswer",
-                    "hands the operator an operation answers where the scales have room to the"
-                            + " rule that says what scale it leaves"),
             new Held("souther.compiler.check.ComputedNumber.Expr.Operated#operator",
                     "the arithmetic a clause writes a number with, as it is evaluated over the"
                             + " ranges or the numbers its places are at"),
@@ -309,17 +306,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     /** What fetches an operator: answered by a call, read out of a field, or named as a constant. */
     private static final List<Held> FETCHED = List.of(
-            new Held("souther.compiler.abort.GetsPast.WhereTheScalesHaveRoom.op",
-                    "which operator answers where the scales have room"),
+            new Held("souther.compiler.abort.ScaleLaw.OfTheOperator.op",
+                    "which operator leaves a scale there is room for"),
             new Held("souther.compiler.core.KernelContracts.completionOf",
                     "names which operator each decimal kernel answers where the scales have room"
                             + " for"),
-            new Held("souther.compiler.check.ContainerSizesUnderAWitness.answers",
-                    "reads which operator a site answers where the scales have room, to ask whether"
-                            + " the scales a witness is at do"),
-            new Held("souther.compiler.check.ContainerSizesUnderAWitness.scaleOf",
-                    "reads which operator an operation answers where the scales have room, to read"
-                            + " the scale it leaves"),
             new Held("souther.compiler.check.SidesBalanced.caseOf",
                     "asks whether a condition on an element compares a field of it for equality"
                             + " with a case"),

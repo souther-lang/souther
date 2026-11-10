@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.abort.ScaleLaw;
 import souther.compiler.types.BinOp;
 import souther.exact.ExactDecimals;
 
@@ -306,6 +307,23 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     public static boolean hasRoomAt(BinOp op, long left, long right) {
         return left <= SCALE_THE_ROOM_IS_SHOWN_FOR && right <= SCALE_THE_ROOM_IS_SHOWN_FOR
                 && scaleOfTheAnswer(op, left, right) <= SCALE_THE_ROOM_IS_SHOWN_FOR;
+    }
+
+    /** The scale furthest from nought that an operation under {@code law} answers at, over two
+     *  numbers no further from nought than {@code first} and {@code second}: an operator's as
+     *  {@link #scaleOfTheAnswer(BinOp, long, long)} says, and a rounding's the one it is asked
+     *  for. */
+    public static long scaleOfTheAnswer(ScaleLaw law, long first, long second) {
+        return law instanceof ScaleLaw.OfTheOperator(BinOp op)
+                ? scaleOfTheAnswer(op, first, second) : first;
+    }
+
+    /** Whether an operation under {@code law} has room, as {@link #hasRoomAt(BinOp, long, long)}
+     *  asks it of an operator; a rounding lines the scale it is asked for up with the number's, as
+     *  a sum does. */
+    public static boolean hasRoomAt(ScaleLaw law, long first, long second) {
+        return hasRoomAt(law instanceof ScaleLaw.OfTheOperator(BinOp op) ? op : BinOp.ADD, first,
+                second);
     }
 
     /** The rooms of {@code all}; null where an operation is worked out of one told after it. */

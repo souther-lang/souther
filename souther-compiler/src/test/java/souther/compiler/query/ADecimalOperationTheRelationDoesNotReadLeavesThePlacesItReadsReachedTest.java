@@ -2,9 +2,6 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.partition.UndividedPosition;
-
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -12,8 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A sum, a difference or a product of decimals that decides nothing changes nothing of what the
- * comparison after it says. Each behavior here is the control with one such operation put before
- * the comparison, and its report is the control's.
+ * comparison after it says, whatever the operands are written as. Each behavior here is the control
+ * with one such operation put before the comparison, and its report is the control's; and a side of
+ * a comparison that negates a place is read as the side that is the place.
  */
 class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
 
@@ -24,6 +22,29 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
                 invariant value >= 0.0m
 
             data Pair = { a: Amount, b: Amount }
+
+            data Loose = { a: Decimal, b: Decimal }
+
+            behavior plainSide : (p: Loose) -> Int
+            let plainSide (p) = {
+                let sign = Decimal.compare(Decimal.add(p.a, p.b), 0.0m)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior negatedSide : (p: Loose) -> Int
+            let negatedSide (p) = {
+                let sign = Decimal.compare(Decimal.add(-p.a, p.b), 0.0m)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior controlTruth : (p: Pair) -> Bool
+            let controlTruth (p) = Decimal.compare(p.a.value, p.b.value) == 0
+
+            behavior differenceTruth : (p: Pair) -> Bool
+            let differenceTruth (p) = {
+                let diff = Decimal.subtract(p.a.value, p.b.value)
+                Decimal.compare(p.a.value, p.b.value) == 0
+            }
 
             behavior control : (p: Pair) -> Int
             let control (p) = {
@@ -55,6 +76,34 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
             behavior times : (p: Pair) -> Int
             let times (p) = {
                 let product = Decimal.multiply(p.a.value, p.b.value)
+                let sign = Decimal.compare(p.a.value, p.b.value)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior negated : (p: Pair) -> Int
+            let negated (p) = {
+                let total = Decimal.add(-p.a.value, p.b.value)
+                let sign = Decimal.compare(p.a.value, p.b.value)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior widened : (p: Pair, n: Int) -> Int
+            let widened (p, n) = {
+                let total = Decimal.add(Decimal.fromInt(n), p.a.value)
+                let sign = Decimal.compare(p.a.value, p.b.value)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior chosen : (p: Pair) -> Int
+            let chosen (p) = {
+                let total = Decimal.multiply(Decimal.max(p.a.value, p.b.value), p.a.value)
+                let sign = Decimal.compare(p.a.value, p.b.value)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior rounded : (p: Pair) -> Int
+            let rounded (p) = {
+                let total = Decimal.add(Decimal.round(2, HALF_UP, p.a.value), p.b.value)
                 let sign = Decimal.compare(p.a.value, p.b.value)
                 if sign == 0 then 0 else if sign < 0 then 1 else 2
             }
@@ -96,11 +145,11 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
             }
             """;
 
-    private static Map<String, UndividedPosition.Reason> reasonsOf(
-            Map<String, PartitionEvidence> evidence, String behavior) {
-        Map<String, UndividedPosition.Reason> byPlace = new LinkedHashMap<>();
-        evidence.get(behavior).notRead().forEach(each -> byPlace.put(each.at(), each.reason()));
-        return byPlace;
+    /** What a behavior leaves unread, each place once for every report of it. */
+    private static List<String> reasonsOf(Map<String, PartitionEvidence> evidence,
+                                          String behavior) {
+        return evidence.get(behavior).notRead().stream()
+                .map(each -> each.at() + ": " + each.reason()).sorted().toList();
     }
 
     @Test
@@ -113,9 +162,12 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
-        for (String behavior : List.of("difference", "sum", "minus", "times", "chained")) {
+        for (String behavior : List.of("difference", "sum", "minus", "times", "chained", "negated",
+                "widened", "chosen", "rounded")) {
             assertEquals(reasonsOf(evidence, "control"), reasonsOf(evidence, behavior), behavior);
         }
+        assertEquals(reasonsOf(evidence, "controlTruth"), reasonsOf(evidence, "differenceTruth"));
+        assertEquals(reasonsOf(evidence, "plainSide"), reasonsOf(evidence, "negatedSide"));
         assertEquals(reasonsOf(evidence, "ageingControl"), reasonsOf(evidence, "ageing"));
     }
 }

@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.UndividedPosition;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -74,11 +73,11 @@ class AConstructionTheCheckDischargesEndsNoRunTest {
             }
             """;
 
-    private static Map<String, UndividedPosition.Reason> reasonsOf(
-            Map<String, PartitionEvidence> evidence, String behavior) {
-        Map<String, UndividedPosition.Reason> byPlace = new LinkedHashMap<>();
-        evidence.get(behavior).notRead().forEach(each -> byPlace.put(each.at(), each.reason()));
-        return byPlace;
+    /** What a behavior leaves unread, each place once for every report of it. */
+    private static List<String> reasonsOf(Map<String, PartitionEvidence> evidence,
+                                          String behavior) {
+        return evidence.get(behavior).notRead().stream()
+                .map(each -> each.at() + ": " + each.reason()).sorted().toList();
     }
 
     @Test
@@ -93,8 +92,8 @@ class AConstructionTheCheckDischargesEndsNoRunTest {
 
         assertEquals(reasonsOf(evidence, "control"), reasonsOf(evidence, "discharged"));
         assertTrue(evidence.containsKey("tally"));
-        assertTrue(reasonsOf(evidence, "refused").containsValue(
-                UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
+        assertTrue(reasonsOf(evidence, "refused").stream().anyMatch(each -> each.endsWith(
+                ": " + UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE)),
                 reasonsOf(evidence, "refused").toString());
     }
 }

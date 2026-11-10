@@ -4,7 +4,6 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawSubject;
-import souther.compiler.types.BinOp;
 
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
@@ -70,24 +69,15 @@ public sealed interface GetsPast {
 
     /**
      * It answers wherever the {@code Decimal}s it is handed are written at scales that leave room
-     * for what {@code op} makes of them, and ends a run for nothing else: a sum or a difference
-     * lines the scales up and a product adds them, and what has no room for the digits or the
-     * scale of its answer ends the run.
+     * for what {@code law} makes of them, and ends a run for nothing else: what has no room for
+     * the digits or the scale of its answer ends the run.
      *
      * <p>Which scales a run is at is not said here: it turns on what the operands are, which a
      * reader of a run reads off them.
      *
-     * @param op the operator, add, subtract or multiply
+     * @param law how the answer's scale is left from the scales of the two numbers it works on
      */
-    record WhereTheScalesHaveRoom(BinOp op) implements GetsPast {
-
-        public WhereTheScalesHaveRoom {
-            if (op != BinOp.ADD && op != BinOp.SUB && op != BinOp.MUL) {
-                throw new IllegalArgumentException("the scales of a decimal are lined up by a sum,"
-                        + " a difference or a product, not " + op);
-            }
-        }
-    }
+    record WhereTheScalesHaveRoom(ScaleLaw law) implements GetsPast {}
 
     /** Nothing here says where it answers. */
     record NotKnown() implements GetsPast {}

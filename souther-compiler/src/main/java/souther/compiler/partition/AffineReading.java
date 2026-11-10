@@ -561,6 +561,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void composed(Core operation, LinearForm<NumericTerm> form,
                                  List<LinearForm<NumericTerm>> operands) {
+                if (Core.withoutStanding(operation) instanceof Core.Neg && operands.size() == 1) {
+                    told.negatedFrom(operands.get(0), form);
+                }
                 tell(operation, form, operands, AffineForms.whereItAnswers(operation));
             }
 
@@ -2467,6 +2470,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** That {@code form} is the number a row holds at a place of the input, read as it is. */
         void readsTheInput(LinearForm<NumericTerm> form) {
             inputReads.add(form);
+        }
+
+        /** That {@code form}, {@code operand} negated, is written at the places {@code operand}
+         *  is: a row holds the number it has at a place, and negating one leaves its places. */
+        void negatedFrom(LinearForm<NumericTerm> operand, LinearForm<NumericTerm> form) {
+            if (inputReads.contains(operand)) {
+                inputReads.add(form);
+            }
         }
 
 

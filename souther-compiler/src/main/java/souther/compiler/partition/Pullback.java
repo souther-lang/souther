@@ -1881,6 +1881,12 @@ final class Pullback {
      * ends a run for says ({@link WhatARunMayEndFor}). An operation answering where the collection
      * it answers fits is owed ({@link StopObligation}), and a reader asks how many its collections
      * hold on the runs it reads.
+     *
+     * <p>Of the runs this reading is about, which are those of the rows a model's examples and a
+     * search build, and not of every value an operation can be handed: an {@link GetsPast.Always}
+     * here says a run of such a row gets past, where the owner's own account
+     * ({@link GetsPast.WhereTheScalesHaveRoom}) says where every run does. The two are told apart
+     * by where this is read, which is nowhere a contract of an operation is.
      */
     private GetsPast completionOf(Core e, InputReads reads) {
         boolean always = (Core.withoutStanding(e) instanceof Core.Construct made

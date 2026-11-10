@@ -195,13 +195,6 @@ public final class WhatARunMayEndFor {
                         ? LibraryEndings.shipped().completionApartFromWhatItIsHanded(operation)
                         : new GetsPast.NotKnown();
             }
-            // A kernel's call kept for a reader to quote answers where its contract says, as the
-            // same call does where it is made.
-            case Core.PreservedCall kept
-                    when AnOperationApplied.of(kept) instanceof AnOperationApplied applied
-                    && applied.operation() instanceof ValueName.Stdlib.Operation operation
-                    && LibraryEndings.shipped().completionApartFromWhatItIsHanded(operation)
-                    instanceof GetsPast.WhereTheScalesHaveRoom scales -> scales;
             default -> new GetsPast.NotKnown();
         };
     }

@@ -2,9 +2,6 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.partition.UndividedPosition;
-
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,7 +31,7 @@ class ACallThatComputesAnOperatorIsReadAsThatOperatorTest {
                 """.formatted(number);
     }
 
-    private static Map<String, UndividedPosition.Reason> reasonsOf(String number) {
+    private static List<String> reasonsOf(String number) {
         Compilation compilation = Compilation.ofSource(model(number), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
@@ -42,9 +39,8 @@ class ACallThatComputesAnOperatorIsReadAsThatOperatorTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
-        Map<String, UndividedPosition.Reason> byPlace = new LinkedHashMap<>();
-        evidence.get("ranged").notRead().forEach(each -> byPlace.put(each.at(), each.reason()));
-        return byPlace;
+        return evidence.get("ranged").notRead().stream()
+                .map(each -> each.at() + ": " + each.reason()).sorted().toList();
     }
 
     @Test

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.abort.GetsPast;
+import souther.compiler.abort.ScaleLaw;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.numeric.ExactAnswer;
@@ -12,7 +13,6 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.values.TextExtents;
@@ -154,15 +154,14 @@ public final class ContainerSizesUnderAWitness {
             case GetsPast.WhereTheTextFits _ -> false;
             // Whether the scales leave room is read off what each operand is, by the rule the
             // operations a row is asked of are ({@link DecimalOperation#hasRoomAt}).
-            case GetsPast.WhereTheScalesHaveRoom(BinOp op) -> {
-                List<Core> operands = operandsOf(operator);
-                if (operands == null || operands.size() != 2) {
-                    yield false;
-                }
-                OptionalLong left = scaleOf(operands.get(0));
-                OptionalLong right = scaleOf(operands.get(1));
-                yield left.isPresent() && right.isPresent()
-                        && DecimalOperation.hasRoomAt(op, left.getAsLong(), right.getAsLong());
+            case GetsPast.WhereTheScalesHaveRoom(ScaleLaw law) -> {
+                List<Core> args = operandsOf(operator);
+                OptionalLong first = args == null ? OptionalLong.empty() : scaleHandedAt(law, args,
+                        law.firstAt());
+                OptionalLong second = args == null ? OptionalLong.empty() : scaleHandedAt(law, args,
+                        law.secondAt());
+                yield first.isPresent() && second.isPresent()
+                        && DecimalOperation.hasRoomAt(law, first.getAsLong(), second.getAsLong());
             }
             case GetsPast.NotKnown _ -> false;
         };
@@ -198,6 +197,10 @@ public final class ContainerSizesUnderAWitness {
             case Core.LetIn li -> {
                 return scaleOf(li.body());
             }
+            // Negating a number leaves it the places it had.
+            case Core.Neg negated -> {
+                return scaleOf(negated.operand());
+            }
             case Core.If fork -> {
                 return larger(scaleOf(fork.then()), scaleOf(fork.els()));
             }
@@ -205,10 +208,16 @@ public final class ContainerSizesUnderAWitness {
                 // A sum, a difference or a product, in whatever shape the tree gives it: its
                 // owner says it is one.
                 List<Core> operands = operandsOf(node);
-                if (operands != null && operands.size() == 2
-                        && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                        instanceof GetsPast.WhereTheScalesHaveRoom(BinOp op)) {
-                    return scaleOfTheAnswer(op, operands);
+                if (operands != null && WhatARunMayEndFor
+                        .completionApartFromTheClosuresWrittenAtIt(node)
+                        instanceof GetsPast.WhereTheScalesHaveRoom(ScaleLaw law)) {
+                    return scaleOfTheAnswer(law, operands);
+                }
+                AnOperationApplied applied = AnOperationApplied.of(node);
+                List<Integer> made = applied == null ? null : DefaultBoundOperationFacts.get()
+                        .argumentsAnAnswerIsMadeOf(applied.operation());
+                if (made != null) {
+                    return scaleOfWhatIsMadeOf(applied.args(), made);
                 }
             }
         }
@@ -224,13 +233,49 @@ public final class ContainerSizesUnderAWitness {
         }
     }
 
-    private OptionalLong scaleOfTheAnswer(BinOp op, List<Core> operands) {
-        OptionalLong left = scaleOf(operands.get(0));
-        OptionalLong right = scaleOf(operands.get(1));
-        return left.isPresent() && right.isPresent()
-                ? OptionalLong.of(DecimalOperation.scaleOfTheAnswer(op, left.getAsLong(),
-                        right.getAsLong()))
+    /**
+     * The scale of an answer made of the arguments at {@code made}: that of the one with the most,
+     * a whole number having none. Nothing where an argument is neither.
+     */
+    private OptionalLong scaleOfWhatIsMadeOf(List<Core> args, List<Integer> made) {
+        OptionalLong most = OptionalLong.of(0);
+        for (int at : made) {
+            Core argument = args.get(at);
+            OptionalLong scale = Type.INT.equals(argument.type()) ? OptionalLong.of(0)
+                    : Type.DECIMAL.equals(argument.type()) ? scaleOf(argument)
+                    : OptionalLong.empty();
+            if (scale.isEmpty()) {
+                return OptionalLong.empty();
+            }
+            most = OptionalLong.of(Math.max(most.getAsLong(), scale.getAsLong()));
+        }
+        return most;
+    }
+
+    private OptionalLong scaleOfTheAnswer(ScaleLaw law, List<Core> args) {
+        OptionalLong first = scaleHandedAt(law, args, law.firstAt());
+        OptionalLong second = scaleHandedAt(law, args, law.secondAt());
+        return first.isPresent() && second.isPresent()
+                ? OptionalLong.of(DecimalOperation.scaleOfTheAnswer(law, first.getAsLong(),
+                        second.getAsLong()))
                 : OptionalLong.empty();
+    }
+
+    /**
+     * The scale of the argument {@code at} an operation under {@code law} is handed: what the
+     * argument is, where it is a number it works on, and the whole number it is written as, where
+     * it is the scale asked for.
+     */
+    private OptionalLong scaleHandedAt(ScaleLaw law, List<Core> args, int at) {
+        if (at >= args.size()) {
+            return OptionalLong.empty();
+        }
+        if (law instanceof ScaleLaw.Asked asked && at == asked.scaleAt()) {
+            Optional<BigInteger> written = writtenWhole(args.get(at));
+            return written.isPresent() && written.get().bitLength() < Integer.SIZE
+                    ? OptionalLong.of(written.get().abs().longValueExact()) : OptionalLong.empty();
+        }
+        return scaleOf(args.get(at));
     }
 
     /**
