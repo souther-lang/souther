@@ -137,11 +137,27 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
      * The same of whole numbers, where the operators are read wherever they are worked out: a
      * product of a quantity of one or two and a price up to ten is never eleven, so the net takes
      * the image of the product and not its hull, while the quantity and the price stand where
-     * their own rules leave them.
+     * their own rules leave them. And so it is however the rule ties the net to the product —
+     * moved by a number, weighed, or held between two inequalities — and not only where the rule
+     * is read as a definition.
      */
     @Test
     void aWholeNumberDefinedAsAProductTakesTheImageAndNotTheHull() {
-        String source = """
+        for (String rule : List.of("net.value == quantity.value * price.value",
+                "net.value - 1 == quantity.value * price.value",
+                "2 * net.value == quantity.value * price.value",
+                "net.value >= quantity.value * price.value"
+                        + " && net.value <= quantity.value * price.value")) {
+            assertFalse(certified(productLine(rule), "q.net"), rule);
+        }
+        String defined = productLine("net.value == quantity.value * price.value");
+        assertTrue(certified(defined, "q.quantity"));
+        assertTrue(certified(defined, "q.price"));
+    }
+
+    /** A line of a quantity of one or two, a price up to ten and a net {@code rule} ties to them. */
+    private static String productLine(String rule) {
+        return """
                 module demo
                 data Q = Int
                     invariant value >= 1 && value <= 2
@@ -150,15 +166,11 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
                 data N = Int
                     invariant value >= 0
                 data Line = { quantity: Q, price: P, net: N }
-                    invariant net.value == quantity.value * price.value
+                    invariant %s
                 data Ok
                 behavior probe : (q: Line) -> Ok
                 let probe (q) = Ok
-                """;
-
-        assertFalse(certified(source, "q.net"));
-        assertTrue(certified(source, "q.quantity"));
-        assertTrue(certified(source, "q.price"));
+                """.formatted(rule);
     }
 
     /** A net the definition can come to past its end restricts the places it is made of, which

@@ -3673,15 +3673,25 @@ public final class FieldDomains {
                 byOccurrence.values().forEach(one -> {
             RuleRef.Invariant rule = reading.from();
             for (NumericConstraint each : one.said().stated()) {
-                if (constraints.numbers()
+                if (!constraints.numbers()
                         .provenByTheBoxAndItsDifferences(each.form(), each.rel())) {
+                    for (FactSubject atom : each.atoms()) {
+                        lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
+                                Set.of(each.rel() == Rel.NE
+                                        ? ProjectionEvidence.Cause.Unstated.A_HOLE
+                                        : ProjectionEvidence.Cause.Unstated.A_RELATION)));
+                    }
                     continue;
                 }
-                for (FactSubject atom : each.atoms()) {
-                    lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
-                            Set.of(each.rel() == Rel.NE
-                                    ? ProjectionEvidence.Cause.Unstated.A_HOLE
-                                    : ProjectionEvidence.Cause.Unstated.A_RELATION)));
+                // Proved, and still not stated where it is proved of an atom standing for an
+                // arithmetic over the places: the box holds that atom as the hull of what the
+                // arithmetic comes to, free of the places it is made of, and a place tied to it
+                // takes the arithmetic's values and not the hull's. A product of a quantity of one
+                // or two and a price up to ten is never eleven, though the hull holds it.
+                if (each.atoms().stream().anyMatch(ComputedNumbers::standsForArithmetic)) {
+                    each.atoms().stream().filter(ranged::contains).forEach(atom ->
+                            lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
+                                    Set.of(ProjectionEvidence.Cause.Unstated.A_RELATION))));
                 }
             }
         })));
@@ -3708,16 +3718,6 @@ public final class FieldDomains {
                         part.rule()));
             }
         }));
-        // And a place a rule defines as a number made of others. Its values are what the number
-        // comes to, the image of a function of those places, and what the bounds hold of it is the
-        // hull of that image: a product of a quantity of one or two and a price up to ten is never
-        // eleven, though the hull holds it.
-        took.definitions().forEach((rule, defined) -> {
-            for (FactSubject place : defined) {
-                lossy.add(new ProjectionEvidence.Cause.Lossy(rule, place,
-                        Set.of(ProjectionEvidence.Cause.Unstated.A_RELATION)));
-            }
-        });
         causes.addAll(lossy);
         causes.addAll(unsaid);
         // And whether the ends handed over are the ends the rules drew. Asked of every subject the
