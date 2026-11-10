@@ -39,6 +39,20 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
         assertTrue(DecimalPoints.isBuiltAt(row), String.valueOf(row));
     }
 
+    /** An end of more digits than a row is built with is no row, and the run still has rows:
+     *  inside it, the one nearest that end that is built. */
+    @Test
+    void aRunWhoseNearEndNoRowIsBuiltAtStillHasARowInsideIt() {
+        ExactRatio past = ExactRatio.of(BigInteger.TEN.pow(
+                (int) DecimalOperation.DIGITS_A_ROW_IS_BUILT_AT).add(BigInteger.ONE));
+        ExactCut upper = ExactCut.inclusive(past);
+        ExactCut lower = ExactCut.inclusive(ExactRatio.ZERO);
+        assertStandsInside(DecimalPoints.within(upper, lower, false), lower, upper);
+        ExactCut negated = ExactCut.inclusive(past.negated());
+        ExactCut above = ExactCut.inclusive(ExactRatio.ZERO);
+        assertStandsInside(DecimalPoints.within(negated, above, true), negated, above);
+    }
+
     @Test
     void anEndTheRunLeavesOutIsPassedByTheFewestPlacesThatPassIt() {
         assertEquals(ExactRatio.ONE,

@@ -121,6 +121,11 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
         public static final Shape OF_A_PLACE =
                 new Shape(PLACES_A_ROW_IS_BUILT_AT, DIGITS_A_ROW_IS_BUILT_AT);
 
+        /** The total of a list of numbers a row holds: at their places, with the digits of the
+         *  greatest of them and of the count of them. */
+        public static final Shape OF_A_TOTAL =
+                new Shape(PLACES_A_ROW_IS_BUILT_AT, DIGITS_A_ROW_IS_BUILT_AT + DIGITS_OF_A_COUNT);
+
         public Shape {
             if (scale < 0 || digits < 0) {
                 throw new IllegalArgumentException("a shape is no less than nought: " + scale
@@ -442,8 +447,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
                         over[o] = Shape.OF_A_PLACE;
                         standing &= isAPlaceAsItStands(formed);
                     }
-                    case Total _ -> over[o] = new Shape(PLACES_A_ROW_IS_BUILT_AT,
-                            DIGITS_A_ROW_IS_BUILT_AT + DIGITS_OF_A_COUNT);
+                    case Total _ -> over[o] = Shape.OF_A_TOTAL;
                     case Worked worked -> {
                         if (worked.operation() >= i) {
                             return null;
@@ -505,6 +509,12 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
          *  more places than a row is built at ({@link #PLACES_A_ROW_IS_BUILT_AT}), which is what
          *  the room is shown for ({@link #allowAClaimOver}). */
         Optional<BigDecimal> at(Map<Object, ExactRatio> values) {
+            return at(values, Shape.OF_A_PLACE);
+        }
+
+        /** {@link #at(Map)} where the number is held to {@code limit}, the shape of what it is: a
+         *  place of a row, or the total of a list of them. */
+        Optional<BigDecimal> at(Map<Object, ExactRatio> values, Shape limit) {
             ExactRatio sum = constant;
             for (Map.Entry<Object, ExactRatio> each : coefs.entrySet()) {
                 ExactRatio value = values.get(each.getKey());
@@ -513,7 +523,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
                 }
                 sum = value.times(each.getValue()).flatMap(sum::plus).orNull();
             }
-            return builtAt(sum);
+            return builtWithin(sum, limit);
         }
     }
 
@@ -548,7 +558,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
          *  there or the number is written at more places than a row is built at. */
         Optional<BigDecimal> at(Map<Object, ExactRatio> values) {
             ExactRatio value = values.get(term);
-            return value == null ? Optional.empty() : builtAt(value);
+            return value == null ? Optional.empty() : builtWithin(value, Shape.OF_A_TOTAL);
         }
     }
 
@@ -567,17 +577,26 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * of the rows would be a claim of the rows that are built.
      */
     public static ExactAnswer<Optional<BigDecimal>> writtenForARow(ExactRatio number) {
+        return writtenWithin(number, Shape.OF_A_PLACE);
+    }
+
+    /**
+     * {@link #writtenForARow} where the number is held to {@code limit}: what a row holds at a
+     * place is of {@link Shape#OF_A_PLACE}, and the total of a list of such numbers of
+     * {@link Shape#OF_A_TOTAL}, which is what the room of an operation over either is shown for.
+     */
+    static ExactAnswer<Optional<BigDecimal>> writtenWithin(ExactRatio number, Shape limit) {
         return switch (number.writtenDecimal()) {
             case ExactAnswer.Held<Optional<BigDecimal>> written -> ExactAnswer.held(written.value()
-                    .filter(each -> Math.abs((long) each.scale()) <= PLACES_A_ROW_IS_BUILT_AT
-                            && each.precision() <= DIGITS_A_ROW_IS_BUILT_AT));
+                    .filter(each -> Math.abs((long) each.scale()) <= limit.scale()
+                            && each.precision() <= limit.digits()));
             case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->
                     ExactAnswer.unheld(unheld.why());
         };
     }
 
-    private static Optional<BigDecimal> builtAt(ExactRatio number) {
-        return number != null && writtenForARow(number)
+    private static Optional<BigDecimal> builtWithin(ExactRatio number, Shape limit) {
+        return number != null && writtenWithin(number, limit)
                 instanceof ExactAnswer.Held<Optional<BigDecimal>> written
                 ? written.value() : Optional.empty();
     }
@@ -630,7 +649,8 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
                                                     Map<Object, ExactRatio> values) {
         return switch (work) {
             case DecimalAdditiveWalk walk -> !values.keySet().containsAll(
-                    walk.added().coefs().keySet()) || walk.added().at(values).isPresent();
+                    walk.added().coefs().keySet())
+                    || walk.added().at(values, Shape.OF_A_TOTAL).isPresent();
             case DecimalOperation each -> each.operands.stream().allMatch(operand ->
                     switch (operand) {
                         case Formed formed -> formed.at(values).isPresent();

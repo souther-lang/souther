@@ -211,9 +211,7 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                                                   Map<BindingId, DecimalOperation.Shape> named) {
         return switch (part) {
             case Path _ -> DecimalOperation.Shape.OF_A_PLACE;
-            case ReadWithTheTotal _ -> new DecimalOperation.Shape(
-                    DecimalOperation.PLACES_A_ROW_IS_BUILT_AT,
-                    DecimalOperation.DIGITS_A_ROW_IS_BUILT_AT + DecimalOperation.DIGITS_OF_A_COUNT);
+            case ReadWithTheTotal _ -> DecimalOperation.Shape.OF_A_TOTAL;
             case Written(BigDecimal value) -> DecimalOperation.Shape.of(value);
             case Named(BindingId name) -> named.get(name);
             case SoFar _ -> DecimalOperation.Shape.NOUGHT;
