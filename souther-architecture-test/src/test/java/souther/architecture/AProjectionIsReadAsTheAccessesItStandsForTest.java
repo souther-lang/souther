@@ -286,7 +286,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/AdmissibleReading", "gather",
                 "(" + core + "Ljava/util/Set;" + at + "Ljava/util/Set;)V",
                 Reading.FIRST_HELD, FINDS_THE_FIRST_HELD);
-        row(out, c + "check/AffineForms", "composed", "(" + core + "Ljava/lang/Object;L" + c
+        row(out, c + "check/AffineForms", "composed", "(" + core + core + "Ljava/lang/Object;L" + c
                 + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;L" + c
                 + "check/AffineForms$Stop;)L" + c + "numeric/LinearForm;",
                 Reading.NAMES, READS_THE_NAMES);
@@ -467,7 +467,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "check/Symbols;L" + c + "check/DeclarationNewtypes;L" + c
                 + "coverage/CoverageSites$Plan;L" + c + "coverage/NormalReturn;ZLjava/util/List;)V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "codegen/BodyGen", "genExpr", "(" + core + "L" + c + "types/Type;)L" + c
+        row(out, c + "codegen/BodyGen", "genExpr","(" + core + "L" + c + "types/Type;)L" + c
                 + "types/Type;", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "codegen/BodyGen", "walksInside", "(" + core + ")Z",
                 Reading.THE_TREE_THAT_RUNS, RUNS);

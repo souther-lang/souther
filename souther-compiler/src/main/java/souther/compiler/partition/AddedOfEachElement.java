@@ -188,34 +188,36 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
     }
 
     /**
-     * The scale furthest from nought that any number worked out of an element is at, the answer
-     * so far apart, where a number of a row is written at no more than
-     * {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT} places either side of the point. A number
-     * written out is at its own scale, a product at the sum of its factors' scales, and a sum or a
-     * difference at the greater of its operands'; so this bounds every operation of decimals the
-     * step works out of the element, and with the seed's scale every one it works out of the
-     * answer so far ({@link souther.compiler.inputs.DecimalAdditiveWalk}).
+     * The shape furthest from nought that any number worked out of an element is of, the answer
+     * so far apart, where a number of a row is of no more than
+     * {@link DecimalOperation.Shape#OF_A_PLACE}. A number written out is of its own shape, and a
+     * product, a sum and a difference of the shapes {@link DecimalOperation#shapeOfTheAnswer}
+     * says; so this bounds every operation of decimals the step works out of the element, and with
+     * the seed's shape every one it works out of the answer so far
+     * ({@link souther.compiler.inputs.DecimalAdditiveWalk}).
      */
-    long scaleOfEveryPart() {
-        Map<BindingId, Long> named = new HashMap<>();
-        long furthest = 0;
+    DecimalOperation.Shape shapeOfEveryPart() {
+        Map<BindingId, DecimalOperation.Shape> named = new HashMap<>();
+        DecimalOperation.Shape furthest = DecimalOperation.Shape.NOUGHT;
         for (Bound each : bound) {
-            long scale = scaleOf(each.value(), named);
-            named.put(each.name(), scale);
-            furthest = Math.max(furthest, scale);
+            DecimalOperation.Shape shape = shapeOf(each.value(), named);
+            named.put(each.name(), shape);
+            furthest = furthest.larger(shape);
         }
-        return Math.max(furthest, scaleOf(answer, named));
+        return furthest.larger(shapeOf(answer, named));
     }
 
-    private static long scaleOf(Part part, Map<BindingId, Long> named) {
+    private static DecimalOperation.Shape shapeOf(Part part,
+                                                  Map<BindingId, DecimalOperation.Shape> named) {
         return switch (part) {
-            case Path _, ReadWithTheTotal _ -> DecimalOperation.PLACES_A_ROW_IS_BUILT_AT;
-            case Written(BigDecimal value) -> Math.abs((long) value.scale());
+            case Path _ -> DecimalOperation.Shape.OF_A_PLACE;
+            case ReadWithTheTotal _ -> DecimalOperation.Shape.OF_A_TOTAL;
+            case Written(BigDecimal value) -> DecimalOperation.Shape.of(value);
             case Named(BindingId name) -> named.get(name);
-            case SoFar _ -> 0;
-            case Worked(BinOp op, Part left, Part right) -> op == BinOp.MUL
-                    ? scaleOf(left, named) + scaleOf(right, named)
-                    : Math.max(scaleOf(left, named), scaleOf(right, named));
+            case SoFar _ -> DecimalOperation.Shape.NOUGHT;
+            case Worked(BinOp op, Part left, Part right) ->
+                    DecimalOperation.shapeOfTheAnswer(op, shapeOf(left, named),
+                            shapeOf(right, named));
         };
     }
 

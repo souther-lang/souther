@@ -6,6 +6,8 @@ import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.AddsWhatItDoesNotHold;
+import souther.compiler.check.InvariantChecker;
+import souther.compiler.check.Scope;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.FoldedValue;
 import souther.compiler.check.ScopeStep;
@@ -50,6 +52,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.ContainerSizesUnderAWitness;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.WholeRounding;
 import souther.compiler.check.WholeUnitsBetween;
@@ -68,6 +71,7 @@ import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.ElementsMet;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -1296,9 +1300,11 @@ final class Pullback {
         Operators[] told = new Operators[1];
         List<ConstructionAsk> asked = new ArrayList<>();
         List<Derivation> answers = inAComparisonsScope(true, () -> {
-            operatorsIn(body, reads, apart, ofTheRelation);
             if (apart == null) {
                 operated.within = body;
+            }
+            operatorsIn(body, reads, apart, ofTheRelation);
+            if (apart == null) {
                 operated.leftOut = leftOut == null ? null : Core.withoutStanding(leftOut);
                 leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
@@ -1407,10 +1413,20 @@ final class Pullback {
      */
     private void anOperator(Core operator, InputReads reads) {
         LinearForm<Quantity> form = composedAs(operator, reads);
-        if (form != null) {
-            operated.tell(operator,
-                    new Answers.AsAnOperator(form, AffineForms.whereItAnswers(operator)));
+        if (form == null) {
+            return;
         }
+        WhereAnOperatorAnswers where = AffineForms.whereItAnswers(operator);
+        // A sum of decimals answers where the scales have room, which no region of the numbers
+        // says. Where the scales are shown to have it, it ends no run and there is nothing to
+        // tell of it.
+        if (where instanceof WhereAnOperatorAnswers.NotStated
+                && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(operator)
+                instanceof GetsPast.WhereTheScalesHaveRoom scales
+                && theScalesHaveRoom(operator, scales, reads)) {
+            return;
+        }
+        operated.tell(operator, new Answers.AsAnOperator(form, where));
     }
 
     /** The number {@code e} comes to where no number of the input is in it, written out as the
@@ -1435,9 +1451,9 @@ final class Pullback {
     }
 
     /**
-     * {@code construct}, told where it makes a newtype over a number: on every run where the
-     * number is held to the type by what made it ({@link #isHeldToTheTypeByTheLibrary}), which is
-     * asked first and whatever form the number has; else where the number is in the run the
+     * {@code construct}, told where it makes a newtype over a number: on every run where no run is
+     * refused by it ({@link #isRefusedByNoRun}), which is asked first and whatever form the number
+     * has; else where the number is in the run the
      * clauses leave ({@link DeclaredBounds#whereMakingSucceeds}) where they leave one — over the
      * number's form, or the rounding it is of ({@link #madeOfARounding}). Untold where they leave
      * anything else, and so left where nothing is said of it.
@@ -1451,7 +1467,7 @@ final class Pullback {
         if (!made.isWrapped()) {
             return;
         }
-        if (isHeldToTheTypeByTheLibrary(construct, made, reads)) {
+        if (isRefusedByNoRun(construct, reads)) {
             operated.tell(construct, new Answers.Anywhere());
             return;
         }
@@ -1472,24 +1488,30 @@ final class Pullback {
     }
 
     /**
-     * Whether {@code construct}, a newtype over a number no form says, is refused by no run: the
-     * clauses of its type leave a run the number is shown to lie in, as the library bounds what
-     * the operation that made it answers ({@link ResultRange}) and as a choice between two values
-     * keeps an end of them ({@link Extreme#boundsOf}). {@code Refund(Decimal.max(0.0m, x))} lies
-     * at nought or above whatever {@code x} is, with no form of {@code x} needed.
+     * Whether no run is refused by {@code construct}: nothing governs what it builds, or the check
+     * of the declarations discharges every clause of it from what they say of the parameters
+     * alone. The check is the owner of that proof, so what it settles is not read again here, and
+     * the number the construction is made of needs no form for it.
+     *
+     * <p>The clauses and nothing else: that a value is one the type admits is not that working
+     * the number out completes. An operation under the number — a quotient, a sum — is read where
+     * it is worked out, as every operation of the body is.
      */
-    private boolean isHeldToTheTypeByTheLibrary(Core.Construct construct, TypeView made,
-                                                InputReads reads) {
+    private boolean isRefusedByNoRun(Core.Construct construct, InputReads reads) {
         if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
             return true;
         }
-        Denotation number = reads.standing(construct.values().getFirst().value(),
-                read.rules().symbols(), read.rules().newtypes());
-        if (!(Core.withoutStanding(number.value()) instanceof Core.PreservedCall call)) {
-            return false;
+        Core.FieldValue field = construct.values().getFirst();
+        Denotation number = reads.standing(field.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        Scope params = Scope.NONE;
+        for (InputDomain.Parameter each : read.domain().parameters()) {
+            params = params.with(each.binding(), each.name(), each.type());
         }
-        NumericDomain.Bounds run = DeclaredBounds.wholeRunOf(made, read.ruleReading());
-        return run != null && whatTheLibraryBounds(call, number.at()).liesWithin(run);
+        return InvariantChecker.discharges(new Core.Construct(construct.typeName(),
+                List.of(new Core.FieldValue(field.field(), number.value(), field.pos())),
+                construct.type(), construct.lineage(), construct.pos()), read.ruleReading(),
+                params, reads.valueTemplates());
     }
 
     /**
@@ -1871,13 +1893,39 @@ final class Pullback {
      * ends a run for says ({@link WhatARunMayEndFor}). An operation answering where the collection
      * it answers fits is owed ({@link StopObligation}), and a reader asks how many its collections
      * hold on the runs it reads.
+     *
+     * <p>Of the runs this reading is about, which are those of the rows a model's examples and a
+     * search build, and not of every value an operation can be handed: an {@link GetsPast.Always}
+     * here says a run of such a row gets past, where the owner's own account
+     * ({@link GetsPast.WhereTheScalesHaveRoom}) says where every run does. The two are told apart
+     * by where this is read, which is nowhere a contract of an operation is.
      */
     private GetsPast completionOf(Core e, InputReads reads) {
         boolean always = (Core.withoutStanding(e) instanceof Core.Construct made
                 && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads))
                 || comesToWhereItAnswers(e, reads);
-        return always ? new GetsPast.Always()
-                : WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
+        if (always) {
+            return new GetsPast.Always();
+        }
+        GetsPast apart = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
+        // Whether the scales have room is no region of the numbers, and a run is stopped at it
+        // for no number a place holds: it answers wherever the operands are at scales a row is
+        // built at, which is read off what they are, and is not known where they are anything else.
+        return apart instanceof GetsPast.WhereTheScalesHaveRoom
+                ? theScalesHaveRoom(e, apart, reads) ? new GetsPast.Always()
+                        : new GetsPast.NotKnown()
+                : apart;
+    }
+
+    /** Whether the decimals {@code e} is handed are at scales it has room for, on every row: those
+     *  of places of the input, written out, or worked out of those
+     *  ({@link ContainerSizesUnderAWitness}). */
+    private boolean theScalesHaveRoom(Core e, GetsPast completion, InputReads reads) {
+        return operated.within != null
+                && ContainerSizesUnderAWitness.answersOn(operated.within, e, completion,
+                        node -> Optional.empty(), node -> Optional.empty(),
+                        node -> reads.pathOf(node, read.rules().newtypes())
+                                instanceof PathResolution.At);
     }
 
     /**

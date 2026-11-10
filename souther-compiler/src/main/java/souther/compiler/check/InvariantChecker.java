@@ -21,6 +21,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.core.Evaluated;
 import souther.compiler.coverage.Arrivals;
@@ -301,6 +302,8 @@ public final class InvariantChecker {
     /** Each copy of an attempt read, with each departure as whether no reading of it found a run
      *  taking it. */
     private final Map<ConstructOccurrence, List<Boolean>> departures = new LinkedHashMap<>();
+    /** What each construction read came out as, by the node itself. */
+    private final Map<Core, Verdict> verdicts = new IdentityHashMap<>();
 
     /** What each value the body builds comes to. */
     private final ValueTemplates templates;
@@ -4566,14 +4569,48 @@ public final class InvariantChecker {
         if (body == null) {
             return new Findings(c.errors, c.warnings, Status.ABANDONED, DeparturesNoRunTakes.NONE);
         }
-        Entered in = c.engine.nothingEntered();
-        for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
-            in = c.enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
-                    body.pos()), in.known(), in.at());
-        }
-        c.entering(body, in.known(), in.at(), ONE_READING);
+        c.entering(body, c.parametersEntered(params, body.pos()));
         return new Findings(c.errors, c.warnings, Status.COMPLETE,
                 new DeparturesNoRunTakes(c.departures));
+    }
+
+    /**
+     * Whether the check discharges every clause of {@code made} from what the declarations say of
+     * {@code params} alone, over the values {@code templates} say what they are defined as: no
+     * guard above it is read, so what holds here holds wherever it is built, and the construction
+     * never aborts. A construction the check cannot read, or cannot
+     * settle, is not discharged.
+     */
+    public static boolean discharges(Core.Construct made, RuleReadingContext reading,
+                                     Scope params, ValueTemplates templates) {
+        InvariantChecker c = new InvariantChecker(reading, Map.of(), templates);
+        // Only the parameters it reads: what the declarations say of another says nothing of it,
+        // and taking every one of a behavior's in is most of what asking costs.
+        c.entering(made, c.parametersEntered(params, WhatABodyReads.namesReadBy(made, made),
+                made.pos()));
+        return c.errors.isEmpty() && c.verdicts.get(made) == Verdict.PROVED;
+    }
+
+    /** What is known once every parameter in {@code params} is taken in. */
+    private Entered parametersEntered(Scope params, SourcePos at) {
+        return parametersEntered(params, params.bindings().keySet(), at);
+    }
+
+    /** What is known once the parameters in {@code params} that are in {@code among} are taken
+     *  in. */
+    private Entered parametersEntered(Scope params, Set<BindingId> among, SourcePos at) {
+        Entered in = engine.nothingEntered();
+        for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
+            if (among.contains(p.getKey())) {
+                in = enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
+                        at), in.known(), in.at());
+            }
+        }
+        return in;
+    }
+
+    private void entering(Core body, Entered in) {
+        entering(body, in.known(), in.at(), ONE_READING);
     }
 
     /**
@@ -5403,6 +5440,7 @@ public final class InvariantChecker {
     private void report(Core at, TypeSymbol.AtModule type, SourcePos pos, boolean attempted,
                         Judgment judgment) {
         Verdict verdict = judgment.verdict();
+        verdicts.put(at, verdict);
         List<Said> watching = WATCHING;
         if (watching != null && capturing == null) {
             watching.add(new Said(type.key().name(), pos, judgment));

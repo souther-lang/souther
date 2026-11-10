@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.abort.ScaleLaw;
 import souther.compiler.inputs.DecimalOperation.Formed;
 import souther.compiler.inputs.DecimalOperation.Worked;
 import souther.compiler.inputs.DecimalOperation.Written;
@@ -14,6 +15,7 @@ import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -51,7 +53,9 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     private static final Formed ADDING_T = new Formed(Map.of("t", ExactRatio.ONE), ExactRatio.ZERO);
 
     /** The scale a path of an element is at, furthest from nought: a part that reads one. */
-    private static final long A_PATH = DecimalOperation.PLACES_A_ROW_IS_BUILT_AT;
+    private static final DecimalOperation.Shape A_PATH = DecimalOperation.Shape.OF_A_PLACE;
+    private static final DecimalOperation.Shape TWO_PATHS = DecimalOperation.shapeOfTheAnswer(
+            BinOp.MUL, A_PATH, A_PATH);
 
     /** The numbers a row is built with, from both ends of the places it is built at and between,
      *  as the builder writes them. */
@@ -131,7 +135,7 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     @Test
     void aWalkOfProductsShownToCompleteGetsThroughEveryStep() {
         DecimalAdditiveWalk walk = new DecimalAdditiveWalk(new BigDecimal("0.0"), ADDING_T,
-                2 * A_PATH);
+                TWO_PATHS);
         boolean anyShown = false;
         for (List<BigDecimal> prices : listsOfElements()) {
             List<BigDecimal> parts = new ArrayList<>();
@@ -174,6 +178,23 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     }
 
     /**
+     * A total is the sum of a list of numbers a row is built with, so it has the digits of the
+     * greatest of them and those of the count: the sum of two numbers of the most digits a row is
+     * built with is a total of a row that is built, and is read as one.
+     */
+    @Test
+    void theTotalOfTwoNumbersOfTheMostDigitsARowIsBuiltWithIsReadOffARowThatIsBuilt() {
+        BigInteger most = BigInteger.TEN.pow((int) DecimalOperation.DIGITS_A_ROW_IS_BUILT_AT)
+                .subtract(BigInteger.ONE);
+        ExactRatio total = ExactRatio.of(most.shiftLeft(1));
+        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(BigDecimal.ZERO, ADDING_T, A_PATH);
+        assertTrue(DecimalOperation.allCompleteAt(List.of(walk), Map.of("t", total)));
+        assertTrue(DecimalOperation.allCompleteAt(List.of(new DecimalOperation(BinOp.ADD,
+                List.of(new DecimalOperation.Total("t"), new Written(BigDecimal.ONE)), List.of())),
+                Map.of("t", total)));
+    }
+
+    /**
      * What a walk answers is at the scale its list is written at, which is no fact of the total:
      * an operation worked out of it completes on a row only where its room does not turn on that,
      * as one worked out of a total does.
@@ -189,6 +210,74 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
                 List.of(0));
         assertTrue(DecimalOperation.allCompleteAt(List.of(walk, timesFour), total));
         assertFalse(DecimalOperation.allCompleteAt(List.of(walk, atTheEdge), total));
+    }
+
+    /**
+     * The digits are asked as well as the scale: a walk has room up to the digits a representation
+     * holds, whatever scale it keeps, and none past them. Asked at the two sides of that edge by
+     * the part that just fits the digits of the count of elements added.
+     */
+    @Test
+    void aWalkHasRoomUpToTheDigitsARepresentationHolds() {
+        long fits = DecimalOperation.DIGITS_THE_ROOM_IS_SHOWN_FOR
+                - DecimalOperation.DIGITS_OF_A_COUNT - 1;
+        assertTrue(DecimalOperation.isWithinRoom(DecimalOperation.shapeOfAWalk(
+                DecimalOperation.Shape.NOUGHT, new DecimalOperation.Shape(0, fits))));
+        assertFalse(DecimalOperation.isWithinRoom(DecimalOperation.shapeOfAWalk(
+                DecimalOperation.Shape.NOUGHT, new DecimalOperation.Shape(0, fits + 1))));
+    }
+
+    /** The numbers the shapes are asked over: scales before and after the point, a unit and the
+     *  greatest number of each of few digits, so that the operands are as far apart in scale and
+     *  as unlike in digits as they get. */
+    private static List<BigDecimal> operandsOfEveryKind() {
+        List<BigDecimal> out = new ArrayList<>();
+        for (int scale : new int[] {-3, 0, 3}) {
+            for (String unscaled : new String[] {"1", "9", "1000", "9999"}) {
+                out.add(new BigDecimal(new BigInteger(unscaled), scale));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whatever the law, what an operation comes to is within the shape the law leaves of the
+     * shapes of its operands: a sum, a difference, a product, and a quotient or a rounding at a
+     * scale asked for, over operands whose scales lie either side of the point. The shapes are
+     * asked of what the arithmetic answers and of nothing else, so that a law that says less
+     * than the arithmetic does is found by whichever pair of operands shows it, as a quotient of
+     * {@code 10^3} by {@code 10^-3}, which is of more digits than the scale of either says.
+     */
+    @Test
+    void whatAnOperationComesToIsWithinTheShapeItsLawLeaves() {
+        for (BigDecimal a : operandsOfEveryKind()) {
+            for (BigDecimal b : operandsOfEveryKind()) {
+                DecimalOperation.Shape ofA = DecimalOperation.Shape.of(a);
+                DecimalOperation.Shape ofB = DecimalOperation.Shape.of(b);
+                assertWithin(BinOp.ADD + " " + a + " " + b, a.add(b),
+                        DecimalOperation.shapeOfTheAnswer(BinOp.ADD, ofA, ofB));
+                assertWithin(BinOp.SUB + " " + a + " " + b, a.subtract(b),
+                        DecimalOperation.shapeOfTheAnswer(BinOp.SUB, ofA, ofB));
+                assertWithin(BinOp.MUL + " " + a + " " + b, a.multiply(b),
+                        DecimalOperation.shapeOfTheAnswer(BinOp.MUL, ofA, ofB));
+                for (int scale : new int[] {0, 2}) {
+                    DecimalOperation.Shape asked = new DecimalOperation.Shape(scale, 0);
+                    ScaleLaw law = new ScaleLaw.Asked();
+                    assertWithin("divide " + a + " " + b + " at " + scale,
+                            a.divide(b, scale, RoundingMode.HALF_UP),
+                            DecimalOperation.shapeOfTheAnswer(law, asked, ofA.larger(ofB)));
+                    assertWithin("round " + a + " at " + scale,
+                            a.setScale(scale, RoundingMode.HALF_UP),
+                            DecimalOperation.shapeOfTheAnswer(law, asked, ofA));
+                }
+            }
+        }
+    }
+
+    private static void assertWithin(String what, BigDecimal answer,
+                                     DecimalOperation.Shape shape) {
+        assertTrue(Math.abs((long) answer.scale()) <= shape.scale(), what + " scale " + answer);
+        assertTrue(answer.precision() <= shape.digits(), what + " digits " + answer);
     }
 
     @Test

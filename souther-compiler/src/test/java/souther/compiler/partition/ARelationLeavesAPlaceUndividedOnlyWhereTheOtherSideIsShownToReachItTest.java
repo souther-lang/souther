@@ -3102,10 +3102,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * value of {@code x} is, so it is not taken as a run {@code x} fills — here, where the values
      * asked of it are all above a third, as anywhere.
      *
-     * <p>An end at a half is not taken as a run either, though nothing rounds it: a {@code Decimal}
-     * sum stops a run where its digits or scale have no room, which no region here says, so the run
-     * may stop working out {@code x + x} on a value {@code x} takes, and no value of {@code y} is
-     * shown to be got to.
+     * <p>An end at a half is taken as a run, since nothing rounds it: a {@code Decimal} sum stops a
+     * run only where its scale has no room, which a row built at a scale a row is built at has, so
+     * every value of {@code y} is got to by the row that holds the same value of {@code x}.
      *
      * <p>The places named are the ones left unshown or related: {@code x} is neither, being parted
      * by lines at the ends of the run {@code y} takes.
@@ -3116,7 +3115,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("y", NOT_SHOWN),
                 left("x: Decimal, y: Y", declarations,
                         "if x + x + x >= 1m && x <= 1m then x == y.value else false", "4:53"));
-        assertEquals(Map.of("y", NOT_REACHED),
+        assertEquals(Map.of("y", RELATES),
                 left("x: Decimal, y: Y", declarations,
                         "if x + x >= 1m && x <= 1m then x == y.value else false", "4:49"));
     }

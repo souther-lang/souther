@@ -5213,7 +5213,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean answers(Pullback.StopObligation owed) {
             return ContainerSizesUnderAWitness.answersOn(owed.within(), owed.operation(),
                     owed.completion(), node -> heldAt(owed, node, false),
-                    node -> heldAt(owed, node, true));
+                    node -> heldAt(owed, node, true), node -> false);
         }
 
         /** How many elements the collection of the input {@code node} reads holds here, or each
