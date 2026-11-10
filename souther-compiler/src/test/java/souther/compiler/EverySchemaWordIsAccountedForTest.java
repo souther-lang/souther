@@ -1761,6 +1761,10 @@ class EverySchemaWordIsAccountedForTest {
         // Which threshold a point of a computation cut at several places is owed at, by kind.
         // Written by a switch over the sealed thresholds, for the reason the ones above are.
         held.add("/$defs/thresholdOfADerivedValue/properties/kind");
+        // How a form a construction asks of a run stands to a number, by relation. Written by a
+        // switch over the relations, so one added there does not compile without its word, and
+        // held to the schema by the same validation of the corpus documents.
+        held.add("/$defs/constructionAsked/oneOf/0/properties/is");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

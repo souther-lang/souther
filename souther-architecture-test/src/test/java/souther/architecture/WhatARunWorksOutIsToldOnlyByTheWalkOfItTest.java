@@ -39,7 +39,9 @@ class WhatARunWorksOutIsToldOnlyByTheWalkOfItTest {
             AMethod.of(PULLBACK, "anOperator", "(" + CORE + ";" + READS + ")V"),
             AMethod.of(PULLBACK, "aConstruction", "(" + CORE + "$Construct;" + READS + ")V"),
             AMethod.of(PULLBACK, "madeOfARounding", "(" + CORE + "$Construct;"
-                    + "Lsouther/compiler/check/TypeView;" + READS + ")V"),
+                    + "Lsouther/compiler/semantics/WhereAnOperatorAnswers;" + READS + ")Z"),
+            AMethod.of(PULLBACK, "madeOfANumberStandingWithinARun", "(" + CORE + "$Construct;"
+                    + "Lsouther/compiler/semantics/WhereAnOperatorAnswers;" + READS + ")V"),
             AMethod.of(PULLBACK, "oneOperationOfTheLibrary",
                     "(" + CORE + "$PreservedCall;" + READS + ")V"));
 

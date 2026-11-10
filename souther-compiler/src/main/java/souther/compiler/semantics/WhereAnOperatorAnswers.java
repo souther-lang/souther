@@ -1,10 +1,12 @@
 package souther.compiler.semantics;
 
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * On which operands an operator of the language answers a value, and on which a run stops at it.
@@ -25,11 +27,39 @@ import java.util.List;
  * value has room for, a quotient of a {@code Rational} whose exponent leaves what one holds. A
  * reader holding it knows a run may stop there and does not know where, which is neither a run
  * that always gets past nor one that never does.
+ *
+ * <p><b>What a reader may take from an answer.</b> Where the operator answers is {@code C}, and an
+ * answer says it exactly, or says nothing. An answer that says it is both a sufficient condition
+ * for a run to get past and a necessary one, so a reader narrowing what a run that got past meets
+ * may take it in, and a reader that leaves a stop out because the operands are held to it may rely
+ * on it. {@link NotStated} says neither, and a reader holding one narrows by nothing and leaves
+ * nothing out. No answer here is a bound on {@code C} from one side only; one that were would be
+ * a second kind of answer, for a reader that does the one and not the other.
+ *
+ * <p>Which operands an answer is asked of is the evaluation's before the operator: a construction
+ * is asked of the number it is made of, once that number was worked out, and what stops the run
+ * that works the number out is that number's own operator's.
  */
 public sealed interface WhereAnOperatorAnswers {
 
     /** On every operand: the operator ends no run. */
     record Everywhere() implements WhereAnOperatorAnswers {}
+
+    /**
+     * Where its value, worked out exactly, lies within {@code run}, and nothing elsewhere: what the
+     * making of a value of a type whose clauses leave a run of numbers answers is that number
+     * where it is in the run.
+     *
+     * <p>Of a number of any type, and not of the whole numbers an {@code Int} holds only
+     * ({@link WhereItsExactValueIsHeld}): an end is any number, and one end may be open or
+     * missing. A run with a hole in it is no run, and is not said.
+     */
+    record WhereItsNumberLiesWithin(NumericDomain.Bounds run) implements WhereAnOperatorAnswers {
+
+        public WhereItsNumberLiesWithin {
+            Objects.requireNonNull(run, "a run is something with ends, which may be missing");
+        }
+    }
 
     /**
      * Where its value, worked out exactly, lies from {@code least} to {@code greatest}: what an

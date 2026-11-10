@@ -23,6 +23,7 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.EveryRunStops;
+import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -390,7 +391,8 @@ public final class GuardThresholds {
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
-                                    reaches, arrived, each.readOn(), aRunStops, stops, found,
+                                    reaches, arrived, each.readOn(), aRunStops, stops,
+                                    each.asks(), found,
                                     between, throughADerivedValue, partnered, withoutALine,
                                     readOn);
                         }
@@ -1065,6 +1067,7 @@ public final class GuardThresholds {
                                ComparisonAssessment read, LinesReadOn linesReadOn,
                                boolean aRunStops,
                                List<EveryRunStops> stops,
+                               List<WhatAConstructionAsks> asks,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<DerivedValues.Settling> throughADerivedValue,
@@ -1079,10 +1082,12 @@ public final class GuardThresholds {
         publish(behavior, stated, wrote, anchor, read, withoutALine);
         // And where every run getting to it is shown to stop, which is a run that may stop in it
         // whatever else is said.
-        if (aRunStops || !stops.isEmpty()) {
+        // Or where a construction on the way to it asks something of every run that gets there,
+        // which a run that does not meet it is stopped by.
+        if (aRunStops || !stops.isEmpty() || !asks.isEmpty()) {
             withoutALine.mayStopARun(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
-                    ModelOccurrences.of(stated), stops);
+                    ModelOccurrences.of(stated), stops, asks);
         }
         // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
         // same way a clause does. Only where a line's origin comes from is: a guard's is where

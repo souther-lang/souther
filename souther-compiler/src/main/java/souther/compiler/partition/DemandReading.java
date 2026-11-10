@@ -35,6 +35,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ModelOccurrences;
@@ -894,6 +895,12 @@ final class DemandReading {
      * carry of it narrows the region and what it cannot is left out, which is wider and never
      * narrower than the rows that get through — and the places that is left tying together are
      * told apart from it, for a reader asking whether a number is free of what the run works out.
+     *
+     * <p><b>What a condition is asked of is what stood before it.</b> Whether the region carries a
+     * condition, and whether the declarations already hold it, are asked of the region of
+     * {@code read}, which is the declarations and nothing a run got past. What a run got past the
+     * operator narrows is taken in afterwards ({@link Reachability.Reaching#gettingPast}), so that
+     * what an operator asks is never held by what it was itself asked for.
      */
     static Answered regionAnswered(Proposition answers, InputReading read) {
         List<TakenConstraint> narrowing = new ArrayList<>();
@@ -909,15 +916,72 @@ final class DemandReading {
             // What a region carries it is told, and the places a way ties by it are worked out
             // against the region it narrows ({@link Reachability.Reaching#gettingPast}): a
             // condition the declarations already hold ties nothing.
-            if (constraint.terms().stream().allMatch(term ->
-                    term instanceof NumericTerm.ValueOf value
-                            && !value.position().insideAContainer())) {
+            if (constraint.terms().stream().allMatch(DemandReading::ofValuesOutsideEveryContainer)
+                    && theRegionCarries(constraint, read)) {
                 narrowing.add(constraint);
             } else if (!heldByTheRunsOfTheDeclarations(constraint, read)) {
                 tied.add(Tie.by(constraint));
             }
         }
         return new Answered(narrowing, tied, false);
+    }
+
+    /**
+     * Whether every statement {@code answers} makes of the numbers of the input is one the
+     * declarations already hold: asked of each as {@link #regionAnswered} asks whether a
+     * statement ties or narrows anything. False where it makes none that can be read as such, which
+     * does not say it is held.
+     */
+    static boolean heldByTheDeclarations(Proposition answers, InputReading read) {
+        boolean readSome = false;
+        for (Read each : projected(answers, read)) {
+            if (each instanceof Read.Settled(boolean thisWay) && thisWay) {
+                readSome = true;
+                continue;
+            }
+            if (!(each instanceof Read.Demands(RowDemand.Relational(
+                    TakenConstraint constraint)))) {
+                return false;
+            }
+            readSome = true;
+            if (!endsOfTheInts(constraint) && !heldByTheRunsOfTheDeclarations(constraint, read)) {
+                return false;
+            }
+        }
+        return readSome;
+    }
+
+    /**
+     * Whether the region of {@code read} can take {@code constraint} in. A number the region holds
+     * in a place is carried; a product of two is carried only where the region's algebra has a
+     * line for it, and a constraint it cannot carry is not one the region is narrowed by.
+     */
+    private static boolean theRegionCarries(TakenConstraint constraint, InputReading read) {
+        if (constraint.terms().stream().allMatch(term -> term instanceof NumericTerm.ValueOf)) {
+            return true;
+        }
+        return constraint instanceof TakenConstraint.Affine(var form, var rel, var _)
+                && read.quantities().region().assuming(form, rel)
+                        instanceof SearchRegion.Assumption.Taken;
+    }
+
+    /**
+     * Whether {@code term} is a value outside every container, a total of what a position holds
+     * or of a run, or a product of such numbers. Not a length or a count, whose ties part what the
+     * position holds and are not a line on the number.
+     */
+    private static boolean ofValuesOutsideEveryContainer(NumericTerm term) {
+        return switch (term) {
+            case NumericTerm.ValueOf value -> !value.position().insideAContainer();
+            case NumericTerm.TakenOf taken -> taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                    && !taken.position().insideAContainer();
+            case NumericTerm.TakenOver _ -> true;
+            case NumericTerm.ProductOf product -> product.one().coefs().keySet().stream()
+                    .allMatch(DemandReading::ofValuesOutsideEveryContainer)
+                    && product.other().coefs().keySet().stream()
+                    .allMatch(DemandReading::ofValuesOutsideEveryContainer);
+            default -> false;
+        };
     }
 
     /**
@@ -934,33 +998,33 @@ final class DemandReading {
     }
 
     /**
-     * What ties places on the way to a comparison: the places, and what the way states of the
-     * numbers read off them where that is known.
+     * What ties places on the way to a comparison, of one of two kinds that are not one fact: a
+     * statement the way makes of the numbers of several places ({@link Stating}), and the places
+     * an operator nobody says where it answers may stop a run on ({@link Unsaid}). The first
+     * relates the values of the places and says which they may be; the second relates nothing,
+     * and says only that some run is stopped on some of their numbers. A reader that asks what a
+     * tie states asks the first, and one that asks whether a run may be stopped there asks the
+     * second, and a tie that is read as both is read as whichever its kind says.
      *
-     * <p>A tie is a statement over places and is equal to every tie of the same statement over the
-     * same places, wherever it is worked out. It is not the site that works it out, and no reader
-     * may take two equal ties to be one run: what is asked of a tie is what it states.
-     *
-     * @param places the places the tie names, in the order they were met
-     * @param by     what is stated of their numbers, or null where only the places are known — the
-     *               numbers an operator not said may stop the run on
-     * @param where  where a run works the operator out, as the closures it is inside of say it
+     * <p>A tie is equal to every tie of the same kind over the same places and, of the first, the
+     * same statement, wherever it is worked out. It is not the site that works it out, and no
+     * reader may take two equal ties to be one run: what is asked of a tie is what it states.
      */
-    record Tie(Set<TermPath> places, TakenConstraint by, Pullback.WorkedOutWhere where) {
+    sealed interface Tie {
 
-        Tie {
-            places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
-        }
+        /** The places the tie names, in the order they were met. */
+        Set<TermPath> places();
 
-        /** The tie a statement of numbers makes, between every place its numbers are read off
-         *  ({@link RowDemand#placesReadOff}). */
+        /** Where a run works the operator out, as the closures it is inside of say it. */
+        Pullback.WorkedOutWhere where();
+
+        /**
+         * The tie a statement of numbers makes, between every place its numbers are read off
+         * ({@link RowDemand#placesReadOff}).
+         */
         static Tie by(TakenConstraint constraint) {
-            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint,
+            return new Stating(RowDemand.placesReadOff(constraint.terms()), constraint,
                     Pullback.WorkedOutWhere.ALWAYS);
-        }
-
-        Tie(Set<TermPath> places, TakenConstraint by) {
-            this(places, by, Pullback.WorkedOutWhere.ALWAYS);
         }
 
         /** The tie of places an operator not said of may stop the run on. */
@@ -970,7 +1034,32 @@ final class DemandReading {
 
         /** The same, of an operator a run works out where {@code where} says. */
         static Tie between(Set<TermPath> places, Pullback.WorkedOutWhere where) {
-            return new Tie(places, null, where);
+            return new Unsaid(places, where);
+        }
+
+        /**
+         * What the way states of the numbers read off {@code places}.
+         *
+         * @param by    what is stated of their numbers
+         * @param where where a run works the statement out
+         */
+        record Stating(Set<TermPath> places, TakenConstraint by, Pullback.WorkedOutWhere where)
+                implements Tie {
+
+            public Stating {
+                places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+            }
+        }
+
+        /**
+         * The places the numbers are of that an operator not said of may stop a run on, which is
+         * all that is known of it.
+         */
+        record Unsaid(Set<TermPath> places, Pullback.WorkedOutWhere where) implements Tie {
+
+            public Unsaid {
+                places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+            }
         }
     }
 

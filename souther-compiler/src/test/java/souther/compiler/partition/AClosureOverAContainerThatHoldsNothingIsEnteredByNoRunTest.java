@@ -119,7 +119,7 @@ class AClosureOverAContainerThatHoldsNothingIsEnteredByNoRunTest {
      *  {@code k}, which a division by a number written down does not. */
     @Test
     void theDivisionAnEmptyContainerIsMadeOfIsGotPastOnTheWayOn() {
-        assertEquals(List.of(new DemandReading.Tie(Set.of(TermPath.of("k")), null)),
+        assertEquals(List.of(DemandReading.Tie.between(Set.of(TermPath.of("k")))),
                 gotPastAtTheLast("List.any(p -> p == d, List.take(0, [100 / k])) || d > 3")
                         .tied());
         assertEquals(List.of(),

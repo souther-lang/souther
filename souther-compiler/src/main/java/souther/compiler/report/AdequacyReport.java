@@ -103,6 +103,7 @@ import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.EveryRunStops;
+import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.CasesExpandedAtARule;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
@@ -4292,6 +4293,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 marked(out, f, page, new ReportMessage.MayStopARun(
                         cited(it.cited(), page, declaredIn, places),
                         everyRunStopsAt(it.everyRunStops(), page),
+                        constructionsAsk(it.asks(), page, rendering, declaredIn),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 page, declaredIn)));
             }
@@ -6752,6 +6754,66 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Optional<BlockReason.RelationShownOverARegion> leftOpen,
                                  Optional<NumberRegion> notShownComputed,
                                  List<WhereARunStopped> runsStopped) {
+    }
+
+    /**
+     * What each construction on the way to a rule asks of a run, as the human report says it after
+     * the rule: where the construction is written and what the numbers it is made of have to be.
+     * Told from the condition the finding holds and nothing else, so the words and the document
+     * say one thing.
+     */
+    private static Message constructionsAsk(List<WhatAConstructionAsks> asks, Page page,
+                                            SourceRendering rendering, SourceId declaredIn) {
+        if (asks.isEmpty()) {
+            return new ReportMessage.Nothing();
+        }
+        List<String> each = new ArrayList<>();
+        for (WhatAConstructionAsks one : asks) {
+            String at = PublishedAt.of(Citation.of(one.at()))
+                    .map(place -> PlaceProse.said(place, rendering, declaredIn))
+                    .orElseGet(() -> String.valueOf(rendering.layouts().resolve(one.at())));
+            each.add(page.say(new ReportMessage.ConstructionAsks(one.construction(), at,
+                    askedSaid(one.asks(), page))));
+        }
+        return new ReportMessage.Verbatim(String.join("", each));
+    }
+
+    /** What is asked, in the page's words: the parts of a conjunction said together and of a
+     *  disjunction one or the other, a part of one kind set off inside the other. */
+    private static String askedSaid(WhatAConstructionAsks.Asked asked, Page page) {
+        return switch (asked) {
+            case WhatAConstructionAsks.Is(var form, var rel, var against) -> page.say(
+                    switch (rel) {
+                        case GE -> new ReportMessage.ItIsAtLeast(form, against);
+                        case GT -> new ReportMessage.ItIsAbove(form, against);
+                        case LE -> new ReportMessage.ItIsAtMost(form, against);
+                        case LT -> new ReportMessage.ItIsBelow(form, against);
+                        case EQ -> new ReportMessage.ItIs(form, against);
+                        case NE -> new ReportMessage.ItIsNot(form, against);
+                    });
+            case WhatAConstructionAsks.AllOf(var each) -> both(page, each.stream()
+                    .map(one -> askedSaidInside(one, asked, page)).toList());
+            case WhatAConstructionAsks.OneOf(var each) -> either(page, each.stream()
+                    .map(one -> askedSaidInside(one, asked, page)).toList());
+        };
+    }
+
+    /** One part of {@code whole}, set off where it is a conjunction or a disjunction of the other
+     *  kind than {@code whole}. */
+    private static String askedSaidInside(WhatAConstructionAsks.Asked part,
+                                          WhatAConstructionAsks.Asked whole, Page page) {
+        String said = askedSaid(part, page);
+        return part instanceof WhatAConstructionAsks.Is || part.getClass() == whole.getClass()
+                ? said : page.say(new ReportMessage.Grouped(said));
+    }
+
+    /** The same as {@link #both}, of things one of which holds. */
+    private static String either(Page page, List<String> each) {
+        Message joined = new ReportMessage.Verbatim(each.getLast());
+        for (int at = each.size() - 2; at >= 0; at--) {
+            joined = new ReportMessage.Either(new ReportMessage.Verbatim(each.get(at)), joined);
+        }
+        return page.say(joined);
     }
 
     /** Where every run getting to a rule stops, as the human report says it after the rule. */
@@ -10622,6 +10684,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
+    /** What a construction asks of a run as a document writes it: a form and how it stands to a
+     *  number, or the parts of a conjunction or of a disjunction. */
+    private static void askedWritten(ObjectNode into, WhatAConstructionAsks.Asked asked) {
+        switch (asked) {
+            case WhatAConstructionAsks.Is(var form, var rel, var against) -> {
+                into.put("form", form);
+                into.put("is", switch (rel) {
+                    case GE -> "at_least";
+                    case GT -> "above";
+                    case LE -> "at_most";
+                    case LT -> "below";
+                    case EQ -> "equal";
+                    case NE -> "not_equal";
+                });
+                into.put("than", against);
+            }
+            case WhatAConstructionAsks.AllOf(var each) -> {
+                ArrayNode parts = into.putArray("allOf");
+                each.forEach(part -> askedWritten(parts.addObject(), part));
+            }
+            case WhatAConstructionAsks.OneOf(var each) -> {
+                ArrayNode parts = into.putArray("oneOf");
+                each.forEach(part -> askedWritten(parts.addObject(), part));
+            }
+        }
+    }
+
     private void finding(DocumentArray out, ReportedFinding reported, UnobservedGroup group,
                          UnobservedChoices pattern, DocumentSources sources,
                          PublishedRuleHandle.WhereARuleIs places) {
@@ -10692,6 +10781,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         bound.put("greatest", within.greatest());
                     }
                 }
+            }
+        }
+        // And what each construction on the way to a rule a run may stop in asks of a run that
+        // works it out, which the words beside the rule say from the same condition.
+        if (finding.about() instanceof About.ARuleThatMayStopARun(var it)
+                && !it.asks().isEmpty()) {
+            ArrayNode asks = f.putArray("asks");
+            for (WhatAConstructionAsks each : it.asks()) {
+                ObjectNode one = asks.addObject();
+                one.put("construction", each.construction());
+                PublishedAt.of(Citation.of(each.at())).ifPresent(place -> at(one, place, sources));
+                askedWritten(one.putObject("asked"), each.asks());
             }
         }
         // Present where the kind has one. A finding a build is not told about under any code is

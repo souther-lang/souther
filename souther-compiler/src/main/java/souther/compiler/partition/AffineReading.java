@@ -577,10 +577,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (makingEndsNoRun(construct)) {
                     return;
                 }
-                WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
-                        DeclaredBounds.whereMakingSucceeds(construct, type,
-                                ofTheInput.ruleReading());
-                if (where == null) {
+                if (!(DeclaredBounds.whereMakingSucceeds(construct, type, ofTheInput.ruleReading())
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld where)) {
                     told.exact = false;
                     return;
                 }
@@ -1029,13 +1027,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         || !(Core.withoutStanding(wrapped) instanceof Core.Int written)) {
                     return false;
                 }
-                WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
-                        DeclaredBounds.whereMakingSucceeds(construct,
+                BigInteger number = BigInteger.valueOf(written.value());
+                return DeclaredBounds.whereMakingSucceeds(construct,
                                 TypeView.asWritten(Type.ref(construct.typeName()), symbols(),
                                         declarations().kinds(), declarations().sums()),
-                                ofTheInput.ruleReading());
-                BigInteger number = BigInteger.valueOf(written.value());
-                return where != null && where.least().compareTo(number) <= 0
+                                ofTheInput.ruleReading())
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld where
+                        && where.least().compareTo(number) <= 0
                         && number.compareTo(where.greatest()) <= 0;
             }
 

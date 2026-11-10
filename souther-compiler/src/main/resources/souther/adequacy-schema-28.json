@@ -4724,6 +4724,32 @@
               }
             }
           },
+          "asks": {
+            "type": "array",
+            "minItems": 1,
+            "description": "On `rule_may_stop_a_run` only, where a construction a run works out on the way to the rule asks something of it that the declarations do not already hold: one entry for each construction, as the model wrote it, so two that ask the same are two. The condition a run has to meet to get past it — a run that does not is stopped there. A possibility of a stop and not a row that stops: which rows stop is for the rows run, and a condition on several numbers says what none of them does alone, as a product at nought or above is met by a gross at nought whatever the rate is. The same condition narrows the rows the rule is read over. Absent where no construction asks anything.",
+            "items": {
+              "type": "object",
+              "required": [
+                "construction",
+                "asked"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "construction": {
+                  "type": "string",
+                  "description": "The type made, as it is written."
+                },
+                "at": {
+                  "$ref": "#/$defs/at",
+                  "description": "Where the construction is written, present where a reader can be sent there."
+                },
+                "asked": {
+                  "$ref": "#/$defs/constructionAsked"
+                }
+              }
+            }
+          },
           "at": {
             "description": "Where the finding is, present exactly where its place is its own rather than the declaration it sits under — `arm_unreached` and nothing else. A behavior with two `guard`s has two arms labelled `else`, so the place is what tells two of these apart, and it is the same place under the same key as the matching `branch.obligations` entry, whose `disposition` is `unmet`. The other kinds are cited at the behavior's own declaration, which the entry above already names.",
             "$ref": "#/$defs/at"
@@ -9667,6 +9693,76 @@
           "$ref": "#/$defs/at"
         }
       }
+    },
+    "constructionAsked": {
+      "description": "What a construction asks of a run that works it out, as a condition on the numbers of the input: a form of them and how it stands to a number, or the parts of a conjunction, or of a disjunction. Told from the one condition that also narrows the rows the rule is read over, with what the declarations already hold of the numbers left out.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "form",
+            "is",
+            "than"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "form": {
+              "type": "string",
+              "description": "The numbers weighed and a constant, as an author would write them."
+            },
+            "is": {
+              "enum": [
+                "at_least",
+                "above",
+                "at_most",
+                "below",
+                "equal",
+                "not_equal"
+              ],
+              "description": "How the form stands to `than`."
+            },
+            "than": {
+              "type": "string",
+              "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
+              "description": "The number, written as a decimal."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "allOf"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "allOf": {
+              "type": "array",
+              "minItems": 2,
+              "description": "Every one of these is asked.",
+              "items": {
+                "$ref": "#/$defs/constructionAsked"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "oneOf"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "oneOf": {
+              "type": "array",
+              "minItems": 2,
+              "description": "At least one of these is asked to hold.",
+              "items": {
+                "$ref": "#/$defs/constructionAsked"
+              }
+            }
+          }
+        }
+      ]
     },
     "at": {
       "type": "object",

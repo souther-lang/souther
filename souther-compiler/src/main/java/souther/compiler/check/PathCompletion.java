@@ -278,7 +278,10 @@ final class PathCompletion {
                             ? heldWherever(product, least, greatest, k, at)
                             : operated.form() != null;
             case WhereAnOperatorAnswers.WhereTheDivisorIsNotNought _ -> operated.form() != null;
-            case WhereAnOperatorAnswers.NotStated _ -> false;
+            // The answer of a construction, which this is not asked of: what a run past it holds
+            // is a construction's to say, and nothing here does.
+            case WhereAnOperatorAnswers.NotStated _,
+                 WhereAnOperatorAnswers.WhereItsNumberLiesWithin _ -> false;
         };
     }
 
@@ -455,7 +458,8 @@ final class PathCompletion {
         Operated operated = operated(e, at);
         switch (operated.where()) {
             case WhereAnOperatorAnswers.Everywhere _ -> { }
-            case WhereAnOperatorAnswers.NotStated _ -> read[0] = false;
+            case WhereAnOperatorAnswers.NotStated _,
+                 WhereAnOperatorAnswers.WhereItsNumberLiesWithin _ -> read[0] = false;
             case WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest) -> {
                 past = operandsHeld(bare, least, greatest, past, at);
                 if (bare instanceof Core.Binary product && product.op() == BinOp.MUL
