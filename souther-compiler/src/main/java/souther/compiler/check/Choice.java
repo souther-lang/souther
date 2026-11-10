@@ -116,6 +116,12 @@ public record Choice(Kind kind, List<Arm> arms) {
      */
     public sealed interface Decides {
 
+        /** Whether choosing the arm binds the name for what an option holds, which is no value of
+         *  the reading it is chosen in. */
+        default boolean bindsWhatAnOptionHolds() {
+            return false;
+        }
+
         /** The condition of {@code fork} held, or it did not. The fork travels with it: the arm it
          *  decides is the fork's, and an arm is where a run through the condition is seen. */
         record ACondition(Core.If fork, boolean holding) implements Decides {
@@ -128,7 +134,13 @@ public record Choice(Kind kind, List<Arm> arms) {
 
         /** The scrutinee is one of the cases this arm names. The scrutinee travels with it: what an
          * arm binds is the value already there, refined to the case. */
-        record ACase(Core.Case arm, Core scrutinee) implements Decides {}
+        record ACase(Core.Case arm, Core scrutinee) implements Decides {
+
+            @Override
+            public boolean bindsWhatAnOptionHolds() {
+                return arm.binding() instanceof Core.ArmBinding.Payload;
+            }
+        }
 
         /** The attempt's invariant held, so the value was built and its {@code as} name stands for
          * it. */

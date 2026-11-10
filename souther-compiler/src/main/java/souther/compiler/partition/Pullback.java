@@ -1777,9 +1777,8 @@ final class Pullback {
                 if (Core.withoutStanding(child) instanceof Core.Block block) {
                     inside = boundInside(e, block, reads, bound);
                 } else if (!(step instanceof ScopeStep.Block)
-                        && !(step instanceof ScopeStep.Chosen(Choice.Decides.ACase(
-                                Core.Case arm, var _))
-                        && arm.binding() instanceof Core.ArmBinding.Payload)) {
+                        && !(step instanceof ScopeStep.Chosen(Choice.Decides decides)
+                        && decides.bindsWhatAnOptionHolds())) {
                     within = reads.entering(step, read.rules().symbols(),
                             read.rules().newtypes());
                 }
@@ -2047,7 +2046,7 @@ final class Pullback {
      * composes it as no form.
      */
     private FormRange exactRangeOf(Core e, InputReads reads) {
-        FormRange ofTheNewtype = whatTheRulesOfTheNewtypeLeaveAt(Core.withoutStanding(e));
+        FormRange ofTheNewtype = whatTheRulesOfTheNewtypeLeaveAt(e);
         if (AffineForms.outcome(e, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
             FormRange composed = FormRange.ofNumbers(form, read, operated.stepsNames::of);
@@ -2096,7 +2095,7 @@ final class Pullback {
      * that makes the value may still stop, and that is asked of what makes it.
      */
     private FormRange whatTheRulesOfTheNewtypeLeaveAt(Core here) {
-        Core.FieldAccess access = switch (here) {
+        Core.FieldAccess access = switch (Core.withoutStanding(here)) {
             case Core.FieldAccess one -> one;
             case Core.FieldProjection projection -> projection.lastAccess();
             default -> null;
@@ -2105,8 +2104,8 @@ final class Pullback {
                 read.rules().newtypes())) {
             return null;
         }
-        TypeView view = TypeView.of(access.target().type(), read.rules().inners(),
-                read.rules().symbols(), read.rules().kinds(), read.rules().sums());
+        TypeView view = TypeView.asWritten(access.target().type(), read.rules().symbols(),
+                read.rules().kinds(), read.rules().sums());
         DeclaredBounds.Range own = DeclaredBounds.of(view, read.ruleReading());
         return own == null ? null : FormRange.ofWhatTheRulesLeave(own);
     }

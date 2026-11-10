@@ -682,6 +682,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 CHOICES_AND_CALLS);
         row(out, c + "partition/Pullback", "comparisonHolding",
                 "(" + core + "L" + c + "core/Core$Read;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "partition/Pullback", "whatTheRulesOfTheNewtypeLeaveAt",
+                "(" + core + ")L" + c + "partition/FormRange;", Reading.ONE_ACCESS,
+                "reads the type a value is read off, of the access, or of the last access of a"
+                        + " projection, and of nothing under it");
         row(out, c + "partition/Pullback", "leaveUnsaidWhatMayEndARunUnder",
                 "(" + core + reads + "L" + c + "partition/Pullback$Bound;)V", Reading.STRUCTURE,
                 "asks each node what it ends a run for, of the owner of that: a name read off a"
@@ -761,7 +765,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node whether it is the quotient by a divisor, and goes down to its"
                         + " parts: a projection holds it where its base does");
         row(out, c + "check/WhatARunMayEndFor", "forEachWorkedOut", "(L" + c
-                        + "core/Core$IfConstructed;Ljava/util/function/Consumer;)V",
+                        + "core/Core$IfConstructed;Ljava/util/function/BiConsumer;)V",
                 Reading.STRUCTURE,
                 "hands the parts of an attempt to a reader, the operands of the construction it"
                         + " tests and its arms, and reads none of them: a projection among them is"
