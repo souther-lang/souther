@@ -252,9 +252,10 @@ public interface SearchRegion {
     }
 
     /**
-     * Whether {@code term} is a whole number of the width of an {@code Int}, which is what the
-     * ends of an {@code Int} bound it by. A region that reads no types says it of no term, which
-     * is what the default is.
+     * Whether {@code term} is the value of a position an {@code Int} is read at, which lies
+     * between the ends of an {@code Int}. Not a product, a total or a count of any number: what
+     * the arithmetic of whole numbers works out to has no end this says. A region that reads no
+     * types says it of no term, which is what the default is.
      */
     default boolean isAnInt(NumericTerm term) {
         return false;

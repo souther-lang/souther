@@ -76,6 +76,13 @@ public final class Intervals {
         return total;
     }
 
+    /** What every whole number an {@code Int} holds lies between. */
+    public static NumericDomain.Bounds theWholeNumbersAnIntHolds() {
+        return new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(Long.MIN_VALUE)),
+                Endpoint.inclusive(Count.of(Long.MAX_VALUE)));
+    }
+
     /**
      * The range holding the one number {@code at}, or null where no count is that number.
      */

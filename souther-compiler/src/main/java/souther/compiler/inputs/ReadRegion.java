@@ -1,10 +1,10 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
@@ -107,8 +107,8 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
 
     @Override
     public boolean isAnInt(NumericTerm term) {
-        return within.answersFor(term)
-                && within.ordersOf(term).answered().spacing() == Granularity.DISCRETE;
+        return term instanceof NumericTerm.ValueOf && within.answersFor(term)
+                && within.ordersOf(term).answered() instanceof Carrier.Whole;
     }
 
     @Override

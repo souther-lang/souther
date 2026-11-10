@@ -138,8 +138,16 @@ public sealed interface TakenConstraint {
                 return souther.compiler.numeric.Intervals.product(one, other);
             }
         }
-        return region.projectionOf(term) instanceof NumericDomain.FormProjection.Within within
-                ? within.bounds() : null;
+        if (!(region.projectionOf(term) instanceof NumericDomain.FormProjection.Within within)) {
+            return null;
+        }
+        // What a type holds is as much a bound as what its declarations say: a value an Int holds
+        // lies between its ends. Only a value read off an input is held so; a product or a total
+        // of Ints is asked of the ranges of its parts and is as wide as they work out.
+        return term instanceof NumericTerm.ValueOf && region.isAnInt(term)
+                ? within.bounds().meet(souther.compiler.numeric.Intervals
+                        .theWholeNumbersAnIntHolds())
+                : within.bounds();
     }
 
     /** {@code region} with each of {@code these} taken in. */
