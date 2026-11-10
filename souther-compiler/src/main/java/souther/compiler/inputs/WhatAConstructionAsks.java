@@ -61,6 +61,10 @@ public record WhatAConstructionAsks(String construction, SourcePos at, Asked ask
     public record OnPlaces(Set<TermPath> places) implements Bearing {
 
         public OnPlaces {
+            if (places.isEmpty()) {
+                throw new IllegalArgumentException("numbers of no place bear on every rule: "
+                        + "that is OnEveryRule");
+            }
             places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
         }
 

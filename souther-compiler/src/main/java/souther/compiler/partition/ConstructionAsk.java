@@ -27,6 +27,12 @@ import java.util.function.Predicate;
 record ConstructionAsk(String construction, SourcePos at, WhatAConstructionAsks.Bearing bearing,
                        Requirement requirement) {
 
+    ConstructionAsk {
+        if (construction == null || at == null || bearing == null || requirement == null) {
+            throw new IllegalArgumentException("a construction asks something of some rules");
+        }
+    }
+
     /**
      * What the report says this asks of a run whose way holds what {@code heldOnEveryWay} says,
      * or empty where it asks nothing of one: every part the way holds is left out, and a condition

@@ -1073,8 +1073,9 @@ public final class GuardThresholds {
         Optional<Set<TermPath>> reads = placesRead(arrived);
         List<WhatAConstructionAsks> told = new ArrayList<>();
         for (ConstructionAsk each : asks) {
-            each.toldOf(heldOnTheWay).filter(one -> reads.map(one::bearsOn).orElse(true))
-                    .ifPresent(told::add);
+            if (reads.map(each.bearing()::bearsOn).orElse(true)) {
+                each.toldOf(heldOnTheWay).ifPresent(told::add);
+            }
         }
         return told;
     }

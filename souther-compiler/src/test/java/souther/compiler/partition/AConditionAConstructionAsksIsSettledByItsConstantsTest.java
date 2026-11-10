@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Rel;
@@ -10,8 +11,10 @@ import souther.compiler.partition.ConstructionAsk.Requirement;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * What a construction asks of a run is a condition of one of five kinds — nothing, no run, one
@@ -84,6 +87,25 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
         assertEquals(new Requirement.OneOf(List.of(X, Y)),
                 Requirement.or(X, Y).leavingOut(HELD::equals));
         assertEquals(Requirement.NEVER, Requirement.NEVER.leavingOut(HELD::equals));
+    }
+
+    /** A construction no run gets past ends a run whichever place the rule reads, and whatever
+     *  the way to the rule holds. */
+    @Test
+    void aConstructionNoRunGetsPastIsToldUnderEveryRuleWhateverTheWayHolds() {
+        ConstructionAsk never = new ConstructionAsk("Held", NOWHERE, EVERY_RULE,
+                Requirement.NEVER);
+        assertEquals(true, never.bearing().bearsOn(Set.of(TermPath.of("y"))));
+        assertEquals(Optional.of(new WhatAConstructionAsks.Never()),
+                never.toldOf(_ -> true).map(WhatAConstructionAsks::asks));
+    }
+
+    @Test
+    void anAskIsOfSomeTypeAtSomePlaceUnderSomeRulesAndNumbersOfNoPlaceAreNotPlaces() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new ConstructionAsk(null, NOWHERE, EVERY_RULE, Requirement.NEVER));
+        assertThrows(IllegalArgumentException.class,
+                () -> new WhatAConstructionAsks.OnPlaces(Set.of()));
     }
 
     @Test
