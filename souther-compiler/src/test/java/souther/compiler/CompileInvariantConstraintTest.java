@@ -346,7 +346,7 @@ class CompileInvariantConstraintTest {
             if (!prefix.contains(i)) {
                 prefix.add(i);
                 extend(prefix, n, out);
-                prefix.remove(prefix.size() - 1);
+                prefix.removeLast();
             }
         }
     }
