@@ -75,13 +75,14 @@ class ContainerSizesUnderAWitnessTest {
                         node -> Optional.empty(), node -> false);
     }
 
-    /** The body of {@code run}, a walk over a list of decimals whose step is {@code step}. */
-    private static Core decimalWalk(String step) {
+    /** The body of {@code run}, a walk over a list of decimals from {@code seed} whose step is
+     *  {@code step}. */
+    private static Core decimalWalk(String seed, String step) {
         Compilation compilation = Compilation.ofSource("""
                 module demo
                 behavior run : (xs: List<Decimal>) -> Decimal
-                let run (xs) = List.fold((acc, x) -> %s, 1.0m, xs)
-                """.formatted(step), "Main");
+                let run (xs) = List.fold((acc, x) -> %s, %s, xs)
+                """.formatted(step, seed), "Main");
         return compilation.db().ask(new Bodies.CheckedBehavior("demo", "run")).value().body();
     }
 
@@ -102,7 +103,11 @@ class ContainerSizesUnderAWitnessTest {
     }
 
     private static boolean scalesHaveRoom(String step) {
-        Core body = decimalWalk(step);
+        return scalesHaveRoom("1.0m", step);
+    }
+
+    private static boolean scalesHaveRoom(String seed, String step) {
+        Core body = decimalWalk(seed, step);
         Core operation = aDecimalOperation(body);
         return ContainerSizesUnderAWitness.answersOn(body, operation,
                 WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(operation),
@@ -120,6 +125,24 @@ class ContainerSizesUnderAWitnessTest {
         assertTrue(scalesHaveRoom("Decimal.add(acc, x)"));
         assertTrue(scalesHaveRoom("Decimal.subtract(acc, x)"));
         assertFalse(scalesHaveRoom("Decimal.multiply(acc, x)"));
+    }
+
+    /**
+     * A scale held is not room held: a walk whose step multiplies two numbers that each read what
+     * it carries doubles the digits at every element, whatever scale it keeps, so a whole number
+     * squared or a rounding of a square has no room however the scale stays. A step that adds
+     * what it carries to itself, or multiplies it by a number it does not carry, grows the digits
+     * by one number's at a time.
+     */
+    @Test
+    void aWalkWhoseDigitsDoubleAtEveryElementHasNoRoomAtAnyScale() {
+        assertFalse(scalesHaveRoom("2m", "Decimal.multiply(acc, acc)"));
+        assertFalse(scalesHaveRoom("2m",
+                "Decimal.round(0, HALF_UP, Decimal.multiply(acc, acc))"));
+        assertFalse(scalesHaveRoom("2m",
+                "Decimal.multiply(Decimal.add(acc, 1m), Decimal.add(acc, 2m))"));
+        assertTrue(scalesHaveRoom("2m", "Decimal.add(acc, acc)"));
+        assertTrue(scalesHaveRoom("2m", "Decimal.multiply(acc, 2m)"));
     }
 
     /** The body of {@code run}, which divides {@code x} by {@code y} at {@code scale}, and adds

@@ -111,6 +111,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.abort.GetsPast.WhereTheScalesHaveRoom.ofTheOperator",
                     "makes where a decimal sum, difference or product answers, over its two"
                             + " arguments"),
+            new Held("souther.compiler.check.ContainerSizesUnderAWitness.multipliesTwoReading",
+                    "asks whether a room a call's contract asks is a product's, to tell a step"
+                            + " that squares what a walk carries from one that adds to it"),
             new Held("souther.compiler.check.LibraryEndings.Reading.OfTheBody.scaleOf",
                     "makes the law each decimal sum, difference or product of a body is asked"
                             + " its room by, over what the body is handed"),

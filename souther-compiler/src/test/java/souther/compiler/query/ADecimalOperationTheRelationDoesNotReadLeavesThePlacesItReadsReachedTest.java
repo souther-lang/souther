@@ -146,6 +146,40 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
                 if sign == 0 then 0 else if sign < 0 then 1 else 2
             }
 
+            data Walked = { xs: List<Decimal>, a: Decimal, b: Decimal }
+
+            behavior controlWalked : (p: Walked) -> Int
+            let controlWalked (p) = {
+                let sign = Decimal.compare(p.a, p.b)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior addedWalk : (p: Walked) -> Int
+            let addedWalk (p) = {
+                let size = List.fold((acc, e) -> Decimal.add(acc, acc),
+                    Decimal.round(0, HALF_UP, p.a), p.xs)
+                let again = List.fold((acc, e) -> Decimal.multiply(acc, 2m),
+                    Decimal.round(0, HALF_UP, p.a), p.xs)
+                let sign = Decimal.compare(p.a, p.b)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior squaredWalk : (p: Walked) -> Int
+            let squaredWalk (p) = {
+                let size = List.fold((acc, e) -> Decimal.multiply(acc, acc),
+                    Decimal.round(0, HALF_UP, p.a), p.xs)
+                let sign = Decimal.compare(p.a, p.b)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior roundedSquaredWalk : (p: Walked) -> Int
+            let roundedSquaredWalk (p) = {
+                let size = List.fold((acc, e) -> Decimal.round(0, HALF_UP, Decimal.multiply(acc, acc)),
+                    Decimal.round(0, HALF_UP, p.a), p.xs)
+                let sign = Decimal.compare(p.a, p.b)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
             behavior chained : (p: Pair) -> Int
             let chained (p) = {
                 let spread = Decimal.multiply(Decimal.add(p.a.value, 1.50m), p.b.value)
@@ -206,8 +240,13 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
         }
         assertEquals(reasonsOf(evidence, "controlTruth"), reasonsOf(evidence, "differenceTruth"));
         assertEquals(reasonsOf(evidence, "plainSide"), reasonsOf(evidence, "negatedSide"));
-        // A quotient at a scale the call does not write, or at one no room holds, can end a run.
-        for (String behavior : List.of("quotientAtAnInputScale", "quotientAtAScaleNoRoomHolds")) {
+        // A walk that adds or scales what it carries has digits a row holds, and one that squares it
+        // does not, whatever scale it keeps.
+        assertEquals(reasonsOf(evidence, "controlWalked"), reasonsOf(evidence, "addedWalk"));
+        // A quotient at a scale the call does not write, or at one no room holds, can end a run;
+        // so can a walk whose digits double at every element.
+        for (String behavior : List.of("quotientAtAnInputScale", "quotientAtAScaleNoRoomHolds",
+                "squaredWalk", "roundedSquaredWalk")) {
             assertTrue(reasonsOf(evidence, behavior).stream().anyMatch(each -> each.endsWith(
                     "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE")), behavior);
         }

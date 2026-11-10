@@ -14,6 +14,7 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.values.TextExtents;
@@ -157,6 +158,10 @@ public final class ContainerSizesUnderAWitness {
             case GetsPast.WhereTheTextFits _ -> false;
             // Whether the scales leave room is read off what each operand is, by the rule the
             // operations a row is asked of are ({@link DecimalOperation#hasRoomAt}).
+            // The scales have room, which is no more than the digits do: a number a row holds has
+            // the digits it was built with, an operation worked out of those has no more than
+            // the text of the body doubles them, and a walk's are read where it is carried
+            // ({@link #doublesWhatItCarries}).
             case GetsPast.WhereTheScalesHaveRoom(var rooms, var _) -> {
                 List<Core> args = operandsOf(operator);
                 yield args != null && rooms.stream().allMatch(room -> hasRoom(room, args));
@@ -334,10 +339,15 @@ public final class ContainerSizesUnderAWitness {
      * seed's, and where the step answers no further from nought than the scale it is handed, at
      * that. Where the step goes further from it — a product, which adds a scale at every element
      * — no scale holds on every step, and nothing is said.
+     *
+     * <p>The scale only: it is held by the induction and the digits by the shape of the step, and
+     * neither says the other. A step that multiplies two parts of what it carries keeps a whole
+     * number's scale and doubles its digits ({@link #doublesWhatItCarries}), so nothing is said
+     * of it either.
      */
     private OptionalLong scaleCarried(WalkAt walk) {
         BindingId carried = walk.carried();
-        if (!asking.add(walk.step())) {
+        if (!asking.add(walk.step()) || doublesWhatItCarries(walk.step().body(), carried)) {
             return OptionalLong.empty();
         }
         try {
@@ -362,6 +372,51 @@ public final class ContainerSizesUnderAWitness {
             assumedScale.remove(carried);
             asking.remove(walk.step());
         }
+    }
+
+    /**
+     * Whether the step multiplies two numbers that each read what the walk carries, which doubles
+     * the digits of what it carries at every element and leaves its scale where it was: a scale
+     * held through such a step is no room held, since a representation has no room for the digits
+     * first. A step that adds, takes away or multiplies by a number it does not carry grows them by
+     * one number's at a time, which a row holds.
+     */
+    private boolean doublesWhatItCarries(Core step, BindingId carried) {
+        boolean[] doubles = {false};
+        Core.forEachDistinctNode(step, node -> doubles[0] |= multipliesTwoReading(node, carried));
+        return doubles[0];
+    }
+
+    /** Whether {@code node} is a product some room of which is asked of two numbers that each read
+     *  {@code carried}: the two factors of an operator or a call, or two of the arguments a body
+     *  multiplies. */
+    private boolean multipliesTwoReading(Core node, BindingId carried) {
+        List<Core> args = operandsOf(node);
+        if (args == null || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
+                instanceof GetsPast.WhereTheScalesHaveRoom(var rooms, var _))) {
+            return false;
+        }
+        for (GetsPast.WhereTheScalesHaveRoom.Room room : rooms) {
+            if (room.law() instanceof ScaleLaw.OfTheOperator(BinOp op) && op == BinOp.MUL
+                    && readsAny(room.first(), args, carried)
+                    && readsAny(room.second(), args, carried)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the scale {@code bound} says is of an argument of {@code args} that reads
+     *  {@code carried}. */
+    private boolean readsAny(ScaleBound bound, List<Core> args, BindingId carried) {
+        return switch (bound) {
+            case ScaleBound.Argument(int at) -> at < args.size() && reads(args.get(at), carried);
+            case ScaleBound.Left(var _, ScaleBound first, ScaleBound second) ->
+                    readsAny(first, args, carried) || readsAny(second, args, carried);
+            case ScaleBound.Larger(ScaleBound one, ScaleBound other) ->
+                    readsAny(one, args, carried) || readsAny(other, args, carried);
+            case ScaleBound.WrittenAt _, ScaleBound.Written _, ScaleBound.NotShown _ -> false;
+        };
     }
 
     private static OptionalLong larger(OptionalLong one, OptionalLong other) {

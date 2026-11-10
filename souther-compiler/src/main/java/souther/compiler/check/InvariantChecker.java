@@ -21,6 +21,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.core.Evaluated;
 import souther.compiler.coverage.Arrivals;
@@ -4583,16 +4584,27 @@ public final class InvariantChecker {
     public static boolean discharges(Core.Construct made, RuleReadingContext reading,
                                      Scope params, ValueTemplates templates) {
         InvariantChecker c = new InvariantChecker(reading, Map.of(), templates);
-        c.entering(made, c.parametersEntered(params, made.pos()));
+        // Only the parameters it reads: what the declarations say of another says nothing of it,
+        // and taking every one of a behavior's in is most of what asking costs.
+        c.entering(made, c.parametersEntered(params, WhatABodyReads.namesReadBy(made, made),
+                made.pos()));
         return c.errors.isEmpty() && c.verdicts.get(made) == Verdict.PROVED;
     }
 
     /** What is known once every parameter in {@code params} is taken in. */
     private Entered parametersEntered(Scope params, SourcePos at) {
+        return parametersEntered(params, params.bindings().keySet(), at);
+    }
+
+    /** What is known once the parameters in {@code params} that are in {@code among} are taken
+     *  in. */
+    private Entered parametersEntered(Scope params, Set<BindingId> among, SourcePos at) {
         Entered in = engine.nothingEntered();
         for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
-            in = enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(), at),
-                    in.known(), in.at());
+            if (among.contains(p.getKey())) {
+                in = enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
+                        at), in.known(), in.at());
+            }
         }
         return in;
     }

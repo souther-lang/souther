@@ -91,7 +91,12 @@ class AConstructionTheCheckDischargesEndsNoRunTest {
                 .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
         assertEquals(reasonsOf(evidence, "control"), reasonsOf(evidence, "discharged"));
-        assertTrue(evidence.containsKey("tally"));
+        // Not left unread by the construction a walk's closure makes, nor by the value it names.
+        for (String behavior : List.of("control", "discharged", "tally")) {
+            assertTrue(reasonsOf(evidence, behavior).stream().noneMatch(each -> each.endsWith(
+                    ": " + UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE)),
+                    behavior + " " + reasonsOf(evidence, behavior));
+        }
         assertTrue(reasonsOf(evidence, "refused").stream().anyMatch(each -> each.endsWith(
                 ": " + UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE)),
                 reasonsOf(evidence, "refused").toString());
