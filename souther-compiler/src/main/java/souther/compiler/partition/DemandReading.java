@@ -916,10 +916,11 @@ final class DemandReading {
                     TakenConstraint constraint)))) {
                 // A condition a region cannot carry is dropped only where the declarations hold
                 // it whole; dropped otherwise it would read as no stop.
-                if (!held(each, read.quantities().region())) {
+                if (!heldOver(each, read.quantities().region())) {
                     Optional<Set<TermPath>> named = placesOfRelations(each);
                     if (named.isPresent()) {
-                        tied.add(Tie.between(named.get()));
+                        tied.add(new Tie.Refusable(named.get(), each,
+                                Pullback.WorkedOutWhere.ALWAYS));
                     } else {
                         unsaid = true;
                     }
@@ -982,19 +983,19 @@ final class DemandReading {
      */
     static boolean heldBy(Proposition answers, InputReading read, SearchRegion region) {
         List<Read> reads = projected(answers, read);
-        return !reads.isEmpty() && reads.stream().allMatch(each -> held(each, region));
+        return !reads.isEmpty() && reads.stream().allMatch(each -> heldOver(each, region));
     }
 
     /** Whether every row {@code region} leaves meets {@code each}: a relation it proves, or a
      *  disjunction of which some alternative it proves whole. */
-    private static boolean held(Read each, SearchRegion region) {
+    static boolean heldOver(Read each, SearchRegion region) {
         return switch (each) {
             case Read.Settled(boolean thisWay) -> thisWay;
             case Read.Demands(RowDemand.Relational(TakenConstraint constraint)) ->
                     endsOfTheInts(constraint) || heldOver(constraint, region);
             case Read.OneOf oneOf -> oneOf.alternatives().stream()
                     .anyMatch(alternative -> alternative.stream()
-                            .allMatch(part -> held(part, region)));
+                            .allMatch(part -> heldOver(part, region)));
             default -> false;
         };
     }
@@ -1101,6 +1102,21 @@ final class DemandReading {
                 implements Tie {
 
             public Stating {
+                places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+            }
+        }
+
+        /**
+         * The places a condition the compiler states exactly may stop a run on, which no region
+         * carries. Not {@link Unsaid}: what stops is known, so a way that holds it whole
+         * releases the tie ({@link Reachability.Reaching#gettingPast}).
+         *
+         * @param condition what the operator asks of a run, as it was read
+         */
+        record Refusable(Set<TermPath> places, Read condition, Pullback.WorkedOutWhere where)
+                implements Tie {
+
+            public Refusable {
                 places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
             }
         }

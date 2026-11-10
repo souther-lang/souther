@@ -394,6 +394,35 @@ class AConstructionTheReadRegionSatisfiesDoesNotEndTheRunTest {
         assertTrue(readings.getOrDefault("gross", Set.of()).contains(NOT_SHOWN), readings::toString);
     }
 
+    /**
+     * A choice the region cannot carry is a stop the compiler can state, and what the way to the
+     * construction holds is asked of it: under a guard that holds one of the two, the construction
+     * stops no run, and what the other number is says nothing of where the rule is read.
+     */
+    @Test
+    void aChoiceTheWayToTheConstructionHoldsStopsNoRun() {
+        String model = """
+                module demo
+
+                data Held = Decimal
+                    invariant value >= 0.0m
+                data Out = { n: Held, within: Bool }
+
+                behavior f : (x: Decimal, y: Decimal, c: Decimal) -> Out
+                    constructs Out, Held
+                let f (x, y, c) =
+                    if GUARD >= 0.0m then
+                        Out { n = Held(Decimal.max(x, y)),
+                              within = Decimal.compare(x, c) <= 0 }
+                    else Out { n = Held(0.0m), within = false }
+                """;
+        Map<String, Set<String>> held = readingsOf(model.replace("GUARD", "y"));
+        assertEquals(Map.of("x", Set.of(READ), "c", Set.of(READ)), held);
+        Map<String, Set<String>> notHeld = readingsOf(model.replace("GUARD", "c"));
+        assertTrue(notHeld.values().stream().anyMatch(each -> each.contains(NOT_SHOWN)),
+                notHeld::toString);
+    }
+
     private static void collect(JsonNode node, Map<String, Set<String>> out) {
         if (node.isObject() && node.has("ruleId") && node.has("reason") && node.has("position")) {
             out.computeIfAbsent(node.path("position").asString(), _ -> new TreeSet<>())

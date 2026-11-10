@@ -337,6 +337,9 @@ public sealed interface Reachability {
      *                        out ({@link DemandReading.Answered#before})
      * @param relationStands  where the relation is worked out
      *                        ({@link DemandReading.Answered#relationStands})
+     * @param arrived         the region the way leaves before a run has got past anything: what a
+     *                        stop that can be stated is asked of, so that no operator is held by
+     *                        what another narrows after it
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
@@ -346,11 +349,11 @@ public sealed interface Reachability {
                     List<DemandReading.Tie> tied, boolean unsaid,
                     List<Pullback.StopObligation> owed,
                     List<DemandReading.PriorApplications> before,
-                    Pullback.WorkedOutWhere relationStands)
+                    Pullback.WorkedOutWhere relationStands, SearchRegion arrived)
             implements Reachability {
 
         public Reaching {
-            if (region == null || requirements == null || truths == null || ways == null
+            if (arrived == null || region == null || requirements == null || truths == null || ways == null
                     || declined == null || narrowedBy == null || gotPast == null
                     || gotPastOfTheRelation == null
                     || tied == null || owed == null || before == null
@@ -375,7 +378,7 @@ public sealed interface Reachability {
                         Optional<List<TakenConstraint>> narrowedBy) {
             this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
                     List.of(), List.of(), List.of(), false, List.of(), List.of(),
-                    Pullback.WorkedOutWhere.ALWAYS);
+                    Pullback.WorkedOutWhere.ALWAYS, region);
         }
 
         /** What a composer is asked of a row on the way: {@link #boundedOnTheWay}, each as the
@@ -443,7 +446,7 @@ public sealed interface Reachability {
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
                     narrowedBy, gotPast, gotPastOfTheRelation, tied, unsaid, owed, before,
-                    relationStands);
+                    relationStands, arrived);
         }
 
         /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
@@ -504,7 +507,12 @@ public sealed interface Reachability {
                 return this;
             }
             List<DemandReading.Tie> ties = new ArrayList<>(tied);
-            ties.addAll(answered.tied());
+            // A stop the compiler can state is released where the way to the operator holds what
+            // it asks, and never by what a run got past in this or another operator.
+            answered.tied().stream()
+                    .filter(each -> !(each instanceof DemandReading.Tie.Refusable refusable
+                            && DemandReading.heldOver(refusable.condition(), arrived)))
+                    .forEach(ties::add);
             NarrowedPast past = OneReading.narrowedPast(region, answered,
                     () -> narrowedPast(region, answered));
             List<TakenConstraint> narrowing = past.narrowing();
@@ -536,7 +544,7 @@ public sealed interface Reachability {
             if (past.leavesNone()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
                         declined, narrowedBy, gotPast, gotPastOfTheRelation, ties, unsaidNow,
-                        owedNow, beforeNow, relationNow);
+                        owedNow, beforeNow, relationNow, arrived);
             }
             List<TakenConstraint> gotPastNow = new ArrayList<>(gotPast);
             gotPastNow.addAll(past.onTheWay());
@@ -544,7 +552,7 @@ public sealed interface Reachability {
             ofTheRelationNow.addAll(past.ofTheRelation());
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
                     by, gotPastNow, ofTheRelationNow, ties, unsaidNow, owedNow, beforeNow,
-                    relationNow);
+                    relationNow, arrived);
         }
 
         /**
