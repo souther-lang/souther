@@ -77,9 +77,15 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
 
             behavior addedWalk : (p: Walked) -> Int
             let addedWalk (p) = {
-                let size = List.fold((acc, e) -> Decimal.add(acc, acc),
+                let size = List.fold((acc, e) -> Decimal.add(acc, e),
                     Decimal.round(0, HALF_UP, p.a), p.xs)
-                let again = List.fold((acc, e) -> Decimal.multiply(acc, 2m),
+                let sign = Decimal.compare(p.a, p.b)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior doubledWalk : (p: Walked) -> Int
+            let doubledWalk (p) = {
+                let size = List.fold((acc, e) -> Decimal.add(acc, acc),
                     Decimal.round(0, HALF_UP, p.a), p.xs)
                 let sign = Decimal.compare(p.a, p.b)
                 if sign == 0 then 0 else if sign < 0 then 1 else 2
@@ -146,10 +152,12 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
         assertEquals(reasonsOf(evidence, "controlTruth"), reasonsOf(evidence, "differenceTruth"));
         assertEquals(reasonsOf(evidence, "ageingControl"), reasonsOf(evidence, "ageing"));
         assertEquals(reasonsOf(evidence, "plainSide"), reasonsOf(evidence, "negatedSide"));
-        // A walk that adds to or scales what it carries has digits a row holds, and one that
-        // squares it does not, whatever scale it keeps.
+        // A walk that adds parts to what it carries has the digits of its parts and of how many
+        // there are; one that adds it to itself or squares it does not, whatever scale it keeps.
         assertEquals(reasonsOf(evidence, "controlWalked"), reasonsOf(evidence, "addedWalk"));
-        assertTrue(reasonsOf(evidence, "squaredWalk").stream().anyMatch(each -> each.endsWith(
-                "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE")));
+        for (String behavior : List.of("doubledWalk", "squaredWalk")) {
+            assertTrue(reasonsOf(evidence, behavior).stream().anyMatch(each -> each.endsWith(
+                    "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE")), behavior);
+        }
     }
 }

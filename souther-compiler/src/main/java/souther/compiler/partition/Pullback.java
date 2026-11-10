@@ -1490,6 +1490,10 @@ final class Pullback {
      * of the declarations discharges every clause of it from what they say of the parameters
      * alone. The check is the owner of that proof, so what it settles is not read again here, and
      * the number the construction is made of needs no form for it.
+     *
+     * <p>The clauses and nothing else: that a value is one the type admits is not that working
+     * the number out completes. An operation under the number — a quotient, a sum — is read where
+     * it is worked out, as every operation of the body is.
      */
     private boolean isRefusedByNoRun(Core.Construct construct, InputReads reads) {
         if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {

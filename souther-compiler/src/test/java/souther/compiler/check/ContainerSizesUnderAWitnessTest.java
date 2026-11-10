@@ -212,19 +212,25 @@ class ContainerSizesUnderAWitnessTest {
     }
 
     /**
-     * A scale held is not room held: a walk whose step multiplies two numbers that each read what
-     * it carries doubles the digits at every element, whatever scale it keeps, so a whole number
-     * squared or a rounding of a square has no room however the scale stays. A step that adds
-     * what it carries to itself, or multiplies it by a number it does not carry, grows the digits
-     * by one number's at a time.
+     * A scale held is not room held: what a walk carries has room only where its step adds parts
+     * to it, which grow its digits by those of the number of elements and no more. What it
+     * carries added to itself, multiplied, squared or rounded can grow them at every element past
+     * what a representation holds whatever scale it keeps — a number of any size doubles, and a
+     * whole number squared or a rounding of a square has no room however the scale stays.
      */
     @Test
-    void aWalkWhoseDigitsDoubleAtEveryElementHasNoRoomAtAnyScale() {
-        assertEquals(List.of(false, false, false, true, true), walksHaveRoom("2m",
+    void aWalkHasRoomOnlyWhereItsStepAddsPartsToWhatItCarries() {
+        assertEquals(List.of(true, true, true, true, true, true, true), walksHaveRoom("2m",
+                "Decimal.add(acc, e)", "Decimal.add(e, acc)", "Decimal.subtract(acc, e)",
+                "Decimal.add(Decimal.subtract(acc, e), 2m)",
+                "Decimal.add(acc, Decimal.multiply(e, e))",
+                "-Decimal.add(acc, e)", "if e > 0m then Decimal.add(acc, e) else acc"));
+        assertEquals(List.of(false, false, false, false, false, false), walksHaveRoom("2m",
+                "Decimal.add(acc, acc)", "Decimal.multiply(acc, 2m)",
+                "Decimal.multiply(acc, Decimal.round(0, HALF_UP, e))",
                 "Decimal.multiply(acc, acc)",
                 "Decimal.round(0, HALF_UP, Decimal.multiply(acc, acc))",
-                "Decimal.multiply(Decimal.add(acc, 1m), Decimal.add(acc, 2m))",
-                "Decimal.add(acc, acc)", "Decimal.multiply(acc, 2m)"));
+                "Decimal.multiply(Decimal.add(acc, 1m), Decimal.add(acc, 2m))"));
     }
 
     private static final String WALK =

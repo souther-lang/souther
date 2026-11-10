@@ -290,11 +290,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;L" + c
                 + "check/AffineForms$Stop;)L" + c + "numeric/LinearForm;",
                 Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "check/ContainerSizesUnderAWitness", "doublesWhatItCarries",
-                "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
-                "looks for a product of two numbers that each read what a walk carries: a"
-                        + " projection hands over its base as its one child, where the read of"
-                        + " a field is met");
         row(out, c + "check/AffineForms", "isANewtypesValue", "(L" + CORE + "$FieldAccess;L" + c
                 + "check/AffineForms$Reading;)Z", Reading.ONE_ACCESS,
                 "asks of one access the type of its target, which says whether the field is the"
