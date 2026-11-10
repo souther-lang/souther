@@ -67,8 +67,8 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
                 NothingTheDeclarationsRefuse.at(path("x"), path("y"), path("z")));
 
         Realization.Found found = assertInstanceOf(Realization.Found.class, made);
-        Place x = found.fixing().get(RealizationTarget.of(term("x")));
-        Place y = found.fixing().get(RealizationTarget.of(term("y")));
+        Place x = found.fixing().get(RealizationTarget.ofAHeld(term("x")));
+        Place y = found.fixing().get(RealizationTarget.ofAHeld(term("y")));
         assertEquals(ExactRatio.of(100), Count.number(y).exactly());
         assertEquals(ExactAnswer.held(BigInteger.valueOf(100)),
                 Count.number(x).exactly().floor().map(whole -> whole.mod(DIVISOR)));

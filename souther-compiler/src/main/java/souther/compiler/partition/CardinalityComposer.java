@@ -1318,7 +1318,7 @@ final class CardinalityComposer {
             for (int each = 0; each < numbers.size(); each++) {
                 NumericTerm number = numbers.get(each);
                 Place place = turns.get(number).get(choice[each]);
-                demands.put(RealizationTarget.of(number),
+                demands.put(RealizationTarget.ofAHeld(number),
                         AskedAt.aNumberOutOf(new NumericSet.At(place), place,
                                 answeredOn.get(number)));
             }

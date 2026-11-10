@@ -109,7 +109,10 @@ public sealed interface RealizationTarget {
     record AskedKey(TermPath elements, TermPath keyAt, TermPath asked) {}
 
     /**
-     * The target of a number, which every number has.
+     * The target of a number, or none where no row writes it: a product no one number holds at a
+     * value is read off several places and is no place's value, so there is nothing to write and
+     * a row is not claimed to reach it. Every other term has one. A target that is made always
+     * has its write root, and a reader that takes the target takes the root with it.
      *
      * <p>Exhaustive over the terms there are, with no {@code default} and no null. Read off a
      * condition instead, a kind of term added would fall to whichever side the last reader's
@@ -121,18 +124,38 @@ public sealed interface RealizationTarget {
      * builds {@link AtOnePositionElsewhere} instead — and only such a caller can, which is why
      * this answers with the place the term names rather than guessing at a case.
      */
-    static OfANumber of(NumericTerm term) {
+    static Optional<OfANumber> of(NumericTerm term) {
         return switch (term) {
-            case NumericTerm.Multiplicity among -> new AmongTheElements(among);
-            case NumericTerm.ExtremeOfItsKey extreme -> new AtItsKey(extreme);
-            case NumericTerm.GatheredUnderItsKey gathered -> new UnderItsKey(gathered);
-            case NumericTerm.GatheredUnderAKey asked -> new UnderAKey(asked);
-            case NumericTerm.OccurrencesOfItsValue among -> new AmongEveryOccurrence(among);
-            case NumericTerm.OccurrencesOfAKey asked -> new AmongEveryOccurrenceEqualToAKey(asked);
-            case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
-            case NumericTerm.TakenOver over -> new OverARun(over);
-            case NumericTerm.ProductOf product -> new OfAProduct(product);
+            case NumericTerm.Multiplicity among -> Optional.of(new AmongTheElements(among));
+            case NumericTerm.ExtremeOfItsKey extreme -> Optional.of(new AtItsKey(extreme));
+            case NumericTerm.GatheredUnderItsKey gathered -> Optional.of(new UnderItsKey(gathered));
+            case NumericTerm.GatheredUnderAKey asked -> Optional.of(new UnderAKey(asked));
+            case NumericTerm.OccurrencesOfItsValue among ->
+                    Optional.of(new AmongEveryOccurrence(among));
+            case NumericTerm.OccurrencesOfAKey asked ->
+                    Optional.of(new AmongEveryOccurrenceEqualToAKey(asked));
+            case NumericTerm.FromOnePosition one -> Optional.of(new AtOnePosition(one));
+            case NumericTerm.TakenOver over -> Optional.of(new OverARun(over));
+            case NumericTerm.ProductOf product -> OfAProduct.of(product);
         };
+    }
+
+    /**
+     * The target of a number known to be one of the terms every row can write, which is every term
+     * but a product: those have a target whatever they are.
+     */
+    static OfANumber ofAPlace(NumericTerm.FromOnePosition one) {
+        return new AtOnePosition(one);
+    }
+
+    /**
+     * The target of a number the caller took out of a target it already holds, so that it has one.
+     * A product is one only where it is held at a value by one number, and the caller says it is
+     * by asking here.
+     */
+    static OfANumber ofAHeld(NumericTerm term) {
+        return of(term).orElseThrow(() -> new IllegalArgumentException(
+                term + " is held at no value by one number, so no row writes it"));
     }
 
     /**
@@ -145,15 +168,33 @@ public sealed interface RealizationTarget {
      * the product is replaced by theirs before a row is composed ({@code Generator}). The root
      * here is the carrier's, which is where the value is written.
      */
-    record OfAProduct(NumericTerm.ProductOf term) implements OfANumber {
+    record OfAProduct(NumericTerm.ProductOf term, OfANumber carrier) implements OfANumber {
+
+        public OfAProduct {
+            NumericTerm.ProductOf.AtAValue way = term == null ? null : term.atAValue();
+            if (way == null || carrier == null || !way.carrier().equals(carrier.term())) {
+                throw new IllegalArgumentException(
+                        "a product is a target only with the number that carries it: " + term);
+            }
+        }
+
+        /**
+         * The target of {@code product}, or none where no one number holds it at a value: such a
+         * product is read off several places and no place a row writes is the product's, so there
+         * is nothing to write and a row is not claimed to reach it.
+         */
+        static Optional<OfANumber> of(NumericTerm.ProductOf product) {
+            NumericTerm.ProductOf.AtAValue way = product.atAValue();
+            if (way == null) {
+                return Optional.empty();
+            }
+            return RealizationTarget.of(way.carrier())
+                    .map(carrier -> new OfAProduct(product, carrier));
+        }
 
         @Override
         public TermPath writeRoot() {
-            NumericTerm.ProductOf.AtAValue way = term.atAValue();
-            if (way == null) {
-                throw new IllegalStateException(term + " is held at no value by one number");
-            }
-            return RealizationTarget.of(way.carrier()).writeRoot();
+            return carrier.writeRoot();
         }
 
         @Override

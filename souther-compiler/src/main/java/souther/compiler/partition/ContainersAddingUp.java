@@ -421,7 +421,7 @@ final class ContainersAddingUp {
         // Which number is being built for, read off the answer that says which number it is of.
         // Named beside it, the two were free to be about two numbers and this would fill a
         // container found under one path with elements counted on another's order.
-        RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
+        RealizationTarget.OfANumber target = RealizationTarget.ofAHeld(orders.term());
         // No element can be written: the container of none, which holds no element and asks
         // nothing of what each would be, is the one left — a list or a set its rules leave
         // holding none.
@@ -748,7 +748,7 @@ final class ContainersAddingUp {
                                    DemandsInside inside, List<TermPath> askedInside,
                                    KeptApart apart, SearchRegion within) {
         TermOrders orders = asked.orders();
-        RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
+        RealizationTarget.OfANumber target = RealizationTarget.ofAHeld(orders.term());
         if (!target.writeRoot().equals(first.writeRoot())
                 || (orders.term() instanceof NumericTerm.TakenOver over
                 && over.source() instanceof RunSource.FlattenedOccurrences)) {

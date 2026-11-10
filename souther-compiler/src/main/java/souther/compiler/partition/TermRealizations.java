@@ -2057,7 +2057,7 @@ final class TermRealizations {
         // Which number is being written for, read off the answer that says which number it is of.
         // Handed in beside it, it was a second name for the same thing and a caller could give two
         // — and this would then write a value for one number on the order of another.
-        RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
+        RealizationTarget.OfANumber target = RealizationTarget.ofAHeld(orders.term());
         return switch (target.term()) {
             // Written by the carrier the line was drawn on, and wearing every name the position
             // declares. Read off the boundary's own shape instead, a count on one carrier could be

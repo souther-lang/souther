@@ -7351,7 +7351,7 @@ public final class Generator {
                 continue;
             }
             NumericTerm.FromOnePosition key = new NumericTerm.ValueOf(keyAsked);
-            if (out.containsKey(RealizationTarget.of(key))) {
+            if (out.containsKey(RealizationTarget.ofAPlace(key))) {
                 continue;
             }
             Function<NumericTerm, Carrier> on = term -> {
@@ -7375,7 +7375,7 @@ public final class Generator {
             switch (placing) {
                 case NumericWitness.Standing.Found beside -> {
                     for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
-                        RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                        RealizationTarget.OfANumber at = RealizationTarget.ofAHeld(placed.term());
                         if (out.putIfAbsent(at, placed.place()) == null) {
                             routed.put(placed.term(), at);
                             chosen.add(at);
@@ -7425,8 +7425,8 @@ public final class Generator {
                     && Count.written(way.at()) instanceof ExactAnswer.Held<Optional<Count>>(
                             Optional<Count> formsOne)
                     && formsOne.isPresent()) {
-                RealizationTarget carrier = RealizationTarget.of(way.carrier());
-                RealizationTarget other = RealizationTarget.of(way.fixed());
+                RealizationTarget carrier = RealizationTarget.ofAHeld(way.carrier());
+                RealizationTarget other = RealizationTarget.ofAHeld(way.fixed());
                 Place alone = standingOverTheScale(each.getValue(), way.scale());
                 Place had = out.get(carrier);
                 Place otherHad = out.get(other);
@@ -7474,8 +7474,8 @@ public final class Generator {
         NumericTerm.TakenOver lookedInto =
                 InputNumber.totalOfTheMapLookedInto(run.term(), subject.rules());
         if (lookedInto != null
-                && out.putIfAbsent(RealizationTarget.of(lookedInto), value) == null) {
-            beside.put(lookedInto, RealizationTarget.of(lookedInto));
+                && out.putIfAbsent(RealizationTarget.ofAHeld(lookedInto), value) == null) {
+            beside.put(lookedInto, RealizationTarget.ofAHeld(lookedInto));
         }
     }
 
@@ -7785,7 +7785,8 @@ public final class Generator {
                             Map<NumericTerm, Place> standingAt = new LinkedHashMap<>();
                             for (NumericWitness.Standing.Found.Placed placed
                                     : standing.inFixingOrder()) {
-                                RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                                RealizationTarget.OfANumber at =
+                                        RealizationTarget.ofAHeld(placed.term());
                                 // A number already standing was given to the region, so it is
                                 // placed where it stands.
                                 if (out.putIfAbsent(at, placed.place()) == null) {
@@ -7838,7 +7839,8 @@ public final class Generator {
                     case NumericWitness.Standing.Found standing -> {
                         for (NumericWitness.Standing.Found.Placed placed
                                 : standing.inFixingOrder()) {
-                            RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                            RealizationTarget.OfANumber at =
+                                    RealizationTarget.ofAHeld(placed.term());
                             if (out.putIfAbsent(at, placed.place()) == null) {
                                 routed.put(placed.term(), at);
                                 chosen.add(at);
@@ -8007,7 +8009,7 @@ public final class Generator {
                         if (!count.standsBeside(placed.term())) {
                             continue;
                         }
-                        RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
+                        RealizationTarget.OfANumber at = RealizationTarget.ofAHeld(placed.term());
                         // Placed on the way, so what it is one of is what the rules leave it
                         // there. A number already standing was given to the region, so it is
                         // placed where it stands.
@@ -8082,12 +8084,14 @@ public final class Generator {
             switch (cut.demand()) {
                 case RowDemand.Relational(var relation) -> {
                     for (NumericTerm term : relation.terms()) {
-                        writtenBesides.add(RealizationTarget.of(term).writeRoot());
+                        RealizationTarget.of(term).ifPresent(
+                                target -> writtenBesides.add(target.writeRoot()));
                     }
                 }
                 case RowDemand.OnARemainder remainder -> {
                     for (NumericTerm term : remainder.terms()) {
-                        writtenBesides.add(RealizationTarget.of(term).writeRoot());
+                        RealizationTarget.of(term).ifPresent(
+                                target -> writtenBesides.add(target.writeRoot()));
                     }
                 }
                 case RowDemand.SoMany many -> writtenBesides.add(new RealizationTarget.ACount(
@@ -8170,7 +8174,7 @@ public final class Generator {
                 relating.add(cut);
                 List<TermPath> at = new ArrayList<>();
                 for (NumericTerm term : relation.terms()) {
-                    at.add(RealizationTarget.of(term).writeRoot());
+                    RealizationTarget.of(term).ifPresent(target -> at.add(target.writeRoot()));
                 }
                 writes.add(at);
             }
@@ -8814,7 +8818,7 @@ public final class Generator {
                 for (RealizationTarget earlier : alreadyStanding.keySet()) {
                     TermPath earlierAsked = earlier.keyAskedFor();
                     Place earlierAt = earlierAsked == null ? null : alreadyStanding.get(
-                            RealizationTarget.of(new NumericTerm.ValueOf(earlierAsked)));
+                            RealizationTarget.ofAPlace(new NumericTerm.ValueOf(earlierAsked)));
                     if (earlierAt != null && owed.keyIsToldApartFrom(earlier)) {
                         apart.add(new NumericWitness.HeldApart(new NumericTerm.ValueOf(asked),
                                 earlierAt));
@@ -8932,10 +8936,15 @@ public final class Generator {
         // name of a sum's to be read at. Left to the sorting below, the position it does not have
         // would be the path asked about.
         if (at == null) {
-            RealizationTarget.OfANumber run = RealizationTarget.of(term);
-            if (trying.merge(run.writeRoot().requirements())
+            Optional<RealizationTarget.OfANumber> run = RealizationTarget.of(term);
+            // A product no one number holds at a value has no place a row writes it at. That is
+            // what this compiler has no way to write, and no word about whether a row exists.
+            if (run.isEmpty()) {
+                return new WaysToWrite(List.of(), true);
+            }
+            if (trying.merge(run.get().writeRoot().requirements())
                     instanceof Requirements.Merge.Merged(Requirements taken)) {
-                to.add(new Way(run, taken));
+                to.add(new Way(run.get(), taken));
             }
             return new WaysToWrite(List.copyOf(to), false);
         }
@@ -8978,7 +8987,7 @@ public final class Generator {
         return switch (target) {
             case RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term) -> term;
             case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
-            case RealizationTarget.OfAProduct(NumericTerm.ProductOf term) -> term;
+            case RealizationTarget.OfAProduct(NumericTerm.ProductOf term, var _) -> term;
             case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
             case RealizationTarget.AtItsKey(NumericTerm.ExtremeOfItsKey term) -> term;
             case RealizationTarget.UnderItsKey(NumericTerm.GatheredUnderItsKey term) -> term;
@@ -10285,7 +10294,7 @@ public final class Generator {
             PartitionClass cls = axes.get(i).classes().get(where[i]);
             NumericSet admits = admitted(cls);
             if (admits != null) {
-                out.put(RealizationTarget.of(cls.of()),
+                out.put(RealizationTarget.ofAHeld(cls.of()),
                         AskedAt.theClass(admits, carrierOf(cls.of(), measuring)));
             }
         }
@@ -10421,7 +10430,7 @@ public final class Generator {
             Map<TermPath, List<FixtureTemplate>> together, PartitionClass cls) {
         return admitted(cls) == null
                 ? null
-                : together.get(RealizationTarget.of(cls.of()).writeRoot());
+                : together.get(RealizationTarget.ofAHeld(cls.of()).writeRoot());
     }
 
     /**

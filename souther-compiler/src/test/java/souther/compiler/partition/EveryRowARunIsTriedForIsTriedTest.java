@@ -51,7 +51,7 @@ class EveryRowARunIsTriedForIsTriedTest {
 
     private static Place at(Map<RealizationTarget, Place> candidate,
                             NumericTerm.FromOnePosition term) {
-        return candidate.get(RealizationTarget.of(term));
+        return candidate.get(RealizationTarget.ofAHeld(term));
     }
 
     /** Every size with every value, once each, and every one of them asked for. */

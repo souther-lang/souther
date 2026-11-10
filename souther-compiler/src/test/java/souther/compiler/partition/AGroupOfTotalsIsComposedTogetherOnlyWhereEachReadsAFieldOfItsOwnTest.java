@@ -49,7 +49,7 @@ class AGroupOfTotalsIsComposedTogetherOnlyWhereEachReadsAFieldOfItsOwnTest {
                 new RunSource.ComputedOccurrences(ELEMENTS, computation, Type.Prim.INT, null),
                 Type.Prim.INT, NewtypeInners.NONE, Symbols.none(DefaultStdlib.get()));
         assertNotNull(over, "a total over what is computed of each element is a number of a run");
-        return RealizationTarget.of(over);
+        return RealizationTarget.ofAHeld(over);
     }
 
     private static RealizationTarget totalOf(String name) {
@@ -98,7 +98,7 @@ class AGroupOfTotalsIsComposedTogetherOnlyWhereEachReadsAFieldOfItsOwnTest {
                 RunSource.overTheOccurrencesAt(ELEMENTS.then("a")), Type.Prim.INT,
                 NewtypeInners.NONE, Symbols.none(DefaultStdlib.get()));
         assertNotNull(projected);
-        assertEquals(2, composed(RealizationTarget.of(projected), totalOf("b"))
+        assertEquals(2, composed(RealizationTarget.ofAHeld(projected), totalOf("b"))
                 .whatItComesTo().size());
     }
 

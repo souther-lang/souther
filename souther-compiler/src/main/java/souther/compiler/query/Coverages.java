@@ -2307,7 +2307,7 @@ final class Coverages {
         StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
         // Where the reading's numbers are written, which is the same at every point of it.
         List<RealizationTarget.OfANumber> read = quantity.numbers().stream()
-                .map(RealizationTarget::of).toList();
+                .map(RealizationTarget::of).flatMap(Optional::stream).toList();
         // Once for the border rather than once for each of its points. What the positions of this
         // input admit is the same answer at every point of it, and working it out where it is spent
         // walks every position of the input at every point a row is searched for.

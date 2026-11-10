@@ -36,7 +36,7 @@ class AGroupOfPartsOfOneMovedDateIsWrittenAsOneDateTest {
                 TakenArguments.NONE, Type.Prim.DATE,
                 ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
         assertNotNull(made, operation);
-        return RealizationTarget.of(made);
+        return RealizationTarget.ofAHeld(made);
     }
 
     private static ValueTransformation aDayBack() {
