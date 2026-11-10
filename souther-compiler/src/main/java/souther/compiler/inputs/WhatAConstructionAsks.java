@@ -26,25 +26,55 @@ import java.util.Set;
  * @param construction the type made, as it is written
  * @param at           where the construction is written
  * @param asks         what it asks
- * @param over         the places the numbers it asks of are of, which is what a rule is said to be
- *                     asked of only where it reads one of them; empty where they are of no place
- *                     that can be named, and it is then said of every rule
+ * @param bearing      which rules what it asks is said under
  */
 public record WhatAConstructionAsks(String construction, SourcePos at, Asked asks,
-                                    Set<TermPath> over) {
+                                    Bearing bearing) {
 
     public WhatAConstructionAsks {
-        if (construction == null || at == null || asks == null) {
+        if (construction == null || at == null || asks == null || bearing == null) {
             throw new IllegalArgumentException("a construction of some type asks something");
         }
-        over = Collections.unmodifiableSet(new LinkedHashSet<>(over));
     }
 
-    /** Whether a rule that reads {@code reads} is one this is asked of: where it reads one of the
-     *  places the numbers are of, or one of them is of no place that can be named. */
+    /** Whether a rule that reads {@code reads} is one this is said under. */
     public boolean bearsOn(Set<TermPath> reads) {
-        return over.isEmpty() || reads.stream().anyMatch(read ->
-                over.stream().anyMatch(place -> place.bearsOn(read)));
+        return bearing.bearsOn(reads);
+    }
+
+    /**
+     * Which rules what a construction asks is said under: the construction asks the same of every
+     * run that works it out, and a rule that reads none of the places its numbers are of is
+     * about nothing it asks, so said under every rule it would be said once for each rule.
+     */
+    public sealed interface Bearing permits OnPlaces, OnEveryRule {
+
+        /** Whether a rule that reads {@code reads} is one this is said under. */
+        boolean bearsOn(Set<TermPath> reads);
+    }
+
+    /** Of numbers of these places: the rules that read one of them. */
+    public record OnPlaces(Set<TermPath> places) implements Bearing {
+
+        public OnPlaces {
+            places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+        }
+
+        @Override
+        public boolean bearsOn(Set<TermPath> reads) {
+            return reads.stream().anyMatch(read ->
+                    places.stream().anyMatch(place -> place.bearsOn(read)));
+        }
+    }
+
+    /** Of a number of no place that can be named, or of none: every rule, since nothing says
+     *  which it is about. */
+    public record OnEveryRule() implements Bearing {
+
+        @Override
+        public boolean bearsOn(Set<TermPath> reads) {
+            return true;
+        }
     }
 
     /** What is asked of the numbers of the input. */

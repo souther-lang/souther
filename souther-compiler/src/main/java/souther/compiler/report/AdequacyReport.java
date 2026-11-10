@@ -3687,6 +3687,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return page.say(Joined.both(Joined.asWritten(each)));
     }
 
+    /** The same, of things one of which holds: {@code a or b or c}. */
+    static String either(Page page, List<String> each) {
+        return page.say(Joined.either(Joined.asWritten(each)));
+    }
+
     /** The same, of reasons said one after another: {@code a; b; c}. */
     static String reasons(Page page, List<String> each) {
         return page.say(Joined.reasons(Joined.asWritten(each)));
@@ -6794,31 +6799,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case NE -> new ReportMessage.ItIsNot(form, against);
                     });
             case WhatAConstructionAsks.AllOf(var each) -> both(page, each.stream()
-                    .map(one -> askedSaidInside(one, asked, page)).toList());
+                    .map(one -> askedSaidInside(one, page)).toList());
             case WhatAConstructionAsks.OneOf(var each) -> either(page, each.stream()
-                    .map(one -> askedSaidInside(one, asked, page)).toList());
+                    .map(one -> askedSaidInside(one, page)).toList());
             case WhatAConstructionAsks.Never _ -> throw new IllegalStateException(
                     "that no run gets past is said of a construction whole and is no part of what"
                             + " one asks");
         };
     }
 
-    /** One part of {@code whole}, set off where it is a conjunction or a disjunction of the other
-     *  kind than {@code whole}. */
-    private static String askedSaidInside(WhatAConstructionAsks.Asked part,
-                                          WhatAConstructionAsks.Asked whole, Page page) {
+    /** One part of a conjunction or of a disjunction, set off where it is itself one: what is asked
+     *  never nests one kind in the same kind, so a part that is more than one form is the other. */
+    private static String askedSaidInside(WhatAConstructionAsks.Asked part, Page page) {
         String said = askedSaid(part, page);
-        return part instanceof WhatAConstructionAsks.Is || part.getClass() == whole.getClass()
-                ? said : page.say(new ReportMessage.Grouped(said));
-    }
-
-    /** The same as {@link #both}, of things one of which holds. */
-    private static String either(Page page, List<String> each) {
-        Message joined = new ReportMessage.Verbatim(each.getLast());
-        for (int at = each.size() - 2; at >= 0; at--) {
-            joined = new ReportMessage.Either(new ReportMessage.Verbatim(each.get(at)), joined);
-        }
-        return page.say(joined);
+        return part instanceof WhatAConstructionAsks.Is ? said
+                : page.say(new ReportMessage.Grouped(said));
     }
 
     /** Where every run getting to a rule stops, as the human report says it after the rule. */

@@ -10,7 +10,6 @@ import souther.compiler.partition.ConstructionAsk.Requirement;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -31,6 +30,9 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
 
     private static final SourcePos NOWHERE = new SourcePos(0, 0);
 
+    private static final WhatAConstructionAsks.Bearing EVERY_RULE =
+            new WhatAConstructionAsks.OnEveryRule();
+
     private static Requirement ask(String form, Proposition read) {
         return new Requirement.Is(new WhatAConstructionAsks.Is(form, Rel.GE, "0"), read);
     }
@@ -50,7 +52,7 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
         assertEquals(new Requirement.AllOf(List.of(X, Y)), Requirement.and(X, Y));
     }
 
-    /** The case that was lost: a part no run meets does not make the other alternative nothing. */
+    /** A part no run meets leaves the other alternative as it is, and is not nothing asked. */
     @Test
     void eitherIsNothingAskedWhereEitherAsksNothingAndWhatTheOtherAsksWhereOneIsMetByNoRun() {
         assertEquals(Requirement.ALWAYS, Requirement.or(Requirement.ALWAYS, X));
@@ -87,13 +89,13 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
     @Test
     void whatIsToldIsWhatIsLeftAndNothingWhereNothingIs() {
         Requirement both = Requirement.and(ask("w", HELD), Y);
-        ConstructionAsk one = new ConstructionAsk("Held", NOWHERE, Set.of(), both);
+        ConstructionAsk one = new ConstructionAsk("Held", NOWHERE, EVERY_RULE, both);
         assertEquals(Optional.of(new WhatAConstructionAsks.Is("y", Rel.GE, "0")),
                 one.toldOf(HELD::equals).map(WhatAConstructionAsks::asks));
-        assertEquals(Optional.empty(), new ConstructionAsk("Held", NOWHERE, Set.of(),
+        assertEquals(Optional.empty(), new ConstructionAsk("Held", NOWHERE, EVERY_RULE,
                 ask("w", HELD)).toldOf(HELD::equals));
         assertEquals(Optional.of(new WhatAConstructionAsks.Never()),
-                new ConstructionAsk("Held", NOWHERE, Set.of(), Requirement.NEVER)
+                new ConstructionAsk("Held", NOWHERE, EVERY_RULE, Requirement.NEVER)
                         .toldOf(HELD::equals).map(WhatAConstructionAsks::asks));
     }
 }

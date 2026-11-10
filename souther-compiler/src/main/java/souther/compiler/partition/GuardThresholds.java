@@ -1070,31 +1070,31 @@ public final class GuardThresholds {
         }
         Predicate<Proposition> heldOnTheWay = stated -> !ways.isEmpty() && ways.stream()
                 .allMatch(way -> DemandReading.heldBy(stated, read, way));
-        Set<TermPath> reads = placesRead(arrived);
+        Optional<Set<TermPath>> reads = placesRead(arrived);
         List<WhatAConstructionAsks> told = new ArrayList<>();
         for (ConstructionAsk each : asks) {
-            each.toldOf(heldOnTheWay).filter(one -> reads == null || one.bearsOn(reads))
+            each.toldOf(heldOnTheWay).filter(one -> reads.map(one::bearsOn).orElse(true))
                     .ifPresent(told::add);
         }
         return told;
     }
 
-    /** The places the relations of the comparison read, or null where it reads none that is
-     *  known, or some of them read places that cannot be named. */
-    private static Set<TermPath> placesRead(ComparisonAssessment arrived) {
+    /** The places the relations of the comparison read, or empty where it reads no relation, or
+     *  some of them read places that cannot be named. */
+    private static Optional<Set<TermPath>> placesRead(ComparisonAssessment arrived) {
         List<UndividedByARelation> relations = arrived.relationsRead();
         if (relations.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         Set<TermPath> reads = new LinkedHashSet<>();
         for (UndividedByARelation relation : relations) {
-            Set<TermPath> places = relation.placesRead();
-            if (places == null) {
-                return null;
+            Optional<Set<TermPath>> places = relation.placesRead();
+            if (places.isEmpty()) {
+                return Optional.empty();
             }
-            reads.addAll(places);
+            reads.addAll(places.get());
         }
-        return reads;
+        return Optional.of(reads);
     }
 
     /**

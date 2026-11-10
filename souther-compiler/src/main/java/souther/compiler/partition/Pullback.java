@@ -1583,43 +1583,57 @@ final class Pullback {
             return;
         }
         Core number = construct.values().getFirst().value();
-        Answers.Stands lower = run.min() == null ? null : standsAt(number, reads, run.min(), true);
-        Answers.Stands upper = run.max() == null ? null : standsAt(number, reads, run.max(), false);
-        if ((run.min() != null && lower == null) || (run.max() != null && upper == null)
-                || (lower == null && upper == null)) {
+        // Each end the run has, and no more: an end it has not is nothing asked, and a number that
+        // comes to no form at an end it has leaves the construction untold.
+        List<Answers.Stands> ends = new ArrayList<>();
+        if (run.min() != null) {
+            Optional<Answers.Stands> least = standsAt(number, reads, run.min(), true);
+            if (least.isEmpty()) {
+                return;
+            }
+            ends.add(least.get());
+        }
+        if (run.max() != null) {
+            Optional<Answers.Stands> greatest = standsAt(number, reads, run.max(), false);
+            if (greatest.isEmpty()) {
+                return;
+            }
+            ends.add(greatest.get());
+        }
+        if (ends.isEmpty()) {
             return;
         }
-        Answers.Stands on = lower == null ? upper : upper == null ? lower
-                : new Answers.Stands.AllOf(lower, upper);
-        operated.tell(construct, new Answers.OfAChoice(on));
+        operated.tell(construct, new Answers.OfAChoice(ends.size() == 1 ? ends.getFirst()
+                : new Answers.Stands.AllOf(ends.get(0), ends.get(1))));
     }
 
     /**
      * How {@code e} stands at {@code end}, the lower end of a run where {@code lower}: over the
      * form of the number where it is one, and where it is the lesser or the greater of two numbers,
-     * over how each of them stands there. Null where a number comes to no form.
+     * over how each of them stands there. Empty where a number comes to no form.
      */
-    private Answers.Stands standsAt(Core e, InputReads reads, Endpoint end, boolean lower) {
+    private Optional<Answers.Stands> standsAt(Core e, InputReads reads, Endpoint end,
+                                              boolean lower) {
         Denotation number = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
         if (Core.withoutStanding(number.value()) instanceof Core.PreservedCall call
                 && Extreme.keptBy(call) instanceof Extreme kept) {
-            Answers.Stands one = standsAt(call.args().get(0), number.at(), end, lower);
-            Answers.Stands other = standsAt(call.args().get(1), number.at(), end, lower);
-            if (one == null || other == null) {
-                return null;
+            Optional<Answers.Stands> one = standsAt(call.args().get(0), number.at(), end, lower);
+            Optional<Answers.Stands> other = standsAt(call.args().get(1), number.at(), end, lower);
+            if (one.isEmpty() || other.isEmpty()) {
+                return Optional.empty();
             }
-            return kept.bothMustStandAt(lower)
-                    ? new Answers.Stands.AllOf(one, other) : new Answers.Stands.OneOf(one, other);
+            return Optional.of(kept.bothMustStandAt(lower)
+                    ? new Answers.Stands.AllOf(one.get(), other.get())
+                    : new Answers.Stands.OneOf(one.get(), other.get()));
         }
-        LinearForm<Quantity> form = AffineForms.outcome(number.value(), number.at(), quantities())
-                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var composed)
-                ? composed : null;
-        if (form == null || !(end.at() instanceof Count count)) {
-            return null;
+        if (!(AffineForms.outcome(number.value(), number.at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form))
+                || !(end.at() instanceof Count count)) {
+            return Optional.empty();
         }
         Rel rel = lower ? (end.inclusive() ? Rel.GE : Rel.GT) : (end.inclusive() ? Rel.LE : Rel.LT);
-        return new Answers.Stands.Of(form,
-                new ConstantComparison.Against(rel, count.exactly()));
+        return Optional.of(new Answers.Stands.Of(form,
+                new ConstantComparison.Against(rel, count.exactly())));
     }
 
     /** A number rounded to a whole one, the form of the number before rounding and the way. */
@@ -8770,30 +8784,32 @@ final class Pullback {
         if (!(asks instanceof ConstructionAsk.Requirement.Always)
                 && Core.withoutStanding(operation) instanceof Core.Construct construct) {
             asked.add(new ConstructionAsk(construct.typeName().name(), construct.pos(),
-                    placesOf(numbers), asks));
+                    bearingOf(numbers), asks));
         }
     }
 
     /**
-     * The places {@code numbers} are of, which is what a rule is told a construction asks of it
-     * by: none where some number is of no place that can be named, which is then said of every
-     * rule.
+     * Which rules a construction that asks something of {@code numbers} is told under: those that
+     * read one of the places the numbers are of, and every rule where some number is of no place
+     * that can be named, or the numbers are none.
      */
-    private static Set<TermPath> placesOf(Collection<? extends Quantity> numbers) {
-        Set<TermPath> out = new LinkedHashSet<>();
+    private static WhatAConstructionAsks.Bearing bearingOf(
+            Collection<? extends Quantity> numbers) {
+        Set<TermPath> places = new LinkedHashSet<>();
         for (Quantity each : numbers) {
             Optional<Set<ReadSubject>> read = PositionsAStatementReads.ofANumber(each);
             if (read.isEmpty()) {
-                return Set.of();
+                return new WhatAConstructionAsks.OnEveryRule();
             }
             for (ReadSubject subject : read.get()) {
                 if (!(subject instanceof ReadSubject.At(TermPath path))) {
-                    return Set.of();
+                    return new WhatAConstructionAsks.OnEveryRule();
                 }
-                out.add(path);
+                places.add(path);
             }
         }
-        return out;
+        return places.isEmpty() ? new WhatAConstructionAsks.OnEveryRule()
+                : new WhatAConstructionAsks.OnPlaces(places);
     }
 
     /**

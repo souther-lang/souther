@@ -2686,12 +2686,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Every place of the input this relation is read off: what the places it holds against each
-     * other are read off, and every place each side is ({@link #placesItIsReadOff}) — or null
+     * other are read off, and every place each side is ({@link #placesItIsReadOff}) — or empty
      * where some side is read off places this cannot name, as what an operation answered of
      * something unnamed is.
      */
-    Set<TermPath> placesRead() {
-        return positionsRead();
+    Optional<Set<TermPath>> placesRead() {
+        return Optional.ofNullable(positionsRead());
     }
 
     private Set<TermPath> positionsRead() {

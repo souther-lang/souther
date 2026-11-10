@@ -1,16 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.diag.SourcePos;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -25,16 +21,11 @@ import java.util.function.Predicate;
  *
  * @param construction the type made, as it is written
  * @param at           where the construction is written
- * @param over         the places the numbers it asks of are of; empty where they are of no place
- *                     that can be named, or of none
+ * @param bearing      which rules what it asks is said under
  * @param requirement  what it asks, with what the declarations hold already left out
  */
-record ConstructionAsk(String construction, SourcePos at, Set<TermPath> over,
+record ConstructionAsk(String construction, SourcePos at, WhatAConstructionAsks.Bearing bearing,
                        Requirement requirement) {
-
-    ConstructionAsk {
-        over = Collections.unmodifiableSet(new LinkedHashSet<>(over));
-    }
 
     /**
      * What the report says this asks of a run whose way holds what {@code heldOnEveryWay} says,
@@ -46,7 +37,7 @@ record ConstructionAsk(String construction, SourcePos at, Set<TermPath> over,
     Optional<WhatAConstructionAsks> toldOf(Predicate<Proposition> heldOnEveryWay) {
         WhatAConstructionAsks.Asked told = requirement.leavingOut(heldOnEveryWay).told();
         return told == null ? Optional.empty()
-                : Optional.of(new WhatAConstructionAsks(construction, at, told, over));
+                : Optional.of(new WhatAConstructionAsks(construction, at, told, bearing));
     }
 
     /**
