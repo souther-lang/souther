@@ -192,6 +192,49 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         assertEquals(asks.get(0).path("asked"), asks.get(1).path("asked"));
     }
 
+    /**
+     * A rule is told what the constructions ask of the places it reads and no others: a construction
+     * over other places asks the same of the run and bears on nothing read here, and said under
+     * every rule it would be said once for each rule.
+     */
+    @Test
+    void aRuleIsToldOnlyWhatIsAskedOfThePlacesItReads() {
+        Compilation compilation = compiled("""
+                module demo
+
+                data Held = Decimal
+                    invariant value >= 0.0m
+                data Plan = { p: Held, q: Held, wx: Bool, wy: Bool }
+
+                behavior f : (x: Decimal, y: Decimal, c: Decimal) -> Plan
+                    constructs Plan, Held
+                let f (x, y, c) = Plan {
+                    p = Held(Decimal.min(x, 1.0m)),
+                    q = Held(Decimal.min(y, 1.0m)),
+                    wx = Decimal.compare(x, c) <= 0,
+                    wy = Decimal.compare(y, c) <= 0
+                }
+                """);
+        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        List<List<JsonNode>> perRule = new ArrayList<>();
+        collectPerFinding(report, perRule);
+        assertEquals(2, perRule.size(), perRule.toString());
+        for (List<JsonNode> asks : perRule) {
+            assertEquals(1, asks.size(), asks.toString());
+        }
+        assertTrue(!perRule.get(0).getFirst().path("at").equals(perRule.get(1).getFirst().path("at")),
+                perRule.toString());
+    }
+
+    private static void collectPerFinding(JsonNode node, List<List<JsonNode>> out) {
+        if (node.isObject() && node.path("kind").asString().equals("rule_may_stop_a_run")
+                && node.has("asks")) {
+            out.add(List.copyOf(node.get("asks").values()));
+        }
+        node.forEach(child -> collectPerFinding(child, out));
+    }
+
     /** What an {@code Int} construction asks is asked as a decimal number too. */
     @Test
     void anIntConstructionAsksItToo() {

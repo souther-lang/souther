@@ -8708,7 +8708,7 @@ final class Pullback {
                 Derivation answers = whereItStands(on);
                 if (answers != null) {
                     out.add(answers);
-                    askedOf(asked, each.operation(), askedBy(on));
+                    askedOf(asked, each.operation(), askedBy(on), on.quantities());
                 } else {
                     operated.beginGroup();
                     operated.leaveUnsaid(on.quantities(), null);
@@ -8749,7 +8749,7 @@ final class Pullback {
                     ? null : whereItStands(form, held);
             if (answers != null) {
                 out.add(answers);
-                askedOf(asked, each.operation(), askedBy(form, held));
+                askedOf(asked, each.operation(), askedBy(form, held), form.coefs().keySet());
             } else if (!comesOnlyToWhereItAnswers(over)) {
                 operated.beginGroup();
                 operated.leaveUnsaid(form.coefs().keySet(), null);
@@ -8764,11 +8764,34 @@ final class Pullback {
      * place it is read. Nothing where it asks nothing the declarations do not hold.
      */
     private static void askedOf(List<WhatAConstructionAsks> asked, Core operation,
-                                WhatAConstructionAsks.Asked asks) {
+                                WhatAConstructionAsks.Asked asks,
+                                Collection<? extends Quantity> numbers) {
         if (asks != null && Core.withoutStanding(operation) instanceof Core.Construct construct) {
             asked.add(new WhatAConstructionAsks(construct.typeName().name(), construct.pos(),
-                    asks));
+                    asks, placesOf(numbers)));
         }
+    }
+
+    /**
+     * The places {@code numbers} are of, which is what a rule is told a construction asks of it
+     * by: none where some number is of no place that can be named, which is then said of every
+     * rule.
+     */
+    private static Set<TermPath> placesOf(Collection<? extends Quantity> numbers) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (Quantity each : numbers) {
+            Optional<Set<ReadSubject>> read = PositionsAStatementReads.ofANumber(each);
+            if (read.isEmpty()) {
+                return Set.of();
+            }
+            for (ReadSubject subject : read.get()) {
+                if (!(subject instanceof ReadSubject.At(TermPath path))) {
+                    return Set.of();
+                }
+                out.add(path);
+            }
+        }
+        return out;
     }
 
     /**

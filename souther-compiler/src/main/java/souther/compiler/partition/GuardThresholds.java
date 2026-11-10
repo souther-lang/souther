@@ -1047,6 +1047,30 @@ public final class GuardThresholds {
     }
 
     /**
+     * What the constructions on the way to a comparison ask of a run, of those that ask it of a
+     * number of a place the comparison reads. A construction over other places asks the same of
+     * the run and does not bear on what is read here, and said under every rule it is said as many
+     * times as there are rules: all of them, where what the comparison reads cannot be named.
+     */
+    private static List<WhatAConstructionAsks> asksBearingOnWhatItReads(
+            ComparisonAssessment read, List<WhatAConstructionAsks> asks) {
+        if (asks.isEmpty()) {
+            return asks;
+        }
+        List<UndividedByARelation> relations = read.relationsRead();
+        Set<TermPath> reads = new LinkedHashSet<>();
+        for (UndividedByARelation relation : relations) {
+            Set<TermPath> places = relation.placesRead();
+            if (places == null) {
+                return asks;
+            }
+            reads.addAll(places);
+        }
+        return relations.isEmpty() ? asks : asks.stream().filter(one -> one.bearsOn(reads))
+                .toList();
+    }
+
+    /**
      * The line one comparison draws, where anything of it can be read.
      *
      * <p>One comparison is one line however many positions it mentions, and what it cuts is
@@ -1084,10 +1108,11 @@ public final class GuardThresholds {
         // whatever else is said.
         // Or where a construction on the way to it asks something of every run that gets there,
         // which a run that does not meet it is stopped by.
-        if (aRunStops || !stops.isEmpty() || !asks.isEmpty()) {
+        List<WhatAConstructionAsks> asked = asksBearingOnWhatItReads(read, asks);
+        if (aRunStops || !stops.isEmpty() || !asked.isEmpty()) {
             withoutALine.mayStopARun(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
-                    ModelOccurrences.of(stated), stops, asks);
+                    ModelOccurrences.of(stated), stops, asked);
         }
         // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
         // same way a clause does. Only where a line's origin comes from is: a guard's is where

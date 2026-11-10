@@ -2690,6 +2690,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * where some side is read off places this cannot name, as what an operation answered of
      * something unnamed is.
      */
+    Set<TermPath> placesRead() {
+        return positionsRead();
+    }
+
     private Set<TermPath> positionsRead() {
         Set<TermPath> out = new LinkedHashSet<>(placesReadOff(amongThemselves));
         for (Side each : sides) {
