@@ -489,29 +489,25 @@ final class LibraryEndings {
                                        List<GetsPast.WhereTheScalesHaveRoom.Room> rooms,
                                        boolean[] unread) {
                 ScaleBound unknown = new ScaleBound.NotShown();
-                switch (term) {
-                    case LibraryTerm.Parameter(int position) -> {
-                        return position < params.size() && Type.DECIMAL.equals(params.get(position))
-                                ? new ScaleBound.Argument(position) : unknown;
-                    }
-                    case LibraryTerm.DecimalNumber(var written) -> {
-                        return new ScaleBound.Written(Math.abs((long) written.scale()));
-                    }
-                    case LibraryTerm.Bound(BindingId binding) -> {
-                        return env.getOrDefault(binding, unknown);
-                    }
-                    case LibraryTerm.Negated(LibraryTerm operand) -> {
-                        return scaleOf(operand, env, params, rooms, unread);
-                    }
+                return switch (term) {
+                    case LibraryTerm.Parameter(int position) ->
+                            position < params.size() && Type.DECIMAL.equals(params.get(position))
+                                    ? new ScaleBound.Argument(position) : unknown;
+                    case LibraryTerm.DecimalNumber(var written) ->
+                            new ScaleBound.Written(Math.abs((long) written.scale()));
+                    case LibraryTerm.Bound(BindingId binding) ->
+                            env.getOrDefault(binding, unknown);
+                    case LibraryTerm.Negated(LibraryTerm operand) ->
+                            scaleOf(operand, env, params, rooms, unread);
                     case LibraryTerm.Let(BindingId binding, LibraryTerm value, LibraryTerm in) -> {
                         Map<BindingId, ScaleBound> inside = new LinkedHashMap<>(env);
                         inside.put(binding, scaleOf(value, env, params, rooms, unread));
-                        return scaleOf(in, inside, params, rooms, unread);
+                        yield scaleOf(in, inside, params, rooms, unread);
                     }
                     case LibraryTerm.Fork(LibraryTerm condition, LibraryTerm then,
                                           LibraryTerm otherwise, var _) -> {
                         scaleOf(condition, env, params, rooms, unread);
-                        return new ScaleBound.Larger(scaleOf(then, env, params, rooms, unread),
+                        yield new ScaleBound.Larger(scaleOf(then, env, params, rooms, unread),
                                 scaleOf(otherwise, env, params, rooms, unread));
                     }
                     case LibraryTerm.Operator(BinOp op, LibraryTerm left, LibraryTerm right, var _)
@@ -521,18 +517,18 @@ final class LibraryEndings {
                         if (first instanceof ScaleBound.NotShown
                                 || second instanceof ScaleBound.NotShown) {
                             unread[0] = true;
-                            return unknown;
+                            yield unknown;
                         }
                         ScaleLaw law = new ScaleLaw.OfTheOperator(op);
                         rooms.add(new GetsPast.WhereTheScalesHaveRoom.Room(law, first, second));
-                        return new ScaleBound.Left(law, first, second);
+                        yield new ScaleBound.Left(law, first, second);
                     }
                     default -> {
                         LibraryTerm.forEachPart(term,
                                 part -> scaleOf(part, env, params, rooms, unread));
-                        return unknown;
+                        yield unknown;
                     }
-                }
+                };
             }
 
             /**
