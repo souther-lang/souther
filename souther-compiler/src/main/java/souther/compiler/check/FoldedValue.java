@@ -185,7 +185,7 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
         ExactRatio number = folded == null ? null : ConstantAlgebra.exactly(folded);
         if (!(scale instanceof Long places) || way == null || number == null
                 || Math.abs(places) > MOST_SCALE
-                || !ARounding.answersAtAScale(BigInteger.valueOf(places))) {
+                || !ARounding.hasRoomAtAScale(BigInteger.valueOf(places))) {
             return Optional.empty();
         }
         ExactRatio ten = ExactRatio.of(BigInteger.TEN.pow((int) Math.abs(places)));

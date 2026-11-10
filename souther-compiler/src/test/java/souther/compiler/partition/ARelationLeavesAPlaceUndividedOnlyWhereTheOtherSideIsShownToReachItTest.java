@@ -3104,9 +3104,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * value of {@code x} is, so it is not taken as a run {@code x} fills — here, where the values
      * asked of it are all above a third, as anywhere.
      *
-     * <p>An end at a half is taken as a run, since nothing rounds it: a {@code Decimal} sum stops a
-     * run only where its scale has no room, which a row built at a scale a row is built at has, so
-     * every value of {@code y} is got to by the row that holds the same value of {@code x}.
+     * <p>An end at a half is taken as a run, since nothing rounds it: a {@code Decimal} sum stops no
+     * run, so every value of {@code y} is got to by the row that holds the same value of
+     * {@code x}.
      *
      * <p>The places named are the ones left unshown or related: {@code x} is neither, being parted
      * by lines at the ends of the run {@code y} takes.
@@ -3541,8 +3541,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * every one from it, and run out at 42: from there on no standard is above four times them.
      * A standard past nought has hours below a quarter of it, which a decimal from nought has, so
      * only the standard of nought settles the comparison. Weighed three to four, the hours run out
-     * at 126. A decimal product may have no room for its digits or scale, so a run is taken only
-     * where a row is built in it and the product is worked out on that row.
+     * at 126. A decimal product stops no run, so every run the ends settle is taken.
      */
     @Test
     void aWeightOnADecimalDrawsTheLineWhereTheOtherRunsOut() {

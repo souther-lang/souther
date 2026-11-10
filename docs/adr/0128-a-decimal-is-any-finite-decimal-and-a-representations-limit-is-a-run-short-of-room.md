@@ -86,8 +86,19 @@ still have to prove where they do not.
   rule defines as a number made of others was certified exact as a box; its values are the image of the
   number, and a product of a quantity of one or two and a price up to ten is never eleven. Only a
   definition whose operators were not shown to answer kept the place from being certified, which every
-  decimal definition was and no whole-number one. The defined place now carries that cause itself, and
-  the places the number is made of stand where their own rules leave them, as before.
+  decimal definition was and no whole-number one. A place any proven rule relates to a number worked
+  out of others now carries that cause itself, a definition among them, and the places the number is
+  made of stand where their own rules leave them, as before.
+- A rounding, a `Decimal.toInt` and a `Decimal.divide` whose answer has room may still pass through an
+  intermediate a `BigDecimal` has none for, such as the power of ten between two far scales. Those
+  are worked out on the exact rational and narrowed once, so a run is short of room only where the
+  answer is.
+- An example row whose evaluation is short of room is undecided and not failed, and the check says
+  so (E1941): the expected answer is a decimal the language defines, and nothing about the model was
+  found out.
+- The analysis that reads a library body used to stop at a declared case such as `HALF_UP`, a
+  guard the abort sets had made sure was never needed. With the decimal operations ending no run it
+  is needed, and a case of a declared unit type is read as that value.
 - A corpus model that weighed each deal by a decimal product, and so asked a reach witness of a
   comparison the product kept unshown, now rounds each deal to whole yen, which an `Int` may not hold:
   the same question, asked for a reason the language states.

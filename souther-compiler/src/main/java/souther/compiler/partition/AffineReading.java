@@ -1105,7 +1105,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                 : AddedOfEachElement.ofAClosure(closure);
                         if (each == null || !preparedWithoutAStop(node, at, closure, node)) {
                             told.exact = false;
-                        } else if (Core.withoutStanding(node).type() != Type.DECIMAL
+                        } else if (Core.withoutStanding(node).type() == Type.INT
                                 && (!(total instanceof NumericTerm.TakenOver)
                                 || !tellAnIntTotalThrough(throughOverWholeNumbers(each,
                                         BigInteger.ZERO, closure.params().getFirst().binding(),
@@ -1328,11 +1328,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)) {
                     return new Attempt.NotApplicable();
                 }
-                // A total of decimals stops where the sum has no room, which is told of the
-                // answers as the library adds them ({@link WhatWasTold#addsUpDecimals}).
+                // A total of whole numbers answers where it fits an Int; one of decimals or of
+                // rationals answers always, and is read off the list it adds up all the same.
                 int operand = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
                         instanceof GetsPast.WhereTheTotalFits(int list) ? list
-                        : call.type() == Type.DECIMAL
+                        : call.type() != Type.INT
                         ? WhatARunMayEndFor.theListItAddsUp(call).orElse(-1) : -1;
                 if (operand < 0 || operand >= call.args().size()) {
                     return new Attempt.NotApplicable();
@@ -1527,9 +1527,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     }
                     total = sum;
                 }
-                // A total of decimals is a decimal and stops no run; one of whole numbers is held
-                // to an Int.
-                if (call.type() != Type.DECIMAL) {
+                // A total of decimals or of rationals is one of its type and stops no run; one of
+                // whole numbers is held to an Int.
+                if (call.type() == Type.INT) {
                     tellAnIntTotal(call, total,
                             IntStream.range(from, told.operations.size()).boxed().toList());
                 }
@@ -1564,7 +1564,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 named.addAll(answer.coefs().keySet());
                 SeededWalk seeded = SeededWalk.of(node, closure -> Core.withoutStanding(closure)
                         instanceof Core.Block block ? block : null);
-                if (Core.withoutStanding(node).type() != Type.DECIMAL
+                if (Core.withoutStanding(node).type() == Type.INT
                         && NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, answer,
                                 ofTheInput, at)) {
                     tellAnIntTotal(node, answer, List.of());
@@ -1643,10 +1643,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 AddedOfEachElement each = total == null ? null : joinsTwoMaps(total)
                         ? AddedOfEachElement.ofAJoin()
                         : AddedOfEachElement.ofTheStep(seeded);
-                // What a walk of decimals carries is a decimal at every step, so the walk stops a
-                // run nowhere the step does; a step read as adding a part of the element works out
-                // nothing else, and one that is not is not read.
-                if (seeded.step().body().type() == Type.DECIMAL) {
+                // What a walk of decimals or of rationals carries is one of its type at every step,
+                // so the walk stops a run nowhere the step does; a step read as adding a part of
+                // the element works out nothing else, and one that is not is not read.
+                if (seeded.step().body().type() != Type.INT) {
                     return each != null;
                 }
                 if (!(Core.withoutStanding(seeded.seed()) instanceof Core.Int seed)) {

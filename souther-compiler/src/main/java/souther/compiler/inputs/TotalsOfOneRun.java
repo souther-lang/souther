@@ -29,12 +29,11 @@ import java.util.Objects;
  * and what one element comes to is the difference: one value however the totals were written.
  *
  * <p>The one total is what the totals come to wherever the run answers, and only that. Which runs
- * answer is not the one total's to say: two writings of it stop on different runs — a sum of
- * decimals stops where two of its values have scales no decimal holds the sum of, and
- * {@code Σa + Σb} meets that adding a value of {@code a} to one of {@code b} never does — and what
- * a run stops on is told of the operators as they were written, while a row is taken to stand at a
- * number only where it was run and answered. So a number that is read as the one total is read
- * truly of every run that answers.
+ * answer is not the one total's to say: what a run stops on is told of the operators as they were
+ * written, while a row is taken to stand at a number only where it was run and answered. A sum of
+ * decimals stops no run, so here the two writings answer on the same runs, and what stops one
+ * stops it in working out an element, which both writings do. So a number that is read as the one
+ * total is read truly of every run that answers.
  *
  * <p>Only in a type with no ends. Where the type has them, the reading holds a total inside them,
  * since a total past them is one no run answers with, and that is said of the total as it is
