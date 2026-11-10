@@ -6,7 +6,6 @@ import souther.compiler.numeric.RulesAsWritten.Written;
 import souther.test.Nightly;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,8 +20,8 @@ import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
  * What the difference bounds say is what the points say, over systems drawn at random.
  *
  * <p>The claims are {@code WhatTheDifferenceBoundsSayIsWhatThePointsSayTest}'s — sound, decided and
- * tight against every point of a bounded range, and the same whatever order the rules arrived in or
- * however often each was said — and so is the oracle. What this adds is the systems: the chosen ones
+ * tight against every point of a bounded range — and so is the oracle. What this adds is the
+ * systems: the chosen ones
  * there are written for the steps the closure takes, and these are drawn from the shapes the
  * fragment has, a bound or a difference on any of three positions, weighed by one or two, strict or
  * not, at any threshold in the range. A combination no chosen system names is one a draw can reach.
@@ -67,55 +66,6 @@ class WhatTheDifferenceBoundsSayOfDrawnRulesIsWhatThePointsSayTest {
         assertTrue(empties > 20 && empties < CASES - 20,
                 "the systems have to come out both ways to check both, and " + empties
                         + " of " + CASES + " were empty");
-    }
-
-    /** The same rules in any order are the same answers. */
-    @Test
-    void theOrderTheRulesArrivedInIsNotPartOfTheAnswer() {
-        Random dice = new Random(1016);
-        for (int round = 0; round < CASES; round++) {
-            List<AffineConstraint<String>> stated = read(aSystem(dice));
-            DifferenceBounds<String> asWritten = closed(stated);
-            List<AffineConstraint<String>> shuffled = new ArrayList<>(stated);
-            Collections.shuffle(shuffled, dice);
-            DifferenceBounds<String> reordered = closed(shuffled);
-
-            assertEquals(asWritten.holdsNothing(), reordered.holdsNothing());
-            if (asWritten.holdsNothing()) {
-                continue;   // where nothing is left there is no tightest bound to compare
-            }
-            for (String position : POSITIONS) {
-                assertEquals(asWritten.upperBoundOf(position), reordered.upperBoundOf(position),
-                        () -> "upper bound of " + position + " moved when the rules were reordered");
-                assertEquals(asWritten.lowerBoundOf(position), reordered.lowerBoundOf(position),
-                        () -> "lower bound of " + position + " moved when the rules were reordered");
-                for (String other : POSITIONS) {
-                    assertEquals(asWritten.differenceBound(position, other),
-                            reordered.differenceBound(position, other));
-                }
-            }
-        }
-    }
-
-    /** And asserting a rule twice says what asserting it once says. */
-    @Test
-    void sayingARuleTwiceSaysWhatSayingItOnceSays() {
-        Random dice = new Random(4800);
-        for (int round = 0; round < CASES; round++) {
-            List<AffineConstraint<String>> stated = read(aSystem(dice));
-            List<AffineConstraint<String>> doubled = new ArrayList<>(stated);
-            doubled.addAll(stated);
-            DifferenceBounds<String> once = closed(stated);
-            DifferenceBounds<String> twice = closed(doubled);
-            assertEquals(once.holdsNothing(), twice.holdsNothing());
-            if (once.holdsNothing()) {
-                continue;
-            }
-            for (String position : POSITIONS) {
-                assertEquals(once.upperBoundOf(position), twice.upperBoundOf(position));
-                assertEquals(once.lowerBoundOf(position), twice.lowerBoundOf(position));
-            }
-        }
     }
 
     private static void assertSoundAndTight(List<Written> written, DifferenceBounds<String> closed,

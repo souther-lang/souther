@@ -10,6 +10,7 @@ import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
+import net.unit8.raoh.decode.ObjectDecoders;
 import net.unit8.raoh.decode.builtin.ListDecoder;
 import net.unit8.raoh.decode.builtin.RecordDecoder;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,127 +35,203 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A newtype's invariant reaches the boundary as the Raoh constraint that says the same thing
- * (issue #83): the failure carries that constraint's code and metadata, not one
- * {@code invariant_violation} for every rule in the model. What the mapping cannot prove equivalent
- * still runs — through {@code refine}, under the shared code with the rejecting type in the metadata.
+ * A newtype's invariant reaches the boundary as the Raoh constraint that says the same thing: the
+ * failure carries that constraint's code and metadata, not one {@code invariant_violation} for every
+ * rule in the model. What the mapping cannot prove equivalent still runs — through {@code refine},
+ * under the shared code with the rejecting type in the metadata.
+ *
+ * <p>Where Raoh states a constraint, the claim is that the issue is the one Raoh builds for it, field
+ * for field, so the codes and metadata are asked of Raoh and not written here a second time.
  */
 class CompileInvariantConstraintTest {
 
-    private static Issue soleIssue(String data, Object input) throws Exception {
+    private static Decoder<Object, ?> decoderOf(String data) throws Exception {
         String module = """
                 module demo
 
                 %s
                 """.formatted(data);
         ClassLoader loader = new BytesClassLoader(Compiler.compile(module), CompileInvariantConstraintTest.class.getClassLoader());
-        Decoder<Object, ?> dec = Codecs.decoder(loader, "demo.V");
-        Result<?> r = dec.decode(input, Path.ROOT);
+        return Codecs.decoder(loader, "demo.V");
+    }
+
+    private static Issue soleIssue(String data, Object input) throws Exception {
+        return sole(decoded(data, input));
+    }
+
+    private static Result<?> decoded(String data, Object input) throws Exception {
+        return decoderOf(data).decode(input, Path.ROOT);
+    }
+
+    private static Issue firstIssue(Result<?> r) {
+        assertTrue(r instanceof Err, "the value breaks the invariant, so decoding must fail");
+        return ((Err<?>) r).issues().asList().get(0);
+    }
+
+    private static Optional<Issue> issueOf(Decoder<Object, ?> decoder, Object input) {
+        return decoder.decode(input, Path.ROOT) instanceof Err<?> err
+                ? Optional.of(err.issues().asList().get(0))
+                : Optional.empty();
+    }
+
+    private static Issue sole(Result<?> r) {
         assertTrue(r instanceof Err, "the value breaks the invariant, so decoding must fail");
         List<Issue> issues = ((Err<?>) r).issues().asList();
         assertEquals(1, issues.size(), "one broken rule, one issue");
         return issues.get(0);
     }
 
-    @Test
-    void aMinimumLengthIsTooShort() throws Exception {
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant String.length(value) > 0
-                """, "");
-        assertEquals("too_short", issue.code());
-        assertEquals(1, issue.meta().get("min"));
-        assertEquals(0, issue.meta().get("actual"));
-        // Raoh's own message, not one minted here, so a resolver may replace it
-        assertFalse(issue.customMessage(), "the message must stay replaceable");
+    private static ListDecoder<Object, Object> raohList(List<?> elements) {
+        List<Object> held = new ArrayList<>(elements);
+        return new ListDecoder<>((in, path) -> Result.ok(held));
     }
 
-    @Test
-    void aMaximumLengthIsTooLong() throws Exception {
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant String.length(value) <= 3
-                """, "abcd");
-        assertEquals("too_long", issue.code());
-        assertEquals(3, issue.meta().get("max"));
+    private static RecordDecoder<Object, Object> raohMap(Map<String, Object> entries) {
+        return new RecordDecoder<>((in, path) -> Result.ok(entries));
     }
 
-    @Test
-    void anExactLengthIsAnInvalidLength() throws Exception {
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant String.length(value) == 4
-                """, "abc");
-        assertEquals("invalid_length", issue.code());
+    private record Mapped(String type, String clause, Object input, Supplier<Result<?>> raoh) {
     }
 
+    /**
+     * A clause the mapping states is reported as the constraint Raoh states for it. Each row is a
+     * clause, the value that breaks it, and the constraint Raoh would have been asked for the same
+     * thing; an adjusted bound ({@code < 10} is a maximum of 9) is the row that says how.
+     */
     @Test
-    void aMatchesInvariantIsAFormat() throws Exception {
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant String.matches("[0-9]{3}", value)
-                """, "12x");
-        assertEquals("invalid_format", issue.code());
+    void aClauseTheMappingStatesIsReportedAsTheIssueRaohBuildsForIt() throws Exception {
+        Map<String, Object> oneEntry = Map.of("a", 1L);
+        List<Mapped> rows = List.of(
+                new Mapped("String", "String.length(value) > 0", "",
+                        () -> ObjectDecoders.string().minLength(1).decode("", Path.ROOT)),
+                new Mapped("String", "String.length(value) <= 3", "abcd",
+                        () -> ObjectDecoders.string().maxLength(3).decode("abcd", Path.ROOT)),
+                new Mapped("String", "String.length(value) == 4", "abc",
+                        () -> ObjectDecoders.string().fixedLength(4).decode("abc", Path.ROOT)),
+                new Mapped("String", "String.matches(\"[0-9]{3}\", value)", "12x",
+                        () -> ObjectDecoders.string().pattern("[0-9]{3}").decode("12x", Path.ROOT)),
+                new Mapped("Int", "value > 0", 0L,
+                        () -> ObjectDecoders.long_().positive().decode(0L, Path.ROOT)),
+                new Mapped("Int", "value >= 0", -1L,
+                        () -> ObjectDecoders.long_().nonNegative().decode(-1L, Path.ROOT)),
+                new Mapped("Int", "value >= 3", 2L,
+                        () -> ObjectDecoders.long_().min(3).decode(2L, Path.ROOT)),
+                new Mapped("Int", "value < 10", 10L,
+                        () -> ObjectDecoders.long_().max(9).decode(10L, Path.ROOT)),
+                new Mapped("Int", "0 <= value", -5L,
+                        () -> ObjectDecoders.long_().nonNegative().decode(-5L, Path.ROOT)),
+                new Mapped("Decimal", "value >= 1.5m", new BigDecimal("1.4"),
+                        () -> ObjectDecoders.decimal().min(new BigDecimal("1.5"))
+                                .decode(new BigDecimal("1.4"), Path.ROOT)),
+                new Mapped("List<Int>", "List.length(value) >= 1", List.of(),
+                        () -> raohList(List.of()).nonempty().decode(List.of(), Path.ROOT)),
+                new Mapped("List<Int>", "List.length(value) >= 3", List.of(1L, 2L),
+                        () -> raohList(List.of(1L, 2L)).minSize(3).decode(List.of(1L, 2L), Path.ROOT)),
+                new Mapped("List<Int>", "List.length(value) <= 1", List.of(1L, 2L),
+                        () -> raohList(List.of(1L, 2L)).maxSize(1).decode(List.of(1L, 2L), Path.ROOT)),
+                new Mapped("List<Int>", "List.length(value) == 1", List.of(1L, 2L),
+                        () -> raohList(List.of(1L, 2L)).fixedSize(1).decode(List.of(1L, 2L), Path.ROOT)),
+                new Mapped("Map<String, Int>", "Map.size(value) >= 2", oneEntry,
+                        () -> raohMap(oneEntry).minSize(2).decode(oneEntry, Path.ROOT)),
+                new Mapped("Map<String, Int>", "Map.size(value) < 1", oneEntry,
+                        () -> raohMap(oneEntry).maxSize(0).decode(oneEntry, Path.ROOT)),
+                new Mapped("Map<String, Int>", "Map.size(value) >= 1", Map.of(),
+                        () -> raohMap(Map.of()).nonempty().decode(Map.of(), Path.ROOT)),
+                new Mapped("List<Int>", "List.allDistinctBy(x -> x, value)", List.of(1L, 2L, 1L),
+                        () -> raohList(List.of(1L, 2L, 1L)).unique().decode(List.of(1L, 2L, 1L), Path.ROOT)));
+        for (Mapped row : rows) {
+            Issue issue = soleIssue("data V = %s\n    invariant %s\n".formatted(row.type(), row.clause()),
+                    row.input());
+            assertEquals(sole(row.raoh().get()), issue, row.clause());
+            assertFalse(issue.customMessage(), row.clause() + ": the message stays replaceable");
+        }
     }
 
-    @Test
-    void aPositiveIntIsOutOfRange() throws Exception {
-        Issue issue = soleIssue("""
-                data V = Int
-                    invariant value > 0
-                """, 0L);
-        assertEquals("out_of_range", issue.code());
-        assertEquals(1L, issue.meta().get("min"));
-        assertEquals(0L, issue.meta().get("actual"));
+    private record Wrapped(String declarations, Object input) {
     }
 
+    /**
+     * A uniqueness over elements Raoh can compare says what Raoh's own {@code unique()} says of the
+     * boundary form of the same elements: a newtype is reported as the value it wraps, through every
+     * name it wears and inside every list it stands in.
+     */
     @Test
-    void aNonNegativeIntIsOutOfRange() throws Exception {
-        Issue issue = soleIssue("""
-                data V = Int
-                    invariant value >= 0
-                """, -1L);
-        assertEquals("out_of_range", issue.code());
-        assertEquals(0L, issue.meta().get("min"));
+    void aRepeatedElementIsReportedAsRaohReportsTheValueItWraps() throws Exception {
+        List<Wrapped> rows = List.of(
+                new Wrapped("data Sku = String\ndata V = List<Sku>", List.of("A123", "B456", "A123")),
+                new Wrapped("data Code = Int\ndata Sku = Code\ndata V = List<List<Sku>>",
+                        List.of(List.of(1L, 2L), List.of(3L), List.of(1L, 2L))),
+                new Wrapped("data Skus = List<String>\ndata V = List<Skus>",
+                        List.of(List.of("a"), List.of("a"))));
+        for (Wrapped row : rows) {
+            Issue issue = soleIssue(row.declarations() + "\n    invariant List.allDistinctBy(x -> x, value)\n",
+                    row.input());
+            assertEquals(sole(raohList((List<?>) row.input()).unique().decode(row.input(), Path.ROOT)),
+                    issue, row.declarations());
+        }
     }
 
+    /**
+     * {@code Unique} is stated of the elements' Souther equality, and two spellings of one amount are
+     * one element by it — where Raoh's own {@code unique()} would tell them apart by
+     * {@code BigDecimal.equals}, which reads the scale. Each repeated element is named once, at the
+     * point its repetition is first found: not at its own first occurrence, and not again once it has
+     * been named.
+     */
     @Test
-    void anIntLowerBoundBecomesMin() throws Exception {
-        Issue issue = soleIssue("""
-                data V = Int
-                    invariant value >= 3
-                """, 2L);
-        assertEquals("out_of_range", issue.code());
-        assertEquals(3L, issue.meta().get("min"));
+    void aDecimalRepeatedAtAnotherScaleIsADuplicate() throws Exception {
+        record Row(String type, List<Object> input, List<Object> duplicates) {
+        }
+        List<Row> rows = List.of(
+                new Row("List<Decimal>", List.of(new BigDecimal("1.0"), new BigDecimal("1.00")),
+                        List.of(new BigDecimal("1.00"))),
+                new Row("List<List<Decimal>>",
+                        List.of(List.of(new BigDecimal("1.0")), List.of(new BigDecimal("1.00"))),
+                        List.of(List.of(new BigDecimal("1.00")))),
+                new Row("List<Decimal>",
+                        List.of(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("2.00"),
+                                new BigDecimal("1.00"), new BigDecimal("1.000")),
+                        List.of(new BigDecimal("2.00"), new BigDecimal("1.00"))));
+        for (Row row : rows) {
+            Issue issue = soleIssue("data V = %s\n    invariant List.allDistinctBy(x -> x, value)\n"
+                    .formatted(row.type()), row.input());
+            assertEquals("duplicate_element", issue.code(), row.type());
+            assertEquals(row.duplicates(), issue.meta().get("duplicates"), row.type());
+            assertFalse(issue.customMessage(), "Raoh's own message, so a resolver may replace it");
+        }
     }
 
-    @Test
-    void aStrictIntUpperBoundBecomesTheAdjacentMax() throws Exception {
-        Issue issue = soleIssue("""
-                data V = Int
-                    invariant value < 10
-                """, 10L);
-        assertEquals("out_of_range", issue.code());
-        assertEquals(9L, issue.meta().get("max"));
+    private record OwnCheck(String declarations, String clause, Object input) {
     }
 
+    /**
+     * What has no message form — a product, a map, a newtype over a product, a newtype that holds
+     * itself through a list, a projection that is not the identity, a clause no constraint states —
+     * keeps its own check, and names itself in the metadata instead: the type that rejected the value
+     * and the clause, if it has a name.
+     */
     @Test
-    void aMirroredBoundReadsTheSameWayRound() throws Exception {
-        Issue issue = soleIssue("""
-                data V = Int
-                    invariant 0 <= value
-                """, -5L);
-        assertEquals("out_of_range", issue.code());
-        assertEquals(0L, issue.meta().get("min"));
-    }
-
-    @Test
-    void aDecimalLowerBoundBecomesMin() throws Exception {
-        Issue issue = soleIssue("""
-                data V = Decimal
-                    invariant value >= 1.5m
-                """, new java.math.BigDecimal("1.4"));
-        assertEquals("out_of_range", issue.code());
+    void aClauseWithNoConstraintForItKeepsItsOwnCheck() throws Exception {
+        List<Object> lines = List.of(Map.of("sku", "a"), Map.of("sku", "a"));
+        List<OwnCheck> rows = List.of(
+                new OwnCheck("data Line = { sku: String }\ndata V = List<Line>", "distinctLines = List.allDistinctBy(x -> x, value)", lines),
+                new OwnCheck("data V = List<Map<String, Int>>", "distinctTallies = List.allDistinctBy(x -> x, value)",
+                        List.of(Map.of("a", 1L), Map.of("a", 1L))),
+                new OwnCheck("data Line = { sku: String }\ndata Entry = Line\ndata V = List<Entry>",
+                        "distinctEntries = List.allDistinctBy(x -> x, value)", lines),
+                new OwnCheck("data Tree = List<Tree>\ndata V = List<Tree>",
+                        "distinctTrees = List.allDistinctBy(x -> x, value)", List.of(List.of(), List.of())),
+                new OwnCheck("data Line = { product: String, qty: Int }\ndata V = List<Line>",
+                        "uniqueProducts = List.allDistinctBy(.product, value)",
+                        List.of(Map.of("product", "a", "qty", 1L), Map.of("product", "a", "qty", 2L))),
+                new OwnCheck("data V = String", "digitsOnly = List.all(c -> c <= 57, String.codePoints(value))", "1a2"));
+        for (OwnCheck row : rows) {
+            Issue issue = soleIssue(row.declarations() + "\n    invariant " + row.clause() + "\n", row.input());
+            assertEquals("invariant_violation", issue.code(), row.clause());
+            assertEquals("V", issue.meta().get("type"), row.clause());
+            assertEquals(row.clause().substring(0, row.clause().indexOf(' ')), issue.meta().get("clause"));
+            assertFalse(issue.customMessage(), "an invariant's text must stay replaceable");
+        }
     }
 
     @Test
@@ -165,22 +244,11 @@ class CompileInvariantConstraintTest {
                 """, "1a2");
         assertEquals("invariant_violation", issue.code());
         assertEquals("V", issue.meta().get("type"));
+        assertNull(issue.meta().get("clause"), "a clause declared without a name has none to report");
         // the same replaceability the mapped constraints have: refine's message overload would mint a
         // custom-message issue that a resolver refuses to touch, so the failure is built by hand
         assertFalse(issue.customMessage(), "an invariant's text must stay replaceable");
         assertEquals("resolved", issue.resolve((code, meta) -> "resolved").message());
-    }
-
-    @Test
-    void aMappedClauseFailsBeforeTheRestOfTheInvariantRuns() throws Exception {
-        // Raoh chains constraints, so the mapped one reports on its own — the refined clause behind
-        // it never sees the value, and the failure is not doubled.
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant String.length(value) > 0
-                        && List.all(c -> c <= 57, String.codePoints(value))
-                """, "");
-        assertEquals("too_short", issue.code());
     }
 
     @Test
@@ -238,101 +306,6 @@ class CompileInvariantConstraintTest {
                 "the second pattern, held apart from the first");
     }
 
-    @Test
-    void aValueThatHoldsStillDecodes() throws Exception {
-        ClassLoader loader = new BytesClassLoader(Compiler.compile("""
-                module demo
-
-                data V = String
-                    invariant String.length(value) > 0
-                        && String.matches("[a-z]+", value)
-                """), getClass().getClassLoader());
-        Result<?> r = Codecs.decoder(loader, "demo.V").decode("ok", Path.ROOT);
-        assertTrue(r instanceof Ok, "a value the invariant admits decodes as before");
-    }
-
-    // --- collections ---
-
-    @Test
-    void anEmptyListIsTooSmall() throws Exception {
-        Issue issue = soleIssue("""
-                data V = List<Int>
-                    invariant List.length(value) >= 1
-                """, List.of());
-        assertEquals("too_small", issue.code(), "Raoh states emptiness itself");
-        assertEquals(1, issue.meta().get("min"));
-        assertEquals(0, issue.meta().get("actual"));
-        assertFalse(issue.customMessage(), "the message is Raoh's, so a resolver may replace it");
-    }
-
-    @Test
-    void aListShorterThanItsMinimumIsTooSmall() throws Exception {
-        Issue issue = soleIssue("""
-                data V = List<Int>
-                    invariant List.length(value) >= 3
-                """, List.of(1L, 2L));
-        assertEquals("too_small", issue.code());
-        assertEquals(3, issue.meta().get("min"));
-        assertEquals(2, issue.meta().get("actual"));
-    }
-
-    @Test
-    void aListLongerThanItsMaximumIsTooBig() throws Exception {
-        Issue issue = soleIssue("""
-                data V = List<Int>
-                    invariant List.length(value) <= 1
-                """, List.of(1L, 2L));
-        assertEquals("too_big", issue.code());
-        assertEquals(1, issue.meta().get("max"));
-    }
-
-    private static Result<?> decoded(String data, Object input) throws Exception {
-        String module = """
-                module demo
-
-                %s
-                """.formatted(data);
-        ClassLoader loader = new BytesClassLoader(Compiler.compile(module), CompileInvariantConstraintTest.class.getClassLoader());
-        Decoder<Object, ?> dec = Codecs.decoder(loader, "demo.V");
-        return dec.decode(input, Path.ROOT);
-    }
-
-    private static Issue firstIssue(Result<?> r) {
-        assertTrue(r instanceof Err, "the value breaks the invariant, so decoding must fail");
-        return ((Err<?>) r).issues().asList().get(0);
-    }
-
-    /** A size declared after a uniqueness is chained on the decoder the uniqueness answers, which
-     * has to be one that has it. Each declares the uniqueness first, so a value that repeats is
-     * reported as a repeat and one that does not is held to the size. */
-    @Test
-    void aSizeDeclaredAfterAUniquenessIsStillChained() throws Exception {
-        String head = """
-                data V = List<Int>
-                    invariant List.allDistinctBy(x -> x, value)
-                """;
-        String atMost = head + "    invariant List.length(value) <= 2\n";
-        String atLeast = head + "    invariant List.length(value) >= 2\n";
-        String exactly = head + "    invariant List.length(value) == 2\n";
-        String nonEmpty = head + "    invariant List.length(value) >= 1\n";
-
-        assertTrue(decoded(atMost, List.of(1L, 2L)) instanceof Ok);
-        assertEquals("duplicate_element", firstIssue(decoded(atMost, List.of(1L, 1L, 1L))).code());
-        Issue tooBig = firstIssue(decoded(atMost, List.of(1L, 2L, 3L)));
-        assertEquals("too_big", tooBig.code());
-        assertEquals(2, tooBig.meta().get("max"));
-        assertEquals(3, tooBig.meta().get("actual"));
-
-        assertTrue(decoded(atLeast, List.of(1L, 2L)) instanceof Ok);
-        assertEquals("too_small", firstIssue(decoded(atLeast, List.of(1L))).code());
-
-        assertTrue(decoded(exactly, List.of(1L, 2L)) instanceof Ok);
-        assertEquals("invalid_size", firstIssue(decoded(exactly, List.of(1L, 2L, 3L))).code());
-
-        assertTrue(decoded(nonEmpty, List.of(1L)) instanceof Ok);
-        assertEquals("too_small", firstIssue(decoded(nonEmpty, List.of())).code());
-    }
-
     /** Every constraint of a list is one a decoder can be asked for after a uniqueness. A constraint
      * added to {@code OfList} has no clause here until one is written for it, so one that would
      * need the decoder the uniqueness no longer answers is found by loading it, not by a user. */
@@ -358,54 +331,111 @@ class CompileInvariantConstraintTest {
         }
     }
 
-    /** The two rules written as one clause are the same chain as two clauses. */
-    @Test
-    void aUniquenessAndASizeInOneClauseAreChainedInOrder() throws Exception {
-        String data = """
-                data V = List<Int>
-                    invariant List.allDistinctBy(x -> x, value) && List.length(value) <= 2
-                """;
-        assertTrue(decoded(data, List.of(1L, 2L)) instanceof Ok);
-        assertEquals("duplicate_element", firstIssue(decoded(data, List.of(1L, 1L, 1L))).code());
-        assertEquals("too_big", firstIssue(decoded(data, List.of(1L, 2L, 3L))).code());
+    private static List<List<Integer>> orders(int n) {
+        List<List<Integer>> out = new ArrayList<>();
+        extend(new ArrayList<>(), n, out);
+        return out;
     }
 
-    /** A size declared before the uniqueness is reported before it. */
-    @Test
-    void aSizeDeclaredBeforeAUniquenessIsReportedFirst() throws Exception {
-        String data = """
-                data V = List<Int>
-                    invariant List.length(value) <= 2
-                    invariant List.allDistinctBy(x -> x, value)
-                """;
-        assertEquals("too_big", firstIssue(decoded(data, List.of(1L, 1L, 1L))).code());
-        assertEquals("duplicate_element", firstIssue(decoded(data, List.of(1L, 1L))).code());
+    private static void extend(List<Integer> prefix, int n, List<List<Integer>> out) {
+        if (prefix.size() == n) {
+            out.add(List.copyOf(prefix));
+            return;
+        }
+        for (int i = 0; i < n; i++) {
+            if (!prefix.contains(i)) {
+                prefix.add(i);
+                extend(prefix, n, out);
+                prefix.removeLast();
+            }
+        }
     }
 
-    /** Two sizes after a uniqueness are both chained, on the decoder the first one leaves. */
-    @Test
-    void constraintsAfterAUniquenessKeepTheirOrder() throws Exception {
-        String data = """
-                data V = List<Int>
-                    invariant List.allDistinctBy(x -> x, value)
-                    invariant List.length(value) <= 3
-                    invariant List.length(value) >= 2
-                """;
-        assertTrue(decoded(data, List.of(1L, 2L)) instanceof Ok);
-        assertEquals("too_big", firstIssue(decoded(data, List.of(1L, 2L, 3L, 4L))).code());
-        assertEquals("too_small", firstIssue(decoded(data, List.of(1L))).code());
+    private static String declared(String head, List<String> clauses, List<Integer> order) {
+        StringBuilder data = new StringBuilder(head);
+        for (int i : order) {
+            data.append("    invariant ").append(clauses.get(i)).append('\n');
+        }
+        return data.toString();
     }
 
-    /** {@code allDistinctBy} with the identity projection says of the elements what Raoh's
-     * {@code unique()} says of them, and Raoh names the duplicates it found. */
+    /**
+     * The failure reported is the first clause, in the order the clauses are declared, that the value
+     * breaks, and it is the issue that clause gives on its own — whether the clause is stated as a
+     * Raoh constraint or is checked as itself, and whichever side of the other it is declared.
+     * {@code __construct} decides in the same order, so the boundary and an attempted construction
+     * name the same clause for the same value. Every order of the clauses is tried.
+     */
+    private static void theFirstClauseThatFailsInDeclarationOrderIsReported(
+            String head, List<String> clauses, List<Object> inputs) throws Exception {
+        List<Decoder<Object, ?>> alone = new ArrayList<>();
+        for (int i = 0; i < clauses.size(); i++) {
+            alone.add(decoderOf(declared(head, clauses, List.of(i))));
+        }
+        for (List<Integer> order : orders(clauses.size())) {
+            Decoder<Object, ?> together = decoderOf(declared(head, clauses, order));
+            for (Object input : inputs) {
+                Optional<Issue> expected = Optional.empty();
+                for (int i : order) {
+                    expected = issueOf(alone.get(i), input);
+                    if (expected.isPresent()) {
+                        break;
+                    }
+                }
+                assertEquals(expected, issueOf(together, input), order + " on " + input);
+            }
+        }
+    }
+
     @Test
-    void aRepeatedElementIsADuplicate() throws Exception {
-        Issue issue = soleIssue("""
-                data V = List<Int>
-                    invariant List.allDistinctBy(x -> x, value)
-                """, List.of(1L, 2L, 1L));
-        assertEquals("duplicate_element", issue.code());
-        assertEquals(List.of(1L), issue.meta().get("duplicates"));
+    void theFirstStringClauseToFailIsTheOneReported() throws Exception {
+        theFirstClauseThatFailsInDeclarationOrderIsReported("data V = String\n",
+                List.of("digitsOnly = List.all(c -> c <= 57, String.codePoints(value))",
+                        "String.length(value) >= 5",
+                        "String.length(value) <= 6",
+                        "String.matches(\"[0-9]+\", value)"),
+                List.of("", "1a2", "123", "123456", "1234567", "abcdefg", "12345"));
+    }
+
+    @Test
+    void theFirstListClauseToFailIsTheOneReported() throws Exception {
+        theFirstClauseThatFailsInDeclarationOrderIsReported("data V = List<Int>\n",
+                List.of("List.allDistinctBy(x -> x, value)",
+                        "List.length(value) <= 2",
+                        "List.length(value) >= 2",
+                        "positive = List.all(n -> n > 0, value)"),
+                List.of(List.of(), List.of(1L), List.of(1L, 2L), List.of(1L, 1L), List.of(1L, 1L, 1L),
+                        List.of(1L, 2L, 3L), List.of(0L, 1L), List.of(0L, 0L, 1L)));
+    }
+
+    @Test
+    void theFirstMapClauseToFailIsTheOneReported() throws Exception {
+        theFirstClauseThatFailsInDeclarationOrderIsReported("data V = Map<String, Int>\n",
+                List.of("notThree = Bool.not(Map.size(value) == 3)",
+                        "Map.size(value) <= 2",
+                        "Map.size(value) >= 1"),
+                List.of(Map.of(), Map.of("a", 1L), Map.of("a", 1L, "b", 2L),
+                        Map.of("a", 1L, "b", 2L, "c", 3L), Map.of("a", 1L, "b", 2L, "c", 3L, "d", 4L)));
+    }
+
+    /** The rules written as one clause are the same chain as the same rules written as clauses. */
+    @Test
+    void clausesWrittenAsOneAreChainedLikeClausesDeclaredSeparately() throws Exception {
+        List<String> clauses = List.of("List.allDistinctBy(x -> x, value)", "List.length(value) <= 2",
+                "List.length(value) >= 2");
+        List<Object> inputs = List.of(List.of(), List.of(1L), List.of(1L, 2L), List.of(1L, 1L),
+                List.of(1L, 1L, 1L), List.of(1L, 2L, 3L));
+        for (List<Integer> order : orders(clauses.size())) {
+            Decoder<Object, ?> separately = decoderOf(declared("data V = List<Int>\n", clauses, order));
+            StringBuilder one = new StringBuilder("data V = List<Int>\n    invariant ");
+            for (int i = 0; i < order.size(); i++) {
+                one.append(i == 0 ? "" : " && ").append(clauses.get(order.get(i)));
+            }
+            Decoder<Object, ?> joined = decoderOf(one.append('\n').toString());
+            for (Object input : inputs) {
+                assertEquals(issueOf(separately, input), issueOf(joined, input), order + " on " + input);
+            }
+        }
     }
 
     /** An emptiness check denied, and a size held unequal to nought, are the non-emptiness a size
@@ -476,208 +506,17 @@ class CompileInvariantConstraintTest {
                 "read as the constraint, which says which element repeats");
     }
 
-    /**
-     * {@code Unique} reports what Raoh's own reports for it. Where an element's Java equality is
-     * Souther's too — an {@code Int}, unlike a {@code Decimal} — {@code RaohListUnique} and Raoh's
-     * {@code ListDecoder.unique()} walk the same elements and must fail with the same issue, field
-     * for field: held here to being the one Raoh builds, the way {@link #aMapsSizeIsReportedAsRaohReportsIt}
-     * holds a map's size constraints to Raoh's. A {@code Decimal} is deliberately not used for this
-     * one — the two are meant to differ there (issue #2033), so parity is not what a Decimal case
-     * would be checking.
-     */
+    /** A key that does not decode leaves no map of the model's for a clause to be about, so it is
+     *  what is reported, and the size of the object it came in is not asked. */
     @Test
-    void aRepeatedElementIsReportedAsRaohReportsIt() throws Exception {
-        List<Object> input = List.of(1L, 2L, 1L);
-        ListDecoder<Object, Object> raoh = new ListDecoder<>((in, path) -> Result.ok(input));
-
+    void aKeyThatDoesNotDecodeIsReportedBeforeTheMapsSize() throws Exception {
         Issue issue = soleIssue("""
-                data V = List<Int>
-                    invariant List.allDistinctBy(x -> x, value)
-                """, input);
-        assertEquals(sole(raoh.unique().decode(input, Path.ROOT)), issue);
-    }
-
-    /** {@code Unique} is stated of the elements' Souther equality (spec §collections), and two
-     * spellings of one amount are one element by it — where Raoh's own {@code unique()} would tell
-     * them apart by {@code BigDecimal.equals}, which reads the scale (issue #2033). */
-    @Test
-    void aDecimalRepeatedAtAnotherScaleIsADuplicate() throws Exception {
-        Issue issue = soleIssue("""
-                data V = List<Decimal>
-                    invariant List.allDistinctBy(x -> x, value)
-                """, List.of(new BigDecimal("1.0"), new BigDecimal("1.00")));
-        assertEquals("duplicate_element", issue.code());
-        assertEquals(List.of(new BigDecimal("1.00")), issue.meta().get("duplicates"));
-        assertFalse(issue.customMessage(), "Raoh's own message, so a resolver may replace it");
-    }
-
-    /** The same equality reaches an amount nested in a container the list holds — the same defect
-     * the flat case has, one level down (issue #2033). */
-    @Test
-    void aDecimalRepeatedInsideANestedListIsADuplicate() throws Exception {
-        Issue issue = soleIssue("""
-                data V = List<List<Decimal>>
-                    invariant List.allDistinctBy(x -> x, value)
-                """, List.of(List.of(new BigDecimal("1.0")), List.of(new BigDecimal("1.00"))));
-        assertEquals("duplicate_element", issue.code());
-        assertEquals(List.of(List.of(new BigDecimal("1.00"))), issue.meta().get("duplicates"));
-    }
-
-    /** Each repeated element is named once, at the point its repetition is first found — not at its
-     * own first occurrence, and not again once it has been named. */
-    @Test
-    void aRepeatedElementIsNamedOnceAtItsFirstRepetition() throws Exception {
-        Issue issue = soleIssue("""
-                data V = List<Decimal>
-                    invariant List.allDistinctBy(x -> x, value)
-                """, List.of(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("2.00"),
-                new BigDecimal("1.00"), new BigDecimal("1.000")));
-        assertEquals("duplicate_element", issue.code());
-        assertEquals(List.of(new BigDecimal("2.00"), new BigDecimal("1.00")),
-                issue.meta().get("duplicates"));
-    }
-
-    /** A product has no message form, so the duplicates a uniqueness found could not be written in
-     * its issue: the clause keeps its own check, as a projected one does. */
-    @Test
-    void aUniquenessOfProductsKeepsItsOwnCheck() throws Exception {
-        Issue issue = soleIssue("""
-                data Line = { sku: String }
-                data V = List<Line>
-                    invariant distinctLines = List.allDistinctBy(x -> x, value)
-                """, List.of(Map.of("sku", "a"), Map.of("sku", "a")));
-        assertEquals("invariant_violation", issue.code());
-        assertEquals("distinctLines", issue.meta().get("clause"));
-    }
-
-    /** Nor does a map, which is no declaration: what has no form is read off the type, not off
-     * whether a name stands there. */
-    @Test
-    void aUniquenessOfMapsKeepsItsOwnCheck() throws Exception {
-        Issue issue = soleIssue("""
-                data V = List<Map<String, Int>>
-                    invariant distinctTallies = List.allDistinctBy(x -> x, value)
-                """, List.of(Map.of("a", 1L), Map.of("a", 1L)));
-        assertEquals("invariant_violation", issue.code());
-        assertEquals("distinctTallies", issue.meta().get("clause"));
-    }
-
-    /** A newtype over a product wraps something with no message form, and has none itself. */
-    @Test
-    void aUniquenessOfNewtypesOverAProductKeepsItsOwnCheck() throws Exception {
-        Issue issue = soleIssue("""
-                data Line = { sku: String }
-                data Entry = Line
-                data V = List<Entry>
-                    invariant distinctEntries = List.allDistinctBy(x -> x, value)
-                """, List.of(Map.of("sku", "a"), Map.of("sku", "a")));
-        assertEquals("invariant_violation", issue.code());
-        assertEquals("distinctEntries", issue.meta().get("clause"));
-    }
-
-    /** A newtype is reported as the value it wraps, which is how the boundary writes it — the issue
-     * holds the string, not the value class the domain holds it in, and the message says so. */
-    @Test
-    void aRepeatedNewtypeIsReportedAsTheValueItWraps() throws Exception {
-        Issue issue = soleIssue("""
-                data Sku = String
-                data V = List<Sku>
-                    invariant List.allDistinctBy(x -> x, value)
-                """, List.of("A123", "B456", "A123"));
-        assertEquals("duplicate_element", issue.code());
-        assertEquals(List.of("A123"), issue.meta().get("duplicates"));
-        assertEquals("must not contain duplicates: [A123]", issue.message());
-    }
-
-    /** Through every name it wears, and inside every list it stands in: a newtype over a newtype
-     * over an {@code Int}, in a list of lists, is reported as the numbers. */
-    @Test
-    void aNewtypeIsUnwrappedThroughEveryNameAndEveryList() throws Exception {
-        Issue issue = soleIssue("""
-                data Code = Int
-                data Sku = Code
-                data V = List<List<Sku>>
-                    invariant List.allDistinctBy(x -> x, value)
-                """, List.of(List.of(1L, 2L), List.of(3L), List.of(1L, 2L)));
-        assertEquals("duplicate_element", issue.code());
-        assertEquals(List.of(List.of(1L, 2L)), issue.meta().get("duplicates"));
-    }
-
-    /** A newtype that holds itself through a list has values of no bounded depth, which no message
-     * form is: the clause keeps its own check. */
-    @Test
-    void aUniquenessOfANewtypeThatHoldsItselfKeepsItsOwnCheck() throws Exception {
-        Issue issue = soleIssue("""
-                data Tree = List<Tree>
-                data V = List<Tree>
-                    invariant distinctTrees = List.allDistinctBy(x -> x, value)
-                """, List.of(List.of(), List.of()));
-        assertEquals("invariant_violation", issue.code());
-        assertEquals("distinctTrees", issue.meta().get("clause"));
-    }
-
-    /** A newtype over a list is reported as that list. */
-    @Test
-    void aNewtypeOverAListIsReportedAsTheList() throws Exception {
-        Issue issue = soleIssue("""
-                data Skus = List<String>
-                data V = List<Skus>
-                    invariant List.allDistinctBy(x -> x, value)
-                """, List.of(List.of("a"), List.of("a")));
-        assertEquals("duplicate_element", issue.code());
-        assertEquals(List.of(List.of("a")), issue.meta().get("duplicates"));
-    }
-
-    /** A projection that is not the identity says it of something else, and Raoh has no constraint for
-     * that: the clause keeps its own check, and names itself in the metadata instead. */
-    @Test
-    void aProjectedUniquenessKeepsItsOwnCheck() throws Exception {
-        Issue issue = soleIssue("""
-                data Line = { product: String, qty: Int }
-                data V = List<Line>
-                    invariant uniqueProducts = List.allDistinctBy(.product, value)
-                """, List.of(Map.of("product", "a", "qty", 1L), Map.of("product", "a", "qty", 2L)));
-        assertEquals("invariant_violation", issue.code());
-        assertEquals("V", issue.meta().get("type"));
-        assertEquals("uniqueProducts", issue.meta().get("clause"));
-        assertFalse(issue.customMessage(), "an invariant's text must stay replaceable");
-    }
-
-    @Test
-    void aMapWithTooFewEntriesIsTooSmall() throws Exception {
-        Issue issue = soleIssue("""
-                data V = Map<String, Int>
+                data K = String
+                    invariant String.length(value) >= 2
+                data V = Map<K, Int>
                     invariant Map.size(value) >= 2
                 """, Map.of("a", 1L));
-        assertEquals("too_small", issue.code());
-        assertEquals(2, issue.meta().get("min"));
-    }
-
-    // --- what a clause's name adds ---
-
-    /** A clause no constraint states carries its name, so a boundary failure says which rule broke
-     * rather than only that the value was rejected. */
-    @Test
-    void aNamedClauseNamesItselfInTheMetadata() throws Exception {
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant digitsOnly = List.all(c -> c <= 57, String.codePoints(value))
-                """, "1a2");
-        assertEquals("invariant_violation", issue.code());
-        assertEquals("V", issue.meta().get("type"));
-        assertEquals("digitsOnly", issue.meta().get("clause"));
-    }
-
-    /** A clause declared without a name has nothing to be told apart by, and says so by carrying no
-     * clause in the metadata — the type still travels. */
-    @Test
-    void anUnnamedClauseCarriesOnlyTheType() throws Exception {
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant List.all(c -> c <= 57, String.codePoints(value))
-                """, "1a2");
-        assertEquals("V", issue.meta().get("type"));
-        assertNull(issue.meta().get("clause"), "there is no name to report");
+        assertEquals("too_short", issue.code(), "the key's own rule, not the map's size");
     }
 
     /**
@@ -704,136 +543,6 @@ class CompileInvariantConstraintTest {
         assertEquals("Id", customer.meta().get("type"));
         assertTrue(sales.message().contains("sales.Id"),
                 "and the default message names the type as Souther identifies it: " + sales.message());
-    }
-
-    private static Issue sole(Result<?> r) {
-        assertTrue(r instanceof Err, "the value breaks the invariant, so decoding must fail");
-        List<Issue> issues = ((Err<?>) r).issues().asList();
-        assertEquals(1, issues.size(), "one broken rule, one issue");
-        return issues.get(0);
-    }
-
-    /**
-     * The order a failure is reported in is the order the clauses are declared in, which is the order
-     * {@code __construct} decides in too — so the boundary and an attempted construction name the same
-     * clause for the same value.
-     */
-    @Test
-    void anEarlierClauseIsReportedThoughALaterOneMapsOntoAConstraint() throws Exception {
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant digitsOnly = List.all(c -> c <= 57, String.codePoints(value))
-                    invariant long = String.length(value) >= 5
-                """, "1a2");
-        assertEquals("invariant_violation", issue.code(), "the first failing clause is the refined one");
-        assertEquals("digitsOnly", issue.meta().get("clause"));
-    }
-
-    /** A clause stated as a constraint keeps its code wherever it is declared: one declared after a
-     *  clause checked as itself is reported as the constraint when it is the one that breaks. */
-    @Test
-    void aMappedClauseDeclaredAfterAnUnmappedOneKeepsItsCode() throws Exception {
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant digitsOnly = List.all(c -> c <= 57, String.codePoints(value))
-                    invariant long = String.length(value) >= 5
-                """, "123");
-        assertEquals("too_short", issue.code());
-        assertEquals(5, issue.meta().get("min"));
-    }
-
-    /** The same for a list, whose decoder keeps its type through a clause checked as itself. */
-    @Test
-    void aListConstraintAfterAnUnmappedClauseKeepsItsCode() throws Exception {
-        Issue issue = soleIssue("""
-                data V = List<Int>
-                    invariant positive = List.all(n -> n > 0, value)
-                    invariant few = List.length(value) <= 2
-                """, List.of(1L, 2L, 3L));
-        assertEquals("too_big", issue.code());
-        assertEquals(2, issue.meta().get("max"));
-    }
-
-    // --- a map's clauses are about the map the model declares ---
-
-    /** A map's clauses run in the order they are declared on the one map: a value breaking both is
-     *  reported as the first, though the second is a constraint and the first is not. */
-    @Test
-    void aMapsEarlierClauseIsReportedThoughALaterOneIsAConstraint() throws Exception {
-        Issue issue = soleIssue("""
-                data V = Map<String, Int>
-                    invariant notThree = Bool.not(Map.size(value) == 3)
-                    invariant few = Map.size(value) <= 2
-                """, Map.of("a", 1L, "b", 2L, "c", 3L));
-        assertEquals("invariant_violation", issue.code());
-        assertEquals("notThree", issue.meta().get("clause"));
-    }
-
-    @Test
-    void aMapsConstraintAfterAnUnmappedClauseKeepsItsCode() throws Exception {
-        Issue issue = soleIssue("""
-                data V = Map<String, Int>
-                    invariant notThree = Bool.not(Map.size(value) == 3)
-                    invariant few = Map.size(value) <= 2
-                """, Map.of("a", 1L, "b", 2L, "c", 3L, "d", 4L));
-        assertEquals("too_big", issue.code());
-        assertEquals(2, issue.meta().get("max"));
-        assertEquals(4, issue.meta().get("actual"));
-    }
-
-    /** A key that does not decode leaves no map of the model's for a clause to be about, so it is
-     *  what is reported, and the size of the object it came in is not asked. */
-    @Test
-    void aKeyThatDoesNotDecodeIsReportedBeforeTheMapsSize() throws Exception {
-        Issue issue = soleIssue("""
-                data K = String
-                    invariant String.length(value) >= 2
-                data V = Map<K, Int>
-                    invariant Map.size(value) >= 2
-                """, Map.of("a", 1L));
-        assertEquals("too_short", issue.code(), "the key's own rule, not the map's size");
-    }
-
-    /**
-     * A map's size constraint reports what Raoh's own reports for it. The generated decoder checks
-     * the map with its keys decoded, which Raoh's record decoder does not see, so the issue is built
-     * by the decoder — and held here to being the one Raoh builds, field for field.
-     */
-    @Test
-    void aMapsSizeIsReportedAsRaohReportsIt() throws Exception {
-        Map<String, Object> input = Map.of("a", 1L);
-        RecordDecoder<Object, Object> raoh = new RecordDecoder<>(
-                (in, path) -> Result.ok(Map.of("a", (Object) 1L)));
-
-        Issue atLeast = soleIssue("""
-                data V = Map<String, Int>
-                    invariant Map.size(value) >= 2
-                """, input);
-        assertEquals(sole(raoh.minSize(2).decode(input, Path.ROOT)), atLeast);
-
-        Issue atMost = soleIssue("""
-                data V = Map<String, Int>
-                    invariant Map.size(value) < 1
-                """, input);
-        assertEquals(sole(raoh.maxSize(0).decode(input, Path.ROOT)), atMost);
-
-        Map<String, Object> none = Map.of();
-        RecordDecoder<Object, Object> empty = new RecordDecoder<>((in, path) -> Result.ok(none));
-        Issue nonEmpty = soleIssue("""
-                data V = Map<String, Int>
-                    invariant Map.size(value) >= 1
-                """, none);
-        assertEquals(sole(empty.nonempty().decode(none, Path.ROOT)), nonEmpty);
-    }
-
-    @Test
-    void aMappedClauseDeclaredFirstKeepsItsCode() throws Exception {
-        Issue issue = soleIssue("""
-                data V = String
-                    invariant long = String.length(value) >= 5
-                    invariant digitsOnly = List.all(c -> c <= 57, String.codePoints(value))
-                """, "1a2");
-        assertEquals("too_short", issue.code());
     }
 
     /** A product data's invariant has no single value for a constraint to be about, so it is checked
@@ -870,9 +579,7 @@ class CompileInvariantConstraintTest {
                 data V = String
                     invariant String.length(value) <= 2
                 """;
-        ClassLoader loader = new BytesClassLoader(Compiler.compile("module demo\n\n" + data),
-                getClass().getClassLoader());
-        Decoder<Object, ?> dec = Codecs.decoder(loader, "demo.V");
+        Decoder<Object, ?> dec = decoderOf(data);
 
         // 𠮷田: two characters, four UTF-16 units. The model admits it, so the decoder must too.
         assertTrue(dec.decode("𠮷田", Path.ROOT) instanceof Ok,

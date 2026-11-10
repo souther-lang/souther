@@ -101,47 +101,46 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
                 ModulePath.of(path)));
     }
 
-    /** A behavior `lib.b` calls that takes another type now: its classes hand it what it took. */
-    @Test
-    void aBehaviorThatTakesAnotherTypeNowIsSaid() {
-        Map<String, ClassFileImage> path = builtAgainst(C, B_CALLS_TWICE, """
-                module lib.c exposing ( twice, thrice )
-                behavior twice : (s: String) -> Int
-                let twice (s) = String.length(s)
-                behavior thrice : (n: Int) -> Int
-                let thrice (n) = n * 3
-                """);
-
-        assertEquals("takes", moved(said(USES_ONLY_INC, path), "lib.b", "twice").fact());
+    /** What `lib.c` is now, and the fact about `twice` that moved under what `lib.b` calls. */
+    private record Moved(String why, String after, String fact) {
     }
 
-    /** A behavior `lib.b` calls that answers another type now: its classes take the answer as what
-     *  it was. */
+    /**
+     * A behavior `lib.b` calls moves, and the fact of it that moved is the one said: it takes
+     * another type now, so its classes hand it what it took; it answers another type now, so they
+     * take the answer as what it was; its module keeps it to itself now, so its classes are not
+     * public.
+     */
     @Test
-    void aBehaviorThatAnswersAnotherTypeNowIsSaid() {
-        Map<String, ClassFileImage> path = builtAgainst(C, B_CALLS_TWICE, """
-                module lib.c exposing ( twice, thrice )
-                behavior twice : (n: Int) -> String
-                let twice (n) = "two"
-                behavior thrice : (n: Int) -> Int
-                let thrice (n) = n * 3
-                """);
+    void aBehaviorLibBCallsThatMovedIsSaidByWhatMoved() {
+        List<Moved> cases = List.of(
+                new Moved("it takes another type", """
+                        module lib.c exposing ( twice, thrice )
+                        behavior twice : (s: String) -> Int
+                        let twice (s) = String.length(s)
+                        behavior thrice : (n: Int) -> Int
+                        let thrice (n) = n * 3
+                        """, "takes"),
+                new Moved("it answers another type", """
+                        module lib.c exposing ( twice, thrice )
+                        behavior twice : (n: Int) -> String
+                        let twice (n) = "two"
+                        behavior thrice : (n: Int) -> Int
+                        let thrice (n) = n * 3
+                        """, "answers"),
+                new Moved("its module keeps it to itself", """
+                        module lib.c exposing ( thrice )
+                        behavior twice : (n: Int) -> Int
+                        let twice (n) = n + n
+                        behavior thrice : (n: Int) -> Int
+                        let thrice (n) = n * 3
+                        """, "exposed"));
+        for (Moved each : cases) {
+            Map<String, ClassFileImage> path = builtAgainst(C, B_CALLS_TWICE, each.after());
 
-        assertEquals("answers", moved(said(USES_ONLY_INC, path), "lib.b", "twice").fact());
-    }
-
-    /** A behavior `lib.b` calls that its module keeps to itself now: its classes are not public. */
-    @Test
-    void aBehaviorNoLongerExposedIsSaid() {
-        Map<String, ClassFileImage> path = builtAgainst(C, B_CALLS_TWICE, """
-                module lib.c exposing ( thrice )
-                behavior twice : (n: Int) -> Int
-                let twice (n) = n + n
-                behavior thrice : (n: Int) -> Int
-                let thrice (n) = n * 3
-                """);
-
-        assertEquals("exposed", moved(said(USES_ONLY_INC, path), "lib.b", "twice").fact());
+            assertEquals(each.fact(), moved(said(USES_ONLY_INC, path), "lib.b", "twice").fact(),
+                    each.why());
+        }
     }
 
     /**

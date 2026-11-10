@@ -9,7 +9,6 @@ import souther.compiler.numeric.RulesAsWritten.Written;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -17,10 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static souther.compiler.numeric.RulesAsWritten.OVER_THREE;
-import static souther.compiler.numeric.RulesAsWritten.admits;
-import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
-import static souther.compiler.numeric.RulesAsWritten.relationsIn;
-import static souther.compiler.numeric.RulesAsWritten.everyOrder;
 
 /**
  * A rule over several positions narrows each of them, and never past what the rules admit.
@@ -37,14 +32,10 @@ import static souther.compiler.numeric.RulesAsWritten.everyOrder;
  * <p>Soundness is the whole of the work here, and it is the one thing argument is worst at: a bound
  * derived too tight refuses rows a model admits and nothing downstream is in a position to notice.
  * So it is checked against the points themselves, enumerated over a bounded range rather than
- * sampled, and the claim asserted is the one that matters — no point the rules admit is ever left
- * outside what this derives.
- *
- * <p>Over the systems of {@link RulesAsWritten#OVER_THREE}, each written for a step the reduction
- * takes: the rest of a rule read without the position being bounded, ends that meet at one value,
- * a cycle of differences summing to nought, a hole sided by what is known and one that is not, and
- * two rules or two premises bounding one thing, which a reader letting the later one win answers
- * differently in some order. Each is given in every order its rules have.
+ * sampled — for this reader and the others at once, with the claim that the same answers come in
+ * every order the rules have, in {@code EveryReaderOfRulesAnswersByTheRulesAloneTest}. What is
+ * asked here is what only the reduction answers for: the cases its steps are written for, and that
+ * a narrower box never makes it say less.
  */
 class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
 
@@ -257,106 +248,6 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         assertInstanceOf(Reduction.NothingIsLeft.class,
                 AffineReduction.over(reading(List.of(rule), between("a", 10, 20, "b", 10, 20)),
                         atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled()));
-    }
-
-    // --- against the points ------------------------------------------------------------------------
-
-    /**
-     * No point the rules admit is ever left outside what this derives. The direction asserted is the
-     * only one that matters: a bound too tight refuses a row a model admits, and a bound too loose
-     * merely says less than it could.
-     */
-    @Test
-    void noPointTheRulesAdmitIsEverRefused() {
-        assertEquals(Set.of(Rel.values()), relationsIn(OVER_THREE),
-                "a relation no system is written with is one no reading of it is asked about");
-        int narrowed = 0;
-        int emptied = 0;
-        for (List<Written> written : OVER_THREE) {
-            List<AffineConstraint<String>> stated = read(written);
-            Box<String> from = between("a", LOW, HIGH, "b", LOW, HIGH, "c", LOW, HIGH);
-            List<Map<String, Integer>> admitted = pointsSatisfying(written, POSITIONS, LOW, HIGH);
-
-            FormReach<String> reading = reading(stated, from);
-            if (reading == null) {
-                assertTrue(admitted.isEmpty(),
-                        () -> "the differences hold nothing, but " + written + " admits " + admitted);
-                continue;
-            }
-            Reduction<String> found = AffineReduction.over(reading, atom -> Granularity.DISCRETE,
-                    CanonicalOrder.asTheyAreSpelled());
-            if (found instanceof Reduction.NothingIsLeft) {
-                assertTrue(admitted.isEmpty(),
-                        () -> "said nothing is left, but " + written + " admits " + admitted);
-                emptied++;
-                continue;
-            }
-            Reduction.Tightened<String> tightened = (Reduction.Tightened<String>) found;
-            Box<String> after = from.meeting(tightened.atLeast(), tightened.atMost());
-            if (!tightened.atLeast().isEmpty() || !tightened.atMost().isEmpty()) {
-                narrowed++;
-            }
-            // A box holds every admitted point exactly when, at each position, it holds the least
-            // and the greatest value an admitted point has there — so those two points are the
-            // ones asked about.
-            for (String position : POSITIONS) {
-                Map<String, Integer> lowest = null;
-                Map<String, Integer> highest = null;
-                for (Map<String, Integer> point : admitted) {
-                    if (lowest == null || point.get(position) < lowest.get(position)) {
-                        lowest = point;
-                    }
-                    if (highest == null || point.get(position) > highest.get(position)) {
-                        highest = point;
-                    }
-                }
-                if (lowest == null) {
-                    continue;
-                }
-                for (Map<String, Integer> point : List.of(lowest, highest)) {
-                    ExactRatio at = num(point.get(position));
-                    assertTrue(admits(after.leastOf(position), at, false)
-                                    && admits(after.mostOf(position), at, true),
-                            () -> "refused a point the rules admit: " + point + " under " + written
-                                    + " left " + position + " in [" + after.leastOf(position)
-                                    + ", " + after.mostOf(position) + "]");
-                }
-            }
-            // Reductive: nothing came back wider than it went in.
-            for (String position : POSITIONS) {
-                assertEquals(after.leastOf(position),
-                        ExactCut.tighterLower(from.leastOf(position), after.leastOf(position)));
-                assertEquals(after.mostOf(position),
-                        ExactCut.tighterUpper(from.mostOf(position), after.mostOf(position)));
-            }
-        }
-        assertTrue(narrowed > 0 && emptied > 0, "narrowed " + narrowed + " and emptied " + emptied
-                + " of " + OVER_THREE.size() + ", so one of the two was never checked");
-    }
-
-    /** And the same answers whatever order the rules arrived in, which is every order they have. */
-    @Test
-    void theOrderTheRulesArrivedInIsNotPartOfTheAnswer() {
-        for (List<Written> written : OVER_THREE) {
-            List<AffineConstraint<String>> stated = read(written);
-            Box<String> from = between("a", LOW, HIGH, "b", LOW, HIGH, "c", LOW, HIGH);
-            FormReach<String> asRead = reading(stated, from);
-            if (asRead == null) {
-                continue;   // the differences hold nothing, which the closure answers before a round
-            }
-            Reduction<String> asWritten = AffineReduction.over(asRead,
-                    atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled());
-            for (List<AffineConstraint<String>> shuffled : everyOrder(stated)) {
-                FormReach<String> reread = reading(shuffled, from);
-                assertTrue(reread != null,
-                        () -> "the differences hold nothing only in another order: " + shuffled);
-                Reduction<String> reordered =
-                        AffineReduction.over(reread, atom -> Granularity.DISCRETE,
-                                CanonicalOrder.asTheyAreSpelled());
-                assertEquals(asWritten, reordered,
-                        () -> "the reduction moved when the rules were reordered: " + shuffled);
-            }
-        }
     }
 
     /** Monotone: a narrower box never yields a wider answer. */

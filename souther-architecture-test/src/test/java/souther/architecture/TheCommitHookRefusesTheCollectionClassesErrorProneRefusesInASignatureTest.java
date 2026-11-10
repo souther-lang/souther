@@ -3,15 +3,12 @@ package souther.architecture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Files;
+import souther.architecture.TheCommitHook.Filed;
+
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What the pre-commit hook says about {@code ArrayList}, {@code LinkedList}, {@code HashSet},
@@ -19,38 +16,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code TreeMap}, held against what Error Prone's NonApiType says of the same source.
  *
  * <p>The hook is the same question asked of a parser, and what it must never do is refuse what CI
- * accepts, because that stops a commit nothing is wrong with. So each case is a source, and the
- * count of what Error Prone refuses in it is the count Error Prone gives when it is run over it
- * ({@link TheCommitHook}), not a count read off its documentation or its source. Both counts are
- * written down per case, and both are asserted, so a Checkstyle or an Error Prone that comes to
- * answer differently fails here and not in somebody's commit.
+ * accepts, because that stops a commit nothing is wrong with. So each case is a source, and what
+ * Error Prone refuses in it is what it gives when it is run over it ({@link TheCommitHook}), not a
+ * count read off its documentation or its source.
  *
- * <p>The hook may refuse less than Error Prone, and where it does the case says so with a count of
- * its own: a type variable's bound is something Error Prone reads and a parser cannot. It may not
- * refuse more, and every case is checked for that as well as for its own counts.
+ * <p>The hook may refuse less than Error Prone, and where it does the case says so: a type
+ * variable's bound is something Error Prone reads and a parser cannot. It may not refuse more, and
+ * every case is checked for that as well as for what it says.
  */
 class TheCommitHookRefusesTheCollectionClassesErrorProneRefusesInASignatureTest {
 
-    /**
-     * A source and how many times each of the two refuses something in it. {@code source} is a
-     * compilation unit's types; {@code Fixture} in it names the class the test files it under.
-     */
-    private record Case(String name, String source, int errorProne, int hook) {
+    /** A case over the members of a class; {@code Fixture} in a source names the class the test
+     *  files it under. */
+    private static Filed refusedByBoth(String name, String members) {
+        return Filed.refusedByBoth(name, inClass(members));
     }
 
-    private static Case refusedByBoth(String name, String members) {
-        return new Case(name, inClass(members), 1, 1);
-    }
-
-    private static Case acceptedByBoth(String name, String members) {
-        return new Case(name, inClass(members), 0, 0);
+    private static Filed acceptedByBoth(String name, String members) {
+        return Filed.acceptedByBoth(name, inClass(members));
     }
 
     private static String inClass(String members) {
         return "final class Fixture {\n    " + members + "\n}";
     }
 
-    private static final List<Case> CASES = List.of(
+    private static final List<Filed> CASES = List.of(
             // Where a name is written.
             refusedByBoth("a result named for its class",
                     "ArrayList<String> f() { return null; }"),
@@ -84,18 +74,17 @@ class TheCommitHookRefusesTheCollectionClassesErrorProneRefusesInASignatureTest 
                     "void f(@Deprecated ArrayList<String> m) { }"),
             refusedByBoth("a method of an enum",
                     "enum E { A; ArrayList<String> f() { return null; } }"),
-            new Case("a method of the body of an enum constant and the one it implements",
-                    inClass("enum E { A { ArrayList<String> g() { return null; } }; abstract ArrayList<String> g(); }"),
-                    2, 2),
+            refusedByBoth("a method of the body of an enum constant and the one it implements",
+                    "enum E { A { ArrayList<String> g() { return null; } }; abstract ArrayList<String> g(); }"),
             refusedByBoth("a method of an anonymous class",
                     "Object f() { return new Object() { ArrayList<String> g() { return null; } }; }"),
-            new Case("two in one signature",
-                    inClass("HashSet<String> f(HashMap<String, String> m) { return null; }"), 2, 2),
-            new Case("an override and what it overrides",
+            refusedByBoth("two in one signature",
+                    "HashSet<String> f(HashMap<String, String> m) { return null; }"),
+            Filed.refusedByBoth("an override and what it overrides",
                     "interface Reads { LinkedList<String> all(); }\n"
                             + "final class Fixture implements Reads {\n"
                             + "    @Override public LinkedList<String> all() { return null; }\n"
-                            + "}", 2, 2),
+                            + "}"),
 
             // What is not a parameter or a result.
             acceptedByBoth("a field",
@@ -130,8 +119,8 @@ class TheCommitHookRefusesTheCollectionClassesErrorProneRefusesInASignatureTest 
                     "HashMap[] f() { return null; }"),
             acceptedByBoth("the lower bound of a wildcard",
                     "void f(List<? super HashSet<String>> sink) { }"),
-            new Case("a type variable bounded by one",
-                    inClass("<T extends ArrayList<String>> T f() { return null; }"), 1, 0),
+            Filed.hookStandsAside("a type variable bounded by one",
+                    inClass("<T extends ArrayList<String>> T f() { return null; }")),
 
             // What a record owns.
             acceptedByBoth("a method of a record",
@@ -162,10 +151,10 @@ class TheCommitHookRefusesTheCollectionClassesErrorProneRefusesInASignatureTest 
                     "@SuppressWarnings(\"all\") ArrayList<String> f() { return null; }"),
             acceptedByBoth("a method of a class that suppresses it",
                     "@SuppressWarnings(\"NonApiType\") static class Quiet { ArrayList<String> f() { return null; } }"),
-            new Case("a class that suppresses it",
+            Filed.acceptedByBoth("a class that suppresses it",
                     "@SuppressWarnings(\"NonApiType\")\nfinal class Fixture {\n"
                             + "    ArrayList<String> f() { return null; }\n"
-                            + "    void g(HashMap<String, String> m) { }\n}", 0, 0),
+                            + "    void g(HashMap<String, String> m) { }\n}"),
             refusedByBoth("a method that suppresses something else",
                     "@SuppressWarnings(\"unused\") ArrayList<String> f() { return null; }"),
             refusedByBoth("the method beside one that suppresses it",
@@ -173,44 +162,13 @@ class TheCommitHookRefusesTheCollectionClassesErrorProneRefusesInASignatureTest 
                             + "    ArrayList<String> g() { return null; }"));
 
     @Test
-    void whatTheHookRefusesIsNeverMoreThanErrorProneRefuses() {
-        for (Case each : CASES) {
-            assertTrue(each.hook() <= each.errorProne(), each.name()
-                    + ": a hook that refuses more than CI stops a commit CI accepts");
-        }
-    }
+    void theHookStandsToErrorProneAsEachCaseSays(@TempDir Path dir) throws Exception {
+        assertEquals(List.of(), TheCommitHook.disagreements(dir, "NonApiType", "NonApiType",
+                CASES, (i, source) -> """
+                        import java.util.*;
+                        import java.util.function.*;
 
-    @Test
-    void eachCaseIsRefusedAsManyTimesAsErrorProneAndTheHookEachSay(@TempDir Path dir)
-            throws Exception {
-        Map<Path, Case> filed = new LinkedHashMap<>();
-        for (int i = 0; i < CASES.size(); i++) {
-            Case each = CASES.get(i);
-            Path file = dir.resolve("Fixture" + i + ".java");
-            Files.writeString(file, """
-                    import java.util.*;
-                    import java.util.function.*;
-
-                    %s
-                    """.formatted(each.source().replace("Fixture", "Fixture" + i)));
-            filed.put(file, each);
-        }
-        List<Path> files = List.copyOf(filed.keySet());
-
-        Map<Path, Integer> byErrorProne = TheCommitHook.errorProneRefusals("NonApiType", dir, files);
-        Map<Path, Integer> byTheHook = TheCommitHook.refusalsBy("NonApiType", files);
-
-        List<String> disagreements = new ArrayList<>();
-        for (Map.Entry<Path, Case> each : filed.entrySet()) {
-            Case expected = each.getValue();
-            int errorProne = byErrorProne.getOrDefault(each.getKey(), 0);
-            int hook = byTheHook.getOrDefault(each.getKey(), 0);
-            if (errorProne != expected.errorProne() || hook != expected.hook()) {
-                disagreements.add(expected.name() + ": Error Prone refused " + errorProne
-                        + " (written " + expected.errorProne() + "), the hook refused " + hook
-                        + " (written " + expected.hook() + ")");
-            }
-        }
-        assertEquals(List.of(), disagreements);
+                        %s
+                        """.formatted(source.replace("Fixture", "Fixture" + i))));
     }
 }

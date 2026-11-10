@@ -8,6 +8,7 @@ import souther.compiler.types.TypeKey;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -65,54 +66,43 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
             data Held = { b: Basket }
             """;
 
-    @Test
-    void aDeclarationWhoseModuleCouldNotBeReadIsUnavailableToBoth() {
-        assertEquals("Unavailable", published(PRICES_THAT_CANNOT_BE_READ, AMOUNT));
-        assertEquals("Unavailable", expanded(PRICES_THAT_CANNOT_BE_READ, AMOUNT));
+    /** A source, the declaration asked after, and the one arm both boundaries say it is in. */
+    private record Asked(String why, String prices, TypeKey named, String arm) {
     }
 
     /**
-     * And one whose module's imports form a ring, which is the case that separates the question.
+     * Both boundaries say the same arm, by the same question: whether a module writes the
+     * declaration at all, asked of what the modules were parsed as.
      *
-     * <p>Every answer from resolution down is cut for a module in a ring, so a boundary that asked
-     * one of them would say the declarations it writes are declarations nobody wrote — and a value
-     * of one would be held to no rule, with nothing saying so.
+     * <p>A module the compiler stops at before working out what its declarations say, and one
+     * whose imports form a ring — the case that separates the question: every answer from
+     * resolution down is cut for a module in a ring, so a boundary that asked one of them would say
+     * the declarations it writes are declarations nobody wrote, and a value of one would be held to
+     * no rule with nothing saying so. And one whose module is refused before its {@code exposing}
+     * line is read: a ring is a judgement about what a module imports and this about the module's
+     * own name, cut at opposite ends of what happens to a source, so an answer to whether a
+     * declaration was written is above every one of them only where it is read off the parse. A
+     * name no module writes is not declared to either.
      */
     @Test
-    void andOneWhoseImportsFormARingIsUnavailableToBothAndNotUndeclared() {
-        assertEquals("Unavailable", published(PRICES_IN_A_RING, AMOUNT));
-        assertEquals("Unavailable", expanded(PRICES_IN_A_RING, AMOUNT));
-    }
+    void bothBoundariesSayWhichOfUnavailableAndNotDeclaredADeclarationIs() {
+        List<Asked> cases = List.of(
+                new Asked("a module that could not be read", PRICES_THAT_CANNOT_BE_READ, AMOUNT,
+                        "Unavailable"),
+                new Asked("a module whose imports form a ring", PRICES_IN_A_RING, AMOUNT,
+                        "Unavailable"),
+                new Asked("a module refused by its name", """
+                        module souther.mine exposing ( Amount )
 
-    /**
-     * And one whose module is refused before its {@code exposing} line is read.
-     *
-     * <p>The other end of the same question. A ring is a judgement about what a module imports and
-     * this is a judgement about the module's own name, and they are cut at opposite ends of what
-     * happens to a source — so an answer to whether a declaration was written is above every one of
-     * them only where it is read off the parse. Written here because every judgement between the
-     * two is one more place an existence answer could have been taken from.
-     */
-    @Test
-    void andOneWhoseModuleIsRefusedByItsNameIsUnavailableToBoth() {
-        String prices = """
-                module souther.mine exposing ( Amount )
-
-                data Amount = Int
-                    invariant value >= 0
-                """;
-        TypeKey mine = new TypeKey("souther.mine", "Amount");
-
-        assertEquals("Unavailable", published(prices, mine));
-        assertEquals("Unavailable", expanded(prices, mine));
-    }
-
-    @Test
-    void andANameNoModuleWritesIsNotDeclaredToBoth() {
-        TypeKey nobody = new TypeKey("shop.prices", "Nobody");
-
-        assertEquals("NotDeclared", published(PRICES_THAT_CANNOT_BE_READ, nobody));
-        assertEquals("NotDeclared", expanded(PRICES_THAT_CANNOT_BE_READ, nobody));
+                        data Amount = Int
+                            invariant value >= 0
+                        """, new TypeKey("souther.mine", "Amount"), "Unavailable"),
+                new Asked("a name no module writes", PRICES_THAT_CANNOT_BE_READ,
+                        new TypeKey("shop.prices", "Nobody"), "NotDeclared"));
+        for (Asked each : cases) {
+            assertEquals(each.arm(), published(each.prices(), each.named()), each.why());
+            assertEquals(each.arm(), expanded(each.prices(), each.named()), each.why());
+        }
     }
 
     /**

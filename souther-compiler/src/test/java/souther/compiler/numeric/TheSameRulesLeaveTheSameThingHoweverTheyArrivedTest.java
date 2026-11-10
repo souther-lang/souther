@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.NumericDomain.Bounds;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,9 +12,6 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static souther.compiler.numeric.RulesAsWritten.OVER_THREE;
-import static souther.compiler.numeric.RulesAsWritten.everyOrder;
-import static souther.compiler.numeric.RulesAsWritten.twice;
 
 /**
  * What a domain says is a function of the rules it was given, and of nothing else.
@@ -32,7 +28,10 @@ import static souther.compiler.numeric.RulesAsWritten.twice;
  * cause was that a disequality was turned into a bound using whatever happened to be known at the
  * moment it was read, and never looked at again.
  *
- * <p>Nor of how many times each rule was said. A rule written twice is one rule.
+ * <p>Nor of how many times each rule was said. A rule written twice is one rule. That, and that a
+ * question scaled up is the same question, are asked of the domain over every system the other
+ * readers of rules are asked of, in {@code EveryReaderOfRulesAnswersByTheRulesAloneTest}; what is
+ * kept here is the cases that were measured and what only a domain answers for.
  */
 class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
 
@@ -286,60 +285,4 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
                 "the same position, asked as a position and as a form");
     }
 
-    // --- and over rules chosen for what they tell apart -------------------------------------------------
-
-    /**
-     * Over the systems of {@link RulesAsWritten#OVER_THREE}, each given in every order its rules
-     * have. Those whose answer could move with the order hold two rules bounding one thing — one
-     * sum held below two bounds, one position bounded above by two sums, the rest of one rule
-     * bounded below by two others — so a reader that lets the later one win, or the one said
-     * between, answers in some order differently; and a part holding nothing beside one that holds
-     * something is where the answer is put together from parts.
-     */
-    @Test
-    void theOrderAndTheRepetitionAreNotPartOfAnyAnswer() {
-        Map<String, NumberSpace> kinds = whole("a", "b", "c");
-        for (List<RulesAsWritten.Written> written : OVER_THREE) {
-            List<Written> rules = new ArrayList<>();
-            written.forEach(each -> rules.add(new Written(
-                    new LinearForm<>(each.constant(), each.coefs()), each.rel())));
-            NumericDomain<String> asWritten = given(rules, kinds);
-            List<NumericDomain<String>> others = new ArrayList<>();
-            for (List<Written> order : everyOrder(rules)) {
-                others.add(given(order, kinds));
-            }
-            others.add(given(twice(rules), kinds));
-
-            // The same questions, scaled up, are the same questions.
-            for (Written each : rules) {
-                LinearForm<String> doubledForm =
-                        SmallForm.small(each.form()).times(ExactRatio.of(3)).form();
-                assertEquals(asWritten.entails(each.form(), each.rel()),
-                        asWritten.entails(doubledForm, each.rel()),
-                        () -> "scaling the question moved what is proven: " + rules);
-                assertEquals(asWritten.refutes(each.form(), each.rel()),
-                        asWritten.refutes(doubledForm, each.rel()),
-                        () -> "scaling the question moved what is refuted: " + rules);
-                assertEquals(asWritten.provenByTheBoxAndItsDifferences(each.form(), each.rel()),
-                        asWritten.provenByTheBoxAndItsDifferences(doubledForm, each.rel()),
-                        () -> "scaling the question moved what the ranges state: " + rules);
-            }
-            for (NumericDomain<String> other : others) {
-                assertEquals(asWritten.isBottom(), other.isBottom(),
-                        () -> "whether anything is left moved: " + rules);
-                for (String position : List.of("a", "b", "c")) {
-                    assertEquals(asWritten.boundsOf(position), other.boundsOf(position),
-                            () -> "the range at " + position + " moved: " + rules);
-                }
-                for (Written each : rules) {
-                    assertEquals(asWritten.entails(each.form(), each.rel()),
-                            other.entails(each.form(), each.rel()),
-                            () -> "what is proven moved: " + rules);
-                    assertEquals(asWritten.refutes(each.form(), each.rel()),
-                            other.refutes(each.form(), each.rel()),
-                            () -> "what is refuted moved: " + rules);
-                }
-            }
-        }
-    }
 }
