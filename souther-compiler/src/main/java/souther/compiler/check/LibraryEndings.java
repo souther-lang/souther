@@ -5,6 +5,8 @@ import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.abort.GetsPast;
+import souther.compiler.abort.ScaleBound;
+import souther.compiler.abort.ScaleLaw;
 import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.numeric.ExactAnswer;
@@ -24,6 +26,7 @@ import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -276,7 +279,10 @@ final class LibraryEndings {
                 return new Read(NONE, new GetsPast.Always());
             }
             if (read.collections.isEmpty() && read.numbers.isEmpty()) {
-                return new Read(read.all, otherwise(operation, read.apart));
+                GetsPast scaled = read.scales.isEmpty() || !read.apart.endsNone() ? null
+                        : read.whereTheScalesHaveRoom(body, paramsOf(operation));
+                return new Read(read.all, scaled != null ? scaled
+                        : otherwise(operation, read.apart));
             }
             return switch (proved.held()) {
                 case HeldOnTheWay.WithinWhatItIsHanded _ -> new Read(read.apart,
@@ -288,6 +294,13 @@ final class LibraryEndings {
                                 : otherwise(operation, read.apart));
                 case HeldOnTheWay.NotShown _ -> new Read(read.all, otherwise(operation, read.apart));
             };
+        }
+
+        /** What the library says {@code operation} is handed, which is nothing for one it does not
+         *  declare. */
+        private List<Type> paramsOf(ValueName.Stdlib.Operation operation) {
+            Stdlib.Entry entry = library.entry(operation);
+            return entry == null ? List.of() : entry.signature().params();
         }
 
         /** {@code ends} but for {@code kind}, where what they are is known. */
@@ -331,6 +344,9 @@ final class LibraryEndings {
             private final Map<LibraryTerm, Type> typed;
             private final Set<LibraryTerm> collections = LibraryTerm.places();
             private final Set<LibraryTerm> numbers = LibraryTerm.places();
+            /** The sites that work a decimal sum, difference or product out, which end a run only
+             *  where the scales have no room. */
+            private final Set<LibraryTerm> scales = LibraryTerm.places();
             /** What a site holds at most by its own owner's word, over the operation's
              *  parameters, where that is a number of them. */
             private final List<LinearForm<LawNumber<Integer>>> bounds = new ArrayList<>();
@@ -361,6 +377,7 @@ final class LibraryEndings {
             void reached(WhereReached reached) {
                 collections.removeAll(reached.onNoWay());
                 numbers.removeAll(reached.onNoWay());
+                scales.removeAll(reached.onNoWay());
                 ending.forEach((site, ends) -> {
                     if (reached.onNoWay().contains(site)) {
                         return;
@@ -369,6 +386,7 @@ final class LibraryEndings {
                             ? without(ends, AbortKind.DIVISION_BY_ZERO) : ends;
                     all = all.and(left);
                     apart = apart.and(collections.contains(site) || numbers.contains(site)
+                            || scales.contains(site)
                             ? without(left, AbortKind.REQUIRED_FORM_HAS_NO_PLACE) : left);
                 });
             }
@@ -437,12 +455,84 @@ final class LibraryEndings {
                         && (op == BinOp.ADD || op == BinOp.SUB || op == BinOp.MUL)) {
                     numbers.add(term);
                 }
+                if (Type.DECIMAL.equals(answer)
+                        && (op == BinOp.ADD || op == BinOp.SUB || op == BinOp.MUL)) {
+                    scales.add(term);
+                }
                 AbortSet sites = AbortSites.ofAnOperatorAnswering(op, answer);
                 if (sites.contains(AbortKind.DIVISION_BY_ZERO)) {
                     divisions.add(term);
                 }
                 return sites.contains(AbortKind.INVARIANT_NOT_HELD)
                         ? NOT_KNOWN : new Endings.Known(sites);
+            }
+
+            /**
+             * Where the body answers where every decimal sum, difference or product it works out
+             * has room, and at the scale it answers: each such operation asks its law over the
+             * scales of its operands, as a function of what the operation is handed, whether or
+             * not a run reaches it, and a choice answers at the larger of its two. Null where an
+             * operation's operands are not numbers the arguments and what is written decide.
+             *
+             * <p>A bound over the arguments and not over a run: what scales a run is at, and how
+             * many places a row is built at, are for the reader that is handed arguments.
+             */
+            GetsPast whereTheScalesHaveRoom(LibraryTerm body, List<Type> params) {
+                List<GetsPast.WhereTheScalesHaveRoom.Room> rooms = new ArrayList<>();
+                boolean[] unread = {false};
+                ScaleBound answer = scaleOf(body, Map.of(), params, rooms, unread);
+                return unread[0] ? null : new GetsPast.WhereTheScalesHaveRoom(rooms, answer);
+            }
+
+            private ScaleBound scaleOf(LibraryTerm term, Map<BindingId, ScaleBound> env,
+                                       List<Type> params,
+                                       List<GetsPast.WhereTheScalesHaveRoom.Room> rooms,
+                                       boolean[] unread) {
+                ScaleBound unknown = new ScaleBound.NotShown();
+                switch (term) {
+                    case LibraryTerm.Parameter(int position) -> {
+                        return position < params.size() && Type.DECIMAL.equals(params.get(position))
+                                ? new ScaleBound.Argument(position) : unknown;
+                    }
+                    case LibraryTerm.DecimalNumber(var written) -> {
+                        return new ScaleBound.Written(Math.abs((long) written.scale()));
+                    }
+                    case LibraryTerm.Bound(BindingId binding) -> {
+                        return env.getOrDefault(binding, unknown);
+                    }
+                    case LibraryTerm.Negated(LibraryTerm operand) -> {
+                        return scaleOf(operand, env, params, rooms, unread);
+                    }
+                    case LibraryTerm.Let(BindingId binding, LibraryTerm value, LibraryTerm in) -> {
+                        Map<BindingId, ScaleBound> inside = new LinkedHashMap<>(env);
+                        inside.put(binding, scaleOf(value, env, params, rooms, unread));
+                        return scaleOf(in, inside, params, rooms, unread);
+                    }
+                    case LibraryTerm.Fork(LibraryTerm condition, LibraryTerm then,
+                                          LibraryTerm otherwise, var _) -> {
+                        scaleOf(condition, env, params, rooms, unread);
+                        return new ScaleBound.Larger(scaleOf(then, env, params, rooms, unread),
+                                scaleOf(otherwise, env, params, rooms, unread));
+                    }
+                    case LibraryTerm.Operator(BinOp op, LibraryTerm left, LibraryTerm right, var _)
+                            when scales.contains(term) -> {
+                        ScaleBound first = scaleOf(left, env, params, rooms, unread);
+                        ScaleBound second = scaleOf(right, env, params, rooms, unread);
+                        if (first instanceof ScaleBound.NotShown
+                                || second instanceof ScaleBound.NotShown) {
+                            unread[0] = true;
+                            return unknown;
+                        }
+                        ScaleLaw law = new ScaleLaw.OfTheOperator(op);
+                        rooms.add(new GetsPast.WhereTheScalesHaveRoom.Room(law, first, second));
+                        return new ScaleBound.Left(law, first, second);
+                    }
+                    default -> {
+                        LibraryTerm.forEachPart(term,
+                                part -> scaleOf(part, env, params, rooms, unread));
+                        return unknown;
+                    }
+                }
             }
 
             /**

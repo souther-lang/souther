@@ -3,7 +3,6 @@ package souther.compiler.core;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.GetsPast;
-import souther.compiler.abort.ScaleLaw;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.types.BinOp;
@@ -164,11 +163,11 @@ public final class KernelContracts {
             case SET_INSERT -> fits(GetsPast.together(1, 1));
             case MAP_INSERT -> fits(GetsPast.together(1, 2));
             case STRING_LOWERCASE, STRING_UPPERCASE -> new GetsPast.WhereTheTextFits(0);
-            case DECIMAL_ADD -> scales(new ScaleLaw.OfTheOperator(BinOp.ADD));
-            case DECIMAL_SUBTRACT -> scales(new ScaleLaw.OfTheOperator(BinOp.SUB));
-            case DECIMAL_MULTIPLY -> scales(new ScaleLaw.OfTheOperator(BinOp.MUL));
+            case DECIMAL_ADD -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.ADD);
+            case DECIMAL_SUBTRACT -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.SUB);
+            case DECIMAL_MULTIPLY -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.MUL);
             // Rounded to the places the call writes out, of the number it is handed last.
-            case DECIMAL_ROUND -> scales(new ScaleLaw.Asked(0, 2));
+            case DECIMAL_ROUND -> GetsPast.WhereTheScalesHaveRoom.ofARounding(0, 2);
             default -> abortsOf(kernel).isEmpty() ? new GetsPast.Always()
                     : new GetsPast.NotKnown();
         };
@@ -181,10 +180,6 @@ public final class KernelContracts {
      */
     public static int theOperandItAloneStopsOn(Kernel kernel) {
         return kernel == Kernel.INT_FLOOR_MOD ? 1 : -1;
-    }
-
-    private static GetsPast scales(ScaleLaw law) {
-        return new GetsPast.WhereTheScalesHaveRoom(law);
     }
 
     private static GetsPast fits(LinearForm<LawNumber<Integer>> answer) {

@@ -8,15 +8,10 @@ import souther.compiler.types.BinOp;
  *
  * <p>Said by the owner of each operation and read, with the arithmetic of scales, by whoever asks
  * whether the scales have room: a row and a witness are asked by the same rule
- * ({@code DecimalOperation}).
+ * ({@code DecimalOperation}). Which numbers are the two is the site's to say
+ * ({@link ScaleBound}), so a law is one rule of scales and nothing about where its operands stand.
  */
 public sealed interface ScaleLaw {
-
-    /** Which argument is the first of the two scales, counted from nought. */
-    int firstAt();
-
-    /** Which argument is the second of the two scales, counted from nought. */
-    int secondAt();
 
     /**
      * A sum or a difference lines the two scales up and a product adds them.
@@ -31,35 +26,9 @@ public sealed interface ScaleLaw {
                         + " a difference or a product, not " + op);
             }
         }
-
-        @Override
-        public int firstAt() {
-            return 0;
-        }
-
-        @Override
-        public int secondAt() {
-            return 1;
-        }
     }
 
-    /**
-     * The answer is at the scale the call asks for, a whole number it writes out at
-     * {@code scaleAt}, of the number at {@code operandAt}: a rounding to a number of places.
-     *
-     * @param scaleAt   which argument is the scale asked for
-     * @param operandAt which argument is the number it is made at that scale
-     */
-    record Asked(int scaleAt, int operandAt) implements ScaleLaw {
-
-        @Override
-        public int firstAt() {
-            return scaleAt;
-        }
-
-        @Override
-        public int secondAt() {
-            return operandAt;
-        }
-    }
+    /** The answer is at the scale it is asked for, the first of the two, of the number at the
+     *  second: a rounding to a number of places. */
+    record Asked() implements ScaleLaw {}
 }

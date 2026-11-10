@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.abort.GetsPast;
+import souther.compiler.abort.ScaleBound;
 import souther.compiler.abort.ScaleLaw;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.DecimalOperation;
@@ -154,14 +155,9 @@ public final class ContainerSizesUnderAWitness {
             case GetsPast.WhereTheTextFits _ -> false;
             // Whether the scales leave room is read off what each operand is, by the rule the
             // operations a row is asked of are ({@link DecimalOperation#hasRoomAt}).
-            case GetsPast.WhereTheScalesHaveRoom(ScaleLaw law) -> {
+            case GetsPast.WhereTheScalesHaveRoom(var rooms, var _) -> {
                 List<Core> args = operandsOf(operator);
-                OptionalLong first = args == null ? OptionalLong.empty() : scaleHandedAt(law, args,
-                        law.firstAt());
-                OptionalLong second = args == null ? OptionalLong.empty() : scaleHandedAt(law, args,
-                        law.secondAt());
-                yield first.isPresent() && second.isPresent()
-                        && DecimalOperation.hasRoomAt(law, first.getAsLong(), second.getAsLong());
+                yield args != null && rooms.stream().allMatch(room -> hasRoom(room, args));
             }
             case GetsPast.NotKnown _ -> false;
         };
@@ -210,8 +206,8 @@ public final class ContainerSizesUnderAWitness {
                 List<Core> operands = operandsOf(node);
                 if (operands != null && WhatARunMayEndFor
                         .completionApartFromTheClosuresWrittenAtIt(node)
-                        instanceof GetsPast.WhereTheScalesHaveRoom(ScaleLaw law)) {
-                    return scaleOfTheAnswer(law, operands);
+                        instanceof GetsPast.WhereTheScalesHaveRoom(var _, ScaleBound answer)) {
+                    return scaleOf(answer, operands);
                 }
                 AnOperationApplied applied = AnOperationApplied.of(node);
                 List<Integer> made = applied == null ? null : DefaultBoundOperationFacts.get()
@@ -252,30 +248,45 @@ public final class ContainerSizesUnderAWitness {
         return most;
     }
 
-    private OptionalLong scaleOfTheAnswer(ScaleLaw law, List<Core> args) {
-        OptionalLong first = scaleHandedAt(law, args, law.firstAt());
-        OptionalLong second = scaleHandedAt(law, args, law.secondAt());
+    /** Whether {@code room} is there over the arguments {@code args}. */
+    private boolean hasRoom(GetsPast.WhereTheScalesHaveRoom.Room room, List<Core> args) {
+        OptionalLong first = scaleOf(room.first(), args);
+        OptionalLong second = scaleOf(room.second(), args);
         return first.isPresent() && second.isPresent()
-                ? OptionalLong.of(DecimalOperation.scaleOfTheAnswer(law, first.getAsLong(),
-                        second.getAsLong()))
-                : OptionalLong.empty();
+                && DecimalOperation.hasRoomAt(room.law(), first.getAsLong(), second.getAsLong());
     }
 
     /**
-     * The scale of the argument {@code at} an operation under {@code law} is handed: what the
-     * argument is, where it is a number it works on, and the whole number it is written as, where
-     * it is the scale asked for.
+     * What {@code bound} comes to over the arguments {@code args}: what each argument is, the
+     * whole number written where a scale is asked for, and what the laws and the larger of two
+     * make of those. Nothing where one of them is not read.
      */
-    private OptionalLong scaleHandedAt(ScaleLaw law, List<Core> args, int at) {
-        if (at >= args.size()) {
-            return OptionalLong.empty();
-        }
-        if (law instanceof ScaleLaw.Asked asked && at == asked.scaleAt()) {
-            Optional<BigInteger> written = writtenWhole(args.get(at));
-            return written.isPresent() && written.get().bitLength() < Integer.SIZE
-                    ? OptionalLong.of(written.get().abs().longValueExact()) : OptionalLong.empty();
-        }
-        return scaleOf(args.get(at));
+    private OptionalLong scaleOf(ScaleBound bound, List<Core> args) {
+        return switch (bound) {
+            case ScaleBound.Argument(int at) -> at < args.size() ? scaleOf(args.get(at))
+                    : OptionalLong.empty();
+            case ScaleBound.WrittenAt(int at) -> at < args.size() ? writtenScale(args.get(at))
+                    : OptionalLong.empty();
+            case ScaleBound.Written(long scale) -> OptionalLong.of(scale);
+            case ScaleBound.Left(ScaleLaw law, ScaleBound first, ScaleBound second) -> {
+                OptionalLong one = scaleOf(first, args);
+                OptionalLong other = scaleOf(second, args);
+                yield one.isPresent() && other.isPresent()
+                        ? OptionalLong.of(DecimalOperation.scaleOfTheAnswer(law, one.getAsLong(),
+                                other.getAsLong()))
+                        : OptionalLong.empty();
+            }
+            case ScaleBound.Larger(ScaleBound one, ScaleBound other) ->
+                    larger(scaleOf(one, args), scaleOf(other, args));
+            case ScaleBound.NotShown _ -> OptionalLong.empty();
+        };
+    }
+
+    /** The places the whole number {@code e} writes out asks for, nought where it writes none. */
+    private static OptionalLong writtenScale(Core e) {
+        Optional<BigInteger> written = writtenWhole(e);
+        return written.isPresent() && written.get().bitLength() < Integer.SIZE
+                ? OptionalLong.of(written.get().abs().longValueExact()) : OptionalLong.empty();
     }
 
     /**

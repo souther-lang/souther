@@ -108,6 +108,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.abort.ScaleLaw.OfTheOperator.<init>",
                     "makes how a decimal sum, difference or product leaves its scale, and refuses"
                             + " any other operator"),
+            new Held("souther.compiler.abort.GetsPast.WhereTheScalesHaveRoom.ofTheOperator",
+                    "makes where a decimal sum, difference or product answers, over its two"
+                            + " arguments"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.OfTheBody.scaleOf",
+                    "makes the law each decimal sum, difference or product of a body is asked"
+                            + " its room by, over what the body is handed"),
             new Held("souther.compiler.inputs.DecimalOperation.scaleOfTheAnswer",
                     "the scale an operator leaves from the scales of its operands, which a row and"
                             + " a witness are asked by alike"),

@@ -108,6 +108,14 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
                 if sign == 0 then 0 else if sign < 0 then 1 else 2
             }
 
+            behavior absolute : (p: Pair) -> Int
+            let absolute (p) = {
+                let size = Decimal.add(Decimal.abs(p.a.value), Decimal.abs(Decimal.round(2, HALF_UP,
+                    p.b.value)))
+                let sign = Decimal.compare(p.a.value, p.b.value)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
             behavior chained : (p: Pair) -> Int
             let chained (p) = {
                 let spread = Decimal.multiply(Decimal.add(p.a.value, 1.50m), p.b.value)
@@ -163,7 +171,7 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
                 .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
         for (String behavior : List.of("difference", "sum", "minus", "times", "chained", "negated",
-                "widened", "chosen", "rounded")) {
+                "widened", "chosen", "rounded", "absolute")) {
             assertEquals(reasonsOf(evidence, "control"), reasonsOf(evidence, behavior), behavior);
         }
         assertEquals(reasonsOf(evidence, "controlTruth"), reasonsOf(evidence, "differenceTruth"));

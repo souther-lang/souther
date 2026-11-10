@@ -1,5 +1,6 @@
 package souther.compiler.abort;
 
+import souther.compiler.types.BinOp;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.LawNumber;
@@ -7,6 +8,7 @@ import souther.compiler.semantics.LawSubject;
 
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -68,16 +70,46 @@ public sealed interface GetsPast {
     record WhereTheTextFits(int operand) implements GetsPast {}
 
     /**
-     * It answers wherever the {@code Decimal}s it is handed are written at scales that leave room
-     * for what {@code law} makes of them, and ends a run for nothing else: what has no room for
-     * the digits or the scale of its answer ends the run.
+     * It answers wherever every one of {@code rooms} has room, and ends a run for nothing else: an
+     * operation that has no room for the digits or the scale of its answer ends the run. A single
+     * operation asks one, and a body that works several decimals out asks each of the operations
+     * it does.
      *
-     * <p>Which scales a run is at is not said here: it turns on what the operands are, which a
+     * <p>Which scales a run is at is not said here: it turns on what the arguments are, which a
      * reader of a run reads off them.
      *
-     * @param law how the answer's scale is left from the scales of the two numbers it works on
+     * @param rooms  what each operation the call works out asks, over what the call is handed
+     * @param answer the scale the call answers at, over the same
      */
-    record WhereTheScalesHaveRoom(ScaleLaw law) implements GetsPast {}
+    record WhereTheScalesHaveRoom(List<Room> rooms, ScaleBound answer) implements GetsPast {
+
+        public WhereTheScalesHaveRoom {
+            rooms = List.copyOf(rooms);
+        }
+
+        /** What one operation asks: that the scales of two numbers leave it room under
+         *  {@code law}. */
+        public record Room(ScaleLaw law, ScaleBound first, ScaleBound second) {}
+
+        /** A sum, a difference or a product of the two arguments. */
+        public static WhereTheScalesHaveRoom ofTheOperator(BinOp op) {
+            ScaleLaw law = new ScaleLaw.OfTheOperator(op);
+            ScaleBound first = new ScaleBound.Argument(0);
+            ScaleBound second = new ScaleBound.Argument(1);
+            return new WhereTheScalesHaveRoom(List.of(new Room(law, first, second)),
+                    new ScaleBound.Left(law, first, second));
+        }
+
+        /** A number rounded to the places the call writes out at {@code scaleAt}, of the number
+         *  at {@code operandAt}. */
+        public static WhereTheScalesHaveRoom ofARounding(int scaleAt, int operandAt) {
+            ScaleLaw law = new ScaleLaw.Asked();
+            ScaleBound first = new ScaleBound.WrittenAt(scaleAt);
+            ScaleBound second = new ScaleBound.Argument(operandAt);
+            return new WhereTheScalesHaveRoom(List.of(new Room(law, first, second)),
+                    new ScaleBound.Left(law, first, second));
+        }
+    }
 
     /** Nothing here says where it answers. */
     record NotKnown() implements GetsPast {}
