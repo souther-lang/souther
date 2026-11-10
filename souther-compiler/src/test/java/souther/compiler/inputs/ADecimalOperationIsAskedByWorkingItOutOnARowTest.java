@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.abort.ScaleLaw;
 import souther.compiler.inputs.DecimalOperation.Formed;
 import souther.compiler.inputs.DecimalOperation.Worked;
 import souther.compiler.inputs.DecimalOperation.Written;
@@ -14,6 +15,7 @@ import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -206,6 +208,27 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
                 DecimalOperation.Shape.NOUGHT, new DecimalOperation.Shape(0, fits))));
         assertFalse(DecimalOperation.isWithinRoom(DecimalOperation.shapeOfAWalk(
                 DecimalOperation.Shape.NOUGHT, new DecimalOperation.Shape(0, fits + 1))));
+    }
+
+    /**
+     * What a quotient or a rounding at a scale asked for comes to is within the shape the law
+     * leaves of its operands, where the scales of the numbers divided are as far apart as they
+     * get: a number before the point at the places a row is built at over one written at as many
+     * after it.
+     */
+    @Test
+    void aNumberAtAScaleAskedForIsWithinTheShapeTheLawLeaves() {
+        int places = DecimalOperation.PLACES_A_ROW_IS_BUILT_AT;
+        BigDecimal far = new BigDecimal(BigInteger.ONE, -places);
+        BigDecimal near = new BigDecimal(BigInteger.ONE, places);
+        DecimalOperation.Shape asked = new DecimalOperation.Shape(0, 0);
+        DecimalOperation.Shape worked = DecimalOperation.Shape.of(far)
+                .larger(DecimalOperation.Shape.of(near));
+        DecimalOperation.Shape left = DecimalOperation.shapeOfTheAnswer(new ScaleLaw.Asked(),
+                asked, worked);
+        BigDecimal quotient = far.divide(near, 0, RoundingMode.HALF_UP);
+        assertTrue(quotient.precision() <= left.digits(), quotient.precision() + " digits");
+        assertEquals(asked.scale(), left.scale());
     }
 
     @Test

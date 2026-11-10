@@ -3,7 +3,10 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.abort.GetsPast;
+import souther.compiler.abort.ScaleBound;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
+import souther.compiler.core.KernelContracts;
 import souther.compiler.types.ValueName;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -16,6 +19,8 @@ import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -186,6 +191,24 @@ class ContainerSizesUnderAWitnessTest {
             out.add(hasRoom(body, callOf(body, ADD)));
         }
         assertEquals(List.of(true, false, false), out);
+    }
+
+    /**
+     * What a call answers is the shape of a number, and a scale asked for alone has no digits to
+     * say: a contract answering with one is refused when it is made, and the quotient's is the
+     * shape its law leaves.
+     */
+    @Test
+    void aContractAnswersWithTheShapeOfANumberNeverAScaleAskedForAlone() {
+        ScaleBound asked = new ScaleBound.WrittenAt(2);
+        assertThrows(IllegalArgumentException.class,
+                () -> new GetsPast.WhereTheScalesHaveRoom(List.of(), asked));
+        assertThrows(IllegalArgumentException.class,
+                () -> new GetsPast.WhereTheScalesHaveRoom(List.of(),
+                        new ScaleBound.Larger(asked, new ScaleBound.Argument(0))));
+        assertInstanceOf(ScaleBound.Left.class,
+                ((GetsPast.WhereTheScalesHaveRoom) KernelContracts.completionOf(
+                        Kernel.DECIMAL_DIVIDE)).answer());
     }
 
     private static List<Boolean> walksHaveRoom(String seed, String... steps) {

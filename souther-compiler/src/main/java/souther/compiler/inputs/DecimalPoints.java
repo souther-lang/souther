@@ -60,16 +60,17 @@ public final class DecimalPoints {
 
     /**
      * A decimal in the run {@code near} bounds on one side and {@code far} on the other, nearest
-     * {@code near}: the end itself where it is held and a decimal, and otherwise the first multiple
-     * of the step the run's width asks for that is inside it. Null where no row is built in the
-     * run, or where {@code far} is not past {@code near}.
+     * {@code near}: the end itself where it is held and a decimal a row is built at
+     * ({@link #isBuiltAt}), and otherwise the first multiple of the step the run's width asks for
+     * that is inside it and is one too. Null where no row is built in the run, or where
+     * {@code far} is not past {@code near}.
      *
      * @param nearIsLower whether {@code near} is the lower end of the run, and so {@code far} the
      *                    upper; {@code far} is null where the run has no end that way
      */
     public static ExactRatio within(ExactCut near, ExactCut far, boolean nearIsLower) {
         ExactRatio at = near.at();
-        if (near.inclusive() && at.fitsWrittenDecimal() && lies(at, far, nearIsLower)) {
+        if (near.inclusive() && isBuiltAt(at) && lies(at, far, nearIsLower)) {
             return at;
         }
         int places = placesToFit(near, far);
@@ -80,7 +81,8 @@ public final class DecimalPoints {
         ExactRatio scaled = at.times(scale).orNull();
         BigInteger count = scaled == null ? null : countInside(scaled, near, nearIsLower);
         ExactRatio candidate = count == null ? null : ExactRatio.of(count).dividedBy(scale).orNull();
-        return candidate != null && lies(candidate, far, nearIsLower) ? candidate : null;
+        return candidate != null && isBuiltAt(candidate) && lies(candidate, far, nearIsLower)
+                ? candidate : null;
     }
 
     /**

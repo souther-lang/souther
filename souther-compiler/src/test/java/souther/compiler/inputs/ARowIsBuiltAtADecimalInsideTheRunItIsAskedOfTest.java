@@ -28,6 +28,17 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
                 DecimalPoints.within(ExactCut.inclusive(ExactRatio.of(5)), null, true));
     }
 
+    /** A decimal the run holds is where a row stands only if a row is built at it ({@link
+     *  DecimalOperation#writtenForARow}): one written at more places than a row is built at is
+     *  not, and the row is a point inside the run that is built. */
+    @Test
+    void anEndTheRunHoldsThatNoRowIsBuiltAtIsNotWhereTheRowStands() {
+        ExactRatio tooFarOut = ExactRatio.of(new BigDecimal(BigInteger.ONE,
+                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1));
+        ExactRatio row = DecimalPoints.within(ExactCut.inclusive(tooFarOut), null, false);
+        assertTrue(DecimalPoints.isBuiltAt(row), String.valueOf(row));
+    }
+
     @Test
     void anEndTheRunLeavesOutIsPassedByTheFewestPlacesThatPassIt() {
         assertEquals(ExactRatio.ONE,

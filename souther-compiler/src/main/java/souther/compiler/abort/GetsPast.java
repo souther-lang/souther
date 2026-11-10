@@ -79,12 +79,27 @@ public sealed interface GetsPast {
      * reader of a run reads off them.
      *
      * @param rooms  what each operation the call works out asks, over what the call is handed
-     * @param answer the scale the call answers at, over the same
+     * @param answer the shape the call answers with, over the same: a number's, never the scale
+     *               asked for alone, which has no digits to say
      */
     record WhereTheScalesHaveRoom(List<Room> rooms, ScaleBound answer) implements GetsPast {
 
         public WhereTheScalesHaveRoom {
             rooms = List.copyOf(rooms);
+            if (saysOnlyAScale(answer)) {
+                throw new IllegalArgumentException(
+                        "an answer is a number's shape, and a scale asked for has no digits: "
+                                + answer);
+            }
+        }
+
+        private static boolean saysOnlyAScale(ScaleBound bound) {
+            return switch (bound) {
+                case ScaleBound.WrittenAt _ -> true;
+                case ScaleBound.Larger(var one, var other) ->
+                        saysOnlyAScale(one) || saysOnlyAScale(other);
+                default -> false;
+            };
         }
 
         /** What one operation asks: that the scales of two numbers leave it room under
@@ -103,16 +118,18 @@ public sealed interface GetsPast {
         /**
          * A quotient asked for at the places the call writes out at {@code scaleAt}, of the
          * numbers at {@code dividendAt} and {@code divisorAt}: the run works at the scale asked
-         * and the larger of the two it divides, and the answer, where it is a number, is at the
-         * scale asked. A divisor of nought is no stop here: it is a case the call answers.
+         * and the larger of the two it divides, and the answer, where it is a number, is of the
+         * shape that law leaves: at the scale asked, and of the digits the numbers it is worked
+         * out of give it. A divisor of nought is no stop here: it is a case the call answers.
          */
         public static WhereTheScalesHaveRoom ofADivision(int dividendAt, int divisorAt,
                                                          int scaleAt) {
+            ScaleLaw law = new ScaleLaw.Asked();
             ScaleBound asked = new ScaleBound.WrittenAt(scaleAt);
             ScaleBound worked = new ScaleBound.Larger(new ScaleBound.Argument(dividendAt),
                     new ScaleBound.Argument(divisorAt));
-            return new WhereTheScalesHaveRoom(
-                    List.of(new Room(new ScaleLaw.Asked(), asked, worked)), asked);
+            return new WhereTheScalesHaveRoom(List.of(new Room(law, asked, worked)),
+                    new ScaleBound.Left(law, asked, worked));
         }
 
         /** A number rounded to the places the call writes out at {@code scaleAt}, of the number

@@ -160,14 +160,19 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     /**
      * The shape of what an operation under {@code law} answers over two numbers no further from
      * nought than {@code first} and {@code second}: an operator's as
-     * {@link #shapeOfTheAnswer(BinOp, Shape, Shape)} says, and a rounding's, which is at the scale
-     * it is asked for, the first, with the digits of the second lined up to it and one more.
+     * {@link #shapeOfTheAnswer(BinOp, Shape, Shape)} says, and one asked for a scale's, a rounding
+     * or a quotient, which is at the scale it is asked for, the first. Its digits are those of
+     * the second, and the places it is lined up by: the ones asked for, and the scales of the
+     * numbers it is worked out of, which are as far apart as twice the furthest of them when one
+     * is written at places before the point and the other after it ({@code 10^4096 / 10^-4096} is
+     * a number of 8193 digits), and one more.
      */
     public static Shape shapeOfTheAnswer(ScaleLaw law, Shape first, Shape second) {
         if (law instanceof ScaleLaw.OfTheOperator(BinOp op)) {
             return shapeOfTheAnswer(op, first, second);
         }
-        return new Shape(first.scale(), held(second.digits() + first.scale() + second.scale() + 1));
+        return new Shape(first.scale(),
+                held(second.digits() + first.scale() + 2 * second.scale() + 1));
     }
 
     /**
