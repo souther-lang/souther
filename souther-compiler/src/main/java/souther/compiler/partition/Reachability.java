@@ -507,11 +507,11 @@ public sealed interface Reachability {
                 return this;
             }
             List<DemandReading.Tie> ties = new ArrayList<>(tied);
-            // A stop the compiler can state is released where the way to the operator holds what
-            // it asks, and never by what a run got past in this or another operator.
+            // A stop is released where the way to the operator holds what it asks, and never by
+            // what a run got past in this or another operator.
             answered.tied().stream()
-                    .filter(each -> !(each instanceof DemandReading.Tie.Refusable refusable
-                            && DemandReading.heldOver(refusable.condition(), arrived)))
+                    .filter(each -> each.asked().filter(read ->
+                            DemandReading.heldOver(read, arrived)).isEmpty())
                     .forEach(ties::add);
             NarrowedPast past = OneReading.narrowedPast(region, answered,
                     () -> narrowedPast(region, answered));

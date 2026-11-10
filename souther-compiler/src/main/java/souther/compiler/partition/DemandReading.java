@@ -914,29 +914,26 @@ final class DemandReading {
             }
             if (!(each instanceof Read.Demands(RowDemand.Relational(
                     TakenConstraint constraint)))) {
-                // A condition a region cannot carry is dropped only where the declarations hold
-                // it whole; dropped otherwise it would read as no stop.
-                if (!heldOver(each, read.quantities().region())) {
-                    Optional<Set<TermPath>> named = placesOfRelations(each);
-                    if (named.isPresent()) {
-                        tied.add(new Tie.Refusable(named.get(), each,
-                                Pullback.WorkedOutWhere.ALWAYS));
-                    } else {
-                        unsaid = true;
-                    }
+                // A condition no region carries is a stop, tied by the places it names where it
+                // is made of relations and unsaid where it is not; it is never dropped.
+                Optional<Set<TermPath>> named = placesOfRelations(each);
+                if (named.isPresent()) {
+                    tied.add(new Tie.Refusable(named.get(), each,
+                            Pullback.WorkedOutWhere.ALWAYS));
+                } else {
+                    unsaid |= !heldOver(each, read.quantities().region());
                 }
                 continue;
             }
             if (endsOfTheInts(constraint)) {
                 continue;
             }
-            // What a region carries it is told, and the places a way ties by it are worked out
-            // against the region it narrows ({@link Reachability.Reaching#gettingPast}): a
-            // condition the declarations already hold ties nothing.
+            // What a region carries it is told, and what it cannot is tied. Whether the way holds
+            // it is asked where the way is known ({@link Reachability.Reaching#gettingPast}).
             if (constraint.terms().stream().allMatch(DemandReading::ofValuesOutsideEveryContainer)
                     && theRegionCarries(constraint, read)) {
                 narrowing.add(constraint);
-            } else if (!heldByTheRunsOfTheDeclarations(constraint, read)) {
+            } else {
                 tied.add(Tie.by(constraint));
             }
         }
@@ -1033,19 +1030,10 @@ final class DemandReading {
         };
     }
 
-    /**
-     * Whether every row the declarations leave meets {@code constraint}, shown by the form's
-     * least and greatest value over the runs the declarations hold its numbers to: what an
-     * operator over {@code Date.year} of two dates answers wherever it cannot pass the ends of an
-     * {@code Int}, which no row is narrowed by and no run is stopped on.
-     */
-    private static boolean heldByTheRunsOfTheDeclarations(TakenConstraint constraint,
-                                                          InputReading read) {
-        return heldOver(constraint, read.quantities().region());
-    }
-
-    /** Whether every row {@code region} leaves meets {@code constraint}, shown by what the
-     *  region proves of the numbers it is over. */
+    /** Whether every row {@code region} leaves meets {@code constraint}, shown by the form's
+     *  least and greatest value over the runs the region holds its numbers to, which is what an
+     *  operator over {@code Date.year} of two dates answers wherever it cannot pass the ends of
+     *  an {@code Int}. */
     private static boolean heldOver(TakenConstraint constraint, SearchRegion region) {
         return constraint instanceof TakenConstraint.Affine(
                         LinearForm<NumericTerm> form, Rel rel, var _)
@@ -1072,6 +1060,15 @@ final class DemandReading {
 
         /** Where a run works the operator out, as the closures it is inside of say it. */
         Pullback.WorkedOutWhere where();
+
+        /**
+         * What the operator asks of a run, where that is known: a way that holds it whole
+         * releases the tie ({@link Reachability.Reaching#gettingPast}). Nothing for a tie that
+         * says only that some run stops there.
+         */
+        default Optional<Read> asked() {
+            return Optional.empty();
+        }
 
         /**
          * The tie a statement of numbers makes, between every place its numbers are read off
@@ -1104,20 +1101,29 @@ final class DemandReading {
             public Stating {
                 places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
             }
+
+            @Override
+            public Optional<Read> asked() {
+                return Optional.of(new Read.Demands(new RowDemand.Relational(by)));
+            }
         }
 
         /**
-         * The places a condition the compiler states exactly may stop a run on, which no region
-         * carries. Not {@link Unsaid}: what stops is known, so a way that holds it whole
-         * releases the tie ({@link Reachability.Reaching#gettingPast}).
+         * The places a condition the compiler states exactly may stop a run on, where it is no
+         * single relation and no region carries it.
          *
-         * @param condition what the operator asks of a run, as it was read
+         * @param read what the operator asks of a run, as it was read
          */
-        record Refusable(Set<TermPath> places, Read condition, Pullback.WorkedOutWhere where)
+        record Refusable(Set<TermPath> places, Read read, Pullback.WorkedOutWhere where)
                 implements Tie {
 
             public Refusable {
                 places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+            }
+
+            @Override
+            public Optional<Read> asked() {
+                return Optional.of(read);
             }
         }
 
