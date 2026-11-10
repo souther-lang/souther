@@ -148,55 +148,45 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             example onMoved | (Moved { n = Count(9) }) -> Ok { size = 9 }
             """;
 
-    /** A record stating a bound on a number of its own places the edge a newtype over that number
-     *  would have placed, and names itself. */
-    @Test
-    void aRecordsBoundOnItsOwnNumberPlacesAnEdge() {
-        String report = report(MODEL);
-
-        assertTrue(report.contains("  Tally\n      ! no row is at the ON point n = 1 (invariant Tally #1)"), report);
+    /**
+     * The line a behavior draws at a place, and the clause that drew it. Read off the evidence the
+     * report is a projection of: what a document prints for a line is made elsewhere, and a test
+     * reading the sentence is held to how it is worded as much as to what it says.
+     */
+    private static void assertLine(Map<String, BorderAssessment> lines, String key, String drawnBy) {
+        BorderAssessment line = lines.get(key);
+        assertTrue(line != null, key + " is a line of the model: " + lines.keySet());
+        assertEquals(drawnBy, line.origin().saidWithoutAPlace(), key);
     }
 
     /**
-     * And a bound on how much one of its fields holds.
+     * A record stating a bound on a number of its own places the edge a newtype over that number
+     * would have placed, and names itself; so does a bound on how much one of its fields holds, and
+     * both ends of a record's own bound do — so that this is read as the rules being met and not as a
+     * floor being special.
      *
-     * <p>The coordinate is the length and not the list, so the line is named by the length: the rule
-     * counts the field rather than saying what the field is.
+     * <p>The coordinate of a length is the length and not the list, so the line is named by the
+     * length: the rule counts the field rather than saying what the field is.
      */
     @Test
-    void aRecordsBoundOnALengthOfItsOwnPlacesAnEdge() {
-        String report = report(MODEL);
+    void aRecordsBoundOnItsOwnNumberOrLengthPlacesAnEdge() {
+        Map<String, BorderAssessment> lines = linesOf(MODEL, "demo");
 
-        assertTrue(report.contains(
-                "point List.length(xs) = 1 (invariant Bag #1)"), report);
-    }
-
-    /** Both ends, so that this is read as the rules being met and not as a floor being special. */
-    @Test
-    void bothEndsOfARecordsOwnBoundAreEdges() {
-        String report = report(MODEL);
-
-        assertTrue(report.contains("  Both\n      ! no row is at the ON point n = 1 (invariant Both #1)"), report);
-        assertTrue(report.contains("      ! no row is at the ON point n = 10 (invariant Both #2)"), report);
+        assertLine(lines, "onTally/v.n = 1", "invariant Tally #1");
+        assertLine(lines, "onBag/List.length(v.xs) = 1", "invariant Bag #1");
+        assertLine(lines, "onBoth/v.n = 1", "invariant Both #1");
+        assertLine(lines, "onBoth/v.n = 10", "invariant Both #2");
     }
 
     /** A clause governing the position from the declaration it sits inside reaches it, and names
-     *  that declaration rather than the value it was reached through. */
+     *  that declaration rather than the value it was reached through; and the outer record's own
+     *  clause owns the line where it is the tighter of the two. */
     @Test
-    void aClauseOnTheRecordAPositionSitsInsideReachesIt() {
-        String report = report(MODEL);
+    void aClauseOnTheRecordAPositionSitsInsideReachesItUnlessTheOuterIsTighter() {
+        Map<String, BorderAssessment> lines = linesOf(MODEL, "demo");
 
-        assertTrue(report.contains(
-                "  Inner\n      ! no row is at the ON point n = 1 (invariant Inner #1)"), report);
-    }
-
-    /** And the outer record's own clause where it is the tighter of the two. */
-    @Test
-    void anOuterClauseThatIsTighterOwnsTheLine() {
-        String report = report(MODEL);
-
-        assertTrue(report.contains(
-                "no row is at the ON point inner.n = 5 (invariant Tight #1)"), report);
+        assertLine(lines, "onOuter/v.inner.n = 1", "invariant Inner #1");
+        assertLine(lines, "onTight/v.inner.n = 5", "invariant Tight #1");
     }
 
     /**
@@ -364,10 +354,12 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aRangeNarrowedByAnotherPositionsBoundIsNotAnEdge() {
-        String report = report(MODEL);
+        Map<String, BorderAssessment> lines = linesOf(MODEL, "demo");
 
-        assertTrue(report.contains("no row is at the ON point b = 10 (invariant R #2)"), report);
-        assertFalse(report.contains("point onR/v.a"), report);
+        assertLine(lines, "onR/v.b = 10", "invariant R #2");
+        assertEquals(List.of(), lines.keySet().stream()
+                .filter(key -> key.matches("onR/v\\.a = -?[0-9]+")).toList(),
+                "`a` has no line at a number, only the one relating it to `b`");
     }
 
     /**
@@ -380,38 +372,31 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aRangeNarrowedThroughAnotherPositionsTypeIsNotAnEdgeEither() {
-        String report = report(MODEL);
+        Map<String, BorderAssessment> lines = linesOf(MODEL, "demo");
 
-        assertTrue(report.contains("no row is at the ON point value = 10 (invariant B #1)"), report);
-        assertFalse(report.contains("point onUnder/v.a"), report);
-    }
-
-    /** The rules written on newtypes are measured as they were. A repair that moved these rather
-     *  than adding to them would read as this issue being fixed. */
-    @Test
-    void theSameRulesOnNewtypesAreMeasuredAsBefore() {
-        String report = report(ON_NEWTYPES);
-
-        assertTrue(report.contains(
-                "no row is at the ON point String.length(value) = 1 (invariant Name #1)"), report);
-        assertTrue(report.contains(
-                "no row is at the ON point List.length(value) = 1 (invariant Cart #1)"), report);
-        assertTrue(report.contains("no row is at the ON point value = 1 (invariant Count #1)"), report);
+        assertLine(lines, "onUnder/v.b = 10", "invariant B #1");
+        assertEquals(List.of(), lines.keySet().stream()
+                .filter(key -> key.matches("onUnder/v\\.a = -?[0-9]+")).toList(),
+                "`a` has no line at a number, only the one relating it to `b`");
     }
 
     /**
-     * A record clause tighter than the type's own owns the line rather than narrowing it.
+     * The rules written on newtypes are measured as they were. A repair that moved these rather
+     * than adding to them would read as this issue being fixed.
      *
-     * <p>`Moved`'s clause bounds one coordinate against a constant, so it places an edge of its own,
-     * and 5 is where the two intersect. Reported as `Count` narrowed within `Moved` it named the rule
+     * <p>And a record clause tighter than the type's own owns the line rather than narrowing it:
+     * `Moved`'s clause bounds one coordinate against a constant, so it places an edge of its own, and
+     * 5 is where the two intersect. Reported as `Count` narrowed within `Moved` it named the rule
      * that did not put the edge where it is.
      */
     @Test
-    void aTighterRecordClauseOwnsTheLineRatherThanNarrowingIt() {
-        String report = report(ON_NEWTYPES);
+    void theSameRulesOnNewtypesAreMeasuredAsBeforeAndATighterRecordClauseOwnsItsLine() {
+        Map<String, BorderAssessment> lines = linesOf(ON_NEWTYPES, "newtypes");
 
-        assertTrue(report.contains("no row is at the ON point n = 5 (invariant Moved #1)"), report);
-        assertFalse(report.contains("within Moved"), report);
+        assertLine(lines, "onName/String.length(v) = 1", "invariant Name #1");
+        assertLine(lines, "onCart/List.length(c) = 1", "invariant Cart #1");
+        assertLine(lines, "onHop/v.n = 1", "invariant Count #1");
+        assertLine(lines, "onMoved/v.n = 5", "invariant Moved #1");
     }
 
     /**
