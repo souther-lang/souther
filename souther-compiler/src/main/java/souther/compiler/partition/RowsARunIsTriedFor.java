@@ -122,10 +122,10 @@ public final class RowsARunIsTriedFor {
             for (long value : values) {
                 Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
                 for (NumericTerm.FromOnePosition length : goal.lengths()) {
-                    fixing.put(RealizationTarget.of(length), Count.of(size));
+                    fixing.put(RealizationTarget.ofAPlace(length), Count.of(size));
                 }
                 for (NumericTerm.FromOnePosition number : goal.values()) {
-                    fixing.put(RealizationTarget.of(number), Count.of(value));
+                    fixing.put(RealizationTarget.ofAPlace(number), Count.of(value));
                 }
                 out.add(fixing);
             }

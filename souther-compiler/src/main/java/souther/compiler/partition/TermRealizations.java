@@ -2057,8 +2057,7 @@ final class TermRealizations {
         // Which number is being written for, read off the answer that says which number it is of.
         // Handed in beside it, it was a second name for the same thing and a caller could give two
         // — and this would then write a value for one number on the order of another.
-        RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
-        return switch (target.term()) {
+        return switch (orders.term()) {
             // Written by the carrier the line was drawn on, and wearing every name the position
             // declares. Read off the boundary's own shape instead, a count on one carrier could be
             // written as a literal of another — which is how a date-time's second count reached a
@@ -2100,8 +2099,18 @@ final class TermRealizations {
             }
             // A string written for its code points alone, which is the search that writes one for
             // several numbers of a string, asked one.
-            case NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _ -> {
+            case NumericTerm.CodePointValueSum sum -> {
                 nothingInside(inside);
+                RealizationTarget.OfANumber target = RealizationTarget.ofAPlace(sum);
+                SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
+                demands.put(target, asked);
+                Map<RealizationTarget.OfANumber, Carrier> answeredOn = new LinkedHashMap<>();
+                answeredOn.put(target, orders.answered());
+                yield stringsHoldingTheirNumbers(answeredOn, sourceType, demands, within, reading);
+            }
+            case NumericTerm.CodePointAt at -> {
+                nothingInside(inside);
+                RealizationTarget.OfANumber target = RealizationTarget.ofAPlace(at);
                 SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
                 demands.put(target, asked);
                 Map<RealizationTarget.OfANumber, Carrier> answeredOn = new LinkedHashMap<>();
