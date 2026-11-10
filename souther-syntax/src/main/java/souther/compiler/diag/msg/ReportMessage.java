@@ -514,6 +514,10 @@ public sealed interface ReportMessage extends Message {
     record ConstructionAsks(String construction, String at, String asked)
             implements ReportMessage, Prose {}
 
+    /** A construction on the way to a rule that no run gets past. */
+    record ConstructionNeverPassed(String construction, String at)
+            implements ReportMessage, Prose {}
+
     /** A part of what is asked, set off from the parts beside it. */
     record Grouped(String inner) implements ReportMessage, Prose {}
 

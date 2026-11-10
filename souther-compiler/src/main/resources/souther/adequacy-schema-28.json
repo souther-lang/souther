@@ -9723,8 +9723,20 @@
             },
             "than": {
               "type": "string",
-              "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
-              "description": "The number, written as a decimal."
+              "description": "The number, an exact number written one way for one value, as every exact number of this document is: a decimal where it is one a decimal writes in full, and a power of ten or a fraction where it is not."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "never"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "never": {
+              "const": true,
+              "description": "No run gets past the construction: what it asks is met by no run. Said of the construction whole and never as a part of what else is asked, since a part no run meets settles what it is a part of."
             }
           }
         },

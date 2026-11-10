@@ -48,7 +48,15 @@ public record WhatAConstructionAsks(String construction, SourcePos at, Asked ask
     }
 
     /** What is asked of the numbers of the input. */
-    public sealed interface Asked permits Is, AllOf, OneOf {}
+    public sealed interface Asked permits Never, Is, AllOf, OneOf {}
+
+    /**
+     * No run gets past the construction: what it asks is met by no run, as the lesser of a number
+     * below nought and any other is below nought and so never at nought or above. Said of the
+     * construction whole, and never as a part of what else is asked, since a part no run meets
+     * settles what it is a part of.
+     */
+    public record Never() implements Asked {}
 
     /**
      * One form of the numbers of the input stands {@code rel} to a number.

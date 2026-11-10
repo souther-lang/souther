@@ -933,6 +933,16 @@ final class DemandReading {
      * does not say it is held.
      */
     static boolean heldByTheDeclarations(Proposition answers, InputReading read) {
+        return heldBy(answers, read, read.quantities().region());
+    }
+
+    /**
+     * The same of what {@code region} leaves, which is a region of the way to somewhere: every
+     * statement {@code answers} makes of the numbers of the input holds of every row it leaves.
+     * Asked of the way before the operator that makes the statement, never of what the run got
+     * past it.
+     */
+    static boolean heldBy(Proposition answers, InputReading read, SearchRegion region) {
         boolean readSome = false;
         for (Read each : projected(answers, read)) {
             if (each instanceof Read.Settled(boolean thisWay) && thisWay) {
@@ -944,7 +954,7 @@ final class DemandReading {
                 return false;
             }
             readSome = true;
-            if (!endsOfTheInts(constraint) && !heldByTheRunsOfTheDeclarations(constraint, read)) {
+            if (!endsOfTheInts(constraint) && !heldOver(constraint, region)) {
                 return false;
             }
         }
@@ -992,9 +1002,15 @@ final class DemandReading {
      */
     private static boolean heldByTheRunsOfTheDeclarations(TakenConstraint constraint,
                                                           InputReading read) {
+        return heldOver(constraint, read.quantities().region());
+    }
+
+    /** Whether every row {@code region} leaves meets {@code constraint}, shown by what the
+     *  region proves of the numbers it is over. */
+    private static boolean heldOver(TakenConstraint constraint, SearchRegion region) {
         return constraint instanceof TakenConstraint.Affine(
                         LinearForm<NumericTerm> form, Rel rel, var _)
-                && TakenConstraint.holdsOverTheRunsOf(form, rel, read.quantities().region());
+                && TakenConstraint.holdsOverTheRunsOf(form, rel, region);
     }
 
     /**

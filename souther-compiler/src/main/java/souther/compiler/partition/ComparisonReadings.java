@@ -30,7 +30,6 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
@@ -338,7 +337,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Optional<StopEvidence> stopsIn, List<StopEvidence.OnAnArm> onTheArms,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay, ComparisonWitnesses.AtAComparison witnesses,
-                   DemandReading.Answered getsPast, List<WhatAConstructionAsks> asks,
+                   DemandReading.Answered getsPast, List<ConstructionAsk> asks,
                    ElementsNamed readsTheElements, LinesReadOn readOn) {
 
         Reading {
@@ -632,13 +631,35 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * ({@link #gotPast}), the same for a comparison and for an application: what the run narrows,
      * its ties, the operators left unsaid and owed, and what the applications before work out.
      */
-    private static DemandReading.Answered pastOf(BoundaryPolicy.Standing standing, Core e,
-                                                 Body in, InputReads reads) {
+    private static Past pastOf(BoundaryPolicy.Standing standing, Core e, Body in,
+                               InputReads reads) {
         if (!(standing instanceof BoundaryPolicy.Standing.Admitted)
                 || !in.context().equals(CallContext.OF_THE_BODY)) {
-            return DemandReading.Answered.NOTHING;
+            return Past.NOTHING;
         }
         return gotPast(e, in, reads);
+    }
+
+    /**
+     * What the run to a comparison asks, as one walk of the parts it works out reads it.
+     *
+     * <p>The two together, from the one answer of each part: what a region can carry of it narrows
+     * the rows, and what each construction among the parts asks is what a report says, and a
+     * walk made twice would choose its parts twice. Of the parts the run always works out up to the
+     * comparison — up to the application it is reached in, where it is in a closure — and not of
+     * the comparison's own working out, which is the relation it states and not something the run
+     * to it meets.
+     *
+     * @param answered what the run asks of a row ({@link DemandReading.Answered})
+     * @param asks     what each construction among the parts asks of the run that works it out
+     */
+    private record Past(DemandReading.Answered answered, List<ConstructionAsk> asks) {
+
+        static final Past NOTHING = new Past(DemandReading.Answered.NOTHING, List.of());
+
+        Past {
+            asks = List.copyOf(asks);
+        }
     }
 
     /**
@@ -655,7 +676,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * the places it names.
      *
      */
-    private static DemandReading.Answered gotPast(Core comparison, Body in, InputReads reads) {
+    private static Past gotPast(Core comparison, Body in, InputReads reads) {
         Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), comparison);
         WhatARunWorksOutBeforeACount.FirstApplication first =
                 WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(in.root(), comparison);
@@ -664,9 +685,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (!afterApplications) {
             return workedOut(whole, comparison, ofTheRelation, in, reads);
         }
-        DemandReading.Answered upTo = workedOut(first.parts(), comparison, ofTheRelation, in,
-                reads);
-        DemandReading.Answered before = workedOut(whole, comparison, ofTheRelation, in, reads);
+        Past upToIt = workedOut(first.parts(), comparison, ofTheRelation, in, reads);
+        DemandReading.Answered upTo = upToIt.answered();
+        DemandReading.Answered before = workedOut(whole, comparison, ofTheRelation, in, reads)
+                .answered();
         List<DemandReading.Tie> ties = new ArrayList<>(before.tied());
         for (TakenConstraint each : before.narrowing()) {
             if (!upTo.narrowing().contains(each)) {
@@ -674,12 +696,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
         }
         // The call applying the closure is read whole, the comparison apart, so the closures the
-        // comparison stands inside are those it says.
-        return upTo.after(new DemandReading.PriorApplications(
+        // comparison stands inside are those it says. What the applications before ask is asked
+        // of a run that makes them, so what is asked is what the run up to this one asks.
+        return new Past(upTo.after(new DemandReading.PriorApplications(
                 walkedOneAfterAnother(first.entered(), reads),
                 new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed(),
                         before.before())))
-                .alsoNeedingToGetToTheRelation(before.relationStands());
+                .alsoNeedingToGetToTheRelation(before.relationStands()), upToIt.asks());
     }
 
     /**
@@ -711,48 +734,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             HowAClosureIsApplied.TO_EVERY_ELEMENT, HowAClosureIsApplied.UNTIL_ONE_HOLDS,
             HowAClosureIsApplied.UNTIL_ONE_FAILS);
 
-    /**
-     * What each construction the run to {@code comparison} always works out asks of it
-     * ({@link Pullback.OperatorsAnswer#asks}): of the parts a run works out whatever it decides,
-     * as {@link #gotPast} reads them, and not of the comparison's own working out, which is the
-     * relation it states and not something the run to it meets.
-     *
-     * <p>Read from the same answers {@link #gotPast} narrows the rows by, so that what is told
-     * here and what narrows are one condition. Of a comparison in a closure, the application it is
-     * reached in alone: what the applications before ask is asked of a run that makes them.
-     */
-    private static List<WhatAConstructionAsks> asksOf(BoundaryPolicy.Standing standing,
-                                                      Core comparison, Body in,
-                                                      InputReads reads) {
-        if (!(standing instanceof BoundaryPolicy.Standing.Admitted)
-                || !in.context().equals(CallContext.OF_THE_BODY)) {
-            return List.of();
-        }
-        Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), comparison);
-        WhatARunWorksOutBeforeACount.FirstApplication first =
-                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(in.root(), comparison);
-        List<Core> parts = first != null && !first.entered().isEmpty() ? first.parts()
-                : WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison);
-        Set<WhatAConstructionAsks> out = new LinkedHashSet<>();
-        for (Core part : parts) {
-            if (part == comparison || ofTheRelation.contains(part)) {
-                continue;
-            }
-            Pullback.OperatorsAnswer operators = standsIn(comparison, part)
-                    ? in.conditions().whereItsOperatorsAnswerLeavingOut(part, comparison, reads,
-                            in.read())
-                    : in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
-            out.addAll(operators.asks());
-        }
-        return List.copyOf(out);
-    }
-
-    /** What a region can carry of every operator of {@code parts} answering
-     *  ({@link #gotPast}). */
-    private static DemandReading.Answered workedOut(List<Core> parts, Core comparison,
-                                                    Set<Core> ofTheRelation, Body in,
-                                                    InputReads reads) {
+    /** What a region can carry of every operator of {@code parts} answering, and what each
+     *  construction among them asks ({@link #gotPast}). */
+    private static Past workedOut(List<Core> parts, Core comparison, Set<Core> ofTheRelation,
+                                  Body in, InputReads reads) {
         DemandReading.Answered out = DemandReading.Answered.NOTHING;
+        List<ConstructionAsk> asks = new ArrayList<>();
         for (Core part : parts) {
             Pullback.OperatorsAnswer operators = part != comparison && standsIn(comparison, part)
                     ? in.conditions().whereItsOperatorsAnswerLeavingOut(part, comparison, reads,
@@ -766,9 +753,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             } else {
                 out = out.and(ofIt.and(DemandReading.Answered.leavingUnsaid(operators,
                         in.root())));
+                asks.addAll(operators.asks());
             }
         }
-        return out;
+        return new Past(out, asks);
     }
 
     /**
@@ -975,13 +963,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // containers is about a value the line is not.
             ElementsOnTheWay.Kept besideIt = ElementsOnTheWay.keptToOneElementEach(assumed,
                     readsTheElements, numbering.saidOnTheWay(List.of(assumed)));
+            Past past = pastOf(standing, e, in, reads);
             out.add(new Reading(stands, stated.statement(), where, reads, besideIt.way(), standing,
                     statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
                             numbering), stopsWhere,
                     worksOutOnEach, stopsIn, onTheArms, applying.elementsMetOn(), stated.written(), in.context(),
                     besideIt.said(), witnesses,
-                    pastOf(standing, e, in, reads), asksOf(standing, e, in, reads),
-                    readsTheElements, readOn));
+                    past.answered(), past.asks(), readsTheElements, readOn));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.

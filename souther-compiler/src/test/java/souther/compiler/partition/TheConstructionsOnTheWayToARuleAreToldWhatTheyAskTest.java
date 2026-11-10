@@ -235,6 +235,101 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         node.forEach(child -> collectPerFinding(child, out));
     }
 
+    private static String madeOf(String number) {
+        return """
+                module demo
+
+                data Held = Decimal
+                    invariant value >= 0.0m
+                data Plan = { p: Held, within: Bool }
+
+                behavior f : (x: Decimal, y: Decimal, c: Decimal) -> Plan
+                    constructs Plan, Held
+                let f (x, y, c) = Plan {
+                    p = Held(NUMBER),
+                    within = Decimal.compare(x, c) <= 0
+                }
+                """.replace("NUMBER", number);
+    }
+
+    /**
+     * A part of what is asked that is only a constant settles what it is a part of: the greater
+     * of {@code -1} and a number is at nought or above where the number is, which is what is
+     * asked and not nothing; the greater of {@code 1} and a number is at nought or above whatever
+     * the number is, which is nothing asked; and the lesser of {@code 1} and a number is at nought
+     * or above where the number is.
+     */
+    @Test
+    void aConstantPartSettlesWhatItIsAPartOfAndIsNeverNothingAsked() {
+        assertEquals(List.of(is("x", "at_least", "0")),
+                asksOf(compiled(madeOf("Decimal.max(-1.0m, x)"))).stream()
+                        .map(one -> one.path("asked")).toList());
+        assertEquals(List.of(), asksOf(compiled(madeOf("Decimal.max(1.0m, x)"))));
+        assertEquals(List.of(is("x", "at_least", "0")),
+                asksOf(compiled(madeOf("Decimal.min(1.0m, x)"))).stream()
+                        .map(one -> one.path("asked")).toList());
+    }
+
+    /**
+     * What the way to the rule holds is not asked of a run that gets there: under a guard that
+     * keeps the number at nought or above, the construction in the branch stops no run, and no
+     * rule is said to be one a run may stop in for it. Where the guard holds only some of what is
+     * asked, what is left is what is said.
+     */
+    @Test
+    void whatTheGuardsOnTheWayHoldIsNotAskedOfARunThatGetsPast() {
+        String under = """
+                module demo
+
+                data Held = Decimal
+                    invariant value >= 0.0m
+                data Plan = { p: Held, within: Bool }
+
+                behavior f : (x: Decimal, y: Decimal, c: Decimal) -> Plan
+                    constructs Plan, Held
+                let f (x, y, c) =
+                    if GUARD then Plan { p = Held(NUMBER), within = Decimal.compare(x, c) <= 0 }
+                    else Plan { p = Held(0.0m), within = false }
+                """;
+        assertEquals(List.of(), asksOf(compiled(under.replace("GUARD", "x >= 0.0m")
+                .replace("NUMBER", "x"))));
+        assertEquals(List.of(is("x", "at_least", "0")), asksOf(compiled(
+                under.replace("GUARD", "y >= 0.0m").replace("NUMBER", "x"))).stream()
+                .map(one -> one.path("asked")).toList());
+        assertEquals(List.of(is("y", "at_least", "0")), asksOf(compiled(
+                under.replace("GUARD", "x >= 0.0m").replace("NUMBER", "Decimal.min(x, y)")))
+                .stream().map(one -> one.path("asked")).toList());
+    }
+
+    /**
+     * A number is written the one way a number is written wherever it is exact, and that is not
+     * always a decimal written out: a number the type holds apart from nought by a thousand
+     * places is a power of ten. What the schema says of it is what every exact number in the
+     * document says, so a document of such a number is still one the schema accepts.
+     */
+    @Test
+    void aNumberTooLongToWriteOutIsTheSchemasAsMuchAsAnyOther() {
+        String wide = "1" + "0".repeat(1001) + ".0m";
+        Compilation compilation = compiled("""
+                module demo
+
+                data Held = Decimal
+                    invariant value >= WIDE
+                data Plan = { p: Held, within: Bool }
+
+                behavior f : (x: Decimal, c: Decimal) -> Plan
+                    constructs Plan, Held
+                let f (x, c) = Plan {
+                    p = Held(Decimal.max(x, 0.0m)),
+                    within = Decimal.compare(x, c) <= 0
+                }
+                """.replace("WIDE", wide));
+        List<JsonNode> asks = asksOf(compilation);
+        assertEquals(1, asks.size(), asks.toString());
+        assertTrue(!asks.getFirst().path("asked").path("than").asString().matches(
+                "^-?[0-9]+(\\.[0-9]+)?$"), asks.toString());
+    }
+
     /** What an {@code Int} construction asks is asked as a decimal number too. */
     @Test
     void anIntConstructionAsksItToo() {

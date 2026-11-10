@@ -1292,7 +1292,7 @@ final class Pullback {
         Set<BindingId> ofTheRelation = apart == null ? Set.of()
                 : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
         Operators[] told = new Operators[1];
-        List<WhatAConstructionAsks> asked = new ArrayList<>();
+        List<ConstructionAsk> asked = new ArrayList<>();
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             operatorsIn(body, reads, apart, ofTheRelation);
             if (apart == null) {
@@ -8471,14 +8471,15 @@ final class Pullback {
      * @param relationStands  where a run works out the comparison left out of the part read, as
      *                        the closures it stands inside say; not said where it is not
      * @param asks            what each construction among the operators asks of a run that works
-     *                        it out, which is what the same operator narrows the run by, told as
-     *                        the report says it; nothing of one the declarations hold
+     *                        it out, which is the condition the same operator narrows the run by,
+     *                        kept as a condition and not told yet; nothing of one the
+     *                        declarations hold
      */
     record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
                            List<WorkedOutWhere> unsaidWhere,
                            boolean unsaidElsewhere, List<StopObligation> obligations,
                            List<AfterTheFirst> afterTheFirst, WorkedOutWhere relationStands,
-                           List<WhatAConstructionAsks> asks) {
+                           List<ConstructionAsk> asks) {
 
         OperatorsAnswer {
             if (unsaidAt.size() != unsaidWhere.size()) {
@@ -8701,7 +8702,7 @@ final class Pullback {
      * rounding puts the ends of the run ({@link RoundedToAWholeNumber#heldBetween}).
      */
     private List<Derivation> whereEachOperatorAnswers(Operators operated,
-                                                      List<WhatAConstructionAsks> asked) {
+                                                      List<ConstructionAsk> asked) {
         List<Derivation> out = new ArrayList<>();
         for (Operated each : operated.told) {
             if (each.where() instanceof Answers.OfAChoice(var on)) {
@@ -8759,16 +8760,17 @@ final class Pullback {
     }
 
     /**
-     * What {@code operation}, where it is a construction, asks of a run, told once the condition it
-     * asks was read as {@code asks}: the same condition that narrows the run, told from the one
-     * place it is read. Nothing where it asks nothing the declarations do not hold.
+     * What {@code operation}, where it is a construction, asks of a run, as the condition it asks
+     * was read ({@code asks}): the same condition that narrows the run, kept from the one place it
+     * is read. Nothing where it asks nothing the declarations do not hold.
      */
-    private static void askedOf(List<WhatAConstructionAsks> asked, Core operation,
-                                WhatAConstructionAsks.Asked asks,
+    private static void askedOf(List<ConstructionAsk> asked, Core operation,
+                                ConstructionAsk.Requirement asks,
                                 Collection<? extends Quantity> numbers) {
-        if (asks != null && Core.withoutStanding(operation) instanceof Core.Construct construct) {
-            asked.add(new WhatAConstructionAsks(construct.typeName().name(), construct.pos(),
-                    asks, placesOf(numbers)));
+        if (!(asks instanceof ConstructionAsk.Requirement.Always)
+                && Core.withoutStanding(operation) instanceof Core.Construct construct) {
+            asked.add(new ConstructionAsk(construct.typeName().name(), construct.pos(),
+                    placesOf(numbers), asks));
         }
     }
 
@@ -8796,51 +8798,50 @@ final class Pullback {
 
     /**
      * What {@code on}, how the numbers a construction is made of stand at the ends of the run its
-     * type leaves, asks of a run, leaving out what the declarations hold of the numbers of the input
-     * whatever the run is — null where they hold all of it.
+     * type leaves, asks of a run: the condition {@link #whereItStands} reads as the statement
+     * that narrows the run, kept as a condition and not as that statement. A part the declarations
+     * hold of every value is nothing asked, a part no number meets is a condition no run meets, and
+     * neither is left to stand for the other.
      */
-    private WhatAConstructionAsks.Asked askedBy(Answers.Stands on) {
+    private ConstructionAsk.Requirement askedBy(Answers.Stands on) {
         return switch (on) {
             case Answers.Stands.Of(var form, var held) -> askedBy(form, held);
             case Answers.Stands.AllOf(var first, var second) ->
-                    allOf(askedBy(first), askedBy(second));
+                    ConstructionAsk.Requirement.and(askedBy(first), askedBy(second));
             case Answers.Stands.OneOf(var first, var second) ->
-                    oneOf(askedBy(first), askedBy(second));
+                    ConstructionAsk.Requirement.or(askedBy(first), askedBy(second));
         };
     }
 
     /** The same, of one form standing as {@code held} says. */
-    private WhatAConstructionAsks.Asked askedBy(LinearForm<Quantity> form,
+    private ConstructionAsk.Requirement askedBy(LinearForm<Quantity> form,
                                                 ConstantComparison held) {
         return switch (held) {
             case ConstantComparison.Against(Rel rel, ExactRatio against) -> {
-                Derivation leaf = form.coefs().isEmpty() ? null : whereItStands(form, held);
-                yield leaf == null
-                        || DemandReading.heldByTheDeclarations(pulled(leaf).proposition(), read)
-                        ? null
-                        : new WhatAConstructionAsks.Is(UndividedByARelation.written(form), rel,
-                                against.spelled());
+                if (form.coefs().isEmpty()) {
+                    yield held.holdsOf(form.constant()) ? ConstructionAsk.Requirement.ALWAYS
+                            : ConstructionAsk.Requirement.NEVER;
+                }
+                Derivation leaf = whereItStands(form, held);
+                if (leaf == null) {
+                    throw new IllegalStateException("a condition read whole is read in each of its"
+                            + " parts, and nothing reads " + UndividedByARelation.written(form)
+                            + " " + rel + " " + against);
+                }
+                Proposition stated = pulled(leaf).proposition();
+                yield DemandReading.heldByTheDeclarations(stated, read)
+                        ? ConstructionAsk.Requirement.ALWAYS
+                        : new ConstructionAsk.Requirement.Is(new WhatAConstructionAsks.Is(
+                                UndividedByARelation.written(form), rel, against.spelled()),
+                                stated);
             }
-            case ConstantComparison.Settled _ -> null;
-            case ConstantComparison.Both(var first, var second) ->
-                    allOf(askedBy(form, first), askedBy(form, second));
-            case ConstantComparison.Either(var first, var second) ->
-                    oneOf(askedBy(form, first), askedBy(form, second));
+            case ConstantComparison.Settled(boolean holds) -> holds
+                    ? ConstructionAsk.Requirement.ALWAYS : ConstructionAsk.Requirement.NEVER;
+            case ConstantComparison.Both(var first, var second) -> ConstructionAsk.Requirement
+                    .and(askedBy(form, first), askedBy(form, second));
+            case ConstantComparison.Either(var first, var second) -> ConstructionAsk.Requirement
+                    .or(askedBy(form, first), askedBy(form, second));
         };
-    }
-
-    /** Both, where a side the declarations hold alone is nothing asked: null for neither. */
-    private static WhatAConstructionAsks.Asked allOf(WhatAConstructionAsks.Asked first,
-                                                     WhatAConstructionAsks.Asked second) {
-        return first == null ? second : second == null ? first
-                : new WhatAConstructionAsks.AllOf(List.of(first, second));
-    }
-
-    /** One of the two, which is nothing asked where the declarations hold either. */
-    private static WhatAConstructionAsks.Asked oneOf(WhatAConstructionAsks.Asked first,
-                                                     WhatAConstructionAsks.Asked second) {
-        return first == null || second == null ? null
-                : new WhatAConstructionAsks.OneOf(List.of(first, second));
     }
 
     /**

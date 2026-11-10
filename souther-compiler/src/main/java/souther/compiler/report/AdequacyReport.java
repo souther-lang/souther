@@ -6772,8 +6772,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             String at = PublishedAt.of(Citation.of(one.at()))
                     .map(place -> PlaceProse.said(place, rendering, declaredIn))
                     .orElseGet(() -> String.valueOf(rendering.layouts().resolve(one.at())));
-            each.add(page.say(new ReportMessage.ConstructionAsks(one.construction(), at,
-                    askedSaid(one.asks(), page))));
+            each.add(page.say(one.asks() instanceof WhatAConstructionAsks.Never
+                    ? new ReportMessage.ConstructionNeverPassed(one.construction(), at)
+                    : new ReportMessage.ConstructionAsks(one.construction(), at,
+                            askedSaid(one.asks(), page))));
         }
         return new ReportMessage.Verbatim(String.join("", each));
     }
@@ -6795,6 +6797,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     .map(one -> askedSaidInside(one, asked, page)).toList());
             case WhatAConstructionAsks.OneOf(var each) -> either(page, each.stream()
                     .map(one -> askedSaidInside(one, asked, page)).toList());
+            case WhatAConstructionAsks.Never _ -> throw new IllegalStateException(
+                    "that no run gets past is said of a construction whole and is no part of what"
+                            + " one asks");
         };
     }
 
@@ -10708,6 +10713,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ArrayNode parts = into.putArray("oneOf");
                 each.forEach(part -> askedWritten(parts.addObject(), part));
             }
+            case WhatAConstructionAsks.Never _ -> into.put("never", true);
         }
     }
 
