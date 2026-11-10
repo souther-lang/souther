@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.collect.InTheOrderGiven;
 
 import java.util.LinkedHashMap;
@@ -59,6 +60,7 @@ final class HowAnAnswerHoldsThings {
                 () -> InTheOrderGiven.map(Map.of(new String("a"), new String("b"),
                         new String("c"), new String("d"))),
                 () -> InTheOrderGiven.set(Set.of(new String("a"))),
+                () -> CodePoints.between('a', 'c').or(CodePoints.of('x')).ranges(),
                 // And the one the language ships that says it keeps none of the contract, so that
                 // a line above going quiet is not the whole of what is asked.
                 () -> {
