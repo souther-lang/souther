@@ -122,7 +122,7 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "The method checks the text is digits with at most one point between two runs"
                             + " of them, so its places fit an int scale; a text with more digits"
                             + " than a whole number the host holds is caught and reported as"
-                            + " ADecimalLiteralHasMoreDigitsThanADecimalHolds."),
+                            + " ADecimalLiteralHasMoreDigitsThanThisCompilerReads."),
             new Permission(
                     "souther/compiler/inputs/Distinctions#whole(Ljava/math/BigDecimal;)Z"
                             + " longValueExact()J",

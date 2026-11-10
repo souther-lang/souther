@@ -3394,6 +3394,7 @@ What a row is held to, and what holding a build to it requires:
 * [[example-does-not-reach-unreachable]]a row's evaluation MUST NOT reach an `+unreachable+` (<<unreachable>>): either the row states a combination the model rules out, or the reason written there does not hold;
 * [[example-evaluation-stays-within-budget]]a row's evaluation MUST come to a value within the counted budget it is held to — the points it may pass and the depth a recursion may go to;
 * [[example-evaluation-stays-within-stack]]and it MUST reach that counted depth limit before the JVM stack runs out, the two being set so the counted one is met first;
+* [[example-evaluation-has-room]]and it MUST have the room the platform supplies for every answer it works out (<<jvm-abort>>). A row short of it is undecided and not failed: the answer is a value the language defines, and nothing about the model was found out;
 * [[example-evaluation-answers]]the work around the counted evaluation — loading a class, decoding a value, comparing two of them — MUST answer within the wait the policy allows. Unlike the two above, this says nothing about the model.
 
 An `+example+` names a target behavior, then lists one or more `+|+`-led rows. A row is an optional name (a string, followed by `+:+`), an input argument tuple, `+->+`, and an expected result — or `+<?>+`, which says the answer is owed and has not been written (<<example-answer-owed>>). `+example+`, `+examples+`, and `+for+` are contextual keywords, not reserved words, so they do not collide with an identifier or the `+example.*+` namespace.
@@ -7024,7 +7025,7 @@ What this establishes is that the evaluation did not finish within the budget, a
 
 The guarantee is about this diagnostic and not about compilation as a whole. Whether a row is reported here does not depend on how fast the host is, how loaded it is, what the JVM has compiled, or what any row before it did. Whether the compiler manages to answer at all is a separate question: work that is not counted — loading a class, a boundary library walking a value it decodes or writes, one computation with long numbers the host has already started — still takes time, and an evaluation that stops answering within the wait it is given is reported as <<e1923>>. That work is bounded by what the counted work produced, since a value only gets large by being built, but it is bounded rather than counted, so it is measured in time. An evaluation given up on stops at the next counted point it reaches.
 
-Two other things end an evaluation, and neither is decided by what the model says. Where it stops answering, that is <<e1923>>; where the JVM stack runs out before the counted depth limit is reached, <<e1924>>.
+Three other things end an evaluation, and none is decided by what the model says. Where it stops answering, that is <<e1923>>; where the JVM stack runs out before the counted depth limit is reached, <<e1924>>; where it is short of the room the platform supplies for an answer, <<e1941>>.
 
 [#e1911]
 === An example reached a point declared unreachable
@@ -7489,6 +7490,20 @@ A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a position of 
 
 *The weight is not the step.* <<e1938>> holds a border against the lines one step from it, which is a fault of one border in one weight. This holds the computation the borders share, once, and neither replaces the other.
 
+[#e1941]
+=== An example evaluation had no room for an answer
+
+[,text]
+----
+The evaluation of this row had no room to write a number it worked out: no room to write
+the product of sign 1, precision 1, scale 2147483647 and sign 1, precision 1, scale 2147483647.
+Hint: The number exists, and this machine could not write it out. This does not mean the row
+is wrong. Write the row with numbers whose decimal places are not so far apart, or round a
+number before it grows that far.
+----
+
+Emitted when a row's evaluation is short of the room the platform supplies for an answer the language defines — a `+Decimal+` past the scales a `+BigDecimal+` keeps, a `+Rational+` past the width of its exponents (<<a-decimal-is-any-finite-decimal>>, <<jvm-abort>>). The row is undecided and not failed (<<example-evaluation-has-room>>): the answer is a value, a platform with more room writes it, and nothing about the model was found out. Not <<e1910>> either, which is a counted budget and the same on every machine.
+
 [#e2001]
 === A helper does not carry the termination guarantee it claims
 
@@ -7928,6 +7943,8 @@ floating-point type.
 ----
 
 Reported where a literal is not written in the form its type takes (<<literal-syntax>>). Most of it is answered while the text is read into tokens, before anything is parsed: a string not closed before the end of the line, a backslash written before something that is not an escape (<<string-literal>>), a fractional literal with no `+m+`. Three are answered after: where a literal was expected and what stands there cannot be one, where an integer literal is past what an `+Int+` holds (<<numeric-literal>>), and where a string literal's text holds half of a surrogate pair, which no escape writes and whatever handed the compiler its text put there (<<a-string-holds-no-half-of-a-surrogate-pair>>).
+
+A decimal literal with more digits than the compiler has room to read is reported with the same code. It is not a literal outside its type, since every finite decimal is a `+Decimal+` (<<a-decimal-is-any-finite-decimal>>), and the message says that the compiler is what has no room.
 
 [#e2306]
 === The text is not made of tokens
