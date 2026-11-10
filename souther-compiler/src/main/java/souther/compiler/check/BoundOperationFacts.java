@@ -191,8 +191,7 @@ public final class BoundOperationFacts {
     private Map<BinOp, List<ValueName>> writtenAs() {
         Map<BinOp, List<ValueName>> out = new LinkedHashMap<>();
         for (ValueName operation : computesANumber()) {
-            NumericResult<DeclaredArgument> result = computesANumber(operation);
-            BinOp op = result == null ? null : result.computes().writtenAs();
+            BinOp op = operatorComputedBy(operation);
             if (op != null) {
                 List<ValueName> computing = out.get(op);
                 if (computing == null) {
@@ -1146,6 +1145,13 @@ public final class BoundOperationFacts {
         BoundOperationFact.ComputesANumber held =
                 one(BoundOperationFact.ComputesANumber.class, operation);
         return held == null ? null : held.result();
+    }
+
+    /** The operator whose arithmetic {@code operation} computes, or null where it computes
+     *  none that an operator is written as. */
+    public BinOp operatorComputedBy(ValueName operation) {
+        NumericResult<DeclaredArgument> result = computesANumber(operation);
+        return result == null ? null : result.computes().writtenAs();
     }
 
     /** The operations that compute arithmetic of their own. */

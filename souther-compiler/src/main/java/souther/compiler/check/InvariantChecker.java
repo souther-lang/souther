@@ -4575,13 +4575,14 @@ public final class InvariantChecker {
 
     /**
      * Whether the check discharges every clause of {@code made} from what the declarations say of
-     * {@code params} alone: no guard above it is read, so what holds here holds wherever it is
-     * built, and the construction never aborts. A construction the check cannot read, or cannot
+     * {@code params} alone, over the values {@code templates} say what they are defined as: no
+     * guard above it is read, so what holds here holds wherever it is built, and the construction
+     * never aborts. A construction the check cannot read, or cannot
      * settle, is not discharged.
      */
     public static boolean discharges(Core.Construct made, RuleReadingContext reading,
-                                     Scope params) {
-        InvariantChecker c = new InvariantChecker(reading);
+                                     Scope params, ValueTemplates templates) {
+        InvariantChecker c = new InvariantChecker(reading, Map.of(), templates);
         c.entering(made, c.parametersEntered(params, made.pos()));
         return c.errors.isEmpty() && c.verdicts.get(made) == Verdict.PROVED;
     }

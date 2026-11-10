@@ -13,7 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A construction the check of the declarations discharges ends no run, whatever shape the number it
- * is made of has, so a comparison after it is read as it is without it. One it does not discharge
+ * is made of has and whether it names a value the module defines, so a comparison after it is read
+ * as it is without it. One it does not discharge
  * can end a run, and a comparison after it is not shown reached.
  */
 class AConstructionTheCheckDischargesEndsNoRunTest {
@@ -45,6 +46,26 @@ class AConstructionTheCheckDischargesEndsNoRunTest {
                 Decimal.add(first.value, totalOf(lateBy(invoices, today, 30)))
             }
 
+            let eight = Amount(8.0m)
+
+            data Kind = Ordinary | Holiday
+            data Day = { worked: Amount, kind: Kind }
+
+            let ordinaryOn (d: Day): Amount =
+                match d.kind with
+                    | Holiday -> Amount(0.0m)
+                    | Ordinary -> if d.worked > eight then eight else d.worked
+
+            let sumOf (f: (Day) -> Amount, days: List<Day>): Amount =
+                Amount(List.sum(List.map(d -> f(d).value, days)))
+
+            behavior tally : (days: List<Day>) -> Amount
+                constructs Amount
+            let tally (days) = {
+                let total = sumOf(d -> ordinaryOn(d), days)
+                if total.value > 60.0m then total else eight
+            }
+
             behavior refused : (invoices: List<Invoice>, today: Date) -> Decimal
                 constructs Amount
             let refused (invoices, today) = {
@@ -71,6 +92,7 @@ class AConstructionTheCheckDischargesEndsNoRunTest {
                 .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
         assertEquals(reasonsOf(evidence, "control"), reasonsOf(evidence, "discharged"));
+        assertTrue(evidence.containsKey("tally"));
         assertTrue(reasonsOf(evidence, "refused").containsValue(
                 UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
                 reasonsOf(evidence, "refused").toString());

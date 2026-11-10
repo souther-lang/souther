@@ -251,6 +251,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "the type a library operation takes two of where it is an operator"),
             new Held("souther.compiler.check.BoundOperationFacts.operationFor",
                     "which library operation an operator is over the type it is written over"),
+            new Held("souther.compiler.check.BoundOperationFacts.operatorComputedBy",
+                    "which operator a library operation computes the arithmetic of, as it was"
+                            + " declared"),
             new Held("souther.compiler.check.BoundOperationFacts.putsListsEndToEnd",
                     "whether a library operation is the operator that puts two values end to end,"
                             + " over a list"),
@@ -545,6 +548,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks the operator's own account whether a quotient it composed can still"
                             + " stop a run, so that a reading says it did not tell of every"
                             + " operation"),
+            new Held("souther.compiler.check.AffineForms.whereAFormItIsHandedAnswers",
+                    "asks whether a library call computes what an operator does, so that it is"
+                            + " held to where the answer has a place as the operator is"),
             new Held("souther.compiler.check.AffineForms.whereItAnswers",
                     "asks the operator's own account where an operation a walk composed answers,"
                             + " for every reading that asks a row to get past what it is told"),

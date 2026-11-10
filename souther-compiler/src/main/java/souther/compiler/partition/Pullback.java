@@ -1505,7 +1505,7 @@ final class Pullback {
         return InvariantChecker.discharges(new Core.Construct(construct.typeName(),
                 List.of(new Core.FieldValue(field.field(), number.value(), field.pos())),
                 construct.type(), construct.lineage(), construct.pos()), read.ruleReading(),
-                params);
+                params, reads.valueTemplates());
     }
 
     /**
@@ -1899,52 +1899,11 @@ final class Pullback {
                 : apart;
     }
 
-    /**
-     * Whether what {@code e} comes to decides which run is taken: it is in a condition, a
-     * scrutinee, an attempted construction or the relation, or is the value of a name one of
-     * those reads, on down. Such an operation is one the relation is about, and that its operands
-     * are at scales it has room for is no more than a row says of them; one whose answer decides
-     * nothing is no part of what is asked.
-     */
-    private boolean decidesWhichRunIsTaken(Core e) {
-        List<Core> roots = new ArrayList<>();
-        if (operated.leftOut != null) {
-            roots.add(operated.leftOut);
-        }
-        // A body that answers a truth is a condition as a whole.
-        if (Type.BOOL.equals(operated.within.type())) {
-            roots.add(operated.within);
-        }
-        Core.forEachDistinctNode(operated.within, node -> {
-            switch (Core.withoutStanding(node)) {
-                case Core.If fork -> roots.add(fork.cond());
-                case Core.Match match -> roots.add(match.scrutinee());
-                case Core.IfConstructed attempt -> roots.add(attempt.construct());
-                default -> { }
-            }
-        });
-        Set<BindingId> names = new HashSet<>();
-        for (Core root : List.copyOf(roots)) {
-            names.addAll(WhatABodyReads.namesReadBy(operated.within, root));
-        }
-        Core.forEachDistinctNode(operated.within, node -> {
-            if (Core.withoutStanding(node) instanceof Core.LetIn li && li.binder() != null
-                    && names.contains(li.binder().binding())) {
-                roots.add(li.value());
-            }
-        });
-        Set<Core> found = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Core root : roots) {
-            Core.forEachDistinctNode(root, node -> found.add(Core.withoutStanding(node)));
-        }
-        return found.contains(Core.withoutStanding(e));
-    }
-
     /** Whether the decimals {@code e} is handed are at scales it has room for, on every row: those
      *  of places of the input, written out, or worked out of those
      *  ({@link ContainerSizesUnderAWitness}). */
     private boolean theScalesHaveRoom(Core e, GetsPast completion, InputReads reads) {
-        return operated.within != null && !decidesWhichRunIsTaken(e)
+        return operated.within != null
                 && ContainerSizesUnderAWitness.answersOn(operated.within, e, completion,
                         node -> Optional.empty(), node -> Optional.empty(),
                         node -> reads.pathOf(node, read.rules().newtypes())

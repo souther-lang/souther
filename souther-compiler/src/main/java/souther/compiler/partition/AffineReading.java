@@ -2328,7 +2328,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         boolean addsDecimal(Core operation, LinearForm<NumericTerm> result,
                             List<LinearForm<NumericTerm>> operands) {
-            if (!(Core.withoutStanding(operation) instanceof Core.Binary binary)
+            if (!(AffineForms.asOperator(operation) instanceof Core.Binary binary)
                     || binary.type() != Type.DECIMAL
                     || (binary.op() != BinOp.ADD && binary.op() != BinOp.SUB
                     && binary.op() != BinOp.MUL)
