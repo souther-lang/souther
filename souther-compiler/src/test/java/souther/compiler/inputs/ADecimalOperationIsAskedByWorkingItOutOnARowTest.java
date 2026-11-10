@@ -194,23 +194,18 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     }
 
     /**
-     * The digits are asked as well as the scale: a walk adding parts that are a few places of a row
-     * multiplied has room, and one adding a product of enough of them, of more digits than a
-     * representation holds, has none though the scale it keeps is small.
+     * The digits are asked as well as the scale: a walk has room up to the digits a representation
+     * holds, whatever scale it keeps, and none past them. Asked at the two sides of that edge by
+     * the part that just fits the digits of the count of elements added.
      */
     @Test
-    void aWalkAddingPartsOfMoreDigitsThanARepresentationHoldsHasNoRoom() {
-        DecimalOperation.Shape product = A_PATH;
-        for (int factors = 1; factors < 4; factors++) {
-            product = DecimalOperation.shapeOfTheAnswer(BinOp.MUL, product, A_PATH);
-        }
+    void aWalkHasRoomUpToTheDigitsARepresentationHolds() {
+        long fits = DecimalOperation.DIGITS_THE_ROOM_IS_SHOWN_FOR
+                - DecimalOperation.DIGITS_OF_A_COUNT - 1;
         assertTrue(DecimalOperation.isWithinRoom(DecimalOperation.shapeOfAWalk(
-                DecimalOperation.Shape.NOUGHT, product)));
-        for (int factors = 4; factors < 520; factors++) {
-            product = DecimalOperation.shapeOfTheAnswer(BinOp.MUL, product, A_PATH);
-        }
+                DecimalOperation.Shape.NOUGHT, new DecimalOperation.Shape(0, fits))));
         assertFalse(DecimalOperation.isWithinRoom(DecimalOperation.shapeOfAWalk(
-                DecimalOperation.Shape.NOUGHT, product)));
+                DecimalOperation.Shape.NOUGHT, new DecimalOperation.Shape(0, fits + 1))));
     }
 
     @Test
