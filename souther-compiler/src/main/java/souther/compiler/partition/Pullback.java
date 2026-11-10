@@ -79,6 +79,7 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
@@ -106,6 +107,7 @@ import souther.compiler.meaning.WrittenOfANode;
 import souther.compiler.meaning.ACarriedValue;
 import souther.compiler.numeric.CalendarMonths;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -1290,6 +1292,7 @@ final class Pullback {
         Set<BindingId> ofTheRelation = apart == null ? Set.of()
                 : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
         Operators[] told = new Operators[1];
+        List<ConstructionAsk> asked = new ArrayList<>();
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             operatorsIn(body, reads, apart, ofTheRelation);
             if (apart == null) {
@@ -1298,7 +1301,7 @@ final class Pullback {
                 leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
             told[0] = operated;
-            return whereEachOperatorAnswers(operated);
+            return whereEachOperatorAnswers(operated, asked);
         });
         Derivation answered = null;
         for (Derivation one : answers) {
@@ -1309,7 +1312,8 @@ final class Pullback {
                 answered == null ? Optional.empty()
                         : Optional.of(pulled(answered).proposition()),
                 told[0].unsaidGroups, told[0].unsaidGroupsWhere, told[0].unsaidElsewhere,
-                told[0].obligations, told[0].afterTheFirst, told[0].relationStandsWhere());
+                told[0].obligations, told[0].afterTheFirst, told[0].relationStandsWhere(),
+                asked);
     }
 
     /**
@@ -1449,15 +1453,19 @@ final class Pullback {
             operated.tell(construct, new Answers.Anywhere());
             return;
         }
+        WhereAnOperatorAnswers where =
+                DeclaredBounds.whereMakingSucceeds(construct, made, read.ruleReading());
         LinearForm<Quantity> value = composedAs(construct, reads);
         if (value == null) {
-            madeOfARounding(construct, made, reads);
+            if (!madeOfARounding(construct, where, reads)) {
+                madeOfANumberStandingWithinARun(construct, where, reads);
+            }
             return;
         }
-        WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
-                DeclaredBounds.whereMakingSucceeds(construct, made, read.ruleReading());
-        if (where != null) {
-            operated.tell(construct, new Answers.AsAnOperator(value, where));
+        if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
+            operated.tell(construct, new Answers.AsAnOperator(value, held));
+        } else {
+            madeOfANumberStandingWithinARun(construct, where, reads);
         }
     }
 
@@ -1537,21 +1545,95 @@ final class Pullback {
 
     /**
      * {@code construct}, a newtype of the type {@code made}, where it is made of a number rounded
-     * to a whole one: told as the rounding held to the run the type's clauses leave
-     * ({@link DeclaredBounds#whereMakingSucceeds}). {@code Yen(Rational.toInt(DOWN, x / 3))}
-     * answers where {@code x / 3} rounds to a number at least nought. Untold where the clauses
-     * leave anything else.
+     * to a whole one: told as the rounding held to the run the type's clauses leave, which is
+     * where making answers ({@code where}, of {@link DeclaredBounds#whereMakingSucceeds}).
+     * {@code Yen(Rational.toInt(DOWN, x / 3))} answers where {@code x / 3} rounds to a number at
+     * least nought. Untold where the clauses leave anything else.
      */
-    private void madeOfARounding(Core.Construct construct, TypeView made, InputReads reads) {
+    private boolean madeOfARounding(Core.Construct construct, WhereAnOperatorAnswers where,
+                                    InputReads reads) {
         Rounding rounding = roundingOf(construct.values().getFirst().value(), reads);
         if (rounding == null) {
-            return;
+            return false;
         }
-        WhereAnOperatorAnswers.WhereItsExactValueIsHeld run =
-                DeclaredBounds.whereMakingSucceeds(construct, made, read.ruleReading());
-        if (run != null) {
+        if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld run) {
             operated.tell(construct, new Answers.Rounded(rounding.before(), rounding.way(), run));
         }
+        return true;
+    }
+
+    /**
+     * {@code construct}, a newtype over a number that no one form says where making answers for,
+     * as the lesser of two numbers is: told as each end of the run making answers within
+     * ({@code where}) standing of the number. Where the number is the lesser or the greater of
+     * two, each end stands of the two as {@link Extreme#bothMustStandAt} says. Untold where making
+     * answers over no run, or a number comes to no form.
+     */
+    private void madeOfANumberStandingWithinARun(Core.Construct construct,
+                                                 WhereAnOperatorAnswers where, InputReads reads) {
+        NumericDomain.Bounds run = switch (where) {
+            case WhereAnOperatorAnswers.WhereItsNumberLiesWithin within -> within.run();
+            case WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest) ->
+                    new NumericDomain.Bounds(
+                            Endpoint.inclusive(Count.of(new BigDecimal(least))),
+                            Endpoint.inclusive(Count.of(new BigDecimal(greatest))));
+            case null, default -> null;
+        };
+        if (run == null) {
+            return;
+        }
+        Core number = construct.values().getFirst().value();
+        // Each end the run has, and no more: an end it has not is nothing asked, and a number that
+        // comes to no form at an end it has leaves the construction untold.
+        List<Answers.Stands> ends = new ArrayList<>();
+        if (run.min() != null) {
+            Optional<Answers.Stands> least = standsAt(number, reads, run.min(), true);
+            if (least.isEmpty()) {
+                return;
+            }
+            ends.add(least.get());
+        }
+        if (run.max() != null) {
+            Optional<Answers.Stands> greatest = standsAt(number, reads, run.max(), false);
+            if (greatest.isEmpty()) {
+                return;
+            }
+            ends.add(greatest.get());
+        }
+        if (ends.isEmpty()) {
+            return;
+        }
+        operated.tell(construct, new Answers.OfAChoice(ends.size() == 1 ? ends.getFirst()
+                : new Answers.Stands.AllOf(ends.get(0), ends.get(1))));
+    }
+
+    /**
+     * How {@code e} stands at {@code end}, the lower end of a run where {@code lower}: over the
+     * form of the number where it is one, and where it is the lesser or the greater of two numbers,
+     * over how each of them stands there. Empty where a number comes to no form.
+     */
+    private Optional<Answers.Stands> standsAt(Core e, InputReads reads, Endpoint end,
+                                              boolean lower) {
+        Denotation number = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
+        if (Core.withoutStanding(number.value()) instanceof Core.PreservedCall call
+                && Extreme.keptBy(call) instanceof Extreme kept) {
+            Optional<Answers.Stands> one = standsAt(call.args().get(0), number.at(), end, lower);
+            Optional<Answers.Stands> other = standsAt(call.args().get(1), number.at(), end, lower);
+            if (one.isEmpty() || other.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(kept.bothMustStandAt(lower)
+                    ? new Answers.Stands.AllOf(one.get(), other.get())
+                    : new Answers.Stands.OneOf(one.get(), other.get()));
+        }
+        if (!(AffineForms.outcome(number.value(), number.at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form))
+                || !(end.at() instanceof Count count)) {
+            return Optional.empty();
+        }
+        Rel rel = lower ? (end.inclusive() ? Rel.GE : Rel.GT) : (end.inclusive() ? Rel.LE : Rel.LT);
+        return Optional.of(new Answers.Stands.Of(form,
+                new ConstantComparison.Against(rel, count.exactly())));
     }
 
     /** A number rounded to a whole one, the form of the number before rounding and the way. */
@@ -8281,7 +8363,7 @@ final class Pullback {
         /** What is left unsaid and owed here, with nothing told of where an operator answers. */
         OperatorsAnswer leftUnsaid() {
             return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidGroupsWhere,
-                    unsaidElsewhere, obligations, afterTheFirst, relationStandsWhere());
+                    unsaidElsewhere, obligations, afterTheFirst, relationStandsWhere(), List.of());
         }
 
         /** What has been told so far, which is the same only while nothing more has. */
@@ -8402,11 +8484,16 @@ final class Pullback {
      * @param unsaidWhere     where each of those operators is worked out
      * @param relationStands  where a run works out the comparison left out of the part read, as
      *                        the closures it stands inside say; not said where it is not
+     * @param asks            what each construction among the operators asks of a run that works
+     *                        it out, which is the condition the same operator narrows the run by,
+     *                        kept as a condition and not told yet; nothing of one the
+     *                        declarations hold
      */
     record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
                            List<WorkedOutWhere> unsaidWhere,
                            boolean unsaidElsewhere, List<StopObligation> obligations,
-                           List<AfterTheFirst> afterTheFirst, WorkedOutWhere relationStands) {
+                           List<AfterTheFirst> afterTheFirst, WorkedOutWhere relationStands,
+                           List<ConstructionAsk> asks) {
 
         OperatorsAnswer {
             if (unsaidAt.size() != unsaidWhere.size()) {
@@ -8425,6 +8512,7 @@ final class Pullback {
             unsaidWhere = List.copyOf(keptWhere);
             obligations = List.copyOf(obligations);
             afterTheFirst = List.copyOf(afterTheFirst);
+            asks = List.copyOf(asks);
         }
 
         /** Whether nothing here may stop a run that nothing says of. */
@@ -8577,6 +8665,37 @@ final class Pullback {
 
         /** On every run, whatever the inputs are. */
         record Anywhere() implements Answers {}
+
+        /** Where a number made of a choice between two numbers stands as {@code on} says. */
+        record OfAChoice(Stands on) implements Answers {}
+
+        /** How numbers stand, each as a form of the input's numbers. */
+        sealed interface Stands {
+
+            /** The number {@code form} is, standing as {@code held} says. */
+            record Of(LinearForm<Quantity> form, ConstantComparison held) implements Stands {}
+
+            /** Both stand as they are said to. */
+            record AllOf(Stands first, Stands second) implements Stands {}
+
+            /** One of the two stands as it is said to. */
+            record OneOf(Stands first, Stands second) implements Stands {}
+
+            /** Every quantity a form in this is over. */
+            default Set<Quantity> quantities() {
+                return switch (this) {
+                    case Of(var form, _) -> form.coefs().keySet();
+                    case AllOf(var first, var second) -> union(first, second);
+                    case OneOf(var first, var second) -> union(first, second);
+                };
+            }
+
+            private static Set<Quantity> union(Stands first, Stands second) {
+                Set<Quantity> all = new LinkedHashSet<>(first.quantities());
+                all.addAll(second.quantities());
+                return all;
+            }
+        }
     }
 
     /**
@@ -8596,9 +8715,21 @@ final class Pullback {
      * <p>A rounding held to a run answers where the number before rounding stands as the way of
      * rounding puts the ends of the run ({@link RoundedToAWholeNumber#heldBetween}).
      */
-    private List<Derivation> whereEachOperatorAnswers(Operators operated) {
+    private List<Derivation> whereEachOperatorAnswers(Operators operated,
+                                                      List<ConstructionAsk> asked) {
         List<Derivation> out = new ArrayList<>();
         for (Operated each : operated.told) {
+            if (each.where() instanceof Answers.OfAChoice(var on)) {
+                Derivation answers = whereItStands(on);
+                if (answers != null) {
+                    out.add(answers);
+                    askedOf(asked, each.operation(), askedBy(on), on.quantities());
+                } else {
+                    operated.beginGroup();
+                    operated.leaveUnsaid(on.quantities(), null);
+                }
+                continue;
+            }
             if (!(each.where() instanceof Answers.ByTheFormOfANumber over)) {
                 continue;
             }
@@ -8622,6 +8753,8 @@ final class Pullback {
                 if (!held.holdsOf(form.constant())) {
                     operated.beginGroup();
                     operated.leaveUnsaidOverUnreadOperands();
+                    askedOf(asked, each.operation(), ConstructionAsk.Requirement.NEVER,
+                            List.of());
                 }
                 continue;
             }
@@ -8633,12 +8766,100 @@ final class Pullback {
                     ? null : whereItStands(form, held);
             if (answers != null) {
                 out.add(answers);
+                askedOf(asked, each.operation(), askedBy(form, held), form.coefs().keySet());
             } else if (!comesOnlyToWhereItAnswers(over)) {
                 operated.beginGroup();
                 operated.leaveUnsaid(form.coefs().keySet(), null);
             }
         }
         return out;
+    }
+
+    /**
+     * What {@code operation}, where it is a construction, asks of a run, as the condition it asks
+     * was read ({@code asks}): the same condition that narrows the run, kept from the one place it
+     * is read. Nothing where it asks nothing the declarations do not hold.
+     */
+    private static void askedOf(List<ConstructionAsk> asked, Core operation,
+                                ConstructionAsk.Requirement asks,
+                                Collection<? extends Quantity> numbers) {
+        if (!(asks instanceof ConstructionAsk.Requirement.Always)
+                && Core.withoutStanding(operation) instanceof Core.Construct construct) {
+            asked.add(new ConstructionAsk(construct.typeName().name(), construct.pos(),
+                    bearingOf(numbers), asks));
+        }
+    }
+
+    /**
+     * Which rules a construction that asks something of {@code numbers} is told under: those that
+     * read one of the places the numbers are of, and every rule where some number is of no place
+     * that can be named, or the numbers are none.
+     */
+    private static WhatAConstructionAsks.Bearing bearingOf(
+            Collection<? extends Quantity> numbers) {
+        Set<TermPath> places = new LinkedHashSet<>();
+        for (Quantity each : numbers) {
+            Optional<Set<ReadSubject>> read = PositionsAStatementReads.ofANumber(each);
+            if (read.isEmpty()) {
+                return new WhatAConstructionAsks.OnEveryRule();
+            }
+            for (ReadSubject subject : read.get()) {
+                if (!(subject instanceof ReadSubject.At(TermPath path))) {
+                    return new WhatAConstructionAsks.OnEveryRule();
+                }
+                places.add(path);
+            }
+        }
+        return places.isEmpty() ? new WhatAConstructionAsks.OnEveryRule()
+                : new WhatAConstructionAsks.OnPlaces(places);
+    }
+
+    /**
+     * What {@code on}, how the numbers a construction is made of stand at the ends of the run its
+     * type leaves, asks of a run: the condition {@link #whereItStands} reads as the statement
+     * that narrows the run, kept as a condition and not as that statement. A part the declarations
+     * hold of every value is nothing asked, a part no number meets is a condition no run meets, and
+     * neither is left to stand for the other.
+     */
+    private ConstructionAsk.Requirement askedBy(Answers.Stands on) {
+        return switch (on) {
+            case Answers.Stands.Of(var form, var held) -> askedBy(form, held);
+            case Answers.Stands.AllOf(var first, var second) ->
+                    ConstructionAsk.Requirement.and(askedBy(first), askedBy(second));
+            case Answers.Stands.OneOf(var first, var second) ->
+                    ConstructionAsk.Requirement.or(askedBy(first), askedBy(second));
+        };
+    }
+
+    /** The same, of one form standing as {@code held} says. */
+    private ConstructionAsk.Requirement askedBy(LinearForm<Quantity> form,
+                                                ConstantComparison held) {
+        return switch (held) {
+            case ConstantComparison.Against(Rel rel, ExactRatio against) -> {
+                if (form.coefs().isEmpty()) {
+                    yield held.holdsOf(form.constant()) ? ConstructionAsk.Requirement.ALWAYS
+                            : ConstructionAsk.Requirement.NEVER;
+                }
+                Derivation leaf = whereItStands(form, held);
+                if (leaf == null) {
+                    throw new IllegalStateException("a condition read whole is read in each of its"
+                            + " parts, and nothing reads " + UndividedByARelation.written(form)
+                            + " " + rel + " " + against);
+                }
+                Proposition stated = pulled(leaf).proposition();
+                yield DemandReading.heldByTheDeclarations(stated, read)
+                        ? ConstructionAsk.Requirement.ALWAYS
+                        : new ConstructionAsk.Requirement.Is(new WhatAConstructionAsks.Is(
+                                UndividedByARelation.written(form), rel, against.spelled()),
+                                stated);
+            }
+            case ConstantComparison.Settled(boolean holds) -> holds
+                    ? ConstructionAsk.Requirement.ALWAYS : ConstructionAsk.Requirement.NEVER;
+            case ConstantComparison.Both(var first, var second) -> ConstructionAsk.Requirement
+                    .and(askedBy(form, first), askedBy(form, second));
+            case ConstantComparison.Either(var first, var second) -> ConstructionAsk.Requirement
+                    .or(askedBy(form, first), askedBy(form, second));
+        };
     }
 
     /**
@@ -8653,6 +8874,26 @@ final class Pullback {
                 WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))
                 && FormRange.ofNumbers(form, read, _ -> null) instanceof FormRange range
                 && range.liesWithin(least, greatest);
+    }
+
+    /** {@code on} read as the statement it makes of the numbers of the input, or null where a
+     *  number in it is past what the exact arithmetic holds, or a count is among them. */
+    private Derivation whereItStands(Answers.Stands on) {
+        return switch (on) {
+            case Answers.Stands.Of(var form, var held) -> {
+                if (form.coefs().isEmpty()) {
+                    yield new Derivation.WrittenOut(held.holdsOf(form.constant()));
+                }
+                yield form.coefs().keySet().stream().anyMatch(quantity ->
+                        quantity instanceof Quantity.HowManyMeet
+                                || quantity instanceof Quantity.HowManyDifferentMeet)
+                        ? null : whereItStands(form, held);
+            }
+            case Answers.Stands.AllOf(var first, var second) ->
+                    joined(ConditionJoin.BOTH, whereItStands(first), whereItStands(second));
+            case Answers.Stands.OneOf(var first, var second) ->
+                    joined(ConditionJoin.EITHER, whereItStands(first), whereItStands(second));
+        };
     }
 
     /** {@code form} standing as {@code held} says, over the quantities it is a form of — or null

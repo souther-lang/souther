@@ -480,13 +480,13 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
     }
 
     /**
-     * A construction worked out before the comparison that stops a run for some rate keeps the
-     * comparison from being shown reached: {@code Refund(Decimal.min(fee, gross))} is refused
-     * for a negative rate, the minimum being the fee, so a row with that rate never gets to the
-     * comparison and the positions are not shown to.
+     * A construction worked out before the comparison that stops a run for some rate narrows the
+     * run by what it asks: {@code Refund(Decimal.min(fee, gross))} is refused for a negative rate
+     * where the gross is above nought, so the run keeps to a product at nought or above and the
+     * positions are read. A rate that is negative is still reached, with a gross at nought.
      */
     @Test
-    void aConstructionBeforeTheComparisonThatStopsForSomeRateKeepsItNotShownReached() {
+    void aConstructionBeforeTheComparisonThatStopsForSomeRateNarrowsTheRunByIt() {
         Compilation compilation = Compilation.ofSource("""
                 module demo
 
@@ -508,8 +508,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
-                unreadReasonsOf(measured(compilation)));
+        assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
     }
 
     /**
@@ -549,7 +548,8 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
     /**
      * What the library says of the larger of two is held to the clauses of the type it is made
      * into: at nought or above is not above nought, so {@code Positive(Decimal.max(0.0m, x))} may
-     * still stop a run, for an {@code x} at nought or below.
+     * still stop a run, for an {@code x} at nought or below. That is told as the values it stops
+     * on, and no row the compiler certifies is one with such an {@code x}.
      */
     @Test
     void aMaximumWithNoughtIsNoProofOfAnythingAboveNought() {
@@ -572,8 +572,12 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
-                unreadReasonsOf(measured(compilation)));
+        assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
+        List<BigDecimal> rows = certifiedFirstInputsOf(compilation);
+        assertTrue(!rows.isEmpty());
+        for (BigDecimal x : rows) {
+            assertTrue(x.signum() > 0, "a row at x = " + x + " is refused by Positive");
+        }
     }
 
     /** A newtype over {@code kind} holding {@code clause}, made of {@code number} in a plan that
@@ -627,21 +631,54 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         }
     }
 
-    /** The end a choice keeps is the only one it puts: the lesser of a value and nought is not
-     *  at nought or above, nor the greater at nought or below. */
+    /**
+     * The end a choice keeps is the only one it puts: the lesser of a value and nought is not at
+     * nought or above, nor the greater at nought or below. A run the making stops is told as the
+     * values it stops on, so the value is read and no row the compiler certifies is one the
+     * making refuses.
+     */
     @Test
     void aChoiceBetweenAValueAndAConstantIsNotHeldToTheEndItDoesNotKeep() {
-        String[][] notHeld = {
-                {"Decimal", "value >= 0.0m", "Decimal.min(0.0m, x)"},
-                {"Decimal", "value <= 0.0m", "Decimal.max(0.0m, x)"},
-                {"Decimal", "value >= 1.0m", "Decimal.max(0.5m, x)"},
-                {"Int", "value >= 0", "Int.min(0, x)"},
-                {"Int", "value <= 0", "Int.max(0, x)"}};
-        for (String[] each : notHeld) {
-            assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
-                    unreadReasonsOf(measured(aNumberMadeInto(each[0], each[1], each[2]))),
-                    each[2] + " held to " + each[1]);
+        Object[][] notHeld = {
+                {"Decimal", "value >= 0.0m", "Decimal.min(0.0m, x)", "0"},
+                {"Decimal", "value <= 0.0m", "Decimal.max(0.0m, x)", "0"},
+                {"Decimal", "value >= 1.0m", "Decimal.max(0.5m, x)", "1"},
+                {"Int", "value >= 0", "Int.min(0, x)", "0"},
+                {"Int", "value <= 0", "Int.max(0, x)", "0"}};
+        for (Object[] each : notHeld) {
+            Compilation compilation = aNumberMadeInto((String) each[0], (String) each[1],
+                    (String) each[2]);
+            String label = each[2] + " held to " + each[1];
+            assertEquals(List.of(), unreadReasonsOf(measured(compilation)), label);
+            List<BigDecimal> rows = certifiedFirstInputsOf(compilation);
+            assertTrue(!rows.isEmpty(), label);
+            BigDecimal end = new BigDecimal((String) each[3]);
+            boolean above = ((String) each[1]).contains(">=");
+            for (BigDecimal x : rows) {
+                assertTrue(above ? x.compareTo(end) >= 0 : x.compareTo(end) <= 0,
+                        label + " at x = " + x);
+            }
         }
+    }
+
+    /** The first input of every row the compiler certifies for {@code f}. */
+    private static List<BigDecimal> certifiedFirstInputsOf(Compilation compilation) {
+        List<BigDecimal> out = new ArrayList<>();
+        for (BorderAssessment border : Adequacy.readingsOf(compilation.db(), "demo").get("f")) {
+            for (ItemAssessment item : border.items().values()) {
+                if (!(item instanceof ItemAssessment.Owed owed)) {
+                    continue;
+                }
+                for (ItemAssessment.Attempt attempt : owed.searches().each()) {
+                    if (attempt instanceof ItemAssessment.Attempt.Certified certified) {
+                        String text = certified.row().inputs().getFirst().text();
+                        out.add(new BigDecimal(text.endsWith("m")
+                                ? text.substring(0, text.length() - 1) : text));
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -779,8 +816,12 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         assertTrue(aPlanStopsABorderRunsThrough(aRefundPlanWith("0.0m", "")));
     }
 
-    /** The second refund, the lesser of the fee and the gross, is refused for a negative rate, and
-     *  that alone is what keeps the comparison from being shown reached. */
+    /**
+     * The second refund, the lesser of the fee and the gross, is refused for a negative rate, and
+     * that alone is what keeps the comparison from being shown reached. The gross here is a count,
+     * whose ties part what the position holds and are no line on the number, so the product of it
+     * and the rate is a tie and not a narrowing.
+     */
     @Test
     void aRefundPlanIsStoppedByTheLesserOfTheFeeAndTheGrossForANegativeRate() {
         assertTrue(aPlanStopsABorderRunsThrough(

@@ -23,6 +23,7 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.EveryRunStops;
+import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -74,6 +75,7 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * The values a behavior's body compares its inputs against.
@@ -390,7 +392,8 @@ public final class GuardThresholds {
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
-                                    reaches, arrived, each.readOn(), aRunStops, stops, found,
+                                    reaches, arrived, each.readOn(), aRunStops, stops,
+                                    asksOfARunReaching(each.asks(), before, read, arrived), found,
                                     between, throughADerivedValue, partnered, withoutALine,
                                     readOn);
                         }
@@ -1045,6 +1048,57 @@ public final class GuardThresholds {
     }
 
     /**
+     * What the constructions on the way to a comparison ask of a run that gets there, as a report
+     * says it of the rule: what each asks that the way to the rule does not already hold, of
+     * those that ask it of a number of a place the comparison reads.
+     *
+     * <p>The way is asked before the constructions narrow it ({@code ways}), so that a statement
+     * the run met on the way holds what a construction asks and no construction is held by what it
+     * asks itself. What is left of a construction is what a run that reaches the rule has to meet
+     * to have got past it, and a construction nothing is left of is a stop on no run that gets
+     * here.
+     *
+     * <p>A construction over other places asks the same of the run and bears on nothing read here,
+     * and said under every rule it is said as many times as there are rules: all of them, where
+     * what the comparison reads cannot be named. And none is dropped where the way is not known.
+     */
+    private static List<WhatAConstructionAsks> asksOfARunReaching(
+            List<ConstructionAsk> asks, List<SearchRegion> ways, InputReading read,
+            ComparisonAssessment arrived) {
+        if (asks.isEmpty()) {
+            return List.of();
+        }
+        Predicate<Proposition> heldOnTheWay = stated -> !ways.isEmpty() && ways.stream()
+                .allMatch(way -> DemandReading.heldBy(stated, read, way));
+        Optional<Set<TermPath>> reads = placesRead(arrived);
+        List<WhatAConstructionAsks> told = new ArrayList<>();
+        for (ConstructionAsk each : asks) {
+            if (reads.map(each.bearing()::bearsOn).orElse(true)) {
+                each.toldOf(heldOnTheWay).ifPresent(told::add);
+            }
+        }
+        return told;
+    }
+
+    /** The places the relations of the comparison read, or empty where it reads no relation, or
+     *  some of them read places that cannot be named. */
+    private static Optional<Set<TermPath>> placesRead(ComparisonAssessment arrived) {
+        List<UndividedByARelation> relations = arrived.relationsRead();
+        if (relations.isEmpty()) {
+            return Optional.empty();
+        }
+        Set<TermPath> reads = new LinkedHashSet<>();
+        for (UndividedByARelation relation : relations) {
+            Optional<Set<TermPath>> places = relation.placesRead();
+            if (places.isEmpty()) {
+                return Optional.empty();
+            }
+            reads.addAll(places.get());
+        }
+        return Optional.of(reads);
+    }
+
+    /**
      * The line one comparison draws, where anything of it can be read.
      *
      * <p>One comparison is one line however many positions it mentions, and what it cuts is
@@ -1065,6 +1119,7 @@ public final class GuardThresholds {
                                ComparisonAssessment read, LinesReadOn linesReadOn,
                                boolean aRunStops,
                                List<EveryRunStops> stops,
+                               List<WhatAConstructionAsks> asks,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<DerivedValues.Settling> throughADerivedValue,
@@ -1079,10 +1134,12 @@ public final class GuardThresholds {
         publish(behavior, stated, wrote, anchor, read, withoutALine);
         // And where every run getting to it is shown to stop, which is a run that may stop in it
         // whatever else is said.
-        if (aRunStops || !stops.isEmpty()) {
+        // Or where a construction on the way to it asks something of every run that gets there,
+        // which a run that does not meet it is stopped by.
+        if (aRunStops || !stops.isEmpty() || !asks.isEmpty()) {
             withoutALine.mayStopARun(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
-                    ModelOccurrences.of(stated), stops);
+                    ModelOccurrences.of(stated), stops, asks);
         }
         // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
         // same way a clause does. Only where a line's origin comes from is: a guard's is where

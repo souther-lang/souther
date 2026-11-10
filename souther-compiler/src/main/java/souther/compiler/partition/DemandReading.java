@@ -35,6 +35,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ModelOccurrences;
@@ -894,73 +895,189 @@ final class DemandReading {
      * carry of it narrows the region and what it cannot is left out, which is wider and never
      * narrower than the rows that get through — and the places that is left tying together are
      * told apart from it, for a reader asking whether a number is free of what the run works out.
+     *
+     * <p><b>What a condition is asked of is what stood before it.</b> Whether the region carries a
+     * condition, and whether the declarations already hold it, are asked of the region of
+     * {@code read}, which is the declarations and nothing a run got past. What a run got past the
+     * operator narrows is taken in afterwards ({@link Reachability.Reaching#gettingPast}), so that
+     * what an operator asks is never held by what it was itself asked for.
      */
     static Answered regionAnswered(Proposition answers, InputReading read) {
         List<TakenConstraint> narrowing = new ArrayList<>();
         List<Tie> tied = new ArrayList<>();
+        boolean unsaid = false;
         for (Read each : projected(answers, read)) {
+            if (each instanceof Read.Settled(boolean thisWay)) {
+                // An operator answering nowhere stops every run, which no place says.
+                unsaid |= !thisWay;
+                continue;
+            }
             if (!(each instanceof Read.Demands(RowDemand.Relational(
                     TakenConstraint constraint)))) {
+                // A condition no region carries is a stop, tied by the places it names where it
+                // is made of relations and unsaid where it is not; it is never dropped.
+                Optional<Set<TermPath>> named = placesOfRelations(each);
+                if (named.isPresent()) {
+                    tied.add(new Tie.Refusable(named.get(), each,
+                            Pullback.WorkedOutWhere.ALWAYS));
+                } else {
+                    unsaid |= !heldOver(each, read.quantities().region());
+                }
                 continue;
             }
-            if (endsOfTheInts(constraint)) {
+            // What every row the declarations leave meets is no stop and narrows nothing. What a
+            // region carries is told, and what it cannot is tied; whether the way holds it is
+            // asked where the way is known ({@link Reachability.Reaching#gettingPast}).
+            if (heldOver(constraint, read.quantities().region())) {
                 continue;
             }
-            // What a region carries it is told, and the places a way ties by it are worked out
-            // against the region it narrows ({@link Reachability.Reaching#gettingPast}): a
-            // condition the declarations already hold ties nothing.
-            if (constraint.terms().stream().allMatch(term ->
-                    term instanceof NumericTerm.ValueOf value
-                            && !value.position().insideAContainer())) {
+            if (constraint.terms().stream().allMatch(DemandReading::ofValuesOutsideEveryContainer)
+                    && theRegionCarries(constraint, read)) {
                 narrowing.add(constraint);
-            } else if (!heldByTheRunsOfTheDeclarations(constraint, read)) {
+            } else {
                 tied.add(Tie.by(constraint));
             }
         }
-        return new Answered(narrowing, tied, false);
+        return new Answered(narrowing, tied, unsaid);
+    }
+
+    /** The places a disjunction of relations names, or none where any part of it is something
+     *  else, which names no place a stop could be told by. */
+    private static Optional<Set<TermPath>> placesOfRelations(Read each) {
+        if (each instanceof Read.Demands(RowDemand.Relational(TakenConstraint constraint))) {
+            return Optional.of(RowDemand.placesReadOff(constraint.terms()));
+        }
+        if (!(each instanceof Read.OneOf oneOf)) {
+            return Optional.empty();
+        }
+        Set<TermPath> places = new LinkedHashSet<>();
+        for (List<Read> alternative : oneOf.alternatives()) {
+            for (Read part : alternative) {
+                Optional<Set<TermPath>> named = placesOfRelations(part);
+                if (named.isEmpty()) {
+                    return Optional.empty();
+                }
+                places.addAll(named.get());
+            }
+        }
+        return Optional.of(places);
     }
 
     /**
-     * Whether every row the declarations leave meets {@code constraint}, shown by the form's
-     * least and greatest value over the runs the declarations hold its numbers to: what an
-     * operator over {@code Date.year} of two dates answers wherever it cannot pass the ends of an
-     * {@code Int}, which no row is narrowed by and no run is stopped on.
+     * Whether every statement {@code answers} makes of the numbers of the input is one the
+     * declarations already hold: asked of each as {@link #regionAnswered} asks whether a
+     * statement ties or narrows anything. False where it makes none that can be read as such, which
+     * does not say it is held.
      */
-    private static boolean heldByTheRunsOfTheDeclarations(TakenConstraint constraint,
-                                                          InputReading read) {
+    static boolean heldByTheDeclarations(Proposition answers, InputReading read) {
+        return heldBy(answers, read, read.quantities().region());
+    }
+
+    /**
+     * The same of what {@code region} leaves, which is a region of the way to somewhere: every
+     * statement {@code answers} makes of the numbers of the input holds of every row it leaves.
+     * Asked of the way before the operator that makes the statement, never of what the run got
+     * past it.
+     */
+    static boolean heldBy(Proposition answers, InputReading read, SearchRegion region) {
+        List<Read> reads = projected(answers, read);
+        return !reads.isEmpty() && reads.stream().allMatch(each -> heldOver(each, region));
+    }
+
+    /** Whether every row {@code region} leaves meets {@code each}: a relation it proves, or a
+     *  disjunction of which some alternative it proves whole. */
+    static boolean heldOver(Read each, SearchRegion region) {
+        return switch (each) {
+            case Read.Settled(boolean thisWay) -> thisWay;
+            case Read.Demands(RowDemand.Relational(TakenConstraint constraint)) ->
+                    heldOver(constraint, region);
+            case Read.OneOf oneOf -> oneOf.alternatives().stream()
+                    .anyMatch(alternative -> alternative.stream()
+                            .allMatch(part -> heldOver(part, region)));
+            default -> false;
+        };
+    }
+
+    /**
+     * Whether the region of {@code read} can take {@code constraint} in. A number the region holds
+     * in a place is carried; a product of two is carried only where the region's algebra has a
+     * line for it, and a constraint it cannot carry is not one the region is narrowed by.
+     */
+    private static boolean theRegionCarries(TakenConstraint constraint, InputReading read) {
+        if (constraint.terms().stream().allMatch(term -> term instanceof NumericTerm.ValueOf)) {
+            return true;
+        }
+        return constraint instanceof TakenConstraint.Affine(var form, var rel, var _)
+                && read.quantities().region().assuming(form, rel)
+                        instanceof SearchRegion.Assumption.Taken;
+    }
+
+    /**
+     * Whether {@code term} is a value outside every container, a total of what a position holds
+     * or of a run, or a product of such numbers. Not a length or a count, whose ties part what the
+     * position holds and are not a line on the number.
+     */
+    private static boolean ofValuesOutsideEveryContainer(NumericTerm term) {
+        return switch (term) {
+            case NumericTerm.ValueOf value -> !value.position().insideAContainer();
+            case NumericTerm.TakenOf taken -> taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                    && !taken.position().insideAContainer();
+            case NumericTerm.TakenOver _ -> true;
+            case NumericTerm.ProductOf product -> product.one().coefs().keySet().stream()
+                    .allMatch(DemandReading::ofValuesOutsideEveryContainer)
+                    && product.other().coefs().keySet().stream()
+                    .allMatch(DemandReading::ofValuesOutsideEveryContainer);
+            default -> false;
+        };
+    }
+
+    /** Whether every row {@code region} leaves meets {@code constraint}, shown by the form's
+     *  least and greatest value over the runs the region holds its numbers to, which is what an
+     *  operator over {@code Date.year} of two dates answers wherever it cannot pass the ends of
+     *  an {@code Int}. */
+    private static boolean heldOver(TakenConstraint constraint, SearchRegion region) {
         return constraint instanceof TakenConstraint.Affine(
                         LinearForm<NumericTerm> form, Rel rel, var _)
-                && TakenConstraint.holdsOverTheRunsOf(form, rel, read.quantities().region());
+                && TakenConstraint.holdsOverTheRunsOf(form, rel, region);
     }
 
     /**
-     * What ties places on the way to a comparison: the places, and what the way states of the
-     * numbers read off them where that is known.
+     * What ties places on the way to a comparison, of one of two kinds that are not one fact: a
+     * statement the way makes of the numbers of several places ({@link Stating}), and the places
+     * an operator nobody says where it answers may stop a run on ({@link Unsaid}). The first
+     * relates the values of the places and says which they may be; the second relates nothing,
+     * and says only that some run is stopped on some of their numbers. A reader that asks what a
+     * tie states asks the first, and one that asks whether a run may be stopped there asks the
+     * second, and a tie that is read as both is read as whichever its kind says.
      *
-     * <p>A tie is a statement over places and is equal to every tie of the same statement over the
-     * same places, wherever it is worked out. It is not the site that works it out, and no reader
-     * may take two equal ties to be one run: what is asked of a tie is what it states.
-     *
-     * @param places the places the tie names, in the order they were met
-     * @param by     what is stated of their numbers, or null where only the places are known — the
-     *               numbers an operator not said may stop the run on
-     * @param where  where a run works the operator out, as the closures it is inside of say it
+     * <p>A tie is equal to every tie of the same kind over the same places and, of the first, the
+     * same statement, wherever it is worked out. It is not the site that works it out, and no
+     * reader may take two equal ties to be one run: what is asked of a tie is what it states.
      */
-    record Tie(Set<TermPath> places, TakenConstraint by, Pullback.WorkedOutWhere where) {
+    sealed interface Tie {
 
-        Tie {
-            places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+        /** The places the tie names, in the order they were met. */
+        Set<TermPath> places();
+
+        /** Where a run works the operator out, as the closures it is inside of say it. */
+        Pullback.WorkedOutWhere where();
+
+        /**
+         * What the operator asks of a run, where that is known: a way that holds it whole
+         * releases the tie ({@link Reachability.Reaching#gettingPast}). Nothing for a tie that
+         * says only that some run stops there.
+         */
+        default Optional<Read> asked() {
+            return Optional.empty();
         }
 
-        /** The tie a statement of numbers makes, between every place its numbers are read off
-         *  ({@link RowDemand#placesReadOff}). */
+        /**
+         * The tie a statement of numbers makes, between every place its numbers are read off
+         * ({@link RowDemand#placesReadOff}).
+         */
         static Tie by(TakenConstraint constraint) {
-            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint,
+            return new Stating(RowDemand.placesReadOff(constraint.terms()), constraint,
                     Pullback.WorkedOutWhere.ALWAYS);
-        }
-
-        Tie(Set<TermPath> places, TakenConstraint by) {
-            this(places, by, Pullback.WorkedOutWhere.ALWAYS);
         }
 
         /** The tie of places an operator not said of may stop the run on. */
@@ -970,7 +1087,56 @@ final class DemandReading {
 
         /** The same, of an operator a run works out where {@code where} says. */
         static Tie between(Set<TermPath> places, Pullback.WorkedOutWhere where) {
-            return new Tie(places, null, where);
+            return new Unsaid(places, where);
+        }
+
+        /**
+         * What the way states of the numbers read off {@code places}.
+         *
+         * @param by    what is stated of their numbers
+         * @param where where a run works the statement out
+         */
+        record Stating(Set<TermPath> places, TakenConstraint by, Pullback.WorkedOutWhere where)
+                implements Tie {
+
+            public Stating {
+                places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+            }
+
+            @Override
+            public Optional<Read> asked() {
+                return Optional.of(new Read.Demands(new RowDemand.Relational(by)));
+            }
+        }
+
+        /**
+         * The places a condition the compiler states exactly may stop a run on, where it is no
+         * single relation and no region carries it.
+         *
+         * @param read what the operator asks of a run, as it was read
+         */
+        record Refusable(Set<TermPath> places, Read read, Pullback.WorkedOutWhere where)
+                implements Tie {
+
+            public Refusable {
+                places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+            }
+
+            @Override
+            public Optional<Read> asked() {
+                return Optional.of(read);
+            }
+        }
+
+        /**
+         * The places the numbers are of that an operator not said of may stop a run on, which is
+         * all that is known of it.
+         */
+        record Unsaid(Set<TermPath> places, Pullback.WorkedOutWhere where) implements Tie {
+
+            public Unsaid {
+                places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+            }
         }
     }
 
@@ -1261,31 +1427,6 @@ final class DemandReading {
         record WalkedOver(Core container, InputReads reads) {}
     }
 
-    /** Whether {@code constraint} is an ordering of one number that holds at the least
-     *  {@code Int} and at the greatest, so at every one between them: what an operator over a
-     *  number answers where it cannot pass either end, which every {@code Int} meets and no row is
-     *  narrowed by. A form is worked out at the two ends and the relation asked of each, so that
-     *  the side of the number it is on, whether it is strict and the sign of its weight are not
-     *  told apart by hand. */
-    static boolean endsOfTheInts(TakenConstraint constraint) {
-        if (!(constraint instanceof TakenConstraint.Affine(
-                        LinearForm<NumericTerm> form, Rel rel, var _))
-                || form.coefs().size() != 1
-                || !(rel == Rel.LE || rel == Rel.LT || rel == Rel.GE || rel == Rel.GT)) {
-            return false;
-        }
-        ExactRatio weight = form.coefs().values().iterator().next();
-        return holdsAt(weight, form.constant(), rel, Long.MIN_VALUE)
-                && holdsAt(weight, form.constant(), rel, Long.MAX_VALUE);
-    }
-
-    /** Whether {@code weight * x + constant} stands to nought as {@code rel} says at
-     *  {@code x}. */
-    private static boolean holdsAt(ExactRatio weight, ExactRatio constant, Rel rel, long x) {
-        ExactRatio at = weight.times(ExactRatio.of(x)).orNull();
-        ExactRatio value = at == null ? null : at.plus(constant).orNull();
-        return value != null && rel.holds(value.signum());
-    }
 
     private static List<Stated> both(List<Stated> left, List<Stated> right) {
         List<Stated> out = new ArrayList<>(left);

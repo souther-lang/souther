@@ -261,19 +261,31 @@ public final class DeclaredBounds {
     }
 
     /**
-     * The numbers making {@code construct}, a value of {@code type} over an {@code Int}, succeeds
-     * for: the whole run its clauses leave ({@link #wholeRunOf}), within the ends of an
-     * {@code Int}. Null where they leave none that is shown to be the whole of what they say, or
-     * the number it wraps is not an {@code Int}.
+     * Where making {@code construct}, a value of {@code type}, answers: for the numbers the whole
+     * run its clauses leave ({@link #wholeRunOf}) holds, as the number it wraps is. Over an
+     * {@code Int} that is the run within the ends of an {@code Int}
+     * ({@link WhereAnOperatorAnswers.WhereItsExactValueIsHeld}), and over any other number the run
+     * itself ({@link WhereAnOperatorAnswers.WhereItsNumberLiesWithin}). Null where they leave none
+     * that is shown to be the whole of what they say, or what it wraps is no number.
      *
      * <p>Every reader that tells a construction as the operation it is asks this, so a run is held
      * to the same numbers at a construction whichever reading meets it.
      */
-    public static WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereMakingSucceeds(
+    public static WhereAnOperatorAnswers whereMakingSucceeds(
             Core.Construct construct, TypeView type, RuleReadingContext reading) {
-        if (construct.values().get(0).value().type() != Type.INT) {
+        Type wrapped = construct.values().get(0).value().type();
+        if (wrapped == Type.INT) {
+            return whereMakingSucceedsOverAnInt(type, reading);
+        }
+        if (wrapped != Type.DECIMAL && wrapped != Type.RATIONAL) {
             return null;
         }
+        NumericDomain.Bounds run = wholeRunOf(type, reading);
+        return run == null ? null : new WhereAnOperatorAnswers.WhereItsNumberLiesWithin(run);
+    }
+
+    private static WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereMakingSucceedsOverAnInt(
+            TypeView type, RuleReadingContext reading) {
         NumericDomain.Bounds run = wholeRunOf(type, reading);
         if (run == null) {
             return null;

@@ -2359,7 +2359,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** {@code form} as an author would write it: each number weighed, in the order of their
      *  names, and the constant last. */
-    private static <A> String written(LinearForm<A> form) {
+    static <A> String written(LinearForm<A> form) {
         Map<String, ExactRatio> named = new TreeMap<>();
         form.coefs().forEach((term, weight) -> named.put(term.toString(), weight));
         StringBuilder out = new StringBuilder();
@@ -2686,10 +2686,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Every place of the input this relation is read off: what the places it holds against each
-     * other are read off, and every place each side is ({@link #placesItIsReadOff}) — or null
+     * other are read off, and every place each side is ({@link #placesItIsReadOff}) — or empty
      * where some side is read off places this cannot name, as what an operation answered of
      * something unnamed is.
      */
+    Optional<Set<TermPath>> placesRead() {
+        return Optional.ofNullable(positionsRead());
+    }
+
     private Set<TermPath> positionsRead() {
         Set<TermPath> out = new LinkedHashSet<>(placesReadOff(amongThemselves));
         for (Side each : sides) {
@@ -3376,10 +3380,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<DemandReading.Tie> ties = new LinkedHashSet<>();
         for (DemandReading.Tie tie : past.tied()) {
             if (touchesAny(tie.places(), List.of(mine, theirs))) {
-                if (tie.by() == null) {
+                if (!(tie instanceof DemandReading.Tie.Stating stating)) {
                     return null;
                 }
-                system.add(tie.by());
+                system.add(stating.by());
                 ties.add(tie);
             }
         }
@@ -3426,10 +3430,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (ties.contains(tie) || !touchesAny(tie.places(), beside)) {
                     continue;
                 }
-                if (tie.by() == null) {
+                if (!(tie instanceof DemandReading.Tie.Stating stating)) {
                     return null;
                 }
-                system.add(tie.by());
+                system.add(stating.by());
                 ties.add(tie);
                 grew = true;
             }
