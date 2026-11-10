@@ -625,10 +625,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + ")Ljava/lang/String;", Reading.NAMES,
                 "spells a side of a comparison for a report, a projection as the accesses it"
                         + " stands for, written from the last of them");
-        row(out, c + "partition/ComparisonAssessment", "sideRuns", "(" + core + "L" + c
-                + "inputs/InputReading;)L" + c + "numeric/NumericDomain$Bounds;", Reading.NAMES,
-                "reads a side of a comparison that is a newtype's value, a projection as the"
-                        + " accesses it stands for, the last of them holding the rest");
         row(out, c + "partition/ComparisonReadings", "collectWritten", "(" + core + "L" + c
                 + "partition/ComparisonReadings$Body;Ljava/util/Set;)V", Reading.STRUCTURE,
                 "which comparisons of the model are written in a condition, which no name read is");
@@ -682,8 +678,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 CHOICES_AND_CALLS);
         row(out, c + "partition/Pullback", "comparisonHolding",
                 "(" + core + "L" + c + "core/Core$Read;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
-        row(out, c + "partition/Pullback", "whatTheRulesOfTheNewtypeLeaveAt",
-                "(" + core + ")L" + c + "partition/FormRange;", Reading.ONE_ACCESS,
+        row(out, c + "check/DeclaredBounds", "ofTheValueReadOff",
+                "(" + core + "L" + c + "check/RuleReadingSource;L" + c
+                        + "check/DeclarationNewtypes;L" + c + "check/RuleReadingContext;)L" + c
+                        + "check/DeclaredBounds$Range;", Reading.ONE_ACCESS,
                 "reads the type a value is read off, of the access, or of the last access of a"
                         + " projection, and of nothing under it");
         row(out, c + "partition/Pullback", "leaveUnsaidWhatMayEndARunUnder",

@@ -71,4 +71,21 @@ class AContainerChosenByCasesIsReadInEachCaseOfItTest {
         assertNotNull(measured(SEPARATE).get("listed"));
         assertNotNull(measured(SHARED).get("listed"));
     }
+
+    /**
+     * The container is whichever of the cases the value is, and {@code Set.contains} relates the
+     * priority to that one: the same relation of two values it states of a container written
+     * out, at the place of each case's field. Nothing of what it relates is left unread, whether
+     * the cases hold a field each or share one.
+     */
+    @Test
+    void aValueRelatedToTheContainerOfWhicheverCaseIsTakenIsReadAsRelatedToIt() {
+        for (String model : List.of(SEPARATE, SHARED)) {
+            List<UndividedPosition.Reason> left = measured(model).get("listed").notRead().stream()
+                    .map(PartitionEvidence.NotRead::reason)
+                    .distinct()
+                    .toList();
+            assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES), left, model);
+        }
+    }
 }

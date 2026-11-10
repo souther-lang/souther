@@ -2237,7 +2237,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
             }
         } else {
-            relations.add(oneValue(stated));
+            relations.addAll(ofEachArm(stated));
         }
         return new Read.AgainstAnotherValue(over, relations);
     }
@@ -2350,6 +2350,30 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         };
     }
 
+    /** The parts of {@code all} that are not the cases an arm is chosen by. */
+    private static List<Proposition> besideItsChosenCases(Proposition.All all) {
+        return all.parts().stream()
+                .filter(each -> !(each instanceof Proposition.InCases chosen && chosen.holds()))
+                .toList();
+    }
+
+    /**
+     * What {@code stated} shows of the values it relates, one reading for each arm where it is the
+     * arms of a choice by cases — each part chosen by cases, and each such arm read as the relation
+     * it is beside them — and the one reading of the statement as it stands anywhere else.
+     */
+    private static List<UndividedByARelation> ofEachArm(Proposition stated) {
+        if (stated instanceof Proposition.Any any && !any.parts().isEmpty()
+                && any.parts().stream().allMatch(each -> each instanceof Proposition.All all
+                        && besideItsChosenCases(all).size() == 1
+                        && all.parts().size() == 2)) {
+            return any.parts().stream()
+                    .map(each -> oneValue(besideItsChosenCases((Proposition.All) each).getFirst()))
+                    .toList();
+        }
+        return List.of(oneValue(stated));
+    }
+
     /**
      * Where every part of {@code stated} says that two values of the input are one value — some
      * element of a container being one, or not — the places of those values; null otherwise.
@@ -2393,7 +2417,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // Which of the elements holding a value is the one meant names no place beside the
             // value's own, which the sameness has already filed.
             case Proposition.LastToHold _ -> true;
-            case Proposition.All all -> all.parts().stream().allMatch(each -> relates(each, out));
+            // The cases an arm is chosen by say which arm's relation holds and relate nothing of
+            // their own: the match chooses them, and dividing its subject by case is its rule. Only
+            // beside a relation they choose, since a statement of the cases alone divides.
+            case Proposition.All all -> {
+                List<Proposition> relating = besideItsChosenCases(all);
+                yield (relating.size() == all.parts().size() || !relating.isEmpty())
+                        && relating.stream().allMatch(each -> relates(each, out));
+            }
             case Proposition.Any any -> any.parts().stream().allMatch(each -> relates(each, out));
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().allMatch(each -> relates(each, out));

@@ -41,6 +41,8 @@ class AnOperandThatIsNoInputPlaceCarriesTheRangeItIsMadeOfTest {
                 invariant value >= 0 && value <= 1000
             data Box = { n: Int }
                 invariant n >= 0
+            data Tray = { n: Int }
+                invariant n >= 0 && n <= 100
             data Line = { sku: String, quantity: Qty, flag: Bool, note: Option<Qty> }
             data Order = { lines: List<Line>, previous: Set<String> }
 
@@ -158,11 +160,22 @@ class AnOperandThatIsNoInputPlaceCarriesTheRangeItIsMadeOfTest {
         // The same where the operation is in the arm and reads the name the arm binds.
         out.put("aProductInTheArmOfAMatch", ofALead("touchesTimesFive(lead)", true));
         out.put("aMatchWhoseArmStopsOnWhatTheRelationReads", ofALead("sizeTimes(lead, free)", false));
-        out.put("aProductOfALookedUpInts"+"Placeholder",ofALead("0", true));
         // What an arm takes out of an option is a value of the type the option holds.
         // And in the arm of an attempt to build a value, which binds the value built.
         out.put("aProductInTheArmOfAnAttempt", new Case(
                 "{ if Box { n = free } as b then b.n * 5 else 0 }", true));
+        // And where the attempt is itself the operand, whose arm names what it built.
+        out.put("anAttemptAsAFactor", new Case(
+                "(if Box { n = free } as b then b.n else 0) * 5", true));
+        out.put("anAttemptAsAFactorBesideALookup", new Case(
+                "(if Box { n = free } as b then b.n else 0) * (" + RAW + ")", false));
+        // A field of a record is where the rules of the record leave it, whatever made the record:
+        // the field of one built from a lookup is bounded where its rules bound it, and is as open
+        // as the lookup where they do not.
+        out.put("aFieldOfARecordWhoseRulesBoundIt", new Case(
+                "{ if Tray { n = " + RAW + " } as t then t.n * 5 else 0 }", true));
+        out.put("aFieldOfARecordWhoseRulesLeaveItOpen", new Case(
+                "{ if Box { n = " + RAW + " } as b then b.n * 5 else 0 }", false));
         out.put("aMatchOverAnOptionOfANewtype", new Case(
                 "{ match l.note with\n | Some n -> n.value * 5\n | None -> 0 }", true));
         out.put("aProductOfLookedUpInts", new Case("(" + RAW + ") * l.quantity.value", false));
