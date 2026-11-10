@@ -1206,6 +1206,7 @@ public final class InvariantChecker {
                 .takingRead(answered.whole().confinement(), allowed, c.answers);
         ComputedNumbers.Account account = new ReadAccount(c.terms, constraints.values());
         for (ComputedNumbers.Defining each : definitions) {
+            took.defines(each.rule(), each.definition().defined());
             // Only where every clause of the value was read: a rule this did not read may hold
             // any place the number is made of, or the place it defines, to fewer numbers.
             if (read && notGathered.isEmpty()

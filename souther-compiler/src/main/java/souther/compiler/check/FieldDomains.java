@@ -2902,7 +2902,7 @@ public final class FieldDomains {
         }
         Set<RuleRef> unheld = new LinkedHashSet<>();
         for (ProjectionEvidence.Cause each : causes) {
-            if (operatorsOfOnlyADefinition(each, place)) {
+            if (operatorsOfOnlyADefinition(each, place) || theImageOfOnlyADefinition(each, place)) {
                 continue;
             }
             if (!(each instanceof ProjectionEvidence.Cause.Unrepresented(RuleRef rule, String _))) {
@@ -2943,7 +2943,29 @@ public final class FieldDomains {
      */
     private boolean operatorsOfOnlyADefinition(ProjectionEvidence.Cause cause, RuleKey place) {
         return cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer(RuleRef rule)
-                && took.isOnlyDefining(rule)
+                && asksAwayFromWhatOnlyADefinitionDefines(rule, place);
+    }
+
+    /**
+     * Whether {@code cause} is that the bounds hold the hull of what a place defined by a rule
+     * comes to ({@link ReadingEvidence#definitions}), the rule saying nothing but such
+     * definitions: asked of whether a value exists, or of a place the number is made of, the
+     * hull says no less than the image does, as {@link #operatorsOfOnlyADefinition} says of
+     * the operators. Of the defined place it says what it says, which is the hull.
+     */
+    private boolean theImageOfOnlyADefinition(ProjectionEvidence.Cause cause, RuleKey place) {
+        return cause instanceof ProjectionEvidence.Cause.Lossy(RuleRef rule, FactSubject defined,
+                        var _)
+                && rule instanceof RuleRef.Invariant invariant
+                && took.definitions().getOrDefault(invariant, Set.of()).contains(defined)
+                && asksAwayFromWhatOnlyADefinitionDefines(rule, place);
+    }
+
+    /** Whether {@code rule} says nothing but that places are numbers made of places it leaves
+     *  free, and {@code place} is none it defines: null, asking whether a value exists, or one of
+     *  the places it leaves free. */
+    private boolean asksAwayFromWhatOnlyADefinitionDefines(RuleRef rule, RuleKey place) {
+        return took.isOnlyDefining(rule)
                 && (place == null || (rule instanceof RuleRef.Invariant invariant
                         && atomAt.get(place) instanceof FactSubject at
                         && took.isFreedByDefinition(invariant, at)));
@@ -3686,6 +3708,16 @@ public final class FieldDomains {
                         part.rule()));
             }
         }));
+        // And a place a rule defines as a number made of others. Its values are what the number
+        // comes to, the image of a function of those places, and what the bounds hold of it is the
+        // hull of that image: a product of a quantity of one or two and a price up to ten is never
+        // eleven, though the hull holds it.
+        took.definitions().forEach((rule, defined) -> {
+            for (FactSubject place : defined) {
+                lossy.add(new ProjectionEvidence.Cause.Lossy(rule, place,
+                        Set.of(ProjectionEvidence.Cause.Unstated.A_RELATION)));
+            }
+        });
         causes.addAll(lossy);
         causes.addAll(unsaid);
         // And whether the ends handed over are the ends the rules drew. Asked of every subject the
