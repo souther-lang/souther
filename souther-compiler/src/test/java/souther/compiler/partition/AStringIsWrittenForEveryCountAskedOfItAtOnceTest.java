@@ -98,7 +98,7 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
         }
 
         private Demands holding(NumericTerm term, NumericSet set) {
-            RealizationTarget.OfANumber target = RealizationTarget.ofAHeld(term);
+            RealizationTarget.OfANumber target = RealizationTarget.ofATakenIn(term);
             asked.put(target, AskedAt.theClass(set, Carrier.WHOLE));
             measured.put(target, TermOrdersFixtures.at(term, Type.STRING, SYMBOLS).answered());
             return this;

@@ -4,6 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.query.Output;
+import souther.compiler.source.SourceId;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
@@ -11,6 +15,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -78,9 +83,42 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
         RealizationTarget.OfANumber other = RealizationTarget.ofAPlace(
                 (NumericTerm.FromOnePosition) number("elsewhere"));
         assertThrows(IllegalArgumentException.class,
-                () -> new RealizationTarget.OfAProduct(withAWay, other));
+                () -> new RealizationTarget.OfAProduct(withAWay, other, other));
         assertThrows(IllegalArgumentException.class,
-                () -> new RealizationTarget.OfAProduct(withNone, other));
+                () -> new RealizationTarget.OfAProduct(withNone, other, other));
+    }
+
+    /**
+     * The reproduction as the issue gives it, examples included: the two rows run and are
+     * answered as written, and the measuring that goes beside them does not stop the run.
+     */
+    @Test
+    void theExamplesOfTheReproductionRunAndAreAnswered() {
+        String model = modelOf("a: Decimal, b: Decimal, limit: Decimal, rate: Decimal",
+                "Decimal.multiply(Decimal.add(a, b), rate)") + """
+
+                example plan
+                    | "a" : (100.0m, 200.0m, 346.0m, 0.1m) -> Out { within = true }
+                    | "b" : (100.0m, 3000.0m, 346.0m, 0.1m) -> Out { within = false }
+                """;
+        Compilation compilation = Compilation.ofSources(List.of(model), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<RowOutcome> rows = new ArrayList<>();
+        for (String module : compilation.modules()) {
+            for (SourceId id : compilation.exampleSourcesOf(module)) {
+                Output.Examples.Of ran = compilation.db()
+                        .ask(Output.Examples.asked(compilation.db(), module, id)).value();
+                if (ran != null) {
+                    rows.addAll(ran.rows());
+                }
+            }
+        }
+        assertEquals(List.of("a", "b"),
+                rows.stream().map(row -> row.identity().shown()).sorted().toList(), rows.toString());
+        for (RowOutcome row : rows) {
+            assertTrue(row.answered(), row.toString());
+        }
     }
 
     /** Every target the factory makes answers its root, whatever kind of term it was made for. */
@@ -198,6 +236,83 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
 
                     behavior f : (a: Int, b: Int, c: Int, d: Int) -> Ok | No
                     let f (a, b, c, d) = {
+                        guard %s else No
+                        Ok
+                    }
+                    """.formatted(condition);
+            Compilation compilation = Compilation.ofSource(model, "Main");
+            assertDoesNotThrow(() -> {
+                compilation.measure(Adequacy.Asked.fullReport());
+                compilation.answerEverything();
+            }, condition);
+            assertNotNull(Adequacy.readingsOf(compilation.db(), "demo"), condition);
+            assertNotNull(compilation.db().ask(new Adequacy.Coverage("demo")).value(), condition);
+        }
+    }
+
+    /**
+     * The same product beside what a list adds up to, how many elements meet a statement that
+     * reads it, and a total of products taken over the elements.
+     */
+    @Test
+    void aProductNoOneNumberHoldsIsMeasuredBesideAListsTotalsAndCounts() {
+        for (String condition : List.of(
+                "List.sum(ns) + (a + b) * c >= 1000",
+                "List.length(List.filter(n -> n * c >= 10, ns)) >= 2",
+                "List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 2",
+                "List.sum(List.map(n -> n * c, ns)) >= 100",
+                "List.sum(List.map(n -> (n + a) * c, ns)) >= 100",
+                "List.sum(ns) >= 9 && (a + b) * c >= 1000",
+                "List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 2 && a >= 5",
+                "a >= 5 && List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 2",
+                "List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 2 && List.sum(ns) >= 9",
+                "List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 1 && c >= 3")) {
+            String model = """
+                    module demo
+
+                    data Ok
+                    data No
+
+                    behavior f : (ns: List<Int>, a: Int, b: Int, c: Int) -> Ok | No
+                    let f (ns, a, b, c) = {
+                        guard %s else No
+                        Ok
+                    }
+                    """.formatted(condition);
+            Compilation compilation = Compilation.ofSource(model, "Main");
+            assertDoesNotThrow(() -> {
+                compilation.measure(Adequacy.Asked.fullReport());
+                compilation.answerEverything();
+            }, condition);
+            assertNotNull(Adequacy.readingsOf(compilation.db(), "demo"), condition);
+            assertNotNull(compilation.db().ask(new Adequacy.Coverage("demo")).value(), condition);
+        }
+    }
+
+    /**
+     * The same product under a quantifier over a list, and over the values of a map: a statement
+     * every element or some element meets, and a number read off the entries.
+     */
+    @Test
+    void aProductNoOneNumberHoldsIsMeasuredUnderAQuantifierAndOverAMap() {
+        for (String condition : List.of(
+                "List.any(n -> (n + a) * c >= 10, ns)",
+                "List.all(n -> (n + a) * c >= 10, ns)",
+                "List.all(n -> (n + a) * c >= 10, ns) && a >= 5",
+                "List.any(n -> (n + a) * c >= 10, ns) && List.sum(ns) >= 9",
+                "List.all(n -> n * c >= 10, ns) && (a + b) * c >= 1000",
+                "Map.size(Map.filterEntries((_, d) -> (d + a) * c >= 10, m)) >= 1",
+                "Map.size(Map.filterEntries((_, d) -> (d + a) * c >= 10, m)) >= 1 && a >= 5",
+                "List.sum(Map.values(m)) + (a + b) * c >= 1000")) {
+            String model = """
+                    module demo
+
+                    data Ok
+                    data No
+
+                    behavior f : (ns: List<Int>, m: Map<String, Int>, a: Int, b: Int, c: Int)
+                            -> Ok | No
+                    let f (ns, m, a, b, c) = {
                         guard %s else No
                         Ok
                     }

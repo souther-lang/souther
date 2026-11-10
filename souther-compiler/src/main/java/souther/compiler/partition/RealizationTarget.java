@@ -6,6 +6,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Spelling;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,11 +25,15 @@ import java.util.Optional;
  * generator's problem, and a term that answered it would name this side's vocabulary from the side
  * that only measures.
  *
- * <p><b>Total, so a term of a new kind is a compilation error here.</b> Every number this compiler
- * has is realized by rebuilding one value, and which value that is is the whole of what this
- * answers. A kind of term arriving that no single value realizes does not belong in either variant,
- * and what should happen then is that this switch stops compiling and the vocabulary is looked at
- * again — not that the new term quietly joins the ones nothing composes a row for.
+ * <p><b>Exhaustive over the terms, so a term of a new kind is a compilation error here.</b> A number
+ * this compiler writes is written by rebuilding one value, and which value that is is the whole of
+ * what a target answers. {@link #of} says for each kind of term whether it has one: every kind does
+ * except a product no one number holds at a value, which is read off several places and is none's
+ * value. A target that exists always has its write root, and a number with none is one a row is not
+ * written for, which is said where its demand is taken in and not found out where its target is
+ * asked. A kind of term arriving that no single value realizes stops this switch compiling, and the
+ * vocabulary is looked at again — not that the new term quietly joins the ones nothing composes a
+ * row for.
  *
  * <p>Whether anything can be built at a target is a different question and is not asked here.
  * {@link TermRealizations} owns it, and answers it for a target that exists — so "there is nowhere
@@ -141,22 +146,38 @@ public sealed interface RealizationTarget {
     }
 
     /**
-     * The target of a number known to be one of the terms every row can write, which is every term
-     * but a product: those have a target whatever they are.
+     * Whether every one of {@code terms} has a target, which is what a demand over them has to be
+     * for a row to be written for it. The one place a demand is asked this: a demand that is not
+     * answered by it is left uncomposed where it is taken in, and what is composed after that
+     * asks {@link #ofATakenIn} of its numbers.
+     */
+    static boolean writesEvery(Collection<? extends NumericTerm> terms) {
+        return terms.stream().allMatch(term -> of(term).isPresent());
+    }
+
+    /**
+     * The target of a number in a position, which every such number has.
      */
     static OfANumber ofAPlace(NumericTerm.FromOnePosition one) {
         return new AtOnePosition(one);
     }
 
+    /** The target of a number taken over a run, which every such number has. */
+    static OfANumber ofARun(NumericTerm.TakenOver over) {
+        return new OverARun(over);
+    }
+
     /**
-     * The target of a number the caller took from a target or a placing that already has one,
-     * where a product no row writes cannot be. Asked of any other number, a product with no target
-     * is a caller that did not ask {@link #of} first, and it is refused rather than answered with a
-     * place to write at.
+     * The target of a number of a demand that was taken in, which is one every number of it has
+     * ({@link #writesEvery}).
+     *
+     * <p>Not for a number of any other origin: a number nobody asked {@link #of} of may be a
+     * product no row writes, and this refuses it rather than answering with a place to write at.
+     * What is held is the target and not the number, wherever the caller already has it.
      */
-    static OfANumber ofAHeld(NumericTerm term) {
-        return of(term).orElseThrow(() -> new IllegalArgumentException(
-                term + " is held at no value by one number, so no row writes it"));
+    static OfANumber ofATakenIn(NumericTerm term) {
+        return of(term).orElseThrow(() -> new IllegalStateException(
+                term + " was taken in with a demand and has no target"));
     }
 
     /**
@@ -169,14 +190,15 @@ public sealed interface RealizationTarget {
      * the product is replaced by theirs before a row is composed ({@code Generator}). The root
      * here is the carrier's, which is where the value is written.
      */
-    record OfAProduct(NumericTerm.ProductOf term, OfANumber carrier) implements OfANumber {
+    record OfAProduct(NumericTerm.ProductOf term, OfANumber carrier, OfANumber fixed)
+            implements OfANumber {
 
         public OfAProduct {
             NumericTerm.ProductOf.AtAValue way = term == null ? null : term.atAValue();
-            if (way == null || carrier == null || !way.carrier().equals(carrier.term())
-                    || RealizationTarget.of(way.fixed()).isEmpty()) {
+            if (way == null || carrier == null || fixed == null
+                    || !way.carrier().equals(carrier.term()) || !way.fixed().equals(fixed.term())) {
                 throw new IllegalArgumentException(
-                        "a product is a target only with the numbers that hold it: " + term);
+                        "a product is a target only with the two numbers that hold it: " + term);
             }
         }
 
@@ -191,11 +213,9 @@ public sealed interface RealizationTarget {
                 return Optional.empty();
             }
             // Held by two numbers, the one alone and the one beside it, and a row writes both.
-            if (RealizationTarget.of(way.fixed()).isEmpty()) {
-                return Optional.empty();
-            }
-            return RealizationTarget.of(way.carrier())
-                    .map(carrier -> new OfAProduct(product, carrier));
+            return RealizationTarget.of(way.carrier()).flatMap(carrier ->
+                    RealizationTarget.of(way.fixed()).map(fixed ->
+                            new OfAProduct(product, carrier, fixed)));
         }
 
         @Override
