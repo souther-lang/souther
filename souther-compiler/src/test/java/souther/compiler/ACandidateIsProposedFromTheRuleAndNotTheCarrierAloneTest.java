@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import souther.compiler.partition.FillResult;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -11,6 +12,7 @@ import souther.compiler.query.Compilation;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -27,7 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>A candidate is still a proposal the decoder answers. Nothing here claims a witness exists for an
  * arbitrary rule: what is held to is narrower — a minimum this can read is a minimum the candidate is
- * built at, rather than one the choice is made in ignorance of.
+ * built at, rather than one the choice is made in ignorance of. So what is asked of a row is that the
+ * decoder accepted it and that it is the one row owed, and not what the filler of a string or an
+ * element happens to be: that is the generator's choice, and a row that spelt it otherwise would be
+ * as good a row.
  */
 class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
@@ -69,7 +74,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * written under leaves a model that does not compile, and a test asking such a model for its rows
      * gets an empty answer that agrees with whatever it expected of one.
      */
-    private static souther.compiler.partition.FillResult generated(String source) {
+    private static FillResult generated(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -84,7 +89,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
     /** The one row the generator writes for that combination, as the text an author is offered. */
     private static String generatedRow(String source) {
-        souther.compiler.partition.FillResult filled = generated(source);
+        FillResult filled = generated(source);
         assertEquals(List.of(), filled.unresolved(),
                 "the combination is one a value exists for, so nothing is left unresolved");
         assertEquals(1, filled.rows().size(), "one combination is uncovered, so one row is written");
@@ -100,113 +105,198 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * holding an element there.
      */
     private static List<String> generatedRows(String source) {
-        souther.compiler.partition.FillResult filled = generated(source);
+        FillResult filled = generated(source);
         assertEquals(List.of(), filled.unresolved(),
                 "the combination is one a value exists for, so nothing is left unresolved");
         return filled.rows().stream().map(row -> row.inputs().get(0).text()).toList();
     }
 
-    // --- two rules about one position --------------------------------------------------------------
-
-    /**
-     * Two rules about the strings of a position, and a value that clears both.
-     *
-     * <p>A proposal per rule is a proposal each of the others may refuse. Offered only those, a
-     * position carrying two rules about its strings has no value at all — each is what one rule
-     * asked for and the next one refuses it — and the behavior it sits in comes back with no row
-     * anywhere.
-     *
-     * <p>Held at the row, because that is the size of what it costs. A reading of the proposals
-     * alone would have shown two values where one was wanted and said nothing about the model
-     * losing every row it has.
-     */
-    @Test
-    void aPositionCarryingTwoRulesIsOfferedAValueClearingBoth() {
-        String row = generatedRow(model("""
-                data Code = String
-                    invariant begins = String.startsWith("X", value)
-                    invariant ends = String.endsWith("Z", value)
-                """, "code: Code", "code = Code(\"XZ\")"));
-
-        assertEquals("T { kind = Overseas, code = Code(\"XZ\") }", row);
-    }
-
-    // --- a collection the rules say is not empty ---------------------------------------------------
-
-    @Test
-    void aListTheRuleSaysIsNotEmptyIsOfferedAnElement() {
-        String row = generatedRow(model("""
-                data Tag = List<String>
-                    invariant someTags = List.length(value) >= 1
-                """, "tags: Tag", "tags = Tag([\"t\"])"));
-
-        assertEquals("T { kind = Overseas, tags = Tag([\"x\"]) }", row);
+    /** A type with rules, the field of the behavior's input that holds it, and a value the type
+     *  admits written as a fixture, so that the model compiles and the row is owed. */
+    private record Position(String name, String declaration, String field, String written) {
     }
 
     /**
-     * The minimum itself, and not one element.
+     * Each of these is a position whose rules the candidate is built at. The decoder answers the
+     * proposal, so a row coming back is a value the rules admit — a collection of the size the
+     * minimum names, of elements no two of which are equal, built against the rules of its own
+     * elements — and one proposal refused is a combination left unresolved, which fails here.
      *
-     * <p>A reader that recognised {@code >= 3} and then offered a list of one would refuse the row for
-     * the same reason it refused the empty one, having read the rule and not used it.
+     * <p>Each says what it holds beyond the one before it, and what was lost where it was not
+     * held:
      */
+    private static final List<Position> POSITIONS = List.of(
+            // A proposal per rule is a proposal each of the others may refuse. Offered only those, a
+            // position carrying two rules about its strings has no value at all and the behavior it
+            // sits in comes back with no row anywhere.
+            new Position("two rules about the strings of one position", """
+                    data Code = String
+                        invariant begins = String.startsWith("X", value)
+                        invariant ends = String.endsWith("Z", value)
+                    """, "code: Code", "code = Code(\"XZ\")"),
+
+            // The empty list was the one value on offer, and the rule refuses it.
+            new Position("a list the rule says is not empty", """
+                    data Tag = List<String>
+                        invariant someTags = List.length(value) >= 1
+                    """, "tags: Tag", "tags = Tag([\"t\"])"),
+
+            // The minimum itself and not one element: a reader that recognised >= 3 and then
+            // offered a list of one would refuse the row for the same reason it refused the empty.
+            new Position("a list with a minimum of three", """
+                    data Tags = List<String>
+                        invariant enough = List.length(value) >= 3
+                    """, "tags: Tags", "tags = Tags([\"a\", \"b\", \"c\"])"),
+
+            // Raoh has no constraint for a set's size, so a chooser reading the decoder's
+            // constraints would find nothing here.
+            new Position("a set the rule says is not empty", """
+                    data Codes = Set<String>
+                        invariant someCodes = Set.size(value) >= 1
+                    """, "codes: Codes", "codes = Codes([\"c\"])"),
+
+            // Three elements no two of which are equal, or it is a set of fewer.
+            new Position("a set with a minimum of three", """
+                    data Codes = Set<String>
+                        invariant enough = Set.size(value) >= 3
+                    """, "codes: Codes", "codes = Codes([\"a\", \"b\", \"c\"])"),
+
+            new Position("a map the rule says is not empty", """
+                    data Props = Map<String, String>
+                        invariant someProps = Map.size(value) >= 1
+                    """, "props: Props", "props = Props([(\"k\", \"v\")])"),
+
+            // Two keys no two of which are equal; the values under them are free to repeat.
+            new Position("a map with a minimum of two", """
+                    data Props = Map<String, String>
+                        invariant enough = Map.size(value) >= 2
+                    """, "props: Props", "props = Props([(\"k\", \"v\"), (\"l\", \"w\")])"),
+
+            // The fixed one-character string met a minimum of one by accident and not one of two.
+            new Position("a string with a minimum of one", """
+                    data Name = String
+                        invariant longEnough = String.length(value) >= 1
+                    """, "name: Name", "name = Name(\"abcde\")"),
+
+            new Position("a string with a minimum of five", """
+                    data Name = String
+                        invariant longEnough = String.length(value) >= 5
+                    """, "name: Name", "name = Name(\"abcde\")"),
+
+            // A string is counted in characters, and how many are worth writing is its own
+            // question: a collection of sixty-five is sixty-five values, a string of sixty-five is
+            // one literal, and the type is one the model plainly admits.
+            new Position("a string with a minimum past what a collection holds", """
+                    data Token = String
+                        invariant longEnough = String.length(value) >= 65
+                    """, "token: Token", "token = Token(\"" + "a".repeat(65) + "\")"),
+
+            // The shortest string the pattern accepts is the empty one, which the minimum refuses;
+            // the string the minimum asks for is five characters, which this pattern accepts.
+            // Neither candidate is a claim — the decoder is given both to answer.
+            new Position("a format and a minimum", """
+                    data Tag = String
+                        invariant shaped = String.matches("x*", value)
+                        invariant longEnough = String.length(value) >= 5
+                    """, "tag: Tag", "tag = Tag(\"xxxxx\")"),
+
+            // A witness is a tree: what stands for a list is a list of what stands for its element.
+            new Position("an element with a rule of its own", """
+                    data Word = String
+                        invariant longEnough = String.length(value) >= 4
+
+                    data Words = List<Word>
+                        invariant someWords = List.length(value) >= 1
+                    """, "words: Words", "words = Words([Word(\"abcd\")])"),
+
+            // An element offering several values offers all of them to the collection built around
+            // it. A list that took the first and stopped would report the combination as refused
+            // while a list of the second is a value the model plainly admits.
+            new Position("an element offering several values, in a list", """
+                    data Word = String
+                        invariant shaped = String.matches("x*", value)
+                        invariant longEnough = String.length(value) >= 5
+
+                    data Words = List<Word>
+                        invariant someWords = List.length(value) >= 1
+                    """, "words: Words", "words = Words([Word(\"xxxxx\")])"),
+
+            new Position("a value offering several values, in a map", """
+                    data Word = String
+                        invariant shaped = String.matches("x*", value)
+                        invariant longEnough = String.length(value) >= 5
+
+                    data Words = Map<String, Word>
+                        invariant someWords = Map.size(value) >= 1
+                    """, "words: Words", "words = Words([(\"k\", Word(\"xxxxx\"))])"),
+
+            // Elements that differ are elements of the type, not numbers counted from nothing: a
+            // set of two counted 0, 1, 2 offers a number the element's own bound rejects.
+            new Position("a set whose second element is bound by the element's own rule", """
+                    data Positive = Int
+                        invariant atLeastTen = value >= 10
+
+                    data Positives = Set<Positive>
+                        invariant enough = Set.size(value) >= 2
+                    """, "ns: Positives", "ns = Positives([Positive(10), Positive(11)])"),
+
+            // The same of a map's keys, which have to differ. Keyed by a string, because a map that
+            // crosses the boundary is a JSON object and its keys are strings (<<e1314>>).
+            new Position("a map whose second key is bound by the key's own rules", """
+                    data Code = String
+                        invariant longEnough = String.length(value) >= 3
+
+                    data ByCode = Map<Code, String>
+                        invariant enough = Map.size(value) >= 2
+                    """, "by: ByCode", "by = ByCode([(Code(\"aaa\"), \"a\"), (Code(\"bbbb\"), \"b\")])"),
+
+            // What a key proposes and what a value proposes are settled inside the map or not at all:
+            // a key at its second proposal beside a value at its first is a map the model admits.
+            new Position("a map whose key and value proposals meet", """
+                    data Key = String
+                        invariant shaped = String.matches("x*", value)
+                        invariant longEnough = String.length(value) >= 5
+
+                    data Val = String
+                        invariant shaped = String.matches("a{5}", value)
+
+                    data M = Map<Key, Val>
+                        invariant nonEmpty = Map.size(value) >= 1
+                    """, "m: M", "m = M([(Key(\"xxxxx\"), Val(\"aaaaa\"))])"),
+
+            // Each format contributes the shortest string it accepts and the minimum contributes
+            // one of its length, last because it is added last. A budget over the whole list drops
+            // it as soon as enough formats are written above it, and only inside a collection.
+            new Position("a proposal after several formats", """
+                    data Word = String
+                        invariant p1 = String.matches("x*", value)
+                        invariant p2 = String.matches("x{2,}", value)
+                        invariant p3 = String.matches("x{3,}", value)
+                        invariant longEnough = String.length(value) >= 5
+
+                    data Words = List<Word>
+                        invariant nonEmpty = List.length(value) >= 1
+                    """, "words: Words", "words = Words([Word(\"xxxxx\")])"),
+
+            // What the descent gives up on is a value inside itself, and how many names a value
+            // wears on the way down is not that.
+            new Position("a long chain of names", """
+                    data L1 = String
+                    data L2 = L1
+                    data L3 = L2
+                    data L4 = L3
+                    data L5 = L4
+
+                    data Deep = List<L5>
+                        invariant someDeep = List.length(value) >= 1
+                    """, "deep: Deep", "deep = Deep([L5(L4(L3(L2(L1(\"a\")))))])"));
+
     @Test
-    void aListIsOfferedAsManyElementsAsTheMinimumNames() {
-        String row = generatedRow(model("""
-                data Tags = List<String>
-                    invariant enough = List.length(value) >= 3
-                """, "tags: Tags", "tags = Tags([\"a\", \"b\", \"c\"])"));
-
-        assertEquals("T { kind = Overseas, tags = Tags([\"x\", \"x\", \"x\"]) }", row);
-    }
-
-    /**
-     * A set counts what a list does, and its rule is read the same way.
-     *
-     * <p>Which the decoder's own reading cannot supply. Raoh has no constraint for a set's size — a
-     * set crosses the boundary as a list, so a size chained after the mapping that drops duplicates
-     * would count the wrong things — and a candidate chooser reading the decoder's constraints would
-     * find nothing here.
-     */
-    @Test
-    void aSetTheRuleSaysIsNotEmptyIsOfferedAnElement() {
-        String row = generatedRow(model("""
-                data Codes = Set<String>
-                    invariant someCodes = Set.size(value) >= 1
-                """, "codes: Codes", "codes = Codes([\"c\"])"));
-
-        assertEquals("T { kind = Overseas, codes = Codes([\"x\"]) }", row);
-    }
-
-    /** A set of three is three elements no two of which are equal, or it is a set of fewer. */
-    @Test
-    void aSetIsOfferedElementsNoTwoOfWhichAreEqual() {
-        String row = generatedRow(model("""
-                data Codes = Set<String>
-                    invariant enough = Set.size(value) >= 3
-                """, "codes: Codes", "codes = Codes([\"a\", \"b\", \"c\"])"));
-
-        assertEquals("T { kind = Overseas, codes = Codes([\"x\", \"xx\", \"xxx\"]) }", row);
-    }
-
-    @Test
-    void aMapTheRuleSaysIsNotEmptyIsOfferedAnEntry() {
-        String row = generatedRow(model("""
-                data Props = Map<String, String>
-                    invariant someProps = Map.size(value) >= 1
-                """, "props: Props", "props = Props([(\"k\", \"v\")])"));
-
-        assertEquals("T { kind = Overseas, props = Props([(\"x\", \"x\")]) }", row);
-    }
-
-    /** Two entries is two keys no two of which are equal; the values under them are free to repeat. */
-    @Test
-    void aMapIsOfferedEntriesNoTwoOfWhichShareAKey() {
-        String row = generatedRow(model("""
-                data Props = Map<String, String>
-                    invariant enough = Map.size(value) >= 2
-                """, "props: Props", "props = Props([(\"k\", \"v\"), (\"l\", \"w\")])"));
-
-        assertEquals("T { kind = Overseas, props = Props([(\"x\", \"x\"), (\"xx\", \"x\")]) }", row);
+    void aPositionIsOfferedAValueItsRulesAdmit() {
+        for (Position each : POSITIONS) {
+            assertDoesNotThrow(() -> generatedRow(model(each.declaration(), each.field(),
+                    each.written())), each.name());
+        }
     }
 
     /**
@@ -278,221 +368,6 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 "a set of two, built from the cases the sum divides into");
     }
 
-    // --- a string the rules give a length ----------------------------------------------------------
-
-    /**
-     * The fixed {@code "x"} is a string of one, so a minimum of one was met by accident and a minimum
-     * of two was not. Both are here: the first has to keep working and the second is the defect.
-     */
-    @Test
-    void aStringIsOfferedALengthTheMinimumAdmits() {
-        String row = generatedRow(model("""
-                data Name = String
-                    invariant longEnough = String.length(value) >= 5
-                """, "name: Name", "name = Name(\"abcde\")"));
-
-        assertEquals("T { kind = Overseas, name = Name(\"xxxxx\") }", row);
-    }
-
-    /**
-     * A string is counted in characters, and how many of those are worth writing is its own question.
-     *
-     * <p>A collection of sixty-five is sixty-five values each built in turn; a string of sixty-five is
-     * one literal. Holding the two to one number is holding a string to a limit nothing about it
-     * suggests, and the type here is one the model plainly admits.
-     */
-    @Test
-    void aStringsLengthIsNotBoundedByWhatACollectionHolds() {
-        String row = generatedRow(model("""
-                data Token = String
-                    invariant longEnough = String.length(value) >= 65
-                """, "token: Token", "token = Token(\"" + "a".repeat(65) + "\")"));
-
-        assertEquals("T { kind = Overseas, token = Token(\"" + "x".repeat(65) + "\") }", row);
-    }
-
-    @Test
-    void aStringWhoseMinimumIsOneIsStillOfferedTheOneCharacterValue() {
-        String row = generatedRow(model("""
-                data Name = String
-                    invariant longEnough = String.length(value) >= 1
-                """, "name: Name", "name = Name(\"abcde\")"));
-
-        assertEquals("T { kind = Overseas, name = Name(\"x\") }", row);
-    }
-
-    /**
-     * A format and a minimum are two proposals, not a precedence.
-     *
-     * <p>The shortest string the pattern accepts is the empty one, which the minimum refuses; the
-     * string the minimum asks for is five characters, which this pattern accepts. A reader that took
-     * the format as the answer wherever there was one would offer only the first and report the
-     * combination as refused. Neither candidate is a claim — what settles it is that the decoder was
-     * given both to answer.
-     */
-    @Test
-    void aFormatAndAMinimumAreBothProposedAndTheDecoderChooses() {
-        String row = generatedRow(model("""
-                data Tag = String
-                    invariant shaped = String.matches("x*", value)
-                    invariant longEnough = String.length(value) >= 5
-                """, "tag: Tag", "tag = Tag(\"xxxxx\")"));
-
-        assertEquals("T { kind = Overseas, tag = Tag(\"xxxxx\") }", row);
-    }
-
-    // --- what a rule reaches -----------------------------------------------------------------------
-
-    /**
-     * The elements have rules of their own, and the value inside the collection is built against them.
-     *
-     * <p>A witness is a tree: what stands for a list is a list of what stands for its element, which
-     * is itself a value some rule may have something to say about.
-     */
-    @Test
-    void anElementsOwnRuleIsReadWhereTheElementIsBuilt() {
-        String row = generatedRow(model("""
-                data Word = String
-                    invariant longEnough = String.length(value) >= 4
-
-                data Words = List<Word>
-                    invariant someWords = List.length(value) >= 1
-                """, "words: Words", "words = Words([Word(\"abcd\")])"));
-
-        assertEquals("T { kind = Overseas, words = Words([Word(\"xxxx\")]) }", row);
-    }
-
-    /**
-     * An element offering several values offers all of them to the collection built around it.
-     *
-     * <p>Which is the same thing the position itself is owed, one level down. {@code Word} proposes the
-     * shortest string its format accepts and the string its minimum asks for, and the decoder settles
-     * which; a list that took the first of those and stopped would report the combination as refused
-     * while a list of the second is a value the model plainly admits. Collapsing the element to one
-     * value moves the defect this whole change is about from the collection to what it holds.
-     */
-    @Test
-    void anElementOfferingSeveralValuesOffersThemAllThroughTheCollection() {
-        String row = generatedRow(model("""
-                data Word = String
-                    invariant shaped = String.matches("x*", value)
-                    invariant longEnough = String.length(value) >= 5
-
-                data Words = List<Word>
-                    invariant someWords = List.length(value) >= 1
-                """, "words: Words", "words = Words([Word(\"xxxxx\")])"));
-
-        assertEquals("T { kind = Overseas, words = Words([Word(\"xxxxx\")]) }", row);
-    }
-
-    /** The same of what a map holds under its keys. */
-    @Test
-    void aValueOfferingSeveralOfThemOffersThemAllThroughTheMap() {
-        String row = generatedRow(model("""
-                data Word = String
-                    invariant shaped = String.matches("x*", value)
-                    invariant longEnough = String.length(value) >= 5
-
-                data Words = Map<String, Word>
-                    invariant someWords = Map.size(value) >= 1
-                """, "words: Words", "words = Words([(\"k\", Word(\"xxxxx\"))])"));
-
-        assertEquals("T { kind = Overseas, words = Words([(\"x\", Word(\"xxxxx\"))]) }", row);
-    }
-
-    /**
-     * Elements that differ are elements of the type, not numbers counted from nothing.
-     *
-     * <p>A set of two needs a second value no rule of the element refuses. Counting {@code 0, 1, 2} for
-     * distinctness offers a number the element's own bound rejects, and the set is then refused for the
-     * element rather than for anything about its size — the same collapse as above, arrived at from the
-     * other side.
-     */
-    @Test
-    void aSetsSecondElementComesFromInsideTheElementsOwnBound() {
-        String row = generatedRow(model("""
-                data Positive = Int
-                    invariant atLeastTen = value >= 10
-
-                data Positives = Set<Positive>
-                    invariant enough = Set.size(value) >= 2
-                """, "ns: Positives", "ns = Positives([Positive(10), Positive(11)])"));
-
-        assertEquals("T { kind = Overseas, ns = Positives([Positive(10), Positive(11)]) }", row);
-    }
-
-    /**
-     * The same of a map's keys, which have to differ for the same reason.
-     *
-     * <p>Keyed by a string, because a map that crosses the boundary is a JSON object and its keys are
-     * strings (<<e1314>>). The rule the second key has to keep is its length rather than a bound, and
-     * it is the same question: a key made without reading the key's own rules is a key the map is
-     * refused for.
-     */
-    @Test
-    void aMapsSecondKeyComesFromInsideTheKeysOwnRules() {
-        String row = generatedRow(model("""
-                data Code = String
-                    invariant longEnough = String.length(value) >= 3
-
-                data ByCode = Map<Code, String>
-                    invariant enough = Map.size(value) >= 2
-                """, "by: ByCode", "by = ByCode([(Code(\"aaa\"), \"a\"), (Code(\"bbbb\"), \"b\")])"));
-
-        assertEquals("T { kind = Overseas, by = ByCode([(Code(\"xxx\"), \"x\"), "
-                + "(Code(\"xxxx\"), \"x\")]) }", row);
-    }
-
-    /**
-     * A key and a value are two parts of one value, so their proposals meet each other.
-     *
-     * <p>The search a row is found by is over the positions of the behavior, and a map is one of those
-     * positions. What its key proposes and what its value proposes are settled inside it or not at all:
-     * a key at its second proposal beside a value at its first is a map the model admits, and nothing
-     * outside this can arrive at that pair.
-     */
-    @Test
-    void aMapsKeyAndValueProposalsMeetEachOther() {
-        String row = generatedRow(model("""
-                data Key = String
-                    invariant shaped = String.matches("x*", value)
-                    invariant longEnough = String.length(value) >= 5
-
-                data Val = String
-                    invariant shaped = String.matches("a{5}", value)
-
-                data M = Map<Key, Val>
-                    invariant nonEmpty = Map.size(value) >= 1
-                """, "m: M", "m = M([(Key(\"xxxxx\"), Val(\"aaaaa\"))])"));
-
-        assertEquals("T { kind = Overseas, m = M([(Key(\"xxxxx\"), Val(\"aaaaa\"))]) }", row);
-    }
-
-    /**
-     * A proposal a rule was read to build is not spent by how many rules were read before it.
-     *
-     * <p>Each format contributes the shortest string it accepts and the minimum contributes a string of
-     * its length, and the minimum's is last because it is added last. A budget over the whole list drops
-     * the one this change exists to add as soon as enough formats are written above it — and drops it
-     * only inside a collection, so the same `Word` is writable at a position of its own and not as an
-     * element.
-     */
-    @Test
-    void aProposalIsNotDroppedForTheNumberOfRulesReadBeforeIt() {
-        String row = generatedRow(model("""
-                data Word = String
-                    invariant p1 = String.matches("x*", value)
-                    invariant p2 = String.matches("x{2,}", value)
-                    invariant p3 = String.matches("x{3,}", value)
-                    invariant longEnough = String.length(value) >= 5
-
-                data Words = List<Word>
-                    invariant nonEmpty = List.length(value) >= 1
-                """, "words: Words", "words = Words([Word(\"xxxxx\")])"));
-
-        assertEquals("T { kind = Overseas, words = Words([Word(\"xxxxx\")]) }", row);
-    }
-
     /**
      * A minimum past what a row can carry is not built.
      *
@@ -524,7 +399,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                         | Domestic -> 1
                         | Overseas -> 1
                 """;
-        souther.compiler.partition.FillResult filled = generated(source);
+        FillResult filled = generated(source);
 
         assertEquals(List.of(), filled.rows(),
                 "no row, rather than one carrying a million elements");
@@ -569,7 +444,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                     .formatted(i, i);
         }
         formats += "    invariant twice = " + ARuleNoReadingTakesIn.narrowly("value") + "\n";
-        souther.compiler.partition.FillResult filled = generated("""
+        FillResult filled = generated("""
                 module nd.gen
 
                 data Domestic
@@ -616,7 +491,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     @Test
     void aTypeWrittenInTermsOfItselfIsDescendedIntoAndComesBack() {
-        souther.compiler.partition.FillResult filled = generated("""
+        FillResult filled = generated("""
                 module nd.gen
 
                 data Domestic
@@ -642,29 +517,6 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
     }
 
     /**
-     * A chain of names is not a type written in terms of itself.
-     *
-     * <p>What the descent has to give up on is a value inside itself, and how many names a value wears
-     * on the way down is not that. A count of levels cannot tell the two apart, so it is the names being
-     * expanded that say when to stop.
-     */
-    @Test
-    void aLongChainOfNamesIsStillBuilt() {
-        String row = generatedRow(model("""
-                data L1 = String
-                data L2 = L1
-                data L3 = L2
-                data L4 = L3
-                data L5 = L4
-
-                data Deep = List<L5>
-                    invariant someDeep = List.length(value) >= 1
-                """, "deep: Deep", "deep = Deep([L5(L4(L3(L2(L1(\"a\")))))])"));
-
-        assertEquals("T { kind = Overseas, deep = Deep([L5(L4(L3(L2(L1(\"x\")))))]) }", row);
-    }
-
-    /**
      * A rule the reader has nothing to say about leaves the position where it was.
      *
      * <p>The guarantee is that a minimum this recognises is used, not that a witness is found for
@@ -679,7 +531,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                         && List.length(value) >= 2
                     invariant hasA = List.contains("a", value)
                 """, "tags: Tags", "tags = Tags([\"a\", \"b\", \"c\"])");
-        souther.compiler.partition.FillResult filled = generated(source);
+        FillResult filled = generated(source);
 
         assertEquals(List.of(), filled.rows(), "no candidate holds a rule nothing here reads");
         assertFalse(filled.unresolved().isEmpty(), "the combination is reported, not dropped");
