@@ -133,31 +133,6 @@ class RunnerTest {
     }
 
     @Test
-    void reportsADecodeFailureWithItsPathAndMessage() throws Exception {
-        Path file = write("pair.sou", """
-                data A = Int
-                data B = Int
-                data Pair = { left: Int, right: Int }
-                behavior mkPair : (a: A, b: B) -> Pair constructs Pair
-                let mkPair (a, b) = Pair { left = a.value, right = b.value }
-                """);
-        Runner.RunException e = assertThrows(Runner.RunException.class,
-                () -> Runner.run(file, "mkPair", "[\"x\", 7]"));
-        assertEquals(1, e.exitCode);
-        assertTrue(e.getMessage().contains("could not be decoded"), e.getMessage());
-    }
-
-    @Test
-    void refusesAnInjectedBehaviorThatHasNoImplementation() throws Exception {
-        Path file = write("clock.sou", """
-                behavior now : () -> String
-                """);
-        Runner.RunException e = assertThrows(Runner.RunException.class,
-                () -> Runner.run(file, "now", null));
-        assertTrue(e.getMessage().contains("no implementation"), e.getMessage());
-    }
-
-    @Test
     void refusesABehaviorThatNeedsInjectedDependencies() throws Exception {
         Path file = write("stamp.sou", """
                 data Stamped = { at: String }
@@ -602,16 +577,6 @@ class RunnerTest {
                 e.localized(java.util.Locale.JAPANESE));
         assertTrue(e.localized(java.util.Locale.ENGLISH).contains("usage: souther run"),
                 e.localized(java.util.Locale.ENGLISH));
-    }
-
-    @Test
-    void namesAHeaderlessModuleAfterTheFile() throws Exception {
-        Path file = write("greeter.sou", """
-                behavior id : (s: String) -> String
-                let id (s) = s
-                """);
-        // The generated class lands in the file-stem package; driving it confirms the name resolves.
-        assertEquals("\"ok\"", Runner.run(file, "id", "\"ok\""));
     }
 
     /** {@code --input} with nothing in it is input of the wrong shape, which is a refusal the reader

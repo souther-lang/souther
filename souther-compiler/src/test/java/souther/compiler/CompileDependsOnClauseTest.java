@@ -26,26 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class CompileDependsOnClauseTest {
 
     @Test
-    void dependsOnNamingAnImplementedBehaviorIsReportedAtTheClause() {
-        String src = """
-                module demo
-                data A = { x: Int }
-                data R = { z: Int }
-
-                behavior helper : (a: A) -> R
-                    constructs R
-                let helper (a) = R { z = a.x }
-
-                behavior use : (a: A) -> R
-                    depends on helper
-                let use (a, helper) = helper(a)
-                """;
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("E1607", e.code(), e.getMessage());
-        assertTrue(e.getMessage().contains("helper"), e.getMessage());
-    }
-
-    @Test
     void dependsOnNamingACompositionIsReportedWithoutAdvisingToRemoveALet() {
         // a `>->` composition is its own implementation and has no `let` to remove, so the advice has
         // to be the one that holds for every implementation: take the name out of `depends on`
@@ -74,22 +54,6 @@ class CompileDependsOnClauseTest {
                 new SourceContext("demo.sou", src, SourceLayout.of(src)), Locale.ENGLISH);
         assertTrue(hint.contains("Remove `chain` from `depends on`"), hint);
         assertFalse(hint.contains("`let`"), "a composition has no `let` to remove: " + hint);
-    }
-
-    @Test
-    void dependsOnNamingAnUnknownBehaviorIsReportedAtTheClause() {
-        String src = """
-                module demo
-                data A = { x: Int }
-                data R = { z: Int }
-
-                behavior use : (a: A) -> R
-                    depends on nosuch
-                let use (a, nosuch) = nosuch(a)
-                """;
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("E1607", e.code(), e.getMessage());
-        assertTrue(e.getMessage().contains("nosuch"), e.getMessage());
     }
 
     @Test

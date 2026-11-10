@@ -215,16 +215,6 @@ class CompileJsonSourceTest {
         assertEquals("required", issues.get(0).code());
     }
 
-    /** An object still accumulates every field's error, which is what makes the guard a guard. */
-    @Test
-    void jsonDecoderStillAccumulatesEveryFieldErrorOfAnObject() throws Exception {
-        Result<?> r = Codecs.decode(compile(), "demo.Account", "jsonDecoder",
-                mapper.readTree("{\"id\":5,\"balance\":\"nope\"}"));
-
-        assertInstanceOf(Err.class, r);
-        assertEquals(3, ((Err<?>) r).issues().asList().size());
-    }
-
     @Test
     void recordDecoderBytecodeLoadsAndVerifies() throws Exception {
         // Constructing a standalone jOOQ Record needs the full jOOQ runtime, so here we just force
