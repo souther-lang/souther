@@ -5,7 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -93,37 +92,62 @@ public sealed interface TakenConstraint {
      */
     static boolean holdsOverTheRunsOf(LinearForm<NumericTerm> form, Rel rel,
                                       SearchRegion region) {
-        ExactRatio low = form.constant();
-        ExactRatio high = form.constant();
-        for (Map.Entry<NumericTerm, ExactRatio> weighed : form.coefs().entrySet()) {
-            if (!(weighed.getKey() instanceof NumericTerm.FromOnePosition one)) {
-                return false;
-            }
-            NumericDomain.Bounds run = region.wholeRunOf(one);
-            if (run == null || !(run.min() != null && run.min().at() instanceof Count least)
-                    || !(run.max() != null && run.max().at() instanceof Count most)) {
-                return false;
-            }
-            ExactRatio atLeast = least.exactly().times(weighed.getValue()).orNull();
-            ExactRatio atMost = most.exactly().times(weighed.getValue()).orNull();
-            if (atLeast == null || atMost == null) {
-                return false;
-            }
-            boolean flipped = atLeast.compareTo(atMost) > 0;
-            low = low.plus(flipped ? atMost : atLeast).orNull();
-            high = high.plus(flipped ? atLeast : atMost).orNull();
-            if (low == null || high == null) {
-                return false;
+        NumericDomain.Bounds run = runOf(form, region);
+        if (run == null) {
+            return false;
+        }
+        Endpoint low = run.min();
+        Endpoint high = run.max();
+        return switch (rel) {
+            case LE -> high != null && Count.number(high.at()).signum() <= 0;
+            case LT -> high != null && isBelowNought(high);
+            case GE -> low != null && Count.number(low.at()).signum() >= 0;
+            case GT -> low != null && isAboveNought(low);
+            case EQ -> low != null && high != null && Count.number(low.at()).signum() == 0
+                    && Count.number(high.at()).signum() == 0;
+            case NE -> (low != null && isAboveNought(low)) || (high != null && isBelowNought(high));
+        };
+    }
+
+    /** Whether a range with {@code lower} as its lower end holds no number at nought or below. */
+    private static boolean isAboveNought(Endpoint lower) {
+        int sign = Count.number(lower.at()).signum();
+        return sign > 0 || (sign == 0 && !lower.inclusive());
+    }
+
+    /** Whether a range with {@code upper} as its upper end holds no number at nought or above. */
+    private static boolean isBelowNought(Endpoint upper) {
+        int sign = Count.number(upper.at()).signum();
+        return sign < 0 || (sign == 0 && !upper.inclusive());
+    }
+
+    /**
+     * The numbers {@code form} comes to over the runs {@code region} holds each number it names to,
+     * or null where one of them has no run it holds. A product is what the ranges of its factors
+     * make of one, and an end a range lacks stays open.
+     */
+    private static NumericDomain.Bounds runOf(LinearForm<NumericTerm> form, SearchRegion region) {
+        return souther.compiler.numeric.Intervals.of(form, term -> runOf(term, region));
+    }
+
+    private static NumericDomain.Bounds runOf(NumericTerm term, SearchRegion region) {
+        if (term instanceof NumericTerm.ProductOf product) {
+            NumericDomain.Bounds one = runOf(product.one(), region);
+            NumericDomain.Bounds other = runOf(product.other(), region);
+            if (one != null && other != null) {
+                return souther.compiler.numeric.Intervals.product(one, other);
             }
         }
-        return switch (rel) {
-            case LE -> high.signum() <= 0;
-            case LT -> high.signum() < 0;
-            case GE -> low.signum() >= 0;
-            case GT -> low.signum() > 0;
-            case EQ -> low.signum() == 0 && high.signum() == 0;
-            case NE -> low.signum() > 0 || high.signum() < 0;
-        };
+        if (!(region.projectionOf(term) instanceof NumericDomain.FormProjection.Within within)) {
+            return null;
+        }
+        // What a type holds is as much a bound as what its declarations say: a value an Int holds
+        // lies between its ends. A product is asked of the ranges of its factors and is as wide
+        // as they work out ({@link SearchRegion#isAnInt}).
+        return region.isAnInt(term)
+                ? within.bounds().meet(souther.compiler.numeric.Intervals
+                        .theWholeNumbersAnIntHolds())
+                : within.bounds();
     }
 
     /** {@code region} with each of {@code these} taken in. */

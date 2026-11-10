@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.numeric.ExactAnswer;
@@ -407,6 +408,11 @@ final class Term {
         // taking the rest in would give two equal values two hashes — so it says which parts stand
         // for it or nothing here takes it.
         if (type.isRecord() && !statesAHashOfItsOwn(type)) {
+            return Rule.ITS_COMPONENTS;
+        }
+        // The library writes this hash by hand, over both of its ends, which are all it carries; so
+        // it is what its components are, and taking them in gives equal runs one hash.
+        if (type == CodePoints.Range.class) {
             return Rule.ITS_COMPONENTS;
         }
         return Rule.NONE_HERE;

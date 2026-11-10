@@ -507,7 +507,25 @@ public sealed interface ReportMessage extends Message {
 
     record SentTo(String at) implements ReportMessage, Prose {}
 
-    record MayStopARun(String rule, Message every, String calls) implements ReportMessage, Prose {}
+    record MayStopARun(String rule, Message every, Message asks, String calls)
+            implements ReportMessage, Prose {}
+
+    /** What one construction on the way to a rule asks of a run that works it out. */
+    record ConstructionAsks(String construction, String at, String asked)
+            implements ReportMessage, Prose {}
+
+    /** A construction on the way to a rule that no run gets past. */
+    record ConstructionNeverPassed(String construction, String at)
+            implements ReportMessage, Prose {}
+
+    /** A part of what is asked, set off from the parts beside it. */
+    record Grouped(String inner) implements ReportMessage, Prose {}
+
+    record ItIsAbove(String form, String value) implements ReportMessage, Prose {}
+
+    record ItIsBelow(String form, String value) implements ReportMessage, Prose {}
+
+    record ItIsNot(String form, String value) implements ReportMessage, Prose {}
 
     record EveryRunStops(String stops) implements ReportMessage, Prose {}
 

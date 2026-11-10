@@ -1266,22 +1266,22 @@ final class CardinalityComposer {
             SearchRegion within, Map<NumericTerm, Place> beside,
             Set<CompositionCapacity> unheld, Set<CompositionRepertoire> unnamed,
             Set<CompositionBudget> refused, RuleReadingContext reading) {
-        Set<NumericTerm> taken = new LinkedHashSet<>();
+        Set<NumericTerm.FromOnePosition> taken = new LinkedHashSet<>();
         for (Asked one : view.shape() instanceof Shape.Sequence ? List.<Asked>of() : asked) {
             if (one instanceof Asked.SoManyMeeting(AStatementAtARow perElement, _, _, _)) {
                 for (NumericTerm number : perElement.numbers()) {
                     if (number instanceof NumericTerm.FromOnePosition from
                             && !(number instanceof NumericTerm.ValueOf)
                             && at.equals(from.position())) {
-                        taken.add(number);
+                        taken.add(from);
                     }
                 }
             }
         }
         // The places each number turns at, and the order it is answered on.
-        Map<NumericTerm, List<Place>> turns = new LinkedHashMap<>();
-        Map<NumericTerm, Carrier> answeredOn = new LinkedHashMap<>();
-        for (NumericTerm number : taken) {
+        Map<NumericTerm.FromOnePosition, List<Place>> turns = new LinkedHashMap<>();
+        Map<NumericTerm.FromOnePosition, Carrier> answeredOn = new LinkedHashMap<>();
+        for (NumericTerm.FromOnePosition number : taken) {
             TermOrders orders = measuring.ordersOf(number);
             Set<Place> levels = new LinkedHashSet<>();
             for (Asked one : asked) {
@@ -1307,7 +1307,7 @@ final class CardinalityComposer {
         // One value answers every number taken of it at once, so what is built is a value for each
         // choice of a place for each number, and the choices are walked no further than elements
         // are composed with.
-        List<NumericTerm> numbers = List.copyOf(turns.keySet());
+        List<NumericTerm.FromOnePosition> numbers = List.copyOf(turns.keySet());
         int[] choice = new int[numbers.size()];
         for (int tried = 0; !numbers.isEmpty(); tried++) {
             if (tried == MOST_ELEMENTS) {
@@ -1316,9 +1316,9 @@ final class CardinalityComposer {
             }
             SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
             for (int each = 0; each < numbers.size(); each++) {
-                NumericTerm number = numbers.get(each);
+                NumericTerm.FromOnePosition number = numbers.get(each);
                 Place place = turns.get(number).get(choice[each]);
-                demands.put(RealizationTarget.of(number),
+                demands.put(RealizationTarget.ofAPlace(number),
                         AskedAt.aNumberOutOf(new NumericSet.At(place), place,
                                 answeredOn.get(number)));
             }
@@ -1355,8 +1355,8 @@ final class CardinalityComposer {
 
     /** Steps {@code choice}, a place for each number, to the next of the choices; false where it
      *  was the last. */
-    private static boolean nextChoice(int[] choice, List<NumericTerm> numbers,
-                                      Map<NumericTerm, List<Place>> turns) {
+    private static boolean nextChoice(int[] choice, List<? extends NumericTerm> numbers,
+                                      Map<? extends NumericTerm, List<Place>> turns) {
         for (int each = 0; each < choice.length; each++) {
             if (++choice[each] < turns.get(numbers.get(each)).size()) {
                 return true;

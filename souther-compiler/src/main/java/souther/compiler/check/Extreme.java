@@ -40,6 +40,19 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
 
     Extreme GREATEST = new Greatest();
 
+    /**
+     * Whether a choice keeping this end of two values stands at an end of a run only where both
+     * of them do: the lesser is at least a lower end where both are, and at most an upper end where
+     * either is; the greater is at most an upper end where both are, and at least a lower end where
+     * either is. {@link #boundsOf} takes the ends where either suffices, from the one value that
+     * reads as a constant.
+     *
+     * @param lowerEnd whether the end of the run is its lower end
+     */
+    default boolean bothMustStandAt(boolean lowerEnd) {
+        return (this instanceof Least) == lowerEnd;
+    }
+
     /** The other end: what a number is the least of, its negation is the greatest of. */
     default Extreme other() {
         return switch (this) {
@@ -177,6 +190,22 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
     }
 
     /**
+     * The end {@code call} keeps of its two arguments, or null where it is no choice between two
+     * arguments that keeps one end of them.
+     */
+    public static Extreme keptBy(Core.PreservedCall call) {
+        if (call.args().size() != 2) {
+            return null;
+        }
+        // The cases answer the argument nodes themselves, which a literal or a call is no
+        // other expression for.
+        Core one = Core.withoutStanding(call.args().get(0));
+        Core other = Core.withoutStanding(call.args().get(1));
+        return keptBy(Choice.casesOf(call), e -> Core.withoutStanding(e) == one,
+                e -> Core.withoutStanding(e) == other);
+    }
+
+    /**
      * The ends {@code call}, a choice between its two arguments that keeps one end of them, puts on
      * its answer from those of them that read as constants: the greater is at least each of the
      * two, so at least the greatest constant among them, and the lesser at most the least. No end
@@ -186,15 +215,7 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
      */
     public static NumericDomain.Bounds boundsOf(Core.PreservedCall call,
                                                 Function<Core, BigDecimal> constant) {
-        if (call.args().size() != 2) {
-            return NumericDomain.Bounds.OPEN;
-        }
-        // The cases answer the argument nodes themselves, which a literal or a call is no
-        // other expression for.
-        Core one = Core.withoutStanding(call.args().get(0));
-        Core other = Core.withoutStanding(call.args().get(1));
-        Extreme kept = keptBy(Choice.casesOf(call), e -> Core.withoutStanding(e) == one,
-                e -> Core.withoutStanding(e) == other);
+        Extreme kept = keptBy(call);
         if (kept == null) {
             return NumericDomain.Bounds.OPEN;
         }

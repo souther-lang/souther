@@ -70,6 +70,10 @@ class WhereAnOperatorAnswersAgreesWithHowItEndsARunTest {
             case WhereAnOperatorAnswers.WhereTheDivisorIsNotNought _ ->
                     ends.equals(AbortSet.of(AbortKind.DIVISION_BY_ZERO));
             case WhereAnOperatorAnswers.NotStated _ -> !ends.isEmpty();
+            // The answer of a construction, which no operator here has: outside the run its type's
+            // clauses leave, a run ends for the clauses that do not hold.
+            case WhereAnOperatorAnswers.WhereItsNumberLiesWithin _ ->
+                    ends.equals(AbortSet.of(AbortKind.INVARIANT_NOT_HELD));
         };
     }
 

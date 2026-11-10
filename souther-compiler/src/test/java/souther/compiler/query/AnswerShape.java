@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.collect.InTheOrderGiven;
 import souther.compiler.identity.DecidedByTheRest;
 
@@ -118,12 +119,21 @@ final class AnswerShape {
     static boolean keepsThatContract(Class<?> type) {
         return !WHICH_KEEP_NONE_OF_IT.contains(type)
                 && (type.getModule() == Object.class.getModule()
-                        || type.getEnclosingClass() == InTheOrderGiven.class)
+                        || type.getEnclosingClass() == InTheOrderGiven.class
+                        || type == THE_RUNS_OF_A_CODE_POINT_SET)
                 && (java.util.List.class.isAssignableFrom(type)
                         || java.util.Set.class.isAssignableFrom(type)
                         || java.util.Map.class.isAssignableFrom(type)
                         || type == java.util.Optional.class);
     }
+
+    /**
+     * The list the notation library holds the runs of a code-point set in. It is a {@code List}
+     * whose equality compares the runs, and {@code whatIsReadForWhatItHoldsKeepsTheContract} asks
+     * it of two built apart, through {@link HowAnAnswerHoldsThings}.
+     */
+    private static final Class<?> THE_RUNS_OF_A_CODE_POINT_SET =
+            CodePoints.of('a').ranges().getClass();
 
     /** What is named as keeping none of it, for a test that holds each of them to it. */
     static Set<Class<?>> whichKeepNoneOfIt() {

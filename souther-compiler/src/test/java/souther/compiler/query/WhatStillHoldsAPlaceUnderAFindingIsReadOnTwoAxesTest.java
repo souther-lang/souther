@@ -175,6 +175,17 @@ class WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest {
                                 + " module, line and column a run stopped there says, made"
                                 + " where the way is read, or show that nothing carrying a way"
                                 + " through a body crosses a module boundary")));
+        // A construction on the way to a rule a run may stop in, held by what it asks of the run.
+        // The place is where the construction is written, which the words and the document say
+        // as a line and a column. Nothing a compile of the models answers holds one, so nothing
+        // has been seen of it; it reaches whoever reads the finding all the same, so the cut
+        // waits on it.
+        out.put("souther.compiler.inputs.WhatAConstructionAsks.at",
+                new Standing(new Because.NothingReachesOne(),
+                        new AcrossTheCut.BlocksIt("say where the construction is written as the"
+                                + " module, line and column the report says, made where the"
+                                + " construction is told what it asks, or show that nothing"
+                                + " carrying a rule a run may stop in crosses a module boundary")));
         return out;
     }
 

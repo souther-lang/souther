@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.PartId;
@@ -102,6 +103,12 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     @Override
     public HeldClass classAt(NumericTerm.ValueOf place) {
         return within.classAt(place);
+    }
+
+    @Override
+    public boolean isAnInt(NumericTerm term) {
+        return !(term instanceof NumericTerm.ProductOf) && within.answersFor(term)
+                && within.ordersOf(term).answered() instanceof Carrier.Whole;
     }
 
     @Override

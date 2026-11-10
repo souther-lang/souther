@@ -252,6 +252,18 @@ public interface SearchRegion {
     }
 
     /**
+     * Whether {@code term} is a whole number a position or a fold over a container holds as an
+     * {@code Int}, which lies between the ends of an {@code Int}: a fold that passes them is a
+     * stop of its own, owed a witness, and is not asked again of a statement about its number.
+     * Not a product, which the arithmetic of two {@code Int} works out past the ends: its range
+     * is that of its factors. A region that reads no types says it of no term, which is what the
+     * default is.
+     */
+    default boolean isAnInt(NumericTerm term) {
+        return false;
+    }
+
+    /**
      * What the order leaves the value at {@code place} by its declarations — one run, runs apart,
      * or none — or null where no rule of the order stops it ({@link Position#orderedRegion}).
      *

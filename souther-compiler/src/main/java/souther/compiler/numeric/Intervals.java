@@ -2,6 +2,9 @@ package souther.compiler.numeric;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
 
 
 /**
@@ -53,6 +56,66 @@ public final class Intervals {
         };
         boolean zero = holdsZero(a, b) || holdsZero(b, a);
         return new NumericDomain.Bounds(furthest(corners, -1, zero), furthest(corners, 1, zero));
+    }
+
+    /**
+     * What {@code form} lies between, given the range {@code of} each term it is over, or null
+     * where a term has none or a weight is no number a count holds.
+     */
+    public static <T> NumericDomain.Bounds of(LinearForm<T> form,
+                                              Function<T, NumericDomain.Bounds> of) {
+        NumericDomain.Bounds total = exactly(form.constant());
+        for (Map.Entry<T, ExactRatio> weighed : form.coefs().entrySet()) {
+            NumericDomain.Bounds weight = exactly(weighed.getValue());
+            NumericDomain.Bounds term = of.apply(weighed.getKey());
+            if (total == null || weight == null || term == null) {
+                return null;
+            }
+            total = sum(total, product(term, weight));
+        }
+        return total;
+    }
+
+    /** What every whole number an {@code Int} holds lies between. */
+    public static NumericDomain.Bounds theWholeNumbersAnIntHolds() {
+        return new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(Long.MIN_VALUE)),
+                Endpoint.inclusive(Count.of(Long.MAX_VALUE)));
+    }
+
+    /**
+     * The range holding the one number {@code at}, or null where no count is that number.
+     */
+    private static NumericDomain.Bounds exactly(ExactRatio at) {
+        if (!(Count.written(at) instanceof ExactAnswer.Held<Optional<Count>> held)
+                || held.value().isEmpty()) {
+            return null;
+        }
+        Endpoint end = Endpoint.inclusive(held.value().get());
+        return new NumericDomain.Bounds(end, end);
+    }
+
+    /**
+     * What a sum of two ranges lies between: an end where both have one, reached where both reach
+     * theirs. An end whose sum no count holds is left open, which is wider and so never less than
+     * the truth.
+     */
+    private static NumericDomain.Bounds sum(NumericDomain.Bounds a, NumericDomain.Bounds b) {
+        return new NumericDomain.Bounds(sumOfEnds(a.min(), b.min()), sumOfEnds(a.max(), b.max()));
+    }
+
+    private static Endpoint sumOfEnds(Endpoint one, Endpoint other) {
+        if (one == null || other == null) {
+            return null;
+        }
+        ExactAnswer<ExactRatio> total = Count.number(one.at()).exactly()
+                .plus(Count.number(other.at()).exactly());
+        if (!(total instanceof ExactAnswer.Held<ExactRatio> held)
+                || !(Count.written(held.value()) instanceof ExactAnswer.Held<Optional<Count>> at)
+                || at.value().isEmpty()) {
+            return null;
+        }
+        return new Endpoint(at.value().get(), one.inclusive() && other.inclusive());
     }
 
     /** Whether {@code one} holds zero and {@code other} holds anything, which is what makes zero a
