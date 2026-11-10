@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.abort.GetsPast;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -11,6 +12,7 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.values.TextExtents;
@@ -23,8 +25,10 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Whether an operator that answers where the collection it answers fits
@@ -64,12 +68,17 @@ public final class ContainerSizesUnderAWitness {
     /** For each name asked of, whether what each bound name stands for reads it. */
     private final Map<BindingId, Map<BindingId, Boolean>> readsAsked = new HashMap<>();
     private final Set<Core> asking = new HashSet<>();
+    private final Predicate<Core> aDecimalOfTheRow;
+    /** The scale each name of a walk's answer so far is taken to be at while its step is read. */
+    private final Map<BindingId, Long> assumedScale = new HashMap<>();
 
     private ContainerSizesUnderAWitness(Core within,
                                         Function<Core, Optional<BigInteger>> ofTheInput,
-                                        Function<Core, Optional<BigInteger>> ofEachElement) {
+                                        Function<Core, Optional<BigInteger>> ofEachElement,
+                                        Predicate<Core> aDecimalOfTheRow) {
         this.ofTheInput = ofTheInput;
         this.ofEachElementOfTheInput = ofEachElement;
+        this.aDecimalOfTheRow = aDecimalOfTheRow;
         List<Core> calls = new ArrayList<>();
         names(within, calls);
         for (Core each : calls) {
@@ -93,8 +102,8 @@ public final class ContainerSizesUnderAWitness {
      */
     public static Optional<BigInteger> mostHeld(Core collection,
                                                 Function<Core, Optional<BigInteger>> ofTheInput) {
-        return new ContainerSizesUnderAWitness(collection, ofTheInput, node -> Optional.empty())
-                .most(collection);
+        return new ContainerSizesUnderAWitness(collection, ofTheInput, node -> Optional.empty(),
+                node -> false).most(collection);
     }
 
     /**
@@ -105,11 +114,15 @@ public final class ContainerSizesUnderAWitness {
      *                      or nothing where the node reads no collection of the input or nothing
      *                      bounds it
      * @param ofEachElement the same, of the most each element of such a collection holds
+     * @param aDecimalOfTheRow whether a node is a place of the input that holds a decimal as a row
+     *                      is built with it ({@link DecimalOperation#writtenForARow}), written at no
+     *                      more places than a row is built at
      */
     public static boolean answersOn(Core within, Core operator, GetsPast completion,
                                     Function<Core, Optional<BigInteger>> ofTheInput,
-                                    Function<Core, Optional<BigInteger>> ofEachElement) {
-        return new ContainerSizesUnderAWitness(within, ofTheInput, ofEachElement)
+                                    Function<Core, Optional<BigInteger>> ofEachElement,
+                                    Predicate<Core> aDecimalOfTheRow) {
+        return new ContainerSizesUnderAWitness(within, ofTheInput, ofEachElement, aDecimalOfTheRow)
                 .answers(operator, completion);
     }
 
@@ -139,8 +152,126 @@ public final class ContainerSizesUnderAWitness {
             // How long a text a conversion makes turns on the text, and what a run holds of
             // collections says nothing of it.
             case GetsPast.WhereTheTextFits _ -> false;
+            // Whether the scales leave room is read off what each operand is, by the rule the
+            // operations a row is asked of are ({@link DecimalOperation#hasRoomAt}).
+            case GetsPast.WhereTheScalesHaveRoom(BinOp op) -> {
+                List<Core> operands = operandsOf(operator);
+                if (operands == null || operands.size() != 2) {
+                    yield false;
+                }
+                OptionalLong left = scaleOf(operands.get(0));
+                OptionalLong right = scaleOf(operands.get(1));
+                yield left.isPresent() && right.isPresent()
+                        && DecimalOperation.hasRoomAt(op, left.getAsLong(), right.getAsLong());
+            }
             case GetsPast.NotKnown _ -> false;
         };
+    }
+
+    /**
+     * The scale furthest from nought that the decimal {@code e} comes to is written at on a run of
+     * a row, or nothing where it is not read here: a decimal written out is at its own scale, a
+     * place of the row at no more than a row is built at, and a sum, a difference or a product of
+     * those as {@link DecimalOperation#scaleOfTheAnswer} says. A name is what it is bound to, and
+     * the answer so far of a walk is at the scale the seed is at or that the step keeps it at.
+     */
+    private OptionalLong scaleOf(Core e) {
+        Core node = Core.withoutStanding(e);
+        switch (node) {
+            case Core.Decimal written -> {
+                return OptionalLong.of(Math.abs((long) written.value().scale()));
+            }
+            case Core.Read name -> {
+                Long assumed = assumedScale.get(name.binding());
+                if (assumed != null) {
+                    return OptionalLong.of(assumed);
+                }
+                WalkAt walk = carriedBy.get(name.binding());
+                if (walk != null) {
+                    return scaleCarried(walk);
+                }
+                Core value = boundTo.get(name.binding());
+                if (value != null) {
+                    return asking.add(value) ? scaleOfWhileAsking(value) : OptionalLong.empty();
+                }
+            }
+            case Core.LetIn li -> {
+                return scaleOf(li.body());
+            }
+            case Core.If fork -> {
+                return larger(scaleOf(fork.then()), scaleOf(fork.els()));
+            }
+            default -> {
+                // A sum, a difference or a product, in whatever shape the tree gives it: its
+                // owner says it is one.
+                List<Core> operands = operandsOf(node);
+                if (operands != null && operands.size() == 2
+                        && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
+                        instanceof GetsPast.WhereTheScalesHaveRoom(BinOp op)) {
+                    return scaleOfTheAnswer(op, operands);
+                }
+            }
+        }
+        return aDecimalOfTheRow.test(node)
+                ? OptionalLong.of(DecimalOperation.PLACES_A_ROW_IS_BUILT_AT) : OptionalLong.empty();
+    }
+
+    private OptionalLong scaleOfWhileAsking(Core value) {
+        try {
+            return scaleOf(value);
+        } finally {
+            asking.remove(value);
+        }
+    }
+
+    private OptionalLong scaleOfTheAnswer(BinOp op, List<Core> operands) {
+        OptionalLong left = scaleOf(operands.get(0));
+        OptionalLong right = scaleOf(operands.get(1));
+        return left.isPresent() && right.isPresent()
+                ? OptionalLong.of(DecimalOperation.scaleOfTheAnswer(op, left.getAsLong(),
+                        right.getAsLong()))
+                : OptionalLong.empty();
+    }
+
+    /**
+     * The scale every answer so far of {@code walk} is at, by induction on the elements: at the
+     * seed's, and where the step answers no further from nought than the scale it is handed, at
+     * that. Where the step goes further from it — a product, which adds a scale at every element
+     * — no scale holds on every step, and nothing is said.
+     */
+    private OptionalLong scaleCarried(WalkAt walk) {
+        BindingId carried = walk.carried();
+        if (!asking.add(walk.step())) {
+            return OptionalLong.empty();
+        }
+        try {
+            OptionalLong seed = scaleOf(walk.seed());
+            if (seed.isEmpty()) {
+                return OptionalLong.empty();
+            }
+            long held = seed.getAsLong();
+            for (int round = 0; round < 2; round++) {
+                assumedScale.put(carried, held);
+                OptionalLong step = scaleOf(walk.step().body());
+                if (step.isEmpty()) {
+                    return OptionalLong.empty();
+                }
+                if (step.getAsLong() <= held) {
+                    return OptionalLong.of(held);
+                }
+                held = step.getAsLong();
+            }
+            return OptionalLong.empty();
+        } finally {
+            assumedScale.remove(carried);
+            asking.remove(walk.step());
+        }
+    }
+
+    private static OptionalLong larger(OptionalLong one, OptionalLong other) {
+        return one.isPresent() && other.isPresent()
+                ? OptionalLong.of(Math.max(one.getAsLong(), other.getAsLong()))
+                : OptionalLong.empty();
     }
 
     /** Whether an {@code Int} sum coming to {@code total} answers it, as the language says

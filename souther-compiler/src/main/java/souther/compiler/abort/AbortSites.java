@@ -422,7 +422,9 @@ public final class AbortSites {
                     : new GetsPast.NotKnown();
             case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND,
                  BinOp.OR -> new GetsPast.Always();
-            case BinOp.ADD, BinOp.SUB, BinOp.MUL, BinOp.DIV -> new GetsPast.NotKnown();
+            case BinOp.ADD, BinOp.SUB, BinOp.MUL -> Type.DECIMAL.equals(answer)
+                    ? new GetsPast.WhereTheScalesHaveRoom(op) : new GetsPast.NotKnown();
+            case BinOp.DIV -> new GetsPast.NotKnown();
         };
     }
 

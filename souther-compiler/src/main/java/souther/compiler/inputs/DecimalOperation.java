@@ -287,6 +287,27 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     private record Rooms(BitSet bounded, BitSet atEveryNumber) {
     }
 
+    /**
+     * The scale furthest from nought that {@code op} answers at, over operands no further from
+     * nought than {@code left} and {@code right}: a product is at the sum of its factors' scales,
+     * a sum or a difference at the greater of its operands'.
+     */
+    public static long scaleOfTheAnswer(BinOp op, long left, long right) {
+        return op == BinOp.MUL ? left + right : Math.max(left, right);
+    }
+
+    /**
+     * Whether {@code op} has room over every pair of operands no further from nought than
+     * {@code left} and {@code right}, and so is worked out wherever its operands are: the operands
+     * and the answer are written at no more places than room is shown for
+     * ({@link #SCALE_THE_ROOM_IS_SHOWN_FOR}). The one answer {@link #roomsOf} and a reader of the
+     * program's own operations give.
+     */
+    public static boolean hasRoomAt(BinOp op, long left, long right) {
+        return left <= SCALE_THE_ROOM_IS_SHOWN_FOR && right <= SCALE_THE_ROOM_IS_SHOWN_FOR
+                && scaleOfTheAnswer(op, left, right) <= SCALE_THE_ROOM_IS_SHOWN_FOR;
+    }
+
     /** The rooms of {@code all}; null where an operation is worked out of one told after it. */
     private static Rooms roomsOf(List<DecimalWork> all) {
         BitSet bounded = new BitSet(all.size());
@@ -319,10 +340,8 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
                     }
                 }
             }
-            scaleOf[i] = each.op == BinOp.MUL ? over[0] + over[1] : Math.max(over[0], over[1]);
-            boolean fits = over[0] <= SCALE_THE_ROOM_IS_SHOWN_FOR
-                    && over[1] <= SCALE_THE_ROOM_IS_SHOWN_FOR
-                    && scaleOf[i] <= SCALE_THE_ROOM_IS_SHOWN_FOR;
+            scaleOf[i] = scaleOfTheAnswer(each.op, over[0], over[1]);
+            boolean fits = hasRoomAt(each.op, over[0], over[1]);
             bounded.set(i, fits);
             atEveryNumber.set(i, fits && standing);
         }

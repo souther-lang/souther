@@ -49,6 +49,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.ContainerSizesUnderAWitness;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.WholeRounding;
 import souther.compiler.check.WholeUnitsBetween;
@@ -1291,9 +1292,11 @@ final class Pullback {
                 : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
         Operators[] told = new Operators[1];
         List<Derivation> answers = inAComparisonsScope(true, () -> {
-            operatorsIn(body, reads, apart, ofTheRelation);
             if (apart == null) {
                 operated.within = body;
+            }
+            operatorsIn(body, reads, apart, ofTheRelation);
+            if (apart == null) {
                 operated.leftOut = leftOut == null ? null : Core.withoutStanding(leftOut);
                 leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
@@ -1401,10 +1404,20 @@ final class Pullback {
      */
     private void anOperator(Core operator, InputReads reads) {
         LinearForm<Quantity> form = composedAs(operator, reads);
-        if (form != null) {
-            operated.tell(operator,
-                    new Answers.AsAnOperator(form, AffineForms.whereItAnswers(operator)));
+        if (form == null) {
+            return;
         }
+        WhereAnOperatorAnswers where = AffineForms.whereItAnswers(operator);
+        // A sum of decimals answers where the scales have room, which no region of the numbers
+        // says. Where the scales are shown to have it, it ends no run and there is nothing to
+        // tell of it.
+        if (where instanceof WhereAnOperatorAnswers.NotStated
+                && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(operator)
+                instanceof GetsPast.WhereTheScalesHaveRoom scales
+                && theScalesHaveRoom(operator, scales, reads)) {
+            return;
+        }
+        operated.tell(operator, new Answers.AsAnOperator(form, where));
     }
 
     /** The number {@code e} comes to where no number of the input is in it, written out as the
@@ -1786,8 +1799,80 @@ final class Pullback {
         boolean always = (Core.withoutStanding(e) instanceof Core.Construct made
                 && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads))
                 || comesToWhereItAnswers(e, reads);
-        return always ? new GetsPast.Always()
-                : WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
+        if (always) {
+            return new GetsPast.Always();
+        }
+        GetsPast apart = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
+        // Whether the scales have room is no region of the numbers, and a run is stopped at it
+        // for no number a place holds: it answers wherever the operands are at scales a row is
+        // built at, which is read off what they are, and is not known where they are anything else.
+        return apart instanceof GetsPast.WhereTheScalesHaveRoom
+                ? theScalesHaveRoom(e, apart, reads) ? new GetsPast.Always()
+                        : new GetsPast.NotKnown()
+                : apart;
+    }
+
+    /**
+     * Whether what {@code e} comes to decides which run is taken: it is in a condition, a
+     * scrutinee, an attempted construction or the relation, or is the value of a name one of
+     * those reads, on down. Such an operation is one the relation is about, and that its operands
+     * are at scales it has room for is no more than a row says of them; one whose answer decides
+     * nothing is no part of what is asked.
+     */
+    private boolean decidesWhichRunIsTaken(Core e) {
+        List<Core> roots = new ArrayList<>();
+        if (operated.leftOut != null) {
+            roots.add(operated.leftOut);
+        }
+        // A body that answers a truth is a condition as a whole.
+        if (Type.BOOL.equals(operated.within.type())) {
+            roots.add(operated.within);
+        }
+        decidingNodes(operated.within, roots);
+        Set<BindingId> names = new HashSet<>();
+        for (Core root : List.copyOf(roots)) {
+            names.addAll(WhatABodyReads.namesReadBy(operated.within, root));
+        }
+        valuesOf(operated.within, names, roots);
+        Set<Core> found = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Core root : roots) {
+            allOf(root, found);
+        }
+        return found.contains(Core.withoutStanding(e));
+    }
+
+    private static void decidingNodes(Core e, List<Core> roots) {
+        switch (Core.withoutStanding(e)) {
+            case Core.If fork -> roots.add(fork.cond());
+            case Core.Match match -> roots.add(match.scrutinee());
+            case Core.IfConstructed attempt -> roots.add(attempt.construct());
+            default -> { }
+        }
+        Core.forEachChild(e, child -> decidingNodes(child, roots));
+    }
+
+    private static void valuesOf(Core e, Set<BindingId> names, List<Core> roots) {
+        if (Core.withoutStanding(e) instanceof Core.LetIn li && li.binder() != null
+                && li.binder().binding() != null && names.contains(li.binder().binding())) {
+            roots.add(li.value());
+        }
+        Core.forEachChild(e, child -> valuesOf(child, names, roots));
+    }
+
+    private static void allOf(Core e, Set<Core> found) {
+        found.add(Core.withoutStanding(e));
+        Core.forEachChild(e, child -> allOf(child, found));
+    }
+
+    /** Whether the decimals {@code e} is handed are at scales it has room for, on every row: those
+     *  of places of the input, written out, or worked out of those
+     *  ({@link ContainerSizesUnderAWitness}). */
+    private boolean theScalesHaveRoom(Core e, GetsPast completion, InputReads reads) {
+        return operated.within != null && !decidesWhichRunIsTaken(e)
+                && ContainerSizesUnderAWitness.answersOn(operated.within, e, completion,
+                        node -> Optional.empty(), node -> Optional.empty(),
+                        node -> reads.pathOf(node, read.rules().newtypes())
+                                instanceof PathResolution.At);
     }
 
     /**

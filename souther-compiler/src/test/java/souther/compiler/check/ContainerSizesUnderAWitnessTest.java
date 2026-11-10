@@ -71,7 +71,54 @@ class ContainerSizesUnderAWitnessTest {
         GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(union);
         return completion instanceof GetsPast.WhereTheAnswerFits fits
                 && ContainerSizesUnderAWitness.answersOn(body, union, fits, witness,
-                        node -> Optional.empty());
+                        node -> Optional.empty(), node -> false);
+    }
+
+    /** The body of {@code run}, a walk over a list of decimals whose step is {@code step}. */
+    private static Core decimalWalk(String step) {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+                behavior run : (xs: List<Decimal>) -> Decimal
+                let run (xs) = List.fold((acc, x) -> %s, 1.0m, xs)
+                """.formatted(step), "Main");
+        return compilation.db().ask(new Bodies.CheckedBehavior("demo", "run")).value().body();
+    }
+
+    /** The first operation under {@code e} that answers where the scales have room. */
+    private static Core aDecimalOperation(Core e) {
+        Core node = Core.withoutStanding(e);
+        if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
+                instanceof GetsPast.WhereTheScalesHaveRoom) {
+            return node;
+        }
+        Core[] found = {null};
+        Core.forEachChild(node, child -> {
+            if (found[0] == null) {
+                found[0] = aDecimalOperation(child);
+            }
+        });
+        return found[0];
+    }
+
+    private static boolean scalesHaveRoom(String step) {
+        Core body = decimalWalk(step);
+        Core operation = aDecimalOperation(body);
+        return ContainerSizesUnderAWitness.answersOn(body, operation,
+                WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(operation),
+                node -> Optional.empty(), node -> Optional.empty(),
+                node -> node instanceof Core.Read read && read.name().equals("x"));
+    }
+
+    /**
+     * What a walk carries is at the seed's scale or the step's, by induction. A sum of it and an
+     * element goes no further from nought than either; a product of them goes a scale further at
+     * every element, so no scale holds on every step.
+     */
+    @Test
+    void aWalkCarriesAScaleOnlyWhereItsStepKeepsIt() {
+        assertTrue(scalesHaveRoom("Decimal.add(acc, x)"));
+        assertTrue(scalesHaveRoom("Decimal.subtract(acc, x)"));
+        assertFalse(scalesHaveRoom("Decimal.multiply(acc, x)"));
     }
 
     private static final String WALK =
