@@ -318,9 +318,13 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
                 ? scaleOfTheAnswer(op, first, second) : first;
     }
 
-    /** Whether an operation under {@code law} has room, as {@link #hasRoomAt(BinOp, long, long)}
-     *  asks it of an operator; a rounding lines the scale it is asked for up with the number's, as
-     *  a sum does. */
+    /**
+     * Whether an operation under {@code law} has room, as {@link #hasRoomAt(BinOp, long, long)}
+     * asks it of an operator; a rounding lines the scale it is asked for up with the number's, as
+     * a sum does, and so does a quotient, which is worked at the scale asked and at the difference
+     * of the two scales it divides: where each is within room, that difference is no further from
+     * nought than three rooms, which an {@code int} holds.
+     */
     public static boolean hasRoomAt(ScaleLaw law, long first, long second) {
         return hasRoomAt(law instanceof ScaleLaw.OfTheOperator(BinOp op) ? op : BinOp.ADD, first,
                 second);

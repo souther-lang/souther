@@ -168,6 +168,9 @@ public final class KernelContracts {
             case DECIMAL_MULTIPLY -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.MUL);
             // Rounded to the places the call writes out, of the number it is handed last.
             case DECIMAL_ROUND -> GetsPast.WhereTheScalesHaveRoom.ofARounding(0, 2);
+            // A quotient is worked at the scale asked and the greater of the two it divides, and
+            // is a number at the scale asked.
+            case DECIMAL_DIVIDE -> GetsPast.WhereTheScalesHaveRoom.ofADivision(0, 1, 2);
             default -> abortsOf(kernel).isEmpty() ? new GetsPast.Always()
                     : new GetsPast.NotKnown();
         };

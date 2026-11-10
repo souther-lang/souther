@@ -69,6 +69,8 @@ public final class ContainerSizesUnderAWitness {
     /** For each name asked of, whether what each bound name stands for reads it. */
     private final Map<BindingId, Map<BindingId, Boolean>> readsAsked = new HashMap<>();
     private final Set<Core> asking = new HashSet<>();
+    /** For each name an arm gives the one number its subject can be, the subject. */
+    private final Map<BindingId, Core> numberOf = new HashMap<>();
     private final Predicate<Core> aDecimalOfTheRow;
     /** The scale each name of a walk's answer so far is taken to be at while its step is read. */
     private final Map<BindingId, Long> assumedScale = new HashMap<>();
@@ -189,6 +191,18 @@ public final class ContainerSizesUnderAWitness {
                 if (value != null) {
                     return asking.add(value) ? scaleOfWhileAsking(value) : OptionalLong.empty();
                 }
+                Core subject = numberOf.get(name.binding());
+                if (subject != null) {
+                    return scaleOfTheNumberOf(subject);
+                }
+            }
+            // An arm answers at the larger of what the arms do.
+            case Core.Match match -> {
+                OptionalLong most = OptionalLong.of(0);
+                for (Core.Case each : match.cases()) {
+                    most = larger(most, scaleOf(each.body()));
+                }
+                return most;
             }
             case Core.LetIn li -> {
                 return scaleOf(li.body());
@@ -219,6 +233,32 @@ public final class ContainerSizesUnderAWitness {
         }
         return aDecimalOfTheRow.test(node)
                 ? OptionalLong.of(DecimalOperation.PLACES_A_ROW_IS_BUILT_AT) : OptionalLong.empty();
+    }
+
+    /**
+     * The scale of the number {@code subject} answers, where it is a call whose contract says what
+     * scale its number is at ({@link GetsPast.WhereTheScalesHaveRoom}): the contract is of the call
+     * and the scale of the one case of its answer that is a number. A name the subject is bound to
+     * is what it is bound to.
+     */
+    private OptionalLong scaleOfTheNumberOf(Core subject) {
+        Core node = Core.withoutStanding(subject);
+        if (node instanceof Core.Read name && boundTo.get(name.binding()) != null) {
+            Core value = boundTo.get(name.binding());
+            return asking.add(value) ? scaleOfTheNumberOfWhileAsking(value) : OptionalLong.empty();
+        }
+        List<Core> args = operandsOf(node);
+        return args != null && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
+                instanceof GetsPast.WhereTheScalesHaveRoom(var _, ScaleBound answer)
+                ? scaleOf(answer, args) : OptionalLong.empty();
+    }
+
+    private OptionalLong scaleOfTheNumberOfWhileAsking(Core value) {
+        try {
+            return scaleOfTheNumberOf(value);
+        } finally {
+            asking.remove(value);
+        }
     }
 
     private OptionalLong scaleOfWhileAsking(Core value) {
@@ -380,6 +420,15 @@ public final class ContainerSizesUnderAWitness {
         Core node = Core.withoutStanding(e);
         if (node instanceof Core.LetIn li && li.binder() != null) {
             boundTo.put(li.binder().binding(), li.value());
+        } else if (node instanceof Core.Match match) {
+            // An arm that names the one number its subject can be, read as that number, names the
+            // number the subject answers: there is one to name, and the type says which.
+            for (Core.Case each : match.cases()) {
+                if (each.binder() != null && Type.DECIMAL.equals(each.bindType())
+                        && Type.DECIMAL.equals(NumericAnswers.in(match.scrutinee().type()))) {
+                    numberOf.put(each.binder().binding(), match.scrutinee());
+                }
+            }
         } else if (AnOperationApplied.of(node) != null) {
             calls.add(node);
         }

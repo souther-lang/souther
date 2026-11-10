@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A sum, a difference or a product of decimals that decides nothing changes nothing of what the
@@ -116,6 +117,35 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
                 if sign == 0 then 0 else if sign < 0 then 1 else 2
             }
 
+            behavior quotient : (p: Pair) -> Int
+            let quotient (p) = {
+                let size = match Decimal.divide(p.a.value, p.b.value, 2, HALF_UP) with
+                    | Decimal as q -> Decimal.multiply(q, Decimal.add(q, p.a.value))
+                    | DivisionByZero -> 0.0m
+                let sign = Decimal.compare(p.a.value, p.b.value)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            data Tuned = { a: Decimal, b: Decimal, s: Int }
+
+            behavior quotientAtAnInputScale : (p: Tuned) -> Int
+            let quotientAtAnInputScale (p) = {
+                let size = match Decimal.divide(p.a, p.b, p.s, HALF_UP) with
+                    | Decimal as q -> Decimal.add(q, p.a)
+                    | DivisionByZero -> 0.0m
+                let sign = Decimal.compare(p.a, p.b)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
+            behavior quotientAtAScaleNoRoomHolds : (p: Tuned) -> Int
+            let quotientAtAScaleNoRoomHolds (p) = {
+                let size = match Decimal.divide(p.a, p.b, 2147483647, HALF_UP) with
+                    | Decimal as q -> Decimal.add(q, p.a)
+                    | DivisionByZero -> 0.0m
+                let sign = Decimal.compare(p.a, p.b)
+                if sign == 0 then 0 else if sign < 0 then 1 else 2
+            }
+
             behavior chained : (p: Pair) -> Int
             let chained (p) = {
                 let spread = Decimal.multiply(Decimal.add(p.a.value, 1.50m), p.b.value)
@@ -171,11 +201,16 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
                 .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
         for (String behavior : List.of("difference", "sum", "minus", "times", "chained", "negated",
-                "widened", "chosen", "rounded", "absolute")) {
+                "widened", "chosen", "rounded", "absolute", "quotient")) {
             assertEquals(reasonsOf(evidence, "control"), reasonsOf(evidence, behavior), behavior);
         }
         assertEquals(reasonsOf(evidence, "controlTruth"), reasonsOf(evidence, "differenceTruth"));
         assertEquals(reasonsOf(evidence, "plainSide"), reasonsOf(evidence, "negatedSide"));
+        // A quotient at a scale the call does not write, or at one no room holds, can end a run.
+        for (String behavior : List.of("quotientAtAnInputScale", "quotientAtAScaleNoRoomHolds")) {
+            assertTrue(reasonsOf(evidence, behavior).stream().anyMatch(each -> each.endsWith(
+                    "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE")), behavior);
+        }
         assertEquals(reasonsOf(evidence, "ageingControl"), reasonsOf(evidence, "ageing"));
     }
 }

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.abort.GetsPast;
 import souther.compiler.core.Core;
+import souther.compiler.types.ValueName;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
@@ -119,6 +120,57 @@ class ContainerSizesUnderAWitnessTest {
         assertTrue(scalesHaveRoom("Decimal.add(acc, x)"));
         assertTrue(scalesHaveRoom("Decimal.subtract(acc, x)"));
         assertFalse(scalesHaveRoom("Decimal.multiply(acc, x)"));
+    }
+
+    /** The body of {@code run}, which divides {@code x} by {@code y} at {@code scale}, and adds
+     *  what the quotient is to {@code x} where there is one. */
+    private static Core quotientBody(String scale) {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+                behavior run : (x: Decimal, y: Decimal, s: Int) -> Decimal
+                let run (x, y, s) = match Decimal.divide(x, y, %s, HALF_UP) with
+                    | Decimal as q -> Decimal.add(q, x)
+                    | DivisionByZero -> 0.0m
+                """.formatted(scale), "Main");
+        return compilation.db().ask(new Bodies.CheckedBehavior("demo", "run")).value().body();
+    }
+
+    /** The first call of {@code operation} under {@code e}. */
+    private static Core callOf(Core e, ValueName operation) {
+        Core node = Core.withoutStanding(e);
+        AnOperationApplied applied = AnOperationApplied.of(node);
+        if (applied != null && applied.operation().equals(operation)) {
+            return node;
+        }
+        Core[] found = {null};
+        Core.forEachChild(node, child -> {
+            if (found[0] == null) {
+                found[0] = callOf(child, operation);
+            }
+        });
+        return found[0];
+    }
+
+    private static boolean sumOfTheQuotientHasRoom(String scale) {
+        Core body = quotientBody(scale);
+        Core sum = callOf(body, ValueName.Stdlib.operation("Decimal", "add"));
+        return ContainerSizesUnderAWitness.answersOn(body, sum,
+                WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(sum),
+                node -> Optional.empty(), node -> Optional.empty(),
+                node -> node instanceof Core.Read read
+                        && (read.name().equals("x") || read.name().equals("y")));
+    }
+
+    /**
+     * The number a quotient answers is at the scale it was asked for, which a name an arm gives it
+     * is at as well: so a sum of it has room where that scale is written and is one a run has room
+     * for, and not where it is handed in or is past what room is shown for.
+     */
+    @Test
+    void theNumberAQuotientAnswersIsAtTheScaleItWasAskedFor() {
+        assertTrue(sumOfTheQuotientHasRoom("2"));
+        assertFalse(sumOfTheQuotientHasRoom("s"));
+        assertFalse(sumOfTheQuotientHasRoom("2147483647"));
     }
 
     private static final String WALK =

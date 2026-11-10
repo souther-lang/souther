@@ -100,6 +100,21 @@ public sealed interface GetsPast {
                     new ScaleBound.Left(law, first, second));
         }
 
+        /**
+         * A quotient asked for at the places the call writes out at {@code scaleAt}, of the
+         * numbers at {@code dividendAt} and {@code divisorAt}: the run works at the scale asked
+         * and the larger of the two it divides, and the answer, where it is a number, is at the
+         * scale asked. A divisor of nought is no stop here: it is a case the call answers.
+         */
+        public static WhereTheScalesHaveRoom ofADivision(int dividendAt, int divisorAt,
+                                                         int scaleAt) {
+            ScaleBound asked = new ScaleBound.WrittenAt(scaleAt);
+            ScaleBound worked = new ScaleBound.Larger(new ScaleBound.Argument(dividendAt),
+                    new ScaleBound.Argument(divisorAt));
+            return new WhereTheScalesHaveRoom(
+                    List.of(new Room(new ScaleLaw.Asked(), asked, worked)), asked);
+        }
+
         /** A number rounded to the places the call writes out at {@code scaleAt}, of the number
          *  at {@code operandAt}. */
         public static WhereTheScalesHaveRoom ofARounding(int scaleAt, int operandAt) {
