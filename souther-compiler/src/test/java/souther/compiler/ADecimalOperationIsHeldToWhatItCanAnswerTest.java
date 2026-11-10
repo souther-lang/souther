@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.runtime.ConstraintViolation;
+import souther.runtime.OutOfRoom;
 
 import org.junit.jupiter.api.Test;
 
@@ -13,21 +14,18 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A Decimal operation answers the value the model wrote or it aborts, and what it cannot do is
- * answer a different one (spec §a-scale-is-used-as-the-number-written, issue #976).
+ * A Decimal operation answers the value the model wrote or the run fails, and what it cannot do is
+ * answer a different one (spec §a-scale-is-used-as-the-number-written).
  *
- * <p>Two failures, and they are separate. A scale is an {@code Int}, which is 64 bits, and what the
- * run time divides at is 32; a scale outside those cannot be handed over as the number it is. A
- * scale that can be handed over may still name an operation whose result no {@code Decimal} holds,
- * which every one of these operations has — a sum and a product included, the product first, since a
- * product's scale is the sum of its factors'.
- *
- * <p>What both used to do is what this holds. The scale was narrowed with a raw {@code l2i}, so
- * {@code 4294967298} divided at scale 2 and said nothing. The refusal was not caught, so it left a
- * behavior as {@code java.lang.ArithmeticException} — a {@code java.math} type named in the failure
- * of a program that has no such type. Both are model bugs and reach a boundary as
- * {@code ConstraintViolation} (spec §jvm-abort), so the assertions here are as much about which
- * exception arrives as about that one does.
+ * <p>Two shortages, and they are told apart. A scale is an {@code Int}, which is 64 bits, and what a
+ * {@code BigDecimal} divides at is 32; a scale outside those cannot be handed over as the number it
+ * is. A scale that can be handed over may still name an answer with more digits than the host
+ * builds, which every one of these operations can ask for — a sum and a product included, the
+ * product first, since a product's scale is the sum of its factors'. Both answers are decimals, and
+ * neither is the model's fault: each reaches a boundary as {@code OutOfRoom} (spec §jvm-abort), the
+ * platform failing, and never as {@code java.lang.ArithmeticException}, a {@code java.math} type
+ * named in the failure of a program that has no such type. A value no {@code Int} holds is the one
+ * refusal here, and it is the language's ({@code ConstraintViolation}).
  */
 class ADecimalOperationIsHeldToWhatItCanAnswerTest {
 
@@ -79,17 +77,24 @@ class ADecimalOperationIsHeldToWhatItCanAnswerTest {
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(beh, in));
     }
 
-    private static ConstraintViolation aborts(BytesClassLoader loader, String behavior,
-                                              BigDecimal a, BigDecimal b, long scale) {
+    /** What {@code behavior} ends with on these arguments, which is a {@code failure}. */
+    private static <T extends Throwable> T fails(Class<T> failure, BytesClassLoader loader,
+                                                 String behavior, BigDecimal a, BigDecimal b,
+                                                 long scale) {
         Throwable raised = assertThrows(Throwable.class,
                 () -> run(loader, behavior, a, b, scale));
         Throwable at = raised;
-        while (at.getCause() != null && !(at instanceof ConstraintViolation)) {
+        while (at.getCause() != null && !failure.isInstance(at)) {
             at = at.getCause();
         }
-        assertTrue(at instanceof ConstraintViolation,
+        assertTrue(failure.isInstance(at),
                 behavior + " raised " + at.getClass().getName() + ": " + at.getMessage());
-        return (ConstraintViolation) at;
+        return failure.cast(at);
+    }
+
+    private static OutOfRoom shortOfRoom(BytesClassLoader loader, String behavior,
+                                         BigDecimal a, BigDecimal b, long scale) {
+        return fails(OutOfRoom.class, loader, behavior, a, b, scale);
     }
 
     @Test
@@ -105,11 +110,11 @@ class ADecimalOperationIsHeldToWhatItCanAnswerTest {
      * Decimal. Nothing downstream could have told the two apart.
      */
     @Test
-    void aScaleNoIntHoldsAbortsRatherThanDividingAtTheScaleTheLowBitsSpell() {
+    void aScaleNoIntHoldsIsShortOfRoomRatherThanDividingAtTheScaleTheLowBitsSpell() {
         BytesClassLoader loader = loaded();
         for (String behavior : new String[] {"divv", "rnd"}) {
-            ConstraintViolation e =
-                    aborts(loader, behavior, new BigDecimal("7"), new BigDecimal("3"), 4294967298L);
+            OutOfRoom e = shortOfRoom(loader, behavior, new BigDecimal("7"), new BigDecimal("3"),
+                    4294967298L);
             assertTrue(e.getMessage().contains("4294967298"), e.getMessage());
             assertTrue(e.getMessage().contains("scale"), e.getMessage());
         }
@@ -117,37 +122,37 @@ class ADecimalOperationIsHeldToWhatItCanAnswerTest {
 
     /** The same the other way: {@code -2^32} narrows to 0, which divides to a whole number. */
     @Test
-    void aNegativeScaleNoIntHoldsAbortsToo() {
+    void aNegativeScaleNoIntHoldsIsShortOfRoomToo() {
         BytesClassLoader loader = loaded();
         for (String behavior : new String[] {"divv", "rnd"}) {
-            ConstraintViolation e =
-                    aborts(loader, behavior, new BigDecimal("7"), new BigDecimal("3"), -4294967296L);
+            OutOfRoom e = shortOfRoom(loader, behavior, new BigDecimal("7"), new BigDecimal("3"),
+                    -4294967296L);
             assertTrue(e.getMessage().contains("-4294967296"), e.getMessage());
         }
     }
 
     /**
-     * A scale an {@code int} holds exactly, and a division at it the run time still cannot answer.
-     * The message must not call this a scale out of range: the scale was handed over as the number
-     * it is, and what has no answer is the operation asked for at it.
+     * A scale an {@code int} holds exactly, and a division at it with more digits than the host
+     * builds. The message must not call this a scale past what is taken: the scale was handed over
+     * as the number it is, and what was short is room for the answer at it.
      */
     @Test
-    void aScaleHandedOverExactlyStillAbortsWhereTheResultIsOneNoDecimalHolds() {
+    void aScaleHandedOverExactlyIsStillShortOfRoomWhereTheAnswerIsTooLongToWrite() {
         BytesClassLoader loader = loaded();
         for (String behavior : new String[] {"divv", "rnd"}) {
-            ConstraintViolation e = aborts(loader, behavior,
+            OutOfRoom e = shortOfRoom(loader, behavior,
                     new BigDecimal("7"), new BigDecimal("3"), Integer.MAX_VALUE);
-            assertTrue(e.getMessage().contains("outside the range a Decimal holds"), e.getMessage());
+            assertTrue(e.getMessage().contains("no room to write"), e.getMessage());
         }
     }
 
-    /** The operators are the same operations and abort the same way. This is what reached a boundary
-     *  as {@code java.lang.ArithmeticException}: no scale is written anywhere in {@code a * b}. */
+    /** The operators are the same operations and are short of room the same way: no scale is
+     *  written anywhere in {@code a * b}. */
     @Test
-    void anOperatorRunningOffTheEndOfTheScaleRangeAborts() {
+    void anOperatorRunningPastABigDecimalsScalesIsShortOfRoom() {
         BytesClassLoader loader = loaded();
-        assertTrue(aborts(loader, "times", TINY, TINY, 2L).getMessage().contains("product"));
-        assertTrue(aborts(loader, "plus", TINY,
+        assertTrue(shortOfRoom(loader, "times", TINY, TINY, 2L).getMessage().contains("product"));
+        assertTrue(shortOfRoom(loader, "plus", TINY,
                 new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE), 2L).getMessage().contains("sum"));
     }
 
@@ -179,7 +184,8 @@ class ADecimalOperationIsHeldToWhatItCanAnswerTest {
     void everyArgumentOfADivideRunsWhateverTheDivisorTurnsOutToBe() {
         BytesClassLoader loader = loaded();
         for (BigDecimal divisor : new BigDecimal[] {new BigDecimal("3"), BigDecimal.ZERO}) {
-            ConstraintViolation e = aborts(loader, "divvAborting", PAST_AN_INT, divisor, 2L);
+            ConstraintViolation e = fails(ConstraintViolation.class, loader, "divvAborting",
+                    PAST_AN_INT, divisor, 2L);
             assertTrue(e.getMessage().contains("does not fit in an Int"),
                     "divisor " + divisor + ": " + e.getMessage());
         }
@@ -199,15 +205,15 @@ class ADecimalOperationIsHeldToWhatItCanAnswerTest {
     }
 
     /**
-     * An abort message over a value at the end of the scale range is bounded. Written with
+     * A message over a value at the end of a {@code BigDecimal}'s scales is bounded. Written with
      * {@code toPlainString()} it would spell the value out — two billion characters for a scale at
-     * the end of the range — which is the allocation the operation just refused to make, so the
-     * failure path would fail.
+     * the end — which is the allocation the operation just had no room for, so the failure path
+     * would fail.
      */
     @Test
-    void anAbortMessageDoesNotSpellOutAValueTheOperationRefusedToBuild() {
+    void aMessageDoesNotSpellOutAValueTheRunHadNoRoomToBuild() {
         BytesClassLoader loader = loaded();
-        String said = aborts(loader, "times", TINY, TINY, 2L).getMessage();
+        String said = shortOfRoom(loader, "times", TINY, TINY, 2L).getMessage();
         assertTrue(said.length() < 200, "message is " + said.length() + " characters");
         assertTrue(said.contains("scale " + Integer.MAX_VALUE), said);
     }

@@ -241,7 +241,7 @@ final class PathCompletion {
     private static WhereAnOperatorAnswers whereItAnswers(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
-                    binary.type(), List.of(binary.left().type(), binary.right().type()));
+                    binary.type());
             case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
             default -> null;
         };

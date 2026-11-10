@@ -99,55 +99,6 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         return greatest == null && !mayStopARow();
     }
 
-    /**
-     * Whether the only operations that can stop a row are of decimals and each has room at every
-     * number a row is built at ({@link DecimalOperation#everyOperationHasRoomAtEveryNumber}). A
-     * number a row is not built at is none of the rows, so no row that is built is stopped.
-     */
-    boolean stopsNoRowThatIsBuilt() {
-        return tellsEveryOperation() && operations.sums().isEmpty() && worksOutDecimals()
-                && DecimalOperation.everyOperationHasRoomAtEveryNumber(operations.decimals());
-    }
-
-    /** Whether the rows of the relation work out an operation of decimals. */
-    boolean worksOutDecimals() {
-        return !operations.decimals().isEmpty();
-    }
-
-    /**
-     * Whether what rows built at the ends of a run find of the operations of decimals told holds
-     * of every number between, for a claim about the values of the term {@code asked} with the
-     * term {@code partner} put where it takes the claim ({@link DecimalOperation#allowAClaimOver}).
-     * True where there is none.
-     */
-    boolean decimalsAllowAClaimOver(Object asked, Object partner) {
-        return DecimalOperation.allowAClaimOver(operations.decimals(), asked, partner);
-    }
-
-    /**
-     * Whether a run of the term {@code asked} with no end on a side is asked at the edge of what
-     * is built ({@link DecimalPoints#edgeOfWhatIsBuilt}) and the rows there stand for the numbers
-     * between: every operation that can stop a row is an operation of decimals, and each that
-     * reads the term reads another with it and has room at every number
-     * ({@link DecimalOperation#everyOperationReadingItHasRoomAtEveryNumber}), so the room of one
-     * turns on the scales of the numbers a row is built from and not on which number of the run
-     * is asked of.
-     *
-     * <p>The numbers a row is built from are written at most as many places before and after the
-     * point as {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}, and the partner is stood beside
-     * the line at such numbers however far out the line is, so two operands of a sum are at most
-     * twice that many places apart in scale whatever the digits. The room of the operations is
-     * then the same at every number of the run, and the point far out is asked as any end is,
-     * to see that the term takes a value there and the rows stand. That a term put beside it
-     * reaches the line at every number is {@code reaches}' own question, asked before the rows
-     * are.
-     */
-    boolean aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt(Object asked) {
-        return greatest == null && tellsEveryOperation() && operations.sums().isEmpty()
-                && worksOutDecimals()
-                && DecimalOperation.everyOperationReadingItHasRoomAtEveryNumber(
-                        operations.decimals(), asked);
-    }
 
     /**
      * Whether one row is computed, the row being the {@code addends} of the form at it and the
@@ -174,8 +125,7 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         Map<Object, ExactRatio> standing = new LinkedHashMap<>(held);
         standing.putAll(values.get());
         withTheNumbersAProductIsMadeOf(standing, operations);
-        return operations.sums().stream().allMatch(sum -> sum.holdsAt(standing))
-                && DecimalOperation.allCompleteAt(operations.decimals(), standing);
+        return operations.sums().stream().allMatch(sum -> sum.holdsAt(standing));
     }
 
     /**
@@ -186,14 +136,14 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
      * values that satisfy it are a run, and the values that satisfy all of them are where those
      * runs meet.
      *
-     * <p>False where that is not worked out and nothing is shown: not every operation is told,
-     * some are of decimals, or one reads a term that is none of the two and is not held still.
-     * Whether the term called {@code other} takes a value, and goes with the value of the other,
-     * is the caller's to have shown.
+     * <p>False where that is not worked out and nothing is shown: not every operation is told, or
+     * one reads a term that is none of the two and is not held still. Whether the term called
+     * {@code other} takes a value, and goes with the value of the other, is the caller's to have
+     * shown.
      */
     boolean aWholeValueCompletes(Object asked, ExactRatio value, Object other, BigInteger least,
                                  BigInteger greatest) {
-        if (!tellsEveryOperation() || !operations.decimals().isEmpty()) {
+        if (!tellsEveryOperation()) {
             return false;
         }
         BigInteger from = least;

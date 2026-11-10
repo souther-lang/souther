@@ -257,7 +257,8 @@ public final class AbortSites {
      */
     private static AbortSet callAborts(Core.Call call, KernelContracts kernels) {
         return switch (call.fn()) {
-            case Core.Reached.OfKernel kernel -> kernels.contractOf(kernel.kernel()).aborts();
+            case Core.Reached.OfKernel kernel ->
+                    kernels.abortsOfACallAnswering(kernel.kernel(), call.type());
             case Core.Reached.OfDeclaration _ -> AbortSet.NONE;
             case Core.Reached.OfValue _ -> AbortSet.NONE;
             case Core.Reached.OfPublishedValue _ -> AbortSet.NONE;
@@ -339,17 +340,7 @@ public final class AbortSites {
                 }
                 yield out;
             }
-            case BinOp.DIV -> {
-                AbortSet out = AbortSet.NONE;
-                for (Type left : NUMBERS) {
-                    for (Type right : NUMBERS) {
-                        if (left.equals(right) || left == Type.RATIONAL || right == Type.RATIONAL) {
-                            out = out.union(divide(Type.RATIONAL, left, right));
-                        }
-                    }
-                }
-                yield out;
-            }
+            case BinOp.DIV -> divide(Type.RATIONAL);
             case BinOp.CONCAT, BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE,
                  BinOp.AND, BinOp.OR -> whateverItsTypes(op);
         };
@@ -386,21 +377,17 @@ public final class AbortSites {
      * RationalMath.divideWholeNumbers}, where both operands are {@code Int} and the answer, and the
      * operation, are {@code Rational}.
      *
-     * <p>{@code +}, {@code -}, {@code *} abort only on {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}:
-     * an {@code Int} or a {@code Decimal} sum, difference or product outside what its type holds
-     * ({@code souther.runtime.IntMath}, {@code souther.runtime.DecimalMath}), or a {@code Rational}
-     * one whose required exact form asks for more exponent than {@code Rational} holds
-     * ({@code souther.runtime.Rational#noRoomForIt}). Never both at one site: {@code Int + Int} and
-     * {@code Decimal + Decimal} stay {@code Int} and {@code Decimal} (ADR-0116's homogeneous rule),
-     * so a {@code +}/{@code -}/{@code *} whose answer is {@code Rational} already has a
-     * {@code Rational}-typed operand feeding it — the same fact {@link #divide} reads directly for
-     * {@code /}, which does not get that guarantee for free.
+     * <p>{@code +}, {@code -}, {@code *} abort only over {@code Int}, on
+     * {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}: a sum, difference or product outside what an
+     * {@code Int} holds ({@code souther.runtime.IntMath}). Over a {@code Decimal} or a
+     * {@code Rational} the answer is a finite decimal or a rational number, which there always is
+     * (spec §stdlib-decimal, §stdlib-rational); a run with no room to write it is the platform
+     * failing ({@code OutOfRoom}), which is not a site's.
      */
     private static AbortSet arithmetic(Core.Binary binary) {
         return switch (binary.op()) {
             case BinOp.ADD, BinOp.SUB, BinOp.MUL -> arithmeticType(binary.op(), binary.type());
-            case BinOp.DIV ->
-                    divide(binary.type(), binary.left().type(), binary.right().type());
+            case BinOp.DIV -> divide(binary.type());
             case BinOp.CONCAT, BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE,
                  BinOp.AND, BinOp.OR -> whateverItsTypes(binary.op());
         };
@@ -422,8 +409,9 @@ public final class AbortSites {
                     : new GetsPast.NotKnown();
             case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND,
                  BinOp.OR -> new GetsPast.Always();
-            case BinOp.ADD, BinOp.SUB, BinOp.MUL -> Type.DECIMAL.equals(answer)
-                    ? GetsPast.WhereTheScalesHaveRoom.ofTheOperator(op) : new GetsPast.NotKnown();
+            case BinOp.ADD, BinOp.SUB, BinOp.MUL ->
+                    Type.DECIMAL.equals(answer) || Type.RATIONAL.equals(answer)
+                            ? new GetsPast.Always() : new GetsPast.NotKnown();
             case BinOp.DIV -> new GetsPast.NotKnown();
         };
     }
@@ -441,8 +429,9 @@ public final class AbortSites {
         };
     }
 
-    /** {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE} for every type {@code +}, {@code -} and
-     *  {@code *} answer with, or a compiler invariant failure for a type none of them do — refused
+    /** {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE} for an {@code Int}, nothing for a
+     *  {@code Decimal} or a {@code Rational}, or a compiler invariant failure for a type none of
+     *  {@code +}, {@code -} and {@code *} answer with — refused
      *  rather than answered with {@link AbortSet#NONE}, so a primitive the checker admits to
      *  arithmetic later and this has not been told about fails loudly instead of silently reading
      *  as total. */
@@ -453,7 +442,8 @@ public final class AbortSites {
                             + ", which no arithmetic the checker admits answers with");
         }
         return switch (prim) {
-            case INT, DECIMAL, RATIONAL -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            case INT -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            case DECIMAL, RATIONAL -> AbortSet.NONE;
             case STRING, BOOL, DATE, TIME, DATETIME, INSTANT -> throw new IllegalStateException(
                     "`" + op + "` answers " + prim.shown()
                             + ", which no arithmetic the checker admits answers with");
@@ -467,9 +457,9 @@ public final class AbortSites {
      * (spec §an-operator-takes-the-types-it-is-defined-for) and states {@code Int}'s own case
      * explicitly: {@code abs} negates with {@code -}, and the smallest {@code Int} — the one value
      * with no positive counterpart — aborts on overflow like any other overflow (spec §stdlib-int).
-     * {@code Decimal} and {@code Rational} negation only flip a sign; neither changes the scale or
-     * the exponent a {@code +}/{@code -}/{@code *} on either type can push out of range, so neither
-     * is a case {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE} names.
+     * {@code Decimal} and {@code Rational} negation only flip a sign, and every number has a
+     * negation of its type, so neither is a case {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}
+     * names.
      *
      * <p>A checked {@code Core.Neg} answers only {@code Int}, {@code Decimal} or {@code Rational}
      * (spec §an-operator-takes-the-types-it-is-defined-for); a fourth reaching here is a malformed
@@ -502,38 +492,15 @@ public final class AbortSites {
      * {@code Int} or {@code Decimal} division — the one thing that would let a future checker
      * change quietly agree with a stale reading here.
      *
-     * <p>{@code /} always answers {@code Rational}, but unlike {@code +}/{@code -}/{@code *} that
-     * does not by itself mean a {@code Rational}-typed operand is already in play — {@code Int / Int}
-     * and {@code Decimal / Decimal} answer {@code Rational} too. So this reads both operand types
-     * directly, the one place in this walker an operand's own type decides the answer rather than
-     * the node's. {@code BodyGen.pushExact} is why: {@code Int} and {@code Decimal} operands are
-     * widened through {@code RationalMath.fromInt}/{@code fromDecimal} — exact and total, building a
-     * fresh, compact {@code Rational} with no prior exponent history — while an operand already
-     * {@code Rational}-typed is pushed as it stands, whatever exponents it already carries.
-     * {@code Int / Int} is emitted through {@code RationalMath.divideWholeNumbers} specifically
-     * (never the general path), but the same fact holds there too: two {@code long}s make a fresh,
-     * compact pair.
-     *
-     * <p>So a zero divisor is the only reason where neither operand was already {@code Rational}:
-     * {@code Int / Int} runs {@code divideWholeNumbers}, {@code Decimal / Decimal} runs
-     * {@code RationalMath.divide} on two freshly-widened operands, and
-     * {@code Rational#dividedBy}'s own exponent subtraction ({@code lessened}) cannot overflow a
-     * {@code long} for exponents that both trace back to a 32-bit {@code Decimal} scale or a
-     * {@code long} {@code Int} — traced directly against {@code Rational#dividedBy} rather than
-     * assumed from the type alone. Where either operand is already {@code Rational}, it may carry
-     * exponents from arithmetic earlier in the program, and dividing can still ask for more than
-     * {@code Rational} holds.
+     * <p>A zero divisor is the one reason, whichever numbers are divided: every other quotient is a
+     * rational number, and a run with no room to write one is the platform failing.
      */
-    private static AbortSet divide(Type answer, Type left, Type right) {
+    private static AbortSet divide(Type answer) {
         if (answer != Type.RATIONAL) {
             throw new IllegalStateException(
                     "`/` answers " + Type.show(answer) + ", and the exact operator's answer"
                             + " is always Rational (spec §stdlib-rational)");
         }
-        AbortSet zeroDivisor = AbortSet.of(AbortKind.DIVISION_BY_ZERO);
-        boolean anOperandIsAlreadyRational = left == Type.RATIONAL || right == Type.RATIONAL;
-        return anOperandIsAlreadyRational
-                ? zeroDivisor.union(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE))
-                : zeroDivisor;
+        return AbortSet.of(AbortKind.DIVISION_BY_ZERO);
     }
 }

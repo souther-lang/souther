@@ -5,7 +5,7 @@ import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.LawNumber;
-import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -89,6 +89,17 @@ public final class KernelContracts {
                     OPTION_MAP ->
                     AbortSet.NONE;
 
+            // A `Decimal` is any finite decimal and a `Rational` any rational number (spec
+            // §stdlib-decimal, §stdlib-rational), so these have an answer for every value they are
+            // handed: a sum, a difference, a product, a rounding, a quotient at a scale, and a
+            // narrowing of a `Rational` to a decimal. Where the representation has no place to write
+            // the answer, the run is short of room (`OutOfRoom`, spec §jvm-abort), which is the
+            // platform failing and no reason this classifies.
+            case DECIMAL_ROUND, DECIMAL_ADD, DECIMAL_SUBTRACT, DECIMAL_MULTIPLY, DECIMAL_DIVIDE,
+                    RATIONAL_TO_FINITE_DECIMAL, RATIONAL_TO_DECIMAL,
+                    RATIONAL_ADD, RATIONAL_SUBTRACT, RATIONAL_MULTIPLY ->
+                    AbortSet.NONE;
+
             // `slice`'s bounds may name nothing to slice at all (spec §stdlib-string, ADR-0096) —
             // told apart from an answer with no place, below, because these fail before any answer
             // is computed.
@@ -99,16 +110,11 @@ public final class KernelContracts {
             // than a `String` holds — built by joining, repeating, padding, replacing, case mapping
             // or rendering a `Decimal`, or by canonicalizing any of those — a `Map` or `Set` one
             // entry past what its size counts, a calendar shift off the end of what a temporal
-            // holds, a `List.rangeInclusive` span longer than a `List` can hold, and an `Int` or
-            // `Decimal` arithmetic result outside what its type holds are the first half — the
-            // answer itself has no place. `Rational.toWholeNumber`/`toInt`/`toFiniteDecimal`/
-            // `toDecimal` narrowing to a carrier that holds no such value are the same half, read
-            // off `Rational#asWholeNumber`/`#asDecimal`. `RATIONAL_ADD`/`SUBTRACT` are the second
-            // half: the exact sum or difference always has a value, but writing it is what
-            // `Rational`'s own arithmetic is defined to do — a common exponent brought out and the
-            // remaining distance built in full (`Rational#plus`/`#minus`) — and that required form
-            // can ask for an exponent past what `Rational` holds even where the mathematical answer
-            // would fit.
+            // holds, a `List.rangeInclusive` span longer than a `List` can hold, and an `Int`
+            // arithmetic result outside what an `Int` holds — the answer itself has no place.
+            // `Decimal.toInt` and `Rational.toWholeNumber`/`toInt` narrowing to an `Int` no `Int`
+            // holds are the same. `List.sum`/`product` are here for a list of `Int`s; over decimals
+            // or rationals they answer always (`abortsAnswering`).
             case STRING_APPEND, STRING_JOIN, STRING_CONCAT, STRING_REPLACE, STRING_REVERSE,
                     STRING_LOWERCASE, STRING_UPPERCASE,
                     STRING_REPEAT, STRING_PAD_LEFT, STRING_PAD_RIGHT, STRING_FROM_DECIMAL,
@@ -117,9 +123,7 @@ public final class KernelContracts {
                     DATE_ADD_DAYS, DATE_ADD_MONTHS, DATE_ADD_YEARS,
                     DATETIME_ADD_MINUTES, DATETIME_ADD_HOURS, DATETIME_ADD_DAYS,
                     INT_ADD, INT_SUBTRACT, INT_MULTIPLY,
-                    DECIMAL_TO_INT, DECIMAL_ROUND, DECIMAL_ADD, DECIMAL_SUBTRACT, DECIMAL_MULTIPLY,
-                    RATIONAL_TO_WHOLE_NUMBER, RATIONAL_TO_FINITE_DECIMAL, RATIONAL_TO_INT,
-                    RATIONAL_TO_DECIMAL, RATIONAL_ADD, RATIONAL_SUBTRACT, RATIONAL_MULTIPLY ->
+                    DECIMAL_TO_INT, RATIONAL_TO_WHOLE_NUMBER, RATIONAL_TO_INT ->
                     AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
 
             // `floorMod` aborts on a zero divisor like `/` does (spec §stdlib-int) and never
@@ -127,17 +131,39 @@ public final class KernelContracts {
             case INT_FLOOR_MOD -> AbortSet.of(AbortKind.DIVISION_BY_ZERO);
 
             // `truncatingDivide` answers `DivisionByZero` as a case and aborts only on the one pair
-            // whose quotient no `Int` holds (spec §stdlib-int); `Decimal.divide` answers a zero
-            // divisor as a case the same way and aborts only where the quotient it rounds to has no
-            // place at the scale asked (spec §stdlib-decimal).
-            case INT_TRUNCATING_DIVIDE, DECIMAL_DIVIDE ->
-                    AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            // whose quotient no `Int` holds (spec §stdlib-int).
+            case INT_TRUNCATING_DIVIDE -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
 
             // The exact `/` operator: a zero divisor aborts outright (spec §stdlib-rational), and
-            // the exact arithmetic underneath can still ask for an exponent past what a `Rational`
-            // holds — the same law the narrowings above answer to.
-            case RATIONAL_DIVIDE ->
-                    AbortSet.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            // every other quotient is a rational number.
+            case RATIONAL_DIVIDE -> AbortSet.of(AbortKind.DIVISION_BY_ZERO);
+        };
+    }
+
+    /**
+     * What a call of {@code kernel} answering a value of {@code answer} can end without a value
+     * for: {@link #abortsOf}, except where the kernel is one operation over several numbers and
+     * what ends a run is one number's alone.
+     *
+     * <p>{@code List.sum} and {@code List.product} add up or multiply whatever numbers they are
+     * handed, and only an {@code Int} has a total no {@code Int} holds; a total of decimals is a
+     * decimal and one of rationals a rational. So over those two they end no run, and over an
+     * {@code Int}, or over a type not read, they end one where {@link #abortsOf} says.
+     */
+    public static AbortSet abortsAnswering(Kernel kernel, Type answer) {
+        return atTheAnswer(kernel, answer, abortsOf(kernel));
+    }
+
+    /** {@link #abortsAnswering}, of the contract this holds for {@code kernel}. */
+    public AbortSet abortsOfACallAnswering(Kernel kernel, Type answer) {
+        return atTheAnswer(kernel, answer, contractOf(kernel).aborts());
+    }
+
+    private static AbortSet atTheAnswer(Kernel kernel, Type answer, AbortSet overEveryNumber) {
+        return switch (kernel) {
+            case LIST_SUM, LIST_PRODUCT -> Type.DECIMAL.equals(answer) || Type.RATIONAL.equals(answer)
+                    ? AbortSet.NONE : overEveryNumber;
+            default -> overEveryNumber;
         };
     }
 
@@ -163,14 +189,6 @@ public final class KernelContracts {
             case SET_INSERT -> fits(GetsPast.together(1, 1));
             case MAP_INSERT -> fits(GetsPast.together(1, 2));
             case STRING_LOWERCASE, STRING_UPPERCASE -> new GetsPast.WhereTheTextFits(0);
-            case DECIMAL_ADD -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.ADD);
-            case DECIMAL_SUBTRACT -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.SUB);
-            case DECIMAL_MULTIPLY -> GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.MUL);
-            // Rounded to the places the call writes out, of the number it is handed last.
-            case DECIMAL_ROUND -> GetsPast.WhereTheScalesHaveRoom.ofARounding(0, 2);
-            // A quotient is worked at the scale asked and the greater of the two it divides, and
-            // is a number of the shape its law leaves, at the scale asked.
-            case DECIMAL_DIVIDE -> GetsPast.WhereTheScalesHaveRoom.ofADivision(0, 1, 2);
             default -> abortsOf(kernel).isEmpty() ? new GetsPast.Always()
                     : new GetsPast.NotKnown();
         };

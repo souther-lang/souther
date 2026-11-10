@@ -209,13 +209,12 @@ public final class RationalMath {
         return r.asDecimal(scale(scale), DecimalMath.toJava(mode), checkpoint);
     }
 
-    /** A scale held to what the run time takes, as {@code DecimalMath} holds one. */
+    /** A scale as a {@code BigDecimal} takes it, as {@code DecimalMath} hands one over. */
     private static int scale(long scale) {
         try {
             return Math.toIntExact(scale);
         } catch (ArithmeticException _) {
-            throw new ConstraintViolation(
-                    "Rational.toDecimal scale is outside the range the run time takes: " + scale);
+            throw new OutOfRoom("Rational.toDecimal at a scale a BigDecimal does not take: " + scale);
         }
     }
 }

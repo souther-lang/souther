@@ -1224,7 +1224,7 @@ public final class AffineForms {
     public static WhereAnOperatorAnswers whereItAnswers(Core operation) {
         return switch (Terms.asOperator(operation)) {
             case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
-                    binary.type(), List.of(binary.left().type(), binary.right().type()));
+                    binary.type());
             case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
             default -> throw new IllegalArgumentException(
                     "a walk composes an operator and nothing else: " + operation);
@@ -1413,8 +1413,7 @@ public final class AffineForms {
      */
     private static <A, E> LinearForm<A> quotientTold(Core.Binary division, LinearForm<A> form,
                                                      Reading<A, E> reading) {
-        if (form != null && !(WhereAnOperatorAnswers.ofAnOperator(division.op(), division.type(),
-                List.of(division.left().type(), division.right().type()))
+        if (form != null && !(WhereAnOperatorAnswers.ofAnOperator(division.op(), division.type())
                 instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought)) {
             reading.unobserved(division);
         }

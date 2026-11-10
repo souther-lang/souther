@@ -64,13 +64,13 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         assertEquals(BigInteger.ONE, taken.numerator());
     }
 
-    /** An exponent is sixty-four bits, and a product asking for more of it aborts rather than
-     *  answering about a value it cannot hold. */
+    /** An exponent is sixty-four bits, and a product asking for more of it is one this run has no
+     *  room to write, rather than an answer about another value. */
     @Test
-    void anExponentPastWhatIsHeldAborts() {
+    void anExponentPastWhatIsHeldIsShortOfRoom() {
         Rational far = new Rational(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE, 0);
 
-        assertThrows(ConstraintViolation.class, () -> far.times(far));
+        assertThrows(OutOfRoom.class, () -> far.times(far));
     }
 
     /** And a product whose exponents merely add is exact, however far past a scale's own width they

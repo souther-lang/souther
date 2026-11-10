@@ -227,8 +227,7 @@ public final class WhatARelationLeavesUndivided {
      * row an operation does not hold at is no row. That a row is computed because they hold is
      * said only where every operation is told.
      *
-     * <p>The operations of decimals ({@code decimals}) have no region: a row is asked by working
-     * them out ({@link DecimalOperation}), and no size of the form says anything of them.
+     * <p>An operation of decimals stops no row, and is none of these.
      *
      * <p>A sum may be over a number that is no term of the relation, which the comparison cancels
      * out of the form and the program still works out. Such a number is held at the value of its
@@ -237,15 +236,13 @@ public final class WhatARelationLeavesUndivided {
      * a number is not in {@code standing}, no row is shown to stand at a value of it, and the
      * sum is not told. {@code standing} is there exactly where that is what was told.
      */
-    public record Operations(List<IntSum> sums, List<DecimalWork> decimals, Told told,
-                             Map<Object, ExactRatio> standing) {
+    public record Operations(List<IntSum> sums, Told told, Map<Object, ExactRatio> standing) {
 
         /** Nothing said of the program. */
         public static final Operations NONE = new Operations(List.of(), Told.NOTHING_SAID);
 
         public Operations {
             sums = List.copyOf(sums);
-            decimals = List.copyOf(decimals);
             Objects.requireNonNull(told, "what was told, or that nothing was said");
             standing = Map.copyOf(standing);
             if (standing.isEmpty() == (told == Told.EVERY_AT_HELD_VALUES)) {
@@ -254,14 +251,9 @@ public final class WhatARelationLeavesUndivided {
             }
         }
 
-        /** The operations of whole numbers and decimals, over the terms of the relation alone. */
-        public Operations(List<IntSum> sums, List<DecimalWork> decimals, Told told) {
-            this(sums, decimals, told, Map.of());
-        }
-
-        /** The operations of whole numbers alone. */
+        /** The operations, over the terms of the relation alone. */
         public Operations(List<IntSum> sums, Told told) {
-            this(sums, List.of(), told);
+            this(sums, told, Map.of());
         }
 
         /** What a reading told: every operation that can stop a run, or only some. */
@@ -290,7 +282,7 @@ public final class WhatARelationLeavesUndivided {
             return switch (told) {
                 case NOTHING_SAID -> false;
                 case SOME -> true;
-                case EVERY -> !sums.isEmpty() || !decimals.isEmpty();
+                case EVERY -> !sums.isEmpty();
                 case EVERY_AT_HELD_VALUES -> true;
             };
         }
@@ -332,7 +324,7 @@ public final class WhatARelationLeavesUndivided {
          * there is none, since then nothing stops a row at a size, and {@code greatest} otherwise.
          */
         public BigInteger sizesStopAt(BigInteger greatest) {
-            return told == Told.EVERY && sums.isEmpty() && decimals.isEmpty() ? null : greatest;
+            return told == Told.EVERY && sums.isEmpty() ? null : greatest;
         }
 
         /** The weight the relation gives each term by key, or null where a term has no key or
@@ -387,9 +379,6 @@ public final class WhatARelationLeavesUndivided {
          * operations are worked out over.
          */
         <P> ExactRatio multipleOfTheForm(List<Term<P>> terms, ExactRatio constant) {
-            if (!decimals.isEmpty()) {
-                return null;
-            }
             Map<Object, ExactRatio> weights = weightsOf(terms);
             ExactRatio most = ExactRatio.ONE;
             for (IntSum each : sums) {
@@ -462,12 +451,9 @@ public final class WhatARelationLeavesUndivided {
      *
      * <p><b>What is said of a value is said of the values that have a row.</b> A row is a row where
      * the program gets to the end of working it out ({@link RowsComputed}), as for a whole number
-     * past where its type stops. A decimal is one number at every scale it is written at, and
-     * whether an operation on it has room turns on the scale and not on the number, so the numbers
-     * with no row are not an interval and no line is drawn for them; they are no counterexample to
-     * a value leaving the relation either way, and are not said of. A claim about every value of a
-     * run is then made of what each operation reads ({@link DecimalOperation#allowAClaimOver}) and
-     * not of rows worked out at its ends; that a run has a row is made by building one.
+     * past where its type stops. An operation of decimals stops no row, so a decimal has a row
+     * wherever what else the program works out lets one through; that a run has a row is made by
+     * building one.
      */
     public sealed interface Leaves {
 
@@ -2342,7 +2328,7 @@ public final class WhatARelationLeavesUndivided {
         for (ExactRatio value : tried) {
             if (value != null && takesTheValue(terms.get(at), value)
                     && arithmetic.computedAt(() -> valuesByKey(terms,
-                    i -> i == at ? value : standingNearestNought(arithmetic, terms.get(i))))) {
+                    i -> i == at ? value : heldNearestNought(terms.get(i))))) {
                 return true;
             }
         }
@@ -2404,8 +2390,7 @@ public final class WhatARelationLeavesUndivided {
                 return true;
             }
         }
-        return ((!arithmetic.mayStopARow() || arithmetic.stopsNoRowThatIsBuilt())
-                && reachedWithoutEnd(terms, relation, free))
+        return (!arithmetic.mayStopARow() && reachedWithoutEnd(terms, relation, free))
                 || (within == null
                         && reachedByTheOthersAddedUp(terms, at, constant, relation, free,
                                 arithmetic))
@@ -4308,13 +4293,10 @@ public final class WhatARelationLeavesUndivided {
      * {@code 2^62 x - 2^62 y < 0}, {@code x} from nought to one, has both
      * rows at nought and none on the true side at one, where a {@code y} of two weighed passes the
      * type; {@code x - y > M}, {@code M} the greatest {@code Int}, has a true row at no {@code x}.
-     * A run open on a side is asked at the edge of what is built on that side, where no operation
-     * of decimals reads the term ({@link RowsComputed#aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt});
-     * otherwise nothing is shown. The point is where the rows are built to see that the term takes
-     * a value there and they stand; the numbers between and past it are claimed by the room of the
-     * operations turning on scales, which the partner's numbers keep however far out the line is
-     * ({@link DecimalPoints#edgeOfWhatIsBuilt}). A dense term is asked there when there is no
-     * operation to be worked out as well.
+     * A run open on a side is asked only where nothing can stop a row: a dense term is then asked
+     * at the edge of what is built on that side ({@link DecimalPoints#edgeOfWhatIsBuilt}), to see
+     * that the term takes a value there and the rows stand. Where an operation can stop a row,
+     * nothing is shown of a run with no end.
      *
      * <p>Two terms standing at each other's value with nothing besides are compared and not
      * added, and are asked nothing of it.
@@ -4341,30 +4323,19 @@ public final class WhatARelationLeavesUndivided {
                 && !arithmetic.mayStopARow())) {
             return true;
         }
-        if (arithmetic.worksOutDecimals()) {
-            // A row evidence of an operation being worked out stands the term at a value it takes.
-            asked = takenRun(terms.get(of), asked);
-        }
         if (constant == null || asked == null) {
             return false;
         }
         boolean endless = asked.lower() == null || asked.upper() == null;
-        if (endless && !noOperations
-                && !arithmetic.aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt(terms.get(of).key())) {
+        if (endless && !noOperations) {
             return false;
         }
-        // The rows built at the ends of the run are asked of every value between them. For a sum of
-        // whole numbers that holds, each being a straight function of the term. For decimals it
-        // holds of what each operation reads, and nothing is claimed of an operation that reads
-        // the term asked of together with another unless its room is the same at every number.
-        if (!arithmetic.decimalsAllowAClaimOver(terms.get(of).key(), terms.get(by).key())) {
-            return false;
-        }
+        // The rows built at the ends of the run are asked of every value between them: a sum of
+        // whole numbers is a straight function of the term.
         List<ExactRatio> fixed = new ArrayList<>(beside);
         for (int i = 0; i < terms.size(); i++) {
             if (i != by && i != of) {
-                fixed.add(weighedAt(standingNearestNought(arithmetic, terms.get(i)),
-                        terms.get(i).weight()));
+                fixed.add(weighedAt(heldNearestNought(terms.get(i)), terms.get(i).weight()));
             }
         }
         List<ExactRatio> askedAt = rowValuesAtTheEnds(terms.get(of), asked);
@@ -4372,8 +4343,7 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         for (ExactRatio value : askedAt) {
-            if ((arithmetic.worksOutDecimals() || askedAtItsEdge)
-                    && !takesTheValue(terms.get(of), value)) {
+            if (askedAtItsEdge && !takesTheValue(terms.get(of), value)) {
                 return false;
             }
             List<ExactRatio> row = new ArrayList<>(fixed);
@@ -4405,7 +4375,7 @@ public final class WhatARelationLeavesUndivided {
                         () -> witness.toArray(ExactRatio[]::new),
                         () -> valuesByKey(terms, i -> i == by ? at
                                 : i == of ? value
-                                : standingNearestNought(arithmetic, terms.get(i))))) {
+                                : heldNearestNought(terms.get(i))))) {
                     computedWhere[relation.holds(total.signum()) ? 1 : 0] = true;
                 } else if (terms.get(by).spacing() == Granularity.DISCRETE) {
                     return false;
@@ -4508,15 +4478,6 @@ public final class WhatARelationLeavesUndivided {
         }
         ExactRatio value = term.realizes().aValueNearestNought(term.spacing());
         return value != null && takesTheValue(term, value) ? value : null;
-    }
-
-    /**
-     * The value a row stands {@code term} at when it only holds it still. A row that is evidence
-     * of an operation of decimals being worked out is a row only if the term takes the value; for
-     * the operations of whole numbers the term is held to it, as it always was.
-     */
-    private static <P> ExactRatio standingNearestNought(RowsComputed arithmetic, Term<P> term) {
-        return arithmetic.worksOutDecimals() ? takenNearestNought(term) : heldNearestNought(term);
     }
 
     /**

@@ -1415,15 +1415,6 @@ final class Pullback {
             return;
         }
         WhereAnOperatorAnswers where = AffineForms.whereItAnswers(operator);
-        // A sum of decimals answers where the scales have room, which no region of the numbers
-        // says. Where the scales are shown to have it, it ends no run and there is nothing to
-        // tell of it.
-        if (where instanceof WhereAnOperatorAnswers.NotStated
-                && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(operator)
-                instanceof GetsPast.WhereTheScalesHaveRoom scales
-                && theScalesHaveRoom(operator, scales, reads)) {
-            return;
-        }
         operated.tell(operator, new Answers.AsAnOperator(form, where));
     }
 
@@ -1888,9 +1879,9 @@ final class Pullback {
      *
      * <p>Of the runs this reading is about, which are those of the rows a model's examples and a
      * search build, and not of every value an operation can be handed: an {@link GetsPast.Always}
-     * here says a run of such a row gets past, where the owner's own account
-     * ({@link GetsPast.WhereTheScalesHaveRoom}) says where every run does. The two are told apart
-     * by where this is read, which is nowhere a contract of an operation is.
+     * here says a run of such a row gets past, where the owner's own account says where every run
+     * does. The two are told apart by where this is read, which is nowhere a contract of an
+     * operation is.
      */
     private GetsPast completionOf(Core e, InputReads reads) {
         boolean always = (Core.withoutStanding(e) instanceof Core.Construct made
@@ -1899,25 +1890,7 @@ final class Pullback {
         if (always) {
             return new GetsPast.Always();
         }
-        GetsPast apart = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
-        // Whether the scales have room is no region of the numbers, and a run is stopped at it
-        // for no number a place holds: it answers wherever the operands are at scales a row is
-        // built at, which is read off what they are, and is not known where they are anything else.
-        return apart instanceof GetsPast.WhereTheScalesHaveRoom
-                ? theScalesHaveRoom(e, apart, reads) ? new GetsPast.Always()
-                        : new GetsPast.NotKnown()
-                : apart;
-    }
-
-    /** Whether the decimals {@code e} is handed are at scales it has room for, on every row: those
-     *  of places of the input, written out, or worked out of those
-     *  ({@link ContainerSizesUnderAWitness}). */
-    private boolean theScalesHaveRoom(Core e, GetsPast completion, InputReads reads) {
-        return operated.within != null
-                && ContainerSizesUnderAWitness.answersOn(operated.within, e, completion,
-                        node -> Optional.empty(), node -> Optional.empty(),
-                        node -> reads.pathOf(node, read.rules().newtypes())
-                                instanceof PathResolution.At);
+        return WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
     }
 
     /**
@@ -1929,8 +1902,7 @@ final class Pullback {
     private static Core theDivisorItAloneStopsOn(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Binary quotient -> quotient.op() == BinOp.DIV
-                    && WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type(),
-                            List.of(quotient.left().type(), quotient.right().type()))
+                    && WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type())
                             instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought
                     ? quotient.right() : null;
             default -> WhatARunMayEndFor.theOperandItAloneStopsOn(e);

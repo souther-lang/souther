@@ -15,11 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A walk adding the decimals of a list to a seed one at a time can stop at any step for want of
- * room, which is no fact of the total it comes to. It is told as the walk it is, and a row is
- * asked to get past every step of it, so a relation over its total is read as the same relation
- * over a total given as an input is. A step that works out anything beside adding the element is
- * no such walk, and tells nothing.
+ * A walk adding the decimals of a list to a seed one at a time completes every step: each answer
+ * so far is a decimal. So a relation over its total is read as the same relation over a total
+ * given as an input is. A step that works out anything beside adding the element is no such walk,
+ * and tells nothing.
  */
 class AWalkAddingDecimalsCompletesStepByStepTest {
 
@@ -211,18 +210,19 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
             assertEquals(Set.of(named, "c"), related(moved), () -> part + moved);
         }
         // At nought or more, price + 1.0 is one or more, and what lies between it and nought is
-        // reached by no list.
+        // reached by no list: no row is built there and nothing is said of it. Nothing stops a
+        // row of the rest, so the total is read as the sum of the field and the one is.
         String pastOne = report(inputs, """
                 Decimal.compare(List.sum(List.map(l -> Decimal.add(l.price.value, 1.0m), lines)),
                                 c.value) <= 0""");
-        assertEquals(Set.of(), related(pastOne), pastOne);
-        // At nought or more it comes to one or more, and nought where the list holds none: what
-        // lies between is reached only through price, at half the total, which a row may not be
-        // written at.
+        assertEquals(Set.of("List.sum({1·price + 1 | lines[*]})"), related(pastOne), pastOne);
+        // And of a total of products beside a field: what no row is built at is said of by
+        // nothing, and the rest is the sum as it is written.
         String fromOne = report(inputs, """
                 Decimal.compare(List.sum(List.map(l -> l.price.value * l.qty.value
                                                        + l.price.value, lines)), c.value) <= 0""");
-        assertEquals(Set.of(), related(fromOne), fromOne);
+        assertEquals(Set.of("List.sum({1·price + 1·price·qty + 0 | lines[*]})"),
+                related(fromOne), fromOne);
         String named = report(inputs, """
                 Decimal.compare(List.sum(List.map(l -> {
                         let d = Decimal.subtract(l.price.value, l.qty.value)
