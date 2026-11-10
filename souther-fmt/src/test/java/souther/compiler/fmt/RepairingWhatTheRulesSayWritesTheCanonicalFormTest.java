@@ -53,6 +53,16 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
         return REPORTS.computeIfAbsent(path, p -> Deviations.of(FormatterCorpus.textOf(p)));
     }
 
+    /**
+     * What the formatter writes for each source, taken once: three checks here ask it of the same
+     * files, and the formatter is the larger part of what each of them costs.
+     */
+    private static final Map<Path, String> CANONICAL = new ConcurrentHashMap<>();
+
+    private static String canonicalOf(Path path) {
+        return CANONICAL.computeIfAbsent(path, p -> Formatter.format(FormatterCorpus.textOf(p)));
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("sources")
     void everySourceIsWhollyNamed(Path path) {
@@ -77,9 +87,11 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("sources")
     void theCanonicalFormOfEverySourceHasNothingAgainstIt(Path path) {
-        String canonical = Formatter.format(FormatterCorpus.textOf(path));
+        String canonical = canonicalOf(path);
 
-        Deviations.Report report = Deviations.of(canonical);
+        // A source already in canonical form is the text the rules were asked about above.
+        Deviations.Report report = canonical.equals(FormatterCorpus.textOf(path))
+                ? reportOn(path) : Deviations.of(canonical);
 
         assertEquals(List.of(), report.deviations(),
                 "the rules have something against the canonical form of " + path);
@@ -98,7 +110,7 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
         int deviations = 0;
         for (Path path : FormatterCorpus.paths()) {
             String source = FormatterCorpus.textOf(path);
-            if (!Formatter.format(source).equals(source)) {
+            if (!canonicalOf(path).equals(source)) {
                 differ.add(path);
                 deviations += reportOn(path).deviations().size();
             }
