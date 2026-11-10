@@ -494,7 +494,8 @@ final class LibraryEndings {
                             position < params.size() && Type.DECIMAL.equals(params.get(position))
                                     ? new ScaleBound.Argument(position) : unknown;
                     case LibraryTerm.DecimalNumber(var written) ->
-                            new ScaleBound.Written(Math.abs((long) written.scale()));
+                            new ScaleBound.Written(Math.abs((long) written.scale()),
+                                written.precision());
                     case LibraryTerm.Bound(BindingId binding) ->
                             env.getOrDefault(binding, unknown);
                     case LibraryTerm.Negated(LibraryTerm operand) ->

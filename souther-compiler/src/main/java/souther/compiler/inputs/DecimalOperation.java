@@ -62,23 +62,131 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * has for it is shown once ({@link #allowAClaimOver}) and does not depend on which number
      * of a run it was chosen near.
      *
-     * <p>And it is why the room does not turn on how large a number is. A row is built from
-     * numbers written at most this many places before or after the point, so two operands of a
-     * sum differ in scale by at most twice it, whatever their digits are, and the sum lines them
-     * up. {@code 1E+2147483647 + 5.0} has no room because the scales are the whole range apart,
-     * and the number is no row: a row is not built at it. A number far out is stood beside by
-     * numbers written at few places however large it is, so the sum lines up scales no further
-     * apart than at the end of a run, and a run with no end is asked at a point far out
-     * ({@link DecimalPoints#edgeOfWhatIsBuilt}) as at any end.
+     * <p>And it is why the room turns on how far apart the scales are and on how many digits a
+     * number has, and not on which number it is. A row is built from numbers written at most this
+     * many places before or after the point, so two operands of a sum differ in scale by at most
+     * twice it, and the sum lines them up. {@code 1E+2147483647 + 5.0} has no room because the
+     * scales are the whole range apart, and the number is no row: a row is not built at it.
+     * A number far out is stood beside by numbers written at few places however large it is, so
+     * the sum lines up scales no further apart than at the end of a run, and a run with no end is
+     * asked at a point far out ({@link DecimalPoints#edgeOfWhatIsBuilt}) as at any end.
      */
     public static final int PLACES_A_ROW_IS_BUILT_AT = 1 << 12;
 
     /**
+     * The most digits a number a row is built from has: the budget for building one, and no fact
+     * about a decimal, as {@link #PLACES_A_ROW_IS_BUILT_AT} is for its scale. A number needing more
+     * is one no row is built at. It holds the point far out a run with no end is asked at, ten to
+     * the places a row is built at written at that many places.
+     *
+     * <p>It is what the room of an operation over rows rests on: a representation holds a number
+     * of fewer digits than {@link #DIGITS_THE_ROOM_IS_SHOWN_FOR}, and what is worked out of rows is
+     * worked out of numbers of at most this many.
+     */
+    public static final long DIGITS_A_ROW_IS_BUILT_AT = 1L << 20;
+
+    /**
      * The greatest scale an operation is shown to have room for, whatever the numbers it is worked
-     * out over. Two scales this great sum to a scale an {@code int} holds with room to spare, and
-     * the digits an addition lines up are fewer than a {@code BigInteger} holds.
+     * out over. Two scales this great sum to a scale an {@code int} holds with room to spare.
      */
     static final long SCALE_THE_ROOM_IS_SHOWN_FOR = 1L << 27;
+
+    /**
+     * The most digits an operation is shown to have room for, whatever the numbers it is worked
+     * out over: below the 646456993 digits no {@code BigInteger} is longer than
+     * ({@code ExactDecimals.MOST_DIGITS_ANY_DECIMAL_HOLDS}), with room to spare.
+     */
+    static final long DIGITS_THE_ROOM_IS_SHOWN_FOR = 1L << 29;
+
+    /** The digits of a number of elements, which a list holds at most {@code 2^31 - 1} of. */
+    public static final long DIGITS_OF_A_COUNT = 10;
+
+    /** Beyond every room, where the sum of two shapes is held rather than overflowed. */
+    private static final long BEYOND_ANY_ROOM = 1L << 60;
+
+    /**
+     * How far from nought the scale of a decimal is at most, and how many digits its unscaled
+     * number has at most: what an operation has room for turns on both, and on nothing else of the
+     * number.
+     *
+     * @param scale  the greatest distance of the scale from nought
+     * @param digits the most digits of the number the scale is of
+     */
+    public record Shape(long scale, long digits) {
+
+        /** No digit at no place, which what a walk is handed to start with is for the parts. */
+        public static final Shape NOUGHT = new Shape(0, 0);
+
+        /** The number a row holds at a place of the input, as a row is built. */
+        public static final Shape OF_A_PLACE =
+                new Shape(PLACES_A_ROW_IS_BUILT_AT, DIGITS_A_ROW_IS_BUILT_AT);
+
+        public Shape {
+            if (scale < 0 || digits < 0) {
+                throw new IllegalArgumentException("a shape is no less than nought: " + scale
+                        + " places and " + digits + " digits");
+            }
+        }
+
+        /** The decimal {@code written} as it is written. */
+        public static Shape of(BigDecimal written) {
+            return new Shape(Math.abs((long) written.scale()), written.precision());
+        }
+
+        /** What neither is further from nought than, whichever of two numbers it is. */
+        public Shape larger(Shape other) {
+            return new Shape(Math.max(scale, other.scale), Math.max(digits, other.digits));
+        }
+    }
+
+    private static long held(long sum) {
+        return sum < 0 || sum > BEYOND_ANY_ROOM ? BEYOND_ANY_ROOM : sum;
+    }
+
+    /**
+     * The shape of what {@code op} answers over operands no further from nought than {@code left}
+     * and {@code right}: a product has the scales and the digits of its factors added, and a sum or
+     * a difference the greater scale, with the digits of the number lined up to it and one more.
+     */
+    public static Shape shapeOfTheAnswer(BinOp op, Shape left, Shape right) {
+        if (op == BinOp.MUL) {
+            return new Shape(held(left.scale() + right.scale()),
+                    held(left.digits() + right.digits()));
+        }
+        long scale = Math.max(left.scale(), right.scale());
+        return new Shape(scale, held(Math.max(left.digits(), right.digits()) + 2 * scale + 1));
+    }
+
+    /**
+     * The shape of what an operation under {@code law} answers over two numbers no further from
+     * nought than {@code first} and {@code second}: an operator's as
+     * {@link #shapeOfTheAnswer(BinOp, Shape, Shape)} says, and a rounding's, which is at the scale
+     * it is asked for, the first, with the digits of the second lined up to it and one more.
+     */
+    public static Shape shapeOfTheAnswer(ScaleLaw law, Shape first, Shape second) {
+        if (law instanceof ScaleLaw.OfTheOperator(BinOp op)) {
+            return shapeOfTheAnswer(op, first, second);
+        }
+        return new Shape(first.scale(), held(second.digits() + first.scale() + second.scale() + 1));
+    }
+
+    /**
+     * The shape of what a walk carries, from a seed of {@code seed} adding and taking away parts
+     * of {@code part} that do not read it, over any number of elements: the parts at most
+     * {@code D} digits add up to fewer than {@code n * 10^D}, which is {@code D} and the digits of
+     * {@code n}, lined up to the greater scale.
+     */
+    public static Shape shapeOfAWalk(Shape seed, Shape part) {
+        long scale = Math.max(seed.scale(), part.scale());
+        return new Shape(scale, held(Math.max(seed.digits(), part.digits()) + 2 * scale
+                + DIGITS_OF_A_COUNT + 1));
+    }
+
+    /** Whether a number of shape {@code shape} is one a representation has room for. */
+    public static boolean isWithinRoom(Shape shape) {
+        return shape.scale() <= SCALE_THE_ROOM_IS_SHOWN_FOR
+                && shape.digits() <= DIGITS_THE_ROOM_IS_SHOWN_FOR;
+    }
 
     /**
      * The places of the input each of {@code all} reads, by the key of the term, through the
@@ -272,8 +380,9 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     /**
      * What each operation of {@code all} has room for, in the order told.
      *
-     * @param bounded       whether its operands and its answer are written at no more places than
-     *                      room is shown for ({@link #SCALE_THE_ROOM_IS_SHOWN_FOR})
+     * @param bounded       whether its operands and its answer are within room
+     *                      ({@link #isWithinRoom}): written at no more places and of no more digits
+     *                      than room is shown for
      * @param atEveryNumber whether it has room at every pair of numbers a row is built at, and so
      *                      completes at every row that is built: it is bounded, and each operand
      *                      is a decimal wherever there is a row, since it is a place of the input
@@ -289,80 +398,57 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     }
 
     /**
-     * The scale furthest from nought that {@code op} answers at, over operands no further from
-     * nought than {@code left} and {@code right}: a product is at the sum of its factors' scales,
-     * a sum or a difference at the greater of its operands'.
-     */
-    public static long scaleOfTheAnswer(BinOp op, long left, long right) {
-        return op == BinOp.MUL ? left + right : Math.max(left, right);
-    }
-
-    /**
-     * Whether {@code op} has room over every pair of operands no further from nought than
-     * {@code left} and {@code right}, and so is worked out wherever its operands are: the operands
-     * and the answer are written at no more places than room is shown for
-     * ({@link #SCALE_THE_ROOM_IS_SHOWN_FOR}). The one answer {@link #roomsOf} and a reader of the
+     * Whether an operation under {@code law} has room over every pair of operands no further from
+     * nought than {@code first} and {@code second}, and so is worked out wherever its operands
+     * are: the operands and the answer are within room ({@link #isWithinRoom}), in the places they
+     * are written at and in their digits. The one answer {@link #roomsOf} and a reader of the
      * program's own operations give.
      */
-    public static boolean hasRoomAt(BinOp op, long left, long right) {
-        return left <= SCALE_THE_ROOM_IS_SHOWN_FOR && right <= SCALE_THE_ROOM_IS_SHOWN_FOR
-                && scaleOfTheAnswer(op, left, right) <= SCALE_THE_ROOM_IS_SHOWN_FOR;
+    public static boolean hasRoomAt(ScaleLaw law, Shape first, Shape second) {
+        return isWithinRoom(first) && isWithinRoom(second)
+                && isWithinRoom(shapeOfTheAnswer(law, first, second));
     }
 
-    /** The scale furthest from nought that an operation under {@code law} answers at, over two
-     *  numbers no further from nought than {@code first} and {@code second}: an operator's as
-     *  {@link #scaleOfTheAnswer(BinOp, long, long)} says, and a rounding's the one it is asked
-     *  for. */
-    public static long scaleOfTheAnswer(ScaleLaw law, long first, long second) {
-        return law instanceof ScaleLaw.OfTheOperator(BinOp op)
-                ? scaleOfTheAnswer(op, first, second) : first;
-    }
-
-    /**
-     * Whether an operation under {@code law} has room, as {@link #hasRoomAt(BinOp, long, long)}
-     * asks it of an operator; a rounding lines the scale it is asked for up with the number's, as
-     * a sum does, and so does a quotient, which is worked at the scale asked and at the difference
-     * of the two scales it divides: where each is within room, that difference is no further from
-     * nought than three rooms, which an {@code int} holds.
-     */
-    public static boolean hasRoomAt(ScaleLaw law, long first, long second) {
-        return hasRoomAt(law instanceof ScaleLaw.OfTheOperator(BinOp op) ? op : BinOp.ADD, first,
-                second);
+    /** Whether {@code op} has room over operands of shapes {@code left} and {@code right}, as
+     *  {@link #hasRoomAt(ScaleLaw, Shape, Shape)} asks it of its law. */
+    public static boolean hasRoomAt(BinOp op, Shape left, Shape right) {
+        return hasRoomAt(new ScaleLaw.OfTheOperator(op), left, right);
     }
 
     /** The rooms of {@code all}; null where an operation is worked out of one told after it. */
     private static Rooms roomsOf(List<DecimalWork> all) {
         BitSet bounded = new BitSet(all.size());
         BitSet atEveryNumber = new BitSet(all.size());
-        long[] scaleOf = new long[all.size()];
+        Shape[] shapeOf = new Shape[all.size()];
         for (int i = 0; i < all.size(); i++) {
             if (all.get(i) instanceof DecimalAdditiveWalk walk) {
-                scaleOf[i] = walk.scaleOfEveryStep();
+                shapeOf[i] = walk.shapeOfEveryStep();
                 bounded.set(i, walk.everyStepHasRoom());
                 atEveryNumber.set(i, walk.everyStepHasRoom());
                 continue;
             }
             DecimalOperation each = (DecimalOperation) all.get(i);
-            long[] over = new long[2];
+            Shape[] over = new Shape[2];
             boolean standing = true;
             for (int o = 0; o < 2; o++) {
                 switch (each.operands.get(o)) {
-                    case Written written -> over[o] = Math.abs((long) written.value().scale());
+                    case Written written -> over[o] = Shape.of(written.value());
                     case Formed formed -> {
-                        over[o] = PLACES_A_ROW_IS_BUILT_AT;
+                        over[o] = Shape.OF_A_PLACE;
                         standing &= isAPlaceAsItStands(formed);
                     }
-                    case Total _ -> over[o] = PLACES_A_ROW_IS_BUILT_AT;
+                    case Total _ -> over[o] = new Shape(PLACES_A_ROW_IS_BUILT_AT,
+                            DIGITS_A_ROW_IS_BUILT_AT + DIGITS_OF_A_COUNT);
                     case Worked worked -> {
                         if (worked.operation() >= i) {
                             return null;
                         }
-                        over[o] = scaleOf[worked.operation()];
+                        over[o] = shapeOf[worked.operation()];
                         standing &= atEveryNumber.get(worked.operation());
                     }
                 }
             }
-            scaleOf[i] = scaleOfTheAnswer(each.op, over[0], over[1]);
+            shapeOf[i] = shapeOfTheAnswer(each.op, over[0], over[1]);
             boolean fits = hasRoomAt(each.op, over[0], over[1]);
             bounded.set(i, fits);
             atEveryNumber.set(i, fits && standing);
@@ -463,21 +549,23 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
 
     /**
      * The number {@code number} as a row is built with it: written at the fewest places, and
-     * empty where it is no decimal or is written at more places than a row is built at
-     * ({@link #PLACES_A_ROW_IS_BUILT_AT}).
+     * empty where it is no decimal, is written at more places than a row is built at
+     * ({@link #PLACES_A_ROW_IS_BUILT_AT}) or has more digits than one is built with
+     * ({@link #DIGITS_A_ROW_IS_BUILT_AT}).
      *
      * <p>The one place that says what a decimal of a row is. What the analysis shows of a row is
      * shown of the decimals it is built with, so whatever writes a decimal into a row (a place of
      * the input, an element of a list a total is the sum of) writes it through here, and the
-     * analysis may take what it reads off the rows from this alone: the scale of a decimal of a
-     * row, and so of the total of a list of them, is no more than the places a row is built at.
-     * Written elsewhere, a decimal could have a scale this does not bound, and no claim made
+     * analysis may take what it reads off the rows from this alone: the shape of a decimal of a
+     * row, and so of the total of a list of them, is no more than {@link Shape#OF_A_PLACE}.
+     * Written elsewhere, a decimal could have a shape this does not bound, and no claim made
      * of the rows would be a claim of the rows that are built.
      */
     public static ExactAnswer<Optional<BigDecimal>> writtenForARow(ExactRatio number) {
         return switch (number.writtenDecimal()) {
             case ExactAnswer.Held<Optional<BigDecimal>> written -> ExactAnswer.held(written.value()
-                    .filter(each -> Math.abs((long) each.scale()) <= PLACES_A_ROW_IS_BUILT_AT));
+                    .filter(each -> Math.abs((long) each.scale()) <= PLACES_A_ROW_IS_BUILT_AT
+                            && each.precision() <= DIGITS_A_ROW_IS_BUILT_AT));
             case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->
                     ExactAnswer.unheld(unheld.why());
         };

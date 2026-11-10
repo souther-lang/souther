@@ -51,7 +51,9 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     private static final Formed ADDING_T = new Formed(Map.of("t", ExactRatio.ONE), ExactRatio.ZERO);
 
     /** The scale a path of an element is at, furthest from nought: a part that reads one. */
-    private static final long A_PATH = DecimalOperation.PLACES_A_ROW_IS_BUILT_AT;
+    private static final DecimalOperation.Shape A_PATH = DecimalOperation.Shape.OF_A_PLACE;
+    private static final DecimalOperation.Shape TWO_PATHS = DecimalOperation.shapeOfTheAnswer(
+            BinOp.MUL, A_PATH, A_PATH);
 
     /** The numbers a row is built with, from both ends of the places it is built at and between,
      *  as the builder writes them. */
@@ -131,7 +133,7 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     @Test
     void aWalkOfProductsShownToCompleteGetsThroughEveryStep() {
         DecimalAdditiveWalk walk = new DecimalAdditiveWalk(new BigDecimal("0.0"), ADDING_T,
-                2 * A_PATH);
+                TWO_PATHS);
         boolean anyShown = false;
         for (List<BigDecimal> prices : listsOfElements()) {
             List<BigDecimal> parts = new ArrayList<>();
@@ -189,6 +191,26 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
                 List.of(0));
         assertTrue(DecimalOperation.allCompleteAt(List.of(walk, timesFour), total));
         assertFalse(DecimalOperation.allCompleteAt(List.of(walk, atTheEdge), total));
+    }
+
+    /**
+     * The digits are asked as well as the scale: a walk adding parts that are a few places of a row
+     * multiplied has room, and one adding a product of enough of them, of more digits than a
+     * representation holds, has none though the scale it keeps is small.
+     */
+    @Test
+    void aWalkAddingPartsOfMoreDigitsThanARepresentationHoldsHasNoRoom() {
+        DecimalOperation.Shape product = A_PATH;
+        for (int factors = 1; factors < 4; factors++) {
+            product = DecimalOperation.shapeOfTheAnswer(BinOp.MUL, product, A_PATH);
+        }
+        assertTrue(DecimalOperation.isWithinRoom(DecimalOperation.shapeOfAWalk(
+                DecimalOperation.Shape.NOUGHT, product)));
+        for (int factors = 4; factors < 520; factors++) {
+            product = DecimalOperation.shapeOfTheAnswer(BinOp.MUL, product, A_PATH);
+        }
+        assertFalse(DecimalOperation.isWithinRoom(DecimalOperation.shapeOfAWalk(
+                DecimalOperation.Shape.NOUGHT, product)));
     }
 
     @Test

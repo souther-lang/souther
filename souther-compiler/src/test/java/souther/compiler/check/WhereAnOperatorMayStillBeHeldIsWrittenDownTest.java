@@ -117,11 +117,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.LibraryEndings.Reading.OfTheBody.scaleOf",
                     "makes the law each decimal sum, difference or product of a body is asked"
                             + " its room by, over what the body is handed"),
-            new Held("souther.compiler.inputs.DecimalOperation.scaleOfTheAnswer",
-                    "the scale an operator leaves from the scales of its operands, which a row and"
+            new Held("souther.compiler.inputs.DecimalOperation.shapeOfTheAnswer",
+                    "the shape an operator leaves from the shapes of its operands, which a row and"
                             + " a witness are asked by alike"),
             new Held("souther.compiler.inputs.DecimalOperation.hasRoomAt",
-                    "whether an operator has room for operands at the scales given, which a row"
+                    "whether an operator has room for operands of the shapes given, which a row"
                             + " and a witness are asked by alike"),
             new Held("souther.compiler.check.ComputedNumber.Expr.Operated#operator",
                     "the arithmetic a clause writes a number with, as it is evaluated over the"
@@ -604,9 +604,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.AddedOfEachElement.addsTo",
                     "asks whether the answer so far is added along sums and differences from"
                             + " the top, and taken from nothing"),
-            new Held("souther.compiler.partition.AddedOfEachElement.scaleOf",
-                    "reads the scale an operation of decimals is at from its operands': a"
-                            + " product's is their sum, a sum's or a difference's the greater"),
+            new Held("souther.compiler.partition.AddedOfEachElement.shapeOf",
+                    "reads the shape an operation of decimals is of from its operands': a"
+                            + " product's scale is their sum, a sum's or a difference's the greater"),
             new Held("souther.compiler.partition.AddedOfEachElement.Checker.checked",
                     "works out what each operation of an element's part comes to from what its"
                             + " operands do, and asks whether a sum with the answer so far from"

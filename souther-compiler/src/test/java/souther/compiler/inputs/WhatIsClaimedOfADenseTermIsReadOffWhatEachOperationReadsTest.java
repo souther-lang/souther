@@ -598,7 +598,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
         assertTrue(DecimalOperation.everyOperationReadingItHasRoomAtEveryNumber(List.of(
                 new DecimalAdditiveWalk(BigDecimal.ZERO,
                         new Formed(Map.of("s", ExactRatio.ONE), ExactRatio.ZERO),
-                        DecimalOperation.PLACES_A_ROW_IS_BUILT_AT),
+                        DecimalOperation.Shape.OF_A_PLACE),
                 product(new Worked(0), two)), "s"));
     }
 
@@ -607,7 +607,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     void aWalkReadsTheTotalItAddsUp() {
         List<DecimalWork> worked = List.of(new DecimalAdditiveWalk(BigDecimal.ZERO,
                         new Formed(Map.of("s", ExactRatio.ONE), ExactRatio.ZERO),
-                        DecimalOperation.PLACES_A_ROW_IS_BUILT_AT),
+                        DecimalOperation.Shape.OF_A_PLACE),
                 sum(new Worked(0), H));
         assertEquals(List.of(Set.of("s"), Set.of("s", "h")), DecimalOperation.readsOf(worked));
     }

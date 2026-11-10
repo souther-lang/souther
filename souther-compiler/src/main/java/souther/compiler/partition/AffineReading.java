@@ -1131,7 +1131,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             told.exact = false;
                         } else if (Core.withoutStanding(node).type() == Type.DECIMAL) {
                             told.walksAddingDecimals(numbers, BigDecimal.ZERO,
-                                    asTheRelationNamesIt(total), each.scaleOfEveryPart());
+                                    asTheRelationNamesIt(total), each.shapeOfEveryPart());
                         } else if (!(total instanceof NumericTerm.TakenOver)
                                 || !tellAnIntTotalThrough(throughOverWholeNumbers(each,
                                         BigInteger.ZERO, closure.params().getFirst().binding(),
@@ -1690,7 +1690,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         return false;
                     }
                     told.walksAddingDecimals(answer, seed, asTheRelationNamesIt(total),
-                            each.scaleOfEveryPart());
+                            each.shapeOfEveryPart());
                     return true;
                 }
                 if (!(Core.withoutStanding(seeded.seed()) instanceof Core.Int seed)) {
@@ -2364,15 +2364,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /**
          * Tells a walk adding {@code added} to {@code seed}, every operation worked out of an
-         * element at a scale no further from nought than {@code scaleOfEveryPart}
+         * element of a shape no further from nought than {@code ofEveryPart}
          * ({@link DecimalAdditiveWalk}), as what {@code answer} is worked out by. The walk is
          * worked out of the seed and the input alone.
          */
         void walksAddingDecimals(LinearForm<NumericTerm> answer, BigDecimal seed,
-                                 LinearForm<NumericTerm> added, long scaleOfEveryPart) {
+                                 LinearForm<NumericTerm> added,
+                                 DecimalOperation.Shape ofEveryPart) {
             DecimalAdditiveWalk told = new DecimalAdditiveWalk(seed, new DecimalOperation.Formed(
                     new LinkedHashMap<Object, ExactRatio>(added.coefs()), added.constant()),
-                    scaleOfEveryPart);
+                    ofEveryPart);
             int at = decimals.indexOf(told);
             if (at < 0) {
                 at = decimals.size();
