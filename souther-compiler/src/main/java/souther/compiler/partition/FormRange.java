@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
@@ -128,6 +129,22 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         ExactRatio least = onAWholeNumber(runs.min(), false);
         ExactRatio greatest = onAWholeNumber(runs.max(), true);
         return least == null || greatest == null ? null : new FormRange(least, greatest);
+    }
+
+    /**
+     * The numbers the rules a position wears leave its value, from the least to the greatest — or
+     * null where they have no end on a side. Whole numbers where the position counts in them
+     * ({@link #ofTheWholeNumbersIn}); anywhere else an end the rules do not reach is taken as
+     * reached, which holds the numbers the rules leave and no fewer.
+     */
+    static FormRange ofWhatTheRulesLeave(DeclaredBounds.Range rules) {
+        NumericDomain.Bounds runs = new NumericDomain.Bounds(rules.min(), rules.max());
+        if (rules.carrier() != null && rules.carrier().countsInWholeNumbers()) {
+            return ofTheWholeNumbersIn(runs);
+        }
+        return rules.min() == null || rules.max() == null ? null
+                : new FormRange(Count.number(rules.min().at()).exactly(),
+                        Count.number(rules.max().at()).exactly());
     }
 
     /** {@code end} of a run of whole numbers, as the whole number nearest it the run reaches —
@@ -268,6 +285,13 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
     boolean liesWithin(BigInteger leastAllowed, BigInteger greatestAllowed) {
         return least.compareTo(ExactRatio.of(leastAllowed)) >= 0
                 && greatest.compareTo(ExactRatio.of(greatestAllowed)) <= 0;
+    }
+
+    /** The numbers both this and {@code other} hold, or null where there are none. */
+    FormRange meet(FormRange other) {
+        ExactRatio from = least.compareTo(other.least) >= 0 ? least : other.least;
+        ExactRatio to = greatest.compareTo(other.greatest) <= 0 ? greatest : other.greatest;
+        return from.compareTo(to) > 0 ? null : new FormRange(from, to);
     }
 
     /** The smallest range holding this and {@code other}. */

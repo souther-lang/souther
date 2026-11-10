@@ -38,6 +38,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -238,6 +240,41 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                         truthAt(XS.element())), true, Optional.empty(), HowTheElementsAreAsked.NOT_SAID)));
         new Derivation.ByALaw(new Derivation.TheCall(LIST_ANY, Map.of()), AnswerAspect.TRUTH,
                 new Derivation.ALawQuantifies(some, overOtherElements));
+    }
+
+    /**
+     * A container chosen by cases is read once in each case, and the call is made where the value
+     * is one of them. An arm whose cases leave none in common with the call's position is one no
+     * value of the call takes, and is not held to the position; an arm that may take a value of
+     * the call, or reads another container, is.
+     */
+    @Test
+    void aMatchIsReadInTheArmsAValueOfTheCallCanTake() {
+        LawProposition.SomeElement<?> some =
+                (LawProposition.SomeElement<?>) lawOf(LIST_ANY, AnswerAspect.TRUTH);
+        LawProposition.Observed<?> observed = (LawProposition.Observed<?>) some.ofTheElement();
+        TermPath inHot = S.refine(casesOf(HOT));
+        Derivation.TheCall call = callOf(LIST_ANY, some.container(), inHot);
+        Function<TermPath, Derivation> readAt = at -> new Derivation.SomeElementMeeting(
+                new DecisionSubject.AnInput(at),
+                new Derivation.OnTheSideALawNames(observed, truthAt(at.element())), true,
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
+        BiFunction<Derivation, Derivation, Derivation> inTwoCases = (hot, other) ->
+                new Derivation.ALawQuantifies(some, new Derivation.MatchArms(List.of(
+                        new Derivation.MatchArms.Arm(casesAt(S, HOT), hot),
+                        new Derivation.MatchArms.Arm(casesAt(S, WARM), other))));
+        TermPath inWarm = S.refine(casesOf(WARM));
+        assertDoesNotThrow(() -> new Derivation.ByALaw(call, AnswerAspect.TRUTH,
+                inTwoCases.apply(readAt.apply(inHot), readAt.apply(inWarm))));
+        // The arm the call is made in is held to it.
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                AnswerAspect.TRUTH, inTwoCases.apply(readAt.apply(YS), readAt.apply(inWarm))));
+        // An arm that takes a value of the cases the call is made in is held to it too.
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                AnswerAspect.TRUTH, new Derivation.ALawQuantifies(some,
+                        new Derivation.MatchArms(List.of(
+                                new Derivation.MatchArms.Arm(casesAt(S, HOT, COLD),
+                                        readAt.apply(inWarm)))))));
     }
 
     /**

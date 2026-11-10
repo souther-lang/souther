@@ -8,6 +8,7 @@ import souther.compiler.check.ARecursion;
 import souther.compiler.check.AddsWhatItDoesNotHold;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.FoldedValue;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.WalkElements;
 import souther.compiler.check.AnOperationApplied;
@@ -169,6 +170,7 @@ import java.util.OptionalLong;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -1742,27 +1744,33 @@ final class Pullback {
                 ? around.inTheWalk(walk.step(), filed, child)
                 : around.under(e, child);
         try {
-            if (e instanceof Core.LetIn li) {
-                operated.stepsNames = under.apply(li.value());
-                leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
-                operated.stepsNames = under.apply(li.body());
-                leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
-            } else if (e instanceof Core.IfConstructed attempt) {
-                WhatARunMayEndFor.forEachWorkedOut(attempt, part -> {
-                    operated.stepsNames = under.apply(part);
-                    leaveUnsaidWhatMayEndARunUnder(part, reads, bound);
-                });
+            // What a child is read in is the scope's own answer ({@link ScopeStep}), but for the
+            // names this walk accounts for itself: a closure's parameters ({@link #boundInside}),
+            // and what an arm takes out of an option, which it has never read as a place and so
+            // cannot place a stop on.
+            BiConsumer<Core, ScopeStep> visit = (child, step) -> {
+                operated.stepsNames = under.apply(child);
+                InputReads within = reads;
+                Bound inside = bound;
+                if (Core.withoutStanding(child) instanceof Core.Block block) {
+                    inside = boundInside(e, block, reads, bound);
+                } else if (!(step instanceof ScopeStep.Block)
+                        && !(step instanceof ScopeStep.Chosen(Choice.Decides.ACase(
+                                Core.Case arm, var _))
+                        && arm.binding() instanceof Core.ArmBinding.Payload)) {
+                    within = reads.entering(step, read.rules().symbols(),
+                            read.rules().newtypes());
+                }
+                if (walk != null && Core.withoutStanding(child) == walk.step()) {
+                    leaveUnsaidUnderEachApplicationOf(walk, child, within, inside);
+                } else {
+                    leaveUnsaidWhatMayEndARunUnder(child, within, inside);
+                }
+            };
+            if (e instanceof Core.IfConstructed attempt) {
+                WhatARunMayEndFor.forEachWorkedOut(attempt, visit);
             } else {
-                Core.forEachChild(e, child -> {
-                    operated.stepsNames = under.apply(child);
-                    Bound inside = Core.withoutStanding(child) instanceof Core.Block block
-                            ? boundInside(e, block, reads, bound) : bound;
-                    if (walk != null && Core.withoutStanding(child) == walk.step()) {
-                        leaveUnsaidUnderEachApplicationOf(walk, child, reads, inside);
-                    } else {
-                        leaveUnsaidWhatMayEndARunUnder(child, reads, inside);
-                    }
-                });
+                ScopeStep.forEachChild(e, visit);
             }
         } finally {
             operated.stepsNames = around;
@@ -1983,14 +1991,21 @@ final class Pullback {
      * order; a whole number an operation of the library answers, where the library bounds it
      * ({@link #whatTheLibraryBounds}) — a remainder by a divisor below nought as by one above; a
      * name the step of a walk around binds to the value found under a key, what the walk's law
-     * says it holds there ({@link WhatTheStepsNamesHold}), where nothing else says; and a sum, a
+     * says it holds there ({@link WhatTheStepsNamesHold}), where nothing else says; the body of a
+     * {@code let}; a choice, what its arms hold together ({@link #exactRangeOfTheArms}); the value
+     * of a newtype, what its rules leave it, which meets what the arithmetic composes where it
+     * composes the number as a place ({@link #whatTheRulesOfTheNewtypeLeaveAt}); and a sum, a
      * difference, a product or a negation of numbers each of which is known, where the arithmetic
      * composes it as no form.
      */
     private FormRange exactRangeOf(Core e, InputReads reads) {
+        FormRange ofTheNewtype = whatTheRulesOfTheNewtypeLeaveAt(Core.withoutStanding(e));
         if (AffineForms.outcome(e, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
-            return FormRange.ofNumbers(form, read, operated.stepsNames::of);
+            FormRange composed = FormRange.ofNumbers(form, read, operated.stepsNames::of);
+            if (composed != null) {
+                return ofTheNewtype == null ? composed : composed.meet(ofTheNewtype);
+            }
         }
         RoundedToAWholeNumber.Written rounding = writtenRounding(e, reads);
         if (rounding != null) {
@@ -2007,6 +2022,15 @@ final class Pullback {
         if (here instanceof Core.Read name) {
             return operated.stepsNames.of(name.binding());
         }
+        if (here instanceof Core.LetIn li) {
+            return exactRangeOf(li.body(), quantities().inside(li, reads));
+        }
+        if (here instanceof Core.FieldAccess || here instanceof Core.FieldProjection) {
+            return ofTheNewtype;
+        }
+        if (here instanceof Core.If || here instanceof Core.Match) {
+            return exactRangeOfTheArms(Choice.of(here), reads);
+        }
         if (!isAnOperator(here)) {
             return null;
         }
@@ -2016,6 +2040,45 @@ final class Pullback {
                     exactRangeOf(binary.left(), reads), exactRangeOf(binary.right(), reads));
             default -> null;
         };
+    }
+
+    /**
+     * The numbers the rules of a newtype leave its value, where {@code here} reads that value off
+     * one whatever made it, or null: a value of the type exists only where its rules held. A run
+     * that makes the value may still stop, and that is asked of what makes it.
+     */
+    private FormRange whatTheRulesOfTheNewtypeLeaveAt(Core here) {
+        Core.FieldAccess access = switch (here) {
+            case Core.FieldAccess one -> one;
+            case Core.FieldProjection projection -> projection.lastAccess();
+            default -> null;
+        };
+        if (access == null || Location.isStep(access.target().type(), access.field(),
+                read.rules().newtypes())) {
+            return null;
+        }
+        TypeView view = TypeView.of(access.target().type(), read.rules().inners(),
+                read.rules().symbols(), read.rules().kinds(), read.rules().sums());
+        DeclaredBounds.Range own = DeclaredBounds.of(view, read.ruleReading());
+        return own == null ? null : FormRange.ofWhatTheRulesLeave(own);
+    }
+
+    /**
+     * The numbers a choice comes to on every run that works it out: the smallest range holding
+     * what each of its arms comes to, an arm read where the choice of it binds its names. Null
+     * where any arm's numbers are not known, since the arm may be the one a run takes.
+     */
+    private FormRange exactRangeOfTheArms(Choice choice, InputReads reads) {
+        FormRange joined = null;
+        for (Choice.Arm arm : choice.arms()) {
+            FormRange of = exactRangeOf(arm.answers(), reads.choosing(arm.decidedBy(),
+                    read.rules().symbols(), read.rules().newtypes()));
+            if (of == null) {
+                return null;
+            }
+            joined = joined == null ? of : joined.hull(of);
+        }
+        return joined;
     }
 
     /**
@@ -2275,8 +2338,17 @@ final class Pullback {
                 }
                 // A name an arm of a match or a let binds stands for what the value it was bound to
                 // stands for, which is read in the arm and not where the match stands.
+                // What a match comes to is the body of the arm taken, read as the case it is taken
+                // for ({@code choosing}), and which case that is says nothing of what else the
+                // value holds: a scrutinee that stands at a place is no place of the number. One
+                // that is worked out is what it is made of.
                 if (Core.withoutStanding(operand) instanceof Core.Match match) {
-                    leaveUnsaidOverWhereItStands(match.scrutinee(), reads, bound);
+                    PathResolution selects = reads.pathOf(match.scrutinee(),
+                            read.rules().newtypes());
+                    if (!(selects instanceof PathResolution.At
+                            || selects instanceof PathResolution.MayStandAt)) {
+                        leaveUnsaidOverWhereItStands(match.scrutinee(), reads, bound);
+                    }
                     for (Core.Case arm : match.cases()) {
                         leaveUnsaidOverWhereItStands(arm.body(), reads.choosing(
                                 Choice.Decides.ofCase(match, arm), read.rules().symbols(),
@@ -2284,8 +2356,9 @@ final class Pullback {
                     }
                     return;
                 }
+                // The number of a let is its body's. The value it binds is theirs through the names
+                // the body reads, and what stops a run in the value is asked of the let itself.
                 if (Core.withoutStanding(operand) instanceof Core.LetIn li) {
-                    leaveUnsaidOverWhereItStands(li.value(), reads, bound);
                     leaveUnsaidOverWhereItStands(li.body(), quantities().inside(li, reads), bound);
                     return;
                 }
