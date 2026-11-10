@@ -1515,7 +1515,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private Attempt totalOfApplications(Core.PreservedCall call, int from,
                                                 List<Denotation> made) {
                 LinearForm<NumericTerm> total = LinearForm.constant(ExactRatio.ZERO);
-                List<LinearForm<NumericTerm>> answers = new ArrayList<>();
                 for (Denotation application : made) {
                     Attempt answered = Attempt.ofAPart(AffineForms.outcome(application.value(),
                             application.at(), this));
@@ -1526,7 +1525,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             LinearForm<NumericTerm> sum))) {
                         return new Attempt.NotApplicable();
                     }
-                    answers.add(one);
                     total = sum;
                 }
                 // A total of decimals is a decimal and stops no run; one of whole numbers is held
