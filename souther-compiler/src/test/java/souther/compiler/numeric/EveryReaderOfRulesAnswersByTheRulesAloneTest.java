@@ -7,7 +7,9 @@ import souther.compiler.numeric.RulesReaders.Reader;
 import souther.compiler.numeric.RulesReaders.Tally;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -63,12 +65,15 @@ class EveryReaderOfRulesAnswersByTheRulesAloneTest {
     void noPointTheRulesAdmitIsEverRefused() {
         assertEquals(Set.of(Rel.values()), relationsIn(OVER_THREE),
                 "a relation no system is written with is one no reading of it is asked about");
-        for (Reader reader : RulesReaders.READERS) {
-            Tally tally = new Tally();
-            for (List<Written> system : systems()) {
-                RulesReaders.noPointTheRulesAdmitIsRefused(reader, system, tally);
+        Map<Reader, Tally> tallies = new LinkedHashMap<>();
+        for (List<Written> system : systems()) {
+            // The points a system admits are the oracle for every reader, so they are walked once.
+            RulesReaders.Admitted admitted = RulesReaders.admittedBy(system);
+            for (Reader reader : RulesReaders.READERS) {
+                RulesReaders.noPointTheRulesAdmitIsRefused(reader, admitted,
+                        tallies.computeIfAbsent(reader, each -> new Tally()));
             }
-            RulesReaders.assertBothWaysWereChecked(reader, tally, 0);
         }
+        tallies.forEach((reader, tally) -> RulesReaders.assertBothWaysWereChecked(reader, tally, 0));
     }
 }

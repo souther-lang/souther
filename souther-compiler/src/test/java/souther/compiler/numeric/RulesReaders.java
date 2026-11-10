@@ -273,6 +273,21 @@ final class RulesReaders {
     }
 
     /**
+     * What a system admits over the range, with every position held to it: the oracle every reader
+     * is held to. It is a walk over every point of the range and the larger part of what asking a
+     * reader costs, so it is taken once for a system and not once for each reader asked about it.
+     */
+    record Admitted(List<String> positions, List<Written> written,
+                    List<Map<String, Integer>> points) {
+    }
+
+    static Admitted admittedBy(List<Written> system) {
+        List<String> positions = List.copyOf(positionsOf(system));
+        List<Written> written = boxed(system, positions, LOW, HIGH);
+        return new Admitted(positions, written, pointsSatisfying(written, positions, LOW, HIGH));
+    }
+
+    /**
      * No point the rules admit is left outside what {@code reader} says of them. The direction
      * asserted is the only one that matters: a bound too tight refuses a row a model admits, and a
      * bound too loose merely says less than it could. Every position is held to the range, so the
@@ -281,10 +296,10 @@ final class RulesReaders {
      * <p>That nothing is left is proven one way only, so a reader saying it where the points hold
      * something is wrong and one saying it where they hold nothing is not asked anything more.
      */
-    static void noPointTheRulesAdmitIsRefused(Reader reader, List<Written> system, Tally tally) {
-        List<String> positions = List.copyOf(positionsOf(system));
-        List<Written> written = boxed(system, positions, LOW, HIGH);
-        List<Map<String, Integer>> admitted = pointsSatisfying(written, positions, LOW, HIGH);
+    static void noPointTheRulesAdmitIsRefused(Reader reader, Admitted whole, Tally tally) {
+        List<String> positions = whole.positions();
+        List<Written> written = whole.written();
+        List<Map<String, Integer>> admitted = whole.points();
         Said said = reader.say(written, positions);
         tally.systems++;
         if (said.nothingLeft()) {

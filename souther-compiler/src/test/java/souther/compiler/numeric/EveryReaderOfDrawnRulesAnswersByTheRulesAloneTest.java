@@ -106,18 +106,23 @@ class EveryReaderOfDrawnRulesAnswersByTheRulesAloneTest {
     @Test
     void noPointTheRulesAdmitIsEverRefused() {
         for (Shape shape : SHAPES) {
-            for (Reader reader : RulesReaders.READERS) {
-                Random dice = new Random(4800);
-                Tally tally = new Tally();
-                for (int round = 0; round < CASES; round++) {
-                    List<Written> system = shape.draw().apply(dice);
-                    if (heldNowhere(system)) {
-                        continue;
-                    }
-                    RulesReaders.noPointTheRulesAdmitIsRefused(reader, system, tally);
+            Random dice = new Random(4800);
+            Map<Reader, Tally> tallies = new LinkedHashMap<>();
+            for (int round = 0; round < CASES; round++) {
+                List<Written> system = shape.draw().apply(dice);
+                if (heldNowhere(system)) {
+                    continue;
                 }
-                RulesReaders.assertBothWaysWereChecked(reader, tally, CASES / 10);
+                // The points a system admits are the oracle for every reader, so they are walked
+                // once for the system and not once for each reader.
+                RulesReaders.Admitted admitted = RulesReaders.admittedBy(system);
+                for (Reader reader : RulesReaders.READERS) {
+                    RulesReaders.noPointTheRulesAdmitIsRefused(reader, admitted,
+                            tallies.computeIfAbsent(reader, each -> new Tally()));
+                }
             }
+            tallies.forEach((reader, tally) ->
+                    RulesReaders.assertBothWaysWereChecked(reader, tally, CASES / 10));
         }
     }
 

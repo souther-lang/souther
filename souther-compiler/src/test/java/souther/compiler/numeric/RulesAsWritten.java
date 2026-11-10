@@ -311,12 +311,13 @@ final class RulesAsWritten {
         List<Map<String, Integer>> out = new ArrayList<>();
         int[] at = new int[positions.size()];
         Arrays.fill(at, low);
+        WholeRules whole = WholeRules.of(written, positions);
         while (true) {
-            Map<String, Integer> point = new LinkedHashMap<>();
-            for (int i = 0; i < at.length; i++) {
-                point.put(positions.get(i), at[i]);
-            }
-            if (written.stream().allMatch(rule -> holdsAt(rule, point))) {
+            if (whole != null ? whole.holdAt(at) : holdsEverywhere(written, positions, at)) {
+                Map<String, Integer> point = new LinkedHashMap<>();
+                for (int i = 0; i < at.length; i++) {
+                    point.put(positions.get(i), at[i]);
+                }
                 out.add(point);
             }
             int i = 0;
@@ -327,6 +328,82 @@ final class RulesAsWritten {
                 return out;
             }
             at[i]++;
+        }
+    }
+
+    private static boolean holdsEverywhere(List<Written> written, List<String> positions, int[] at) {
+        Map<String, Integer> point = new LinkedHashMap<>();
+        for (int i = 0; i < at.length; i++) {
+            point.put(positions.get(i), at[i]);
+        }
+        return written.stream().allMatch(rule -> holdsAt(rule, point));
+    }
+
+    /**
+     * The rules of a system whose weights and constants are all whole numbers, read once as
+     * {@code long}s so that a point is checked by plain arithmetic: a range walked point by point
+     * is the larger part of what a reader costs to hold to it, and an exact ratio made and unmade
+     * for every weight at every point was most of that. Absent where a system is not of whole
+     * numbers, which is checked as it always was.
+     */
+    private static final class WholeRules {
+
+        private final long[][] weights;
+        private final long[] constants;
+        private final Rel[] relations;
+
+        private WholeRules(long[][] weights, long[] constants, Rel[] relations) {
+            this.weights = weights;
+            this.constants = constants;
+            this.relations = relations;
+        }
+
+        static WholeRules of(List<Written> written, List<String> positions) {
+            long[][] weights = new long[written.size()][positions.size()];
+            long[] constants = new long[written.size()];
+            Rel[] relations = new Rel[written.size()];
+            for (int rule = 0; rule < written.size(); rule++) {
+                Written each = written.get(rule);
+                Long constant = whole(each.constant());
+                if (constant == null) {
+                    return null;
+                }
+                constants[rule] = constant;
+                relations[rule] = each.rel();
+                for (Map.Entry<String, ExactRatio> weight : each.coefs().entrySet()) {
+                    Long value = whole(weight.getValue());
+                    int position = positions.indexOf(weight.getKey());
+                    if (value == null || position < 0) {
+                        return null;
+                    }
+                    weights[rule][position] = value;
+                }
+            }
+            return new WholeRules(weights, constants, relations);
+        }
+
+        private static Long whole(ExactRatio ratio) {
+            if (!ratio.isWhole()) {
+                return null;
+            }
+            try {
+                return Long.parseLong(ratio.toString());
+            } catch (NumberFormatException _) {
+                return null;
+            }
+        }
+
+        boolean holdAt(int[] at) {
+            for (int rule = 0; rule < constants.length; rule++) {
+                long total = constants[rule];
+                for (int position = 0; position < at.length; position++) {
+                    total += weights[rule][position] * at[position];
+                }
+                if (!relations[rule].holds(Long.signum(total))) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 
