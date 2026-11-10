@@ -141,30 +141,22 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
 
     private static final ValueName.Stdlib.Operation ABS = ValueName.Stdlib.operation("Decimal", "abs");
 
-    private static final String ABS_BODY = "if d < 0.0m then 0.0m - d else d";
-
-    private static GetsPast completionOfAbsAs(String body) {
-        return LibraryEndings.of(rewritten(ABS_BODY, body)).completionApartFromWhatItIsHanded(ABS);
-    }
-
     /**
-     * A body that works decimals out asks the room of each operation it does, over what the call
-     * is handed and what is written, and answers at the scale its parts do: the shipped {@code abs}
-     * takes a number from a written nought, and the same body over a product asks the product's
-     * room as well. One whose operand is no number the arguments and what is written decide is not
-     * known.
+     * A body that works a decimal out asks the room of each operation it does, over what the call
+     * is handed and what is written: the shipped {@code abs} takes a number from a written nought
+     * and answers at the scale of it or its operand. One whose operand is no number the
+     * arguments and what is written decide is not known.
      */
     @Test
     void aBodyWorkingDecimalsOutAsksTheRoomOfEachOperation() {
-        assertEquals(1, roomsOf(LibraryEndings.shipped().completionApartFromWhatItIsHanded(ABS)));
-        assertEquals(2, roomsOf(completionOfAbsAs("if d < 0.0m then 0.0m - d else d * d")));
-        assertEquals(new GetsPast.NotKnown(),
-                completionOfAbsAs("if d < 0.0m then 0.0m - Decimal.round(2, HALF_UP, d) else d"));
-    }
+        GetsPast shipped = LibraryEndings.shipped().completionApartFromWhatItIsHanded(ABS);
+        assertTrue(shipped instanceof GetsPast.WhereTheScalesHaveRoom, shipped.toString());
+        assertEquals(1, ((GetsPast.WhereTheScalesHaveRoom) shipped).rooms().size());
 
-    private static int roomsOf(GetsPast completion) {
-        assertTrue(completion instanceof GetsPast.WhereTheScalesHaveRoom, completion.toString());
-        return ((GetsPast.WhereTheScalesHaveRoom) completion).rooms().size();
+        assertEquals(new GetsPast.NotKnown(), LibraryEndings.of(rewritten(
+                "if d < 0.0m then 0.0m - d else d",
+                "if d < 0.0m then 0.0m - Decimal.round(2, HALF_UP, d) else d"))
+                .completionApartFromWhatItIsHanded(ABS));
     }
 
     /** A kernel's is what its contract says, and not read again here. */

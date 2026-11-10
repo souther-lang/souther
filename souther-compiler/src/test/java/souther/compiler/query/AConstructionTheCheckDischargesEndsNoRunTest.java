@@ -47,21 +47,13 @@ class AConstructionTheCheckDischargesEndsNoRunTest {
 
             let eight = Amount(8.0m)
 
-            data Kind = Ordinary | Holiday
-            data Day = { worked: Amount, kind: Kind }
-
-            let ordinaryOn (d: Day): Amount =
-                match d.kind with
-                    | Holiday -> Amount(0.0m)
-                    | Ordinary -> if d.worked > eight then eight else d.worked
-
-            let sumOf (f: (Day) -> Amount, days: List<Day>): Amount =
+            let sumOf (f: (Amount) -> Amount, days: List<Amount>): Amount =
                 Amount(List.sum(List.map(d -> f(d).value, days)))
 
-            behavior tally : (days: List<Day>) -> Amount
+            behavior tally : (days: List<Amount>) -> Amount
                 constructs Amount
             let tally (days) = {
-                let total = sumOf(d -> ordinaryOn(d), days)
+                let total = sumOf(d -> eight, days)
                 if total.value > 60.0m then total else eight
             }
 

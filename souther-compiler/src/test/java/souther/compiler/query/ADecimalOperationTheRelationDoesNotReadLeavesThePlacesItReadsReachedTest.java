@@ -60,89 +60,10 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
                 if sign == 0 then 0 else if sign < 0 then 1 else 2
             }
 
-            behavior sum : (p: Pair) -> Int
-            let sum (p) = {
-                let total = Decimal.add(p.a.value, p.b.value)
-                let sign = Decimal.compare(p.a.value, p.b.value)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior minus : (p: Pair) -> Int
-            let minus (p) = {
-                let diff = p.a.value - p.b.value
-                let sign = Decimal.compare(p.a.value, p.b.value)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
             behavior times : (p: Pair) -> Int
             let times (p) = {
                 let product = Decimal.multiply(p.a.value, p.b.value)
                 let sign = Decimal.compare(p.a.value, p.b.value)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior negated : (p: Pair) -> Int
-            let negated (p) = {
-                let total = Decimal.add(-p.a.value, p.b.value)
-                let sign = Decimal.compare(p.a.value, p.b.value)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior widened : (p: Pair, n: Int) -> Int
-            let widened (p, n) = {
-                let total = Decimal.add(Decimal.fromInt(n), p.a.value)
-                let sign = Decimal.compare(p.a.value, p.b.value)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior chosen : (p: Pair) -> Int
-            let chosen (p) = {
-                let total = Decimal.multiply(Decimal.max(p.a.value, p.b.value), p.a.value)
-                let sign = Decimal.compare(p.a.value, p.b.value)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior rounded : (p: Pair) -> Int
-            let rounded (p) = {
-                let total = Decimal.add(Decimal.round(2, HALF_UP, p.a.value), p.b.value)
-                let sign = Decimal.compare(p.a.value, p.b.value)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior absolute : (p: Pair) -> Int
-            let absolute (p) = {
-                let size = Decimal.add(Decimal.abs(p.a.value), Decimal.abs(Decimal.round(2, HALF_UP,
-                    p.b.value)))
-                let sign = Decimal.compare(p.a.value, p.b.value)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior quotient : (p: Pair) -> Int
-            let quotient (p) = {
-                let size = match Decimal.divide(p.a.value, p.b.value, 2, HALF_UP) with
-                    | Decimal as q -> Decimal.multiply(q, Decimal.add(q, p.a.value))
-                    | DivisionByZero -> 0.0m
-                let sign = Decimal.compare(p.a.value, p.b.value)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            data Tuned = { a: Decimal, b: Decimal, s: Int }
-
-            behavior quotientAtAnInputScale : (p: Tuned) -> Int
-            let quotientAtAnInputScale (p) = {
-                let size = match Decimal.divide(p.a, p.b, p.s, HALF_UP) with
-                    | Decimal as q -> Decimal.add(q, p.a)
-                    | DivisionByZero -> 0.0m
-                let sign = Decimal.compare(p.a, p.b)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior quotientAtAScaleNoRoomHolds : (p: Tuned) -> Int
-            let quotientAtAScaleNoRoomHolds (p) = {
-                let size = match Decimal.divide(p.a, p.b, 2147483647, HALF_UP) with
-                    | Decimal as q -> Decimal.add(q, p.a)
-                    | DivisionByZero -> 0.0m
-                let sign = Decimal.compare(p.a, p.b)
                 if sign == 0 then 0 else if sign < 0 then 1 else 2
             }
 
@@ -169,21 +90,6 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
                 let size = List.fold((acc, e) -> Decimal.multiply(acc, acc),
                     Decimal.round(0, HALF_UP, p.a), p.xs)
                 let sign = Decimal.compare(p.a, p.b)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior roundedSquaredWalk : (p: Walked) -> Int
-            let roundedSquaredWalk (p) = {
-                let size = List.fold((acc, e) -> Decimal.round(0, HALF_UP, Decimal.multiply(acc, acc)),
-                    Decimal.round(0, HALF_UP, p.a), p.xs)
-                let sign = Decimal.compare(p.a, p.b)
-                if sign == 0 then 0 else if sign < 0 then 1 else 2
-            }
-
-            behavior chained : (p: Pair) -> Int
-            let chained (p) = {
-                let spread = Decimal.multiply(Decimal.add(p.a.value, 1.50m), p.b.value)
-                let sign = Decimal.compare(p.a.value, p.b.value)
                 if sign == 0 then 0 else if sign < 0 then 1 else 2
             }
 
@@ -234,22 +140,16 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
-        for (String behavior : List.of("difference", "sum", "minus", "times", "chained", "negated",
-                "widened", "chosen", "rounded", "absolute", "quotient")) {
+        for (String behavior : List.of("difference", "times")) {
             assertEquals(reasonsOf(evidence, "control"), reasonsOf(evidence, behavior), behavior);
         }
         assertEquals(reasonsOf(evidence, "controlTruth"), reasonsOf(evidence, "differenceTruth"));
-        assertEquals(reasonsOf(evidence, "plainSide"), reasonsOf(evidence, "negatedSide"));
-        // A walk that adds or scales what it carries has digits a row holds, and one that squares it
-        // does not, whatever scale it keeps.
-        assertEquals(reasonsOf(evidence, "controlWalked"), reasonsOf(evidence, "addedWalk"));
-        // A quotient at a scale the call does not write, or at one no room holds, can end a run;
-        // so can a walk whose digits double at every element.
-        for (String behavior : List.of("quotientAtAnInputScale", "quotientAtAScaleNoRoomHolds",
-                "squaredWalk", "roundedSquaredWalk")) {
-            assertTrue(reasonsOf(evidence, behavior).stream().anyMatch(each -> each.endsWith(
-                    "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE")), behavior);
-        }
         assertEquals(reasonsOf(evidence, "ageingControl"), reasonsOf(evidence, "ageing"));
+        assertEquals(reasonsOf(evidence, "plainSide"), reasonsOf(evidence, "negatedSide"));
+        // A walk that adds to or scales what it carries has digits a row holds, and one that
+        // squares it does not, whatever scale it keeps.
+        assertEquals(reasonsOf(evidence, "controlWalked"), reasonsOf(evidence, "addedWalk"));
+        assertTrue(reasonsOf(evidence, "squaredWalk").stream().anyMatch(each -> each.endsWith(
+                "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE")));
     }
 }
