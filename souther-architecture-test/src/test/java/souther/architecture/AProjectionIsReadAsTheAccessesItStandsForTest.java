@@ -467,7 +467,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "check/Symbols;L" + c + "check/DeclarationNewtypes;L" + c
                 + "coverage/CoverageSites$Plan;L" + c + "coverage/NormalReturn;ZLjava/util/List;)V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "codegen/BodyGen", "genExpr", "(" + core + "L" + c + "types/Type;)L" + c
+        row(out, c + "partition/Pullback", "decidesWhichRunIsTaken", "(" + core + ")Z",
+                Reading.STRUCTURE, "looks for the conditions a body decides by and the values of"
+                        + " the names they read: a projection hands over its base as its one"
+                        + " child, where the read of a field is met");
+        row(out, c + "codegen/BodyGen", "genExpr","(" + core + "L" + c + "types/Type;)L" + c
                 + "types/Type;", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "codegen/BodyGen", "walksInside", "(" + core + ")Z",
                 Reading.THE_TREE_THAT_RUNS, RUNS);

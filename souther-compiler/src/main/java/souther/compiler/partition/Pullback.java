@@ -6,6 +6,8 @@ import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.AddsWhatItDoesNotHold;
+import souther.compiler.check.InvariantChecker;
+import souther.compiler.check.Scope;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.FoldedValue;
 import souther.compiler.check.ValueStanding;
@@ -68,6 +70,7 @@ import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.ElementsMet;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -1446,9 +1449,9 @@ final class Pullback {
     }
 
     /**
-     * {@code construct}, told where it makes a newtype over a number: on every run where the
-     * number is held to the type by what made it ({@link #isHeldToTheTypeByTheLibrary}), which is
-     * asked first and whatever form the number has; else where the number is in the run the
+     * {@code construct}, told where it makes a newtype over a number: on every run where no run is
+     * refused by it ({@link #isRefusedByNoRun}), which is asked first and whatever form the number
+     * has; else where the number is in the run the
      * clauses leave ({@link DeclaredBounds#whereMakingSucceeds}) where they leave one — over the
      * number's form, or the rounding it is of ({@link #madeOfARounding}). Untold where they leave
      * anything else, and so left where nothing is said of it.
@@ -1462,7 +1465,7 @@ final class Pullback {
         if (!made.isWrapped()) {
             return;
         }
-        if (isHeldToTheTypeByTheLibrary(construct, made, reads)) {
+        if (isRefusedByNoRun(construct, reads)) {
             operated.tell(construct, new Answers.Anywhere());
             return;
         }
@@ -1483,24 +1486,26 @@ final class Pullback {
     }
 
     /**
-     * Whether {@code construct}, a newtype over a number no form says, is refused by no run: the
-     * clauses of its type leave a run the number is shown to lie in, as the library bounds what
-     * the operation that made it answers ({@link ResultRange}) and as a choice between two values
-     * keeps an end of them ({@link Extreme#boundsOf}). {@code Refund(Decimal.max(0.0m, x))} lies
-     * at nought or above whatever {@code x} is, with no form of {@code x} needed.
+     * Whether no run is refused by {@code construct}: nothing governs what it builds, or the check
+     * of the declarations discharges every clause of it from what they say of the parameters
+     * alone. The check is the owner of that proof, so what it settles is not read again here, and
+     * the number the construction is made of needs no form for it.
      */
-    private boolean isHeldToTheTypeByTheLibrary(Core.Construct construct, TypeView made,
-                                                InputReads reads) {
+    private boolean isRefusedByNoRun(Core.Construct construct, InputReads reads) {
         if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
             return true;
         }
-        Denotation number = reads.standing(construct.values().getFirst().value(),
-                read.rules().symbols(), read.rules().newtypes());
-        if (!(Core.withoutStanding(number.value()) instanceof Core.PreservedCall call)) {
-            return false;
+        Core.FieldValue field = construct.values().getFirst();
+        Denotation number = reads.standing(field.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        Scope params = Scope.NONE;
+        for (InputDomain.Parameter each : read.domain().parameters()) {
+            params = params.with(each.binding(), each.name(), each.type());
         }
-        NumericDomain.Bounds run = DeclaredBounds.wholeRunOf(made, read.ruleReading());
-        return run != null && whatTheLibraryBounds(call, number.at()).liesWithin(run);
+        return InvariantChecker.discharges(new Core.Construct(construct.typeName(),
+                List.of(new Core.FieldValue(field.field(), number.value(), field.pos())),
+                construct.type(), construct.lineage(), construct.pos()), read.ruleReading(),
+                params);
     }
 
     /**
@@ -1910,40 +1915,29 @@ final class Pullback {
         if (Type.BOOL.equals(operated.within.type())) {
             roots.add(operated.within);
         }
-        decidingNodes(operated.within, roots);
+        Core.forEachDistinctNode(operated.within, node -> {
+            switch (Core.withoutStanding(node)) {
+                case Core.If fork -> roots.add(fork.cond());
+                case Core.Match match -> roots.add(match.scrutinee());
+                case Core.IfConstructed attempt -> roots.add(attempt.construct());
+                default -> { }
+            }
+        });
         Set<BindingId> names = new HashSet<>();
         for (Core root : List.copyOf(roots)) {
             names.addAll(WhatABodyReads.namesReadBy(operated.within, root));
         }
-        valuesOf(operated.within, names, roots);
+        Core.forEachDistinctNode(operated.within, node -> {
+            if (Core.withoutStanding(node) instanceof Core.LetIn li && li.binder() != null
+                    && names.contains(li.binder().binding())) {
+                roots.add(li.value());
+            }
+        });
         Set<Core> found = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Core root : roots) {
-            allOf(root, found);
+            Core.forEachDistinctNode(root, node -> found.add(Core.withoutStanding(node)));
         }
         return found.contains(Core.withoutStanding(e));
-    }
-
-    private static void decidingNodes(Core e, List<Core> roots) {
-        switch (Core.withoutStanding(e)) {
-            case Core.If fork -> roots.add(fork.cond());
-            case Core.Match match -> roots.add(match.scrutinee());
-            case Core.IfConstructed attempt -> roots.add(attempt.construct());
-            default -> { }
-        }
-        Core.forEachChild(e, child -> decidingNodes(child, roots));
-    }
-
-    private static void valuesOf(Core e, Set<BindingId> names, List<Core> roots) {
-        if (Core.withoutStanding(e) instanceof Core.LetIn li && li.binder() != null
-                && li.binder().binding() != null && names.contains(li.binder().binding())) {
-            roots.add(li.value());
-        }
-        Core.forEachChild(e, child -> valuesOf(child, names, roots));
-    }
-
-    private static void allOf(Core e, Set<Core> found) {
-        found.add(Core.withoutStanding(e));
-        Core.forEachChild(e, child -> allOf(child, found));
     }
 
     /** Whether the decimals {@code e} is handed are at scales it has room for, on every row: those
