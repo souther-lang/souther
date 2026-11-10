@@ -382,6 +382,18 @@ class AConstructionTheReadRegionSatisfiesDoesNotEndTheRunTest {
                 """.formatted(guard);
     }
 
+    /**
+     * A construction asking one of two things of the same place stops a run where neither holds,
+     * which the region cannot carry as a line. The place is then not shown reached, and is not
+     * read as a place nothing stops a run on.
+     */
+    @Test
+    void aChoiceAboutOnePlaceTheRegionCannotCarryIsNotReadAsNoStop() {
+        Map<String, Set<String>> readings = at(readingsOf(plan(UNTYPED, "gross", "rate",
+                "Decimal.max(gross, Decimal.multiply(gross, 2.0m))")), "gross");
+        assertTrue(readings.getOrDefault("gross", Set.of()).contains(NOT_SHOWN), readings::toString);
+    }
+
     private static void collect(JsonNode node, Map<String, Set<String>> out) {
         if (node.isObject() && node.has("ruleId") && node.has("reason") && node.has("position")) {
             out.computeIfAbsent(node.path("position").asString(), _ -> new TreeSet<>())

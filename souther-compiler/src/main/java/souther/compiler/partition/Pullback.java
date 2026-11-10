@@ -8753,6 +8753,8 @@ final class Pullback {
                 if (!held.holdsOf(form.constant())) {
                     operated.beginGroup();
                     operated.leaveUnsaidOverUnreadOperands();
+                    askedOf(asked, each.operation(), ConstructionAsk.Requirement.NEVER,
+                            List.of());
                 }
                 continue;
             }

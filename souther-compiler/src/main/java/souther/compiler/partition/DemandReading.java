@@ -905,9 +905,25 @@ final class DemandReading {
     static Answered regionAnswered(Proposition answers, InputReading read) {
         List<TakenConstraint> narrowing = new ArrayList<>();
         List<Tie> tied = new ArrayList<>();
+        boolean unsaid = false;
         for (Read each : projected(answers, read)) {
+            if (each instanceof Read.Settled(boolean thisWay)) {
+                // An operator answering nowhere stops every run, which no place says.
+                unsaid |= !thisWay;
+                continue;
+            }
             if (!(each instanceof Read.Demands(RowDemand.Relational(
                     TakenConstraint constraint)))) {
+                // A condition a region cannot carry is dropped only where the declarations hold
+                // it whole; dropped otherwise it would read as no stop.
+                if (!held(each, read.quantities().region())) {
+                    Optional<Set<TermPath>> named = placesOfRelations(each);
+                    if (named.isPresent()) {
+                        tied.add(Tie.between(named.get()));
+                    } else {
+                        unsaid = true;
+                    }
+                }
                 continue;
             }
             if (endsOfTheInts(constraint)) {
@@ -923,7 +939,29 @@ final class DemandReading {
                 tied.add(Tie.by(constraint));
             }
         }
-        return new Answered(narrowing, tied, false);
+        return new Answered(narrowing, tied, unsaid);
+    }
+
+    /** The places a disjunction of relations names, or none where any part of it is something
+     *  else, which names no place a stop could be told by. */
+    private static Optional<Set<TermPath>> placesOfRelations(Read each) {
+        if (each instanceof Read.Demands(RowDemand.Relational(TakenConstraint constraint))) {
+            return Optional.of(RowDemand.placesReadOff(constraint.terms()));
+        }
+        if (!(each instanceof Read.OneOf oneOf)) {
+            return Optional.empty();
+        }
+        Set<TermPath> places = new LinkedHashSet<>();
+        for (List<Read> alternative : oneOf.alternatives()) {
+            for (Read part : alternative) {
+                Optional<Set<TermPath>> named = placesOfRelations(part);
+                if (named.isEmpty()) {
+                    return Optional.empty();
+                }
+                places.addAll(named.get());
+            }
+        }
+        return Optional.of(places);
     }
 
     /**
@@ -943,22 +981,22 @@ final class DemandReading {
      * past it.
      */
     static boolean heldBy(Proposition answers, InputReading read, SearchRegion region) {
-        boolean readSome = false;
-        for (Read each : projected(answers, read)) {
-            if (each instanceof Read.Settled(boolean thisWay) && thisWay) {
-                readSome = true;
-                continue;
-            }
-            if (!(each instanceof Read.Demands(RowDemand.Relational(
-                    TakenConstraint constraint)))) {
-                return false;
-            }
-            readSome = true;
-            if (!endsOfTheInts(constraint) && !heldOver(constraint, region)) {
-                return false;
-            }
-        }
-        return readSome;
+        List<Read> reads = projected(answers, read);
+        return !reads.isEmpty() && reads.stream().allMatch(each -> held(each, region));
+    }
+
+    /** Whether every row {@code region} leaves meets {@code each}: a relation it proves, or a
+     *  disjunction of which some alternative it proves whole. */
+    private static boolean held(Read each, SearchRegion region) {
+        return switch (each) {
+            case Read.Settled(boolean thisWay) -> thisWay;
+            case Read.Demands(RowDemand.Relational(TakenConstraint constraint)) ->
+                    endsOfTheInts(constraint) || heldOver(constraint, region);
+            case Read.OneOf oneOf -> oneOf.alternatives().stream()
+                    .anyMatch(alternative -> alternative.stream()
+                            .allMatch(part -> held(part, region)));
+            default -> false;
+        };
     }
 
     /**

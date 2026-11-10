@@ -75,7 +75,7 @@ record ConstructionAsk(String construction, SourcePos at, WhatAConstructionAsks.
         record AllOf(List<Requirement> parts) implements Requirement {
 
             public AllOf {
-                parts = List.copyOf(parts);
+                parts = partsOfAChoice(parts, "every one of");
             }
         }
 
@@ -83,8 +83,18 @@ record ConstructionAsk(String construction, SourcePos at, WhatAConstructionAsks.
         record OneOf(List<Requirement> parts) implements Requirement {
 
             public OneOf {
-                parts = List.copyOf(parts);
+                parts = partsOfAChoice(parts, "one of");
             }
+        }
+
+        private static List<Requirement> partsOfAChoice(List<Requirement> parts, String of) {
+            List<Requirement> kept = List.copyOf(parts);
+            if (kept.size() < 2 || kept.stream().anyMatch(each -> each instanceof Always
+                    || each instanceof Never)) {
+                throw new IllegalArgumentException(of + " several conditions is two or more, none "
+                        + "of them settled: " + kept);
+            }
+            return kept;
         }
 
         /** Both, which is no run where either is none and what the other asks where one asks

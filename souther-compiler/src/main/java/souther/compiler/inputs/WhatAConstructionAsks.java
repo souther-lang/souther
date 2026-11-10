@@ -17,6 +17,10 @@ import java.util.Set;
  * rule's to say, and where the declarations already hold it, nothing is asked of a run here and no
  * construction is said.
  *
+ * <p>What a run holds is what it holds where the construction is worked out: a guard the run
+ * passed before it leaves out what the guard holds, and a guard the run meets only after it
+ * leaves out nothing, since the construction ended the run first.
+ *
  * <p>Said of the construction as the model wrote it, so two constructions that ask the same are
  * two of these, as they are two places a run may end.
  *

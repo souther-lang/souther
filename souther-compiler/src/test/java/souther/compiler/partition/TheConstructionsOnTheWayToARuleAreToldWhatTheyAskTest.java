@@ -301,6 +301,28 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 .stream().map(one -> one.path("asked")).toList());
     }
 
+    /** A guard met only after the construction does not leave anything out of what it asks. */
+    @Test
+    void aGuardAfterTheConstructionLeavesNothingOutOfWhatItAsks() {
+        Compilation compilation = compiled("""
+                module demo
+
+                data Held = Decimal
+                    invariant value >= 0.0m
+                data Plan = { p: Held, within: Bool }
+
+                behavior f : (x: Decimal, c: Decimal) -> Plan
+                    constructs Plan, Held
+                let f (x, c) = {
+                    let made = Held(x)
+                    if x >= 0.0m then Plan { p = made, within = Decimal.compare(x, c) <= 0 }
+                    else Plan { p = Held(0.0m), within = false }
+                }
+                """);
+        assertEquals(List.of(is("x", "at_least", "0")),
+                asksOf(compilation).stream().map(one -> one.path("asked")).toList());
+    }
+
     /**
      * A number is written the one way a number is written wherever it is exact, and that is not
      * always a decimal written out: a number the type holds apart from nought by a thousand
