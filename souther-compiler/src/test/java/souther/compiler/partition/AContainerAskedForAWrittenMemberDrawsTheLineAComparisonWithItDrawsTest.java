@@ -31,7 +31,13 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
     private static final String MODEL = """
             module probe
             data Line = { code: String, rates: Map<String, Int>, tags: List<String>,
-                          ids: Set<String>, nums: List<Int> }
+                          ids: Set<String>, nums: List<Int>, days: List<Date> }
+
+            behavior anyDay : (l: Line) -> Bool
+            let anyDay (l) = List.any(d -> d == Date("2026-01-05"), l.days)
+
+            behavior hasDay : (l: Line) -> Bool
+            let hasDay (l) = List.contains(Date("2026-01-05"), l.days)
 
             behavior any : (l: Line) -> Bool
             let any (l) = List.any(t -> t == "K", l.tags)
@@ -69,6 +75,29 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         assertEquals(Set.of("l.rates[key] USD"), linesOf("keyed"));
         assertEquals(linesOf("keyed"), linesOf("guarded"));
         assertEquals(Set.of("l.nums[*] 5"), linesOf("numbered"));
+        assertEquals(Set.of("l.days[*] 2026-01-05"), linesOf("anyDay"));
+        assertEquals(linesOf("anyDay"), linesOf("hasDay"));
+    }
+
+    /** A date written out is told apart at as a number is: the day, and the days either side. */
+    @Test
+    void aDateWrittenOutHasTheRowsAtItAndEitherSideOfIt() {
+        List<String> rows = new ArrayList<>();
+        for (BorderAssessment border : borders("hasDay")) {
+            for (Map.Entry<?, ItemAssessment> item : border.items().entrySet()) {
+                String row = certified(item.getValue());
+                if (row != null) {
+                    rows.add(item.getKey().toString().startsWith("AtTheLine") ? "AT " + row
+                            : "BESIDE " + row);
+                }
+            }
+        }
+        assertTrue(rows.stream().anyMatch(row -> row.startsWith("AT ")
+                && row.contains("Date(\"2026-01-05\")")), rows.toString());
+        assertTrue(rows.stream().anyMatch(row -> row.startsWith("BESIDE ")
+                && row.contains("Date(\"2026-01-04\")")), rows.toString());
+        assertTrue(rows.stream().anyMatch(row -> row.startsWith("BESIDE ")
+                && row.contains("Date(\"2026-01-06\")")), rows.toString());
     }
 
     /** A row at the line holds the value, and a row on either side holds another: the rows are

@@ -91,7 +91,7 @@ A container beside the elements, asked the same thing by every element, is asked
 the row however it is written, so a count over it takes no number between none and all of the
 elements.
 
-A container asked for a written string or number is asked of its elements what a comparison of
+A container asked for a written string, number or date is asked of its elements what a comparison of
 them with that value written with `==` is, so it draws that comparison's line: at the value, with
 a row at it holding the value and a row on either side holding another. The statement is one and is
 read two ways, as the value a place is told apart at and as a relation on the order the place
