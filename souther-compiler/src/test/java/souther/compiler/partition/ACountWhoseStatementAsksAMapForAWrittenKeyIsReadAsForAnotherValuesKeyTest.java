@@ -29,10 +29,14 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
     private static final String DECLARATIONS = """
             module probe
 
+            data Code = String
+
             data Line = { code: String, rates: Map<String, Int>, tags: List<String>,
-                          nums: Set<Int>, amts: List<Decimal>, flags: List<Bool> }
+                          nums: Set<Int>, amts: List<Decimal>, flags: List<Bool>,
+                          coded: Map<Code, Int>, cc: Code }
 
             let usd = "USD"
+            let usdCode = Code("USD")
             """;
 
     private static final String BEHAVIOR = """
@@ -62,6 +66,17 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
             // A value written under a name is the value it is.
             new Case("List.length(List.filter(l -> Map.containsKey(usd, l.rates), lines)) == k",
                     true),
+            // A map keyed by a newtype, the key another value of the row or a newtype's
+            // constructor written in the statement or under a name.
+            new Case("List.length(List.filter(l -> Map.containsKey(l.cc, l.coded), lines))"
+                    + " == k", true),
+            new Case("List.length(List.filter(l -> Map.containsKey(Code(\"USD\"), l.coded),"
+                    + " lines)) == k", true),
+            new Case("List.length(List.filter(l -> Map.containsKey(usdCode, l.coded), lines))"
+                    + " == k", true),
+            // A key made of a value of the row is worked out of it and is no value written.
+            new Case("List.length(List.filter(l -> Map.containsKey(Code(l.code), l.coded),"
+                    + " lines)) == k", false),
             // The same of the elements a list or a set holds, of any kind of value written.
             new Case("List.length(List.filter(l -> List.contains(\"K\", l.tags), lines)) == k",
                     true),
@@ -120,12 +135,13 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
         int at = 0;
         for (Case each : CASES) {
             PartitionEvidence evidence = MEASURED.get("case" + at++);
-            assertNotNull(evidence, each.body());
-            shown.put(each.body(), evidence.notRead().stream().noneMatch(left ->
+            assertNotNull(evidence, each.body());            shown.put(each.body(), evidence.notRead().stream().noneMatch(left ->
                     left.at().equals("k")));
         }
         Map<String, Boolean> expected = new LinkedHashMap<>();
         CASES.forEach(each -> expected.put(each.body(), each.reaches()));
-        assertEquals(expected, shown);
+        Map<String, Boolean> differing = new LinkedHashMap<>(shown);
+        differing.entrySet().removeIf(each -> each.getValue().equals(expected.get(each.getKey())));
+        assertEquals(Map.of(), differing, "the cases shown otherwise than expected, as shown");
     }
 }

@@ -1060,6 +1060,12 @@ final class Pullback {
         return reads.folded(e, read.rules().symbols(), read.rules().newtypes());
     }
 
+    /** What {@code e} writes where it is asked of a place, which holds it under whatever names
+     *  the place wears: a newtype's constructor writes the value it wraps. */
+    private Optional<Object> foldedUnderItsNames(Core e, InputReads reads) {
+        return reads.foldedUnderItsNames(e, read.rules().symbols(), read.rules().newtypes());
+    }
+
     /**
      * How a truth that is no binding, name or choice was read, by the first rule in this order that
      * reads all of it — or, where none does, the first that takes it at all.
@@ -5282,7 +5288,8 @@ final class Pullback {
             }
             Value written = subject instanceof LawSubject.Argument<DeclaredArgument>(
                     DeclaredArgument at)
-                    ? Value.folded(folded(applied.argument(at), reads).orElse(null)) : null;
+                    ? Value.folded(foldedUnderItsNames(applied.argument(at), reads).orElse(null))
+                    : null;
             return written == null ? null : new Operand.Written<>(written);
         }
 

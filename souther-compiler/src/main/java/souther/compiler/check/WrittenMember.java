@@ -8,8 +8,8 @@ import souther.compiler.values.Value;
  *
  * <p>The one place such a member is read as the value it is, so that every reader of what a rule
  * asks a container to hold — the places a clause reads, the entries a record's builders keep —
- * says the same of it. The fold's domain is the primitives: a value built by a newtype's
- * constructor, or a case, is not one.
+ * says the same of it. A rule writes a primitive: a newtype's constructor is a construction, which
+ * a rule cannot make, and a case is no value a member is asked to be.
  */
 final class WrittenMember {
 

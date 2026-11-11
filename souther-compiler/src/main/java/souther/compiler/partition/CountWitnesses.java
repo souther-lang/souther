@@ -495,8 +495,7 @@ public final class CountWitnesses {
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (List<FixtureTemplate> some : subsetsFromTheEnds(members, MOST_VALUES + 1)) {
-            FixtureTemplate holding = WornNames.collectionHolding(view, some, source);
-            if (holding != null && !out.contains(holding)) {
+            FixtureTemplate holding = WornNames.collectionHolding(view, some, source);            if (holding != null && !out.contains(holding)) {
                 out.add(holding);
             }
         }

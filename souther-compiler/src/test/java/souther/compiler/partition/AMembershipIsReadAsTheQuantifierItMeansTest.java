@@ -46,7 +46,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             data Name = String
                 invariant String.length(value) >= 1 && String.length(value) <= 8
 
-            data Lead = { campaigns: Set<Name>, names: List<Name>, picked: Name }
+            data Lead = { campaigns: Set<Name>, names: List<Name>, picked: Name, raw: String }
 
             let campaignsOf (lead: Lead): Set<Name> = lead.campaigns
 
@@ -70,7 +70,10 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             let spread (lead, priority) = Set.contains(priority, campaignsOfOpen(lead))
 
             behavior written : (lead: Lead) -> Bool
-            let written (lead) = Set.contains(Name("q"), lead.campaigns)
+            let written (lead) = Set.contains(Name(String.trim(lead.raw)), lead.campaigns)
+
+            behavior namedWritten : (lead: Lead) -> Bool
+            let namedWritten (lead) = Set.contains(Name("q"), lead.campaigns)
 
             data Tally = { counts: List<Int> }
 
@@ -186,7 +189,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
     }
 
     /**
-     * A value written in the source stands at no position, and what is asked of an element is
+     * A value worked out of the input stands at no position, and what is asked of an element is
      * declined as that — read, and short of somewhere to read the value from — rather than as a
      * shape this has no words for. The container holding the value is still the container holding
      * something, which is asked: some element being it needs some element.
@@ -274,8 +277,11 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
      *  to hold none equal to, whatever kind of value it is. */
     @Test
     void anElementWrittenIsAskedOfTheContainerAsTheValueItself() {
+        // A newtype's constructor writes the value it wraps, which the place wearing the name
+        // holds under it.
         for (Map.Entry<String, Value> each : Map.of("listedWritten", Value.text("USD"),
-                "listedWrittenNumber", Value.number(7)).entrySet()) {
+                "listedWrittenNumber", Value.number(7),
+                "namedWritten", Value.text("q")).entrySet()) {
             Operand<TermPath> written = new Operand.Written<>(each.getValue());
             assertEquals(List.of(new RowDemand.SameAs(written)),
                     assertInstanceOf(RowDemand.Exists.class, asked(each.getKey(), true))

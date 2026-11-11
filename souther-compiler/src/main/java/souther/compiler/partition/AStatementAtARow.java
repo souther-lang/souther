@@ -1922,14 +1922,17 @@ final class AStatementAtARow {
     }
 
     /** Whether {@code seen} is {@code written}, or null where the two are of kinds no row writes
-     *  alike. */
+     *  alike. A scalar written is the value a position holds under whatever newtypes it wears,
+     *  so it is compared with what the row holds inside them. */
     private static Boolean isWritten(Value written, ObservedValue seen) {
         return switch (written) {
             case Value.Text(String text) ->
-                    seen instanceof ObservedValue.Text(String got) ? got.equals(text) : null;
+                    ObservedValue.scalarInside(seen) instanceof ObservedValue.Text(String got)
+                            ? got.equals(text) : null;
             case Value.Truth(boolean truth) ->
-                    seen instanceof ObservedValue.Bool(boolean got) ? got == truth : null;
-            case Value.Number(BigDecimal number) -> switch (seen) {
+                    ObservedValue.scalarInside(seen) instanceof ObservedValue.Bool(boolean got)
+                            ? got == truth : null;
+            case Value.Number(BigDecimal number) -> switch (ObservedValue.scalarInside(seen)) {
                 case ObservedValue.Integer(long got) ->
                         number.compareTo(BigDecimal.valueOf(got)) == 0;
                 case ObservedValue.Decimal(BigDecimal got) -> number.compareTo(got) == 0;
