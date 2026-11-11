@@ -268,6 +268,14 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         assertEquals(linesOf("mappedAny"), linesOf("mapped"));
     }
 
+    /** A line one application of a closure draws is met through that application: a row at it is
+     *  found where the other applications are made on other elements, as it is where one is. */
+    @Test
+    void aLineOneApplicationDrawsIsMetThroughThatApplication() {
+        assertEquals(6, rowsFound("mappedAny"));
+        assertEquals(pointsOf("mappedAny"), pointsOf("mapped"));
+    }
+
     /** An application that states nothing on some application of the closure — a member asked of
      *  no element — leaves the lines of the others drawn, with the points the comparison has. */
     @Test

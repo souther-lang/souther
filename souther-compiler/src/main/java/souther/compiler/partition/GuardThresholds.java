@@ -6,6 +6,7 @@ import souther.compiler.check.AnalysisBody;
 import souther.compiler.collect.LatelyAsked;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.BindingId;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Choice;
@@ -507,11 +508,11 @@ public final class GuardThresholds {
      * ({@link CoverageSites.Plan#runsOnce}), a run recorded there is this call's, and the way to
      * the call need not be read off the row.
      */
-    private static ElementsMetOn whereMet(ComparisonReadings.Reading each,
-                                          Function<ValueName.Helper, Boolean> runsOnce) {
+    private static Function<ApplicationsReadOn, ElementsMetOn> whereMet(
+            ComparisonReadings.Reading each, Function<ValueName.Helper, Boolean> runsOnce) {
         ValueName.Helper helper = each.context().helper();
-        return helper != null && runsOnce.apply(helper)
-                ? each.metOn().madeWhereverRecorded() : each.metOn();
+        boolean wherever = helper != null && runsOnce.apply(helper);
+        return by -> wherever ? each.metOn(by).madeWhereverRecorded() : each.metOn(by);
     }
 
     /**
@@ -1115,7 +1116,8 @@ public final class GuardThresholds {
     private static void lineAt(String behavior, ModelOccurrence stated,
                                EmittedComparisonState.Instrumented at,
                                SourceConstructOrigin wrote, Citation where,
-                               ElementsMetOn metOn, RuleReachNumbering reaches,
+                               Function<ApplicationsReadOn, ElementsMetOn> metOn,
+                               RuleReachNumbering reaches,
                                ComparisonAssessment read, LinesReadOn linesReadOn,
                                boolean aRunStops,
                                List<EveryRunStops> stops,
@@ -1148,7 +1150,7 @@ public final class GuardThresholds {
         ComparisonGeometry geometry = ComparisonGeometry.of(read,
                 (cutting, part, authored, by) -> {
                     LineOrigin.ComparisonOrigin origin = originOf(behavior, stated, at, wrote,
-                            anchor, metOn, part, cutting, authored);
+                            anchor, metOn.apply(by), part, cutting, authored);
                     readOn.read(origin, by);
                     return origin;
                 }, linesReadOn);

@@ -19,6 +19,7 @@ import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -304,8 +305,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param onTheArms  what a run taking each arm of a choice the comparison is read through
      *                   works out there, with where the arm is taken, where it is read once;
      *                   none otherwise. Independent of the lines it draws
-     * @param metOn   which elements of the input a run makes the comparison on, where it stands
-     *                   inside closures an operation stopping at an answer applies to them
+     * @param applying   the applications of the closures the comparison stands in, which say which
+     *                   elements of the input a run makes the comparison on, where an operation
+     *                   stopping at an answer applies them
      * @param runsAs     the construct as the tree that runs holds it, which is {@code occurrence}
      *                   wherever the body read is the one that runs. A helper's body read at a call
      *                   is not: it runs as the helper's own method, which every call shares, so
@@ -335,7 +337,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Optional<Condition> statedAsACondition, Optional<Proposition> stopsWhere,
                    Optional<List<Cutting.OnAnApplication>> worksOutOnEach,
                    Optional<StopEvidence> stopsIn, List<StopEvidence.OnAnArm> onTheArms,
-                   ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
+                   ClosureApplications applying, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay, ComparisonWitnesses.AtAComparison witnesses,
                    DemandReading.Answered getsPast, List<ConstructionAsk> asks,
                    ElementsNamed readsTheElements, LinesReadOn readOn) {
@@ -343,13 +345,25 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         Reading {
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null || worksOutOnEach == null
-                    || stopsIn == null || onTheArms == null || metOn == null || runsAs == null || context == null
+                    || stopsIn == null || onTheArms == null || applying == null || runsAs == null
+                    || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null
                     || asks == null || readsTheElements == null || readOn == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
             asks = List.copyOf(asks);
+        }
+
+        /** Which elements of the input a run makes the comparison on, as every application says. */
+        ElementsMetOn metOn() {
+            return applying.elementsMetOn();
+        }
+
+        /** Which elements a run makes the comparison on where a line is read by {@code by} of the
+         *  applications. */
+        ElementsMetOn metOn(ApplicationsReadOn by) {
+            return applying.elementsMetOn(by);
         }
 
         /**
@@ -968,7 +982,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             out.add(new Reading(stands, stated.statement(), where, reads, besideIt.way(), standing,
                     statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
                             numbering), stopsWhere,
-                    worksOutOnEach, stopsIn, onTheArms, applying.elementsMetOn(), stated.written(), in.context(),
+                    worksOutOnEach, stopsIn, onTheArms, applying, stated.written(), in.context(),
                     besideIt.said(), witnesses,
                     past.answered(), past.asks(), readsTheElements, readOn));
         }
