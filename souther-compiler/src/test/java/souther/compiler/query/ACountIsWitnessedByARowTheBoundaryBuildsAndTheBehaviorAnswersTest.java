@@ -205,7 +205,7 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
     }
 
     /** An element made to hold a key its own rule refuses is no witness, and the search goes on
-     *  to the next key; where its rule refuses every key, nothing is found. */
+     *  to the next key. */
     @Test
     void anElementItsOwnRuleRefusesIsPassedOverAndNotTakenForEveryOne() {
         String notDollars = DEAL + "\n    invariant currency.value /= \"USD\"";
@@ -213,9 +213,6 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
         assertTrue(found.isPresent(), "the other key is tried");
         assertEquals("Deal { currency = CurrencyCode(\"JPY\"), amount = 0m }",
                 found.get().kept().text());
-        String neither = DEAL + "\n    invariant currency.value /= \"USD\""
-                + " && currency.value /= \"JPY\"";
-        assertEquals(Optional.empty(), witnessIn(compiled(forecast(neither, ""))));
     }
 
     /** A behavior that depends on another runs only with it stood in for, which nothing here

@@ -400,7 +400,8 @@ public final class ReachWitnesses {
         Set<Figure> stopped = new LinkedHashSet<>();
         Set<WhereARunStopped> runs = new LinkedHashSet<>();
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
-                i -> inputs.types().get(i), i -> elementOfAList(inputs.parameters().get(i), read),
+                i -> inputs.types().get(i),
+                i -> elementOfAList(inputs.parameters().get(i), read) != null,
                 i -> parametersTheBodyDoesNotRead.contains(inputs.parameters().get(i)), reading,
                 building, stopped);
         if (each == null) {

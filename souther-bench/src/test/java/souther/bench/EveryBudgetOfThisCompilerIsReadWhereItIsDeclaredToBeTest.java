@@ -939,6 +939,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;ILjava/util/List;Ljava/util/Set;)Z",
                     "stops at the rows a witness is sought among, nearest the firsts first, and"
                             + " adds the figure to what the search came to"),
+            Map.entry("souther.compiler.partition.CountWitnesses#waysTheyCanBeTogether("
+                            + "Ljava/util/Map;Ljava/util/Set;)Ljava/util/List;",
+                    "stops at the ways the places a statement reads can be at the values it"
+                            + " names, made one at a time, and adds the figure to what the search"
+                            + " came to"),
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.

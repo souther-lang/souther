@@ -301,6 +301,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + "Ljava/math/BigDecimal;" + CONTEXT + ")L" + PARTITION
                             + "FixtureTemplate;",
                     THE_POSITION),
+            row(PARTITION + "RowSearch", "addHoldingOne",
+                    "(" + TYPE + CONTEXT + "Ljava/util/List;)V", THE_POSITION),
             row(PARTITION + "TermRealizations", "aLineToTheValue",
                     "(Lsouther/compiler/inputs/NumericTerm$TakenOver;" + TYPE + "L" + PARTITION
                             + "AskedAt;Lsouther/compiler/inputs/Quantities;"

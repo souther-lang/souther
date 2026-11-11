@@ -1,6 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
+import souther.compiler.check.TypeView;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -11,6 +14,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.IntPredicate;
 
@@ -73,22 +77,24 @@ public final class RowSearch {
     /**
      * The values each parameter is tried with, built, in the order they are tried: what the model
      * names at its type, what each row written for the behavior took there, written back from
-     * what was built, what stands for {@code standing} at it, and where that is a list, a list of
-     * one of what stands for its element — or null where the boundary built none at some
-     * parameter. The figures the search stopped at are added to
+     * what was built, what stands for {@code standing} at it, and where {@code holdingOne} says so
+     * and it is a collection, one holding one of what stands for what it holds — or null where the
+     * boundary built none at some parameter. The figures the search stopped at are added to
      * {@code stopped}: a value a run's observation was cut short at, and values left untried.
      *
      * @param standing the type whose representatives are tried at each parameter, which is the
      *                 parameter's own where nothing else takes its place
-     * @param listing  the element of the list each parameter is, as the reading of the input
-     *                 says, or null where it is no list or a list of one is not tried there
      * @param atItsFirst which parameters are tried with their first value alone: the ones a run
      *                 of the behavior does not turn on, since another value of one of them is the
      *                 same run, and the rows of the others are not to be spent on them
+     * @param holdingOne which parameters are tried holding one of what stands for what they hold
+     *                 as well, where they are collections: what stands for a collection holds
+     *                 nothing, and a walk of nothing gets to no comparison inside it, nor a
+     *                 statement read a place in
      */
     static List<List<Built>> tried(List<Type> types, List<List<FixtureTemplate>> named,
                                    List<List<ObservedValue>> taken, IntFunction<Type> standing,
-                                   IntFunction<Type> listing, IntPredicate atItsFirst,
+                                   IntPredicate holdingOne, IntPredicate atItsFirst,
                                    RuleReadingContext reading, Building building,
                                    Set<Figure> stopped) {
         List<List<Built>> each = new ArrayList<>();
@@ -96,7 +102,7 @@ public final class RowSearch {
             if (atItsFirst.test(i)) {
                 // Its first value the boundary builds and nothing past it: another value of it is
                 // the same run, so none is built, and none is a figure the search stopped at.
-                Built first = firstBuilt(i, types, named, taken, standing, listing, reading,
+                Built first = firstBuilt(i, types, named, taken, standing, holdingOne, reading,
                         building, stopped);
                 if (first == null) {
                     return null;
@@ -107,7 +113,9 @@ public final class RowSearch {
             List<FixtureTemplate> tried = new ArrayList<>(named.get(i));
             takenAt(i, types.get(i), taken, reading, tried, stopped);
             tried.addAll(Partitions.representativesOf(standing.apply(i), reading).values());
-            addListsOf(listing.apply(i), reading, tried);
+            if (holdingOne.test(i)) {
+                addHoldingOne(types.get(i), reading, tried);
+            }
             List<Built> made = new ArrayList<>();
             for (FixtureTemplate one : upTo(tried, stopped)) {
                 building.build(i, one).ifPresent(value -> made.add(new Built(one, value)));
@@ -132,7 +140,7 @@ public final class RowSearch {
     private static Built firstBuilt(int parameter, List<Type> types,
                                     List<List<FixtureTemplate>> named,
                                     List<List<ObservedValue>> taken, IntFunction<Type> standing,
-                                    IntFunction<Type> listing, RuleReadingContext reading,
+                                    IntPredicate holdingOne, RuleReadingContext reading,
                                     Building building, Set<Figure> stopped) {
         int[] left = {MOST_VALUES};
         // Values a run's observation was cut short at: said only where no value is found, since a
@@ -152,7 +160,9 @@ public final class RowSearch {
         }
         if (built == null) {
             stage = new ArrayList<>();
-            addListsOf(listing.apply(parameter), reading, stage);
+            if (holdingOne.test(parameter)) {
+                addHoldingOne(types.get(parameter), reading, stage);
+            }
             built = firstOf(parameter, stage, building, left, stopped);
         }
         if (built == null) {
@@ -198,20 +208,78 @@ public final class RowSearch {
         }
     }
 
-    /** Adds to {@code into} a list of one of what stands for {@code element}, where it is a type:
-     *  what stands for a list holds nothing, and a walk of nothing gets to no comparison inside
-     *  it. */
-    private static void addListsOf(Type element, RuleReadingContext reading,
-                                   List<FixtureTemplate> into) {
-        if (element == null) {
+    /**
+     * Adds to {@code into} what holds one of what stands for what {@code type} holds, where it is
+     * a collection: one of what stands for its element, or one entry of what stand for its key and
+     * its value, each once.
+     */
+    private static void addHoldingOne(Type type, RuleReadingContext reading,
+                                      List<FixtureTemplate> into) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        // Whether the names can be written is the type's, so it is asked once and not after every
+        // candidate: a type whose names cannot be written has no candidate to enumerate.
+        if (!(WornNames.of(view.wrappers(), source) instanceof WornNames.Spelled spelled)) {
             return;
         }
-        for (FixtureTemplate one : Partitions.representativesOf(element, reading).values()) {
-            FixtureTemplate holding = FixtureTemplate.collection(List.of(one));
-            if (!into.contains(holding)) {
-                into.add(holding);
+        Function<List<FixtureTemplate>, FixtureTemplate> holding = spelled::holding;
+        switch (view.shape()) {
+            case Shape.Sequence sequence -> addEachHoldingOne(
+                    Partitions.representativesOf(sequence.element(), reading).values(), holding,
+                    into);
+            case Shape.Mapping mapping -> addEachHoldingOneEntry(
+                    Partitions.representativesOf(mapping.key(), reading).values(),
+                    Partitions.representativesOf(mapping.value(), reading).values(), holding,
+                    into);
+            default -> { }
+        }
+    }
+
+    /** Adds to {@code into} what {@code holding} makes of each of {@code elements} alone — a
+     *  collection of the type, under the names it wears — each once, as far as there is room
+     *  ({@link #hasRoom}). */
+    static void addEachHoldingOne(List<FixtureTemplate> elements,
+                                  Function<List<FixtureTemplate>, FixtureTemplate> holding,
+                                  List<FixtureTemplate> into) {
+        for (FixtureTemplate one : elements) {
+            if (!hasRoom(into)) {
+                return;
+            }
+            addOnce(holding.apply(List.of(one)), into);
+        }
+    }
+
+    /** Adds to {@code into} what {@code holding} makes of the entry of each key and each value,
+     *  each once, as far as there is room ({@link #hasRoom}): the pairs are made one at a time,
+     *  and none is made past the room. */
+    static void addEachHoldingOneEntry(List<FixtureTemplate> keys, List<FixtureTemplate> values,
+                                       Function<List<FixtureTemplate>, FixtureTemplate> holding,
+                                       List<FixtureTemplate> into) {
+        for (FixtureTemplate key : keys) {
+            for (FixtureTemplate value : values) {
+                if (!hasRoom(into)) {
+                    return;
+                }
+                addOnce(holding.apply(List.of(FixtureTemplate.entry(key, value))), into);
             }
         }
+    }
+
+    /** {@code one} added where there is room for it and it is not there. */
+    private static void addOnce(FixtureTemplate one, List<FixtureTemplate> into) {
+        if (hasRoom(into) && !into.contains(one)) {
+            into.add(one);
+        }
+    }
+
+    /**
+     * Whether one more candidate is worth building: the search tries {@link #MOST_VALUES} of them
+     * and one past that says the figure was passed ({@link #upTo}), so a producer stops building
+     * where this is false, and the figure is said by what it handed on.
+     */
+    static boolean hasRoom(List<?> candidates) {
+        return candidates.size() <= MOST_VALUES;
     }
 
     /** As many of {@code values} as the search tries, first first, with the figure added to
