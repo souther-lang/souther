@@ -85,7 +85,7 @@ class AParameterARunDoesNotTurnOnIsTriedAtItsFirstValueAloneTest {
             named.add(values);
         });
         return RowSearch.tried(subject.types(), named, taken, subject.types()::get,
-                _ -> null, atFirst, _ -> false, subject.ruleReading(), building, stopped);
+                _ -> false, atFirst, subject.ruleReading(), building, stopped);
     }
 
     @Test

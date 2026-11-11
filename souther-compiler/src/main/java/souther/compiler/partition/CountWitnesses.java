@@ -144,8 +144,8 @@ public final class CountWitnesses {
                 .filter(place -> !place.head().equals(container.head()))
                 .forEach(place -> readOutside.add(place.head()));
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
-                i -> i == at ? Type.list(element) : inputs.types().get(i), _ -> null,
-                _ -> false, i -> readOutside.contains(inputs.parameters().get(i)), reading,
+                i -> i == at ? Type.list(element) : inputs.types().get(i),
+                i -> readOutside.contains(inputs.parameters().get(i)), _ -> false, reading,
                 building, stopped);
         if (each == null) {
             return new Sought(Optional.empty(), stopped, runs);
@@ -313,7 +313,10 @@ public final class CountWitnesses {
         out.addAll(standing);
         Map<List<String>, TermPath> alike = new LinkedHashMap<>();
         sameValuesIn(stated, container.element(), alike);
-        if (alike.isEmpty() || out.size() > MOST_VALUES) {
+        if (out.size() > MOST_VALUES) {
+            return RowSearch.upTo(out, stopped);
+        }
+        if (alike.isEmpty()) {
             return RowSearch.upTo(withWhatItReadsDiffering(out, element, container, stated,
                     reading), stopped);
         }

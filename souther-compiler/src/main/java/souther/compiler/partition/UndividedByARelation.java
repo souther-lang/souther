@@ -5672,10 +5672,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (int part = 0; part < 2; part++) {
             Quantity.HowManyMeet counted = sides.get(part).counted();
-            if (counted == null
-                    || !(counted.container() instanceof DecisionSubject.AnInput(
-                            TermPath container, var _))
-                    || container.insideAContainer()
+            TermPath container = counted == null ? null : inputContainerOf(counted);
+            if (container == null
                     || !Quantity.PositionInTheWalk.counts(sides.get(1 - part).number(),
                             container)) {
                 continue;
@@ -5709,10 +5707,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> out = new ArrayList<>(terms);
         for (int at = 0; at < sides.size(); at++) {
             Quantity.HowManyMeet counted = sides.get(at).counted();
-            if (counted == null || !(counted.container() instanceof DecisionSubject.AnInput(
-                    TermPath container, var _)) || container.insideAContainer()
-                    || !countIsShownEveryWhere(counted, container, conditions, witnesses, stopped,
-                            runsStopped)) {
+            TermPath container = counted == null ? null : inputContainerOf(counted);
+            if (container == null || !countIsShownEveryWhere(counted, container, conditions,
+                    witnesses, stopped, runsStopped)) {
                 continue;
             }
             NumericDomain.Bounds held = howManyAreHeld(container, read, along, true);
@@ -5743,6 +5740,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     was.runsTo(), was.key()));
         }
         return out;
+    }
+
+    /** The container of the input {@code counted} counts the elements of, or null where it counts
+     *  those of another, or of one inside a container: what a row shows is of a container a
+     *  parameter holds. */
+    private static TermPath inputContainerOf(Quantity.HowManyMeet counted) {
+        return counted.container() instanceof DecisionSubject.AnInput(TermPath container, var _)
+                && !container.insideAContainer() ? container : null;
     }
 
     /**

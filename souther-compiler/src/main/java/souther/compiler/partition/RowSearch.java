@@ -76,33 +76,32 @@ public final class RowSearch {
     /**
      * The values each parameter is tried with, built, in the order they are tried: what the model
      * names at its type, what each row written for the behavior took there, written back from
-     * what was built, what stands for {@code standing} at it, and where that is a list, a list of
-     * one of what stands for its element — or null where the boundary built none at some
-     * parameter. The figures the search stopped at are added to
+     * what was built, what stands for {@code standing} at it, and where {@code holdingOne} says so
+     * and it is a collection, one holding one of what stands for what it holds — or null where the
+     * boundary built none at some parameter. The figures the search stopped at are added to
      * {@code stopped}: a value a run's observation was cut short at, and values left untried.
      *
      * @param standing the type whose representatives are tried at each parameter, which is the
      *                 parameter's own where nothing else takes its place
-     * @param listing  the element of the list each parameter is, as the reading of the input
-     *                 says, or null where it is no list or a list of one is not tried there
      * @param atItsFirst which parameters are tried with their first value alone: the ones a run
      *                 of the behavior does not turn on, since another value of one of them is the
      *                 same run, and the rows of the others are not to be spent on them
      * @param holdingOne which parameters are tried holding one of what stands for what they hold
-     *                 as well, where they are collections: the ones a statement reads a place in,
-     *                 which nothing is read of in what holds none
+     *                 as well, where they are collections: what stands for a collection holds
+     *                 nothing, and a walk of nothing gets to no comparison inside it, nor a
+     *                 statement read a place in
      */
     static List<List<Built>> tried(List<Type> types, List<List<FixtureTemplate>> named,
                                    List<List<ObservedValue>> taken, IntFunction<Type> standing,
-                                   IntFunction<Type> listing, IntPredicate atItsFirst,
-                                   IntPredicate holdingOne, RuleReadingContext reading,
-                                   Building building, Set<Figure> stopped) {
+                                   IntPredicate holdingOne, IntPredicate atItsFirst,
+                                   RuleReadingContext reading, Building building,
+                                   Set<Figure> stopped) {
         List<List<Built>> each = new ArrayList<>();
         for (int i = 0; i < types.size(); i++) {
             if (atItsFirst.test(i)) {
                 // Its first value the boundary builds and nothing past it: another value of it is
                 // the same run, so none is built, and none is a figure the search stopped at.
-                Built first = firstBuilt(i, types, named, taken, standing, listing, reading,
+                Built first = firstBuilt(i, types, named, taken, standing, holdingOne, reading,
                         building, stopped);
                 if (first == null) {
                     return null;
@@ -113,7 +112,6 @@ public final class RowSearch {
             List<FixtureTemplate> tried = new ArrayList<>(named.get(i));
             takenAt(i, types.get(i), taken, reading, tried, stopped);
             tried.addAll(Partitions.representativesOf(standing.apply(i), reading).values());
-            addListsOf(listing.apply(i), reading, tried);
             if (holdingOne.test(i)) {
                 addHoldingOne(types.get(i), reading, tried);
             }
@@ -141,7 +139,7 @@ public final class RowSearch {
     private static Built firstBuilt(int parameter, List<Type> types,
                                     List<List<FixtureTemplate>> named,
                                     List<List<ObservedValue>> taken, IntFunction<Type> standing,
-                                    IntFunction<Type> listing, RuleReadingContext reading,
+                                    IntPredicate holdingOne, RuleReadingContext reading,
                                     Building building, Set<Figure> stopped) {
         int[] left = {MOST_VALUES};
         // Values a run's observation was cut short at: said only where no value is found, since a
@@ -161,7 +159,9 @@ public final class RowSearch {
         }
         if (built == null) {
             stage = new ArrayList<>();
-            addListsOf(listing.apply(parameter), reading, stage);
+            if (holdingOne.test(parameter)) {
+                addHoldingOne(types.get(parameter), reading, stage);
+            }
             built = firstOf(parameter, stage, building, left, stopped);
         }
         if (built == null) {
@@ -210,48 +210,27 @@ public final class RowSearch {
     /**
      * Adds to {@code into} what holds one of what stands for what {@code type} holds, where it is
      * a collection: one of what stands for its element, or one entry of what stand for its key and
-     * its value.
+     * its value, each once.
      */
     private static void addHoldingOne(Type type, RuleReadingContext reading,
                                       List<FixtureTemplate> into) {
         RuleReadingSource source = reading.source();
-        FixtureTemplate holding = switch (TypeView.shapeOf(type, source.inners(), source.symbols(),
-                source.kinds(), source.sums())) {
-            case Shape.Sequence sequence -> {
-                List<FixtureTemplate> element =
-                        Partitions.representativesOf(sequence.element(), reading).values();
-                yield element.isEmpty() ? null
-                        : FixtureTemplate.collection(List.of(element.getFirst()));
-            }
+        List<FixtureTemplate> holding = new ArrayList<>();
+        switch (TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums())) {
+            case Shape.Sequence sequence ->
+                    Partitions.representativesOf(sequence.element(), reading).values()
+                            .forEach(one -> holding.add(FixtureTemplate.collection(List.of(one))));
             case Shape.Mapping mapping -> {
-                List<FixtureTemplate> key =
-                        Partitions.representativesOf(mapping.key(), reading).values();
-                List<FixtureTemplate> value =
+                List<FixtureTemplate> values =
                         Partitions.representativesOf(mapping.value(), reading).values();
-                yield key.isEmpty() || value.isEmpty() ? null : FixtureTemplate.collection(
-                        List.of(FixtureTemplate.entry(key.getFirst(), value.getFirst())));
+                Partitions.representativesOf(mapping.key(), reading).values().forEach(key ->
+                        values.forEach(value -> holding.add(FixtureTemplate.collection(
+                                List.of(FixtureTemplate.entry(key, value))))));
             }
-            default -> null;
-        };
-        if (holding != null && !into.contains(holding)) {
-            into.add(holding);
+            default -> { }
         }
-    }
-
-    /** Adds to {@code into} a list of one of what stands for {@code element}, where it is a type:
-     *  what stands for a list holds nothing, and a walk of nothing gets to no comparison inside
-     *  it. */
-    private static void addListsOf(Type element, RuleReadingContext reading,
-                                   List<FixtureTemplate> into) {
-        if (element == null) {
-            return;
-        }
-        for (FixtureTemplate one : Partitions.representativesOf(element, reading).values()) {
-            FixtureTemplate holding = FixtureTemplate.collection(List.of(one));
-            if (!into.contains(holding)) {
-                into.add(holding);
-            }
-        }
+        holding.stream().filter(one -> !into.contains(one)).forEach(into::add);
     }
 
     /** As many of {@code values} as the search tries, first first, with the figure added to
