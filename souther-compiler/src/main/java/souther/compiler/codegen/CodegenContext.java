@@ -29,6 +29,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.JvmClassNames;
 import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.ValueName;
@@ -733,8 +734,7 @@ final class CodegenContext {
      * itself. What the language declares never is — no module emits a primitive or the prelude's
      * data — nor is a type another module emitted. */
     boolean isLocalMember(TypeSymbol member) {
-        return !member.isDeclaredByLanguage()
-                && member instanceof TypeSymbol.AtModule at && at.module().equals(pkg);
+        return JvmClassNames.isLocalMember(pkg, member);
     }
 
     /** The members of {@code out} that reach their union through a bridge case, in the order the

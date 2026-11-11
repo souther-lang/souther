@@ -122,7 +122,7 @@ public final class JvmClassNames {
         Map<TypeSymbol, List<GeneratedClass.BehaviorResult>> bridgeCases = new LinkedHashMap<>();
         results.forEach((union, output) -> {
             for (TypeSymbol member : Boundary.of(output, kinds, sums).atoms()) {
-                if (!isLocalMember(module, member)) {
+                if (!isLocalMember(module.name(), member)) {
                     bridgeCases.computeIfAbsent(member, k -> new ArrayList<>()).add(union);
                 }
             }
@@ -161,11 +161,15 @@ public final class JvmClassNames {
         }
     }
 
-    /** Whether {@code member} is a type this module declared: the union's JVM form and its
-     *  Souther form are then the same values, and no bridge case is made for it. */
-    private static boolean isLocalMember(Hir.Module module, TypeSymbol member) {
+    /**
+     * Whether {@code member} is a type the module named {@code module} declared: the union's JVM
+     * form and its Souther form are then the same values, and no bridge case is made for it. The
+     * one place that is decided, for the check that refuses a collision of bridge cases and the
+     * backend that writes them.
+     */
+    public static boolean isLocalMember(String module, TypeSymbol member) {
         return !member.isDeclaredByLanguage()
-                && member instanceof TypeSymbol.AtModule at && at.module().equals(module.name());
+                && member instanceof TypeSymbol.AtModule at && at.module().equals(module);
     }
 
     /** The behavior of this module written under {@code name}. Every result union and every bridge

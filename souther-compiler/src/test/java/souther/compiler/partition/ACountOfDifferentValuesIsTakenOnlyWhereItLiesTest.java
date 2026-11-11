@@ -7,6 +7,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,7 +32,7 @@ class ACountOfDifferentValuesIsTakenOnlyWhereItLiesTest {
                 most == null ? null : at(most));
     }
 
-    private static final List<Long> ENDS = java.util.Arrays.asList(null, 0L, 1L, 2L, 3L,
+    private static final List<Long> ENDS = Arrays.asList(null, 0L, 1L, 2L, 3L,
             (long) Integer.MAX_VALUE);
 
     /** Whether {@code inner} lies within {@code outer}, an absent end being no end. */

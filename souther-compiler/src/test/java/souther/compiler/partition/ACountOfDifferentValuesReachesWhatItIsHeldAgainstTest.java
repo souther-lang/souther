@@ -114,23 +114,18 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
      */
     @Test
     void aCountIsReadAgainstANumberOnlyWhereTheContainerReachesEveryValueOfIt() {
-        Map<String, Boolean> read = new LinkedHashMap<>();
-        read.put("capTwo", true);
-        read.put("capOne", false);
-        read.put("bools", true);
-        read.put("one", false);
-        read.put("codes", true);
-        Map<String, String> held = new LinkedHashMap<>();
-        held.put("capTwo", "CapTwo, xs.value");
-        held.put("capOne", "CapOne, xs.value");
-        held.put("bools", "List<Bool>, xs");
-        held.put("one", "List<One>, xs");
-        held.put("codes", "List<Code>, xs");
+        // The container each is of, the values it is asked of, and whether `k` is read.
+        record Held(String name, String type, String values, boolean read) {}
+        Map<String, Boolean> expected = new LinkedHashMap<>();
         Map<String, Boolean> actual = new LinkedHashMap<>();
-        for (String name : read.keySet()) {
-            String[] type = held.get(name).split(", ");
-            // One model for each: the behaviors of a model share what the measure may spend.
-            Compilation compilation = Compilation.ofSource("""
+        for (Held each : List.of(
+                new Held("capTwo", "CapTwo", "xs.value", true),
+                new Held("capOne", "CapOne", "xs.value", false),
+                new Held("bools", "List<Bool>", "xs", true),
+                new Held("one", "List<One>", "xs", false),
+                new Held("codes", "List<Code>", "xs", true))) {
+            expected.put(each.name(), each.read());
+            actual.put(each.name(), kIsRead("""
                     module probe
 
                     data K = Int
@@ -146,19 +141,9 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
 
                     behavior %1$sCount : (xs: %2$s, k: K) -> Bool
                     let %1$sCount (xs, k) = Set.size(Set.fromList(%3$s)) == k.value
-                    """.formatted(name, type[0], type[1]), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            assertEquals(List.of(), compilation.errors().stream()
-                    .map(each -> each.diagnostic().code()).toList(),
-                    "the model under test compiles");
-            PartitionEvidence evidence =
-                    compilation.db().ask(new Adequacy.Coverage("probe")).value().get(name + "Count");
-            assertNotNull(evidence, name);
-            actual.put(name, evidence.notRead().stream().noneMatch(left ->
-                    left.at().equals("k") && left.reason() == UndividedPosition.Reason
-                            .RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE));
+                    """.formatted(each.name(), each.type(), each.values()), each.name() + "Count"));
         }
-        assertEquals(read, actual);
+        assertEquals(expected, actual);
     }
 
     /**
@@ -274,8 +259,7 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value().get("wideCount");
         assertNotNull(evidence);
-        assertEquals(List.of(souther.compiler.partition.CompositionBudget
-                        .VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure()),
+        assertEquals(List.of(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure()),
                 evidence.notRead().stream().filter(left -> left.at().equals("k"))
                         .flatMap(left -> left.figures().stream()).distinct().toList());
     }
