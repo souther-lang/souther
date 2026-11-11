@@ -32,6 +32,7 @@ import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.exc.StreamConstraintsException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.exc.MismatchedInputException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.File;
@@ -677,9 +678,14 @@ public final class Runner {
      * nearest binary value instead of the number that was written (spec
      * §a-boundary-scalar-is-read-not-converted); the decoder refuses that, so a program's input
      * could not be read at all.
+     *
+     * <p>An object that names a member twice is refused rather than read as the last of them: the
+     * tree would keep one value and drop the other before any decoder saw either, and what a program
+     * is run on would not be what was written.
      */
     private static final JsonMapper JSON = JsonMapper.builder()
-            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build();
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+            .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY).build();
 
     /** How deep the mapper reads and writes before it refuses, counted in levels of JSON. */
     private static final int READ_DEPTH_LIMIT =
@@ -712,7 +718,9 @@ public final class Runner {
      * {@code StreamReadException}. It is the run having no room to write the number, and is said as
      * that and not as malformed input (spec §jvm-abort). The reader's other limits — a number, a name
      * or a document too long — refuse text that is as much JSON, and are said as the reader's limit
-     * with its own wording, for the same reason.
+     * with its own wording, for the same reason. A member named twice is the one thing the tree
+     * builder refuses as a mismatch rather than as syntax, and its context stands on the second
+     * name.
      */
     private static JsonNode parseJson(String input) {
         JsonParser parser = JSON.createParser(input);
@@ -726,6 +734,9 @@ public final class Runner {
             }
             if (e instanceof NumberFormatException) {
                 throw fail("run.input.outofroom", depthPath(where));
+            }
+            if (e instanceof MismatchedInputException) {
+                throw fail("run.input.duplicate", depthPath(where));
             }
             if (e instanceof StreamConstraintsException) {
                 throw fail("run.input.limit", depthPath(where), e.getMessage());

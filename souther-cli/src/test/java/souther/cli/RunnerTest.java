@@ -854,6 +854,36 @@ class RunnerTest {
     }
 
     /**
+     * An object that names a member twice is refused with the path of the second name, wherever it
+     * stands, and not read as the last of them. The same name in two objects, or at two levels, is
+     * not a repeat.
+     */
+    @Test
+    void aMemberNamedTwiceIsRefusedAndNotReadAsTheLastOfThem() throws Exception {
+        Path file = write("pair.sou", """
+                data Pair = { a: Int, b: List<Pair> }
+                behavior same : (p: Pair) -> Pair
+                let same (p) = p
+                """);
+        Runner.Program program = Runner.compile(file);
+        assertEquals("{\"a\":1,\"b\":[{\"a\":2,\"b\":[]}]}",
+                program.run("same", "{\"a\":1,\"b\":[{\"a\":2,\"b\":[]}]}").trim());
+
+        Runner.RunException top = assertThrows(Runner.RunException.class,
+                () -> program.run("same", "{\"a\":1,\"a\":2,\"b\":[]}"));
+        assertEquals(1, top.exitCode);
+        assertTrue(top.getMessage().contains("/a"), top.getMessage());
+        assertTrue(top.getMessage().contains("twice"), top.getMessage());
+        assertFalse(top.getMessage().contains("not valid JSON"), top.getMessage());
+        assertTrue(top.localized(java.util.Locale.JAPANESE).contains("2回"),
+                top.localized(java.util.Locale.JAPANESE));
+
+        Runner.RunException nested = assertThrows(Runner.RunException.class,
+                () -> program.run("same", "{\"a\":1,\"b\":[{\"a\":2,\"b\":[],\"b\":[]}]}"));
+        assertTrue(nested.getMessage().contains("/b/0/b"), nested.getMessage());
+    }
+
+    /**
      * A number whose exponent no {@code BigDecimal} keeps is valid JSON and a {@code Decimal}, so the
      * run says it has no room to write it and names where it stands, and never calls the input
      * malformed. The last exponent a scale holds still reads, and text that is not a number at all is
