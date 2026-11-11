@@ -19,6 +19,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
+import souther.compiler.values.Operand;
 
 import java.util.List;
 import java.util.Map;
@@ -174,7 +175,8 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
                 ? new RowDemand.Exists(ITEMS, only(inside), HOLDING, Optional.empty())
                 : new RowDemand.ForAll(ITEMS, only(inside), HOLDING, Optional.empty()));
         ContentsAsked.Asked one = asked.asked().getFirst();
-        assertEquals(value, one.value(), () -> "the one thing asked: " + asked);
+        assertEquals(new Operand.At<>(value), one.value(),
+                () -> "the one thing asked: " + asked);
         return one.standsWhereMet();
     }
 

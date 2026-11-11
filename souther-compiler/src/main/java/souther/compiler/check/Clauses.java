@@ -10,6 +10,8 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -411,7 +413,7 @@ final class Clauses {
         Map<BindingId, String> declared = new HashMap<>();
         bindingsOf(named).forEach((name, binding) -> declared.put(binding, name));
         return new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
-                new HashMap<>(), new ArrayList<>(), new ArrayList<>(), new HashSet<>(),
+                symbols, new HashMap<>(), new ArrayList<>(), new ArrayList<>(), new HashSet<>(),
                 new HashSet<>())
                 .exactly(clause, symbols, source.declarations());
     }
@@ -424,7 +426,7 @@ final class Clauses {
             Set<BindingId> bindings = new HashSet<>();
             Set<ClauseRead> reads = new HashSet<>();
             new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
-                    new HashMap<>(), new ArrayList<>(), new ArrayList<>(), bindings, reads)
+                    symbols, new HashMap<>(), new ArrayList<>(), new ArrayList<>(), bindings, reads)
                     .readsOf(read);
             Set<String> all = new HashSet<>();
             for (BindingId each : bindings) {
@@ -460,7 +462,8 @@ final class Clauses {
      *               record's fields are each a place of their own
      */
     private record ReadsOfAClause(Map<BindingId, String> fields, boolean wraps,
-                                  DeclarationNewtypes newtypes, Map<BindingId, Location> aliases,
+                                  DeclarationNewtypes newtypes, Symbols symbols,
+                                  Map<BindingId, Location> aliases,
                                   List<Lookup> lookups, List<Apart> aparts,
                                   Set<BindingId> bindings, Set<ClauseRead> reads) {
 
@@ -592,8 +595,8 @@ final class Clauses {
                                                            List<EntryHeld.Stated> entries) {
             AnOperationApplied applied = AnOperationApplied.of(lookup);
             AnOperationApplied.Searched searched = applied == null ? null : applied.searches();
-            Location lookedFor = searched == null ? null : locationOf(searched.member());
-            if (lookedFor == null) {
+            Operand<RuleKey> member = searched == null ? null : operandOf(searched.member());
+            if (member == null) {
                 return Optional.empty();
             }
             boolean asAKey = searched.aKey();
@@ -601,13 +604,25 @@ final class Clauses {
             Location container = asAKey ? locationOf(searched.container()) : null;
             for (EntryHeld.Stated entry : entries) {
                 if (container != null && entry.valueIn() != null
-                        && lookedFor.equals(locationOf(entry.key()))
+                        && member.equals(operandOf(entry.key()))
                         && container.equals(locationOf(entry.container()))) {
                     valueIn = valueIn == null ? entry.valueIn() : valueIn.meet(entry.valueIn());
                 }
             }
-            return Optional.of(new ClauseRead.Member(keyOf(lookedFor), asAKey,
-                    Optional.ofNullable(valueIn)));
+            return Optional.of(new ClauseRead.Member(member, asAKey, Optional.ofNullable(valueIn)));
+        }
+
+        /**
+         * What {@code e} is: the place of the value it stands at, or the value the source wrote —
+         * or null where it is neither, which a rule cannot ask a container to hold.
+         */
+        private Operand<RuleKey> operandOf(Core e) {
+            Location at = locationOf(e);
+            if (at != null) {
+                return new Operand.At<>(keyOf(at));
+            }
+            Value written = WrittenMember.of(e, symbols);
+            return written == null ? null : new Operand.Written<>(written);
         }
 
         /** What the rules of the value call the place {@code at}. */

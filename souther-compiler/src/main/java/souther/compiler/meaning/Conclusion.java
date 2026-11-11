@@ -384,8 +384,7 @@ public final class Conclusion {
             case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                  Proposition.Some _, Proposition.SomeReachable _, Proposition.Always _,
                  Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                 Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Unread _,
+                 Proposition.InTheStrings _, Proposition.SameValue _,                 Proposition.LastToHold _, Proposition.Unread _,
                  Proposition.Carried _, Proposition.SoManyHold _,
                  Proposition.WhereItAnswers _, Proposition.OfTheWays _ -> 0;
         };

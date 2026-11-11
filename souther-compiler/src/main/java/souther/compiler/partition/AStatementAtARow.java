@@ -30,8 +30,12 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Recognizer;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -171,7 +175,8 @@ final class AStatementAtARow {
                     && askable(there);
             case Proposition.Always _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Unread _,
+                 Proposition.StringInside _,
+                 Proposition.LastToHold _, Proposition.Unread _,
                  Proposition.Carried _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _ -> askable(stated);
         };
@@ -216,8 +221,11 @@ final class AStatementAtARow {
             case Proposition.InCases(DecisionSubject.AnInput _, CasesLeft cases, boolean _,
                                      Spelling _) ->
                     cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
-            case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
-                                       boolean _, Spelling _) -> true;
+            // A row writes the value at a position, and whether it is another's, or the one
+            // written, is read off that value.
+            case Proposition.SameValue same -> same.one() instanceof DecisionSubject.AnInput
+                    && (same.otherSubject() == null
+                            || same.otherSubject() instanceof DecisionSubject.AnInput);
             // A row writes the string at a position, and whether it is one of a language's is
             // read off that string. A piece of a split string is no position's.
             case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition _,
@@ -243,7 +251,7 @@ final class AStatementAtARow {
                 case Relation.Ordered _ -> false;
             };
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
-                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
+                 Proposition.InTheStrings _, Proposition.StringInside _,
                  Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
@@ -468,9 +476,9 @@ final class AStatementAtARow {
                                      boolean _, Spelling _) -> List.of(at);
             case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition(
                     TermPath at, var _), StringsLanguage _, boolean _, Spelling _) -> List.of(at);
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
-                                       DecisionSubject.AnInput(TermPath other, var _), boolean _,
-                                       Spelling _) -> List.of(one, other);
+            case Proposition.SameValue same when askable(same) -> same.otherSubject() == null
+                    ? List.of(same.one().inputPosition())
+                    : List.of(same.one().inputPosition(), same.otherSubject().inputPosition());
             default -> null;
         };
     }
@@ -583,7 +591,8 @@ final class AStatementAtARow {
             }
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
+                 Proposition.StringInside _,
+                 Proposition.LastToHold _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> { }
         }
@@ -1330,9 +1339,14 @@ final class AStatementAtARow {
                                      boolean holds, Spelling _) when askable(part) ->
                     heldAs(holds, amongCases(at, cases, row));
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
-                                       DecisionSubject.AnInput(TermPath other, var _),
+                                       Operand.At<DecisionSubject>(
+                                               DecisionSubject.AnInput(TermPath other, var _)),
                                        boolean holds, Spelling _) ->
                     heldAs(holds, theSame(one, other, row));
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath at, var _),
+                                       Operand.Written<DecisionSubject>(Value written),
+                                       boolean holds, Spelling _) ->
+                    heldAs(holds, theSameAsWritten(at, written, row));
             case Proposition.InTheStrings(
                     Proposition.InTheStrings.Strings.AtAPosition(TermPath at, var _),
                     StringsLanguage language, boolean holds, Spelling _) ->
@@ -1383,8 +1397,9 @@ final class AStatementAtARow {
                     });
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.StringInside _, Proposition.Unread _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _, Proposition.LastToHold _ -> notAsked(part);
+                 Proposition.StringInside _, Proposition.Unread _,
+                 Proposition.OnAnApplication _, Proposition.SomeReachable _,
+                 Proposition.LastToHold _ -> notAsked(part);
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
@@ -1463,7 +1478,8 @@ final class AStatementAtARow {
             }
             case Proposition.Compared _, Proposition.Always _, Proposition.LastToHold _ -> true;
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
-                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
+                 Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.StringInside _,
                  Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
@@ -1687,7 +1703,7 @@ final class AStatementAtARow {
                     // A count of statements comes to either here: that claims nothing of it.
                     case Proposition.Some _, Proposition.Compared _, Proposition.Truth _,
                          Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                         Proposition.SameValue _, Proposition.StringInside _,
+                         Proposition.SameValue _,                         Proposition.StringInside _,
                          Proposition.LastToHold _, Proposition.Carried _,
                          Proposition.SomeReachable _, Proposition.Unread _,
                          Proposition.OnAnApplication _, Proposition.SoManyHold _ ->
@@ -1883,6 +1899,48 @@ final class AStatementAtARow {
             return new Said.NotRead(Set.of(notRead));
         }
         return new Said.Is(left.equals(right));
+    }
+
+    /** Whether the value a row writes at {@code at} is {@code written}, as the language
+     *  compares values: a number by what it denotes, not by how many digits it was written with. */
+    private static Said theSameAsWritten(TermPath at, Value written,
+                                         BorderQuantity.Observation row) {
+        if (!(row.at(at) instanceof WalkResult.Reached<ObservationAtPoint>(
+                ObservationAtPoint point))) {
+            return new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK));
+        }
+        if (!(point instanceof ObservationAtPoint.Value(ObservedValue seen))) {
+            return Said.NOTHING_THERE;
+        }
+        ReadingGap notRead = ReadingGap.ofAComparisonOf(seen);
+        if (notRead != null) {
+            return new Said.NotRead(Set.of(notRead));
+        }
+        Boolean same = isWritten(written, seen);
+        return same == null ? new Said.NotRead(Set.of(ReadingGap.NO_VALUE))
+                : new Said.Is(same);
+    }
+
+    /** Whether {@code seen} is {@code written}, or null where the two are of kinds no row writes
+     *  alike. A scalar written is the value a position holds under whatever newtypes it wears,
+     *  so it is compared with what the row holds inside them. */
+    private static Boolean isWritten(Value written, ObservedValue seen) {
+        return switch (written) {
+            case Value.Text(String text) ->
+                    ObservedValue.scalarInside(seen) instanceof ObservedValue.Text(String got)
+                            ? got.equals(text) : null;
+            case Value.Truth(boolean truth) ->
+                    ObservedValue.scalarInside(seen) instanceof ObservedValue.Bool(boolean got)
+                            ? got == truth : null;
+            case Value.Number(BigDecimal number) -> switch (ObservedValue.scalarInside(seen)) {
+                case ObservedValue.Integer(long got) ->
+                        number.compareTo(BigDecimal.valueOf(got)) == 0;
+                case ObservedValue.Decimal(BigDecimal got) -> number.compareTo(got) == 0;
+                default -> null;
+            };
+            case Value.Case(TypeSymbol data) ->
+                    seen instanceof ObservedValue.Unit(TypeSymbol got) ? got.equals(data) : null;
+        };
     }
 
     /**

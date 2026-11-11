@@ -9,6 +9,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.values.Operand;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -170,7 +171,8 @@ public final class AnswerAsAnInput {
             // of it is the answer's to meet.
             case Proposition.Compared _, Proposition.Some _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.StringInside _, Proposition.SomeReachable _ ->
+                 Proposition.StringInside _,
+                 Proposition.SomeReachable _ ->
                     heldAt(inputNumbersIn(stated), pinned, positive);
             // A statement of the input alone is about no answer, and was returned above.
             case Proposition.Always _, Proposition.Unread _, Proposition.LastToHold _,
@@ -386,10 +388,10 @@ public final class AnswerAsAnInput {
             // inside another, whose strings are values of the input.
             case Proposition.SomeReachable _, Proposition.StringInside _ -> null;
             case Proposition.Carried carried -> throw carried.handedToAReader();
-            case Proposition.SameValue(DecisionSubject one, DecisionSubject other,
+            case Proposition.SameValue(DecisionSubject one, Operand<DecisionSubject> other,
                                        boolean holds, var _) -> {
                 DecisionSubject left = subject(one);
-                DecisionSubject right = subject(other);
+                Operand<DecisionSubject> right = other.placedAs(this::subject);
                 yield left == null || right == null ? null
                         : new Proposition.SameValue(left, right, holds);
             }
@@ -467,7 +469,8 @@ public final class AnswerAsAnInput {
             case Proposition.Always _, Proposition.Unread _, Proposition.Carried _ -> false;
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.StringInside _,
+                 Proposition.LastToHold _,
                  Proposition.SomeReachable _, Proposition.All _, Proposition.Any _,
                  Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Some _,
                  Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->

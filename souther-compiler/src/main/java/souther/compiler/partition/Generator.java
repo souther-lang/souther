@@ -15120,7 +15120,8 @@ public final class Generator {
         }
 
         @Override
-        public ContainerContents contentsOf(TermPath container, PlanComposer.Under under) {
+        public ContainerContents contentsOf(TermPath container, PlanComposer.Under under,
+                                            PlanComposer.Writing writing) {
             return here.contentsOf(container, value -> {
                 ConstructionPlan.Node node = plan.at(value);
                 if (node == null) {
@@ -15128,7 +15129,7 @@ public final class Generator {
                 }
                 Proposals composed = under.of(node);
                 return composed.isEmpty() ? null : composed.values().getFirst();
-            });
+            }, writing);
         }
 
         /**

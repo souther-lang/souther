@@ -7,6 +7,8 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.check.ValueAsked;
 import souther.compiler.observe.ElementsTaken;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -91,12 +93,12 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
      *               it is asked of the one chosen. One at most, since what is asked inside an
      *               element names no container further in ({@link RowDemand.WithinIt})
      */
-    record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey,
+    record Asked(TermPath container, Operand<TermPath> value, boolean holding, boolean ofTheKey,
                  Optional<ValueAsked> valueIn, Optional<Around> around) {
 
         Asked {
             Objects.requireNonNull(container, "what is asked is asked of some container");
-            Objects.requireNonNull(value, "a container is asked about the value at some position");
+            Objects.requireNonNull(value, "a container is asked about some value");
             Objects.requireNonNull(valueIn, "numbers asked of the value under a key, or none");
             Objects.requireNonNull(around, "asked under a quantifier or under none");
             if (valueIn.isPresent() && !(holding && ofTheKey)) {
@@ -106,9 +108,24 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         }
 
         /** A demand that asks nothing of the value filed under a key. */
-        Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey,
+        Asked(TermPath container, Operand<TermPath> value, boolean holding, boolean ofTheKey,
               Optional<Around> around) {
             this(container, value, holding, ofTheKey, Optional.empty(), around);
+        }
+
+        /** A demand about the value at the position {@code at}. */
+        Asked(TermPath container, TermPath at, boolean holding, boolean ofTheKey,
+              Optional<ValueAsked> valueIn, Optional<Around> around) {
+            this(container, new Operand.At<>(at), holding, ofTheKey, valueIn,
+                    around);
+        }
+
+        /** A demand about the value at the position {@code at}, asking nothing of the value filed
+         *  under a key. */
+        Asked(TermPath container, TermPath at, boolean holding, boolean ofTheKey,
+              Optional<Around> around) {
+            this(container, new Operand.At<>(at), holding, ofTheKey,
+                    Optional.empty(), around);
         }
 
         /**
@@ -163,7 +180,13 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                     holdingOne.add(container);
                 }
             }
-            return holdingOne.containsAll(value.containersHoldingIt());
+            return holdingOne.containsAll(value.place().map(TermPath::containersHoldingIt)
+                    .orElse(List.of()));
+        }
+
+        /** The position of the row the value asked about stands at, none where it is written. */
+        Optional<TermPath> valueAt() {
+            return value.place();
         }
     }
 
@@ -292,16 +315,16 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         Optional<Around> withThis = Optional.of(Around.over(container, some));
         for (RowDemand.OfAnElement one : ofTheElement) {
             switch (one) {
-                case RowDemand.SameAs(TermPath value) when some ->
+                case RowDemand.SameAs(Operand<TermPath> value) when some ->
                         into.add(new Asked(container, value, true, false, Optional.empty(),
                                 around));
-                case RowDemand.DifferentFrom(TermPath value) when !some ->
+                case RowDemand.DifferentFrom(Operand<TermPath> value) when !some ->
                         into.add(new Asked(container, value, false, false, Optional.empty(),
                                 around));
-                case RowDemand.KeyedAs(TermPath value) when some ->
+                case RowDemand.KeyedAs(Operand<TermPath> value) when some ->
                         into.add(new Asked(container, value, true, true, Optional.empty(),
                                 around));
-                case RowDemand.NotKeyedAs(TermPath value) when !some ->
+                case RowDemand.NotKeyedAs(Operand<TermPath> value) when !some ->
                         into.add(new Asked(container, value, false, true, Optional.empty(),
                                 around));
                 case RowDemand.WithinIt(TermPath inner, boolean innerSome, var asked) ->
@@ -338,7 +361,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         Set<TermPath> named = new LinkedHashSet<>();
         for (Asked each : asked) {
             named.add(each.container());
-            named.add(each.value());
+            each.valueAt().ifPresent(named::add);
             each.around().ifPresent(around -> named.add(around.container()));
         }
         named.addAll(trying.atANameTheCasesShare());
@@ -438,7 +461,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 left[0]--;
                 List<Asked> under = new ArrayList<>();
                 for (Asked each : asked.asked()) {
-                    under.add(new Asked(at.get(each.container()), at.get(each.value()),
+                    under.add(new Asked(at.get(each.container()), each.value().placedAs(at::get),
                             each.holding(), each.ofTheKey(), each.valueIn(),
                             each.around().map(around ->
                                     new Around(at.get(around.container()), around.some(),
@@ -523,34 +546,46 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             if (!each.container().head().equals(head)) {
                 continue;
             }
+            // A value written reads nothing off any parameter: it is the same wherever it is asked,
+            // so what a demand needs of the rest is only whether it is asked at all.
+            TermPath value = each.valueAt().orElse(null);
             if (each.askedOfThePlan()) {
-                if (each.value().head().equals(head)) {
+                if (value == null || value.head().equals(head)) {
                     within.add(each);
                     continue;
                 }
-                ValuesHandedOn.Standing one = handed.chosen().get(each.value());
+                ValuesHandedOn.Standing one = handed.chosen().get(value);
                 if (one == null) {
-                    return new Resolution.Unresolved(nothingHandedOn(each.value()));
+                    return new Resolution.Unresolved(nothingHandedOn(value));
                 }
-                given.add(new Given(each, one.value()));
+                given.add(new Given(each, new Operand.At<>(one.value())));
                 continue;
             }
             // Asked under every element of a container: the one around it is over every element.
             Around around = each.around().orElseThrow();
             TermPath over = around.container();
-            if (each.value().head().equals(head) || over.head().equals(head)) {
+            if ((value != null && value.head().equals(head)) || over.head().equals(head)) {
                 leftOpen.add(each);
                 continue;
             }
-            List<ValuesHandedOn.Standing> standing = handed.values().get(each.value());
+            List<ValuesHandedOn.Standing> standing =
+                    value == null ? List.of() : handed.values().get(value);
             if (standing == null) {
-                return new Resolution.Unresolved(nothingHandedOn(each.value()));
+                return new Resolution.Unresolved(nothingHandedOn(value));
             }
             List<ElementsTaken> held = handed.elements().get(over);
             if (held == null) {
                 return new Resolution.Unresolved(
                         new SearchMessage.NothingComposedBeforeHandsOnTheElements(
                                 String.valueOf(over)));
+            }
+            // Asked of the container once, where it is asked of some element at all: the same
+            // value of each is one value, and a row with none of them is asked nothing.
+            if (each.value() instanceof Operand.Written<TermPath>(Value written)) {
+                if (held.stream().anyMatch(element -> around.asksOf(element.elementAt(over)))) {
+                    given.add(new Given(each, new Operand.Written<>(written)));
+                }
+                continue;
             }
             // Each element, and the one value read in it: two read in one element are no one
             // value for it, as one read outside every element is the same for each.
@@ -583,9 +618,9 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                     }
                 }
                 if (in.size() != 1) {
-                    return new Resolution.Unresolved(noOneValue(each.value(), in.size()));
+                    return new Resolution.Unresolved(noOneValue(value, in.size()));
                 }
-                given.add(new Given(each, in.getFirst()));
+                given.add(new Given(each, new Operand.At<>(in.getFirst())));
             }
         }
         // And each position of this parameter held to one of another composed before it, with the
@@ -623,15 +658,21 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
     private static List<HeldTo> apartFromWhatItHoldsNone(List<Asked> within, List<Given> given) {
         List<HeldTo> out = new ArrayList<>();
         for (Asked held : within) {
-            if (!held.holding() || held.around().isPresent()
-                    || held.value().insideAContainer()) {
+            TermPath at = held.valueAt().orElse(null);
+            if (at == null || !held.holding() || held.around().isPresent()
+                    || at.insideAContainer()) {
                 continue;
             }
             for (Given kept : given) {
                 Asked none = kept.asked();
-                if (!none.holding() && none.ofTheKey() == held.ofTheKey()
+                // A value written is no value built elsewhere to hold the position apart from: the
+                // container refuses to be written holding and keeping out one value, so the
+                // position that chose it is refused there, as it is beside a value written that
+                // the plan itself holds none equal to.
+                if (kept.value() instanceof Operand.At<FixtureTemplate>(FixtureTemplate built)
+                        && !none.holding() && none.ofTheKey() == held.ofTheKey()
                         && none.container().equals(held.container())) {
-                    out.add(new HeldTo(held.value(), kept.value(), false));
+                    out.add(new HeldTo(at, built, false));
                 }
             }
         }
@@ -694,9 +735,10 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
      * A value handed on that a container is to hold, or to hold nothing equal to.
      *
      * @param asked the demand it was handed for
-     * @param value the value
+     * @param value what was built where the demand reads its value, or the value the demand
+     *              writes, which a container is written with where it is composed
      */
-    record Given(Asked asked, FixtureTemplate value) {
+    record Given(Asked asked, Operand<FixtureTemplate> value) {
 
         Given {
             Objects.requireNonNull(asked, "a value is given for a demand");
@@ -771,7 +813,8 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         Optional<SearchMessage> notComposed() {
             return leftOpen.stream().findFirst().map(each ->
                     new SearchMessage.NotHandedTheValueForEachElement(
-                            String.valueOf(each.container()), String.valueOf(each.value()),
+                            String.valueOf(each.container()),
+                            String.valueOf(each.valueAt().orElseThrow()),
                             String.valueOf(each.around().orElseThrow().container())));
         }
 
@@ -786,7 +829,8 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
          * own, on an entry of its own.
          */
         ContainerContents contentsOf(TermPath container,
-                                     Function<TermPath, FixtureTemplate> valueAt) {
+                                     Function<TermPath, FixtureTemplate> valueAt,
+                                     PlanComposer.Writing writing) {
             List<FixtureTemplate> holding = new ArrayList<>();
             List<FixtureTemplate> keptOut = new ArrayList<>();
             List<ContainerContents.KeyAsked> keysHeld = new ArrayList<>();
@@ -796,7 +840,11 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 if (!each.container().equals(container)) {
                     continue;
                 }
-                FixtureTemplate value = valueAt.apply(each.value());
+                FixtureTemplate value = switch (each.value()) {
+                    case Operand.At<TermPath>(TermPath at) -> valueAt.apply(at);
+                    case Operand.Written<TermPath>(Value written) ->
+                            writing.write(written, each.ofTheKey());
+                };
                 if (value == null) {
                     return null;
                 }
@@ -812,12 +860,20 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 if (!asked.container().equals(container)) {
                     continue;
                 }
+                FixtureTemplate value = switch (each.value()) {
+                    case Operand.At<FixtureTemplate>(FixtureTemplate built) -> built;
+                    case Operand.Written<FixtureTemplate>(Value written) ->
+                            writing.write(written, asked.ofTheKey());
+                };
+                if (value == null) {
+                    return null;
+                }
                 if (asked.ofTheKey() && asked.holding()) {
                     (asked.askedOfThePlan() ? keysHeld : keysEachFiled).add(
-                            new ContainerContents.KeyAsked(each.value(), asked.valueIn()));
+                            new ContainerContents.KeyAsked(value, asked.valueIn()));
                 } else {
                     (asked.ofTheKey() ? keysKeptOut : (asked.holding() ? holding : keptOut))
-                            .add(each.value());
+                            .add(value);
                 }
             }
             return new ContainerContents(holding, keptOut, keysHeld, keysEachFiled, keysKeptOut);
@@ -851,10 +907,11 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             });
         }
         for (Asked each : asked) {
-            if (each.askedOfThePlan() && each.value().head().equals(head)) {
-                read.add(each.value());
+            TermPath at = each.valueAt().orElse(null);
+            if (each.askedOfThePlan() && at != null && at.head().equals(head)) {
+                read.add(at);
                 if (each.standsWhereMet()) {
-                    standing.add(each.value());
+                    standing.add(at);
                 }
             }
         }
@@ -907,8 +964,9 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             if (each.container().head().equals(head)) {
                 continue;
             }
-            if (each.value().head().equals(head)) {
-                (each.askedOfThePlan() ? one : inEach).add(each.value());
+            TermPath at = each.valueAt().orElse(null);
+            if (at != null && at.head().equals(head)) {
+                (each.askedOfThePlan() ? one : inEach).add(at);
             }
             if (!each.askedOfThePlan()) {
                 TermPath over = each.around().orElseThrow().container();
@@ -996,9 +1054,10 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
     Set<TermPath> readWithin(String head) {
         Set<TermPath> out = new LinkedHashSet<>();
         for (Asked each : asked) {
-            if (each.askedOfThePlan() && each.value().head().equals(head)
+            TermPath at = each.valueAt().orElse(null);
+            if (each.askedOfThePlan() && at != null && at.head().equals(head)
                     && each.container().head().equals(head)) {
-                out.add(each.value());
+                out.add(at);
             }
         }
         return out;
@@ -1015,7 +1074,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         for (Asked each : asked) {
             String container = each.container().head();
             Set<String> from = new LinkedHashSet<>();
-            from.add(each.value().head());
+            each.valueAt().ifPresent(at -> from.add(at.head()));
             if (!each.askedOfThePlan()) {
                 from.add(each.around().orElseThrow().container().head());
             }

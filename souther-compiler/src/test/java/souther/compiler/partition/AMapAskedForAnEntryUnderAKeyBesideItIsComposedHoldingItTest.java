@@ -294,6 +294,100 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
         assertNull(chosen.fields(), "no map holds both a one and a two under the key a");
     }
 
+    /**
+     * A rule asking a container for a member it writes is composed as one asking for the member at
+     * another place is: the container holds the member, and where the rule says what the entry
+     * under a written key is, the entry is that.
+     */
+    @Test
+    void aWrittenMemberTheRuleAsksForIsComposedHeld() {
+        assertEquals("[(\"USD\", ConversionRate(1m))]", composed(writtenMember(
+                "Map.containsKey(\"USD\", rates)")).fields().get("rates").text());
+        assertEquals("[(\"USD\", ConversionRate(2.5m))]", composed(writtenMember("""
+                Map.get("USD", rates)
+                    |> Option.map(r -> Decimal.compare(r.value, 2.5m) == 0)
+                    |> Option.withDefault(false)""")).fields().get("rates").text());
+    }
+
+    /**
+     * What a key is is the value it comes to, and not how the rule named it: two rules asking
+     * about one key ask about one entry, whether they name the key as a place of the record or
+     * write it, so what they ask of the value under it is asked together.
+     */
+    @Test
+    void rulesNamingOneKeyTwoWaysAskAboutOneEntry() {
+        String one = """
+                Map.get(key, rates)
+                    |> Option.map(n -> n == 1)
+                    |> Option.withDefault(false)""";
+        String atLeastNought = """
+                Map.get("USD", rates)
+                    |> Option.map(n -> n >= 0)
+                    |> Option.withDefault(false)""";
+
+        assertEquals("[(\"USD\", 1)]", composed(sameKey(
+                "key == \"USD\"", one, atLeastNought)).fields().get("rates").text());
+    }
+
+    @Test
+    void rulesNamingOneKeyAsTwoPlacesAskAboutOneEntry() {
+        String one = """
+                Map.get(key, rates)
+                    |> Option.map(n -> n == 1)
+                    |> Option.withDefault(false)""";
+        String atLeastNought = """
+                Map.get(other, rates)
+                    |> Option.map(n -> n >= 0)
+                    |> Option.withDefault(false)""";
+
+        assertEquals("[(\"USD\", 1)]", composed(sameKey(
+                "key == \"USD\" && other == \"USD\"", one, atLeastNought))
+                .fields().get("rates").text());
+    }
+
+    /**
+     * Two entries asked different numbers are two entries, so a key the record chooses is chosen
+     * apart from a key a rule writes as it is from another it chooses.
+     */
+    @Test
+    void aKeyChosenIsApartFromAKeyWrittenWhereTheirEntriesAskDifferentNumbers() {
+        String first = """
+                Map.get(key, rates)
+                    |> Option.map(n -> n == 1)
+                    |> Option.withDefault(false)""";
+        String second = """
+                Map.get("USD", rates)
+                    |> Option.map(n -> n == 2)
+                    |> Option.withDefault(false)""";
+
+        assertEquals("[(\"EUR\", 1), (\"USD\", 2)]", composed(sameKey(
+                "key == \"USD\" || key == \"EUR\"", first, second))
+                .fields().get("rates").text());
+    }
+
+    private static String sameKey(String keys, String first, String second) {
+        return """
+                module demo
+
+                data N = { key: String, other: String, rates: Map<String, Int> }
+                    invariant %s
+                    invariant %s
+                    invariant %s
+                """.formatted(keys, first, second);
+    }
+
+    private static String writtenMember(String invariant) {
+        return """
+                module demo
+
+                data ConversionRate = Decimal
+                    invariant value > 0.0m
+
+                data N = { rates: Map<String, ConversionRate> }
+                    invariant %s
+                """.formatted(invariant);
+    }
+
     private static Partitions.FieldsChosen composed(String source) {
         Partitions.FieldsChosen chosen = composedGiven(source, Map.of());
         assertNotNull(chosen.fields(), "the record is one something can be composed of");

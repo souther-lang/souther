@@ -118,7 +118,8 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
      * and hand no container a value.
      */
     @Override
-    public ContainerContents contentsOf(TermPath container, PlanComposer.Under under) {
+    public ContainerContents contentsOf(TermPath container, PlanComposer.Under under,
+                                        PlanComposer.Writing writing) {
         throw new IllegalStateException("a plan composed around one number hands `" + container
                 + "` no value, so nothing is asked what it holds");
     }
