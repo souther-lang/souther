@@ -6077,7 +6077,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * The row that shows the number of elements of {@code container} that meet a statement: one
      * element it holds of and one it fails of, beside one value of everything else, at a row that
      * gets to this relation ({@link CountWitnesses}), or null where there is none. What counts the
-     * row shows is the witness's to say ({@link CountWitnesses.Witness#overAgain}).
+     * row shows is the witness's to say ({@link CountWitnesses.Witness#expansion}).
      *
      * <p>Where the search stopped short of everything it would have tried, the figures it stopped
      * at go into {@code stopped}, and where the runs of the rows it tried stopped into

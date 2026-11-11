@@ -961,7 +961,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " names, made one at a time, and adds the figure to what the search"
                             + " came to"),
             Map.entry("souther.compiler.partition.CountWitnesses#entriesTried("
-                            + "Ljava/util/List;Ljava/util/List;Ljava/util/Set;)Ljava/util/List;",
+                            + "Ljava/util/List;Ljava/util/List;"
+                            + "Lsouther/compiler/partition/CountWitnesses$Container;"
+                            + "Ljava/util/Set;)Ljava/util/List;",
                     "stops at the entries of a map tried, each key with each value, nearest the"
                             + " firsts first, and adds the figure to what the search came to"),
             Map.entry("souther.compiler.partition.CountWitnesses#firstPairThat("
