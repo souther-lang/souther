@@ -141,7 +141,7 @@ class ADeclarationReadBackFromClassesStatesWhatItsAuthorWroteTest {
         Map<String, JsonNode> here = readInTheConsumer();
         assertNotNull(here.get("onThroughHelper"), "the consumer measures it");
 
-        assertEquals(inTheLibrarysOwnBuild("throughHelper"), here.get("onThroughHelper"),
+        assertEquals(inTheLibrarysOwnBuild("overThroughHelper"), here.get("onThroughHelper"),
                 "a clause calling a helper the dependency never exposed reaches from here exactly"
                         + " what it reaches in the module that wrote it");
         assertEquals(here.get("onWritten"), here.get("onThroughHelper"),
@@ -160,15 +160,15 @@ class ADeclarationReadBackFromClassesStatesWhatItsAuthorWroteTest {
         Compilation compilation = Compilation.ofSource(LIBRARY.replace(
                 "module shared.codes exposing ( Composed, ThroughHelper, Written )",
                 "module shared.codes exposing ( Composed, ThroughHelper, Written, Yes, No,"
-                        + " throughHelper )") + """
+                        + " overThroughHelper )") + """
 
                 data Yes
                 data No
 
-                behavior throughHelper : (i: ThroughHelper) -> Yes | No
-                let throughHelper (i) = Yes
+                behavior overThroughHelper : (i: ThroughHelper) -> Yes | No
+                let overThroughHelper (i) = Yes
 
-                example throughHelper
+                example overThroughHelper
                     | "one" : (ThroughHelper("a")) -> Yes
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

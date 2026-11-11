@@ -281,8 +281,8 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
 
                 data Ok
 
-                behavior stage : (q: AtLeastQualified) -> Ok
-                let stage (q) = Ok
+                behavior staging : (q: AtLeastQualified) -> Ok
+                let staging (q) = Ok
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
