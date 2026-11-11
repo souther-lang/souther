@@ -1741,10 +1741,13 @@ final class DemandReading {
             // holds an entry filed under that value, or none does.
             case Proposition.SameAsWritten(DecisionSubject.AnInput(TermPath at, var _), Value _,
                                            boolean _, var _)
-                    when at.mapOfTheKeys() != null && writtenWays(stated, at.mapOfTheKeys()) != null ->
-                    someElementMeeting(at.mapOfTheKeys(),
-                            writtenWays(stated, at.mapOfTheKeys()), read, Optional.empty(),
-                            Optional.of(stated));
+                    when at.mapOfTheKeys() != null -> {
+                List<AnElementsWay> ways = writtenWays(stated, at.mapOfTheKeys());
+                yield ways == null
+                        ? List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE))
+                        : someElementMeeting(at.mapOfTheKeys(), ways, read, Optional.empty(),
+                                Optional.of(stated));
+            }
             case Proposition.SameAsWritten _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
             // A piece held to a language depends on the string it is a piece of, which the
