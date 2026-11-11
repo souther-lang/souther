@@ -2049,7 +2049,11 @@ final class Pullback {
         if (here instanceof Core.FieldAccess || here instanceof Core.FieldProjection) {
             return ofTheNewtype;
         }
-        if (here instanceof Core.If || here instanceof Core.Match) {
+        // Every choice {@link Choice#of} reads, so that the arms of an attempt to build a value are
+        // joined as those of an if and of a match are. The range is the one a run that comes out
+        // has; whether the attempt itself stops a run is asked of the stops, not of this.
+        if (here instanceof Core.If || here instanceof Core.Match
+                || here instanceof Core.IfConstructed) {
             return exactRangeOfTheArms(Choice.of(here), reads);
         }
         if (!isAnOperator(here)) {

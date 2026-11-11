@@ -178,6 +178,12 @@ class AnOperandThatIsNoInputPlaceCarriesTheRangeItIsMadeOfTest {
                 "{ if Tray { n = " + RAW + " } as t then t.n * 5 else 0 }", true));
         out.put("aFieldOfARecordWhoseRulesLeaveItOpen", new Case(
                 "{ if Box { n = " + RAW + " } as b then b.n * 5 else 0 }", false));
+        // The range of an attempt that is itself the operand is the range of its arms: what the
+        // record's rules bound the field to, and nought.
+        out.put("anAttemptAsAFactorWhoseRulesBoundTheField", new Case(
+                "(if Tray { n = " + RAW + " } as t then t.n else 0) * 5", true));
+        out.put("anAttemptAsAFactorWhoseRulesLeaveTheFieldOpen", new Case(
+                "(if Box { n = " + RAW + " } as b then b.n else 0) * 5", false));
         out.put("aMatchOverAnOptionOfANewtype", new Case(
                 "{ match l.note with\n | Some n -> n.value * 5\n | None -> 0 }", true));
         // The name an arm binds is read the same whether the operation is in the arm or the match

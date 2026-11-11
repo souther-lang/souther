@@ -35,6 +35,7 @@ import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.ReadThroughNames;
@@ -2362,6 +2363,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * disjunction of two relations each beside cases of its own is not that unless the cases
      * keep the arms apart: where two arms may both hold, the statement is not one arm's relation
      * or the other's, and the cases cannot be taken away from either.
+     *
+     * <p>And the relation must stand only where its cases hold ({@link
+     * #standsOnlyWhereTheCasesHold}): a relation is read over every row that gets to it, and what
+     * is left of an arm without its cases says nothing of where it is the statement. Where the
+     * arms do not cover every case of the subject the rest are rows the statement is false at,
+     * and no arm's relation is the statement there.
      */
     static List<Proposition> armsOfAChoice(Proposition stated) {
         if (!(stated instanceof Proposition.Any any) || any.parts().isEmpty()) {
@@ -2387,7 +2394,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
             }
             if (cases == null || relation == null
-                    || (chosenOn != null && !chosenOn.equals(cases.of()))) {
+                    || (chosenOn != null && !chosenOn.equals(cases.of()))
+                    || !standsOnlyWhereTheCasesHold(relation, cases)) {
                 return null;
             }
             for (CasesLeft before : taken) {
@@ -2400,6 +2408,27 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             relations.add(relation);
         }
         return relations;
+    }
+
+    /**
+     * Whether {@code relation} reads a place that is there only where {@code cases} hold: one
+     * whose path narrows the subject the cases are of to cases no wider than them. The cases are
+     * then carried by the relation's own place, so a row has a value there only where the arm is
+     * the one taken, and the relation can be read without them. A relation that reads no such
+     * place is the arm's only where the cases say so, and they cannot be taken off it.
+     */
+    private static boolean standsOnlyWhereTheCasesHold(Proposition relation,
+                                                       Proposition.InCases cases) {
+        if (!(cases.of() instanceof DecisionSubject.AnInput(TermPath subject, var _))) {
+            return false;
+        }
+        for (TermPath each : PositionsAStatementReads.of(relation).orElse(List.of())) {
+            CasesLeft there = each.requirements().refinements().get(subject);
+            if (there != null && there.within(cases.cases())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

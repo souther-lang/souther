@@ -6,6 +6,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -55,6 +56,34 @@ class AContainerChosenByCasesIsReadInEachCaseOfItTest {
                 if Set.contains(priority, campaignsOf(lead)) then 25 else 0
             """;
 
+    /** A third case the match answers false at: its arm folds away, and what is left is two arms
+     *  that do not cover the value. */
+    private static final String NOT_EVERY_CASE = """
+            module probe
+            data NewLead = { campaigns: Set<String> }
+            data WorkingLead = { campaigns: Set<String>, touches: Int }
+            data ClosedLead = { reason: String }
+            data Lead = NewLead | WorkingLead | ClosedLead
+
+            behavior listed : (lead: Lead, priority: String) -> Bool
+            let listed (lead, priority) =
+                match lead with
+                    | NewLead { campaigns } -> Set.contains(priority, campaigns)
+                    | WorkingLead { campaigns } -> Set.contains(priority, campaigns)
+                    | ClosedLead -> false
+            """;
+
+    /** The same relation chosen by a flag the model writes, which is no choice by cases. */
+    private static final String BY_A_FLAG = """
+            module probe
+            data Lead = { fresh: Bool, campaigns: Set<String>, others: Set<String> }
+
+            behavior listed : (lead: Lead, priority: String) -> Bool
+            let listed (lead, priority) =
+                (lead.fresh && Set.contains(priority, lead.campaigns))
+                    || (Bool.not(lead.fresh) && Set.contains(priority, lead.others))
+            """;
+
     private static Map<String, PartitionEvidence> measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
@@ -70,6 +99,30 @@ class AContainerChosenByCasesIsReadInEachCaseOfItTest {
     void aModelWhoseCasesEachHoldTheContainerIsMeasured() {
         assertNotNull(measured(SEPARATE).get("listed"));
         assertNotNull(measured(SHARED).get("listed"));
+    }
+
+    /**
+     * What a statement leaves unread does not depend on whether the arms cover every case of the
+     * value: the relation of an arm stands only under its cases, whichever way the rest is
+     * written. A choice by a flag is no choice by cases and is read as the one statement it is,
+     * which leaves more unread and is never read as arms.
+     */
+    @Test
+    void whatIsLeftUnreadIsTheSameWhetherTheArmsCoverEveryCaseAndWhetherTheChoiceIsByCases() {
+        Map<String, List<UndividedPosition.Reason>> reasons = new LinkedHashMap<>();
+        Map<String, String> models = new LinkedHashMap<>();
+        models.put("everyCase", SEPARATE);
+        models.put("notEveryCase", NOT_EVERY_CASE);
+        models.put("byAFlag", BY_A_FLAG);
+        models.forEach((name, model) -> reasons.put(name,
+                measured(model).get("listed").notRead().stream()
+                        .map(PartitionEvidence.NotRead::reason).distinct().toList()));
+        assertEquals(Map.of(
+                "everyCase", List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
+                "notEveryCase", List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
+                "byAFlag", List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
+                        UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE)),
+                reasons);
     }
 
     /**
