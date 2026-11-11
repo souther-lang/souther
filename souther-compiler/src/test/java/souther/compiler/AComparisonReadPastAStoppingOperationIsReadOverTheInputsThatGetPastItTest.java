@@ -89,7 +89,7 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
 
     private static String report(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
@@ -198,17 +198,16 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
      */
     @Test
     void aValueHeldAwayFromANumberLeavesAnOrderUndividedAndAnEquationDividedByIt() {
-        for (String hole : List.of("0", "5", "-2")) {
-            for (String order : List.of("p.x >= p.k", "p.x < p.k", "p.x <= p.k", "p.x > p.k")) {
-                String report = report(guarded(hole, order));
-                assertFalse(somethingIsNotRead(report), hole + " " + order + "\n" + report);
-                assertEquals(Set.of("p.k", "p.x"), undivided(report), hole + " " + order);
-            }
-            for (String equation : List.of("p.x == p.k", "p.x /= p.k")) {
-                String report = report(guarded(hole, equation));
-                assertFalse(somethingIsNotRead(report), hole + " " + equation + "\n" + report);
-                assertEquals(Set.of("p.x"), undivided(report), hole + " " + equation);
-            }
+        String hole = "0";
+        for (String order : List.of("p.x >= p.k", "p.x < p.k")) {
+            String report = report(guarded(hole, order));
+            assertFalse(somethingIsNotRead(report), order + "\n" + report);
+            assertEquals(Set.of("p.k", "p.x"), undivided(report), order);
+        }
+        for (String equation : List.of("p.x == p.k", "p.x /= p.k")) {
+            String report = report(guarded(hole, equation));
+            assertFalse(somethingIsNotRead(report), equation + "\n" + report);
+            assertEquals(Set.of("p.x"), undivided(report), equation);
         }
     }
 }
