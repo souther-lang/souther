@@ -921,14 +921,8 @@ public final class Partitions {
         // already divide: reported and accounted for as every rule the classes were not composed
         // out of is, so that a rule is never recorded as measured at an axis whose classes it is
         // not among.
-        List<RuleEvidence> notComposedBesideTheDeclared = new ArrayList<>();
-        if (made.why() != null) {
-            for (RuleEvidence each : dividing) {
-                if (each instanceof RuleEvidence.BySet) {
-                    notComposedBesideTheDeclared.add(each);
-                }
-            }
-        }
+        List<RuleEvidence> notComposedBesideTheDeclared = made.why() == null ? List.of()
+                : dividing.stream().filter(RuleEvidence.BySet.class::isInstance).toList();
         // What became of each rule, applied and not decided again. The answer is total over what
         // was handed in, so a rule with nothing said about it is not something this loop can leave
         // behind — which is what the account below refuses, and what a stage deciding the three

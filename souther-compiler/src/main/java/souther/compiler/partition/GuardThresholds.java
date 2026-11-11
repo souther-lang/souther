@@ -15,7 +15,6 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.RuleAt;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.RuleCitation;
-import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.UnreadComparison;
@@ -1259,34 +1258,19 @@ public final class GuardThresholds {
                     case ComparisonAssessment.Several several -> several.partnered();
                     default -> Map.of();
                 };
-        List<BehaviorSetStatements.Partnered> out = new ArrayList<>();
-        for (Map.Entry<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold>
-                each : partnered.entrySet()) {
-            UndividedByARelation.StringsAPartnerCanHold strings = each.getValue();
-            PredicateOrigin origin = new PredicateOrigin(
-                    new PredicateOccurrence(first + out.size()),
-                    new RuleRef.Comparison(behavior, wrote), anchor, Optional.of(stated));
-            out.add(new BehaviorSetStatements.Partnered(origin,
-                    new PredicateStatement.CanBeTheValueOf(strings.partner()), each.getKey(),
-                    strings));
-        }
         // The numbers an equality between two numbers is true at are told from the rest as the
         // strings are: the values the partner can come to, and those it never does. Shown at every
         // length, since a number has none.
+        Map<NumericTerm.FromOnePosition, BehaviorSetStatements.PartnerHolds> told =
+                new LinkedHashMap<>(partnered);
         if (read instanceof ComparisonAssessment.AcrossPositions across) {
-            for (Map.Entry<NumericTerm.FromOnePosition,
-                    UndividedByARelation.NumbersAPartnerCanHold> each
-                    : across.left().numbersPartnered().entrySet()) {
-                UndividedByARelation.NumbersAPartnerCanHold numbers = each.getValue();
-                PredicateOrigin origin = new PredicateOrigin(
-                        new PredicateOccurrence(first + out.size()),
-                        new RuleRef.Comparison(behavior, wrote), anchor, Optional.of(stated));
-                out.add(new BehaviorSetStatements.Partnered(origin,
-                        new PredicateStatement.CanBeTheValueOf(numbers.partner()), each.getKey(),
-                        new BehaviorSetStatements.PartnerHolds.OfNumbers(numbers.holds(),
-                                numbers.partner())));
-            }
+            told.putAll(across.left().numbersPartnered());
         }
+        List<BehaviorSetStatements.Partnered> out = new ArrayList<>();
+        told.forEach((term, holds) -> out.add(new BehaviorSetStatements.Partnered(
+                new PredicateOrigin(new PredicateOccurrence(first + out.size()),
+                        new RuleRef.Comparison(behavior, wrote), anchor, Optional.of(stated)),
+                term, holds)));
         return out;
     }
 

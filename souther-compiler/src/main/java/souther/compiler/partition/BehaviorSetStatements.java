@@ -259,26 +259,23 @@ public final class BehaviorSetStatements {
      * ({@link SetStatement#notShown}). Held as the one value they are read off, so what is open is
      * said in one place.
      *
-     * @param by     which reading of which comparison this is
-     * @param states what it states, called by the partner it is relative to
-     * @param term   the position it is about
-     * @param holds  the strings or the numbers the partner can hold, as far as each is shown
+     * @param by    which reading of which comparison this is
+     * @param term  the position it is about
+     * @param holds the strings or the numbers the partner can hold, as far as each is shown
      */
-    public record Partnered(PredicateOrigin by, PredicateStatement states,
-                            NumericTerm.FromOnePosition term, PartnerHolds holds) {
+    public record Partnered(PredicateOrigin by, NumericTerm.FromOnePosition term,
+                            PartnerHolds holds) {
 
         public Partnered {
-            if (by == null || states == null || term == null || holds == null) {
+            if (by == null || term == null || holds == null) {
                 throw new IllegalArgumentException(
                         "an equality states of a position what its partner can hold");
             }
         }
 
-        /** An equality between strings, of the strings its partner can hold. */
-        public Partnered(PredicateOrigin by, PredicateStatement states,
-                         NumericTerm.FromOnePosition term,
-                         UndividedByARelation.StringsAPartnerCanHold strings) {
-            this(by, states, term, new PartnerHolds.OfStrings(strings));
+        /** What it states, called by the partner it is relative to. */
+        PredicateStatement states() {
+            return new PredicateStatement.CanBeTheValueOf(holds.partner());
         }
     }
 
@@ -291,36 +288,12 @@ public final class BehaviorSetStatements {
      * that is a fact of a number, and a number's classes stay as they are the day a rule about
      * the lengths of strings is read otherwise.
      */
-    public sealed interface PartnerHolds {
+    public sealed interface PartnerHolds
+            permits UndividedByARelation.StringsAPartnerCanHold,
+                    UndividedByARelation.NumbersAPartnerCanHold {
 
         /** What the model calls the partner. */
         String partner();
-
-        /** Strings, as far as each is shown ({@link UndividedByARelation.StringsAPartnerCanHold}). */
-        record OfStrings(UndividedByARelation.StringsAPartnerCanHold strings)
-                implements PartnerHolds {
-
-            public OfStrings {
-                if (strings == null) {
-                    throw new IllegalArgumentException("strings a partner can hold");
-                }
-            }
-
-            @Override
-            public String partner() {
-                return strings.partner();
-            }
-        }
-
-        /** Whole numbers, shown and possible ({@link WhereAnEquationHolds}). */
-        record OfNumbers(WhereAnEquationHolds holds, String partner) implements PartnerHolds {
-
-            public OfNumbers {
-                if (holds == null || partner == null) {
-                    throw new IllegalArgumentException("numbers a partner can hold");
-                }
-            }
-        }
     }
 
     /**
@@ -367,12 +340,12 @@ public final class BehaviorSetStatements {
         DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
         for (Partnered each : partnered) {
-            if (each.holds() instanceof PartnerHolds.OfNumbers numbers) {
+            if (each.holds() instanceof UndividedByARelation.NumbersAPartnerCanHold numbers) {
                 asked.add(askedOfNumbers(each, numbers.holds()));
                 continue;
             }
             UndividedByARelation.StringsAPartnerCanHold strings =
-                    ((PartnerHolds.OfStrings) each.holds()).strings();
+                    (UndividedByARelation.StringsAPartnerCanHold) each.holds();
             // A partner none of whose values is shown leaves the true side empty, and every string
             // it may be told neither way.
             AdmittedPlan shown = strings.canBe().isEmpty() ? AdmittedPlan.NONE

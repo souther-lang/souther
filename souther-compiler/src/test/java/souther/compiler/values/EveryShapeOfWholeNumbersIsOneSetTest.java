@@ -174,6 +174,26 @@ class EveryShapeOfWholeNumbersIsOneSetTest {
         assertEquals(ValueSet.Likeness.DIFFERENT, wide.comparedWith(evens));
     }
 
+    /**
+     * Sets of whole numbers are compared over the numbers, which is what a position of numbers
+     * holds: every whole number written as the two remainders of two is the set that leaves none
+     * out, though that one also holds values that are no number and the numbers do not. A set that
+     * names a value that is no number is none of them.
+     */
+    @Test
+    void setsOfWholeNumbersAreComparedOverTheNumbers() {
+        ValueSet every = ValueSet.wholeNumberSet(evens().or(WholeNumberSet.ofClass(
+                new Congruences(BigInteger.ONE, n(2)))));
+        assertEquals(ValueSet.Likeness.SAME, every.comparedWith(ValueSet.ANY));
+        assertFalse(every.has(Value.text("a")));
+        assertTrue(ValueSet.ANY.has(Value.text("a")));
+        ValueSet named = ValueSet.oneOf(Set.of(number(2), Value.text("a")));
+        assertEquals(ValueSet.Likeness.DIFFERENT, named.comparedWith(
+                ValueSet.wholeNumberSet(evens())));
+        assertEquals(ValueSet.Likeness.DIFFERENT, ValueSet.wholeNumberSet(evens())
+                .comparedWith(named));
+    }
+
     /** Two ways of writing one set of numbers hold the same values, and a set of one shape does
      *  not pass for the other. */
     @Test

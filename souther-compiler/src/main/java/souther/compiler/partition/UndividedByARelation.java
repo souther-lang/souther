@@ -904,7 +904,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param holds   where the equality holds, as far as shown and as far as possible
      * @param partner what the model calls the other side, as the number it weighs
      */
-    record NumbersAPartnerCanHold(WhereAnEquationHolds holds, String partner) {
+    record NumbersAPartnerCanHold(WhereAnEquationHolds holds, String partner)
+            implements BehaviorSetStatements.PartnerHolds {
 
         NumbersAPartnerCanHold {
             if (holds == null || partner == null) {
@@ -992,7 +993,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo,
                                   StringsPastTheWay reached,
                                   StringsPastTheWay partnerHeldTo, String partner,
-                                  List<String> imagesNotShown) {
+                                  List<String> imagesNotShown)
+            implements BehaviorSetStatements.PartnerHolds {
 
         StringsAPartnerCanHold {
             if (canBe == null || mayBe == null || partner == null || imagesNotShown == null) {
