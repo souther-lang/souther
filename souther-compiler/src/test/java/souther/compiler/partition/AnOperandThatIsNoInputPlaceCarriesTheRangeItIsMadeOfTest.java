@@ -39,6 +39,8 @@ class AnOperandThatIsNoInputPlaceCarriesTheRangeItIsMadeOfTest {
                 invariant value >= 0 && value <= 1000
             data Price = Int
                 invariant value >= 0 && value <= 1000
+            data Rate = Decimal
+                invariant value > 0.0m
             data Box = { n: Int }
                 invariant n >= 0
             data Tray = { n: Int }
@@ -73,8 +75,8 @@ class AnOperandThatIsNoInputPlaceCarriesTheRangeItIsMadeOfTest {
     private static final String JUDGED = """
 
             behavior %1$s : (order: Order, prices: Map<String, Price>, raw: Map<String, Int>,
-                             free: Int) -> Bool
-            let %1$s (order, prices, raw, free) = {
+                             rates: Map<String, Rate>, free: Int) -> Bool
+            let %1$s (order, prices, raw, rates, free) = {
                 let numbers = List.map(l -> %2$s, order.lines)
                 List.length(numbers) == 0
                     || List.all(l -> Set.contains(l.sku, order.previous), order.lines)
@@ -178,6 +180,22 @@ class AnOperandThatIsNoInputPlaceCarriesTheRangeItIsMadeOfTest {
                 "{ if Box { n = " + RAW + " } as b then b.n * 5 else 0 }", false));
         out.put("aMatchOverAnOptionOfANewtype", new Case(
                 "{ match l.note with\n | Some n -> n.value * 5\n | None -> 0 }", true));
+        // The name an arm binds is read the same whether the operation is in the arm or the match
+        // is its operand.
+        out.put("anOperationInTheArmOfAMatchOverAnOption", new Case(
+                "{ match l.note with\n | Some n -> n.value * free\n | None -> 0 }", true));
+        out.put("aMatchOverAnOptionAsAFactor", new Case(
+                "(match l.note with\n | Some n -> n.value\n | None -> 0) * free", true));
+        // A Decimal weighted by a rate the sku looks up, converted through the option the lookup
+        // answers and rounded: the number a run works out is the rounded Decimal, whose rate is
+        // positive and whose quantity is no more than the newtype leaves it.
+        out.put("aRoundedDecimalOfALookedUpRate", new Case(
+                "Map.get(l.sku, rates) |> Option.map(rate -> Decimal.round(2, HALF_UP,"
+                        + " Decimal.fromInt(l.quantity.value) * rate.value * 0.01m))", true));
+        out.put("thatRoundedDecimalThroughALet", new Case(
+                "{ let weighted = Map.get(l.sku, rates) |> Option.map(rate -> Decimal.round(2,"
+                        + " HALF_UP, Decimal.fromInt(l.quantity.value) * rate.value * 0.01m))\n"
+                        + " weighted }", true));
         out.put("aProductOfLookedUpInts", new Case("(" + RAW + ") * l.quantity.value", false));
         out.put("aLookedUpProductThroughALet",
                 new Case("{ let price = " + RAW + "\n price * l.quantity.value }", false));
@@ -221,6 +239,14 @@ class AnOperandThatIsNoInputPlaceCarriesTheRangeItIsMadeOfTest {
             }
         });
         assertEquals(Map.of(), differs);
+    }
+
+    @Test
+    void aNameAnArmBindsIsReadAlikeWhereTheOperationIsInTheArmAndWhereTheMatchIsItsOperand() {
+        for (UndividedPosition.Reason reason : UndividedPosition.Reason.values()) {
+            assertEquals(readAs("anOperationInTheArmOfAMatchOverAnOption", reason),
+                    readAs("aMatchOverAnOptionAsAFactor", reason), reason.toString());
+        }
     }
 
     @Test

@@ -1757,19 +1757,18 @@ final class Pullback {
                 ? around.inTheWalk(walk.step(), filed, child)
                 : around.under(e, child);
         try {
-            // What a child is read in is the scope's own answer ({@link ScopeStep}), but for the
-            // names this walk accounts for itself: a closure's parameters ({@link #boundInside}),
-            // and what an arm takes out of an option, which it has never read as a place and so
-            // cannot place a stop on.
+            // What a child is read in is the scope's own answer ({@link ScopeStep}), for every
+            // step but the names this walk accounts for itself: a closure's parameters
+            // ({@link #boundInside}). The same answer is asked where the operand a number is made
+            // of is read ({@link #leaveUnsaidOverWhereItStands}), so a name an arm binds is read
+            // in one world whichever walk meets it.
             BiConsumer<Core, ScopeStep> visit = (child, step) -> {
                 operated.stepsNames = under.apply(child);
                 InputReads within = reads;
                 Bound inside = bound;
                 if (Core.withoutStanding(child) instanceof Core.Block block) {
                     inside = boundInside(e, block, reads, bound);
-                } else if (!(step instanceof ScopeStep.Block)
-                        && !(step instanceof ScopeStep.Chosen(Choice.Decides decides)
-                        && decides.bindsWhatAnOptionHolds())) {
+                } else if (!(step instanceof ScopeStep.Block)) {
                     within = reads.entering(step, read.rules().symbols(),
                             read.rules().newtypes());
                 }

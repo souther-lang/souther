@@ -6,6 +6,7 @@ import souther.compiler.check.NonAffineOperation;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -2350,28 +2351,66 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         };
     }
 
-    /** The parts of {@code all} that are not the cases an arm is chosen by. */
-    private static List<Proposition> besideItsChosenCases(Proposition.All all) {
-        return all.parts().stream()
-                .filter(each -> !(each instanceof Proposition.InCases chosen && chosen.holds()))
-                .toList();
+    /**
+     * The relation each arm of {@code stated} states, where {@code stated} is the arms of one
+     * choice by cases; null where it is anything else.
+     *
+     * <p>Said of what the statement holds and not of how it is shaped: every part is one relation
+     * beside the cases of one subject that choose it, and no two parts choose a case in common.
+     * Those are the arms of a match as the language reads one — a value takes one arm — and what
+     * is left of an arm when its cases are taken away is the relation that arm states. A
+     * disjunction of two relations each beside cases of its own is not that unless the cases
+     * keep the arms apart: where two arms may both hold, the statement is not one arm's relation
+     * or the other's, and the cases cannot be taken away from either.
+     */
+    static List<Proposition> armsOfAChoice(Proposition stated) {
+        if (!(stated instanceof Proposition.Any any) || any.parts().isEmpty()) {
+            return null;
+        }
+        DecisionSubject chosenOn = null;
+        List<CasesLeft> taken = new ArrayList<>();
+        List<Proposition> relations = new ArrayList<>();
+        for (Proposition part : any.parts()) {
+            if (!(part instanceof Proposition.All all)) {
+                return null;
+            }
+            Proposition.InCases cases = null;
+            Proposition relation = null;
+            for (Proposition each : all.parts()) {
+                if (each instanceof Proposition.InCases chosen && chosen.holds()
+                        && cases == null) {
+                    cases = chosen;
+                } else if (relation == null) {
+                    relation = each;
+                } else {
+                    return null;
+                }
+            }
+            if (cases == null || relation == null
+                    || (chosenOn != null && !chosenOn.equals(cases.of()))) {
+                return null;
+            }
+            for (CasesLeft before : taken) {
+                if (before.meet(cases.cases()) != null) {
+                    return null;
+                }
+            }
+            chosenOn = cases.of();
+            taken.add(cases.cases());
+            relations.add(relation);
+        }
+        return relations;
     }
 
     /**
      * What {@code stated} shows of the values it relates, one reading for each arm where it is the
-     * arms of a choice by cases — each part chosen by cases, and each such arm read as the relation
-     * it is beside them — and the one reading of the statement as it stands anywhere else.
+     * arms of one choice by cases ({@link #armsOfAChoice}), and the one reading of the statement
+     * as it stands anywhere else.
      */
     private static List<UndividedByARelation> ofEachArm(Proposition stated) {
-        if (stated instanceof Proposition.Any any && !any.parts().isEmpty()
-                && any.parts().stream().allMatch(each -> each instanceof Proposition.All all
-                        && besideItsChosenCases(all).size() == 1
-                        && all.parts().size() > 1)) {
-            return any.parts().stream()
-                    .map(each -> oneValue(besideItsChosenCases((Proposition.All) each).getFirst()))
-                    .toList();
-        }
-        return List.of(oneValue(stated));
+        List<Proposition> arms = armsOfAChoice(stated);
+        return arms == null ? List.of(oneValue(stated))
+                : arms.stream().map(Cutting::oneValue).toList();
     }
 
     /**
@@ -2417,17 +2456,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // Which of the elements holding a value is the one meant names no place beside the
             // value's own, which the sameness has already filed.
             case Proposition.LastToHold _ -> true;
+            case Proposition.All all -> all.parts().stream().allMatch(each -> relates(each, out));
             // The cases an arm is chosen by say which arm's relation holds and relate nothing of
-            // their own: the match chooses them, and dividing its subject by case is its rule. Only
-            // beside a relation they choose, since a statement of the cases alone divides.
-            case Proposition.All all -> {
-                List<Proposition> relating = besideItsChosenCases(all);
-                // Cases that choose an arm say nothing beside what they choose, which the relation
-                // beside them is.
-                yield (!relating.isEmpty() || all.parts().isEmpty())
-                        && relating.stream().allMatch(each -> relates(each, out));
+            // their own: the match chooses them, and dividing its subject by case is its rule. So
+            // of the arms of one choice it is the relation of each that is asked.
+            case Proposition.Any any -> {
+                List<Proposition> arms = armsOfAChoice(any);
+                yield (arms == null ? any.parts() : arms).stream()
+                        .allMatch(each -> relates(each, out));
             }
-            case Proposition.Any any -> any.parts().stream().allMatch(each -> relates(each, out));
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().allMatch(each -> relates(each, out));
             case Proposition.WhereItAnswers where ->

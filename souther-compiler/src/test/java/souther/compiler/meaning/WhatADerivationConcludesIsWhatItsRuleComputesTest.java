@@ -278,6 +278,44 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     }
 
     /**
+     * An arm is left out only where the call's position narrows the very subject the arm selects:
+     * one written under a case of its holder, {@code r.q@Hot.flag}, and the one a match selects,
+     * {@code r.q.flag}, may be one value through a name the cases share, and neither is shown
+     * apart from the other. An arm that may take a value of the call is held to the call's
+     * position, whichever way the position says it narrows.
+     */
+    @Test
+    void anArmASharedNameMayTakeIsHeldToTheCallsPosition() {
+        LawProposition.SomeElement<?> some =
+                (LawProposition.SomeElement<?>) lawOf(LIST_ANY, AnswerAspect.TRUTH);
+        LawProposition.Observed<?> observed = (LawProposition.Observed<?>) some.ofTheElement();
+        TermPath flag = TermPath.of("r").then("q").then("flag");
+        TermPath underACase = TermPath.of("r").then("q").refine(casesOf(HOT)).then("flag")
+                .refine(casesOf(WARM));
+        TermPath onTheSubject = flag.refine(casesOf(WARM));
+        Function<TermPath, Derivation> readAt = at -> new Derivation.SomeElementMeeting(
+                new DecisionSubject.AnInput(at),
+                new Derivation.OnTheSideALawNames(observed, truthAt(at.element())), true,
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
+        BiFunction<TermPath, TermPath, Derivation> readInTwoArms = (inWarm, inCold) ->
+                new Derivation.ALawQuantifies(some, new Derivation.MatchArms(List.of(
+                        new Derivation.MatchArms.Arm(casesAt(flag, WARM), readAt.apply(inWarm)),
+                        new Derivation.MatchArms.Arm(casesAt(flag, COLD), readAt.apply(inCold)))));
+        // Narrowing the subject itself leaves the arm of another case out: it reads what it likes.
+        Derivation.TheCall onTheSubjectsPosition = callOf(LIST_ANY, some.container(), onTheSubject);
+        assertDoesNotThrow(() -> new Derivation.ByALaw(onTheSubjectsPosition, AnswerAspect.TRUTH,
+                readInTwoArms.apply(onTheSubject, YS)));
+        // Narrowing it under a case of its holder shows neither arm apart: each is held.
+        Derivation.TheCall underACasesPosition = callOf(LIST_ANY, some.container(), underACase);
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
+                underACasesPosition, AnswerAspect.TRUTH, readInTwoArms.apply(underACase, YS)));
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
+                underACasesPosition, AnswerAspect.TRUTH, readInTwoArms.apply(YS, underACase)));
+        assertDoesNotThrow(() -> new Derivation.ByALaw(underACasesPosition, AnswerAspect.TRUTH,
+                readInTwoArms.apply(underACase, underACase)));
+    }
+
+    /**
      * A lookup finding something across the lists of an outer list is a reading of the key the call
      * was handed: how often another key occurs is no reading of what {@code Map.get} states of
      * this one, though the two are counted the same way over the same lists.
