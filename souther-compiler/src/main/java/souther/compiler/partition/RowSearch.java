@@ -215,22 +215,57 @@ public final class RowSearch {
     private static void addHoldingOne(Type type, RuleReadingContext reading,
                                       List<FixtureTemplate> into) {
         RuleReadingSource source = reading.source();
-        List<FixtureTemplate> holding = new ArrayList<>();
         switch (TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums())) {
-            case Shape.Sequence sequence ->
-                    Partitions.representativesOf(sequence.element(), reading).values()
-                            .forEach(one -> holding.add(FixtureTemplate.collection(List.of(one))));
-            case Shape.Mapping mapping -> {
-                List<FixtureTemplate> values =
-                        Partitions.representativesOf(mapping.value(), reading).values();
-                Partitions.representativesOf(mapping.key(), reading).values().forEach(key ->
-                        values.forEach(value -> holding.add(FixtureTemplate.collection(
-                                List.of(FixtureTemplate.entry(key, value))))));
-            }
+            case Shape.Sequence sequence -> addEachHoldingOne(
+                    Partitions.representativesOf(sequence.element(), reading).values(), into);
+            case Shape.Mapping mapping -> addEachHoldingOneEntry(
+                    Partitions.representativesOf(mapping.key(), reading).values(),
+                    Partitions.representativesOf(mapping.value(), reading).values(), into);
             default -> { }
         }
-        holding.stream().filter(one -> !into.contains(one)).forEach(into::add);
+    }
+
+    /** Adds to {@code into} a collection of each of {@code elements}, each once, as far as there
+     *  is room ({@link #hasRoom}). */
+    static void addEachHoldingOne(List<FixtureTemplate> elements, List<FixtureTemplate> into) {
+        for (FixtureTemplate one : elements) {
+            if (!hasRoom(into)) {
+                return;
+            }
+            addOnce(FixtureTemplate.collection(List.of(one)), into);
+        }
+    }
+
+    /** Adds to {@code into} a collection of the entry of each key and each value, each once, as
+     *  far as there is room ({@link #hasRoom}): the pairs are made one at a time, and none is made
+     *  past the room. */
+    static void addEachHoldingOneEntry(List<FixtureTemplate> keys, List<FixtureTemplate> values,
+                                       List<FixtureTemplate> into) {
+        for (FixtureTemplate key : keys) {
+            for (FixtureTemplate value : values) {
+                if (!hasRoom(into)) {
+                    return;
+                }
+                addOnce(FixtureTemplate.collection(List.of(FixtureTemplate.entry(key, value))),
+                        into);
+            }
+        }
+    }
+
+    private static void addOnce(FixtureTemplate one, List<FixtureTemplate> into) {
+        if (hasRoom(into) && !into.contains(one)) {
+            into.add(one);
+        }
+    }
+
+    /**
+     * Whether one more candidate is worth building: the search tries {@link #MOST_VALUES} of them
+     * and one past that says the figure was passed ({@link #upTo}), so a producer stops building
+     * where this is false, and the figure is said by what it handed on.
+     */
+    static boolean hasRoom(List<?> candidates) {
+        return candidates.size() <= MOST_VALUES;
     }
 
     /** As many of {@code values} as the search tries, first first, with the figure added to

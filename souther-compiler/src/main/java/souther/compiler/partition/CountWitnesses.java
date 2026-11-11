@@ -390,8 +390,11 @@ public final class CountWitnesses {
                     source.symbols(), source.kinds(), source.sums()), source.symbols(),
                     source.kinds(), source.sums()).size();
             List<FixtureTemplate> values = new ArrayList<>(Witnesses.distinctValuesOf(type,
-                    Math.max(2, divided), reading, Set.of()).values());
+                    valuesAskedOfAType(divided), reading, Set.of()).values());
             for (ValuesAStatementNames.Named each : named.getOrDefault(place, List.of())) {
+                if (!RowSearch.hasRoom(values)) {
+                    break;
+                }
                 FixtureTemplate written = switch (each) {
                     case ValuesAStatementNames.Named.Numeric number ->
                             Partitions.writtenNumberAt(type, number.at(), reading);
@@ -403,7 +406,7 @@ public final class CountWitnesses {
                 }
             }
             if (!values.isEmpty()) {
-                told.putIfAbsent(fields, values);
+                told.putIfAbsent(fields, RowSearch.upTo(values, stopped));
             }
         }
         List<FixtureTemplate> out = new ArrayList<>(tried);
@@ -416,6 +419,15 @@ public final class CountWitnesses {
             }
         }
         return out;
+    }
+
+    /**
+     * How many values are asked of a type that divides its values into {@code divided} kinds: one
+     * of each, and two at least, since one a statement holds of and one it fails of is what is
+     * looked for — and no more than one past the figure, which says it was passed.
+     */
+    static int valuesAskedOfAType(int divided) {
+        return Math.min(Math.max(2, divided), MOST_VALUES + 1);
     }
 
     /**
