@@ -1353,6 +1353,10 @@ final class Pullback {
                 anOperator(e, reads);
                 operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
             }
+            case Core.Binary quotient when quotient.op() == BinOp.DIV -> {
+                aQuotient(quotient, reads);
+                operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
+            }
             case Core.Construct construct -> {
                 aConstruction(construct, reads);
                 operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
@@ -1425,6 +1429,22 @@ final class Pullback {
         }
         WhereAnOperatorAnswers where = AffineForms.whereItAnswers(operator);
         operated.tell(operator, new Answers.AsAnOperator(form, where));
+    }
+
+    /**
+     * {@code quotient}, told where its divisor is a number the arithmetic composes into a form, as
+     * its own account says it answers ({@link WhereAnOperatorAnswers}): where that divisor is not
+     * nought. What it answers is no form of the input and is not told; what it is asked of is the
+     * divisor, so the form told is the divisor's. A divisor the arithmetic does not compose is
+     * left to what may end a run ({@link #leaveUnsaidWhatMayEndARunUnder}).
+     */
+    private void aQuotient(Core.Binary quotient, InputReads reads) {
+        if (!(AffineForms.outcome(quotient.right(), reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var divisor))) {
+            return;
+        }
+        operated.tell(quotient, new Answers.AsAnOperator(divisor,
+                WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type())));
     }
 
     /** The number {@code e} comes to where no number of the input is in it, written out as the
@@ -2021,7 +2041,8 @@ final class Pullback {
      * of a newtype, what its rules leave it, which meets what the arithmetic composes where it
      * composes the number as a place ({@link DeclaredBounds#ofTheValueReadOff}); and a sum, a
      * difference, a product or a negation of numbers each of which is known, where the arithmetic
-     * composes it as no form.
+     * composes it as no form; and a quotient by a whole number, which lies no farther from nought
+     * than what it divides ({@link FormRange#quotientByAWholeNumber}).
      */
     private FormRange exactRangeOf(Core e, InputReads reads) {
         DeclaredBounds.Range leftByTheRules = DeclaredBounds.ofTheValueReadOff(e, read.rules(),
@@ -2062,6 +2083,10 @@ final class Pullback {
         if (here instanceof Core.If || here instanceof Core.Match
                 || here instanceof Core.IfConstructed) {
             return exactRangeOfTheArms(Choice.of(here), reads);
+        }
+        if (here instanceof Core.Binary quotient && quotient.op() == BinOp.DIV
+                && quotient.right().type() == Type.INT) {
+            return FormRange.quotientByAWholeNumber(exactRangeOf(quotient.left(), reads));
         }
         if (!isAnOperator(here)) {
             return null;
@@ -8760,7 +8785,8 @@ final class Pullback {
             LinearForm<Quantity> form();
         }
 
-        /** As {@code where} says, of the number the operator comes to, which is {@code form}. */
+        /** As {@code where} says, of {@code form}: the number the operator comes to, and for a
+         *  quotient its divisor, which is the number its answer is asked of. */
         record AsAnOperator(LinearForm<Quantity> form, WhereAnOperatorAnswers where)
                 implements ByTheFormOfANumber {}
 
@@ -8808,8 +8834,8 @@ final class Pullback {
     /**
      * Where each of {@code operated} answers, as the language says it does
      * ({@link WhereAnOperatorAnswers}): an {@code Int} sum where the number it comes to is one an
-     * {@code Int} holds. A run working a side out stops at the first that does not, and the
-     * comparison comes out no way there.
+     * {@code Int} holds, and a quotient where its divisor is not nought. A run working a side out
+     * stops at the first that does not, and the comparison comes out no way there.
      *
      * <p>Only what is said over these numbers. An operator whose region is not said is left where
      * nothing here says it.
@@ -8844,6 +8870,8 @@ final class Pullback {
             ConstantComparison held = switch (over) {
                 case Answers.AsAnOperator(_, WhereAnOperatorAnswers.Everywhere _) ->
                         new ConstantComparison.Settled(true);
+                case Answers.AsAnOperator(_, WhereAnOperatorAnswers.WhereTheDivisorIsNotNought _) ->
+                        new ConstantComparison.Against(Rel.NE, ExactRatio.ZERO);
                 case Answers.AsAnOperator(_,
                         WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest)) ->
                         ConstantComparison.both(

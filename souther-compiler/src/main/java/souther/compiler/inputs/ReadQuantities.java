@@ -244,6 +244,10 @@ final class ReadQuantities implements Quantities {
      *  the reading it is asked of: what it answers is this reading's alone, fixings included. */
     private final Map<NumericTerm, Optional<NumericDomain.Bounds>> wholeRuns =
             new ConcurrentHashMap<>();
+    /** The same, of the runs shown whole but for the values held away from them
+     *  ({@link #wholeRunBesidesItsHolesOf}). */
+    private final Map<NumericTerm, Optional<NumericDomain.RunBesidesItsHoles>> runsBesidesHoles =
+            new ConcurrentHashMap<>();
     /**
      * Where each form this reading has been asked about runs ({@link #projectionOf}), by the
      * question, worked out once for the reading it is asked of: fixings and what was taken in are
@@ -2553,6 +2557,40 @@ final class ReadQuantities implements Quantities {
             wholeRuns.put(term, had);
         }
         return had.orElse(null);
+    }
+
+    /**
+     * A run of {@code term} and the values the rules hold it away from, every value of the run
+     * but those being one the rules leave it — or null where that is not shown
+     * ({@link NumericDomain#wholeRunBesidesItsHolesOf}).
+     *
+     * <p>Read as {@link #wholeRunOf} reads, but only where the containers it walks hold something
+     * or none the one way: a run across several ways is one run only where each way's run is, and
+     * a hole of one way is no hole of another.
+     */
+    NumericDomain.RunBesidesItsHoles wholeRunBesidesItsHolesOf(NumericTerm term) {
+        Optional<NumericDomain.RunBesidesItsHoles> had = runsBesidesHoles.get(term);
+        if (had == null) {
+            had = Optional.ofNullable(runShownWholeBesidesItsHoles(term));
+            runsBesidesHoles.put(term, had);
+        }
+        return had.orElse(null);
+    }
+
+    private NumericDomain.RunBesidesItsHoles runShownWholeBesidesItsHoles(NumericTerm term) {
+        if (!(asking(List.of(term))
+                instanceof StructuralContext.Merge.Together(StructuralContext under))) {
+            return null;
+        }
+        List<StructuralContext> ways = eitherWay(under, List.of(term));
+        if (ways.size() != 1) {
+            return null;
+        }
+        StructuralContext only = ways.getFirst();
+        ConstraintState<InputAtom> rules = insideItsOrder(
+                holding(effectiveConstraints(only), term, only),
+                NumericTerms.ordered(List.of(term)), only);
+        return rules.numbers().wholeRunBesidesItsHolesOf(called(term, only));
     }
 
     private NumericDomain.Bounds runShownWhole(NumericTerm term) {

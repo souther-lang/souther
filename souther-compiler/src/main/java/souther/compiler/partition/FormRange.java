@@ -281,6 +281,21 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         return least == null ? null : new FormRange(least, greatest);
     }
 
+    /**
+     * The numbers a quotient by a whole number comes to where {@code dividend} holds what it
+     * divides, or null where those are not known. A whole number other than nought is at least one
+     * from nought, so no quotient lies farther from nought than the dividend does; a run whose
+     * divisor is nought stops and comes to none.
+     */
+    static FormRange quotientByAWholeNumber(FormRange dividend) {
+        if (dividend == null) {
+            return null;
+        }
+        ExactRatio below = dividend.least.negated();
+        ExactRatio farthest = below.compareTo(dividend.greatest) > 0 ? below : dividend.greatest;
+        return new FormRange(farthest.negated(), farthest);
+    }
+
     /** Whether every number this holds lies from {@code least} to {@code greatest}. */
     boolean liesWithin(BigInteger leastAllowed, BigInteger greatestAllowed) {
         return least.compareTo(ExactRatio.of(leastAllowed)) >= 0

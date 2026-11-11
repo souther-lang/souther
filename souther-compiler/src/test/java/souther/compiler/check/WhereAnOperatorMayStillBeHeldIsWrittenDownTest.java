@@ -199,6 +199,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.exactRangeOf",
                     "hands the operator a run works out to the arithmetic of the runs of its"
                             + " operands, where no form says what it comes to"),
+            new Held("souther.compiler.partition.Pullback.aQuotient",
+                    "which operand a quotient is asked of where it answers, the divisor, and that"
+                            + " it answers where that is not nought"),
             new Held("souther.compiler.partition.Pullback.theDivisorItAloneStopsOn",
                     "which operand of a quotient it stops a run on, the one it divides by and not"
                             + " the one it divides, where the operator's account says its divisor"

@@ -101,6 +101,16 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public NumericDomain.RunBesidesItsHoles wholeRunBesidesItsHolesOf(
+            NumericTerm.FromOnePosition term) {
+        if (term instanceof NumericTerm.ValueOf value
+                && !(classAt(value) instanceof HeldClass.None)) {
+            return null;
+        }
+        return within.wholeRunBesidesItsHolesOf(term);
+    }
+
+    @Override
     public HeldClass classAt(NumericTerm.ValueOf place) {
         return within.classAt(place);
     }

@@ -73,6 +73,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UsualPlace;
@@ -7546,6 +7547,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && source == null && each.number() instanceof NumericTerm.TakenOver over
                     ? steppedTotalOver(over, read, region, conditions, heldWhole,
                             carriers.get(i), working.partials())
+                    : realizes == null && source != null && way != Way.UNTOUCHED
+                    && each.number() instanceof NumericTerm.ValueOf value
+                    ? aRunBesidesItsHoles(value, source, answering, carriers.get(i), runsTo)
                     : null;
             // Where every total lies no lower than the least the term takes, it lies there.
             BigInteger leastTotal = stepped == null ? null : stepped.possible().least();
@@ -9445,6 +9449,49 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : ofTheElements(alone, counts, carrier,
                         !unitWeight && !atOneElement.contains(over));
         return totals == null || unitWeight ? totals : totals.meet(stated.run());
+    }
+
+    /**
+     * The whole numbers {@code value} is shown to take where the region holds it away from some
+     * ({@link SearchRegion#apartAt}) and shows the run it would otherwise take whole — or null
+     * where none is shown. The numbers are that run but for the holes, which are no values it
+     * takes: an interval would say it took every one.
+     *
+     * <p>Only where the value takes every value its type holds, and on an order that steps by
+     * one. A hole that is no whole number is none of its values.
+     */
+    private static WhatARelationLeavesUndivided.Term.Stepped aRunBesidesItsHoles(
+            NumericTerm.ValueOf value, Source source, SearchRegion region, Carrier carrier,
+            NumericDomain.Bounds runsTo) {
+        if (!source.takes().every() || spacingOf(carrier) != Granularity.DISCRETE) {
+            return null;
+        }
+        NumericDomain.RunBesidesItsHoles shown = region.wholeRunBesidesItsHolesOf(value);
+        if (shown == null) {
+            return null;
+        }
+        NumericDomain.Bounds run = withinTheEnds(asARelationReadsIt(shown.run(), carrier), runsTo);
+        if (run == null) {
+            return null;
+        }
+        List<ExactRatio> held = new ArrayList<>(shown.holes());
+        for (Place hole : region.apartAt(value).places()) {
+            if (!(hole instanceof Count count)) {
+                return null;
+            }
+            held.add(count.exactly());
+        }
+        List<BigInteger> holes = new ArrayList<>();
+        for (ExactRatio hole : held) {
+            if (hole.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger at)
+                    && ExactRatio.of(at).compareTo(hole) == 0) {
+                holes.add(at);
+            }
+        }
+        WholeNumberSet taken = WholeNumberSet.ofRuns(WholeNumberRuns.between(run.min(), run.max())
+                .and(WholeNumberRuns.of(holes).others()));
+        return taken.isNone() ? null
+                : new WhatARelationLeavesUndivided.Term.Stepped(taken, taken);
     }
 
     /**

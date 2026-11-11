@@ -1601,6 +1601,65 @@ public final class NumericDomain<A> {
     }
 
     /**
+     * A run of {@code atom} and the values the rules hold it away from, such that every value of
+     * the run but those is one the rules leave it — or null where that is not shown.
+     *
+     * <p>What {@link #wholeRunOf} answers of the rules without the disequalities over the atom
+     * alone, which are the values taken out of the run: a hole is no bound, and it does not tie
+     * the atom to any other. So it is only an atom no rule relates to another that has holes read
+     * apart, since a row that holds the others at the value a disequality of one of them refuses
+     * is no row.
+     *
+     * <p>Null where the atom has no hole, which is {@link #wholeRunOf}'s to say.
+     */
+    public RunBesidesItsHoles wholeRunBesidesItsHolesOf(A atom) {
+        List<ExactRatio> holes = new ArrayList<>();
+        StatedRules<A> without = StatedRules.none();
+        for (AffineConstraint<A> rule : stated.distinct()) {
+            List<A> over = rule.form().atomsIn(order);
+            if (over.contains(atom) && over.size() > 1) {
+                return null;
+            }
+            if (rule instanceof AffineConstraint.Disequality<A> hole && over.size() == 1
+                    && over.contains(atom)) {
+                ExactRatio weight = null;
+                for (Map.Entry<A, ExactRatio> entry : hole.form().entriesIn(order)) {
+                    if (entry.getKey().equals(atom)) {
+                        weight = entry.getValue();
+                    }
+                }
+                if (weight == null || !(hole.at().dividedBy(weight)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
+                    return null;
+                }
+                holes.add(at);
+            } else {
+                without = without.and(StatedRules.of(rule));
+            }
+        }
+        if (holes.isEmpty()) {
+            return null;
+        }
+        Bounds run = new NumericDomain<>(without, spaces, readARuleNothingSatisfies, order,
+                closedStates, null, null).wholeRunOf(atom);
+        return run == null ? null : new RunBesidesItsHoles(run, holes);
+    }
+
+    /**
+     * A run of an atom and the values the rules hold it away from: every value of the run but
+     * those is one the rules leave the atom ({@link #wholeRunBesidesItsHolesOf}).
+     *
+     * @param run   the run, which the holes are in or outside of
+     * @param holes the values the atom is held away from
+     */
+    public record RunBesidesItsHoles(Bounds run, List<ExactRatio> holes) {
+
+        public RunBesidesItsHoles {
+            holes = List.copyOf(holes);
+        }
+    }
+
+    /**
      * Whether the rules are shown to leave {@code atom} the whole of its run: what
      * {@link #projectionCertification} asks of every rule, asked of the rules a chain of them
      * relates to the atom, and of the rest only that they leave some value.
