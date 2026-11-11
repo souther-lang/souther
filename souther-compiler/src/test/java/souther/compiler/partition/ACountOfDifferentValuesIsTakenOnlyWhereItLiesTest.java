@@ -9,6 +9,8 @@ import souther.compiler.numeric.NumericDomain;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -32,47 +34,112 @@ class ACountOfDifferentValuesIsTakenOnlyWhereItLiesTest {
                 most == null ? null : at(most));
     }
 
-    private static final List<Long> ENDS = Arrays.asList(null, 0L, 1L, 2L, 3L,
-            (long) Integer.MAX_VALUE);
+    /** The most elements a container is built of below, and so the most different values. */
+    private static final int MOST = 4;
 
-    /** Whether {@code inner} lies within {@code outer}, an absent end being no end. */
-    private static boolean within(NumericDomain.Bounds inner, NumericDomain.Bounds outer) {
-        boolean low = outer.min() == null
-                || (inner.min() != null && inner.min().at().compareTo(outer.min().at()) >= 0);
-        boolean high = outer.max() == null
-                || (inner.max() != null && inner.max().at().compareTo(outer.max().at()) <= 0);
-        return low && high;
+    /**
+     * Every count of different values among the elements the statement keeps that a container of
+     * between {@code least} and {@code most} elements holds, where the place has {@code values}
+     * different ones, each taken by an element that is kept and — where {@code someFail} — one more
+     * element the statement fails of: a list may hold an element over again, a set holds each once.
+     * The containers are listed whole, so what is reachable is read off them and off no claim.
+     */
+    private static Set<Integer> reachable(int values, int least, int most, boolean overAgain,
+                                          boolean someFail) {
+        int kinds = values + (someFail ? 1 : 0);
+        Set<Integer> out = new TreeSet<>();
+        for (int size = least; size <= Math.min(most, MOST); size++) {
+            fill(new int[kinds], 0, size, overAgain, values, out);
+        }
+        return out;
     }
 
+    /** Adds to {@code out} the count of different kept values of each way of putting {@code left}
+     *  more elements among the kinds from {@code from} on, kept ones first. */
+    private static void fill(int[] held, int from, int left, boolean overAgain, int values,
+                             Set<Integer> out) {
+        if (from == held.length) {
+            if (left == 0) {
+                int different = 0;
+                for (int kind = 0; kind < values; kind++) {
+                    different += held[kind] > 0 ? 1 : 0;
+                }
+                out.add(different);
+            }
+            return;
+        }
+        for (int each = 0; each <= (overAgain ? left : Math.min(1, left)); each++) {
+            held[from] = each;
+            fill(held, from + 1, left - each, overAgain, values, out);
+        }
+        held[from] = 0;
+    }
+
+    private static final List<Long> VALUES = Arrays.asList(null, 0L, 1L, 2L, 3L);
+
+    private static final List<Long> MOSTS = Arrays.asList(null, 0L, 1L, 2L, 3L);
+
+    /**
+     * What a count is shown to take is a count some container holds, and what a count may be is
+     * lied in: asked of every way the number of values the place has, the number of elements a
+     * container may hold, whether it may hold one over again and what is asked of an element can
+     * be, against the containers listed whole. Where the values counted are not all of them, there
+     * may be more than are shown, and what a container may hold is the same however many.
+     */
     @Test
-    void whatACountIsShownToTakeLiesWhereItLiesWhateverThePiecesAre() {
-        List<String> outside = new ArrayList<>();
-        for (Long values : ENDS) {
-            for (Long mayLeast : ENDS) {
-                for (Long mayMost : ENDS) {
-                    for (Long heldMost : ENDS) {
-                        for (int flags = 0; flags < 16; flags++) {
-                            boolean overAgain = (flags & 1) != 0;
-                            boolean everyElement = (flags & 2) != 0;
-                            boolean someFail = (flags & 4) != 0;
-                            boolean allValues = (flags & 8) != 0;
-                            UndividedByARelation.CountTakes taken =
-                                    UndividedByARelation.differentTakes(
-                                            values == null ? null : at(values), allValues,
-                                            between(mayLeast == null ? 0L : mayLeast, mayMost),
-                                            between(0L, heldMost), overAgain, everyElement,
-                                            someFail);
-                            if (taken != null && taken.takes().holdsAValue()
-                                    && !within(taken.takes(), taken.lies())) {
-                                outside.add(values + "/" + mayLeast + ".." + mayMost + "/"
-                                        + heldMost + "/" + flags + ": " + taken);
+    void whatACountIsShownToTakeIsOneSomeContainerHoldsAndLiesWhereItMayBe() {
+        List<String> wrong = new ArrayList<>();
+        for (Long values : VALUES) {
+            for (int least = 0; least <= 2; least++) {
+                for (Long most : MOSTS) {
+                    if (most != null && most < least) {
+                        continue;
+                    }
+                    for (int flags = 0; flags < 16; flags++) {
+                        boolean overAgain = (flags & 1) != 0;
+                        boolean everyElement = (flags & 2) != 0;
+                        boolean someFail = (flags & 4) != 0;
+                        boolean allValues = (flags & 8) != 0;
+                        if (everyElement && someFail) {
+                            continue;
+                        }
+                        UndividedByARelation.CountTakes taken = UndividedByARelation.differentTakes(
+                                values == null ? null : at(values), allValues,
+                                between((long) least, most), between((long) least, most),
+                                overAgain, everyElement, someFail);
+                        int upTo = most == null ? MOST : (int) Math.min(most, MOST);
+                        // What a container may hold: as many values as there may be, and an
+                        // element the statement fails of wherever it is not said to keep every one.
+                        Set<Integer> possible = reachable(values == null || !allValues ? MOST
+                                : (int) (long) values, least, upTo, overAgain, !everyElement);
+                        // What the rows show: as many values as are shown to be there, and an
+                        // element the statement fails of only where one was found.
+                        Set<Integer> shown = reachable(values == null ? MOST : (int) (long) values,
+                                least, upTo, overAgain, someFail);
+                        if (taken == null) {
+                            continue;
+                        }
+                        for (int count = 0; count <= MOST; count++) {
+                            String at = values + "/" + least + ".." + most + "/" + flags + " at "
+                                    + count;
+                            if (contains(taken.takes(), count) && !shown.contains(count)) {
+                                wrong.add("takes a count no container holds: " + at);
+                            }
+                            if (possible.contains(count) && !contains(taken.lies(), count)) {
+                                wrong.add("lies short of a count a container holds: " + at);
                             }
                         }
                     }
                 }
             }
         }
-        assertEquals(List.of(), outside);
+        assertEquals(List.of(), wrong);
+    }
+
+    /** Whether {@code count} is in {@code bounds}, an absent end being no end. */
+    private static boolean contains(NumericDomain.Bounds bounds, int count) {
+        return (bounds.min() == null || bounds.min().at().compareTo(at(count).at()) <= 0)
+                && (bounds.max() == null || bounds.max().at().compareTo(at(count).at()) >= 0);
     }
 
     /**

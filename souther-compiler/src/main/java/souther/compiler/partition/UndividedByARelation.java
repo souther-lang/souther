@@ -5746,7 +5746,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             NumericDomain.Bounds mayBeHeld = howManyMayBeHeld(container, read, along);
             CountTakes taken = counted instanceof Quantity.HowManyMeet
                     ? countTakes(mayBeHeld, held, shown.overAgain())
-                    : differentTakes(counted, container, mayBeHeld, held, shown, read);
+                    : differentTakesOf(counted, container, mayBeHeld, held, shown, read);
             if (taken == null) {
                 continue;
             }
@@ -5831,8 +5831,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * What a count of the different values the elements of {@code container} hold at one place
      * is, of a container that {@code mayBeHeld} says how many it may hold and a row shows
-     * {@code areHeld} of ({@link #differentTakes(Endpoint, NumericDomain.Bounds,
-     * NumericDomain.Bounds, boolean, boolean, boolean)} says what that comes to).
+     * {@code areHeld} of ({@link #differentTakes} says what that comes to).
      *
      * <p>Only where each value the place takes is taken by some element beside whatever the
      * elements are kept by: no rule keeps the elements of the container apart, and none relates
@@ -5840,10 +5839,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * that a value the statement keeps is one any other element may hold. Null where that is not
      * shown.
      */
-    private static CountTakes differentTakes(Quantity.CountedOverAContainer counted,
-                                             TermPath container, NumericDomain.Bounds mayBeHeld,
-                                             NumericDomain.Bounds areHeld,
-                                             CountWitnesses.Witness shown, InputReading read) {
+    private static CountTakes differentTakesOf(Quantity.CountedOverAContainer counted,
+                                               TermPath container, NumericDomain.Bounds mayBeHeld,
+                                               NumericDomain.Bounds areHeld,
+                                               CountWitnesses.Witness shown, InputReading read) {
         CountWitnesses.Asked asked = CountWitnesses.Asked.of(counted);
         if (asked == null || !(asked.differentAt().orElse(null) instanceof
                 Quantity.TheValue.AtAPlace(DecisionSubject.AnInput(TermPath place, var _)))) {

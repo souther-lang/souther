@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A row of a behavior's inputs at which a counted statement holds of one element of the container
@@ -309,11 +310,21 @@ public final class CountWitnesses {
         List<FixtureTemplate> tried = elementsTried(element, container, asked, inputs, built,
                 reading, building, written, stopped);
         boolean ofValues = asked.differentAt().isPresent();
+        // A pair is a witness only once the container holds it, the statement tells it apart as
+        // the count asks, and a run of the row it makes gets to the comparison: the three are one
+        // question of one pair, so a pair that fails the last is no reason to look at no other.
+        Predicate<List<FixtureTemplate>> getsThere = pair -> {
+            RowSearch.Run ran = running.run(rowHolding(row, container, pair));
+            if (!ran.getsThere()) {
+                ran.stopped().ifPresent(runs::add);
+            }
+            return ran.getsThere();
+        };
         List<FixtureTemplate> both = ofValues
                 ? twoThatDiffer(tried, container, asked.differentAt().get(), built, inputs,
-                        statement, building, stopped)
+                        statement, building, getsThere, stopped)
                 : oneKeptAndOneDropped(tried, container, built, inputs, statement, building,
-                        stopped);
+                        getsThere, stopped);
         if (both == null) {
             return Optional.empty();
         }
@@ -322,15 +333,16 @@ public final class CountWitnesses {
         FixtureTemplate failing = ofValues
                 ? aFailingElement(tried, container, built, inputs, statement, building)
                 : both.getLast();
+        return Optional.of(new Witness(rowHolding(row, container, both), container.at(),
+                both.getFirst(), both.getLast(), failing, container.overAgain()));
+    }
+
+    /** {@code row} with the container holding {@code elements}. */
+    private static List<FixtureTemplate> rowHolding(List<FixtureTemplate> row, Container container,
+                                                    List<FixtureTemplate> elements) {
         List<FixtureTemplate> shown = new ArrayList<>(row);
-        shown.set(container.at(), container.holding(both));
-        RowSearch.Run ran = running.run(shown);
-        if (!ran.getsThere()) {
-            ran.stopped().ifPresent(runs::add);
-            return Optional.empty();
-        }
-        return Optional.of(new Witness(shown, container.at(), both.getFirst(), both.getLast(),
-                failing, container.overAgain()));
+        shown.set(container.at(), container.holding(elements));
+        return shown;
     }
 
     /**
@@ -361,6 +373,8 @@ public final class CountWitnesses {
                                                               BehaviorInputs inputs,
                                                               AStatementAtARow statement,
                                                               RowSearch.Building building,
+                                                              Predicate<List<FixtureTemplate>>
+                                                                      getsThere,
                                                               Set<Figure> stopped) {
         List<FixtureTemplate> kept = new ArrayList<>();
         List<FixtureTemplate> dropped = new ArrayList<>();
@@ -377,21 +391,38 @@ public final class CountWitnesses {
                 dropped.add(each);
             }
         }
-        // Two that the statement tells apart are no two the container holds: what it asks of the
-        // elements it holds together is its own, so each pair is asked of it, in the order the
-        // elements were tried and held to the figure they are tried to. Where the figure stops the
-        // asking it is said, and nothing is shown that the pairs left unasked would.
+        return firstPairThat(kept, dropped, false, pair -> {
+            Integer meet = metIn(pair, container, built, inputs, statement, building);
+            return meet != null && meet == 1 && getsThere.test(pair);
+        }, stopped);
+    }
+
+    /**
+     * The first pair of an element of {@code ones} and one of {@code others} — two of {@code ones}
+     * where {@code ofOne}, the earlier first — that {@code holds} of, in the order the elements were
+     * tried, or null where none does.
+     *
+     * <p>A pair is a witness only where everything that is asked of it holds of it together: that
+     * the container holds the two, that they are what the count tells apart, that a run of the row
+     * they make gets to the comparison. What the container asks of the elements it holds together
+     * is its own, and a run is of the row and not of each, so the whole of it is the one question
+     * {@code holds} answers, and a pair that fails any part is no reason to look at no other. Held
+     * to the figure the elements are tried to; where the figure stops the asking it is said, and
+     * nothing is shown that the pairs left unasked would.
+     */
+    static <T> List<T> firstPairThat(List<T> ones, List<T> others, boolean ofOne,
+                                     Predicate<List<T>> holds, Set<Figure> stopped) {
         int asked = 0;
-        for (FixtureTemplate one : kept) {
-            for (FixtureTemplate other : dropped) {
+        for (int one = 0; one < ones.size(); one++) {
+            for (int other = ofOne ? one + 1 : 0; other < (ofOne ? ones : others).size();
+                    other++) {
                 if (asked++ >= MOST_VALUES) {
                     stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
                     return null;
                 }
-                List<FixtureTemplate> both = List.of(one, other);
-                Integer meet = metIn(both, container, built, inputs, statement, building);
-                if (meet != null && meet == 1) {
-                    return both;
+                List<T> pair = List.of(ones.get(one), (ofOne ? ones : others).get(other));
+                if (holds.test(pair)) {
+                    return pair;
                 }
             }
         }
@@ -411,6 +442,7 @@ public final class CountWitnesses {
                                                        BehaviorInputs inputs,
                                                        AStatementAtARow statement,
                                                        RowSearch.Building building,
+                                                       Predicate<List<FixtureTemplate>> getsThere,
                                                        Set<Figure> stopped) {
         List<FixtureTemplate> kept = new ArrayList<>();
         for (FixtureTemplate each : tried) {
@@ -419,26 +451,11 @@ public final class CountWitnesses {
                 kept.add(each);
             }
         }
-        // Two that differ are no two the container holds: what it asks of the elements it holds
-        // together is its own, so each pair is asked of it, the first element's with the others
-        // before any other, and held to the figure the elements are tried to. Where the figure
-        // stops the asking, it is said, and nothing is shown that the pairs left unasked would.
-        int asked = 0;
-        for (int one = 0; one < kept.size(); one++) {
-            for (int other = one + 1; other < kept.size(); other++) {
-                if (asked++ >= MOST_VALUES) {
-                    stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
-                    return null;
-                }
-                List<FixtureTemplate> both = List.of(kept.get(one), kept.get(other));
-                Integer different = differentIn(both, container, at, built, inputs, statement,
-                        building);
-                if (different != null && different == 2) {
-                    return both;
-                }
-            }
-        }
-        return null;
+        return firstPairThat(kept, kept, true, pair -> {
+            Integer different = differentIn(pair, container, at, built, inputs, statement,
+                    building);
+            return different != null && different == 2 && getsThere.test(pair);
+        }, stopped);
     }
 
     /**

@@ -944,25 +944,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the ways the places a statement reads can be at the values it"
                             + " names, made one at a time, and adds the figure to what the search"
                             + " came to"),
-            Map.entry("souther.compiler.partition.CountWitnesses#oneKeptAndOneDropped("
-                            + "Ljava/util/List;Lsouther/compiler/partition/CountWitnesses$Container;"
-                            + "Ljava/util/List;Lsouther/compiler/partition/BehaviorInputs;"
-                            + "Lsouther/compiler/partition/AStatementAtARow;"
-                            + "Lsouther/compiler/partition/RowSearch$Building;Ljava/util/Set;)"
-                            + "Ljava/util/List;",
-                    "stops at the pairs of an element a statement holds of and one it fails of that"
-                            + " the container is asked to hold, and adds the figure to what the"
-                            + " search came to"),
-            Map.entry("souther.compiler.partition.CountWitnesses#twoThatDiffer("
-                            + "Ljava/util/List;Lsouther/compiler/partition/CountWitnesses$Container;"
-                            + "Lsouther/compiler/meaning/Quantity$TheValue;Ljava/util/List;"
-                            + "Lsouther/compiler/partition/BehaviorInputs;"
-                            + "Lsouther/compiler/partition/AStatementAtARow;"
-                            + "Lsouther/compiler/partition/RowSearch$Building;Ljava/util/Set;)"
-                            + "Ljava/util/List;",
-                    "stops at the pairs of elements the statement keeps that hold different values"
-                            + " that the container is asked to hold, and adds the figure to what"
-                            + " the search came to"),
+            Map.entry("souther.compiler.partition.CountWitnesses#firstPairThat("
+                            + "Ljava/util/List;Ljava/util/List;ZLjava/util/function/Predicate;"
+                            + "Ljava/util/Set;)Ljava/util/List;",
+                    "stops at the pairs of elements a count is told apart by that are asked of the"
+                            + " container and of a run, and adds the figure to what the search came"
+                            + " to"),
             Map.entry("souther.compiler.partition.CountWitnesses#collectionsTold("
                             + "Lsouther/compiler/types/Type;ZLjava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/check/DeclaredBounds$CountRange;"
