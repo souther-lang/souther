@@ -125,11 +125,13 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
     @Test
     void aCountIsReadAgainstANumberOnlyWhereTheContainerReachesEveryValueOfIt() {
         Map<String, Boolean> read = new LinkedHashMap<>();
+        read.put("capTwo", true);
         read.put("capOne", false);
         read.put("bools", true);
         read.put("one", false);
         read.put("codes", true);
         Map<String, String> held = new LinkedHashMap<>();
+        held.put("capTwo", "CapTwo, xs.value");
         held.put("capOne", "CapOne, xs.value");
         held.put("bools", "List<Bool>, xs");
         held.put("one", "List<One>, xs");
@@ -147,24 +149,55 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
                         invariant value == "x"
                     data Code = String
                         invariant String.matches("[A-Z]{3}", value)
+                    data CapTwo = List<String>
+                        invariant List.length(value) <= 2
                     data CapOne = List<String>
                         invariant List.length(value) <= 1
 
-                    behavior %1$s : (xs: %2$s, k: K) -> Bool
-                    let %1$s (xs, k) = Set.size(Set.fromList(%3$s)) == k.value
+                    behavior %1$sCount : (xs: %2$s, k: K) -> Bool
+                    let %1$sCount (xs, k) = Set.size(Set.fromList(%3$s)) == k.value
                     """.formatted(name, type[0], type[1]), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             assertEquals(List.of(), compilation.errors().stream()
                     .map(each -> each.diagnostic().code()).toList(),
                     "the model under test compiles");
             PartitionEvidence evidence =
-                    compilation.db().ask(new Adequacy.Coverage("probe")).value().get(name);
+                    compilation.db().ask(new Adequacy.Coverage("probe")).value().get(name + "Count");
             assertNotNull(evidence, name);
             actual.put(name, evidence.notRead().stream().noneMatch(left ->
                     left.at().equals("k") && left.reason() == UndividedPosition.Reason
                             .RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE));
         }
         assertEquals(read, actual);
+    }
+
+    /**
+     * Two elements the statement keeps that hold different values are found, and a rule that
+     * leaves the kept elements short ids shows no more than that: the strings the type of the place
+     * has are not the values an element the statement keeps may hold, so the count is not shown at
+     * every value up to how many elements the container holds.
+     */
+    @Test
+    void aRuleThatTiesTheValuesToWhatTheStatementReadsLeavesTheCountUnread() {
+        Compilation compilation = Compilation.ofSource("""
+                module probe
+
+                data Short = { id: String, qty: Int }
+                    invariant qty <= 3 || String.length(id) <= 2
+
+                behavior shortCount : (xs: List<Short>, k: Int) -> Bool
+                let shortCount (xs, k) = Set.size(Set.fromList(List.map(p -> p.id,
+                        List.filter(p -> p.qty > 3, xs)))) == k
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        PartitionEvidence evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value().get("shortCount");
+        assertNotNull(evidence);
+        assertEquals(true, evidence.notRead().stream().anyMatch(left -> left.at().equals("k")
+                && left.reason()
+                        == UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE));
     }
 
     @Test
