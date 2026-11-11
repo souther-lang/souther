@@ -218,8 +218,12 @@ public final class RowSearch {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
-        Function<List<FixtureTemplate>, FixtureTemplate> holding =
-                elements -> WornNames.collectionHolding(view, elements, source);
+        // Whether the names can be written is the type's, so it is asked once and not after every
+        // candidate: a type whose names cannot be written has no candidate to enumerate.
+        if (!(WornNames.of(view.wrappers(), source) instanceof WornNames.Spelled spelled)) {
+            return;
+        }
+        Function<List<FixtureTemplate>, FixtureTemplate> holding = spelled::holding;
         switch (view.shape()) {
             case Shape.Sequence sequence -> addEachHoldingOne(
                     Partitions.representativesOf(sequence.element(), reading).values(), holding,
@@ -262,10 +266,9 @@ public final class RowSearch {
         }
     }
 
-    /** {@code one} added where there is room for it and it is not there, and nothing where it
-     *  could not be written (null). */
+    /** {@code one} added where there is room for it and it is not there. */
     private static void addOnce(FixtureTemplate one, List<FixtureTemplate> into) {
-        if (one != null && hasRoom(into) && !into.contains(one)) {
+        if (hasRoom(into) && !into.contains(one)) {
             into.add(one);
         }
     }

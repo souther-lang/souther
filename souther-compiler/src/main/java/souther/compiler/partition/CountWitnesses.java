@@ -136,8 +136,12 @@ public final class CountWitnesses {
         // The container as the parameter it is: a list a newtype wraps is written as the newtype.
         RuleReadingSource source = reading.source();
         TypeView parameter = inputs.viewOf(inputs.types().get(at));
-        Container holder = new Container(at, container,
-                elements -> WornNames.collectionHolding(parameter, elements, source));
+        // Whether its names can be written is the type's, so a container whose names cannot be has
+        // no row to show.
+        if (!(WornNames.of(parameter.wrappers(), source) instanceof WornNames.Spelled spelled)) {
+            return Sought.NOTHING;
+        }
+        Container holder = new Container(at, container, spelled::holding);
         Set<Figure> stopped = new LinkedHashSet<>();
         Set<WhereARunStopped> runs = new LinkedHashSet<>();
         // What each parameter may hold, as far as the boundary builds it: the container as what
@@ -234,7 +238,7 @@ public final class CountWitnesses {
         FixtureTemplate whole = container.holding().apply(both);
         List<FixtureTemplate> shown = new ArrayList<>(row);
         shown.set(container.at(), whole);
-        if (whole == null || meet == null || meet != 1) {
+        if (meet == null || meet != 1) {
             return Optional.empty();
         }
         RowSearch.Run ran = running.run(shown);
@@ -290,8 +294,7 @@ public final class CountWitnesses {
                                  List<ObservedValue> built, BehaviorInputs inputs,
                                  AStatementAtARow statement, RowSearch.Building building) {
         FixtureTemplate whole = container.holding().apply(elements);
-        Optional<ObservedValue> held =
-                whole == null ? Optional.empty() : building.build(container.at(), whole);
+        Optional<ObservedValue> held = building.build(container.at(), whole);
         if (held.isEmpty()) {
             return null;
         }
@@ -555,8 +558,7 @@ public final class CountWitnesses {
      *  parameter {@code at}, or null where it refuses it. */
     private static ObservedValue builtAlone(FixtureTemplate element, Container container,
                                             RowSearch.Building building) {
-        FixtureTemplate alone = container.holding().apply(List.of(element));
-        return alone == null ? null : building.build(container.at(), alone)
+        return building.build(container.at(), container.holding().apply(List.of(element)))
                 .map(held -> held instanceof ObservedValue.Sequence(List<ObservedValue> each)
                         && each.size() == 1 ? each.getFirst() : null)
                 .orElse(null);
@@ -568,8 +570,7 @@ public final class CountWitnesses {
      * @param at      which parameter it is
      * @param place   where it stands
      * @param holding the container holding the elements it is handed, as a value of the type of
-     *                the parameter — under the names that type wears — or null where one cannot be
-     *                written
+     *                the parameter, under the names that type wears
      */
     private record Container(int at, TermPath place,
                              Function<List<FixtureTemplate>, FixtureTemplate> holding) {}
