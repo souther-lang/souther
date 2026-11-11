@@ -133,24 +133,18 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      * relation turned where it is weighed by a number below nought: {@code 30 - 2 * (q + 1) > 0}
      * is {@code q < 14}, on each sign of the divisor.
      *
-     * <p>A quotient is a Rational, and the language states no place where a sum or a weight of one
-     * stops a run. The line on the dividend alone is drawn only for rows every operation is told
-     * to get past, so it is not drawn here; every other line is the quotient's.
+     * <p>A quotient is a Rational, and a sum or a weight of one is a Rational wherever its operands
+     * are, so it stops no run: every line is the quotient's, the one on the dividend alone among
+     * them.
      */
     @Test
     void aQuotientMovedAndWeighedByNumbersIsTheQuotientAgainstANumber() {
         for (String guard : List.of(ABOVE, BELOW)) {
-            assertEquals(withoutTheLineOnTheDividendAlone(borders(guard, "a.pay / b.days < 14")),
+            assertEquals(Set.copyOf(borders(guard, "a.pay / b.days < 14")),
                     Set.copyOf(borders(guard, "30 - 2 * (a.pay / b.days + 1) > 0")), guard);
-            assertEquals(withoutTheLineOnTheDividendAlone(borders(guard, "a.pay / b.days >= 14")),
+            assertEquals(Set.copyOf(borders(guard, "a.pay / b.days >= 14")),
                     Set.copyOf(borders(guard, "(a.pay / b.days + 1) / 3 >= 5")), guard);
         }
-    }
-
-    private static Set<String> withoutTheLineOnTheDividendAlone(List<String> lines) {
-        return lines.stream()
-                .filter(line -> !line.contains("OfACoordinate[behavior=f, term=a.pay"))
-                .collect(Collectors.toSet());
     }
 
     @Test

@@ -364,7 +364,7 @@ public final class ReportedReason {
             // Its own word and not the one above: what falls short is the values here getting to
             // the rule, and a reader looks at what the run works out before it.
             // Numbers of a run the relation settles in which no row is shown to get past the
-            // operations of decimals told are the same kind of thing: what falls short is values
+            // operations told are the same kind of thing: what falls short is values
             // getting to the rule, and no class is drawn over them.
             case BlockReason.RelationNotShownReachedAtEveryValue _,
                  BlockReason.RelationRowsNotShownComputed _ ->

@@ -266,7 +266,8 @@ public final class ExactDecimals {
 
     /**
      * The sum of {@code a} and {@code b} at the scale the run time gives it, or null where the
-     * representation has no room for it. The run time's {@code +} is this, and aborts on null.
+     * representation has no room for it. The run time's {@code +} is this, and on null it is short
+     * of room: the sum is a {@code Decimal} all the same.
      */
     public static BigDecimal sumWhereThereIsRoom(BigDecimal a, BigDecimal b) {
         try {
@@ -289,8 +290,8 @@ public final class ExactDecimals {
      * The product of {@code a} and {@code b} at the scale the run time gives it, which is the sum
      * of the factors' scales, or null where the representation has no room for it.
      *
-     * <p>That sum is worked out first, and a product whose scale no {@code Decimal} holds has no
-     * room whatever its value is. Asked first, {@code BigDecimal} answers some such products
+     * <p>That sum is worked out first, and a product whose scale no {@code BigDecimal} keeps has
+     * no room whatever its value is. Asked first, {@code BigDecimal} answers some such products
      * instead of refusing them — a nought factor on the left is multiplied at a scale moved back
      * into range, and the same factor on the right is refused — so {@code a * b} and {@code b * a}
      * would differ. A refusal that still comes back is the representation having no room for the

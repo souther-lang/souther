@@ -2141,16 +2141,16 @@ final class BodyGen {
                 // §an-operator-takes-the-types-it-is-defined-for). The two arms below are the
                 // carriers' kernels and so are reached by the first two; arithmetic any Rational
                 // takes part in is exact and went to the arm above. Int aborts on overflow, and `/`
-                // aborts on a zero divisor; Decimal aborts at the ends of the scale range, and `/`
-                // over two of them answers an exact quotient that leaves the type and aborts on a
-                // zero divisor as well. Case handling for a zero divisor is the divide/remainder
-                // functions, not the operator.
+                // aborts on a zero divisor; a Decimal sum, difference or product always has an
+                // answer, and `/` over two of them answers an exact quotient that leaves the type
+                // and aborts on a zero divisor as well. Case handling for a zero divisor is the
+                // divide/remainder functions, not the operator.
                 //
                 // Both go through the runtime that owns the arithmetic — IntMath and DecimalMath —
-                // rather than to a host method. What an operator means is the runtime's, and calling
-                // BigDecimal here is what let a scale overflow leave a behavior as a
-                // java.lang.ArithmeticException (ADR-0112, issue #976). This said "Decimal does not
-                // overflow", which is not true of a sum, a difference or a product either.
+                // rather than to a host method. What an operator means is the runtime's: a
+                // BigDecimal has no place for an answer past its scales and reports it as a
+                // java.lang.ArithmeticException, which DecimalMath says as the run having no room
+                // to write it (ADR-0112).
                 //
                 // One arm each, and the runtime's method named in it. Read off the operator a
                 // second time inside a single arm, the last of the four is whatever is left over,

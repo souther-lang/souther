@@ -30,16 +30,17 @@ import java.util.function.LongConsumer;
  * being a value of the language and saying its failures in the language's terms.
  *
  * <p><b>Why the exponents are sixty-four bits.</b> Every {@code Int} and every {@code Decimal} has one
- * exact value here, and that is a rule rather than a range this type happens to cover (ADR-0116). What a
- * computation can ask for past this width aborts, as an {@code Int}'s overflow does (spec §jvm-abort).
+ * exact value here, and that is a rule rather than a range this type happens to cover (ADR-0116). The
+ * width is this representation's and bounds no value: a {@code Rational} is any rational number (spec
+ * §stdlib-rational), and an answer whose exponents are past sixty-four bits is one this run has no place
+ * to write.
  *
- * <p><b>Two failures, told apart.</b> An operation aborts where the answer has no representation, as a
- * {@link ConstraintViolation}. Where the run had no room for an instrument the answer needed, it fails as
- * {@link OutOfRoom}, and a platform that supplies what the decision wanted answers the same pair. Room is
- * what the platform supplies and not memory alone — how large a whole number its arithmetic builds is one
- * of the things a width can want more of. Being ordered is a fact about this type, so what a heap's size
- * may not decide is whether a {@code sort} over these is admitted and what it means, as against whether
- * one run of it finishes, which is what any operation is subject to.
+ * <p><b>What is left to fail is the run.</b> Where an answer has no representation here, or the run had no
+ * room for an instrument the answer needed, it fails as {@link OutOfRoom}, and a platform that supplies
+ * what the computation wanted answers. Room is what the platform supplies and not memory alone — how
+ * large a whole number its arithmetic builds, and how wide an exponent its representation keeps, are
+ * things a computation can want more of. A {@link ConstraintViolation} is left for what the language
+ * itself refuses: a zero divisor of {@code /}, and a narrowing to an {@code Int} no {@code Int} holds.
  *
  * <p><b>The host's own limits leave by this type's abort.</b> A whole number is held by a host that has a
  * largest one, and a number past it is one no value here is made of — so no method of this type answers
@@ -109,7 +110,7 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /** What a failure of the arithmetic is in this language's terms. */
     private static RuntimeException translated(ExactFailure failure) {
         return switch (failure) {
-            case ExactRangeExceeded range -> new ConstraintViolation(range.reason());
+            case ExactRangeExceeded range -> new OutOfRoom(range.reason());
             case ExactRoomExceeded room -> new OutOfRoom(room.reason());
         };
     }
@@ -239,14 +240,14 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * values that had arrived as decimals, which is the one thing the widening promises to be reversible
      * for.
      *
-     * <p>The other end is where a value really has no decimal: a scale counts only so far up, and a
-     * value needing more places than that is not one any spelling reaches.
+     * <p>The other end is where no {@code BigDecimal} reaches: a value needing more places than a
+     * scale of 32 bits counts is a decimal this run has no place to write.
      */
     private int aScaleThatClearsBothExponents() {
         long tens = Math.min(twos, fives);
         if (tens < -(long) Integer.MAX_VALUE) {
-            throw new ConstraintViolation(
-                    "no Decimal holds a scale of " + BigInteger.valueOf(tens).negate());
+            throw new OutOfRoom(
+                    "no room to write a Decimal at a scale of " + BigInteger.valueOf(tens).negate());
         }
         return tens > -(long) Integer.MIN_VALUE ? Integer.MIN_VALUE : (int) -tens;
     }
@@ -553,9 +554,9 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
                 + HostWork.product(stored, width));
     }
 
-    /** The abort a whole number the host had no range for leaves by. */
-    private static ConstraintViolation noRoomForIt(ArithmeticException thrown) {
-        return new ConstraintViolation("no Rational holds a whole number that size: " + thrown.getMessage());
+    /** The shortage a whole number the host had no range for leaves by. */
+    private static OutOfRoom noRoomForIt(ArithmeticException thrown) {
+        return new OutOfRoom("no room to write a whole number that size: " + thrown.getMessage());
     }
 
     /** The numerator with the powers that multiply it built in. */

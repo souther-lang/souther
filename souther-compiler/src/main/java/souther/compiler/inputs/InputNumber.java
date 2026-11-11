@@ -1534,9 +1534,7 @@ public final class InputNumber {
      * entry's value times the lookup of the entry's key in it with a written nought where it
      * holds none — or null where the step is anything else. The sum and the product are written
      * with the operator or as the library's operation ({@link WrittenOperation}). A decimal nought
-     * is written at no more places than a row is built at
-     * ({@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}), so its product with a value is at the
-     * scale a product of two numbers of a row is.
+     * is nought at whatever scale it is written.
      */
     private static TermPath lookedUpBy(Core step, BindingId accumulator, BindingId value,
                                        BindingId key, Following names, InputReads reads,
@@ -1585,8 +1583,7 @@ public final class InputNumber {
     private static boolean isANoughtWritten(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Int zero -> zero.value() == 0;
-            case Core.Decimal zero -> zero.value().signum() == 0 && zero.value().scale() >= 0
-                    && zero.value().scale() <= DecimalOperation.PLACES_A_ROW_IS_BUILT_AT;
+            case Core.Decimal zero -> zero.value().signum() == 0;
             default -> false;
         };
     }

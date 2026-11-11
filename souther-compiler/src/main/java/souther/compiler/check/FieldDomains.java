@@ -2902,7 +2902,7 @@ public final class FieldDomains {
         }
         Set<RuleRef> unheld = new LinkedHashSet<>();
         for (ProjectionEvidence.Cause each : causes) {
-            if (operatorsOfOnlyADefinition(each, place)) {
+            if (operatorsOfOnlyADefinition(each, place) || theImageOfOnlyADefinition(each, place)) {
                 continue;
             }
             if (!(each instanceof ProjectionEvidence.Cause.Unrepresented(RuleRef rule, String _))) {
@@ -2943,7 +2943,29 @@ public final class FieldDomains {
      */
     private boolean operatorsOfOnlyADefinition(ProjectionEvidence.Cause cause, RuleKey place) {
         return cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer(RuleRef rule)
-                && took.isOnlyDefining(rule)
+                && asksAwayFromWhatOnlyADefinitionDefines(rule, place);
+    }
+
+    /**
+     * Whether {@code cause} is that the bounds hold the hull of what a place defined by a rule
+     * comes to ({@link ReadingEvidence#definitions}), the rule saying nothing but such
+     * definitions: asked of whether a value exists, or of a place the number is made of, the
+     * hull says no less than the image does, as {@link #operatorsOfOnlyADefinition} says of
+     * the operators. Of the defined place it says what it says, which is the hull.
+     */
+    private boolean theImageOfOnlyADefinition(ProjectionEvidence.Cause cause, RuleKey place) {
+        return cause instanceof ProjectionEvidence.Cause.Lossy(RuleRef rule, FactSubject defined,
+                        var _)
+                && rule instanceof RuleRef.Invariant invariant
+                && took.definitions().getOrDefault(invariant, Set.of()).contains(defined)
+                && asksAwayFromWhatOnlyADefinitionDefines(rule, place);
+    }
+
+    /** Whether {@code rule} says nothing but that places are numbers made of places it leaves
+     *  free, and {@code place} is none it defines: null, asking whether a value exists, or one of
+     *  the places it leaves free. */
+    private boolean asksAwayFromWhatOnlyADefinitionDefines(RuleRef rule, RuleKey place) {
+        return took.isOnlyDefining(rule)
                 && (place == null || (rule instanceof RuleRef.Invariant invariant
                         && atomAt.get(place) instanceof FactSubject at
                         && took.isFreedByDefinition(invariant, at)));
@@ -3651,15 +3673,25 @@ public final class FieldDomains {
                 byOccurrence.values().forEach(one -> {
             RuleRef.Invariant rule = reading.from();
             for (NumericConstraint each : one.said().stated()) {
-                if (constraints.numbers()
+                if (!constraints.numbers()
                         .provenByTheBoxAndItsDifferences(each.form(), each.rel())) {
+                    for (FactSubject atom : each.atoms()) {
+                        lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
+                                Set.of(each.rel() == Rel.NE
+                                        ? ProjectionEvidence.Cause.Unstated.A_HOLE
+                                        : ProjectionEvidence.Cause.Unstated.A_RELATION)));
+                    }
                     continue;
                 }
-                for (FactSubject atom : each.atoms()) {
-                    lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
-                            Set.of(each.rel() == Rel.NE
-                                    ? ProjectionEvidence.Cause.Unstated.A_HOLE
-                                    : ProjectionEvidence.Cause.Unstated.A_RELATION)));
+                // Proved, and still not stated where it is proved of an atom standing for an
+                // arithmetic over the places: the box holds that atom as the hull of what the
+                // arithmetic comes to, free of the places it is made of, and a place tied to it
+                // takes the arithmetic's values and not the hull's. A product of a quantity of one
+                // or two and a price up to ten is never eleven, though the hull holds it.
+                if (each.atoms().stream().anyMatch(ComputedNumbers::standsForArithmetic)) {
+                    each.atoms().stream().filter(ranged::contains).forEach(atom ->
+                            lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
+                                    Set.of(ProjectionEvidence.Cause.Unstated.A_RELATION))));
                 }
             }
         })));

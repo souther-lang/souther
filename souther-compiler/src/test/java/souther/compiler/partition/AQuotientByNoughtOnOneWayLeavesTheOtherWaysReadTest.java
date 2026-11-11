@@ -189,9 +189,8 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
             assertTrue(report.contains(MAY_STOP_A_RUN), guard + "\n" + report);
             assertFalse(report.contains("not read"), guard + "\n" + report);
         }
-        // The way that answers adds two quotients, a sum of two Rationals that the operation's
-        // account says may stop where a Rational has no room for it: the stop is said, and the
-        // rows of that way are not shown computed.
+        // The quotient by nought stands inside a sum of two Rationals. The sum stops no run, and
+        // the stop is said all the same where it stands.
         String sum = "a / 1 + (if b > 0 then 1 / 1 else 1 / 0) >= k";
         assertTrue(human(MODEL.formatted("", sum)).contains(MAY_STOP_A_RUN), sum);
     }

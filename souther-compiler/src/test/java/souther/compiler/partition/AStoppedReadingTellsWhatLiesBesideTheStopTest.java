@@ -132,16 +132,16 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
     }
 
     /**
-     * What is worked out on the number a quotient comes to is not the quotient's: the quotient
-     * answers wherever its divisor is not nought, and the sum with one that follows is a sum of its
-     * own, which the lines drawn on the dividend and the divisor do not keep their rows from.
+     * What is worked out on the number a quotient comes to is a sum of rationals, which is a
+     * rational wherever its operands are, so it stops no row: the quotient answers wherever its
+     * divisor is not nought, and every operation that can stop a run is told.
      */
     @Test
-    void anOperationOnTheNumberAQuotientComesToIsNotTheQuotientsToAnswerFor() {
-        assertNotEquals(WhatARelationLeavesUndivided.Told.EVERY,
+    void anOperationOnTheNumberAQuotientComesToStopsNoRow() {
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY,
                 workingOfTheRule("n / m + 1 >= 100").told());
-        assertNotEquals(WhatARelationLeavesUndivided.Told.EVERY,
-                workingOfTheRule(OVER_RATIONALS, "n / m + n >= m").told());
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY,
+                workingOfTheRule(OVER_RATIONALS, "n / m + 1.0m >= 100").told());
     }
 
     /**

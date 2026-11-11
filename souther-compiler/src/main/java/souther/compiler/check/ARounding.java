@@ -38,10 +38,11 @@ public record ARounding(Core scale, Core policy, Core rounded, Ways ways) {
     }
 
     /**
-     * Whether the run time rounds at {@code scale}: it takes a scale an {@code int} holds and ends
-     * the run at any other, so a rounding at another scale answers nothing and is no number.
+     * Whether the run time has room to round at {@code scale}: it takes a scale an {@code int}
+     * holds and has no room at any other. A rounding at another scale is still a number the
+     * language defines, but no run writes it, so no row is built at it.
      */
-    public static boolean answersAtAScale(BigInteger scale) {
+    public static boolean hasRoomAtAScale(BigInteger scale) {
         return scale.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) >= 0
                 && scale.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
     }

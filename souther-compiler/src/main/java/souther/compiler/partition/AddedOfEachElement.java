@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.SeededWalk;
 import souther.compiler.core.Core;
-import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.NumericTerm;
@@ -184,40 +183,6 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                 default -> false;
             };
             default -> false;
-        };
-    }
-
-    /**
-     * The shape furthest from nought that any number worked out of an element is of, the answer
-     * so far apart, where a number of a row is of no more than
-     * {@link DecimalOperation.Shape#OF_A_PLACE}. A number written out is of its own shape, and a
-     * product, a sum and a difference of the shapes {@link DecimalOperation#shapeOfTheAnswer}
-     * says; so this bounds every operation of decimals the step works out of the element, and with
-     * the seed's shape every one it works out of the answer so far
-     * ({@link souther.compiler.inputs.DecimalAdditiveWalk}).
-     */
-    DecimalOperation.Shape shapeOfEveryPart() {
-        Map<BindingId, DecimalOperation.Shape> named = new HashMap<>();
-        DecimalOperation.Shape furthest = DecimalOperation.Shape.NOUGHT;
-        for (Bound each : bound) {
-            DecimalOperation.Shape shape = shapeOf(each.value(), named);
-            named.put(each.name(), shape);
-            furthest = furthest.larger(shape);
-        }
-        return furthest.larger(shapeOf(answer, named));
-    }
-
-    private static DecimalOperation.Shape shapeOf(Part part,
-                                                  Map<BindingId, DecimalOperation.Shape> named) {
-        return switch (part) {
-            case Path _ -> DecimalOperation.Shape.OF_A_PLACE;
-            case ReadWithTheTotal _ -> DecimalOperation.Shape.OF_A_TOTAL;
-            case Written(BigDecimal value) -> DecimalOperation.Shape.of(value);
-            case Named(BindingId name) -> named.get(name);
-            case SoFar _ -> DecimalOperation.Shape.NOUGHT;
-            case Worked(BinOp op, Part left, Part right) ->
-                    DecimalOperation.shapeOfTheAnswer(op, shapeOf(left, named),
-                            shapeOf(right, named));
         };
     }
 

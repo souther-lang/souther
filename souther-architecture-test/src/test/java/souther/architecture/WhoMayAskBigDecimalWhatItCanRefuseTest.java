@@ -40,8 +40,9 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
      * taken off before the scale reaches its floor. {@code multiply} also works out the product's
      * scale before the call, because {@code BigDecimal} answers some products whose scale is out of
      * range instead of refusing them. {@code ofDecimalText} is handed only text the
-     * decimal-text grammar accepted, which has no exponent to overflow. {@code RationalMath.toInt}
-     * reports the refusal itself. {@code Representations.canonicalNumber} rescales to zero only after
+     * decimal-text grammar accepted, which has no exponent to overflow. {@code IntNarrowing.rounded}
+     * rounds a decimal as written only where its whole digits keep it inside the {@code Int}s, and
+     * on a refusal asks the exact number instead. {@code Representations.canonicalNumber} rescales to zero only after
      * counting the digits that asks for and finding them few. {@code ExactDecimals.spelledBounded}
      * counts the same way and calls {@code toPlainString} only where the count stays under the same
      * limit, and calls {@code toString} instead where it does not — total on every value regardless
@@ -75,12 +76,12 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
             "souther/runtime/DecimalMath#round(JLsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)"
                     + "Ljava/math/BigDecimal; setScale(ILjava/math/RoundingMode;)"
                     + "Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#toInt(Lsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)J"
+            "souther/runtime/IntNarrowing#rounded(Ljava/math/BigDecimal;Ljava/math/RoundingMode;"
+                    + "Lsouther/runtime/WorkCheckpoint;Ljava/util/function/Supplier;)J"
                     + " longValueExact()J",
-            "souther/runtime/DecimalMath#toInt(Lsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)J"
+            "souther/runtime/IntNarrowing#rounded(Ljava/math/BigDecimal;Ljava/math/RoundingMode;"
+                    + "Lsouther/runtime/WorkCheckpoint;Ljava/util/function/Supplier;)J"
                     + " setScale(ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",
-            "souther/runtime/RationalMath#toInt(Lsouther/runtime/RoundingMode;Lsouther/runtime/Rational;"
-                    + "Lsouther/runtime/WorkCheckpoint;)J longValueExact()J",
             "souther/runtime/Representations#canonicalNumber(Ljava/math/BigDecimal;"
                     + "Lsouther/runtime/WorkCheckpoint;)Ljava/math/BigDecimal; setScale(I)Ljava/math/BigDecimal;");
 

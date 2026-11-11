@@ -102,10 +102,12 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
     }
 
     /**
-     * And where the whole number is one the host has no room for, the abort is this language's.
+     * And where the whole number is one the host has no room for, the run is short of room, in this
+     * language's words, and an {@code Int} it is too large for is still refused as the language
+     * refuses one.
      *
-     * <p>A value the host cannot hold is a value this type cannot hold, so the refusal is the type's own
-     * and reads as one. The host says it by an exception of its arithmetic, which names a
+     * <p>A value the host cannot write is still a value: the shortage is the run's ({@link OutOfRoom}),
+     * and the type says it as its own. The host says it by an exception of its arithmetic, which names a
      * {@code BigInteger} to whoever catches it and nothing about a Rational (ADR-0112) — and says it only
      * after computing the number far enough to find it does not fit, which for a power of five this size
      * is minutes of work for an answer that was never coming. Hence the bound on how long this may take:
@@ -117,15 +119,15 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
      */
     @Test
     @Timeout(20)
-    void aWholeNumberTheHostHasNoRoomForAbortsAsThisLanguageDoes() {
+    void aWholeNumberTheHostHasNoRoomForIsShortOfRoomInThisLanguagesWords() {
         Rational wide = Rational.of(new BigDecimal(BigInteger.ONE, -1_573_741_824)).times(
                 Rational.of(new BigDecimal(BigInteger.ONE, -1_573_741_824)));
         assertEquals(3_147_483_648L, wide.twos(), "the value this is about");
         assertTrue(wide.hasFiniteDecimal());
 
-        assertThrows(ConstraintViolation.class, () -> RationalMath.toFiniteDecimal(wide));
+        assertThrows(OutOfRoom.class, () -> RationalMath.toFiniteDecimal(wide));
         assertThrows(ConstraintViolation.class, () -> RationalMath.toWholeNumber(wide));
-        assertThrows(ConstraintViolation.class, () -> RationalMath.toDecimal(0, DOWN.INSTANCE, wide));
+        assertThrows(OutOfRoom.class, () -> RationalMath.toDecimal(0, DOWN.INSTANCE, wide));
     }
 
     /**
@@ -137,22 +139,22 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
      */
     @Test
     @Timeout(20)
-    void aFoldOverTheseAbortsTheSameWay() {
+    void aFoldOverTheseIsShortOfRoomTheSameWay() {
         Rational one = Rational.of(1);
         Rational tiny = Rational.of(new BigDecimal(BigInteger.ONE, 1_000_000_000));
 
-        assertThrows(ConstraintViolation.class, () -> Lists.sumRational(List.of(one, tiny)),
+        assertThrows(OutOfRoom.class, () -> Lists.sumRational(List.of(one, tiny)),
                 "the exact sum of these has more digits than the host holds");
     }
 
-    /** And the other end is where a decimal really has none: a scale counts only so far up, and no
-     *  spelling of a value needing more places reaches one. */
+    /** And the other end is where a decimal needs more places than a {@code BigDecimal}'s scale
+     *  counts: it is a decimal all the same, which this run has no place to write. */
     @Test
-    void aValueNeedingMorePlacesThanAScaleCountsHasNoDecimal() {
+    void aValueNeedingMorePlacesThanAScaleCountsIsShortOfRoom() {
         Rational past = new Rational(BigInteger.ONE, BigInteger.ONE, -3_000_000_000L, -3_000_000_000L);
 
         assertTrue(past.hasFiniteDecimal(), "a denominator of one, so the decimal repeats nowhere");
-        assertThrows(ConstraintViolation.class, () -> RationalMath.toFiniteDecimal(past));
+        assertThrows(OutOfRoom.class, () -> RationalMath.toFiniteDecimal(past));
     }
 
     /**

@@ -5,6 +5,7 @@ import souther.compiler.inputs.RuleSite;
 import souther.compiler.values.AdmissibleValues;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -115,6 +116,9 @@ final class ReadingEvidence {
     /** The places each rule defines a number from and so leaves as free as they were. */
     private final Map<RuleRef.Invariant, Set<FactSubject>> freed = new LinkedHashMap<>();
 
+    /** The places each rule defines as a number made of others. */
+    private final Map<RuleRef.Invariant, Set<FactSubject>> defined = new LinkedHashMap<>();
+
     /** The rules that state or work out something besides what places are defined as. */
     private final Set<RuleRef.Invariant> beyondTheirDefinitions = new HashSet<>();
 
@@ -133,6 +137,23 @@ final class ReadingEvidence {
     void freedByDefinition(RuleRef.Invariant rule, Collection<FactSubject> positions) {
         freed.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
         positions.forEach(position -> record(rule, position));
+    }
+
+    /**
+     * {@code rule} defines {@code position} as a number made of other places, whether or not it is
+     * shown to leave those free.
+     *
+     * <p>What the bounds hold of such a place is the hull of what the number can come to, and the
+     * number is a function of the places it is made of: its values are the image of that function,
+     * which a range does not state ({@link #definitions}).
+     */
+    void defines(RuleRef.Invariant rule, FactSubject position) {
+        defined.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
+    }
+
+    /** Every place a rule defines as a number made of others, by the rule. */
+    Map<RuleRef.Invariant, Set<FactSubject>> definitions() {
+        return Collections.unmodifiableMap(defined);
     }
 
     /**

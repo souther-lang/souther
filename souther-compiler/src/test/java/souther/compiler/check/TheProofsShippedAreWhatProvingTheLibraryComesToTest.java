@@ -32,7 +32,8 @@ class TheProofsShippedAreWhatProvingTheLibraryComesToTest {
 
     @Test
     void whatIsReadOffThemIsWhatProvingComesTo() {
-        BoundOperationFacts proved = OperationFactBinder.bindAll(DefaultStdlib.get());
+        BoundOperationFacts proved =
+                OperationFactBinder.bindAll(DefaultStdlib.get(), LibraryProofs.PROVING);
         BoundOperationFacts shipped = DefaultBoundOperationFacts.get();
         assertEquals(settlings(proved), settlings(shipped),
                 "each observation settled as proving settles it");

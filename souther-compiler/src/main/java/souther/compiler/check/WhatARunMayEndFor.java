@@ -111,7 +111,7 @@ public final class WhatARunMayEndFor {
             case Core.Neg neg -> new Endings.Known(AbortSites.ofANegation(neg));
             case Core.Call call -> switch (call.fn()) {
                 case Core.Reached.OfKernel kernel ->
-                        new Endings.Known(KernelContracts.abortsOf(kernel.kernel()));
+                        new Endings.Known(KernelContracts.abortsAnswering(kernel.kernel(), call.type()));
                 case Core.Emitted emitted -> new Endings.Known(AbortSites.ofAnEmittedCall(emitted));
                 case Core.Reached.OfDeclaration _, Core.Reached.OfValue _,
                      Core.Reached.OfPublishedValue _ -> new Endings.NotKnown();
@@ -271,7 +271,12 @@ public final class WhatARunMayEndFor {
      *  ({@link LibraryEndings}). */
     private static Endings ofTheLibrary(Core.PreservedCall kept) {
         AnOperationApplied applied = AnOperationApplied.of(kept);
-        return applied == null ? new Endings.NotKnown() : ofAnOperation(applied.operation());
+        if (applied == null) {
+            return new Endings.NotKnown();
+        }
+        return applied.operation() instanceof ValueName.Stdlib.Operation ofTheLibrary
+                ? LibraryEndings.shipped().ofACallAnswering(ofTheLibrary, kept.type())
+                : new Endings.NotKnown();
     }
 
     /** What applying {@code operation} itself, and none of what it is handed, may end a run for:

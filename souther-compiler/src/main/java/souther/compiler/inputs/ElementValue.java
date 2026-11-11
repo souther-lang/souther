@@ -902,8 +902,8 @@ public sealed interface ElementValue {
      * of the element, read off the law the library states of the operation.
      *
      * @param scale how many places the number keeps; below nought, how many it rounds off before
-     *              the point. One the run time rounds at, since a rounding at another answers
-     *              nothing ({@link ARounding#answersAtAScale})
+     *              the point. One the run time has room to round at, since a rounding at another
+     *              is written by no run ({@link ARounding#hasRoomAtAScale})
      * @param way   how it is rounded
      * @param inner what is rounded
      * @param stepsOf the operation whose step of a coarser order this is, where it is the floor of
@@ -917,8 +917,8 @@ public sealed interface ElementValue {
             Objects.requireNonNull(scale, "a number is rounded at a scale");
             Objects.requireNonNull(way, "some way");
             Objects.requireNonNull(inner, "and a number is rounded");
-            if (!ARounding.answersAtAScale(scale)) {
-                throw new IllegalArgumentException("the run time rounds at no scale " + scale);
+            if (!ARounding.hasRoomAtAScale(scale)) {
+                throw new IllegalArgumentException("the run time has no room to round at " + scale);
             }
             if (stepsOf != null && (scale.signum() != 0 || way != WholeRounding.FLOOR)) {
                 throw new IllegalArgumentException("the step of a coarser order is the floor of a"
@@ -1826,7 +1826,7 @@ public sealed interface ElementValue {
             Long scale = rounds.scale() == null ? Long.valueOf(0) : wholeNumberOf(rounds.scale());
             WholeRounding way = rounds.wayOf(followed(rounds.policy()));
             if (scale == null || way == null
-                    || !ARounding.answersAtAScale(BigInteger.valueOf(scale))) {
+                    || !ARounding.hasRoomAtAScale(BigInteger.valueOf(scale))) {
                 return null;
             }
             LinearForm<Atom> form = AffineForms.of(rounds.rounded(), at, atoms());

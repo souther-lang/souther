@@ -739,7 +739,7 @@ public final class ExampleVerifier {
                     stoppedAt(WorkFigure.RECURSION_DEPTH.at(policy.recursionDepthLimit()));
             case TIMEOUT -> stoppedAt(WorkFigure.COMPILER_TIME.at(within(deadline)));
             case INPUT_FIXTURE, EXPECTED_FIXTURE, ENSURES, FAKE_RESOLUTION, INVOCATION, COMPARISON,
-                 STACK_EXHAUSTED, VALUE_CROSSING ->
+                 STACK_EXHAUSTED, OUT_OF_ROOM, VALUE_CROSSING ->
                     Incompleteness.Cause.of(Incompleteness.Code.ROW_UNDECIDED);
             case NONE -> throw new IllegalStateException(
                     "a row that ended undecided says what stopped it, and nothing went wrong here");
@@ -1771,6 +1771,14 @@ public final class ExampleVerifier {
                     rows.add(outcomeOf(target, row, evaluation.state, List.of()));
                     return;
                 }
+                // And so does a run short of the platform's room outside the behavior — a decoder
+                // or an encoder writing a number past what its representation keeps.
+                if (isShortOfRoom(cause)) {
+                    out.add(shortOfRoom(row, cause));
+                    evaluation.state.incomplete(FailurePhase.OUT_OF_ROOM);
+                    rows.add(outcomeOf(target, row, evaluation.state, List.of()));
+                    return;
+                }
                 // Whoever is compiling asked to stop. Nothing is known about this row — no result was
                 // produced and no comparison was made — so this is not a failing example, and
                 // reporting it as one would put a diagnostic on a model that may be correct.
@@ -1832,6 +1840,21 @@ public final class ExampleVerifier {
                 .hint(depth ? new ExampleMessage.ReachingTheDepthLimitIsNotDiverging()
                         : new ExampleMessage.SpendingTheBudgetIsNotDiverging())
                 .build();
+    }
+
+    /** Whether {@code cause} is a run short of the platform's room ({@code souther.runtime.OutOfRoom}),
+     *  matched by name: the applied code runs under its own loader. */
+    private static boolean isShortOfRoom(Throwable cause) {
+        return cause != null && "souther.runtime.OutOfRoom".equals(cause.getClass().getName());
+    }
+
+    /** A row short of the platform's room for an answer it worked out (E1941): undecided, since
+     *  the answer is a value and a platform with more room writes it. */
+    private static Diagnostic shortOfRoom(Hir.ExampleRow row, Throwable cause) {
+        return Diagnostic.at(row.pos())
+                .say(new ExampleMessage.TheEvaluationHadNoRoomForAnAnswer(
+                        String.valueOf(cause.getMessage())))
+                .hint(new ExampleMessage.RunningShortOfRoomIsNotAWrongAnswer()).build();
     }
 
     /**
@@ -2711,6 +2734,14 @@ public final class ExampleVerifier {
             // out, which is named where that happened.
             out.add(stackRanOut(row, "the behavior overflowed the stack"));
             state.incomplete(FailurePhase.STACK_EXHAUSTED);
+            return;
+        }
+        // Short of the platform's room for an answer the language defines: the row is not wrong,
+        // and what it would have decided is what was not found out. Matched by name for the reason
+        // an unreachable point is.
+        if (isShortOfRoom(cause)) {
+            out.add(shortOfRoom(row, cause));
+            state.incomplete(FailurePhase.OUT_OF_ROOM);
             return;
         }
         aborted(fixtures, row, stated, answers,

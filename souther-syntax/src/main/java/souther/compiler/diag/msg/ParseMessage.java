@@ -144,13 +144,15 @@ public sealed interface ParseMessage extends Message {
     record AnIntegerLiteralIsOutsideInt(String written) implements ParseMessage, Reported {}
 
     /**
-     * A decimal literal with more digits than any {@code Decimal} holds.
+     * A decimal literal with more digits than this compiler has room to read. The literal is a
+     * {@code Decimal} all the same, since every finite decimal is one; it is the compiler that
+     * cannot hold it.
      *
      * <p>Not echoed: a literal this long is hundreds of millions of characters, and the caret
      * already says which one it is.
      */
     @Code(DiagnosticCode.E2305)
-    record ADecimalLiteralHasMoreDigitsThanADecimalHolds() implements ParseMessage, Reported {}
+    record ADecimalLiteralHasMoreDigitsThanThisCompilerReads() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2305)
     record AStringLiteralIsNotClosed() implements ParseMessage, Reported {}

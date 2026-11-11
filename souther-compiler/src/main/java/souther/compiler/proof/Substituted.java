@@ -47,8 +47,8 @@ final class Substituted {
             case Value.OneMore(Value walked, Value next) ->
                     new Value.OneMore(value(walked, from, to), value(next, from, to));
             case Value.AsEntries(Value entries) -> new Value.AsEntries(value(entries, from, to));
-            case Value.Argument _, Value.Fresh _, Value.Whole _, Value.Decimal _, Value.Truth _,
-                 Value.Lambda _, Value.NothingYet _ -> value;
+            case Value.Argument _, Value.Fresh _, Value.Unit _, Value.Whole _, Value.Decimal _,
+                 Value.Truth _, Value.Lambda _, Value.NothingYet _ -> value;
         };
     }
 

@@ -3,6 +3,7 @@ package souther.compiler.proof;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -31,6 +32,10 @@ sealed interface Value {
      * @param what what it stands for, for a reader of a proof
      */
     record Fresh(int id, String what) implements Value {}
+
+    /** The one value of the unit data {@code type}: one value and no other, wherever it is
+     *  named. */
+    record Unit(TypeSymbol type) implements Value {}
 
     /** What {@code operation} answers handed {@code args}. */
     record Made(ValueName.Stdlib.Operation operation, List<Value> args) implements Value {

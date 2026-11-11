@@ -29,12 +29,12 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
     }
 
     /** A decimal the run holds is where a row stands only if a row is built at it ({@link
-     *  DecimalOperation#writtenForARow}): one written at more places than a row is built at is
+     *  DecimalPoints#writtenForARow}): one written at more places than a row is built at is
      *  not, and the row is a point inside the run that is built. */
     @Test
     void anEndTheRunHoldsThatNoRowIsBuiltAtIsNotWhereTheRowStands() {
         ExactRatio tooFarOut = ExactRatio.of(new BigDecimal(BigInteger.ONE,
-                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1));
+                DecimalPoints.PLACES_A_ROW_IS_BUILT_AT + 1));
         ExactRatio row = DecimalPoints.within(ExactCut.inclusive(tooFarOut), null, false);
         assertTrue(DecimalPoints.isBuiltAt(row), String.valueOf(row));
     }
@@ -44,7 +44,7 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
     @Test
     void aRunWhoseNearEndNoRowIsBuiltAtStillHasARowInsideIt() {
         ExactRatio past = ExactRatio.of(BigInteger.TEN.pow(
-                (int) DecimalOperation.DIGITS_A_ROW_IS_BUILT_AT).add(BigInteger.ONE));
+                (int) DecimalPoints.DIGITS_A_ROW_IS_BUILT_AT).add(BigInteger.ONE));
         ExactCut upper = ExactCut.inclusive(past);
         ExactCut lower = ExactCut.inclusive(ExactRatio.ZERO);
         assertStandsInside(DecimalPoints.within(upper, lower, false), lower, upper);
@@ -105,7 +105,7 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
                 ExactCut.inclusive(ExactRatio.ONE), true));
         ExactCut lower = ExactCut.exclusive(A_THIRD);
         ExactCut tooNarrow = ExactCut.exclusive(A_THIRD.plus(ExactRatio.ONE.dividedBy(
-                ExactRatio.of(BigInteger.TEN.pow(DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 5)))
+                ExactRatio.of(BigInteger.TEN.pow(DecimalPoints.PLACES_A_ROW_IS_BUILT_AT + 5)))
                 .orNull()).orNull());
         assertNull(DecimalPoints.within(lower, tooNarrow, true));
     }
@@ -140,7 +140,7 @@ class ARowIsBuiltAtADecimalInsideTheRunItIsAskedOfTest {
     @Test
     void aLineNearerNoughtThanARowIsBuiltAtIsStoodBesideAtTheEndsOfTheRun() {
         ExactRatio line = A_THIRD.dividedBy(ExactRatio.of(BigInteger.TEN.pow(
-                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 100))).orNull();
+                DecimalPoints.PLACES_A_ROW_IS_BUILT_AT + 100))).orNull();
         ExactCut nought = ExactCut.inclusive(ExactRatio.ZERO);
         ExactCut one = ExactCut.inclusive(ExactRatio.ONE);
         List<ExactRatio> both = DecimalPoints.besideTheLine(line, nought, one);

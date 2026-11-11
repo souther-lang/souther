@@ -2191,7 +2191,7 @@ public sealed interface NumericTerm
             ProductOf there = inside == null ? null : new ProductOf(one, other, inside);
             AtAValue made = there == null ? null : there.atAValue();
             // The number alone stands at the value over the scale, and a row is built with its
-            // numbers at few places (DecimalOperation.PLACES_A_ROW_IS_BUILT_AT) whatever the
+            // numbers at few places (DecimalPoints.PLACES_A_ROW_IS_BUILT_AT) whatever the
             // operations of the comparison are asked at. Over a whole number of times the
             // value is as many places as the value: a half leaves twice, a tenth ten times.
             // Seven tenths leaves a hundredth no decimal to stand at, and four fifths leaves a

@@ -103,8 +103,7 @@ final class RowsOfTheTwo {
      */
     static RowsOfTheTwo of(Operations operations, Object asked, Object partner,
                            Map<Object, ExactRatio> standing) {
-        if (!operations.exact()
-                || !operations.decimals().isEmpty() || operations.sums().isEmpty()
+        if (!operations.exact() || operations.sums().isEmpty()
                 || asked == null || partner == null || asked.equals(partner)) {
             return null;
         }

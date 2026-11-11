@@ -192,6 +192,7 @@ final class Reading {
             case LibraryTerm.WholeNumber(long value) -> one(new Value.Whole(value));
             case LibraryTerm.DecimalNumber(var value) -> one(new Value.Decimal(value));
             case LibraryTerm.Truth(boolean value) -> one(new Value.Truth(value));
+            case LibraryTerm.UnitValue(var type) -> one(new Value.Unit(type));
             case LibraryTerm.ListOf(List<LibraryTerm> elements) ->
                     each(elements, frame, Value.Listed::new);
             case LibraryTerm.TupleOf(List<LibraryTerm> elements) ->

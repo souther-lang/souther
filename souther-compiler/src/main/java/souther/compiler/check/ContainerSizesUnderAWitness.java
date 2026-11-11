@@ -1,10 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.abort.GetsPast;
-import souther.compiler.abort.ScaleBound;
-import souther.compiler.abort.ScaleLaw;
 import souther.compiler.core.Core;
-import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -14,7 +11,6 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.values.TextExtents;
@@ -29,7 +25,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 /**
  * Whether an operator that answers where the collection it answers fits
@@ -69,19 +64,12 @@ public final class ContainerSizesUnderAWitness {
     /** For each name asked of, whether what each bound name stands for reads it. */
     private final Map<BindingId, Map<BindingId, Boolean>> readsAsked = new HashMap<>();
     private final Set<Core> asking = new HashSet<>();
-    /** For each name an arm gives the one number its subject can be, the subject. */
-    private final Map<BindingId, Core> numberOf = new HashMap<>();
-    private final Predicate<Core> aDecimalOfTheRow;
-    /** The scale each name of a walk's answer so far is taken to be at while its step is read. */
-    private final Map<BindingId, DecimalOperation.Shape> assumedShape = new HashMap<>();
 
     private ContainerSizesUnderAWitness(Core within,
                                         Function<Core, Optional<BigInteger>> ofTheInput,
-                                        Function<Core, Optional<BigInteger>> ofEachElement,
-                                        Predicate<Core> aDecimalOfTheRow) {
+                                        Function<Core, Optional<BigInteger>> ofEachElement) {
         this.ofTheInput = ofTheInput;
         this.ofEachElementOfTheInput = ofEachElement;
-        this.aDecimalOfTheRow = aDecimalOfTheRow;
         List<Core> calls = new ArrayList<>();
         names(within, calls);
         for (Core each : calls) {
@@ -105,8 +93,8 @@ public final class ContainerSizesUnderAWitness {
      */
     public static Optional<BigInteger> mostHeld(Core collection,
                                                 Function<Core, Optional<BigInteger>> ofTheInput) {
-        return new ContainerSizesUnderAWitness(collection, ofTheInput, node -> Optional.empty(),
-                node -> false).most(collection);
+        return new ContainerSizesUnderAWitness(collection, ofTheInput, node -> Optional.empty())
+                .most(collection);
     }
 
     /**
@@ -117,15 +105,11 @@ public final class ContainerSizesUnderAWitness {
      *                      or nothing where the node reads no collection of the input or nothing
      *                      bounds it
      * @param ofEachElement the same, of the most each element of such a collection holds
-     * @param aDecimalOfTheRow whether a node is a place of the input that holds a decimal as a row
-     *                      is built with it ({@link DecimalOperation#writtenForARow}), written at no
-     *                      more places than a row is built at
      */
     public static boolean answersOn(Core within, Core operator, GetsPast completion,
                                     Function<Core, Optional<BigInteger>> ofTheInput,
-                                    Function<Core, Optional<BigInteger>> ofEachElement,
-                                    Predicate<Core> aDecimalOfTheRow) {
-        return new ContainerSizesUnderAWitness(within, ofTheInput, ofEachElement, aDecimalOfTheRow)
+                                    Function<Core, Optional<BigInteger>> ofEachElement) {
+        return new ContainerSizesUnderAWitness(within, ofTheInput, ofEachElement)
                 .answers(operator, completion);
     }
 
@@ -155,269 +139,8 @@ public final class ContainerSizesUnderAWitness {
             // How long a text a conversion makes turns on the text, and what a run holds of
             // collections says nothing of it.
             case GetsPast.WhereTheTextFits _ -> false;
-            // Whether the scales and the digits leave room is read off what each operand is, by
-            // the rule the operations a row is asked of are ({@link DecimalOperation#hasRoomAt}):
-            // a number a row holds is of the shape a row is built with, an operation is of the
-            // shape its law makes of its operands', and what a walk carries is read where it is
-            // carried ({@link #shapeCarried}).
-            case GetsPast.WhereTheScalesHaveRoom(var rooms, var _) -> {
-                List<Core> args = operandsOf(operator);
-                yield args != null && rooms.stream().allMatch(room -> hasRoom(room, args));
-            }
             case GetsPast.NotKnown _ -> false;
         };
-    }
-
-    /**
-     * The shape furthest from nought that the decimal {@code e} comes to is of on a run of a row,
-     * or nothing where it is not read here: a decimal written out is of its own, a place of the
-     * row of no more than a row is built with, and a sum, a difference or a product of those as
-     * {@link DecimalOperation#shapeOfTheAnswer} says. A name is what it is bound to, and the
-     * answer so far of a walk is of the shape its seed and its parts make
-     * ({@link DecimalOperation#shapeOfAWalk}).
-     */
-    private Optional<DecimalOperation.Shape> shapeOf(Core e) {
-        Core node = Core.withoutStanding(e);
-        switch (node) {
-            case Core.Decimal written -> {
-                return Optional.of(DecimalOperation.Shape.of(written.value()));
-            }
-            case Core.Read name -> {
-                DecimalOperation.Shape assumed = assumedShape.get(name.binding());
-                if (assumed != null) {
-                    return Optional.of(assumed);
-                }
-                WalkAt walk = carriedBy.get(name.binding());
-                if (walk != null) {
-                    return shapeCarried(walk);
-                }
-                Core value = boundTo.get(name.binding());
-                if (value != null) {
-                    return asking.add(value) ? shapeOfWhileAsking(value) : Optional.empty();
-                }
-                Core subject = numberOf.get(name.binding());
-                if (subject != null) {
-                    return shapeOfTheNumberOf(subject);
-                }
-            }
-            // An arm answers at the larger of what the arms do.
-            case Core.Match match -> {
-                Optional<DecimalOperation.Shape> most =
-                        Optional.of(DecimalOperation.Shape.NOUGHT);
-                for (Core.Case each : match.cases()) {
-                    most = largerShape(most, shapeOf(each.body()));
-                }
-                return most;
-            }
-            case Core.LetIn li -> {
-                return shapeOf(li.body());
-            }
-            // Negating a number leaves it the places and the digits it had.
-            case Core.Neg negated -> {
-                return shapeOf(negated.operand());
-            }
-            case Core.If fork -> {
-                return largerShape(shapeOf(fork.then()), shapeOf(fork.els()));
-            }
-            default -> {
-                // A sum, a difference or a product, in whatever shape the tree gives it: its
-                // owner says it is one.
-                List<Core> operands = operandsOf(node);
-                if (operands != null && WhatARunMayEndFor
-                        .completionApartFromTheClosuresWrittenAtIt(node)
-                        instanceof GetsPast.WhereTheScalesHaveRoom(var _, ScaleBound answer)) {
-                    return shapeOf(answer, operands);
-                }
-                AnOperationApplied applied = AnOperationApplied.of(node);
-                List<Integer> made = applied == null ? null : DefaultBoundOperationFacts.get()
-                        .argumentsAnAnswerIsMadeOf(applied.operation());
-                if (made != null) {
-                    return shapeOfWhatIsMadeOf(applied.args(), made);
-                }
-            }
-        }
-        return aDecimalOfTheRow.test(node) ? Optional.of(DecimalOperation.Shape.OF_A_PLACE)
-                : Optional.empty();
-    }
-
-    /**
-     * The shape of the number {@code subject} answers, where it is a call whose contract says what
-     * shape its number is of ({@link GetsPast.WhereTheScalesHaveRoom}): the contract is of the
-     * call and the shape of the one case of its answer that is a number. A name the subject is
-     * bound to is what it is bound to.
-     */
-    private Optional<DecimalOperation.Shape> shapeOfTheNumberOf(Core subject) {
-        Core node = Core.withoutStanding(subject);
-        if (node instanceof Core.Read name && boundTo.get(name.binding()) != null) {
-            Core value = boundTo.get(name.binding());
-            return asking.add(value) ? shapeOfTheNumberOfWhileAsking(value) : Optional.empty();
-        }
-        List<Core> args = operandsOf(node);
-        return args != null && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                instanceof GetsPast.WhereTheScalesHaveRoom(var _, ScaleBound answer)
-                ? shapeOf(answer, args) : Optional.empty();
-    }
-
-    private Optional<DecimalOperation.Shape> shapeOfTheNumberOfWhileAsking(Core value) {
-        try {
-            return shapeOfTheNumberOf(value);
-        } finally {
-            asking.remove(value);
-        }
-    }
-
-    private Optional<DecimalOperation.Shape> shapeOfWhileAsking(Core value) {
-        try {
-            return shapeOf(value);
-        } finally {
-            asking.remove(value);
-        }
-    }
-
-    /**
-     * The shape of an answer made of the arguments at {@code made}: the larger of theirs, a whole
-     * number a run holds being of no scale and of as many digits as an {@code Int} has. Nothing
-     * where an argument is neither.
-     */
-    private Optional<DecimalOperation.Shape> shapeOfWhatIsMadeOf(List<Core> args,
-                                                                 List<Integer> made) {
-        Optional<DecimalOperation.Shape> most = Optional.of(DecimalOperation.Shape.NOUGHT);
-        for (int at : made) {
-            Core argument = args.get(at);
-            Optional<DecimalOperation.Shape> shape = Type.INT.equals(argument.type())
-                    ? Optional.of(new DecimalOperation.Shape(0, DIGITS_OF_AN_INT))
-                    : Type.DECIMAL.equals(argument.type()) ? shapeOf(argument) : Optional.empty();
-            most = largerShape(most, shape);
-        }
-        return most;
-    }
-
-    /** The digits of the greatest whole number an {@code Int} holds. */
-    private static final long DIGITS_OF_AN_INT = 19;
-
-    /** Whether {@code room} is there over the arguments {@code args}. */
-    private boolean hasRoom(GetsPast.WhereTheScalesHaveRoom.Room room, List<Core> args) {
-        Optional<DecimalOperation.Shape> first = shapeOf(room.first(), args);
-        Optional<DecimalOperation.Shape> second = shapeOf(room.second(), args);
-        return first.isPresent() && second.isPresent()
-                && DecimalOperation.hasRoomAt(room.law(), first.get(), second.get());
-    }
-
-    /**
-     * What {@code bound} comes to over the arguments {@code args}: what each argument is, the
-     * whole number written where a scale is asked for, and what the laws and the larger of two
-     * make of those. Nothing where one of them is not read.
-     */
-    private Optional<DecimalOperation.Shape> shapeOf(ScaleBound bound, List<Core> args) {
-        return switch (bound) {
-            case ScaleBound.Argument(int at) -> at < args.size() ? shapeOf(args.get(at))
-                    : Optional.empty();
-            case ScaleBound.WrittenAt(int at) -> at < args.size() ? writtenScale(args.get(at))
-                    : Optional.empty();
-            case ScaleBound.Written(long scale, long digits) ->
-                    Optional.of(new DecimalOperation.Shape(scale, digits));
-            case ScaleBound.Left(ScaleLaw law, ScaleBound first, ScaleBound second) -> {
-                Optional<DecimalOperation.Shape> one = shapeOf(first, args);
-                Optional<DecimalOperation.Shape> other = shapeOf(second, args);
-                yield one.isPresent() && other.isPresent()
-                        ? Optional.of(DecimalOperation.shapeOfTheAnswer(law, one.get(),
-                                other.get()))
-                        : Optional.empty();
-            }
-            case ScaleBound.Larger(ScaleBound one, ScaleBound other) ->
-                    largerShape(shapeOf(one, args), shapeOf(other, args));
-            case ScaleBound.NotShown _ -> Optional.empty();
-        };
-    }
-
-    /** The shape of the places the whole number {@code e} writes out asks for: no digit of a
-     *  number, at as many places as it says. */
-    private static Optional<DecimalOperation.Shape> writtenScale(Core e) {
-        Optional<BigInteger> written = writtenWhole(e);
-        return written.isPresent() && written.get().bitLength() < Integer.SIZE
-                ? Optional.of(new DecimalOperation.Shape(written.get().abs().longValueExact(), 0))
-                : Optional.empty();
-    }
-
-    /**
-     * The shape every answer so far of {@code walk} is of, over any number of elements: where its
-     * step adds parts to what it carries and takes parts from it, and nothing more
-     * ({@link #addsOnlyToWhatItCarries}), what it carries is the seed and the parts, whose shape
-     * is that of the step with nothing carried, and the shape of such a walk is
-     * {@link DecimalOperation#shapeOfAWalk} of the two. Any other step is no walk whose shape is
-     * said: what it carries can grow at every element past what a representation holds whatever
-     * scale it keeps, and nothing is said.
-     */
-    private Optional<DecimalOperation.Shape> shapeCarried(WalkAt walk) {
-        BindingId carried = walk.carried();
-        if (!asking.add(walk.step())) {
-            return Optional.empty();
-        }
-        try {
-            if (!addsOnlyToWhatItCarries(walk.step().body(), carried)) {
-                return Optional.empty();
-            }
-            Optional<DecimalOperation.Shape> seed = shapeOf(walk.seed());
-            if (seed.isEmpty()) {
-                return Optional.empty();
-            }
-            assumedShape.put(carried, DecimalOperation.Shape.NOUGHT);
-            return shapeOf(walk.step().body())
-                    .map(parts -> DecimalOperation.shapeOfAWalk(seed.get(), parts));
-        } finally {
-            assumedShape.remove(carried);
-            asking.remove(walk.step());
-        }
-    }
-
-    /**
-     * Whether {@code e}, the step of a walk, makes what the walk carries of it with parts added
-     * to it and taken from it, and nothing more: every part is a number that does not read it,
-     * so what is carried is what the parts come to, and a choice between two such is one of them.
-     * The one shape a run's digits are bounded for over any number of elements: parts of at most
-     * {@code D} digits add up to fewer than {@code n * 10^D}, which is {@code D} and the digits
-     * of {@code n} however many there are. Any other step — what is carried added to itself,
-     * multiplied, rounded or handed on — can grow them at every element past what a
-     * representation holds, which the scale it keeps does not say, so nothing is said of it.
-     *
-     * <p>A name is the number it is bound to: one that is the carried name itself, or a sum or a
-     * difference that adds only to it, and no other that reads it.
-     */
-    private boolean addsOnlyToWhatItCarries(Core e, BindingId carried) {
-        Core node = Core.withoutStanding(e);
-        if (!reads(node, carried)) {
-            return true;
-        }
-        if (node instanceof Core.Read name) {
-            Core value = boundTo.get(name.binding());
-            return name.binding().equals(carried)
-                    || (value != null && addsOnlyToWhatItCarries(value, carried));
-        }
-        if (node instanceof Core.Neg negated) {
-            return addsOnlyToWhatItCarries(negated.operand(), carried);
-        }
-        if (node instanceof Core.If fork) {
-            return addsOnlyToWhatItCarries(fork.then(), carried)
-                    && addsOnlyToWhatItCarries(fork.els(), carried);
-        }
-        List<Core> parts = operandsOf(node);
-        GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node);
-        if (parts == null || parts.size() != 2
-                || !(completion.equals(GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.ADD))
-                || completion.equals(GetsPast.WhereTheScalesHaveRoom.ofTheOperator(BinOp.SUB)))) {
-            return false;
-        }
-        boolean first = reads(parts.get(0), carried);
-        boolean second = reads(parts.get(1), carried);
-        return first != second
-                && addsOnlyToWhatItCarries(parts.get(first ? 0 : 1), carried);
-    }
-
-    /** The larger of two shapes, nothing where either is not read. */
-    private static Optional<DecimalOperation.Shape> largerShape(
-            Optional<DecimalOperation.Shape> one, Optional<DecimalOperation.Shape> other) {
-        return one.isPresent() && other.isPresent() ? Optional.of(one.get().larger(other.get()))
-                : Optional.empty();
     }
 
     /** Whether an {@code Int} sum coming to {@code total} answers it, as the language says
@@ -470,15 +193,6 @@ public final class ContainerSizesUnderAWitness {
         Core node = Core.withoutStanding(e);
         if (node instanceof Core.LetIn li && li.binder() != null) {
             boundTo.put(li.binder().binding(), li.value());
-        } else if (node instanceof Core.Match match) {
-            // An arm that names the one number its subject can be, read as that number, names the
-            // number the subject answers: there is one to name, and the type says which.
-            for (Core.Case each : match.cases()) {
-                if (each.binder() != null && Type.DECIMAL.equals(each.bindType())
-                        && Type.DECIMAL.equals(NumericAnswers.in(match.scrutinee().type()))) {
-                    numberOf.put(each.binder().binding(), match.scrutinee());
-                }
-            }
         } else if (AnOperationApplied.of(node) != null) {
             calls.add(node);
         }
