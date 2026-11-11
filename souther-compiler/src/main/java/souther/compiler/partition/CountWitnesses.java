@@ -95,10 +95,13 @@ public final class CountWitnesses {
      * @param container which parameter is the container
      * @param kept      the element the statement holds of
      * @param dropped   the element it fails of
-     * @param overAgain whether the container may hold an element over again, so that a row holds
-     *                  the one the statement holds of as many times as it likes and the count takes
-     *                  every value up to its size; a container that holds each element once shows
-     *                  no more than the one
+     * @param overAgain whether the container is a list, which may hold an element over again, so
+     *                  that a row holds the one the statement holds of as many times as it likes
+     *                  and the count takes every value up to its size; a container that holds each
+     *                  element once shows no more than the one. It is the type's, and no rule's:
+     *                  a rule that keeps a list's elements apart leaves it fewer to hold, which is
+     *                  what {@code UndividedByARelation#howManyAreHeld} says of it, and a count is
+     *                  shown only as far as that
      */
     public record Witness(List<FixtureTemplate> inputs, int container, FixtureTemplate kept,
                           FixtureTemplate dropped, boolean overAgain) {
