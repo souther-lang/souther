@@ -6789,7 +6789,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The places the statement of the count {@code side} is reads, where it is one, as positions.
+     * The places the statement of the count at side {@code at} reads, where it is one, as
+     * positions.
      *
      * <p>What the statement says of them is a comparison of its own, which divides them where it
      * is made. The relation it is a term of parts none of them, so a relation shown to reach the
@@ -6798,8 +6799,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * they are left as the comparison is filed at them.
      *
      * <p>Not one the relation's other sides read as well: {@code count(x > k) == k} holds
-     * {@code k} against the count, which the statement's comparison of it says nothing of, and the
-     * statement leaves the count nothing at the {@code k} it makes empty.
+     * {@code k} against the count, which the statement's own comparison of it says nothing of.
      */
     private List<FilingCoordinate> placesTheStatementReads(int at) {
         Side side = sides.get(at);
