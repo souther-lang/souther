@@ -10,6 +10,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Text;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.StringContainment;
@@ -615,6 +616,37 @@ public sealed interface Proposition {
                     ? subject : null;
         }
 
+        /**
+         * What this states of a place against a string or a number the source wrote, as the
+         * comparison with it written with {@code ==} states it — or null where it is anything
+         * else.
+         *
+         * <p>The one statement read two ways: as a value the place is told apart at, which is how
+         * a container is asked to hold it, and as a relation on the order the place stands on,
+         * which is what draws a line there.
+         */
+        public Compared asAComparison() {
+            if (!(one instanceof DecisionSubject.AnInput(TermPath place, var _))
+                    || !(other instanceof Operand.Written<DecisionSubject>(Value written))) {
+                return null;
+            }
+            DecisionAtom atom = new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(place));
+            Rel states = holds ? Rel.EQ : Rel.NE;
+            return switch (written) {
+                case Value.Text(String text) -> new Compared(
+                        new Relation.Ordered(atom, new Text(text), Rel.EQ), holds);
+                case Value.Number(var number) -> LinearForm.<Quantity>atom(atom)
+                        .minus(LinearForm.constant(ExactRatio.of(number)))
+                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(var form)
+                        ? comparedAs(Relation.OneWay.of(form, states)) : null;
+                case Value.Truth _, Value.Case _ -> null;
+            };
+        }
+
+        private static Compared comparedAs(Relation.OneWay<Quantity> one) {
+            return new Compared(new Relation.Affine(one.form(), one.proposition()), one.holds());
+        }
+
         @Override
         public Proposition denied() {
             return new SameValue(one, other, !holds);
@@ -1211,6 +1243,20 @@ public sealed interface Proposition {
         private static boolean reboundBy(DecisionSubject container, List<TermPath> rebound) {
             return container instanceof DecisionSubject.AnInput(TermPath at, var _)
                     && rebound.stream().anyMatch(at::isAtOrUnder);
+        }
+
+        /**
+         * Some element of a container of the input being a string or a number the source wrote, as
+         * some element meeting the comparison with it written with {@code ==} — or null where this
+         * is anything else ({@link SameValue#asAComparison}).
+         */
+        public Some asTheComparisonOfItsElements() {
+            if (container instanceof DecisionSubject.AnInput
+                    && ofTheElement instanceof SameValue same
+                    && same.asAComparison() instanceof Compared compared) {
+                return new Some(container, compared, holds);
+            }
+            return null;
         }
 
         @Override

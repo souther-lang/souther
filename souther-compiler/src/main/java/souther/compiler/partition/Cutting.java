@@ -2176,6 +2176,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         instanceof TheParts.Drawn(Read.Several lines)) {
             return lines;
         }
+        if (stated instanceof Proposition.Some some
+                && some.asTheComparisonOfItsElements() instanceof Proposition.Some shown
+                && several(behavior, application, shown, read, reads, Optional.of(authors),
+                        _ -> UndividedByARelation.Working.UNREAD, false)
+                        instanceof TheParts.Drawn(Read.Several lines)) {
+            return lines;
+        }
         List<FilingCoordinate> related = valuesItRelates(stated);
         return related == null ? null : against(related, stated);
     }
