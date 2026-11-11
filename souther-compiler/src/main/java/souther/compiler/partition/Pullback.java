@@ -5341,10 +5341,17 @@ final class Pullback {
             if (read != null) {
                 return new Operand.At<>(read);
             }
-            Value written = subject instanceof LawSubject.Argument<DeclaredArgument>(
-                    DeclaredArgument at)
-                    ? Value.folded(foldedUnderItsNames(applied.argument(at), reads).orElse(null))
-                    : null;
+            Value written = switch (subject) {
+                case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) -> Value.folded(
+                        foldedUnderItsNames(applied.argument(at), reads).orElse(null));
+                // An element of a container the source wrote out is a value it wrote as much as
+                // an argument it handed over is.
+                case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
+                        elements.get(at) instanceof ElementAt.AValue(Core value, InputReads in)
+                                ? Value.folded(foldedUnderItsNames(value, in).orElse(null))
+                                : null;
+                default -> null;
+            };
             return written == null ? null : new Operand.Written<>(written);
         }
 

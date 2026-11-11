@@ -39,7 +39,18 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             data Group = { tags: List<String> }
             data Line = { code: String, rates: Map<String, Int>, tags: List<String>,
                           ids: Set<String>, nums: List<Int>, days: List<Date>, n: Int,
-                          other: List<String>, groups: List<Group> }
+                          other: List<String>, groups: List<Group>, s: String, i: Int }
+
+            behavior ofWrittenList : (l: Line) -> Bool
+            let ofWrittenList (l) = List.contains(l.s, ["A", "B"])
+            behavior ofWrittenListAny : (l: Line) -> Bool
+            let ofWrittenListAny (l) = List.any(e -> e == l.s, ["A", "B"])
+            behavior ofWrittenSet : (l: Line) -> Bool
+            let ofWrittenSet (l) = Set.contains(l.s, Set.fromList(["A", "B"]))
+            behavior ofWrittenInts : (l: Line) -> Bool
+            let ofWrittenInts (l) = List.contains(l.i, [1, 2, 3])
+            behavior ofWrittenIntsAny : (l: Line) -> Bool
+            let ofWrittenIntsAny (l) = List.any(e -> e == l.i, [1, 2, 3])
 
             behavior any : (l: Line) -> Bool
             let any (l) = List.any(t -> t == "K", l.tags)
@@ -97,6 +108,18 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         assertEquals(Set.of("l.nums[*] 5"), linesOf("numbered"));
         assertEquals(Set.of("l.days[*] 2026-01-05"), linesOf("anyDay"));
         assertEquals(linesOf("anyDay"), linesOf("hasDay"));
+    }
+
+    /** A container the source wrote out, asked for a value of the input, draws the lines the
+     *  comparison of its elements with that value draws, and a row is found at the same points. */
+    @Test
+    void aWrittenContainerDrawsTheLinesOfTheComparison() {
+        assertEquals(Set.of("l.s A", "l.s B"), linesOf("ofWrittenListAny"));
+        assertEquals(linesOf("ofWrittenListAny"), linesOf("ofWrittenList"));
+        assertEquals(linesOf("ofWrittenListAny"), linesOf("ofWrittenSet"));
+        assertEquals(linesOf("ofWrittenIntsAny"), linesOf("ofWrittenInts"));
+        assertEquals(certifiedPointsOf("ofWrittenListAny"), certifiedPointsOf("ofWrittenList"));
+        assertEquals(certifiedPointsOf("ofWrittenIntsAny"), certifiedPointsOf("ofWrittenInts"));
     }
 
     /** Written beside other statements, under a closure or twice over one container, the lines

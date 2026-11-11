@@ -204,6 +204,61 @@ public sealed interface Proposition {
     }
 
     /**
+     * This statement with each place held to a string or a number the source wrote put as the
+     * comparison of the place with it ({@link SameValue#asAComparison}), or this statement where
+     * none is.
+     *
+     * <p>The one place that says how a statement about a written value is read as a relation on
+     * the order its place stands on, which is what draws a line there. Every reader of lines asks
+     * this of the statement as a whole, so a written value is a comparison to all of them and
+     * wherever it stands in the statement. The value it is held to stays a value for a reader that
+     * asks which one: this is a second reading of the statement and does not replace it.
+     */
+    default Proposition withTheValuesItHoldsCompared() {
+        return switch (this) {
+            case SameValue same -> same.asAComparison() instanceof Compared compared
+                    ? compared : this;
+            case All all -> {
+                List<Proposition> parts = comparedEach(all.parts());
+                yield parts == null ? this : all(parts);
+            }
+            case Any any -> {
+                List<Proposition> parts = comparedEach(any.parts());
+                yield parts == null ? this : any(parts);
+            }
+            case OnAnApplication applications -> {
+                List<Proposition> each = comparedEach(applications.each());
+                yield each == null ? this : onAnApplication(each);
+            }
+            case WhereItAnswers where -> {
+                Proposition answers = where.answers().withTheValuesItHoldsCompared();
+                Proposition states = where.states().withTheValuesItHoldsCompared();
+                yield answers == where.answers() && states == where.states() ? this
+                        : whereItAnswers(answers, states);
+            }
+            case Some some -> {
+                Proposition element = some.ofTheElement().withTheValuesItHoldsCompared();
+                yield element == some.ofTheElement() ? this
+                        : new Some(some.container(), element, some.holds());
+            }
+            default -> this;
+        };
+    }
+
+    /** {@code parts}, each read so ({@link #withTheValuesItHoldsCompared}) — or null where none
+     *  of them is read as anything else. */
+    private static List<Proposition> comparedEach(List<Proposition> parts) {
+        List<Proposition> out = new ArrayList<>();
+        boolean changed = false;
+        for (Proposition part : parts) {
+            Proposition compared = part.withTheValuesItHoldsCompared();
+            changed |= compared != part;
+            out.add(compared);
+        }
+        return changed ? out : null;
+    }
+
+    /**
      * Whether this can come out one way for one element of the container at {@code container} and
      * the other way for another: whether it names a subject an element is, or holds something
      * nothing here sees into.
@@ -1246,20 +1301,6 @@ public sealed interface Proposition {
         private static boolean reboundBy(DecisionSubject container, List<TermPath> rebound) {
             return container instanceof DecisionSubject.AnInput(TermPath at, var _)
                     && rebound.stream().anyMatch(at::isAtOrUnder);
-        }
-
-        /**
-         * Some element of a container of the input being a string or a number the source wrote, as
-         * some element meeting the comparison with it written with {@code ==} — or null where this
-         * is anything else ({@link SameValue#asAComparison}).
-         */
-        public Some asTheComparisonOfItsElements() {
-            if (container instanceof DecisionSubject.AnInput
-                    && ofTheElement instanceof SameValue same
-                    && same.asAComparison() instanceof Compared compared) {
-                return new Some(container, compared, holds);
-            }
-            return null;
         }
 
         @Override

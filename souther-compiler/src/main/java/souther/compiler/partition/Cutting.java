@@ -1438,6 +1438,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                      Pullback.OnTheInput onTheInput, boolean onEveryElement,
                                      Supplier<Optional<AuthorsLines>> lines) {
         Pullback.Pulled stated = onTheInput.stated();
+        // What a written value is held to is read as the comparison with it, wherever it stands
+        // in the statement ({@link Proposition#withTheValuesItHoldsCompared}), so that a container
+        // asked for it draws the line the same comparison draws and is not told to relate it to
+        // another value.
+        Proposition asLinesAre = stated.proposition().withTheValuesItHoldsCompared();
         // A remainder of a form over a value read off a binding is no number a row's numbers put
         // anywhere: no line on it and no relation of it to another value. Over the element of a
         // list of every whole number between two, the comparison is read on the elements the
@@ -1456,27 +1461,19 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     : noLine(comparison, stated.proposition(), List.of(), Set.of(),
                             onTheInput.arithmetic(), read, reads, answering);
         }
-        Read line = stated.proposition() instanceof Proposition.Compared(
+        Read line = asLinesAre instanceof Proposition.Compared(
                 Relation.Affine affine, boolean holds, Spelling _, var _)
                 ? lineOn(behavior, affine, holds, comparison.left(), read, reads) : null;
         List<FilingCoordinate> related = line == null
-                ? relatedToAnotherValue(stated.proposition()) : null;
-        return switch (stated.proposition()) {
+                ? relatedToAnotherValue(asLinesAre) : null;
+        return switch (asLinesAre) {
             case Proposition.Always _ -> new Read.CutsNothing(
                     settledAt(stated, comparison, read, reads, answering));
             case Proposition.WhereItAnswers nowhere when Proposition.answersNowhere(nowhere) ->
                     new Read.AnswersNowhere(settledAt(stated, comparison, read, reads, answering));
             case Proposition.Compared _ when line != null -> line;
             case Proposition.Compared _ when related != null ->
-                    against(related, stated.proposition(), workingOf(onTheInput));
-            // A container held to a value the source wrote is the line a comparison of its
-            // elements with that value draws, wherever the statement is read: here, and as an
-            // application ({@link #ofAnApplication}), from the one reading of it.
-            case Proposition.Some some
-                    when some.asTheComparisonOfItsElements() instanceof Proposition.Some shown ->
-                    asLines(behavior, comparison, shown, onTheInput.arithmetic(),
-                            onTheInput.working(), onTheInput.workingOfRelation(), read, reads,
-                            answering, lines.get());
+                    against(related, asLinesAre, workingOf(onTheInput));
             case Proposition.Some some
                     when valuesItRelates(some) instanceof List<FilingCoordinate> values ->
                     against(values, some);
@@ -1498,13 +1495,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
                  Proposition.Some _, Proposition.InCases _, Proposition.Truth _,
                  Proposition.Present _, Proposition.WhereItAnswers _
-                    when statesNoRelation(stated.proposition()) -> new Read.StatesNoRelation();
+                    when statesNoRelation(asLinesAre) -> new Read.StatesNoRelation();
             // A statement read where an operation in it answers is the lines of what it states,
             // each deciding only where the operation answers ({@link WhereEachLineDecides}).
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
                  Proposition.WhereItAnswers _
-                    when !Proposition.leavesSomethingUnread(stated.proposition()) ->
-                    asLines(behavior, comparison, stated.proposition(), onTheInput.arithmetic(),
+                    when !Proposition.leavesSomethingUnread(asLinesAre) ->
+                    asLines(behavior, comparison, asLinesAre, onTheInput.arithmetic(),
                             onTheInput.working(), onTheInput.workingOfRelation(), read, reads,
                             answering, lines.get());
             // Some element meeting several parts, which is the parts read of that element: a
@@ -1519,12 +1516,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             answering, lines.get());
             // And one some part of which nothing read, as the lines it draws beside that part.
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
-                 Proposition.WhereItAnswers _ when holdsARelation(stated.proposition()) ->
-                    besideWhatWasNotRead(behavior, comparison, stated.proposition(),
+                 Proposition.WhereItAnswers _ when holdsARelation(asLinesAre) ->
+                    besideWhatWasNotRead(behavior, comparison, asLinesAre,
                             onTheInput.arithmetic(), onTheInput.working(),
                             onTheInput.workingOfRelation(), read, reads, answering, lines.get());
-            default -> noLine(comparison, stated.proposition(),
-                    Proposition.stopsIn(stated.proposition()), Set.of(), onTheInput.arithmetic(),
+            default -> noLine(comparison, asLinesAre,
+                    Proposition.stopsIn(asLinesAre), Set.of(), onTheInput.arithmetic(),
                     read, reads, answering);
         };
     }
@@ -2184,8 +2181,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         instanceof TheParts.Drawn(Read.Several lines)) {
             return lines;
         }
-        if (stated instanceof Proposition.Some some
-                && some.asTheComparisonOfItsElements() instanceof Proposition.Some shown
+        Proposition shown = stated.withTheValuesItHoldsCompared();
+        if (shown != stated
                 && several(behavior, application, shown, read, reads, Optional.of(authors),
                         _ -> UndividedByARelation.Working.UNREAD, false)
                         instanceof TheParts.Drawn(Read.Several lines)) {
@@ -2487,9 +2484,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (stated) {
             // What a sameness relates is the places of its subjects: against a value written, the
             // place of the one alone.
-            // A value the source wrote is no other value: a place held to one is the comparison
-            // with it ({@link Proposition.SameValue#asAComparison}) and relates nothing.
-            case Proposition.SameValue same when same.asAComparison() != null -> false;
             case Proposition.SameValue same when same.one() instanceof DecisionSubject.AnInput
                     && (same.otherSubject() == null
                             || same.otherSubject() instanceof DecisionSubject.AnInput) -> {

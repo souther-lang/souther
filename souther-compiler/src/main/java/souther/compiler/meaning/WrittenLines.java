@@ -333,7 +333,8 @@ public final class WrittenLines {
             known = new LinkedHashSet<>();
             Proposition out = concluded.of(step);
             conclusions.put(step, out);
-            gather(out, known, stated);
+            // The relations a line is read from are those of the statement read as lines are.
+            gather(out.withTheValuesItHoldsCompared(), known, stated);
             made.put(step, known);
         }
         return known;
@@ -362,17 +363,8 @@ public final class WrittenLines {
                  Proposition.Some _, Proposition.OnAnApplication _, Proposition.SoManyHold _,
                  Proposition.OfTheWays _, Proposition.SomeReachable _ ->
                     stated.partsHeld().forEach(each -> gather(each, into, found));
-            // A place held to a string the source wrote is the relation of that string on the
-            // order the place stands on, which is a place of the line the comparison draws.
-            case Proposition.SameValue same -> {
-                Proposition.Compared asCompared = same.asAComparison();
-                if (asCompared != null) {
-                    into.add(asCompared.heldSpelling());
-                    found.putIfAbsent(asCompared.heldSpelling(), asCompared);
-                }
-            }
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                  Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
                  Proposition.Unread _ -> { }
         }
