@@ -944,6 +944,19 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the ways the places a statement reads can be at the values it"
                             + " names, made one at a time, and adds the figure to what the search"
                             + " came to"),
+            Map.entry("souther.compiler.partition.CountWitnesses#collectionsTold("
+                            + "Lsouther/compiler/types/Type;ZLjava/util/List;Ljava/util/List;"
+                            + "Lsouther/compiler/check/RuleReadingContext;Ljava/util/Set;)"
+                            + "Ljava/util/List;",
+                    "leaves out a collection of the values a statement names that holds more"
+                            + " elements than a proposal may, and adds the figure to what the"
+                            + " search came to"),
+            Map.entry("souther.compiler.partition.CountWitnesses$Built#holding("
+                            + "Ljava/util/List;Ljava/math/BigInteger;Ljava/util/Set;)"
+                            + "Lsouther/compiler/partition/FixtureTemplate;",
+                    "builds no collection of more elements than a proposal may hold, however many"
+                            + " a statement says, and adds the figure to what the search came"
+                            + " to"),
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.
