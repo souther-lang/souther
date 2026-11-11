@@ -3,13 +3,10 @@ package souther.compiler.partition;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredBounds;
-import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleCitation;
-import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.TypeView;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
@@ -2184,19 +2181,8 @@ sealed interface ComparisonAssessment {
             Endpoint only = Endpoint.inclusive(Count.of(number.value()));
             return new NumericDomain.Bounds(only, only);
         }
-        Core.FieldAccess access = switch (seen) {
-            case Core.FieldAccess one -> one;
-            case Core.FieldProjection projection -> projection.lastAccess();
-            default -> null;
-        };
-        if (access == null
-                || Location.isStep(access.target().type(), access.field(), read.newtypes())) {
-            return NumericDomain.Bounds.OPEN;
-        }
-        RuleReadingSource rules = read.rules();
-        TypeView view = TypeView.of(access.target().type(), rules.inners(), rules.symbols(),
-                rules.kinds(), rules.sums());
-        DeclaredBounds.Range own = DeclaredBounds.of(view, read.ruleReading());
+        DeclaredBounds.Range own = DeclaredBounds.ofTheValueReadOff(seen, read.rules(),
+                read.newtypes(), read.ruleReading());
         return own == null ? NumericDomain.Bounds.OPEN
                 : new NumericDomain.Bounds(own.min(), own.max());
     }

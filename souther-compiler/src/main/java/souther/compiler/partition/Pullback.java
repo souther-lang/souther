@@ -10,6 +10,7 @@ import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Scope;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.FoldedValue;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.WalkElements;
 import souther.compiler.check.AnOperationApplied;
@@ -173,6 +174,7 @@ import java.util.OptionalLong;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -1755,27 +1757,31 @@ final class Pullback {
                 ? around.inTheWalk(walk.step(), filed, child)
                 : around.under(e, child);
         try {
-            if (e instanceof Core.LetIn li) {
-                operated.stepsNames = under.apply(li.value());
-                leaveUnsaidWhatMayEndARunUnder(li.value(), reads, bound);
-                operated.stepsNames = under.apply(li.body());
-                leaveUnsaidWhatMayEndARunUnder(li.body(), quantities().inside(li, reads), bound);
-            } else if (e instanceof Core.IfConstructed attempt) {
-                WhatARunMayEndFor.forEachWorkedOut(attempt, part -> {
-                    operated.stepsNames = under.apply(part);
-                    leaveUnsaidWhatMayEndARunUnder(part, reads, bound);
-                });
+            // What a child is read in is the scope's own answer ({@link ScopeStep}), for every
+            // step but the names this walk accounts for itself: a closure's parameters
+            // ({@link #boundInside}). The same answer is asked where the operand a number is made
+            // of is read ({@link #leaveUnsaidOverWhereItStands}), so a name an arm binds is read
+            // in one world whichever walk meets it.
+            BiConsumer<Core, ScopeStep> visit = (child, step) -> {
+                operated.stepsNames = under.apply(child);
+                InputReads within = reads;
+                Bound inside = bound;
+                if (Core.withoutStanding(child) instanceof Core.Block block) {
+                    inside = boundInside(e, block, reads, bound);
+                } else if (!(step instanceof ScopeStep.Block)) {
+                    within = reads.entering(step, read.rules().symbols(),
+                            read.rules().newtypes());
+                }
+                if (walk != null && Core.withoutStanding(child) == walk.step()) {
+                    leaveUnsaidUnderEachApplicationOf(walk, child, within, inside);
+                } else {
+                    leaveUnsaidWhatMayEndARunUnder(child, within, inside);
+                }
+            };
+            if (e instanceof Core.IfConstructed attempt) {
+                WhatARunMayEndFor.forEachWorkedOut(attempt, visit);
             } else {
-                Core.forEachChild(e, child -> {
-                    operated.stepsNames = under.apply(child);
-                    Bound inside = Core.withoutStanding(child) instanceof Core.Block block
-                            ? boundInside(e, block, reads, bound) : bound;
-                    if (walk != null && Core.withoutStanding(child) == walk.step()) {
-                        leaveUnsaidUnderEachApplicationOf(walk, child, reads, inside);
-                    } else {
-                        leaveUnsaidWhatMayEndARunUnder(child, reads, inside);
-                    }
-                });
+                ScopeStep.forEachChild(e, visit);
             }
         } finally {
             operated.stepsNames = around;
@@ -2003,14 +2009,24 @@ final class Pullback {
      * order; a whole number an operation of the library answers, where the library bounds it
      * ({@link #whatTheLibraryBounds}) — a remainder by a divisor below nought as by one above; a
      * name the step of a walk around binds to the value found under a key, what the walk's law
-     * says it holds there ({@link WhatTheStepsNamesHold}), where nothing else says; and a sum, a
+     * says it holds there ({@link WhatTheStepsNamesHold}), where nothing else says; the body of a
+     * {@code let}; a choice, what its arms hold together ({@link #exactRangeOfTheArms}); the value
+     * of a newtype, what its rules leave it, which meets what the arithmetic composes where it
+     * composes the number as a place ({@link DeclaredBounds#ofTheValueReadOff}); and a sum, a
      * difference, a product or a negation of numbers each of which is known, where the arithmetic
      * composes it as no form.
      */
     private FormRange exactRangeOf(Core e, InputReads reads) {
+        DeclaredBounds.Range leftByTheRules = DeclaredBounds.ofTheValueReadOff(e, read.rules(),
+                read.rules().newtypes(), read.ruleReading());
+        FormRange ofTheNewtype = leftByTheRules == null ? null
+                : FormRange.ofWhatTheRulesLeave(leftByTheRules);
         if (AffineForms.outcome(e, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
-            return FormRange.ofNumbers(form, read, operated.stepsNames::of);
+            FormRange composed = FormRange.ofNumbers(form, read, operated.stepsNames::of);
+            if (composed != null) {
+                return ofTheNewtype == null ? composed : composed.meet(ofTheNewtype);
+            }
         }
         RoundedToAWholeNumber.Written rounding = writtenRounding(e, reads);
         if (rounding != null) {
@@ -2027,6 +2043,19 @@ final class Pullback {
         if (here instanceof Core.Read name) {
             return operated.stepsNames.of(name.binding());
         }
+        if (here instanceof Core.LetIn li) {
+            return exactRangeOf(li.body(), quantities().inside(li, reads));
+        }
+        if (here instanceof Core.FieldAccess || here instanceof Core.FieldProjection) {
+            return ofTheNewtype;
+        }
+        // Every choice {@link Choice#of} reads, so that the arms of an attempt to build a value are
+        // joined as those of an if and of a match are. The range is the one a run that comes out
+        // has; whether the attempt itself stops a run is asked of the stops, not of this.
+        if (here instanceof Core.If || here instanceof Core.Match
+                || here instanceof Core.IfConstructed) {
+            return exactRangeOfTheArms(Choice.of(here), reads);
+        }
         if (!isAnOperator(here)) {
             return null;
         }
@@ -2036,6 +2065,24 @@ final class Pullback {
                     exactRangeOf(binary.left(), reads), exactRangeOf(binary.right(), reads));
             default -> null;
         };
+    }
+
+    /**
+     * The numbers a choice comes to on every run that works it out: the smallest range holding
+     * what each of its arms comes to, an arm read where the choice of it binds its names. Null
+     * where any arm's numbers are not known, since the arm may be the one a run takes.
+     */
+    private FormRange exactRangeOfTheArms(Choice choice, InputReads reads) {
+        FormRange joined = null;
+        for (Choice.Arm arm : choice.arms()) {
+            FormRange of = exactRangeOf(arm.answers(), reads.choosing(arm.decidedBy(),
+                    read.rules().symbols(), read.rules().newtypes()));
+            if (of == null) {
+                return null;
+            }
+            joined = joined == null ? of : joined.hull(of);
+        }
+        return joined;
     }
 
     /**
@@ -2293,26 +2340,34 @@ final class Pullback {
                     operated.unsaidAt.addAll(places.places());
                     return;
                 }
-                // A name an arm of a match or a let binds stands for what the value it was bound to
-                // stands for, which is read in the arm and not where the match stands.
-                if (Core.withoutStanding(operand) instanceof Core.Match match) {
-                    leaveUnsaidOverWhereItStands(match.scrutinee(), reads, bound);
-                    for (Core.Case arm : match.cases()) {
-                        leaveUnsaidOverWhereItStands(arm.body(), reads.choosing(
-                                Choice.Decides.ofCase(match, arm), read.rules().symbols(),
-                                read.rules().newtypes()), bound);
+                // A name an arm of a match, an attempt or a let binds stands for what the value it
+                // was bound to stands for, which is read in the arm and not where the node
+                // stands: each part is read where its step into it puts it
+                // ({@link ScopeStep#forEachChild}). What a match comes to is the body of the arm
+                // taken, and which case that is says nothing of what else the value holds, so a
+                // scrutinee that stands at a place is no place of the number; a worked out one is
+                // what it is made of. The number of a let is its body's, and the value it binds
+                // is theirs through the names the body reads.
+                Core node = Core.withoutStanding(operand);
+                Core skipped = switch (node) {
+                    case Core.Match match -> {
+                        PathResolution selects = reads.pathOf(match.scrutinee(),
+                                read.rules().newtypes());
+                        yield selects instanceof PathResolution.At
+                                || selects instanceof PathResolution.MayStandAt
+                                ? match.scrutinee() : null;
                     }
-                    return;
-                }
-                if (Core.withoutStanding(operand) instanceof Core.LetIn li) {
-                    leaveUnsaidOverWhereItStands(li.value(), reads, bound);
-                    leaveUnsaidOverWhereItStands(li.body(), quantities().inside(li, reads), bound);
-                    return;
-                }
+                    case Core.LetIn li -> li.value();
+                    default -> null;
+                };
                 boolean[] hasParts = {false};
-                Core.forEachChild(Core.withoutStanding(operand), part -> {
+                ScopeStep.forEachChild(node, (part, step) -> {
                     hasParts[0] = true;
-                    leaveUnsaidOverWhereItStands(part, reads, bound);
+                    if (part != skipped) {
+                        leaveUnsaidOverWhereItStands(part, step instanceof ScopeStep.Block ? reads
+                                : reads.entering(step, read.rules().symbols(),
+                                        read.rules().newtypes()), bound);
+                    }
                 });
                 if (!hasParts[0] && Core.withoutStanding(operand) instanceof Core.Read name) {
                     // A name stands for the value it was bound to, and a run that works the name

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -181,6 +182,41 @@ public final class DeclaredBounds {
      * reading rather than taking a name off a width.
      */
     public record Range(Endpoint min, Endpoint max, Carrier carrier) {}
+
+    /**
+     * What the rules of a type leave the number {@code read} takes off a value of it, or null
+     * where it takes none off one or the rules leave it open: a value of the type exists only
+     * where its rules held, whatever made it. A newtype's own value is what its rules leave it,
+     * and a field of a record is what the record's rules place on that field, the ends a position
+     * of the input holding it is bounded by. A run that makes the value may still stop, which is
+     * asked of what makes it.
+     */
+    public static Range ofTheValueReadOff(Core read, RuleReadingSource rules,
+                                          DeclarationNewtypes newtypes, RuleReadingContext reading) {
+        Core.FieldAccess access = switch (Core.withoutStanding(read)) {
+            case Core.FieldAccess one -> one;
+            case Core.FieldProjection projection -> projection.lastAccess();
+            default -> null;
+        };
+        if (access == null) {
+            return null;
+        }
+        Type from = access.target().type();
+        if (!Location.isStep(from, access.field(), newtypes)) {
+            return of(TypeView.asWritten(from, rules.symbols(), rules.kinds(), rules.sums()),
+                    reading);
+        }
+        Carrier carrier = Carrier.ofPrimitive(access.type());
+        if (carrier == null || !(TypeView.shapeOf(from, rules.inners(), rules.symbols(),
+                rules.kinds(), rules.sums()) instanceof Shape.Product(
+                        TypeSymbol.AtModule record, var _))) {
+            return null;
+        }
+        Bounds placed = placed(FieldDomains.of(record, reading)
+                .placedAt(TermPath.ruleKeyOf(List.of(new TermPath.Step.Field(access.field())))),
+                NumberAt.OfWhatNumber.OWN_VALUE, carrier);
+        return placed == null ? null : placed.range();
+    }
 
     /** What a numeric newtype's own rules leave its value between, for a caller that is asking about
      * the value and not about anything taken of it. */
