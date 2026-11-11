@@ -626,11 +626,14 @@ public sealed interface Proposition {
          * which is what draws a line there.
          */
         public Compared asAComparison() {
-            if (!(one instanceof DecisionSubject.AnInput(TermPath place, var _))
+            if (!(one instanceof DecisionSubject.AnInput(TermPath place, ValueIdentity identity))
                     || !(other instanceof Operand.Written<DecisionSubject>(Value written))) {
                 return null;
             }
-            DecisionAtom atom = new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(place));
+            // Which value at the place it is says which element of a container it is, so the
+            // relation is about the same value the sameness was.
+            DecisionAtom atom = new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(place),
+                    identity);
             Rel states = holds ? Rel.EQ : Rel.NE;
             return switch (written) {
                 case Value.Text(String text) -> new Compared(

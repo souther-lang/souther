@@ -1469,6 +1469,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Compared _ when line != null -> line;
             case Proposition.Compared _ when related != null ->
                     against(related, stated.proposition(), workingOf(onTheInput));
+            // A container held to a value the source wrote is the line a comparison of its
+            // elements with that value draws, wherever the statement is read: here, and as an
+            // application ({@link #ofAnApplication}), from the one reading of it.
+            case Proposition.Some some
+                    when some.asTheComparisonOfItsElements() instanceof Proposition.Some shown ->
+                    asLines(behavior, comparison, shown, onTheInput.arithmetic(),
+                            onTheInput.working(), onTheInput.workingOfRelation(), read, reads,
+                            answering, lines.get());
             case Proposition.Some some
                     when valuesItRelates(some) instanceof List<FilingCoordinate> values ->
                     against(values, some);
@@ -2479,6 +2487,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (stated) {
             // What a sameness relates is the places of its subjects: against a value written, the
             // place of the one alone.
+            // A value the source wrote is no other value: a place held to one is the comparison
+            // with it ({@link Proposition.SameValue#asAComparison}) and relates nothing.
+            case Proposition.SameValue same when same.asAComparison() != null -> false;
             case Proposition.SameValue same when same.one() instanceof DecisionSubject.AnInput
                     && (same.otherSubject() == null
                             || same.otherSubject() instanceof DecisionSubject.AnInput) -> {
