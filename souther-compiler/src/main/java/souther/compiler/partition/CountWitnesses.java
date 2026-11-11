@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * A row of a behavior's inputs at which a counted statement holds of one element of the container
@@ -318,7 +317,7 @@ public final class CountWitnesses {
         }
         if (alike.isEmpty()) {
             return RowSearch.upTo(withWhatItReadsDiffering(out, element, container, stated,
-                    reading), stopped);
+                    reading, stopped), stopped);
         }
         BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
                 new StandingAtAPoint.RowWalk(inputs, new ObservedInputs(built,
@@ -349,8 +348,8 @@ public final class CountWitnesses {
                 }
             }
         }
-        return RowSearch.upTo(withWhatItReadsDiffering(out, element, container, stated, reading),
-                stopped);
+        return RowSearch.upTo(withWhatItReadsDiffering(out, element, container, stated, reading,
+                stopped), stopped);
     }
 
     /**
@@ -359,23 +358,27 @@ public final class CountWitnesses {
      * statement may tell apart by a place of their own, which the one value that stands for the
      * element does not. After what was tried, so that a row found without them is the row found.
      *
+     * <p>A place is the element itself where the statement is about the element and not a field
+     * of it ({@code x -> x}), which is the empty run of fields.
+     *
      * <p>A type that states a division — both of a {@code Bool}, each case of a sum — is taken at
      * every value that divides it, and any other at two values that differ
      * ({@link Witnesses#distinctValuesOf}): one a statement holds of and one it fails of is what
      * is looked for, and a type with no division of its own has no more than that to tell apart.
-     * And at the values the statement itself names there ({@link ValuesAStatementNames}), which
-     * are what it tells apart where the type tells nothing.
+     * And at the values the statement itself names there ({@link ValuesAStatementNames}), written
+     * as the type of the place writes them, which are what it tells apart where the type tells
+     * nothing.
      *
-     * <p>Each place alone first, then every place at once: a statement over two of them holds only
-     * where both are at the values it asks for. The ways the places can be together are counted as
-     * far as the figure the elements are tried to ({@link RowSearch#upTo}), which is said where
-     * they come to more.
+     * <p>What this finds is the elements a statement turns on the values it names and the types
+     * divide into tell apart. Where it turns on anything else — a measure of a place, what two
+     * places add up to — the element is found where a row of the model supplies it, and nothing is
+     * found otherwise.
      */
     private static List<FixtureTemplate> withWhatItReadsDiffering(
             List<FixtureTemplate> tried, Type element, TermPath container, Proposition stated,
-            RuleReadingContext reading) {
+            RuleReadingContext reading, Set<Figure> stopped) {
         RuleReadingSource source = reading.source();
-        Map<TermPath, List<Object>> named = ValuesAStatementNames.of(stated);
+        Map<TermPath, List<ValuesAStatementNames.Named>> named = ValuesAStatementNames.of(stated);
         Map<List<String>, List<FixtureTemplate>> told = new LinkedHashMap<>();
         for (TermPath place : PositionsAStatementReads.of(stated).orElse(List.of())) {
             List<String> fields = fieldsBelow(container.element(), place);
@@ -388,8 +391,13 @@ public final class CountWitnesses {
                     source.kinds(), source.sums()).size();
             List<FixtureTemplate> values = new ArrayList<>(Witnesses.distinctValuesOf(type,
                     Math.max(2, divided), reading, Set.of()).values());
-            for (Object constant : named.getOrDefault(place, List.of())) {
-                FixtureTemplate written = Witnesses.writtenAs(constant, type, reading);
+            for (ValuesAStatementNames.Named each : named.getOrDefault(place, List.of())) {
+                FixtureTemplate written = switch (each) {
+                    case ValuesAStatementNames.Named.Numeric number ->
+                            Partitions.writtenNumberAt(type, number.at(), reading);
+                    case ValuesAStatementNames.Named.Written text ->
+                            Witnesses.writtenAs(text.at(), type, reading);
+                };
                 if (written != null && !values.contains(written)) {
                     values.add(written);
                 }
@@ -399,29 +407,57 @@ public final class CountWitnesses {
             }
         }
         List<FixtureTemplate> out = new ArrayList<>(tried);
-        List<Map<List<String>, FixtureTemplate>> together = List.of(Map.of());
-        for (Map.Entry<List<String>, List<FixtureTemplate>> place : told.entrySet()) {
-            List<Map<List<String>, FixtureTemplate>> next = new ArrayList<>();
-            for (Map<List<String>, FixtureTemplate> so : together) {
-                for (FixtureTemplate value : place.getValue()) {
-                    Map<List<String>, FixtureTemplate> more = new LinkedHashMap<>(so);
-                    more.put(place.getKey(), value);
-                    next.add(more);
-                }
-            }
-            // Past the figure, one more is as much as is needed to say it is passed.
-            together = next.size() > MOST_VALUES ? next.subList(0, MOST_VALUES + 1) : next;
-        }
-        List<Map<List<String>, FixtureTemplate>> alone = new ArrayList<>();
-        told.forEach((fields, values) -> values.forEach(value -> alone.add(Map.of(fields, value))));
-        for (Map<List<String>, FixtureTemplate> placed : Stream.concat(alone.stream(),
-                together.stream()).toList()) {
+        for (Map<List<String>, FixtureTemplate> placed : waysTheyCanBeTogether(told, stopped)) {
             for (FixtureTemplate one : Witnesses.holdingAt(element, placed, reading).values()) {
                 if (!out.contains(one)) {
                     out.add(one);
                 }
                 break;
             }
+        }
+        return out;
+    }
+
+    /**
+     * Each place of {@code told} at each of its values alone, then every place at once — a
+     * statement over two of them holds only where both are at the values it asks for — as many as
+     * the figure the elements are tried to ({@link RowSearch#MOST_VALUES}), with the figure said in
+     * {@code stopped} where there are more. The ways together are counted and then made one at a
+     * time, so that nothing past the figure is built.
+     */
+    private static List<Map<List<String>, FixtureTemplate>> waysTheyCanBeTogether(
+            Map<List<String>, List<FixtureTemplate>> told, Set<Figure> stopped) {
+        List<List<String>> places = List.copyOf(told.keySet());
+        List<Map<List<String>, FixtureTemplate>> out = new ArrayList<>();
+        int alone = 0;
+        for (List<String> place : places) {
+            alone += told.get(place).size();
+        }
+        long together = places.size() < 2 ? 0 : 1;
+        for (List<String> place : places) {
+            if (places.size() > 1) {
+                together = Math.min(together * told.get(place).size(), MOST_VALUES + 1L);
+            }
+        }
+        if (alone + together > MOST_VALUES) {
+            stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+        }
+        for (List<String> place : places) {
+            for (FixtureTemplate value : told.get(place)) {
+                if (out.size() < MOST_VALUES) {
+                    out.add(Map.of(place, value));
+                }
+            }
+        }
+        for (long at = 0; at < together && out.size() < MOST_VALUES; at++) {
+            Map<List<String>, FixtureTemplate> placed = new LinkedHashMap<>();
+            long rest = at;
+            for (List<String> place : places) {
+                List<FixtureTemplate> values = told.get(place);
+                placed.put(place, values.get((int) (rest % values.size())));
+                rest /= values.size();
+            }
+            out.add(placed);
         }
         return out;
     }
@@ -459,8 +495,8 @@ public final class CountWitnesses {
         }
     }
 
-    /** The fields from {@code element} down to {@code place}, or null where it is not under it
-     *  by fields alone. */
+    /** The fields from {@code element} down to {@code place} — none where it is the element
+     *  itself — or null where it is not under it by fields alone. */
     private static List<String> fieldsBelow(TermPath element, TermPath place) {
         if (!place.isAtOrUnder(element)) {
             return null;
@@ -473,7 +509,7 @@ public final class CountWitnesses {
             }
             out.add(name);
         }
-        return out.isEmpty() ? null : out;
+        return out;
     }
 
     /** {@code value} with {@code at}, a field and the fields of what is there, holding

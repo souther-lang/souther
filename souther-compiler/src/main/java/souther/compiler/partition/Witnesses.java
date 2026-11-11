@@ -609,14 +609,17 @@ final class Witnesses {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
-        if (!(view.shape() instanceof Shape.Scalar)) {
+        if (!(view.shape() instanceof Shape.Scalar(Type.Prim prim))) {
             return null;
         }
+        // A constant is written at a place of its own kind and no other: the language converts
+        // between none of them, so a number of one kind at a place of another is no value of it.
         FixtureTemplate written = switch (constant) {
-            case String text -> FixtureTemplate.string(text);
-            case Long number -> FixtureTemplate.integer(number);
-            case BigDecimal number -> FixtureTemplate.decimal(number);
-            case Boolean truth -> FixtureTemplate.bool(truth);
+            case String text when prim == Type.Prim.STRING -> FixtureTemplate.string(text);
+            case Long number when prim == Type.Prim.INT -> FixtureTemplate.integer(number);
+            case BigDecimal number when prim == Type.Prim.DECIMAL || prim == Type.Prim.RATIONAL ->
+                    FixtureTemplate.decimal(number);
+            case Boolean truth when prim == Type.Prim.BOOL -> FixtureTemplate.bool(truth);
             default -> null;
         };
         return written == null ? null : WornNames.under(view.wrappers(), written, source);

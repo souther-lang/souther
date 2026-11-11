@@ -1498,8 +1498,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * Whatever cut short the values a witness is sought among is named, and the elements tried are
-     * held to the figure however each is come by. None of the numbers written is above a thousand,
-     * so the search finds no element the count holds of and tries all it has. A row of ten is
+     * held to the figure however each is come by. No number is both above a thousand and below
+     * nought, so the search finds no element the count holds of and tries all it has. A row of ten is
      * all of it, and no figure is named. A row of sixty-five was kept only so far by the run that
      * read it, and the figure it was cut at is named. Five rows of sixty, each kept whole, write
      * more elements between them than the search tries, and its own figure is named.
@@ -1528,7 +1528,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 module w1
                 behavior m : (xs: List<Int>) -> Bool
                 let m (xs) = {
-                    let kept = List.filter(x -> x > 1000, xs)
+                    let kept = List.filter(x -> x > 1000 && x < 0, xs)
                     List.length(kept) == List.length(xs)
                 }
 

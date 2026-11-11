@@ -38,19 +38,30 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
 
             data Cur = String
                 invariant String.matches("[A-Z]{3}", value)
-            data Line = { currency: Cur, flag: Bool, a: Bool, b: Bool, qty: Int, code: String }
+            data Line = { currency: Cur, flag: Bool, a: Bool, b: Bool, qty: Int, amount: Decimal,
+                          code: String }
+            data Wide = { f1: Bool, f2: Bool, f3: Bool, f4: Bool, f5: Bool, f6: Bool, f7: Bool,
+                          f8: Bool, f9: Bool }
             data Capped = { items: List<Line> }
                 invariant List.length(items) <= 3
             """;
 
     private static final String BEHAVIOR = """
 
-            behavior %1$s : (lines: List<Line>, rates: Map<Cur, Int>, k: Int, capped: Capped)
-                    -> Bool
-            let %1$s (lines, rates, k, capped) = %2$s
+            behavior %1$s : (lines: List<Line>, rates: Map<Cur, Int>, k: Int, capped: Capped,
+                             flags: List<Bool>, names: List<String>, target: String,
+                             wide: List<Wide>) -> Bool
+            let %1$s (lines, rates, k, capped, flags, names, target, wide) = %2$s
             """;
 
     private static final String PRICED = "Map.get(l.currency, rates)";
+
+    /** Nine places that must each be at the one value, which are more ways together than the
+     *  figure the elements are tried to. */
+    private static final String EVERY_FLAG_OFF = "List.length(List.filter(w -> "
+            + "Bool.not(w.f1) && Bool.not(w.f2) && Bool.not(w.f3) && Bool.not(w.f4) && "
+            + "Bool.not(w.f5) && Bool.not(w.f6) && Bool.not(w.f7) && Bool.not(w.f8) && "
+            + "Bool.not(w.f9), wide)) == k";
 
     /** A count and the number it is held against, and whether that number is read. */
     private record Case(String body, String against, boolean read) {}
@@ -80,6 +91,11 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                         true),
                 new Case("List.length(List.filter(l -> l.code == \"USD\", lines)) == k", "k",
                         true),
+                // The value a number is named at is written as the type of the place writes it.
+                new Case("List.length(List.filter(l -> l.amount > 5.0m, lines)) == k", "k", true),
+                // A statement about the element itself and not a field of it.
+                new Case("List.length(List.filter(x -> x, flags)) == k", "k", true),
+                new Case("List.length(List.filter(n -> n == target, names)) == k", "k", true),
                 // What a way says of the size of the container is no more than the most the count
                 // is, and the count is none up to that.
                 new Case("if List.length(lines) == 2 then " + flagged + " == k else false", "k",
@@ -88,9 +104,16 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                         true),
                 new Case("if List.length(lines) <= 3 then " + flagged + " == k else false", "k",
                         true),
+                // A measure of a place is no value of it, so what the statement names of one is no
+                // value to put there, and the element is found only where a row supplies it.
+                new Case("List.length(List.filter(l -> String.length(l.code) > 3, lines)) == k",
+                        "k", false),
                 // No element meets the statement, so no row holds the count at anything but none.
                 new Case("List.length(List.filter(l -> l.flag && Bool.not(l.flag), lines)) == k",
                         "k", false),
+                // More ways to be together than the figure: the ones past it are not tried, and the
+                // figure is what is said.
+                new Case(EVERY_FLAG_OFF, "k", false),
                 // A container the rules cap holds no more than three, and a count past it is no
                 // row of.
                 new Case("List.length(List.filter(l -> l.flag, capped.items)) == k", "k", false));
@@ -126,5 +149,21 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
         Map<String, Boolean> expected = new LinkedHashMap<>();
         CASES.forEach(each -> expected.put(each.body(), !each.read()));
         assertEquals(expected, refused);
+    }
+
+    /**
+     * What was not tried is said, and not only that nothing was shown: a search that stopped short
+     * of everything it would have tried names the figure it stopped at, whether or not the ways it
+     * left are ones the rules would have refused.
+     */
+    @Test
+    void aSearchCutShortSaysTheFigureItStoppedAt() {
+        int at = CASES.indexOf(CASES.stream().filter(each -> each.body().equals(EVERY_FLAG_OFF))
+                .findFirst().orElseThrow());
+        assertEquals(List.of(souther.compiler.partition.CompositionBudget
+                        .VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure()),
+                MEASURED.get("case" + at).notRead().stream()
+                        .filter(left -> left.at().equals("k"))
+                        .flatMap(left -> left.figures().stream()).distinct().toList());
     }
 }

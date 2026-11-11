@@ -5681,13 +5681,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (held == null || !held.holdsAValue()) {
                 continue;
             }
-            // From none: a container of any size holds an element the statement fails of for
-            // every one it holds of, so what the rules leave its size is the most the count is
-            // and not the least. It lies where the size may, and takes every value up to the
-            // most a row holds.
-            NumericDomain.Bounds none = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
-                    null);
-            NumericDomain.Bounds may = howManyMayBeHeld(container, read, along);
+            CountTakes taken = countTakes(howManyMayBeHeld(container, read, along), held);
             WhatARelationLeavesUndivided.Term<FilingCoordinate> was = terms.get(at);
             // Made of the places it reads: the container, and what the statement reads in an
             // element or outside the container. No term over one of them is apart from the count,
@@ -5698,13 +5692,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     .map(FilingCoordinate::at).filter(place -> !reads.contains(place))
                     .forEach(reads::add);
             out.set(at, new WhatARelationLeavesUndivided.Term<>(reads, was.weight(),
-                    asARelationReadsIt(may == null ? none
-                            : new NumericDomain.Bounds(none.min(), may.max()), carriers.get(at)),
-                    asARelationReadsIt(new NumericDomain.Bounds(none.min(), held.max()),
-                            carriers.get(at)), was.takes(), was.itsPlace(), was.spacing(),
-                    was.runsTo(), was.key()));
+                    asARelationReadsIt(taken.lies(), carriers.get(at)),
+                    asARelationReadsIt(taken.takes(), carriers.get(at)), was.takes(),
+                    was.itsPlace(), was.spacing(), was.runsTo(), was.key()));
         }
         return out;
+    }
+
+    /**
+     * Where the count of the elements of a container that meet a statement lies, and which values a
+     * row shows it takes.
+     *
+     * @param lies  from none up to the most the rules and the way leave the container to hold
+     * @param takes from none up to the most a row holds, every value of it
+     */
+    record CountTakes(NumericDomain.Bounds lies, NumericDomain.Bounds takes) {}
+
+    /**
+     * What a count of the elements meeting a statement is, of a container that {@code mayBeHeld}
+     * says how many it may hold and a row shows {@code areHeld} of: a container of any size holds,
+     * of the elements it holds, some the statement holds of and the rest it fails of, so the count
+     * is none up to its size, and what the size is left is the most it is and never the least.
+     * Where nothing says how many the container may hold, the count lies from none on.
+     */
+    static CountTakes countTakes(NumericDomain.Bounds mayBeHeld, NumericDomain.Bounds areHeld) {
+        Endpoint none = Endpoint.inclusive(Count.of(0));
+        return new CountTakes(
+                new NumericDomain.Bounds(none, mayBeHeld == null ? null : mayBeHeld.max()),
+                new NumericDomain.Bounds(none, areHeld.max()));
     }
 
     /** The container of the input {@code counted} counts the elements of, or null where it counts
