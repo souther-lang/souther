@@ -101,6 +101,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * The equivalence classes a model already states, read off the types a behavior takes.
@@ -858,10 +859,70 @@ public final class Partitions {
         // here because this is where a witness for a row is paid for: a string offered for a row is
         // no answer about the position, and paying for it out of what the position may build would
         // let a representative decide how exactly the model was read.
-        Classing.Result answered = Classing.of(term, mine, blocked, carrier,
+        Classing.Result answered = Classing.of(term, orders, domain, mine, blocked, carrier,
                 at.position().admits(), allowance, PatternPlan.Budget.OF_A_WITNESS::meter,
                 place -> standing(view, carrier, place, ruleSource));
         Classing.Classed classed = answered.classed();
+        // The answer's own population, and not what is left after taking the rest away. Subtracted
+        // here, the same question is answered twice — and the day the two subtract differently the
+        // classes are composed out of one list and recorded as composed out of another.
+        List<RuleEvidence> dividing = answered.dividing();
+        // One switch and not three conditionals. What each answer means for the classes, for the
+        // rules they were composed from and for whether the cuts stand is the answer's, said once;
+        // read off it three times, each reading is a place to disagree about what the arm meant.
+        // Decided before any rule is accounted for, because what became of a rule that states a
+        // set is whether the classes composed, and that is this switch's answer.
+        Composition made = switch (classed) {
+            // The classes are what the walk below works out of the lines and the values singled
+            // out, and the cuts are as they have always been.
+            case Classing.Classed.OnTheOrder _ -> Composition.ON_AN_ORDER;
+            // A cut is a place on the order, and a class that is a set has no answer to where it
+            // lies — so a position whose classes are sets has none, and a value singled out is in
+            // them rather than beside them. Published as both, one distinction would be stated
+            // twice in two algebras and every line would fall in no class ({@link Axis}).
+            // Under the names the position wears, which is where they are put on: the rules divided
+            // the values the position holds and knew nothing of what is written over them, and a
+            // row writes one of those values under every name the type puts on it. Left off, a
+            // class drawn over strings is asked about a construction and holds none of them —
+            // which is the classes of a position holding nothing the position holds.
+            // And the rules that left values open, whose values beside the classes are in none.
+            // Unless every class can be asked about a place on the order, as a class of a number
+            // is: it holds the numbers it holds whatever they are, and a cut falls in the class
+            // that holds its place.
+            case Classing.Classed.Composed(List<PartitionClass> it)
+                    when axis != null && axis.derivable() && !it.isEmpty()
+                            && it.stream().allMatch(each ->
+                                    each.recognises() instanceof Recognition.OfACount) ->
+                    besideTheDeclared(axis, composedFrom(dividing));
+            case Classing.Classed.Composed(List<PartitionClass> it) ->
+                    new Composition(it.stream().map(each -> each.under(view.wrappers())).toList(),
+                            composedFrom(dividing),
+                            !it.isEmpty() && it.stream()
+                                    .allMatch(each -> each.recognises().answersAboutAPlace()),
+                            null,
+                            answered.leftOpen().stream()
+                                    .<RuleEvidenceOrigin>map(each -> each.statement().origin())
+                                    .distinct().toList());
+            // No classes and nothing they were composed from, and the cuts stand: they are
+            // observations of their own rather than a projection of the classes.
+            case Classing.Classed.NotComposed(var why) ->
+                    new Composition(List.of(), List.of(), true, why, List.of());
+        };
+        // And what the walk below still reads, which is not the same list. Only the classes turn on
+        // whether they composed: where they did not, the lines a rule drew are still lines and the
+        // places it parts the position are still places, so the walk runs over everything that
+        // reached here but the rules proved to tell nothing apart — those state nothing, and a line
+        // read off one would be a line the model does not draw.
+        List<RuleEvidence> taken = answered.forEach().stream()
+                .filter(each -> each.outcome() == Classing.Outcome.LEFT_TO_THE_WALK
+                        || each.outcome() == Classing.Outcome.DIVIDED)
+                .map(Classing.Disposed::what).toList();
+        // The rules whose classes were drawn and then not composed with what the declarations
+        // already divide: reported and accounted for as every rule the classes were not composed
+        // out of is, so that a rule is never recorded as measured at an axis whose classes it is
+        // not among.
+        List<RuleEvidence> notComposedBesideTheDeclared = made.why() == null ? List.of()
+                : dividing.stream().filter(RuleEvidence.BySet.class::isInstance).toList();
         // What became of each rule, applied and not decided again. The answer is total over what
         // was handed in, so a rule with nothing said about it is not something this loop can leave
         // behind — which is what the account below refuses, and what a stage deciding the three
@@ -869,10 +930,13 @@ public final class Partitions {
         for (Classing.Disposed each : answered.forEach()) {
             switch (each.outcome()) {
                 // The classes are made out of it. A rule that states a set is measured here, at the
-                // axis they are on; a line and a value singled out are measured by the walk below,
-                // which is where what they leave is worked out.
+                // axis they are on, where the classes composed; a line and a value singled out are
+                // measured by the walk below, which is where what they leave is worked out.
                 case DIVIDED -> {
-                    if (each.what() instanceof RuleEvidence.BySet) {
+                    if (notComposedBesideTheDeclared.contains(each.what())) {
+                        account.disposedOf(each.what(),
+                                new EvidenceAccount.Disposition.TheClassesWereNotComposed(term));
+                    } else if (each.what() instanceof RuleEvidence.BySet) {
                         account.measured(each.what(), id);
                     }
                 }
@@ -902,47 +966,6 @@ public final class Partitions {
                     new FilingCoordinate.AtPosition(term.position()), each.open(),
                     each.statement().imagesNotShown(), each.byCodePoints());
         }
-        // The answer's own population, and not what is left after taking the rest away. Subtracted
-        // here, the same question is answered twice — and the day the two subtract differently the
-        // classes are composed out of one list and recorded as composed out of another.
-        List<RuleEvidence> dividing = answered.dividing();
-        // And what the walk below still reads, which is not the same list. Only the classes turn on
-        // whether they composed: where they did not, the lines a rule drew are still lines and the
-        // places it parts the position are still places, so the walk runs over everything that
-        // reached here but the rules proved to tell nothing apart — those state nothing, and a line
-        // read off one would be a line the model does not draw.
-        List<RuleEvidence> taken = answered.forEach().stream()
-                .filter(each -> each.outcome() == Classing.Outcome.LEFT_TO_THE_WALK
-                        || each.outcome() == Classing.Outcome.DIVIDED)
-                .map(Classing.Disposed::what).toList();
-        // One switch and not three conditionals. What each answer means for the classes, for the
-        // rules they were composed from and for whether the cuts stand is the answer's, said once;
-        // read off it three times, each reading is a place to disagree about what the arm meant.
-        Composition made = switch (classed) {
-            // The classes are what the walk below works out of the lines and the values singled
-            // out, and the cuts are as they have always been.
-            case Classing.Classed.OnTheOrder _ -> Composition.ON_AN_ORDER;
-            // A cut is a place on the order, and a class that is a set has no answer to where it
-            // lies — so a position whose classes are sets has none, and a value singled out is in
-            // them rather than beside them. Published as both, one distinction would be stated
-            // twice in two algebras and every line would fall in no class ({@link Axis}).
-            // Under the names the position wears, which is where they are put on: the rules divided
-            // the values the position holds and knew nothing of what is written over them, and a
-            // row writes one of those values under every name the type puts on it. Left off, a
-            // class drawn over strings is asked about a construction and holds none of them —
-            // which is the classes of a position holding nothing the position holds.
-            // And the rules that left values open, whose values beside the classes are in none.
-            case Classing.Classed.Composed(List<PartitionClass> it) ->
-                    new Composition(it.stream().map(each -> each.under(view.wrappers())).toList(),
-                            composedFrom(dividing), false, null,
-                            answered.leftOpen().stream()
-                                    .<RuleEvidenceOrigin>map(each -> each.statement().origin())
-                                    .distinct().toList());
-            // No classes and nothing they were composed from, and the cuts stand: they are
-            // observations of their own rather than a projection of the classes.
-            case Classing.Classed.NotComposed(var why) ->
-                    new Composition(List.of(), List.of(), true, why, List.of());
-        };
         // What a reader is told about the rules the classes were not composed out of. The account
         // for them is above, with every other rule's — this is the sentence, and only where the
         // classes were the group's own to compose: a blocker says what became of its own rule and
@@ -958,7 +981,8 @@ public final class Partitions {
         // the reason copied onto it would name it for what another rule was not shown over.
         if (made.why() != null && blocked.isEmpty()
                 && !(made.why() instanceof BlockReason.RelationShownOverARegion)) {
-            RuleEvidence.statementsIn(answered.notComposed())
+            RuleEvidence.statementsIn(Stream.concat(answered.notComposed().stream(),
+                            notComposedBesideTheDeclared.stream()).toList())
                     .forEach(each -> found.add(RuleWithoutALine.of(each.origin().cited(),
                             each.origin().readAt(),
                             new FilingCoordinate.AtPosition(term.position()), made.why())));
@@ -1145,6 +1169,36 @@ public final class Partitions {
             return why != null || onAnOrder() || (axis != null && axis.derivable())
                     ? List.of() : leftOpenBy;
         }
+    }
+
+    /**
+     * What the rules of a body leave a number the declarations already divide into classes: those
+     * classes, divided no further.
+     *
+     * <p>The common refinement of the declared classes and the classes the rules tell, and it is
+     * the declared classes where each of them holds one number: a class of one number is on one
+     * side of every distinction a rule draws, so no rule cuts it, and the rule is decided at each.
+     * Where a declared class holds more than one number the refinement is not built, and the
+     * answer is that the classes are not composed — never the declared classes standing as if the
+     * rule had been taken up.
+     */
+    private static Composition besideTheDeclared(Axis axis, List<RuleEvidenceOrigin> composed) {
+        boolean eachOfOne = axis.classes().stream().allMatch(each ->
+                heldOneNumberAt(each.recognises()));
+        return eachOfOne
+                ? new Composition(axis.classes(), composed, true, null, List.of())
+                : new Composition(List.of(), List.of(), true,
+                        new BlockReason.ClassesNotComposed(), List.of());
+    }
+
+    /** Whether a class holds the one value a rule singled out, under whatever names the position
+     *  wears it. */
+    private static boolean heldOneNumberAt(Recognition class_) {
+        return switch (class_) {
+            case Recognition.Under under -> heldOneNumberAt(under.inner());
+            case Recognition.AtAValue one -> one.at() != null;
+            default -> false;
+        };
     }
 
     /** Which rules the classes were composed out of, which is every distinction that went in. */

@@ -10,6 +10,8 @@ import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.numeric.WholeNumberSet;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -25,6 +27,7 @@ import java.util.TreeSet;
 import java.util.function.BiPredicate;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
+import java.util.stream.IntStream;
 
 /**
  * Which of the places a relation is written over it is shown to leave undivided.
@@ -118,25 +121,97 @@ public final class WhatARelationLeavesUndivided {
      */
     public record Term<P>(List<P> madeOf, ExactRatio weight, NumericDomain.Bounds holds,
                           NumericDomain.Bounds realizes, Object takes, boolean itsPlace,
-                          Granularity spacing, NumericDomain.Bounds runsTo, Object key) {
+                          Granularity spacing, NumericDomain.Bounds runsTo, Object key,
+                          Stepped stepped) {
+
+        /**
+         * What a term takes where that is no run of every value: {@code witnessed} are values a
+         * row is shown to take, and {@code possible} are those every value it takes lies in. So
+         * the values it is shown to take are a part of the values it takes, which are a part of
+         * the values it may take, and a value past {@code possible} is one it takes in no row.
+         *
+         * <p>What is witnessed is no more than a list of one element comes to, and what is
+         * possible holds for a list of any number of elements: the second is only what the totals
+         * of every length keep ({@code 2·x} added up stays even, and what a filter keeps from
+         * six on added up stays nought or six and more), and a set that is not closed under
+         * adding is no such set.
+         */
+        public record Stepped(WholeNumberSet witnessed, WholeNumberSet possible) {
+
+            public Stepped {
+                Objects.requireNonNull(witnessed, "a stepped term takes some values");
+                Objects.requireNonNull(possible, "a stepped term lies in some values");
+                if (witnessed.isNone() || possible.isNone()) {
+                    throw new IllegalArgumentException("a stepped term takes a value");
+                }
+            }
+
+            /** Whether {@code value}, a whole number, is one the term is shown to take. */
+            boolean takes(BigInteger value) {
+                return witnessed.holds(value);
+            }
+
+            /** The ends of the values the term is shown to take, as a run with its ends taken. */
+            NumericDomain.Bounds hull() {
+                BigInteger least = witnessed.least();
+                BigInteger greatest = witnessed.greatest();
+                return new NumericDomain.Bounds(
+                        least == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(least))),
+                        greatest == null ? null
+                                : Endpoint.inclusive(Count.of(new BigDecimal(greatest))));
+            }
+        }
 
         /** A term no operation of the relation is told of by name. */
         public Term(List<P> madeOf, ExactRatio weight, NumericDomain.Bounds holds,
                     NumericDomain.Bounds realizes, Object takes, boolean itsPlace,
                     Granularity spacing, NumericDomain.Bounds runsTo) {
-            this(madeOf, weight, holds, realizes, takes, itsPlace, spacing, runsTo, null);
+            this(madeOf, weight, holds, realizes, takes, itsPlace, spacing, runsTo, null, null);
+        }
+
+        /** A term whose values are every one of a run. */
+        public Term(List<P> madeOf, ExactRatio weight, NumericDomain.Bounds holds,
+                    NumericDomain.Bounds realizes, Object takes, boolean itsPlace,
+                    Granularity spacing, NumericDomain.Bounds runsTo, Object key) {
+            this(madeOf, weight, holds, realizes, takes, itsPlace, spacing, runsTo, key, null);
+        }
+
+        /**
+         * The same term, taking the values {@code stepped} says and no run of every value: what
+         * reads {@link #realizes} as a run of every value finds nothing shown, and only a reader
+         * that asks the remainder as well ({@link #asSteppedRun}) sees what is taken.
+         */
+        public Term<P> takingEvery(Stepped taken) {
+            return new Term<>(madeOf, weight, holds, null, takes, itsPlace, spacing, runsTo, key,
+                    taken);
         }
 
         /** The same term, holding {@code held}. */
         Term<P> holding(NumericDomain.Bounds held) {
             return new Term<>(madeOf, weight, held, realizes, takes, itsPlace, spacing, runsTo,
-                    key);
+                    key, stepped);
+        }
+
+        /**
+         * This term with the run its stepped values lie in as {@link #realizes}, which only
+         * {@link #takesTheValue} reads rightly — it asks the remainder too — and the readers of
+         * what a term takes on one side of a line, which a run with its ends taken answers
+         * whatever lies between them. Itself where the term takes every value of a run.
+         */
+        Term<P> asSteppedRun() {
+            return stepped == null || realizes != null ? this
+                    : new Term<>(madeOf, weight, holds, stepped.hull(), takes, itsPlace, spacing,
+                            runsTo, key, stepped);
         }
 
         public Term {
             if (madeOf == null || weight == null || weight.signum() == 0 || holds == null) {
                 throw new IllegalArgumentException("a term of a relation is made of something,"
                         + " weighed by something other than nought and held somewhere");
+            }
+            if (stepped != null && realizes != null && !stepped.hull().equals(realizes)) {
+                throw new IllegalArgumentException("a stepped term is read over the run its"
+                        + " values lie in: " + realizes + " against " + stepped.hull());
             }
             Interval taken = realizes == null || runsTo == null ? null : Interval.of(realizes);
             Interval order = taken == null ? null : Interval.of(runsTo);
@@ -885,8 +960,8 @@ public final class WhatARelationLeavesUndivided {
                                                    Independence independent) {
         boolean[] free = freeOf(terms, at, overlap, independent);
         for (int other = 0; other < terms.size(); other++) {
-            if (free[other] && reachesOneWay(terms, other, at, within, constant, relation,
-                    holding)) {
+            if (free[other] && reachesOneWay(withTheSteppedRunOfAnOrder(terms, other, relation),
+                    other, at, within, constant, relation, holding)) {
                 return true;
             }
         }
@@ -995,11 +1070,12 @@ public final class WhatARelationLeavesUndivided {
         }
     }
 
-    private static <P> Leaves leavesOf(List<Term<P>> terms, int at, ExactRatio constant,
+    private static <P> Leaves leavesOf(List<Term<P>> given, int at, ExactRatio constant,
                                        Asking asking, BiPredicate<P, P> overlap,
                                        Independence independent, Granularity granularity,
                                        BigInteger greatest, List<JointSupport> supports,
                                        Operations operations) {
+        List<Term<P>> terms = withTheSteppedRunsBeside(given, at, asking);
         RowsComputed arithmetic = RowsComputed.upTo(greatest).withOperations(operations);
         Jointly jointly = granularity == Granularity.DISCRETE && arithmetic.stopsAtASize()
                 ? new Jointly(arithmetic) : null;
@@ -2831,10 +2907,19 @@ public final class WhatARelationLeavesUndivided {
         if (new OfNumbers(value, value).passes(term.runsTo(), term.spacing())) {
             return false;
         }
+        if (term.stepped() != null && !inTheStepped(term.stepped(), value)) {
+            return false;
+        }
         int fromLeast = run.lower() == null ? 1 : value.compareTo(run.lower().at());
         int fromGreatest = run.upper() == null ? -1 : value.compareTo(run.upper().at());
         return (fromLeast > 0 || (fromLeast == 0 && run.lower().inclusive()))
                 && (fromGreatest < 0 || (fromGreatest == 0 && run.upper().inclusive()));
+    }
+
+    /** Whether the whole number {@code value} is one {@code stepped} takes. */
+    private static boolean inTheStepped(Term.Stepped stepped, ExactRatio value) {
+        BigInteger whole = value.isWhole() ? value.floor().orNull() : null;
+        return whole != null && stepped.takes(whole);
     }
 
     /**
@@ -4048,6 +4133,245 @@ public final class WhatARelationLeavesUndivided {
     private static <P> boolean reaches(List<Term<P>> terms, int by, int of, Interval within,
                                        ExactRatio constant, Rel relation, List<ExactRatio> beside,
                                        RowsComputed arithmetic) {
+        return reachesOver(withTheSteppedRunOfAnOrder(terms, by, relation), by, of, within,
+                constant, relation, beside, arithmetic);
+    }
+
+    /**
+     * Where an equality between the term at {@code at} and the one beside it holds, as far as that
+     * is shown and as far as it is possible ({@link WhereAnEquationHolds}) — or null where the
+     * equality is not worked out that way.
+     *
+     * <p>For the weighed equality a run cannot say: {@code 2·x = c} is true at the even numbers of
+     * {@code c} and false at every other. Worked out only where every row of the form is computed
+     * ({@link RowsComputed#nothingStopsARow}), so that a value the other term is shown to take is
+     * a row, and only for the values {@code s} of the other term whose weighed size is within what
+     * the type holds: a row at a greater one may stop where its product is worked out, and its
+     * value of {@code c} is none this shows. The other term has to be apart from the one asked of
+     * and tied to none, and to take at least two values, so that where the equality can hold it
+     * can fail as well and the value is left either way and not settled.
+     *
+     * <p>Two terms of whole values, a whole constant, and weights that are whole numbers other than
+     * nought. Anything else is null, which says nothing.
+     *
+     * @param constant what is added to the terms, so that the equation is
+     *                 {@code Σ weight·value + constant = 0} ({@link #restOf})
+     * @param greatest the greatest value of the type the form is worked out in, or null where it
+     *                 has none
+     */
+    public static <P> WhereAnEquationHolds whereAnEquationHolds(
+            List<Term<P>> terms, int at, ExactRatio constant, Rel relation,
+            BiPredicate<P, P> overlap, Independence independent, BigInteger greatest,
+            Operations operations) {
+        if (terms.size() != 2 || (relation != Rel.EQ && relation != Rel.NE) || constant == null
+                || !constant.isWhole()
+                || !freeOf(terms, at, overlap, independent)[1 - at]) {
+            return null;
+        }
+        Term<P> here = terms.get(at);
+        Term<P> other = terms.get(1 - at);
+        if (here.spacing() != Granularity.DISCRETE || other.spacing() != Granularity.DISCRETE
+                || !here.weight().isWhole() || !other.weight().isWhole()
+                || here.weight().signum() == 0 || other.weight().signum() == 0
+                || !(here.weight().floor() instanceof ExactAnswer.Held<BigInteger>(var weightHere))
+                || !(other.weight().floor() instanceof ExactAnswer.Held<BigInteger>(var weightThere))
+                || !(constant.floor() instanceof ExactAnswer.Held<BigInteger>(var added))) {
+            return null;
+        }
+        Term<P> closed = closedWhereItLies(other);
+        WholeNumberSet lies = wholeNumbersOf(closed.holds());
+        // What a total of several elements may come to is the values of the remainder it is shown
+        // in, which a run of ends does not say.
+        WholeNumberSet possible = lies == null || other.stepped() == null ? lies
+                : other.stepped().possible().and(lies);
+        WholeNumberSet taken = other.stepped() != null ? other.stepped().witnessed()
+                : other.realizes() == null ? null
+                : other.realizes().saysNothing() ? possible
+                : wholeNumbersOf(other.realizes());
+        if (possible == null || taken == null) {
+            return null;
+        }
+        RowsComputed arithmetic = RowsComputed.upTo(greatest).withOperations(operations);
+        // The values of the other term a row is computed at are asked at, from the widest the
+        // type's ends say to the narrowest, and the first whose ends the program computes is the
+        // one used: a weighed value past what the type holds is a row that stops where its
+        // product is worked out. The ends are proposed from the type and settled by the rows,
+        // so what is shown is what the program does and not what the type is taken to be.
+        List<WholeNumberSet> reached = new ArrayList<>();
+        if (greatest == null) {
+            reached.add(taken);
+        } else {
+            BigInteger magnitude = weightThere.abs();
+            BigInteger below = greatest.add(BigInteger.ONE).negate();
+            BigInteger low = weightThere.signum() > 0 ? ceilDividedBy(below, weightThere)
+                    : ceilDividedBy(greatest, weightThere);
+            BigInteger high = weightThere.signum() > 0 ? greatest.divide(weightThere)
+                    : floorDividedBy(below, weightThere);
+            reached.add(taken.and(WholeNumberSet.ofRuns(WholeNumberRuns.one(low, high))));
+            reached.add(taken.and(WholeNumberSet.ofRuns(WholeNumberRuns.one(
+                    greatest.divide(magnitude).negate(), greatest.divide(magnitude)))));
+        }
+        for (WholeNumberSet within : reached) {
+            BigInteger one = within.nearestMember(BigInteger.ZERO, Set.of());
+            if (one == null || within.nearestMember(one, Set.of(one)) == null) {
+                continue;
+            }
+            // weightHere·c + weightThere·s + added = 0, for the values s of the other term.
+            WhereAnEquationHolds holds = WhereAnEquationHolds.of(within, possible, weightThere,
+                    weightHere, added);
+            if (holds != null && rowsAtTheEnds(holds, terms, at, weightHere, weightThere, added,
+                    constant, arithmetic)) {
+                // Said of the values this term may hold, which is all a row has: a value the
+                // weighing reaches past the type of this term is none of its values.
+                WholeNumberSet ofThis = wholeNumbersOf(closedWhereItLies(here).holds());
+                if (ofThis == null) {
+                    return holds;
+                }
+                WholeNumberSet shown = holds.shown().and(ofThis);
+                return shown.isNone() ? null
+                        : new WhereAnEquationHolds(shown, holds.possible().and(ofThis));
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether the program computes the row at each end of where {@code holds} shows the equation
+     * true: every addend is the same straight function of the value there, so a row between the
+     * two ends is computed where the ends are. Where an end is missing, nothing may stop a row.
+     */
+    private static <P> boolean rowsAtTheEnds(WhereAnEquationHolds holds, List<Term<P>> terms,
+                                             int at, BigInteger weightHere,
+                                             BigInteger weightThere, BigInteger added,
+                                             ExactRatio constant, RowsComputed arithmetic) {
+        BigInteger least = holds.shown().least();
+        BigInteger most = holds.shown().greatest();
+        if (least == null || most == null) {
+            return !arithmetic.stopsAtASize() && !arithmetic.mayStopARow();
+        }
+        for (BigInteger value : new BigInteger[] {least, most}) {
+            // weightHere·value + weightThere·beside + added = 0
+            BigInteger[] beside = added.negate().subtract(weightHere.multiply(value))
+                    .divideAndRemainder(weightThere);
+            if (beside[1].signum() != 0) {
+                return false;
+            }
+            ExactRatio here = ExactRatio.of(value);
+            ExactRatio there = ExactRatio.of(beside[0]);
+            if (!arithmetic.rowIsComputed(() -> new ExactRatio[] {
+                    ExactRatio.of(weightHere).times(here).orNull(),
+                    ExactRatio.of(weightThere).times(there).orNull(),
+                    constant},
+                    () -> valuesByKey(terms, i -> i == at ? here : there))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static BigInteger ceilDividedBy(BigInteger number, BigInteger by) {
+        BigInteger[] both = number.divideAndRemainder(by);
+        return both[1].signum() != 0 && both[1].signum() == by.signum()
+                ? both[0].add(BigInteger.ONE) : both[0];
+    }
+
+    private static BigInteger floorDividedBy(BigInteger number, BigInteger by) {
+        BigInteger[] both = number.divideAndRemainder(by);
+        return both[1].signum() != 0 && both[1].signum() != by.signum()
+                ? both[0].subtract(BigInteger.ONE) : both[0];
+    }
+
+    /** The whole numbers {@code bounds} holds, or null where an end is no number. */
+    private static WholeNumberSet wholeNumbersOf(NumericDomain.Bounds bounds) {
+        BigInteger low = bounds.min() == null ? null : bounds.min().wholeAdmitted(true);
+        BigInteger high = bounds.max() == null ? null : bounds.max().wholeAdmitted(false);
+        if ((bounds.min() != null && low == null) || (bounds.max() != null && high == null)) {
+            return null;
+        }
+        return WholeNumberSet.ofRuns(WholeNumberRuns.one(low, high));
+    }
+
+    /**
+     * {@code terms} with the term at {@code by} read over the run its stepped values lie in, where
+     * {@code relation} is an order. An order is left either way by a term that takes a value on
+     * each side of a line, and a run with its ends taken does that whatever lies between them; the
+     * values a row stands the term at are asked of the remainder as well
+     * ({@link #takesTheValue}). Equality asks the one value, and the run says nothing of it.
+     */
+    private static <P> List<Term<P>> withTheSteppedRunOfAnOrder(List<Term<P>> terms, int by,
+                                                                Rel relation) {
+        if (relation == Rel.EQ || relation == Rel.NE
+                || terms.stream().noneMatch(each -> each.stepped() != null
+                        && each.realizes() == null)) {
+            return terms;
+        }
+        List<Term<P>> read = new ArrayList<>();
+        for (Term<P> each : terms) {
+            // Where a term may lie is as far as its order runs: the ends of the order are values
+            // the rows are built at, where an open run is asked of none.
+            read.add(closedWhereItLies(each));
+        }
+        // Only the reaching term is read over its run; the others are asked what they hold.
+        read.set(by, read.get(by).asSteppedRun());
+        return read;
+    }
+
+    /**
+     * {@code terms} with each term other than the one at {@code at} that takes the values of a
+     * remainder read over the run they lie in, where {@code asking} is of orders only — the term
+     * at {@code at} keeps the values it is shown to take, which are none of a run. What stands
+     * beside it is asked a side of a line, which a run with its ends taken answers whatever lies
+     * between them ({@link #withTheSteppedRunOfAnOrder}).
+     */
+    private static <P> List<Term<P>> withTheSteppedRunsBeside(List<Term<P>> terms, int at,
+                                                              Asking asking) {
+        if (asking.leftBy().stream().anyMatch(relation -> relation == Rel.EQ
+                || relation == Rel.NE)
+                || IntStream.range(0, terms.size()).noneMatch(i -> i != at
+                        && terms.get(i).stepped() != null && terms.get(i).realizes() == null)) {
+            return terms;
+        }
+        List<Term<P>> read = new ArrayList<>();
+        for (int i = 0; i < terms.size(); i++) {
+            Term<P> each = terms.get(i);
+            Term<P> closed = closedWhereItLies(each);
+            read.add(i == at ? closed : closed.asSteppedRun());
+        }
+        return read;
+    }
+
+    /**
+     * {@code term} holding only where it lies as far as its order runs, and for a term every value
+     * of which is of a remainder, at the values of it within those ends: the rows are built at the
+     * ends of what it holds, where an open run is asked of none.
+     */
+    private static <P> Term<P> closedWhereItLies(Term<P> term) {
+        NumericDomain.Bounds held = term.runsTo() == null ? term.holds()
+                : term.holds().meet(term.runsTo());
+        if (term.stepped() != null) {
+            // Every total lies in the values it may take, so an end of the order that is none of
+            // them is no value the term takes. What it is shown to take says nothing of where it
+            // lies: a total of several elements lies past the total of one.
+            WholeNumberSet possible = term.stepped().possible();
+            BigInteger low = held.min() == null ? possible.least()
+                    : held.min().wholeAdmitted(true) instanceof BigInteger from
+                    ? possible.leastAtOrAbove(from) : null;
+            BigInteger high = held.max() == null ? possible.greatest()
+                    : held.max().wholeAdmitted(false) instanceof BigInteger to
+                    ? possible.greatestAtOrBelow(to) : null;
+            if (low == null || high == null || low.compareTo(high) <= 0) {
+                held = new NumericDomain.Bounds(low == null ? held.min()
+                        : Endpoint.inclusive(Count.of(new BigDecimal(low))),
+                        high == null ? held.max()
+                                : Endpoint.inclusive(Count.of(new BigDecimal(high))));
+            }
+        }
+        return held.equals(term.holds()) ? term : term.holding(held);
+    }
+
+    private static <P> boolean reachesOver(List<Term<P>> terms, int by, int of, Interval within,
+                                           ExactRatio constant, Rel relation,
+                                           List<ExactRatio> beside, RowsComputed arithmetic) {
         Term<P> reaching = terms.get(by);
         boolean exactly = relation == Rel.EQ || relation == Rel.NE;
         boolean itsValue = standsAtTheOthersValue(terms, constant);
@@ -4365,6 +4689,10 @@ public final class WhatARelationLeavesUndivided {
             // that does not, and shows nothing of the other side.
             boolean[] computedWhere = new boolean[2];
             for (ExactRatio at : across) {
+                // A term that takes the values of a remainder is stood at one of them, in its run.
+                if (terms.get(by).stepped() != null && !takesTheValue(terms.get(by), at)) {
+                    return false;
+                }
                 List<ExactRatio> witness = new ArrayList<>(row);
                 witness.add(at.times(terms.get(by).weight()).orNull());
                 ExactRatio total = ExactRatio.ZERO;
@@ -4406,6 +4734,21 @@ public final class WhatARelationLeavesUndivided {
                 : DecimalPoints.within(asked.upper(), asked.lower(), false);
         if (lowest == null || highest == null) {
             return null;
+        }
+        // A term that takes the values of a remainder stands at the first and last of them.
+        if (term.stepped() != null) {
+            BigInteger first = lowest.isWhole() ? lowest.floor().orNull() : null;
+            BigInteger last = highest.isWhole() ? highest.floor().orNull() : null;
+            if (first == null || last == null) {
+                return null;
+            }
+            BigInteger taken = term.stepped().witnessed().leastAtOrAbove(first);
+            BigInteger takenLast = term.stepped().witnessed().greatestAtOrBelow(last);
+            if (taken == null || takenLast == null) {
+                return null;
+            }
+            lowest = ExactRatio.of(taken);
+            highest = ExactRatio.of(takenLast);
         }
         at.add(lowest);
         at.add(highest);
@@ -4454,8 +4797,18 @@ public final class WhatARelationLeavesUndivided {
         BigInteger from = strictlyBelow(relation, reaching.weight())
                 ? line.ceiling().map(at -> at.subtract(BigInteger.ONE)).orNull()
                 : line.floor().orNull();
-        return from == null ? null
-                : List.of(ExactRatio.of(from), ExactRatio.of(from.add(BigInteger.ONE)));
+        if (from == null) {
+            return null;
+        }
+        if (reaching.stepped() != null) {
+            // The last value of the remainder on one side and the first on the other.
+            BigInteger below = reaching.stepped().witnessed().greatestAtOrBelow(from);
+            BigInteger above = reaching.stepped().witnessed()
+                    .leastAtOrAbove(from.add(BigInteger.ONE));
+            return below == null || above == null ? null
+                    : List.of(ExactRatio.of(below), ExactRatio.of(above));
+        }
+        return List.of(ExactRatio.of(from), ExactRatio.of(from.add(BigInteger.ONE)));
     }
 
     /**

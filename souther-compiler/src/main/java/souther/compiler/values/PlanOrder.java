@@ -69,16 +69,37 @@ final class PlanOrder {
             // Written out already, and what putting them together costs is arithmetic over values
             // somebody wrote down — except where one of them is a machine, which is as big as it
             // is and is a thing this can simply ask, the machine being made.
-            case AdmittedPlan.Of it -> it.isFree() ? 0
-                    : ((ValueSet.Matching) it.set()).language().size();
+            case AdmittedPlan.Of it -> it.set() instanceof ValueSet.Matching matching
+                    ? matching.language().size() : progressionsIn(it.set());
             case AdmittedPlan.Pattern it -> it.plan().states();
             // The complement of a machine is a machine made deterministic, so it costs what the
-            // machine it is of is, at least.
+            // machine it is of is, at least; that of progressions is a progression for each
+            // remainder of their divisors.
             case AdmittedPlan.Without it -> it.set() instanceof ValueSet.Matching matching
-                    ? matching.language().size() : 0;
+                    ? matching.language().size() : remaindersIn(it.set());
             case AdmittedPlan.Both it -> parts(it.parts());
             case AdmittedPlan.Either it -> parts(it.parts());
         };
+    }
+
+    /** How many progressions a set of whole numbers holds, which is what putting it together with
+     *  another costs; none for any other set that costs nothing. */
+    private static long progressionsIn(ValueSet set) {
+        return set instanceof ValueSet.WholeSteps steps ? steps.numbers().parts().size() : 0;
+    }
+
+    /** What the complement of a set of whole numbers costs: a progression for each remainder of
+     *  the divisor of each progression it holds, capped where nothing is built that large. */
+    private static long remaindersIn(ValueSet set) {
+        if (!(set instanceof ValueSet.WholeSteps steps)) {
+            return 0;
+        }
+        long out = 0;
+        for (var part : steps.numbers().parts()) {
+            out = Math.min(ENOUGH, out + (part.within().modulus().bitLength() > 30 ? ENOUGH
+                    : part.within().modulus().longValue()));
+        }
+        return out;
     }
 
     private static long parts(java.util.Set<AdmittedPlan> parts) {
@@ -374,6 +395,15 @@ final class PlanOrder {
                 out.append("3;").append(it.numbers().runs().size()).append(';');
                 it.numbers().runs().forEach(run -> out.append(run.from() == null ? "" : run.from())
                         .append("..").append(run.to() == null ? "" : run.to()).append(';'));
+            }
+            // Each progression's run and remainder, in the order it is held.
+            case ValueSet.WholeSteps it -> {
+                out.append("4;").append(it.numbers().parts().size()).append(';');
+                it.numbers().parts().forEach(part -> out
+                        .append(part.run().from() == null ? "" : part.run().from()).append("..")
+                        .append(part.run().to() == null ? "" : part.run().to()).append('@')
+                        .append(part.within().residue()).append('%')
+                        .append(part.within().modulus()).append(';'));
             }
         }
     }

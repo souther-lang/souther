@@ -202,6 +202,22 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the runs kept of what the elements can come to, or at the values"
                             + " an element is tried moved to, and puts that figure in the set it is"
                             + " handed"),
+            Map.entry("souther.compiler.partition.NumbersAskedFor#ofTheClass("
+                            + "Lsouther/compiler/partition/NumericSet$InTheNumbers;"
+                            + "Lsouther/compiler/check/Carrier;)"
+                            + "Lsouther/compiler/partition/NumbersAskedFor;",
+                    "names every member of a class of few enough numbers, and answers null"
+                            + " past the figure, which is a walk of some of something unsaid"
+                            + " and so no claim about the class"),
+            Map.entry("souther.compiler.partition.TermRealizations#membersOfTheNumbers("
+                            + "Lsouther/compiler/partition/NumericSet$InTheNumbers;"
+                            + "Lsouther/compiler/check/Carrier;Lsouther/compiler/numeric/Place;"
+                            + "Lsouther/compiler/numeric/OrderedRuns;"
+                            + "Lsouther/compiler/values/ValueSet;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "stops at the members of the progressions turned down for the next, and"
+                            + " hands the figure over as what is left of them where none was"
+                            + " offered"),
             Map.entry("souther.compiler.partition.ContainerAsAWhole#turningOn("
                             + "Lsouther/compiler/inputs/NumericTerm;Ljava/util/List;"
                             + "Ljava/util/Map;Lsouther/compiler/inputs/Quantities;"
@@ -583,7 +599,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "puts the figure beside the answer where a run held more members of the class"
                             + " than were looked at"),
             Map.entry("souther.compiler.partition.TermRealizations#membersOnTheOrder("
-                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/partition/NumericSet$OfRuns;"
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/check/HeldClass;"
                             + "Ljava/util/List;Lsouther/compiler/values/ValueSet;"

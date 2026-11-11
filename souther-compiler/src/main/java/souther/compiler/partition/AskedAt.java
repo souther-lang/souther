@@ -130,11 +130,19 @@ public record AskedAt(NumbersAskedFor about, Walked walked) {
      * not a caller named one of them.
      */
     public static AskedAt aNumberOutOf(NumericSet admitted, Place named, Carrier on) {
-        if (on == null) {
+        // A set of progressions has no runs a walk could be asked for. Where it is finite and few
+        // enough, each of its numbers is one a walk tries, so the class is walked whole; where it
+        // is not, what is walked is some of something unsaid, as it is where there is no order to
+        // read the class on.
+        NumbersAskedFor about = on == null ? null : switch (admitted) {
+            case NumericSet.OfRuns runs -> NumbersAskedFor.ofTheClass(runs, on);
+            case NumericSet.InTheNumbers numbers -> NumbersAskedFor.ofTheClass(numbers, on);
+        };
+        if (about == null) {
             return new AskedAt(NumbersAskedFor.ANYTHING,
                     new Walked.SomeOfSomethingUnsaid(admitted, named));
         }
-        return new AskedAt(NumbersAskedFor.ofTheClass(admitted, on),
+        return new AskedAt(about,
                 named == null ? new Walked.AllOfIt(admitted)
                         : new Walked.OneOfThem(admitted, named));
     }

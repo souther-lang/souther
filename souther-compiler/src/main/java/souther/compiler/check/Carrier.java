@@ -22,6 +22,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueOrder;
 import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
@@ -1305,7 +1306,7 @@ public sealed interface Carrier extends ValueOrder {
             // and a run of the order, and the reading of extents is where that is made.
             case ValueSet.Cofinite it -> writableIn(it, held, apart, meter);
             case ValueSet.Matching it -> writableIn(it, held, apart, meter);
-            case ValueSet.Finite _, ValueSet.WholeRuns _ -> null;
+            case ValueSet.Finite _, ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> null;
         };
     }
 
@@ -1346,6 +1347,29 @@ public sealed interface Carrier extends ValueOrder {
                     if (at != null) {
                         yield at;
                     }
+                }
+                yield null;
+            }
+            // Members of the progressions inside the run, taken one at a time from the one
+            // nearest the run's low end and no more of them than the values held apart can stand
+            // in front of.
+            case ValueSet.WholeSteps it -> {
+                if (!(this instanceof Whole)) {
+                    yield null;
+                }
+                WholeNumberSet inside = it.numbers().and(WholeNumberSet.ofRuns(
+                        WholeNumberRuns.between(held.low(), held.high())));
+                BigInteger from = inside.least() != null ? inside.least()
+                        : inside.nearestMember(BigInteger.ZERO, Set.of());
+                // As many members as there are values held apart and one more: distinct members
+                // cannot all be among those held apart, so the last of them is one that is not.
+                for (int tried = 0; from != null && tried <= apart.count(); tried++) {
+                    OrderedInterval one = new OrderedInterval(endAt(from), endAt(from));
+                    Place at = firstHeldIn(one, anchorIn(one), Set.of(), apart);
+                    if (at != null) {
+                        yield at;
+                    }
+                    from = inside.leastAtOrAbove(from.add(BigInteger.ONE));
                 }
                 yield null;
             }
@@ -1639,6 +1663,13 @@ public sealed interface Carrier extends ValueOrder {
                     ? souther.compiler.values.Emptiness.UNDECIDED
                     : wholeNumbersOf(it, range).isNone() ? souther.compiler.values.Emptiness.EMPTY
                     : souther.compiler.values.Emptiness.NONEMPTY;
+            // Whether the progressions reach into the range, which their ends and remainders say.
+            case ValueSet.WholeSteps it -> !(this instanceof Whole)
+                    ? souther.compiler.values.Emptiness.UNDECIDED
+                    : it.numbers().and(WholeNumberSet.ofRuns(WholeNumberRuns.between(
+                            range.low(), range.high()))).isNone()
+                    ? souther.compiler.values.Emptiness.EMPTY
+                    : souther.compiler.values.Emptiness.NONEMPTY;
         };
     }
 
@@ -1690,6 +1721,29 @@ public sealed interface Carrier extends ValueOrder {
                          n = n.add(BigInteger.ONE)) {
                         out.add(valueAt(new Count(new BigDecimal(n))));
                     }
+                }
+                yield Admits.of(out, atMost);
+            }
+            // Members counted off one at a time, and not at all beyond what a caller counts.
+            case ValueSet.WholeSteps it -> {
+                if (!(this instanceof Whole)) {
+                    yield new Admits.NotKnown();
+                }
+                WholeNumberSet inside = it.numbers().and(WholeNumberSet.ofRuns(
+                        WholeNumberRuns.between(held.low(), held.high())));
+                Set<Value> out = new LinkedHashSet<>();
+                BigInteger from = inside.least() != null ? inside.least()
+                        : inside.nearestMember(BigInteger.ZERO, Set.of());
+                if (inside.least() == null && from != null) {
+                    // No least to count from, so the members are many unless few lie either side.
+                    yield new Admits.MoreThanCounted();
+                }
+                for (BigInteger at = from; at != null; at = inside.leastAtOrAbove(
+                        at.add(BigInteger.ONE))) {
+                    if (out.size() >= atMost) {
+                        yield new Admits.MoreThanCounted();
+                    }
+                    out.add(valueAt(new Count(new BigDecimal(at))));
                 }
                 yield Admits.of(out, atMost);
             }

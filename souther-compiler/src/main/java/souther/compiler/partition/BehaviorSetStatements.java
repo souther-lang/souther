@@ -19,6 +19,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.WhereAnEquationHolds;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.AdmittedPlan;
@@ -252,27 +253,66 @@ public final class BehaviorSetStatements {
      * rest and under the same allowance. Whether the position holds values on both sides of it is
      * settled where its values are known ({@link Classing}), as for any rule that states a set.
      *
-     * <p>As far as each string is shown, which is the three regions {@code strings} holds: the
-     * strings shown to be the partner's, those shown to be none of its values, and the rest, told
+     * <p>As far as each value is shown, which is the three regions {@code holds} keeps: the
+     * values shown to be the partner's, those shown to be none of its values, and the rest, told
      * neither way, which are in no class this draws and are said to be left open
      * ({@link SetStatement#notShown}). Held as the one value they are read off, so what is open is
      * said in one place.
      *
-     * @param by      which reading of which comparison this is
-     * @param states  what it states, called by the partner it is relative to
-     * @param term    the position it is about
-     * @param strings the strings the partner can hold, as far as each is shown
+     * @param by    which reading of which comparison this is
+     * @param term  the position it is about
+     * @param holds the strings or the numbers the partner can hold, as far as each is shown
      */
-    public record Partnered(PredicateOrigin by, PredicateStatement states,
-                            NumericTerm.FromOnePosition term,
-                            UndividedByARelation.StringsAPartnerCanHold strings) {
+    public record Partnered(PredicateOrigin by, NumericTerm.FromOnePosition term,
+                            PartnerHolds holds) {
 
         public Partnered {
-            if (by == null || states == null || term == null || strings == null) {
+            if (by == null || term == null || holds == null) {
                 throw new IllegalArgumentException(
-                        "an equality states of a position the strings its partner can hold");
+                        "an equality states of a position what its partner can hold");
             }
         }
+
+        /** What it states, called by the partner it is relative to. */
+        PredicateStatement states() {
+            return new PredicateStatement.CanBeTheValueOf(holds.partner());
+        }
+    }
+
+    /**
+     * What the other side of an equality can hold, which is the one thing a number and a string
+     * share: the values shown to be its, and the values outside which none is.
+     *
+     * <p>Two kinds and not one record read by both. What is held of strings is shown at the
+     * lengths a run gets to the relation at, and past the way's own statements of them; none of
+     * that is a fact of a number, and a number's classes stay as they are the day a rule about
+     * the lengths of strings is read otherwise.
+     */
+    public sealed interface PartnerHolds
+            permits UndividedByARelation.StringsAPartnerCanHold,
+                    UndividedByARelation.NumbersAPartnerCanHold {
+
+        /** What the model calls the partner. */
+        String partner();
+    }
+
+    /**
+     * What an equality between numbers states of a position: the numbers shown to be the
+     * partner's, those outside which none is, and the rest, which are told neither way.
+     *
+     * <p>Held as the numbers they are. They have no length to be shown at and no operation's image
+     * to be open for, so none of what a string's reach says reaches them.
+     */
+    private static Asked askedOfNumbers(Partnered each, WhereAnEquationHolds holds) {
+        ValueSet canBe = ValueSet.wholeNumberSet(holds.shown());
+        ValueSet mayBe = ValueSet.wholeNumberSet(holds.possible());
+        AdmittedPlan shown = canBe.isEmpty() ? AdmittedPlan.NONE : AdmittedPlan.of(canBe);
+        boolean everyOneShown = canBe.holdsTheSameValuesAs(mayBe);
+        AdmittedPlan notShown = everyOneShown ? null
+                : AdmittedPlan.meeting(List.of(AdmittedPlan.of(mayBe),
+                        canBe.isEmpty() ? AdmittedPlan.ANY : AdmittedPlan.without(canBe)));
+        return new Asked(each.by(), each.states(), each.term(), shown,
+                AdmittedPlan.without(mayBe), notShown, null, List.of(), List.of(), List.of());
     }
 
     /**
@@ -300,7 +340,12 @@ public final class BehaviorSetStatements {
         DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
         for (Partnered each : partnered) {
-            UndividedByARelation.StringsAPartnerCanHold strings = each.strings();
+            if (each.holds() instanceof UndividedByARelation.NumbersAPartnerCanHold numbers) {
+                asked.add(askedOfNumbers(each, numbers.holds()));
+                continue;
+            }
+            UndividedByARelation.StringsAPartnerCanHold strings =
+                    (UndividedByARelation.StringsAPartnerCanHold) each.holds();
             // A partner none of whose values is shown leaves the true side empty, and every string
             // it may be told neither way.
             AdmittedPlan shown = strings.canBe().isEmpty() ? AdmittedPlan.NONE

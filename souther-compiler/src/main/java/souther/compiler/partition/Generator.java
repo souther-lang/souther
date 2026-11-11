@@ -64,6 +64,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
@@ -6971,10 +6972,18 @@ public final class Generator {
      * and no longer.
      */
     private static DeclaredBounds.CountRange oneCountFromOne(Recognition.OfACount count) {
+        // The least member from one, which the progressions name outright.
+        if (count.is() instanceof NumericSet.InTheNumbers members) {
+            BigInteger least = members.numbers().leastAtOrAbove(BigInteger.ONE);
+            int many = least == null ? -1
+                    : CountDomain.asCount(Count.of(new BigDecimal(least)));
+            return many < 0 ? null : new DeclaredBounds.CountRange(many, many);
+        }
         List<Place> takenOut = switch (count.is()) {
             case NumericSet.AwayFrom away -> away.values();
             case NumericSet.InARunExcept except -> except.excluded();
             case NumericSet.At _, NumericSet.InARun _ -> List.of();
+            case NumericSet.InTheNumbers _ -> List.of();
         };
         Endpoint low = count.is().extent().min();
         Count from = low == null ? Count.of(1) : wholeAt(low, true);

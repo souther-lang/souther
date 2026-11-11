@@ -92,7 +92,7 @@ final class OrderedClasses {
                 // leave nothing of is those values, and a class beside them holding nothing is one
                 // no row is ever counted at — and so is a run with nothing taken out of it that the
                 // declarations leave nothing in.
-                NumericSet rest = taken.isEmpty() ? new NumericSet.InARun(run)
+                NumericSet.OfRuns rest = taken.isEmpty() ? new NumericSet.InARun(run)
                         : new NumericSet.InARunExcept(run, taken);
                 if (anythingLeft(rest, carrier, min, max, held)) {
                     classes.add(Intervals.classOf(run, taken, term, type, reading, ruleReading,
@@ -116,7 +116,7 @@ final class OrderedClasses {
      * <p>Kept where neither could say: a class nobody can show is empty is one the rows are still
      * owed at, and dropped on a guess it would be a distinction gone missing from the denominator.
      */
-    private static boolean anythingLeft(NumericSet rest, Carrier carrier, Endpoint min,
+    private static boolean anythingLeft(NumericSet.OfRuns rest, Carrier carrier, Endpoint min,
                                         Endpoint max, HeldValues held) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         for (LevelInterval part : Criterion.Within.runsInside(rest.region(carrier), carrier,
@@ -149,7 +149,7 @@ final class OrderedClasses {
         for (Place value : values) {
             classes.add(theValue(value, orders, type, reading, ruleReading));
         }
-        NumericSet rest = new NumericSet.AwayFrom(values);
+        NumericSet.OfRuns rest = new NumericSet.AwayFrom(values);
         if (!anythingLeft(rest, carrier, within == null ? null : within.min(),
                 within == null ? null : within.max(), held)) {
             return classes;

@@ -3112,6 +3112,74 @@ final class TermRealizations {
     }
 
     /**
+     * The members of {@code members} to try, nearest {@code named} first: where the place is none,
+     * the member nearest nought; then the least member and the greatest, where there are such.
+     * A member the declarations leave out, or the position's values refuse, is skipped for the
+     * next one the progressions hold, as many times as a figure of tries allows.
+     */
+    private static Tried membersOfTheNumbers(NumericSet.InTheNumbers members, Carrier carrier,
+                                             Place named, OrderedRuns declared,
+                                             ValueSet admits) {
+        Set<CompositionRepertoire> ofTheRun =
+                Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
+        BigInteger target = named instanceof Count count && count.exactly().isWhole()
+                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
+                ? whole : BigInteger.ZERO;
+        // A set small enough to name each member is walked member by member, nearest where the
+        // number is usually near first: what none of them builds is a class the rules leave
+        // nothing, which a walk of some of them could not say.
+        List<BigInteger> every = members.numbers()
+                .membersUpTo(CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+        if (every != null) {
+            List<Place> all = new ArrayList<>();
+            every.stream().sorted(Comparator.comparing((BigInteger each) ->
+                            each.subtract(target).abs()).thenComparing(Comparator.reverseOrder()))
+                    .map(each -> (Place) Count.of(new BigDecimal(each)))
+                    .filter(at -> (declared == null || declared.admits(at))
+                            && carrier.admitted(admits, at))
+                    .forEach(all::add);
+            return new Tried(all, new Remainder.Exhausted());
+        }
+        List<BigInteger> wanted = new ArrayList<>();
+        wanted.add(target);
+        if (members.numbers().least() != null) {
+            wanted.add(members.numbers().least());
+        }
+        if (members.numbers().greatest() != null) {
+            wanted.add(members.numbers().greatest());
+        }
+        List<Place> offered = new ArrayList<>();
+        Set<BigInteger> turnedDown = new LinkedHashSet<>();
+        boolean stopped = false;
+        for (BigInteger near : wanted) {
+            int tries = 0;
+            while (true) {
+                BigInteger member = members.numbers().nearestMember(near, turnedDown);
+                if (member == null) {
+                    break;
+                }
+                Place at = Count.of(new BigDecimal(member));
+                if ((declared == null || declared.admits(at)) && carrier.admitted(admits, at)) {
+                    if (!offered.contains(at)) {
+                        offered.add(at);
+                    }
+                    break;
+                }
+                if (++tries >= CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()) {
+                    stopped = true;
+                    break;
+                }
+                turnedDown.add(member);
+            }
+        }
+        // Nothing offered because the members ran out says the progressions hold none of the
+        // position's values, and because the figure was reached says no more than that.
+        return new Tried(offered, !offered.isEmpty() ? new Remainder.SomeOf(ofTheRun)
+                : stopped ? new Remainder.StoppedAt(CompositionBudget.NUMBERS_OF_A_SET_TRIED)
+                : new Remainder.Exhausted());
+    }
+
+    /**
      * A number of a set on the order its values are counted on, asked of the carrier.
      *
      * <p>For the accounts whose numbers are a place on an order rather than a count of something:
@@ -3141,7 +3209,17 @@ final class TermRealizations {
                 ? it : null;
         OrderedRuns declared = value == null ? null : within.orderedRegionAt(value);
         ValueSet admits = value == null ? ValueSet.ANY : within.admittedAt(value);
+        // Progressions have members and no runs: the members nearest where the number is usually
+        // near are offered, each one the declarations and the position's values admit. What is
+        // left is a set of runs, which the rest of this looks in.
+        NumericSet.OfRuns ofRuns;
         switch (wanted) {
+            case NumericSet.InTheNumbers members -> {
+                return membersOfTheNumbers(members, orders.answered(), named, declared, admits);
+            }
+            case NumericSet.OfRuns each -> ofRuns = each;
+        }
+        switch (ofRuns) {
             // A set of one number is that number, and there is nothing else it could have been —
             // and where the order the declarations leave the value holds it nowhere, the set holds
             // no value of the position at all.
@@ -3190,7 +3268,7 @@ final class TermRealizations {
         // else is asked of it afterwards.
         HeldClass members = value == null ? HeldClass.NONE : within.classAt(value);
         if (!(members instanceof HeldClass.None)) {
-            return membersOnTheOrder(wanted, orders, members, runs, admits, ofTheRun, usual);
+            return membersOnTheOrder(ofRuns, orders, members, runs, admits, ofTheRun, usual);
         }
         // One place of each run of the set inside each of those, standing for it — and where the
         // one standing for it is a value the position's values refuse, one of the run they take,
@@ -3204,7 +3282,7 @@ final class TermRealizations {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<Place> offered = new ArrayList<>();
         for (NumericDomain.Bounds run : runs) {
-            for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
+            for (LevelInterval look : Criterion.Within.runsInside(ofRuns.region(carrier), carrier,
                     run == null ? null : run.min(), run == null ? null : run.max())) {
                 if (!(space.standingFor(look, usual).level() instanceof Level.OnACarrier on)) {
                     continue;
@@ -3243,7 +3321,7 @@ final class TermRealizations {
      *
      * @param leaves the runs the declarations and the region leave the number, lowest first
      */
-    private static Tried membersOnTheOrder(NumericSet wanted, TermOrders orders,
+    private static Tried membersOnTheOrder(NumericSet.OfRuns wanted, TermOrders orders,
                                            HeldClass members, List<NumericDomain.Bounds> leaves,
                                            ValueSet admits, Set<CompositionRepertoire> ofTheRun,
                                            UsualPlace usual) {

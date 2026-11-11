@@ -44,6 +44,7 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.WhereAnEquationHolds;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
@@ -62,6 +63,7 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.DateTranslation;
@@ -76,6 +78,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.observe.Figure;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
@@ -680,9 +683,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         Set<WhereARunStopped> rowsStopped,
                         Set<FilingCoordinate> mayStopBefore,
                         Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered,
-                        Map<FilingCoordinate, GettingThere> gettingThere) {
+                        Map<FilingCoordinate, GettingThere> gettingThere,
+                        Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbersPartnered) {
 
         WhatItLeaves {
+            numbersPartnered = keptInOrder(numbersPartnered);
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
@@ -690,8 +695,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             mayStopBefore = Set.copyOf(mayStopBefore);
             // In the order the sides were said in: whoever files a reading for each numbers them
             // as it goes, and an order the keys' hashes decide numbers them differently each run.
-            partnered = Collections.unmodifiableMap(new LinkedHashMap<>(partnered));
-            gettingThere = Collections.unmodifiableMap(new LinkedHashMap<>(gettingThere));
+            partnered = keptInOrder(partnered);
+            gettingThere = keptInOrder(gettingThere);
             if (!undivided.containsAll(mayStopBefore)) {
                 throw new IllegalArgumentException("a run stopping before the relation is said of"
                         + " a place the relation is shown to leave undivided");
@@ -702,6 +707,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
 
+        /** {@code map} unchangeable and in the order it was given, which is the one thing a copy is
+         *  for: an empty one is the one empty map and builds nothing. */
+        private static <K, V> Map<K, V> keptInOrder(Map<K, V> map) {
+            return map.isEmpty() ? Map.of()
+                    : Collections.unmodifiableMap(new LinkedHashMap<>(map));
+        }
+
         WhatItLeaves(Set<FilingCoordinate> undivided,
                      Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                      boolean rowsArrive, Set<Figure> stoppedAt,
@@ -710,6 +722,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                      Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
             this(undivided, settled, rowsArrive, stoppedAt, rowsStopped, mayStopBefore, partnered,
                     Map.of());
+        }
+
+        WhatItLeaves(Set<FilingCoordinate> undivided,
+                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
+                     boolean rowsArrive, Set<Figure> stoppedAt,
+                     Set<WhereARunStopped> rowsStopped,
+                     Set<FilingCoordinate> mayStopBefore,
+                     Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered,
+                     Map<FilingCoordinate, GettingThere> gettingThere) {
+            this(undivided, settled, rowsArrive, stoppedAt, rowsStopped, mayStopBefore, partnered,
+                    gettingThere, Map.of());
+        }
+
+        /**
+         * This, with the numbers each position's partner can hold. A position so parted is no
+         * longer shown undivided: the equality is true at some of its values and false at the
+         * rest, which is what the relation shows of it.
+         */
+        WhatItLeaves numbersPartnered(
+                Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbers) {
+            Set<FilingCoordinate> parted = new LinkedHashSet<>();
+            numbers.keySet().forEach(term -> parted.add(FilingCoordinate.of(term)));
+            Set<FilingCoordinate> stillUndivided = new LinkedHashSet<>(undivided);
+            stillUndivided.removeAll(parted);
+            Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
+            stops.removeAll(parted);
+            Map<FilingCoordinate, GettingThere> shown = new LinkedHashMap<>(gettingThere);
+            shown.keySet().removeAll(parted);
+            return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, rowsStopped,
+                    stops, partnered, shown, numbers);
         }
 
         WhatItLeaves(Set<FilingCoordinate> undivided,
@@ -739,7 +781,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Set<FilingCoordinate> both = new LinkedHashSet<>(undivided);
             both.addAll(places);
             return new WhatItLeaves(both, settled, rowsArrive, stoppedAt, rowsStopped,
-                    mayStopBefore, partnered, gettingThere);
+                    mayStopBefore, partnered, gettingThere, numbersPartnered);
         }
 
         /**
@@ -758,7 +800,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Map<FilingCoordinate, GettingThere> shown = new LinkedHashMap<>(gettingThere);
             shown.keySet().removeAll(parted);
             return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, rowsStopped,
-                    stops, strings, shown);
+                    stops, strings, shown, numbersPartnered);
         }
 
         /** What a way that no row comes along shows of {@code places}: every one of them, of the
@@ -794,7 +836,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             });
             return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, rowsStopped, stops,
-                    partnered, reached);
+                    partnered, reached, numbersPartnered);
         }
 
         /** What both this and {@code other} show, for rows that may come along either: a place
@@ -838,8 +880,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     alikeStrings.put(term, strings.orAnother(theirs));
                 }
             });
+            // The same of the numbers: parted by one way and not by the other is parted by neither.
+            Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> alikeNumbers =
+                    new LinkedHashMap<>();
+            numbersPartnered.forEach((term, numbers) -> {
+                NumbersAPartnerCanHold theirs = other.numbersPartnered.get(term);
+                if (numbers.equals(theirs)) {
+                    alikeNumbers.put(term, numbers);
+                }
+            });
             return new WhatItLeaves(both, alike, true, stopped, runs, stops, alikeStrings,
-                    reached);
+                    reached, alikeNumbers);
+        }
+    }
+
+    /**
+     * The numbers the other side of an equality can come to, which are the only ones of this side
+     * that some row can have the equality come out true at, as far as each is shown.
+     *
+     * <p>Where {@link WhereAnEquationHolds#shown} holds a number a row is shown to have the
+     * equality true at, and outside {@link WhereAnEquationHolds#possible} none has.
+     *
+     * @param holds   where the equality holds, as far as shown and as far as possible
+     * @param partner what the model calls the other side, as the number it weighs
+     */
+    record NumbersAPartnerCanHold(WhereAnEquationHolds holds, String partner)
+            implements BehaviorSetStatements.PartnerHolds {
+
+        NumbersAPartnerCanHold {
+            if (holds == null || partner == null) {
+                throw new IllegalArgumentException("numbers a partner can come to are some numbers");
+            }
         }
     }
 
@@ -922,7 +993,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo,
                                   StringsPastTheWay reached,
                                   StringsPastTheWay partnerHeldTo, String partner,
-                                  List<String> imagesNotShown) {
+                                  List<String> imagesNotShown)
+            implements BehaviorSetStatements.PartnerHolds {
 
         StringsAPartnerCanHold {
             if (canBe == null || mayBe == null || partner == null || imagesNotShown == null) {
@@ -1691,8 +1763,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 // The product is held at a value by the total alone standing at it.
                 total = way.carrier();
             }
+            // The values a term takes that leave one remainder are those a list of one element
+            // comes to ({@link #steppedTotalOver}), which is a total a row writes with one element.
             if (total == null || !working.partials().contains(total)
-                    || terms.get(i).realizes() == null) {
+                    || (terms.get(i).realizes() == null && terms.get(i).stepped() == null)) {
                 continue;
             }
             boolean askedByNoOther = true;
@@ -3152,6 +3226,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped, runsStopped);
+        // An equality with a weighed number is true at the values the weighing reaches, which are
+        // no run: the places not shown undivided are parted by them.
+        if (!offItsLine && heldWhole && sides.size() == 2 && standApart(0, 1, independent)) {
+            shown = shown.numbersPartnered(numbersAPartnerCanHold(terms, constant, relation,
+                    overlapping, independent, carriers, operations, out, leaves));
+        }
         Set<TermPath> accountedFor = Set.of();
         if (sides.size() == 2 && heldWhole && standApart(0, 1, independent)) {
             Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
@@ -3180,6 +3260,83 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                               Set<TermPath> accountedFor) {
 
         static final Partnering NONE = new Partnering(Map.of(), Set.of());
+    }
+
+    /**
+     * The numbers each side of an equality between two numbers is parted by, for the sides not
+     * already shown undivided: the values some value of the other side comes to once weighed, and
+     * the values none does ({@link WhatARelationLeavesUndivided#whereAnEquationHolds}).
+     *
+     * <p>Only a side that is the number of one position, since it is a position the classes are
+     * of; what stands beside it may be any number the relation is made of.
+     */
+    private Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbersAPartnerCanHold(
+            List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms, ExactRatio constant,
+            Rel relation, BiPredicate<FilingCoordinate, FilingCoordinate> overlapping,
+            WhatARelationLeavesUndivided.Independence independent, List<Carrier> carriers,
+            WhatARelationLeavesUndivided.Operations operations, Set<FilingCoordinate> shown,
+            List<WhatARelationLeavesUndivided.Leaves> leaves) {
+        Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> out = new LinkedHashMap<>();
+        for (int at = 0; at < 2; at++) {
+            // A side the relation already says something of, by runs, keeps what it said.
+            // Only a position of whole numbers: the classes are about the number read from it, and
+            // a case of an enumeration is counted on its order and is no number a row is asked at.
+            if (!(sides.get(at).number() instanceof NumericTerm.ValueOf mine)
+                    || !(carriers.get(at) instanceof Carrier.Whole)
+                    || sides.get(1 - at).number() == null || leaves.get(at) != null
+                    || shown.contains(FilingCoordinate.of(mine))) {
+                continue;
+            }
+            WhereAnEquationHolds holds = WhatARelationLeavesUndivided.whereAnEquationHolds(terms,
+                    at, constant, relation, overlapping, independent,
+                    greatestOf(carriers.get(1 - at)), operations);
+            if (holds != null) {
+                Side there = sides.get(1 - at);
+                String named = there.number() instanceof NumericTerm.ValueOf place
+                        ? place.subjectPath().toString() : there.number().toString();
+                String partner = whatTheEquationMakesOf(sides.get(at).weight(), there.weight(),
+                        constant, named);
+                if (partner != null) {
+                    out.put(mine, new NumbersAPartnerCanHold(holds, partner));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The other side of an equality as the number the position beside it is: for
+     * {@code weightHere·here + weightThere·there + constant = 0}, the value
+     * {@code (-weightThere·there - constant) / weightHere}, written with the sign of
+     * {@code weightHere} taken out so that what is divided by is positive.
+     *
+     * @return the text, or null where a weight or the constant is no whole number
+     */
+    private static String whatTheEquationMakesOf(ExactRatio weightHere, ExactRatio weightThere,
+                                                 ExactRatio constant, String there) {
+        if (!(weightHere.floor() instanceof ExactAnswer.Held<BigInteger>(var divisor))
+                || !(weightThere.floor() instanceof ExactAnswer.Held<BigInteger>(var weighed))
+                || !(constant.floor() instanceof ExactAnswer.Held<BigInteger>(var added))
+                || divisor.signum() == 0) {
+            return null;
+        }
+        BigInteger factor = weighed.negate();
+        BigInteger offset = added.negate();
+        if (divisor.signum() < 0) {
+            divisor = divisor.negate();
+            factor = factor.negate();
+            offset = offset.negate();
+        }
+        String weighedText = factor.equals(BigInteger.ONE) ? there
+                : factor.equals(BigInteger.ONE.negate()) ? "-" + there
+                : factor + " * " + there;
+        String whole = offset.signum() == 0 ? weighedText
+                : weighedText + (offset.signum() > 0 ? " + " : " - ") + offset.abs();
+        if (divisor.equals(BigInteger.ONE)) {
+            return whole;
+        }
+        return weighedText.equals(whole) && factor.equals(BigInteger.ONE)
+                ? whole + " / " + divisor : "(" + whole + ") / " + divisor;
     }
 
     /**
@@ -3305,6 +3462,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // strings shown on a side are still parted from them.
             if (strings == null || strings.mayBe().isEmpty()
                     || strings.mayBe() instanceof ValueSet.WholeRuns
+                    || strings.mayBe() instanceof ValueSet.WholeSteps
                     || (!undivided && strings.mayBe().isAny() && strings.leavesNoneOpen())) {
                 continue;
             }
@@ -6892,6 +7050,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * How many numbers {@code numbers} holds that are shown to differ: the most one of its
+     * progressions holds, which the set holds at least; none where a progression has no end, and
+     * so the set holds without end.
+     *
+     * <p>Not the sum over the progressions. Two of them may hold one number between them, and a
+     * count taken for what is shown must not be more than there are.
+     */
+    private static Optional<BigInteger> membersShown(WholeNumberSet numbers) {
+        BigInteger most = BigInteger.ZERO;
+        for (WholeNumberSet.Part part : numbers.parts()) {
+            if (part.run().from() == null || part.run().to() == null) {
+                return Optional.empty();
+            }
+            BigInteger here = part.run().to().subtract(part.run().from())
+                    .divide(part.within().modulus()).add(BigInteger.ONE);
+            most = most.max(here);
+        }
+        return Optional.of(most);
+    }
+
+    /**
      * What {@code leaves} says of the side at {@code at}, put where it goes. Values settling it
      * are kept against the side's number, whatever number it is; where the lines between them part
      * no place — the orders' ends alone draw them, or they are lines on a total of a run — the
@@ -7361,10 +7540,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             NumericDomain.Bounds runsTo = each.position() != null
                     ? positionsOrderStops(each.position(), carriers.get(i))
                     : whereItStops(carriers.get(i));
-            terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
-                    withinTheEnds(realizes, runsTo), takes,
-                    each.number() instanceof NumericTerm.ValueOf, spacingOf(carriers.get(i)),
-                    runsTo, each.key()));
+            // A total of a field weighed by a whole number takes its multiples and no run, and a
+            // total over what a filter keeps takes nought and the values from the least it keeps.
+            WhatARelationLeavesUndivided.Term.Stepped stepped = realizes == null
+                    && source == null && each.number() instanceof NumericTerm.TakenOver over
+                    ? steppedTotalOver(over, read, region, conditions, heldWhole,
+                            carriers.get(i), working.partials())
+                    : null;
+            // Where every total lies no lower than the least the term takes, it lies there.
+            BigInteger leastTotal = stepped == null ? null : stepped.possible().least();
+            NumericDomain.Bounds lies = leastTotal == null ? holds
+                    : holds.meet(new NumericDomain.Bounds(
+                            Endpoint.inclusive(Count.of(new BigDecimal(leastTotal))), null));
+            WhatARelationLeavesUndivided.Term<FilingCoordinate> term =
+                    new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), lies,
+                            withinTheEnds(realizes, runsTo), takes,
+                            each.number() instanceof NumericTerm.ValueOf,
+                            spacingOf(carriers.get(i)), runsTo, each.key());
+            terms.add(stepped == null ? term : term.takingEvery(stepped));
         }
         return terms;
     }
@@ -9195,6 +9388,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                               List<OnAWay> conditions,
                                                               boolean heldWhole, Carrier carrier,
                                                               Collection<NumericTerm> atOneElement) {
+        return summedOverTheElements(over, read, region, conditions, heldWhole, carrier,
+                atOneElement, false);
+    }
+
+    /**
+     * The run of totals of {@code over}, or — where {@code unitWeight} — of the field it weighs,
+     * each taken once ({@link #steppedTotalOver}), which is no run the total itself takes.
+     */
+    private static NumericDomain.Bounds summedOverTheElements(NumericTerm.TakenOver over,
+                                                              InputReading read,
+                                                              SearchRegion region,
+                                                              List<OnAWay> conditions,
+                                                              boolean heldWhole, Carrier carrier,
+                                                              Collection<NumericTerm> atOneElement,
+                                                              boolean unitWeight) {
         List<NumericTerm.ValueOf> elements = valuesOfOneElement(over);
         if (!heldWhole || carrier == null
                 || !SUMMED.equals(DefaultBoundOperationFacts.get().accumulation(over.operation()))) {
@@ -9223,7 +9431,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (elements.isEmpty() && over.source() instanceof RunSource.ComputedOccurrences computed
                 && computed.computation() instanceof ElementValue.Affine weighed) {
             alone = summedOverWeighedFieldsOfOneElement(computed.elements(), weighed, read,
-                    region, stated.rest(), carrier);
+                    region, stated.rest(), carrier, unitWeight);
         } else if (elements.isEmpty()) {
             alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
         } else {
@@ -9234,8 +9442,156 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : shownOfAnElement(elements, read, region, stated.rest());
         }
         NumericDomain.Bounds totals = alone == null || containers.isEmpty() ? null
-                : ofTheElements(alone, counts, carrier, !atOneElement.contains(over));
-        return totals == null ? null : totals.meet(stated.run());
+                : ofTheElements(alone, counts, carrier,
+                        !unitWeight && !atOneElement.contains(over));
+        return totals == null || unitWeight ? totals : totals.meet(stated.run());
+    }
+
+    /**
+     * The totals of {@code over} that leave one remainder, where it adds up one field of each
+     * element weighed by a whole number other than one and minus one — or null where none is
+     * shown: a list of the one element at {@code u} comes to {@code k·u}, so what is taken is the
+     * multiples of {@code k} between the ends, and between them no other value is: an interval
+     * would say it took every one.
+     *
+     * <p>Only where nothing the way states bounds the total, since a bound would cut the run at
+     * a value the multiples do not stand at, and only on an order that steps. A number added to
+     * each element is left unread: it adds as many times as there are elements, and so no one
+     * remainder.
+     */
+    private static WhatARelationLeavesUndivided.Term.Stepped steppedTotalOver(
+            NumericTerm.TakenOver over, InputReading read, SearchRegion region,
+            List<OnAWay> conditions, boolean heldWhole, Carrier carrier,
+            Collection<NumericTerm> atOneElement) {
+        if (carrier != null && carrier.spacing() == Granularity.DISCRETE
+                && over.source() instanceof RunSource.ComputedOccurrences chosen
+                && chosen.computation() instanceof ElementValue.Choose choice) {
+            return steppedTotalOverWhatAFilterKeeps(over, chosen, choice, read, region,
+                    conditions, heldWhole, carrier);
+        }
+        if (carrier == null || carrier.spacing() != Granularity.DISCRETE
+                || !(over.source() instanceof RunSource.ComputedOccurrences computed)
+                || !(computed.computation() instanceof ElementValue.Affine weighed)
+                || weighed.form().coefs().size() != 1 || !weighed.form().constant().isZero()) {
+            return null;
+        }
+        ExactRatio weight = weighed.form().coefs().values().iterator().next();
+        BigInteger step = weight.isWhole() ? weight.abs().floor().orNull() : null;
+        StatedOfATotal stated = statedOfTheTotalAlone(over, conditions);
+        if (step == null || step.equals(BigInteger.ONE) || stated == null
+                || stated.run().min() != null || stated.run().max() != null) {
+            return null;
+        }
+        NumericDomain.Bounds units = summedOverTheElements(over, read, region, conditions,
+                heldWhole, carrier, atOneElement, true);
+        // Only the totals of one element are taken: {@code k·x} is the element at {@code x}
+        // weighed, a list of that one element comes to it, and no step before it can stop. The
+        // total of several is the total of their {@code k·x}, each of which may be past the
+        // order where the {@code x} is not. And the multiples of {@code k} are every one of the
+        // run only where the run holds nought, so that nought, the total of none, is among them.
+        NumericDomain.Bounds wholeUnits = units == null || !units.admits(Count.ZERO) ? null
+                : onWholeNumbers(units);
+        NumericDomain.Bounds multiples = wholeUnits == null ? null
+                : wholeUnits.timesEach(weight);
+        NumericDomain.Bounds order = whereItStops(carrier);
+        if (multiples == null) {
+            return null;
+        }
+        Congruences remainder = new Congruences(BigInteger.ZERO, step);
+        // An end the totals have is held to the order's; a side they have none on stays open, as
+        // far as the order runs ({@link WhatARelationLeavesUndivided.Term#runsTo}).
+        NumericDomain.Bounds met = order == null ? multiples : multiples.noFurtherOutThan(order);
+        BigInteger first = met.min() == null ? null : met.min().wholeAdmitted(true);
+        BigInteger last = met.max() == null ? null : met.max().wholeAdmitted(false);
+        if ((met.min() != null && first == null) || (met.max() != null && last == null)) {
+            return null;
+        }
+        if (first != null && last != null && first.compareTo(last) > 0) {
+            return null;
+        }
+        // Every total is a multiple of the weight; the ones a list of one element comes to are
+        // those of the run the units were shown to take.
+        WholeNumberSet multiplesOfTheWeight = WholeNumberSet.ofClass(remainder);
+        WholeNumberSet shown = multiplesOfTheWeight.and(
+                WholeNumberSet.ofRuns(WholeNumberRuns.one(first, last)));
+        return shown.isNone() ? null
+                : new WhatARelationLeavesUndivided.Term.Stepped(shown, multiplesOfTheWeight);
+    }
+
+    /**
+     * The totals of {@code over}, a field of each element a filter keeps added up, that a list of
+     * one element comes to — or null where none is shown: nought where the element is one the
+     * filter leaves out, and the field's own value where it keeps it. The field is kept from
+     * {@code least} on, so the totals are nought, and every whole number of the field's run
+     * from {@code least}, and none of the numbers between.
+     *
+     * <p>Only a field kept by the test {@code field > c} or {@code field >= c} of that one
+     * field, added as it stands, and left out by every other value of it. The field must be shown
+     * to take values on both sides of the test and the container to hold one element.
+     */
+    private static WhatARelationLeavesUndivided.Term.Stepped steppedTotalOverWhatAFilterKeeps(
+            NumericTerm.TakenOver over, RunSource.ComputedOccurrences computed,
+            ElementValue.Choose choice, InputReading read, SearchRegion region,
+            List<OnAWay> conditions, boolean heldWhole, Carrier carrier) {
+        if (!heldWhole
+                || !(choice.test() instanceof ElementValue.Test.Compared(var tested, var relation))
+                || !(choice.whenHolds() instanceof ElementValue.Affine kept)
+                || !(choice.otherwise() instanceof ElementValue.Affine left)
+                || !left.form().coefs().isEmpty() || !left.form().constant().isZero()
+                || kept.form().coefs().size() != 1 || !kept.form().constant().isZero()
+                || tested.coefs().size() != 1 || (relation != Rel.GT && relation != Rel.GE)) {
+            return null;
+        }
+        ElementProjection field = kept.form().coefs().keySet().iterator().next();
+        if (!ExactRatio.ONE.equals(kept.form().coefs().get(field))
+                || !ExactRatio.ONE.equals(tested.coefs().get(field))
+                || !tested.constant().isWhole()) {
+            return null;
+        }
+        // The least whole number the test keeps.
+        BigInteger kernel = tested.constant().negated().floor().orNull();
+        BigInteger least = kernel == null ? null
+                : relation == Rel.GT ? kernel.add(BigInteger.ONE) : kernel;
+        StatedOfATotal stated = statedOfTheTotalAlone(over, conditions);
+        TermPath place = field.from(computed.elements());
+        List<TermPath> containers = place.containersHoldingIt();
+        if (least == null || least.signum() <= 0 || stated == null
+                || stated.run().min() != null || stated.run().max() != null
+                || containers.size() != 1) {
+            return null;
+        }
+        NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
+        NumericDomain.Bounds run = held == null || !held.admits(Count.of(1)) ? null
+                : shownOfAnElementAlone(List.of(new NumericTerm.ValueOf(place)),
+                        containers.getFirst(), read, region, stated.rest(), null);
+        NumericDomain.Bounds wholeRun = run == null ? null : onWholeNumbers(run);
+        if (wholeRun == null) {
+            return null;
+        }
+        NumericDomain.Bounds keptRun = wholeRun.meet(new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(new BigDecimal(least))), null));
+        NumericDomain.Bounds leftRun = wholeRun.meet(new NumericDomain.Bounds(null,
+                Endpoint.inclusive(Count.of(new BigDecimal(least.subtract(BigInteger.ONE))))));
+        if (!keptRun.holdsAValue() || !leftRun.holdsAValue()) {
+            return null;
+        }
+        NumericDomain.Bounds order = whereItStops(carrier);
+        NumericDomain.Bounds ends = order == null ? keptRun : keptRun.noFurtherOutThan(order);
+        BigInteger first = ends.min() == null ? null : ends.min().wholeAdmitted(true);
+        BigInteger last = ends.max() == null ? null : ends.max().wholeAdmitted(false);
+        if (first == null || (ends.max() != null && last == null)
+                || (last != null && first.compareTo(last) > 0)) {
+            return null;
+        }
+        // Nought is the total of an element left out, and a total of one kept is from the least
+        // the field takes there. A list of any number of elements totals nought, or adds up
+        // elements each kept at {@code least} or more, and so lies at {@code least} or more:
+        // between them is no total.
+        WholeNumberSet noughtAlone = WholeNumberSet.ofRuns(WholeNumberRuns.one(BigInteger.ZERO,
+                BigInteger.ZERO));
+        return new WhatARelationLeavesUndivided.Term.Stepped(
+                noughtAlone.or(WholeNumberSet.ofRuns(WholeNumberRuns.one(first, last))),
+                noughtAlone.or(WholeNumberSet.ofRuns(WholeNumberRuns.one(least, null))));
     }
 
     /** The one total a container of no element comes to. */
@@ -9450,14 +9806,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static NumericDomain.Bounds summedOverWeighedFieldsOfOneElement(
             TermPath elements, ElementValue.Affine weighed, InputReading read, SearchRegion region,
-            List<OnAWay> conditions, Carrier carrier) {
+            List<OnAWay> conditions, Carrier carrier, boolean unitWeight) {
         List<TermPath> places = new ArrayList<>();
         TermPath container = null;
         NumericDomain.Bounds sum = null;
         for (Map.Entry<ElementProjection, ExactRatio> each : weighed.form().coefs().entrySet()) {
             // A run is an interval and says nothing of a step between its values: a field weighed
-            // two takes every other whole number of the interval it is moved to.
-            if (!ExactRatio.ONE.equals(each.getValue().abs())) {
+            // two takes every other whole number of the interval it is moved to. Read unweighed
+            // ({@code unitWeight}), the field takes the run it is shown to and the weight is the
+            // caller's to apply.
+            if (unitWeight ? weighed.form().coefs().size() != 1
+                    : !ExactRatio.ONE.equals(each.getValue().abs())) {
                 return null;
             }
             TermPath place = each.getKey().from(elements);
@@ -9470,7 +9829,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             NumericDomain.Bounds field = shownOfAnElementAlone(
                     List.of(new NumericTerm.ValueOf(place)), container, read, region, conditions,
                     null);
-            NumericDomain.Bounds part = field == null ? null : field.timesEach(each.getValue());
+            NumericDomain.Bounds part = field == null ? null
+                    : unitWeight ? field : field.timesEach(each.getValue());
             if (part == null) {
                 return null;
             }
@@ -10254,6 +10614,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 case ValueSet.WholeRuns(WholeNumberRuns numbers) -> numbers.count() == null
                         ? Optional.empty() : Optional.of(Endpoint.inclusive(
                                 Count.of(new BigDecimal(numbers.count()))));
+                // As many as the widest of the progressions holds, which is no more than the set
+                // does: how many differ is shown as far as one of them goes, and without end where
+                // one has none.
+                case ValueSet.WholeSteps(WholeNumberSet numbers) ->
+                        membersShown(numbers).map(many -> Endpoint.inclusive(
+                                Count.of(new BigDecimal(many))));
                 case ValueSet.Matching(Language language) ->
                         language.howManyStrings() instanceof BigInteger strings
                                 ? Optional.of(Endpoint.inclusive(
