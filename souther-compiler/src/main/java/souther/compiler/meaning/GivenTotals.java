@@ -29,7 +29,7 @@ public final class GivenTotals {
     public static boolean canBeGiven(Proposition stated) {
         return switch (stated) {
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _, Proposition.SameAsWritten _,Proposition.InTheStrings _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.InTheStrings _,
                  Proposition.StringInside _, Proposition.LastToHold _ -> true;
             case Proposition.Compared compared -> compared.relation() instanceof Relation.Affine
                     || compared.relation() instanceof Relation.Ordered;
@@ -72,7 +72,7 @@ public final class GivenTotals {
                 case ExactAnswer.Unheld<Proposition>(var why) -> ExactAnswer.unheld(why);
             };
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _, Proposition.SameAsWritten _,Proposition.InTheStrings _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.InTheStrings _,
                  Proposition.StringInside _, Proposition.LastToHold _ ->
                     ExactAnswer.held(stated);
             case Proposition.Some _, Proposition.SomeReachable _, Proposition.OnAnApplication _,

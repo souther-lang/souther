@@ -195,8 +195,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             case Proposition.Carried _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                 Proposition.SameValue _, Proposition.SameAsWritten _,
-                 Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
                  Proposition.Unread _ -> { }
         }
     }

@@ -36,8 +36,8 @@ public final class CompoundSamples {
     public static final List<Class<? extends Proposition>> LEAVES = List.of(
             Proposition.Always.class, Proposition.Compared.class, Proposition.Truth.class,
             Proposition.InCases.class, Proposition.Present.class, Proposition.InTheStrings.class,
-            Proposition.SameValue.class, Proposition.SameAsWritten.class,
-            Proposition.StringInside.class, Proposition.LastToHold.class, Proposition.Unread.class, Proposition.Carried.class);
+            Proposition.SameValue.class, Proposition.StringInside.class,
+            Proposition.LastToHold.class, Proposition.Unread.class, Proposition.Carried.class);
 
     /** The kinds {@link Proposition} permits. */
     public static Set<Class<?>> permitted() {

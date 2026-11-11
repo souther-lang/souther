@@ -15,6 +15,8 @@ import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -390,7 +392,7 @@ public final class CountWitnesses {
             List<FixtureTemplate> tried, Type element, TermPath container, Proposition stated,
             RuleReadingContext reading, Set<Figure> stopped) {
         RuleReadingSource source = reading.source();
-        Map<TermPath, List<ValuesAStatementNames.Named>> named = ValuesAStatementNames.of(stated);
+        Map<TermPath, List<Value>> named = ValuesAStatementNames.of(stated);
         Map<List<String>, List<FixtureTemplate>> told = new LinkedHashMap<>();
         for (TermPath place : PositionsAStatementReads.of(stated).orElse(List.of())) {
             // The keys of a map the element holds, and the elements of a list or a set it holds,
@@ -427,16 +429,11 @@ public final class CountWitnesses {
                     source.kinds(), source.sums()).size();
             List<FixtureTemplate> values = new ArrayList<>(Witnesses.distinctValuesOf(type,
                     valuesAskedOfAType(divided), reading, Set.of()).values());
-            for (ValuesAStatementNames.Named each : named.getOrDefault(place, List.of())) {
+            for (Value each : named.getOrDefault(place, List.of())) {
                 if (!RowSearch.hasRoom(values)) {
                     break;
                 }
-                FixtureTemplate written = switch (each) {
-                    case ValuesAStatementNames.Named.Numeric number ->
-                            Partitions.writtenNumberAt(type, number.at(), reading);
-                    case ValuesAStatementNames.Named.Written text ->
-                            Witnesses.writtenAs(text.at(), type, reading);
-                };
+                FixtureTemplate written = Witnesses.writtenAs(each, type, reading);
                 if (written != null && !values.contains(written)) {
                     values.add(written);
                 }
@@ -464,7 +461,7 @@ public final class CountWitnesses {
      * is not such a collection, or a value named is not written at the type the collection holds.
      */
     private static List<FixtureTemplate> collectionsTold(Type type, boolean ofTheKeys,
-                                                         List<ValuesAStatementNames.Named> names,
+                                                         List<Value> names,
                                                          RuleReadingContext reading) {
         if (type == null || names.isEmpty()) {
             return List.of();
@@ -486,13 +483,8 @@ public final class CountWitnesses {
         }
         List<FixtureTemplate> out = new ArrayList<>();
         out.add(none);
-        for (ValuesAStatementNames.Named each : names) {
-            FixtureTemplate value = switch (each) {
-                case ValuesAStatementNames.Named.Numeric number ->
-                        Partitions.writtenNumberAt(held, number.at(), reading);
-                case ValuesAStatementNames.Named.Written text ->
-                        Witnesses.writtenAs(text.at(), held, reading);
-            };
+        for (Value each : names) {
+            FixtureTemplate value = Witnesses.writtenAs(each, held, reading);
             FixtureTemplate holding = value == null ? null : WornNames.collectionHolding(view,
                     List.of(ofTheKeys ? FixtureTemplate.entry(value, filed.values().getFirst())
                             : value), source);
@@ -565,7 +557,8 @@ public final class CountWitnesses {
                                      Map<List<String>, TermPath> into) {
         switch (stated) {
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
-                                       DecisionSubject.AnInput(TermPath other, var _),
+                                       Operand.At<DecisionSubject>(
+                                               DecisionSubject.AnInput(TermPath other, var _)),
                                        boolean holds, var _) when holds -> {
                 List<String> inOne = fieldsBelow(element, one);
                 List<String> inOther = fieldsBelow(element, other);

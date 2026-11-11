@@ -70,7 +70,7 @@ final class OutsideTheOtherReadings {
             case Proposition.Compared compared -> takenIn(compared, region);
             case Proposition.Always _, Proposition.Any _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                 Proposition.SameValue _, Proposition.SameAsWritten _, Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
                  Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
                  Proposition.Unread _, Proposition.OnAnApplication _, Proposition.SoManyHold _,
                  Proposition.WhereItAnswers _, Proposition.OfTheWays _ -> region;

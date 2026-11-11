@@ -147,6 +147,7 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
@@ -324,8 +325,7 @@ final class Pullback {
                         stated.partsHeld().forEach(part -> partsOf(part, into));
                 case Proposition.Unread _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                     Proposition.SameValue _, Proposition.SameAsWritten _,
-                     Proposition.StringInside _, Proposition.LastToHold _,
+                     Proposition.SameValue _,                     Proposition.StringInside _, Proposition.LastToHold _,
                      Proposition.Carried _, Proposition.SomeReachable _ -> {
                     into.add(stated.spelling());
                     into.add(stated.deniedSpelling());
@@ -5246,14 +5246,11 @@ final class Pullback {
 
         @Override
         public Derivation same(LawProposition.Same<DeclaredArgument> same) {
-            DecisionSubject one = subject(same.one());
-            DecisionSubject other = subject(same.other());
-            if (one != null && other != null) {
+            Operand<DecisionSubject> one = operand(same.one());
+            Operand<DecisionSubject> other = operand(same.other());
+            if (one != null && other != null
+                    && (one.place().isPresent() || other.place().isPresent())) {
                 return leaf(new Derivation.TheSameValue(same, one, other), e, reads);
-            }
-            Derivation.TheSameAsWritten asWritten = sameAsWritten(same, one, other);
-            if (asWritten != null) {
-                return leaf(asWritten, e, reads);
             }
             // A value chosen by cases is the same as the other on each of them, as a comparison
             // the source wrote of it is read ({@link #comparedWhereItsCountsAre}).
@@ -5275,26 +5272,18 @@ final class Pullback {
         }
 
         /**
-         * {@code same}, where one of the two values is a subject and the other is a value the
-         * source wrote — or null where neither is, or both are, or the one that is not a subject
-         * comes to no value written: a name chosen by cases, a value worked out of the input.
+         * What {@code subject} is: the subject it is read as, or the value the source wrote — or
+         * null where it is neither, a name chosen by cases or a value worked out of the input.
          */
-        private Derivation.TheSameAsWritten sameAsWritten(
-                LawProposition.Same<DeclaredArgument> same, DecisionSubject one,
-                DecisionSubject other) {
-            if ((one == null) == (other == null)) {
-                return null;
+        private Operand<DecisionSubject> operand(LawSubject<DeclaredArgument> subject) {
+            DecisionSubject read = subject(subject);
+            if (read != null) {
+                return new Operand.At<>(read);
             }
-            boolean subjectIsOne = one != null;
-            Value written = writtenValue(subjectIsOne ? same.other() : same.one());
-            return written == null ? null : new Derivation.TheSameAsWritten(same,
-                    subjectIsOne ? one : other, subjectIsOne, written);
-        }
-
-        /** The value the source wrote as {@code subject}, or null where it is not written. */
-        private Value writtenValue(LawSubject<DeclaredArgument> subject) {
-            return subject instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at)
+            Value written = subject instanceof LawSubject.Argument<DeclaredArgument>(
+                    DeclaredArgument at)
                     ? Value.folded(folded(applied.argument(at), reads).orElse(null)) : null;
+            return written == null ? null : new Operand.Written<>(written);
         }
 
         /**
@@ -9850,8 +9839,9 @@ final class Pullback {
     private Derivation asADifferenceOfTwoOrderedValues(Derivation read) {
         if (!(tried(read) instanceof Proposition.SameValue(
                 DecisionSubject.AnInput(TermPath one, ValueIdentity oneIs),
-                DecisionSubject.AnInput(TermPath other, ValueIdentity otherIs), boolean holds,
-                var _))) {
+                Operand.At<DecisionSubject>(
+                        DecisionSubject.AnInput(TermPath other, ValueIdentity otherIs)),
+                boolean holds, var _))) {
             return null;
         }
         // One position inside an element, said of twice, is one number only where both are that

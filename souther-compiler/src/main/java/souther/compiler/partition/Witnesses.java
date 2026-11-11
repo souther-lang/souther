@@ -8,6 +8,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.core.IntNegation;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
@@ -623,6 +624,21 @@ final class Witnesses {
             default -> null;
         };
         return written == null ? null : WornNames.under(view.wrappers(), written, source);
+    }
+
+    /**
+     * {@code value} written at a place of {@code type} under the names that type wears — or null
+     * where it is no value a scalar place holds: a case, or a number of the other kind. A number
+     * is the same at an {@code Int} place and at a {@code Decimal} one, which the type says.
+     */
+    static FixtureTemplate writtenAs(Value value, Type type, RuleReadingContext reading) {
+        return switch (value) {
+            case Value.Text(String text) -> writtenAs((Object) text, type, reading);
+            case Value.Truth(boolean truth) -> writtenAs((Object) truth, type, reading);
+            case Value.Number(BigDecimal number) -> Partitions.writtenNumberAt(type, number,
+                    reading);
+            case Value.Case _ -> null;
+        };
     }
 
     /**

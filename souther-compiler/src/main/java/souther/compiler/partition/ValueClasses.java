@@ -125,7 +125,7 @@ final class ValueClasses {
      * with its names off, which the reading of it already says. The two are never compared with each
      * other (E1319), so a position is written about in one of them and never in both.
      */
-    static FixtureTemplate written(Value value, Shape shape) {
+    private static FixtureTemplate written(Value value, Shape shape) {
         return switch (value) {
             case Value.Text text -> FixtureTemplate.string(text.value());
             case Value.Truth truth -> FixtureTemplate.bool(truth.value());

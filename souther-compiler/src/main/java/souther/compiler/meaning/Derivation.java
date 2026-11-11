@@ -33,7 +33,7 @@ import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
-import souther.compiler.values.Value;
+import souther.compiler.values.Operand;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -1277,9 +1277,6 @@ public sealed interface Derivation {
                     case Stopped _ -> true;
                     case TheSameValue(var part, var one, var other) -> part.equals(law)
                             && stands(law.one(), one) && stands(law.other(), other);
-                    case TheSameAsWritten(var part, var subject, var subjectIsOne, var _) ->
-                            part.equals(law) && stands(
-                                    subjectIsOne ? law.one() : law.other(), subject);
                     case TheSameNumber(var part, var one, var other, var _) -> part.equals(law)
                             && standsAsANumber(law.one(), one)
                             && standsAsANumber(law.other(), other);
@@ -1408,10 +1405,12 @@ public sealed interface Derivation {
 
             /** Whether {@code read}, the subject {@code subject} was read as, is the position the
              *  call has it at. */
-            private boolean stands(LawSubject<DeclaredArgument> subject, DecisionSubject read) {
+            private boolean stands(LawSubject<DeclaredArgument> subject,
+                                   Operand<DecisionSubject> read) {
                 TermPath at = positionOf(subject);
-                return at == null
-                        || ReadThroughNames.atThePositions(read).equals(new DecisionSubject.AnInput(at));
+                return at == null || read.place().isEmpty()
+                        || ReadThroughNames.atThePositions(read.place().get())
+                                .equals(new DecisionSubject.AnInput(at));
             }
 
             /**
@@ -1562,7 +1561,7 @@ public sealed interface Derivation {
 
     /** A step that reads one part of a law, which it holds. */
     sealed interface ALawPart extends Derivation
-            permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue, TheSameAsWritten,
+            permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue,
                     TheSameNumber, TheStringsInside,
                     ALawQuantifies, ALawComparison, ALawJoinsWithoutWhatImpliesAnother, WhereAnOperationKeepsIt {
 
@@ -1630,43 +1629,34 @@ public sealed interface Derivation {
         }
     }
 
-    /** A part of a law that states two values are one, or not, with the two read as
-     *  {@code one} and {@code other}. */
-    record TheSameValue(LawProposition.Same<?> part, DecisionSubject one, DecisionSubject other)
-            implements ALawPart {
+    /**
+     * A part of a law that states two values are one, or not, with the two read as {@code one} and
+     * {@code other}: each a subject, or a value the source wrote, and at least one a subject.
+     */
+    record TheSameValue(LawProposition.Same<?> part, Operand<DecisionSubject> one,
+                        Operand<DecisionSubject> other) implements ALawPart {
 
         public TheSameValue {
             Objects.requireNonNull(part, "a step reads a part of a law");
-            Objects.requireNonNull(one, "a sameness is of two subjects");
-            Objects.requireNonNull(other, "a sameness is of two subjects");
+            Objects.requireNonNull(one, "a sameness is of two values");
+            Objects.requireNonNull(other, "a sameness is of two values");
+            if (one.place().isEmpty() && other.place().isEmpty()) {
+                throw new IllegalArgumentException("a sameness of two values written is settled,"
+                        + " and is read as that: " + one + " " + other);
+            }
+        }
+
+        public TheSameValue(LawProposition.Same<?> part, DecisionSubject one,
+                            DecisionSubject other) {
+            this(part, new Operand.At<>(one), new Operand.At<>(other));
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.SameValue(one, other, part.holds());
-        }
-    }
-
-    /**
-     * A part of a law that states two values are one, or not, where one of them is a value the
-     * source wrote: the other is read as {@code subject}, and the written one stands at no
-     * position.
-     *
-     * @param subjectIsOne whether the subject is the law's first value, and the written one its
-     *                     second
-     */
-    record TheSameAsWritten(LawProposition.Same<?> part, DecisionSubject subject,
-                            boolean subjectIsOne, Value written) implements ALawPart {
-
-        public TheSameAsWritten {
-            Objects.requireNonNull(part, "a step reads a part of a law");
-            Objects.requireNonNull(subject, "a sameness with a written value is of a subject");
-            Objects.requireNonNull(written, "a sameness with a written value is with a value");
-        }
-
-        @Override
-        public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.SameAsWritten(subject, written, part.holds());
+            // The value written is the other side, whichever the law wrote it as.
+            boolean subjectFirst = one.place().isPresent();
+            return new Proposition.SameValue((subjectFirst ? one : other).place().orElseThrow(),
+                    subjectFirst ? other : one, part.holds());
         }
     }
 
@@ -2219,8 +2209,7 @@ public sealed interface Derivation {
                 // A count turning on the element is met by some element as one statement.
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                     Proposition.SameValue _, Proposition.SameAsWritten _,
-                     Proposition.StringInside _,
+                     Proposition.SameValue _,                     Proposition.StringInside _,
                      Proposition.LastToHold _, Proposition.Some _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.SoManyHold _,
@@ -2883,7 +2872,7 @@ public sealed interface Derivation {
                 }
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                     Proposition.SameAsWritten _, Proposition.StringInside _,
+                     Proposition.StringInside _,
                      Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _,
@@ -2927,7 +2916,7 @@ public sealed interface Derivation {
                 }
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                     Proposition.SameAsWritten _, Proposition.StringInside _,
+                     Proposition.StringInside _,
                      Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _,

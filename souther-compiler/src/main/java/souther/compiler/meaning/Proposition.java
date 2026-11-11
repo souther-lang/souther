@@ -17,6 +17,7 @@ import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
 
 import java.util.ArrayList;
@@ -197,7 +198,7 @@ public sealed interface Proposition {
                     .map(none -> List.of(reached.atANode(), none))
                     .orElseGet(() -> List.of(reached.atANode()));
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, SameAsWritten _,StringInside _, LastToHold _, Unread _, Carried _ -> List.of();
+                 SameValue _, StringInside _, LastToHold _, Unread _, Carried _ -> List.of();
         };
     }
 
@@ -229,8 +230,8 @@ public sealed interface Proposition {
             // string and no container's element.
             case InTheStrings _ -> false;
             case SameValue same -> mayBeAnElementOf(same.one(), container)
-                    || mayBeAnElementOf(same.other(), container);
-            case SameAsWritten written -> mayBeAnElementOf(written.subject(), container);
+                    || (same.otherSubject() != null
+                            && mayBeAnElementOf(same.otherSubject(), container));
             case StringInside inside -> mayBeAnElementOf(inside.inner(), container)
                     || mayBeAnElementOf(inside.outer(), container);
             case LastToHold last -> isAnElementOf(last.position(), container);
@@ -571,71 +572,52 @@ public sealed interface Proposition {
     }
 
     /**
-     * Two subjects holding the same value, or not — what a container holding a value asks of one
-     * of its elements.
+     * A subject holding the same value as another subject, or as a value the source wrote, or not
+     * — what a container holding a value asks of one of its elements.
+     *
+     * <p>A value written stands at no position and is no {@link DecisionSubject}, which is a value
+     * a row controls, so it is the other side as an {@link Operand} and never the first. It is a
+     * {@link Value}, the thing it denotes and not the text it was written with.
      *
      * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record SameValue(DecisionSubject one, DecisionSubject other, boolean holds, Spelling spelling)
-            implements Proposition {
+    record SameValue(DecisionSubject one, Operand<DecisionSubject> other, boolean holds,
+                     Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
             return spelling.hashCode();
         }
 
-        public SameValue(DecisionSubject one, DecisionSubject other, boolean holds) {
+        public SameValue(DecisionSubject one, Operand<DecisionSubject> other, boolean holds) {
             this(one, other, holds, null);
+        }
+
+        public SameValue(DecisionSubject one, DecisionSubject other, boolean holds) {
+            this(one, new Operand.At<>(other), holds, null);
         }
 
         public SameValue {
             if (one == null || other == null) {
-                throw new IllegalArgumentException("a sameness is of two subjects");
+                throw new IllegalArgumentException("a sameness is of a subject and what it is"
+                        + " against");
             }
-            spelling = Spelling.of(one.spelled() + (holds ? " == " : " /= ") + other.spelled());
+            spelling = Spelling.of(one.spelled() + (holds ? " == " : " /= ") + switch (other) {
+                case Operand.At<DecisionSubject>(DecisionSubject subject) -> subject.spelled();
+                case Operand.Written<DecisionSubject>(Value value) -> value.spelled();
+            });
+        }
+
+        /** The other subject, or null where the other is a value written. Read for every row a
+         *  statement is put to, so it allocates nothing. */
+        public DecisionSubject otherSubject() {
+            return other instanceof Operand.At<DecisionSubject>(DecisionSubject subject)
+                    ? subject : null;
         }
 
         @Override
         public Proposition denied() {
             return new SameValue(one, other, !holds);
-        }
-    }
-
-    /**
-     * A subject holding a value the source wrote, or not — what a container holding a written
-     * value asks of one of its elements.
-     *
-     * <p>The value is a {@link Value}, the thing it denotes and not the text it was written with.
-     * It stands at no position, so it is not a {@link DecisionSubject}: a subject is a value a row
-     * controls, and a row controls nothing of a constant. It is the other side of what
-     * {@link SameValue} says of two subjects.
-     *
-     * @param spelling spelled from the rest when it is made, whatever is handed in
-     */
-    record SameAsWritten(DecisionSubject subject, Value written, boolean holds, Spelling spelling)
-            implements Proposition {
-
-        @Override
-        public int hashCode() {
-            return spelling.hashCode();
-        }
-
-        public SameAsWritten(DecisionSubject subject, Value written, boolean holds) {
-            this(subject, written, holds, null);
-        }
-
-        public SameAsWritten {
-            if (subject == null || written == null) {
-                throw new IllegalArgumentException("a sameness with a written value is of a"
-                        + " subject and a value");
-            }
-            spelling = Spelling.of(subject.spelled() + (holds ? " == " : " /= ")
-                    + written.spelled());
-        }
-
-        @Override
-        public Proposition denied() {
-            return new SameAsWritten(subject, written, !holds);
         }
     }
 
@@ -1220,7 +1202,7 @@ public sealed interface Proposition {
                         quantifiesOverInside(container, where.answers(), rebound)
                                 || quantifiesOverInside(container, where.states(), rebound);
                 case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                     SameValue _, SameAsWritten _,StringInside _, LastToHold _, Carried _, Unread _ -> false;
+                     SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> false;
             };
         }
 
@@ -1244,7 +1226,7 @@ public sealed interface Proposition {
                 case Always(boolean always) -> always ? Set.of() : Set.of(ofTheElement.spelling());
                 // One part, whatever it says: two spelled alike are one statement.
                 case Compared _, Truth _, InCases _, Present _, InTheStrings _, SameValue _,
-                     SameAsWritten _, StringInside _, LastToHold _, Any _, Some _, Carried _, SomeReachable _,
+                     StringInside _, LastToHold _, Any _, Some _, Carried _, SomeReachable _,
                      Unread _, OnAnApplication _, SoManyHold _, WhereItAnswers _, OfTheWays _ ->
                         Set.of(ofTheElement.spelling());
             });
@@ -1954,7 +1936,7 @@ public sealed interface Proposition {
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
                  WhereItAnswers _, OfTheWays _ -> stopsIn(stated.partsHeld(), into, first);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, SameAsWritten _,StringInside _, LastToHold _, Carried _ -> false;
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> false;
         };
     }
 
@@ -2084,7 +2066,7 @@ public sealed interface Proposition {
                  OfTheWays _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::saysASearchReachesBelow);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, SameAsWritten _,StringInside _, Unread _, Carried _, LastToHold _ -> false;
+                 SameValue _, StringInside _, Unread _, Carried _, LastToHold _ -> false;
         };
     }
 
@@ -2111,8 +2093,7 @@ public sealed interface Proposition {
             // Of the input, and of no answer.
             case InTheStrings _ -> false;
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
-                    || same.other() instanceof DecisionSubject.AnAnswer;
-            case SameAsWritten written -> written.subject() instanceof DecisionSubject.AnAnswer;
+                    || same.otherSubject() instanceof DecisionSubject.AnAnswer;
             case StringInside inside -> anAnswerIn(inside.inner()) || anAnswerIn(inside.outer());
             case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _,
                  WhereItAnswers _, OfTheWays _ ->
@@ -2323,10 +2304,11 @@ public sealed interface Proposition {
      * values are one is stated once a count is made of it.
      */
     public static List<TermPath> positionsHeldEqual(Proposition stated) {
-        if (stated instanceof SameValue(DecisionSubject one, DecisionSubject other, boolean holds,
-                var _)) {
+        if (stated instanceof SameValue(DecisionSubject one, Operand<DecisionSubject> other,
+                boolean holds, var _)) {
             return holds && one instanceof DecisionSubject.AnInput(TermPath at, var _)
-                    && other instanceof DecisionSubject.AnInput(TermPath alsoAt, var _)
+                    && other instanceof Operand.At<DecisionSubject>(
+                            DecisionSubject.AnInput(TermPath alsoAt, var _))
                     ? List.of(at, alsoAt) : null;
         }
         if (!(stated instanceof Compared(Relation relation, boolean holds, var _, var _))
@@ -2406,7 +2388,7 @@ public sealed interface Proposition {
             case SoManyHold _, Some _, SomeReachable _ -> throw new IllegalStateException(
                     "a count or a quantifier is of statements answering on every row: " + stated);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, SameAsWritten _,StringInside _, LastToHold _, Carried _, Unread _ -> stated;
+                 SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> stated;
         };
     }
 
@@ -2420,7 +2402,7 @@ public sealed interface Proposition {
             case All _, Any _, OnAnApplication _, OfTheWays _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, SameAsWritten _,StringInside _, LastToHold _, Carried _, Unread _ -> false;
+                 SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> false;
         };
     }
 
@@ -2445,7 +2427,7 @@ public sealed interface Proposition {
             case Any any -> any.parts().stream().allMatch(Proposition::deniedWhereverItFails);
             case OfTheWays ways -> deniedWhereverItFails(ways.written());
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, SameAsWritten _,StringInside _, LastToHold _, Carried _, Some _, SoManyHold _,
+                 SameValue _, StringInside _, LastToHold _, Carried _, Some _, SoManyHold _,
                  SomeReachable _ -> true;
         };
     }

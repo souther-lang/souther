@@ -18,6 +18,7 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
 
 import java.util.List;
@@ -240,8 +241,9 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                                                     Proposition.SameValue(
                                                             DecisionSubject.AnInput(TermPath one,
                                                                     var _),
-                                                            DecisionSubject.AnInput(TermPath other,
-                                                                    var _),
+                                                            Operand.At<DecisionSubject>(
+                                                                    DecisionSubject.AnInput(
+                                                                            TermPath other, var _)),
                                                             var _, var _), var _, var _),
                                             var _, var _, var _, var _)
                                     && over.equals(totals) && one.equals(totals.key())
@@ -257,7 +259,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
      */
     @Test
     void aKeyWrittenIsAskedOfTheMapAsTheValueItself() {
-        MembershipTarget usd = new MembershipTarget.Written(Value.text("USD"));
+        Operand<TermPath> usd = new Operand.Written<>(Value.text("USD"));
         RowDemand.Exists holds =
                 assertInstanceOf(RowDemand.Exists.class, asked("keyedWritten", true));
         assertEquals("ledger.totals", holds.container().toString());
@@ -274,7 +276,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
     void anElementWrittenIsAskedOfTheContainerAsTheValueItself() {
         for (Map.Entry<String, Value> each : Map.of("listedWritten", Value.text("USD"),
                 "listedWrittenNumber", Value.number(7)).entrySet()) {
-            MembershipTarget written = new MembershipTarget.Written(each.getValue());
+            Operand<TermPath> written = new Operand.Written<>(each.getValue());
             assertEquals(List.of(new RowDemand.SameAs(written)),
                     assertInstanceOf(RowDemand.Exists.class, asked(each.getKey(), true))
                             .ofAnElement().theWay());

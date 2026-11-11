@@ -72,15 +72,14 @@ final class PlanComposer {
     }
 
     /**
-     * How a value the source wrote is written into a container, as one of its elements or as one
-     * of its keys. Each is null where nothing in the language writes the value at the type the
-     * container holds there.
+     * How a value the source wrote is written into a container, as one of its elements or, where
+     * {@code asKey}, as one of its keys: null where nothing in the language writes the value at
+     * the type the container holds there.
      */
+    @FunctionalInterface
     interface Writing {
 
-        FixtureTemplate asElement(Value value);
-
-        FixtureTemplate asKey(Value value);
+        FixtureTemplate write(Value value, boolean asKey);
     }
 
     /** Composing one position of the plan, which is what a caller is given to reach below a field. */
@@ -128,15 +127,15 @@ final class PlanComposer {
      * with.
      */
     private static FixtureTemplate writtenAs(Value value, Type type, boolean asKey,
-                                             RuleReadingSource source) {
+                                             RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
         if (!(TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums()) instanceof Shape.Container container)) {
             return null;
         }
         Type held = asKey ? container instanceof Shape.Mapping map ? map.key() : null
                 : container.element();
-        return held == null ? null : ValueClasses.written(value, TypeView.shapeOf(held,
-                source.inners(), source.symbols(), source.kinds(), source.sums()));
+        return held == null ? null : Witnesses.writtenAs(value, held, reading);
     }
 
     /** What composing the positions a container is handed values from met. */
@@ -182,20 +181,9 @@ final class PlanComposer {
         }
         if (plan.handed()) {
             Met handed = new Met();
-            RuleReadingSource written = reading.source();
             ContainerContents contents = values.contentsOf(plan.at(),
                     node -> handed.noting(compose(node, values, reading)),
-                    new Writing() {
-                        @Override
-                        public FixtureTemplate asElement(Value value) {
-                            return writtenAs(value, plan.type(), false, written);
-                        }
-
-                        @Override
-                        public FixtureTemplate asKey(Value value) {
-                            return writtenAs(value, plan.type(), true, written);
-                        }
-                    });
+                    (value, asKey) -> writtenAs(value, plan.type(), asKey, reading));
             met = met.and(handed.met);
             if (contents == null) {
                 return Proposals.NONE.meeting(met);

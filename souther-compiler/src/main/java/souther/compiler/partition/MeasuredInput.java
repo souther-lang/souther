@@ -368,8 +368,7 @@ public final class MeasuredInput {
             for (ClauseRead read : PlacesTheRulesRead.membersNeeded(root.type(), source)) {
                 ClauseRead.Member member = read.member().orElseThrow();
                 out.add(new ContentsAsked.Asked(root.at().then(read.at().steps()),
-                        new MembershipTarget.AtPosition(
-                                root.at().then(member.lookedFor().steps())),
+                        member.lookedFor().placedAs(key -> root.at().then(key.steps())),
                         true, member.asAKey(), member.valueIn(), around));
             }
         }

@@ -42,6 +42,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
+import souther.compiler.values.Operand;
 import souther.compiler.values.PlannedValues;
 import souther.compiler.values.ValueSet;
 
@@ -398,7 +399,8 @@ final class MeaningAssumptions {
             // which a path holds; and the container holding one where some is.
             case Proposition.Some(DecisionSubject.AnInput(TermPath container,
                                           ValueIdentity identity),
-                                  Proposition.SameValue(DecisionSubject one, DecisionSubject other,
+                                  Proposition.SameValue(DecisionSubject one,
+                                          Operand.At<DecisionSubject>(DecisionSubject other),
                                           boolean same, var _), boolean holds, var _)
                     when same && howManyAre(container, identity, one, other) != null -> {
                 FactSubject count = howManyAre(container, identity, one, other);
@@ -466,8 +468,7 @@ final class MeaningAssumptions {
             // is not read here.
             case Proposition.InCases _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT);
-            case Proposition.SameValue _, Proposition.SameAsWritten _,
-                 Proposition.LastToHold _ ->
+            case Proposition.SameValue _, Proposition.LastToHold _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES);
             // One string inside another, or which language a string is in, is no fact a path holds
             // of a place: what it holds is what the statement says of how long each string is.

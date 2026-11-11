@@ -7,6 +7,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.BindingId;
+import souther.compiler.values.Operand;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -417,17 +418,13 @@ public final class ReadThroughNames {
                         : new Proposition.Present(of, present.holds());
             }
             case Proposition.SameValue same -> {
+                // A value written is the same whatever the names are: only a subject is told.
                 DecisionSubject one = told(same.one(), telling);
-                DecisionSubject other = told(same.other(), telling);
+                Operand<DecisionSubject> other =
+                        same.other().placedAs(each -> told(each, telling));
                 yield one == null || other == null ? twoAsOne.get()
                         : one == same.one() && other == same.other() ? stated
                         : new Proposition.SameValue(one, other, same.holds());
-            }
-            // The value written is the same whatever the names are: only the subject is told.
-            case Proposition.SameAsWritten written -> {
-                DecisionSubject of = told(written.subject(), telling);
-                yield of == null ? twoAsOne.get() : of == written.subject() ? stated
-                        : new Proposition.SameAsWritten(of, written.written(), written.holds());
             }
             // A statement none of whose parts was told anything is the statement it was, and is
             // not put together again: joining parts orders them, which is no small thing to do

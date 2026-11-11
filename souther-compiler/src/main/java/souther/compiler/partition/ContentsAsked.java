@@ -7,6 +7,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.check.ValueAsked;
 import souther.compiler.observe.ElementsTaken;
+import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
 
 import java.util.ArrayList;
@@ -92,7 +93,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
      *               it is asked of the one chosen. One at most, since what is asked inside an
      *               element names no container further in ({@link RowDemand.WithinIt})
      */
-    record Asked(TermPath container, MembershipTarget value, boolean holding, boolean ofTheKey,
+    record Asked(TermPath container, Operand<TermPath> value, boolean holding, boolean ofTheKey,
                  Optional<ValueAsked> valueIn, Optional<Around> around) {
 
         Asked {
@@ -107,7 +108,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         }
 
         /** A demand that asks nothing of the value filed under a key. */
-        Asked(TermPath container, MembershipTarget value, boolean holding, boolean ofTheKey,
+        Asked(TermPath container, Operand<TermPath> value, boolean holding, boolean ofTheKey,
               Optional<Around> around) {
             this(container, value, holding, ofTheKey, Optional.empty(), around);
         }
@@ -115,7 +116,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         /** A demand about the value at the position {@code at}. */
         Asked(TermPath container, TermPath at, boolean holding, boolean ofTheKey,
               Optional<ValueAsked> valueIn, Optional<Around> around) {
-            this(container, new MembershipTarget.AtPosition(at), holding, ofTheKey, valueIn,
+            this(container, new Operand.At<>(at), holding, ofTheKey, valueIn,
                     around);
         }
 
@@ -123,7 +124,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
          *  under a key. */
         Asked(TermPath container, TermPath at, boolean holding, boolean ofTheKey,
               Optional<Around> around) {
-            this(container, new MembershipTarget.AtPosition(at), holding, ofTheKey,
+            this(container, new Operand.At<>(at), holding, ofTheKey,
                     Optional.empty(), around);
         }
 
@@ -153,7 +154,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 return true;
             }
             // A value written is the same in every element, so asked of one it is asked of all.
-            if (value instanceof MembershipTarget.Written) {
+            if (value instanceof Operand.Written<TermPath>) {
                 return true;
             }
             Around outer = around.orElseThrow();
@@ -183,13 +184,13 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                     holdingOne.add(container);
                 }
             }
-            return holdingOne.containsAll(value.position().map(TermPath::containersHoldingIt)
+            return holdingOne.containsAll(value.place().map(TermPath::containersHoldingIt)
                     .orElse(List.of()));
         }
 
         /** The position of the row the value asked about stands at, none where it is written. */
         Optional<TermPath> valueAt() {
-            return value.position();
+            return value.place();
         }
     }
 
@@ -225,15 +226,6 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         boolean asksOf(int element) {
             return element >= from && element < below;
         }
-    }
-
-    /** {@code value} where the way being walked writes the names it stands at. */
-    private static MembershipTarget placed(MembershipTarget value, Map<TermPath, TermPath> at) {
-        return switch (value) {
-            case MembershipTarget.AtPosition(TermPath position) ->
-                    new MembershipTarget.AtPosition(at.get(position));
-            case MembershipTarget.Written written -> written;
-        };
     }
 
     /** What {@code way} asks of containers' contents. */
@@ -327,16 +319,16 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         Optional<Around> withThis = Optional.of(Around.over(container, some));
         for (RowDemand.OfAnElement one : ofTheElement) {
             switch (one) {
-                case RowDemand.SameAs(MembershipTarget value) when some ->
+                case RowDemand.SameAs(Operand<TermPath> value) when some ->
                         into.add(new Asked(container, value, true, false, Optional.empty(),
                                 around));
-                case RowDemand.DifferentFrom(MembershipTarget value) when !some ->
+                case RowDemand.DifferentFrom(Operand<TermPath> value) when !some ->
                         into.add(new Asked(container, value, false, false, Optional.empty(),
                                 around));
-                case RowDemand.KeyedAs(MembershipTarget value) when some ->
+                case RowDemand.KeyedAs(Operand<TermPath> value) when some ->
                         into.add(new Asked(container, value, true, true, Optional.empty(),
                                 around));
-                case RowDemand.NotKeyedAs(MembershipTarget value) when !some ->
+                case RowDemand.NotKeyedAs(Operand<TermPath> value) when !some ->
                         into.add(new Asked(container, value, false, true, Optional.empty(),
                                 around));
                 case RowDemand.WithinIt(TermPath inner, boolean innerSome, var asked) ->
@@ -473,7 +465,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                 left[0]--;
                 List<Asked> under = new ArrayList<>();
                 for (Asked each : asked.asked()) {
-                    under.add(new Asked(at.get(each.container()), placed(each.value(), at),
+                    under.add(new Asked(at.get(each.container()), each.value().placedAs(at::get),
                             each.holding(), each.ofTheKey(), each.valueIn(),
                             each.around().map(around ->
                                     new Around(at.get(around.container()), around.some(),
@@ -838,9 +830,9 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
                     continue;
                 }
                 FixtureTemplate value = switch (each.value()) {
-                    case MembershipTarget.AtPosition(TermPath at) -> valueAt.apply(at);
-                    case MembershipTarget.Written(Value written) -> each.ofTheKey()
-                            ? writing.asKey(written) : writing.asElement(written);
+                    case Operand.At<TermPath>(TermPath at) -> valueAt.apply(at);
+                    case Operand.Written<TermPath>(Value written) ->
+                            writing.write(written, each.ofTheKey());
                 };
                 if (value == null) {
                     return null;

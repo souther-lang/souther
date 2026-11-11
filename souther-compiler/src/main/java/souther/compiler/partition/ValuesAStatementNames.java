@@ -12,6 +12,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Text;
+import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
@@ -55,28 +56,18 @@ final class ValuesAStatementNames {
 
     private ValuesAStatementNames() {}
 
-    /** A value a statement names: the number or the text it is written with. */
-    sealed interface Named {
-
-        /** A number, exactly: the same at an {@code Int} place and at a {@code Decimal} one. */
-        record Numeric(BigDecimal at) implements Named {}
-
-        /** A text. */
-        record Written(String at) implements Named {}
-    }
-
     /**
      * Each place {@code stated} names values at, and the values in the order they are named: the
      * value a comparison is written with, and the whole numbers beside it a comparison to a number
      * is told apart at.
      */
-    static Map<TermPath, List<Named>> of(Proposition stated) {
-        Map<TermPath, List<Named>> out = new LinkedHashMap<>();
+    static Map<TermPath, List<Value>> of(Proposition stated) {
+        Map<TermPath, List<Value>> out = new LinkedHashMap<>();
         collect(stated, out);
         return out;
     }
 
-    private static void collect(Proposition stated, Map<TermPath, List<Named>> out) {
+    private static void collect(Proposition stated, Map<TermPath, List<Value>> out) {
         switch (stated) {
             case Proposition.Compared compared -> relation(compared.relation(), out);
             case Proposition.All all -> all.parts().forEach(each -> collect(each, out));
@@ -90,16 +81,11 @@ final class ValuesAStatementNames {
                     counted.statements().forEach(each -> collect(each, out));
             case Proposition.OnAnApplication applied ->
                     applied.each().forEach(each -> collect(each, out));
-            // A place the statement says holds a value it wrote is told apart at that value. A
-            // truth or a case is told apart by what the type divides into.
-            case Proposition.SameAsWritten(DecisionSubject.AnInput(TermPath place, var _),
-                                           Value written, boolean _, var _) ->
-                    named(place, switch (written) {
-                        case Value.Text(String text) -> List.of(new Named.Written(text));
-                        case Value.Number(BigDecimal number) -> List.of(new Named.Numeric(number));
-                        case Value.Truth _, Value.Case _ -> List.<Named>of();
-                    }, out);
-            case Proposition.SameAsWritten _, Proposition.Always _, Proposition.Truth _,
+            // A place the statement says holds a value it wrote is told apart at that value.
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath place, var _),
+                                       Operand.Written<DecisionSubject>(Value written),
+                                       boolean _, var _) -> named(place, List.of(written), out);
+            case Proposition.Always _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                  Proposition.SameValue _,
                  Proposition.StringInside _, Proposition.LastToHold _, Proposition.OfTheWays _,
@@ -107,7 +93,7 @@ final class ValuesAStatementNames {
         }
     }
 
-    private static void relation(Relation relation, Map<TermPath, List<Named>> out) {
+    private static void relation(Relation relation, Map<TermPath, List<Value>> out) {
         switch (relation) {
             // A place written with a value on the order it stands on: the value, and where it
             // counts the whole numbers beside it, which a strict order is told apart at.
@@ -116,7 +102,7 @@ final class ValuesAStatementNames {
                 if (place != null) {
                     switch (at) {
                         case Count count -> named(place, besideThe(count.at()), out);
-                        case Text text -> named(place, List.of(new Named.Written(text.at())), out);
+                        case Text text -> named(place, List.of(Value.text(text.at())), out);
                     }
                 }
             }
@@ -145,11 +131,11 @@ final class ValuesAStatementNames {
 
     /** {@code at}, and the whole numbers either side of it — the number itself too where it is no
      *  whole number. */
-    private static List<Named> besideThe(BigDecimal at) {
+    private static List<Value> besideThe(BigDecimal at) {
         ExactRatio exact = ExactRatio.of(at);
-        List<Named> out = new ArrayList<>();
+        List<Value> out = new ArrayList<>();
         if (!exact.isWhole()) {
-            out.add(new Named.Numeric(at));
+            out.add(Value.number(at));
         }
         wholesBeside(exact).forEach(written -> {
             if (!out.contains(written)) {
@@ -161,15 +147,15 @@ final class ValuesAStatementNames {
 
     /** The whole numbers at and either side of {@code at}: the one above, the one below, and the
      *  next past each. */
-    private static List<Named> wholesBeside(ExactRatio at) {
+    private static List<Value> wholesBeside(ExactRatio at) {
         if (!(at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger below))
                 || !(at.ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger above))) {
             return List.of();
         }
-        List<Named> out = new ArrayList<>();
+        List<Value> out = new ArrayList<>();
         for (BigInteger each : List.of(above, below, above.add(BigInteger.ONE),
                 below.subtract(BigInteger.ONE))) {
-            Named written = new Named.Numeric(new BigDecimal(each));
+            Value written = Value.number(new BigDecimal(each));
             if (!out.contains(written)) {
                 out.add(written);
             }
@@ -177,8 +163,9 @@ final class ValuesAStatementNames {
         return out;
     }
 
-    private static void named(TermPath place, List<Named> values, Map<TermPath, List<Named>> out) {
-        List<Named> at = out.computeIfAbsent(place, _ -> new ArrayList<>());
+    private static void named(TermPath place, List<Value> values,
+                              Map<TermPath, List<Value>> out) {
+        List<Value> at = out.computeIfAbsent(place, _ -> new ArrayList<>());
         values.stream().filter(value -> !at.contains(value)).forEach(at::add);
     }
 }

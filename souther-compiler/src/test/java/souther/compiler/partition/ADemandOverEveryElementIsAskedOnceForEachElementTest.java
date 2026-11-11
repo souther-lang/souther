@@ -20,7 +20,6 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
-import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,17 +65,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     private static final TermPath SHELF = TermPath.of("shelf");
 
     /** Nothing here asks for a value the source wrote. */
-    private static final PlanComposer.Writing NOTHING_WRITTEN = new PlanComposer.Writing() {
-        @Override
-        public FixtureTemplate asElement(Value value) {
-            return null;
-        }
-
-        @Override
-        public FixtureTemplate asKey(Value value) {
-            return null;
-        }
-    };
+    private static final PlanComposer.Writing NOTHING_WRITTEN = (value, asKey) -> null;
 
     private static ContentsAsked asked(RowDemand.OfACondition demand) {
         return ContentsAsked.of(List.of(new OnTheWay.TakenIn(WHERE, demand, NamedElements.NONE)));

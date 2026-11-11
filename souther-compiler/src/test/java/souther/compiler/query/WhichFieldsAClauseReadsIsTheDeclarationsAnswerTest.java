@@ -15,6 +15,8 @@ import souther.compiler.check.ValueAsked;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.TypeKey;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
@@ -146,7 +148,7 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                         Set.of(values("inner", "low"), values("inner", "high")),
                         Set.of(howMany("tags")),
                         Set.of(values("name")),
-                        Set.of(howMany("tags"), neededMember("tags")),
+                        Set.of(howMany("tags"), neededMember("tags", Value.text("a"))),
                         Set.of(howMany("items"), howMany("inner", "members"))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
         everyClauseReadsWhatItsRulesRead(c);
@@ -181,7 +183,8 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                         Set.of(values("key"), neededKey("table", "key", BigDecimal.ONE)),
                         Set.of(values("key"), lookedUpMember("other")),
                         Set.of(values("key"), lookedUpMember("tags"), howMany("tags")),
-                        Set.of(values("key"), neededKey("table", "key"), neededMember("tags"))),
+                        Set.of(values("key"), neededKey("table", "key"),
+                                neededMember("tags", Value.text("a")))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
         everyClauseReadsWhatItsRulesRead(c);
     }
@@ -333,9 +336,13 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                 RuleKey.THE_VALUE);
     }
 
-    private static ClauseRead neededMember(String... steps) {
-        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS,
-                RuleKey.THE_VALUE);
+    /** A member the clause needs the container at {@code container} to hold as an element: a
+     *  value the clause writes. */
+    private static ClauseRead neededMember(String container, Value written) {
+        return new ClauseRead(new RuleKey(List.of(container)),
+                ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
+                Optional.of(new ClauseRead.Member(new Operand.Written<>(written), false,
+                        Optional.empty())));
     }
 
     /** A member the clause needs the map at {@code container} to hold as a key: the value at the

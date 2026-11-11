@@ -62,8 +62,7 @@ public final class TruthTable {
             // A count of statements is one part: what holds whichever way it comes out holds
             // whichever way its statements do.
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _, Proposition.SameAsWritten _,
-                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _,
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _,
                  Proposition.Carried _, Proposition.SomeReachable _, Proposition.OnAnApplication _,
                  Proposition.SoManyHold _ -> {
                 into.putIfAbsent(spelledAs(stated), into.size());
@@ -86,8 +85,7 @@ public final class TruthTable {
                     && valueOf(where.states(), parts, assignment);
             case Proposition.OfTheWays ways -> valueOf(ways.written(), parts, assignment);
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _, Proposition.SameAsWritten _,
-                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _,
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _,
                  Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _,
                  Proposition.SoManyHold _ -> {
