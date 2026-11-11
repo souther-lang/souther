@@ -162,20 +162,40 @@ public final class CountWitnesses {
      * @param failing   an element the statement fails of that the boundary builds a container of,
      *                  or null where none was found — or where nothing is asked of an element, so
      *                  that there is none to fail
-     * @param overAgain whether the container is a list, which may hold an element over again, so
-     *                  that a row holds the one the statement holds of as many times as it likes
-     *                  and the count takes every value up to its size; a container that holds each
-     *                  element once shows no more than the one. It is the type's, and no rule's:
-     *                  a rule that keeps a list's elements apart leaves it fewer to hold, which is
-     *                  what {@code UndividedByARelation#howManyAreHeld} says of it, and a count is
-     *                  shown only as far as that
+     * @param expansion how far the two elements the row holds say the count goes: to every value up
+     *                  to the size of the container, or to no more than the two
      */
     public record Witness(List<FixtureTemplate> inputs, int container, FixtureTemplate one,
-                          FixtureTemplate other, FixtureTemplate failing, boolean overAgain) {
+                          FixtureTemplate other, FixtureTemplate failing, Expansion expansion) {
 
         public Witness {
             inputs = List.copyOf(inputs);
         }
+
+        /** Whether the count is shown at every value from none up to the size of the container. */
+        public boolean takesEverySize() {
+            return expansion != Expansion.ONLY_THESE;
+        }
+    }
+
+    /**
+     * What a row that holds one element the statement holds of and another it fails of shows of
+     * the counts beside them. It is the type's and the statement's, and no rule's: a rule that
+     * keeps elements apart leaves a container fewer to hold, which is what
+     * {@code UndividedByARelation#howManyAreHeld} says of it, and a count is shown only as far as
+     * that.
+     */
+    public enum Expansion {
+        /** A list may hold an element over again, so a row holds the one the statement holds of
+         *  as many times as it likes. */
+        REPEATED_ELEMENT,
+        /** A map holds an entry under each key, and the statement reads no key: the entries it
+         *  holds of and those it fails of may be put under as many different keys as the map may
+         *  hold, each of them any number of times. */
+        INDEPENDENT_KEYS,
+        /** The two elements and no more: a set holds each element once, and a statement that reads
+         *  the key of an entry says of another key what it has no reason to say of the first. */
+        ONLY_THESE
     }
 
     /**
@@ -184,10 +204,10 @@ public final class CountWitnesses {
      * elements the statement keeps that hold different values — or, where none was found, the
      * figures the search stopped at first and where the runs of the rows it tried stopped.
      *
-     * <p>Only of a count of a parameter's own elements, of a list or a set. Where it is a list the
-     * rows a count is read over hold the witness's elements so many times each; a set holds each
-     * once, and what the witness shows of it is the one element and the other
-     * ({@link Witness#overAgain}).
+     * <p>Only of a count of a parameter's own elements, of a list, a set or a map. Where it is a list
+     * the rows a count is read over hold the witness's elements so many times each; a set holds each
+     * once, and what the witness shows of it is the one element and the other. A map's element is an
+     * entry, a key and a value built together and held under a key once ({@link Witness#expansion}).
      *
      * @param named the values the model names at each parameter's type, tried before anything
      *              else is
@@ -208,13 +228,18 @@ public final class CountWitnesses {
         // its rules ask; a set holds each once, and what one element meets and another fails are
         // two values already.
         boolean repeats = read.domain().holdsAnElementOverAgain(container, read.rules());
-        if (!repeats && !read.domain().holdsEachElementOnce(container, read.rules())) {
+        // A map holds an entry, which is a key and a value: counted of the entries that meet a
+        // statement, and no further than that.
+        boolean ofEntries = read.domain().entryOf(container, read.rules()).size() == 2;
+        if (ofEntries ? asked.differentAt().isPresent()
+                : !repeats && !read.domain().holdsEachElementOnce(container, read.rules())) {
             return Sought.NOTHING;
         }
         BehaviorInputs inputs = BehaviorInputs.of(read);
         int at = inputs.parameters().indexOf(container.head());
         Type element = read.domain().typeAt(container.element(), read.rules());
-        if (at < 0 || element == null) {
+        Type key = ofEntries ? read.domain().typeAt(container.key(), read.rules()) : null;
+        if (at < 0 || element == null || (ofEntries && key == null)) {
             return Sought.NOTHING;
         }
         RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
@@ -252,12 +277,17 @@ public final class CountWitnesses {
         // And the elements the model writes in the container, each written back as a fixture of
         // the element's type, tried before what stands for that type.
         List<FixtureTemplate> written = new ArrayList<>();
+        List<FixtureTemplate> writtenKeys = new ArrayList<>();
         for (RowSearch.Built list : each.get(at)) {
-            elementsOf(ObservedValue.inside(worn, list.value()), element, reading, written,
-                    stopped);
+            ObservedValue held = ObservedValue.inside(worn, list.value());
+            if (ofEntries) {
+                entriesOf(held, key, element, reading, writtenKeys, written, stopped);
+            } else {
+                elementsOf(held, element, reading, written, stopped);
+            }
         }
         Container holder = new Container(at, container, spelled::holding, worn,
-                repeats ? fewestHeld(container, read) : 1, repeats,
+                repeats ? fewestHeld(container, read) : 1, repeats, key, writtenKeys,
                 place -> mayHold(place, read));
         each.set(at, each.get(at).subList(0, 1));
         // The rows of those, nearest first, as many as the search tries: one whose other values
@@ -294,6 +324,77 @@ public final class CountWitnesses {
         }
     }
 
+    /** Adds to {@code keys} and to {@code values} the key and the value of each entry of
+     *  {@code map}, a map the boundary built, each written back as a fixture of its type and each
+     *  once — and to {@code stopped} the figure it was cut short at, where it was. */
+    private static void entriesOf(ObservedValue map, Type key, Type value,
+                                  RuleReadingContext reading, List<FixtureTemplate> keys,
+                                  List<FixtureTemplate> values, Set<Figure> stopped) {
+        if (map instanceof ObservedValue.Truncated(Figure cut)) {
+            stopped.add(cut);
+        }
+        if (!(map instanceof ObservedValue.Mapping(List<ObservedValue.Entry> held))) {
+            return;
+        }
+        for (ObservedValue.Entry each : held) {
+            if (ObservedFixtures.of(each.key(), key, reading)
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate written)
+                    && !keys.contains(written)) {
+                keys.add(written);
+            }
+            if (ObservedFixtures.of(each.value(), value, reading)
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate written)
+                    && !values.contains(written)) {
+                values.add(written);
+            }
+        }
+    }
+
+    /**
+     * The entries tried of a map: each key tried with each value tried, the pairs nearest the
+     * first of each first, as many as the search tries — with the figure said in {@code stopped}
+     * where there are more.
+     */
+    private static List<FixtureTemplate> entriesTried(List<FixtureTemplate> keys,
+                                                      List<FixtureTemplate> values,
+                                                      Set<Figure> stopped) {
+        List<FixtureTemplate> out = new ArrayList<>();
+        int farthest = keys.size() + values.size() - 2;
+        for (int sum = 0; sum <= farthest; sum++) {
+            for (int value = Math.max(0, sum - keys.size() + 1);
+                    value <= Math.min(sum, values.size() - 1); value++) {
+                if (out.size() >= MOST_VALUES) {
+                    stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+                    return out;
+                }
+                out.add(FixtureTemplate.entry(keys.get(sum - value), values.get(value)));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What stands for the keys of the map: those the model writes in it, two that differ, and the
+     * keys a statement that reads a place of a key tells apart.
+     */
+    private static List<FixtureTemplate> keysTried(Container held, Asked asked,
+                                                   RuleReadingContext reading,
+                                                   Set<Figure> stopped) {
+        List<FixtureTemplate> out = new ArrayList<>(held.writtenKeys());
+        Witnesses.distinctValuesOf(held.key(), valuesAskedOfAType(2), reading, Set.of()).values()
+                .stream().filter(each -> !out.contains(each)).forEach(out::add);
+        return RowSearch.upTo(withWhatItReadsDiffering(out, held.key(), held.place().key(), held,
+                asked, reading, stopped), stopped);
+    }
+
+    /** Whether the statement reads the key of an entry, or reads something that is no place. */
+    private static boolean readsAKey(Asked asked, TermPath container) {
+        return asked.reads().map(read -> read.stream().anyMatch(place ->
+                place.isAtOrUnder(container.key()))).orElse(true);
+    }
+
     /** A witness whose other inputs are {@code beside}'s, or empty where none was found there —
      *  and, where the run of the row that met the statement both ways stopped, where it did,
      *  added to {@code runs}. */
@@ -307,8 +408,10 @@ public final class CountWitnesses {
                                             Set<Figure> stopped, Set<WhereARunStopped> runs) {
         List<FixtureTemplate> row = beside.stream().map(RowSearch.Built::fixture).toList();
         List<ObservedValue> built = beside.stream().map(RowSearch.Built::value).toList();
-        List<FixtureTemplate> tried = elementsTried(element, container, asked, inputs, built,
+        List<FixtureTemplate> values = elementsTried(element, container, asked, inputs, built,
                 reading, building, written, stopped);
+        List<FixtureTemplate> tried = container.key() == null ? values
+                : entriesTried(keysTried(container, asked, reading, stopped), values, stopped);
         boolean ofValues = asked.differentAt().isPresent();
         // A pair is a witness only once the container holds it, the statement tells it apart as
         // the count asks, and a run of the row it makes gets to the comparison: the three are one
@@ -324,7 +427,8 @@ public final class CountWitnesses {
                 ? twoThatDiffer(tried, container, asked.differentAt().get(), built, inputs,
                         statement, building, getsThere, stopped)
                 : oneKeptAndOneDropped(tried, container, built, inputs, statement, building,
-                        getsThere, stopped);
+                        pair -> holdsEach(pair, container, building) && getsThere.test(pair),
+                        stopped);
         if (both == null) {
             return Optional.empty();
         }
@@ -333,8 +437,27 @@ public final class CountWitnesses {
         FixtureTemplate failing = ofValues
                 ? aFailingElement(tried, container, built, inputs, statement, building)
                 : both.getLast();
+        Expansion expansion = container.overAgain() ? Expansion.REPEATED_ELEMENT
+                : container.key() != null && !readsAKey(asked, container.place())
+                ? Expansion.INDEPENDENT_KEYS : Expansion.ONLY_THESE;
         return Optional.of(new Witness(rowHolding(row, container, both), container.at(),
-                both.getFirst(), both.getLast(), failing, container.overAgain()));
+                both.getFirst(), both.getLast(), failing, expansion));
+    }
+
+    /**
+     * Whether the container holds each of {@code elements}: where it is a map, as many entries as
+     * there are elements, so that two entries filed under one key — which the boundary may keep as
+     * one — are not taken for two.
+     */
+    private static boolean holdsEach(List<FixtureTemplate> elements, Container container,
+                                     RowSearch.Building building) {
+        if (container.key() == null) {
+            return true;
+        }
+        return building.build(container.at(), container.holding(elements))
+                .map(held -> container.inside(held) instanceof ObservedValue.Mapping(var entries)
+                        && entries.size() == elements.size())
+                .orElse(false);
     }
 
     /** {@code row} with the container holding {@code elements}. */
@@ -563,7 +686,8 @@ public final class CountWitnesses {
             return RowSearch.upTo(out, stopped);
         }
         if (alike.isEmpty()) {
-            return RowSearch.upTo(withWhatItReadsDiffering(out, element, held, asked,
+            return RowSearch.upTo(withWhatItReadsDiffering(out, element, container.element(),
+                    held, asked,
                     reading, stopped), stopped);
         }
         BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
@@ -595,7 +719,8 @@ public final class CountWitnesses {
                 }
             }
         }
-        return RowSearch.upTo(withWhatItReadsDiffering(out, element, held, asked, reading,
+        return RowSearch.upTo(withWhatItReadsDiffering(out, element, container.element(), held,
+                asked, reading,
                 stopped), stopped);
     }
 
@@ -622,9 +747,8 @@ public final class CountWitnesses {
      * found otherwise.
      */
     private static List<FixtureTemplate> withWhatItReadsDiffering(
-            List<FixtureTemplate> tried, Type element, Container held, Asked asked,
-            RuleReadingContext reading, Set<Figure> stopped) {
-        TermPath container = held.place();
+            List<FixtureTemplate> tried, Type element, TermPath root, Container held,
+            Asked asked, RuleReadingContext reading, Set<Figure> stopped) {
         RuleReadingSource source = reading.source();
         Map<TermPath, List<ValuesAStatementNames.Named>> named =
                 ValuesAStatementNames.of(asked.statement());
@@ -638,7 +762,7 @@ public final class CountWitnesses {
                     && place.steps().getLast() instanceof TermPath.Step.Element
                     ? place.prefix(place.steps().size() - 1) : null;
             List<String> fieldsToIt =
-                    collection == null ? null : fieldsBelow(container.element(), collection);
+                    collection == null ? null : fieldsBelow(root, collection);
             // A place that is an element of the container being counted is no such collection:
             // it is read as the place it is, below.
             if (fieldsToIt != null || place.mapOfTheKeys() != null) {
@@ -656,7 +780,7 @@ public final class CountWitnesses {
                 }
                 continue;
             }
-            List<String> fields = fieldsBelow(container.element(), place);
+            List<String> fields = fieldsBelow(root, place);
             Type type = fields == null ? null : Witnesses.typeAt(element, fields, reading);
             if (type == null) {
                 continue;
@@ -1009,11 +1133,14 @@ public final class CountWitnesses {
      *              parameter, under the names that type wears
      * @param size  the fewest elements the boundary builds it with ({@link #fewestHeld})
      * @param overAgain whether it may hold an element over again
+     * @param key       the type of the keys of a map, null where it is not one
+     * @param writtenKeys the keys the model writes in it
      * @param mayHold   how many the collection at a place of the container's elements may hold
      */
     private record Container(int at, TermPath place,
                              Function<List<FixtureTemplate>, FixtureTemplate> wrap,
-                             List<TypeSymbol> worn, int size, boolean overAgain,
+                             List<TypeSymbol> worn, int size, boolean overAgain, Type key,
+                             List<FixtureTemplate> writtenKeys,
                              Function<TermPath, DeclaredBounds.CountRange> mayHold) {
 
         /** What the boundary built of the container, with the names it wears taken off. */
