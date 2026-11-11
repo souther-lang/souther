@@ -949,6 +949,96 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * What an application of an operation reads as on one application of the closure it stands in:
+     * the reading, how its statement was derived there, and the statement.
+     */
+    record AppliedOn(Read read, Derivation how, Proposition stated) {}
+
+    /**
+     * What an application of an operation states inside a closure whose applications are said,
+     * read on each of them as {@link #onEachApplication} reads a comparison: a line two
+     * applications draw is one line, and it decides where it decides on one of them, met where a
+     * run makes that one ({@link WhereAnApplicationIsMade#decidesOn}). What stands before the
+     * application in the closure — the left of a conjunction it is the right of — is what each
+     * application is reached under, and so is where the lines of the application decide.
+     *
+     * <p>Null where some application states nothing of its own, as a single reading of it does.
+     *
+     * @param readingOn what the application reads as on one of the applications
+     */
+    static Read ofAnApplicationOnEach(List<ClosureApplications.Application> each,
+                                      Function<ClosureApplications.Application, AppliedOn> readingOn) {
+        List<Derivation> derived = new ArrayList<>();
+        Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
+        Map<ALineRead, List<UndividedByARelation.Working>> workings = new HashMap<>();
+        Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> relating = new LinkedHashMap<>();
+        List<FilingCoordinate> against = new ArrayList<>();
+        List<UndividedByARelation> relations = new ArrayList<>();
+        boolean relatedOnlySomewhere = false;
+        for (ClosureApplications.Application one : each) {
+            if (!one.isMadeOnSomeRow()) {
+                continue;
+            }
+            AppliedOn applied = readingOn.apply(one);
+            if (applied == null) {
+                return null;
+            }
+            derived.add(one.statedOn(applied.how()));
+            switch (applied.read()) {
+                case Read.Several several -> {
+                    for (Read.Several.Part part : several.parts()) {
+                        ALineRead key = new ALineRead(part.id(), part.line());
+                        lines.computeIfAbsent(key, _ -> new ArrayList<>())
+                                .add(new WhereAnApplicationIsMade.OnOne(part.cases(),
+                                        one.reached()));
+                        workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                                .add(part.working());
+                    }
+                }
+                case Read.AgainstAnotherValue alone -> {
+                    alone.over().forEach(at -> {
+                        if (!against.contains(at)) {
+                            against.add(at);
+                        }
+                    });
+                    relations.addAll(alone.relations());
+                    ALineRead key = new ALineRead(
+                            new PlaceOfALine(THE_COMPARISON, spelled(applied.stated())), alone);
+                    relating.computeIfAbsent(key, _ -> new ArrayList<>())
+                            .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
+                    workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                            .add(UndividedByARelation.Working.UNREAD);
+                    relatedOnlySomewhere |= !(one.reached() instanceof Proposition.Always(
+                            boolean holds) && holds);
+                }
+                default -> {
+                    return null;
+                }
+            }
+        }
+        if (!against.isEmpty()) {
+            List<Read.Several.Part> parts = new ArrayList<>();
+            relating.forEach((relation, readings) -> parts.add(new Read.Several.Part(
+                    relation.id(), relation.read(), WhereAnApplicationIsMade.decidesOn(readings),
+                    UndividedByARelation.Working.together(workings.get(relation)))));
+            return relatedOnlySomewhere && lines.isEmpty() && parts.stream().allMatch(part ->
+                    part.cases().stream().allMatch(one -> AStatementAtARow.askable(
+                            one.condition()) && saysNothingOfAnElement(one.condition())))
+                    ? derivedOnEach(new Read.Several(parts), derived)
+                    : new Read.AgainstAnotherValue(against, relations);
+        }
+        if (lines.isEmpty()) {
+            return null;
+        }
+        List<Read.Several.Part> parts = new ArrayList<>();
+        lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(), line.read(),
+                Read.Several.Part.isReadInCases(line.read())
+                        ? WhereAnApplicationIsMade.decidesOn(readings) : List.of(),
+                UndividedByARelation.Working.together(workings.get(line)))));
+        return derivedOnEach(new Read.Several(parts), derived);
+    }
+
+    /**
      * Whether {@code stated} says nothing of any element of a container: it compares numbers of
      * the input no container holds, or says a container holds something or nothing, or is made
      * of such statements. Anything else is taken to say something of one.

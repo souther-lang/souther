@@ -37,7 +37,7 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
 
     private static final String MODEL = """
             module probe
-            data Group = { tags: List<String>, n: Int }
+            data Group = { tags: List<String>, n: Int, nums: List<Int> }
             data Line = { code: String, rates: Map<String, Int>, tags: List<String>,
                           ids: Set<String>, nums: List<Int>, days: List<Date>, n: Int,
                           other: List<String>, groups: List<Group>, s: String, i: Int,
@@ -46,6 +46,11 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
 
             behavior nested : (l: Line) -> Bool
             let nested (l) = List.any(g -> g.n > 3 && List.contains("K", g.tags), l.groups)
+            behavior nestedD : (l: Line) -> Bool
+            let nestedD (l) = List.any(g -> g.n > 3 && List.contains(g.n + 1, g.nums), l.groups)
+            behavior nestedDAny : (l: Line) -> Bool
+            let nestedDAny (l) =
+                List.any(g -> g.n > 3 && List.any(e -> e == g.n + 1, g.nums), l.groups)
             behavior nestedFirst : (l: Line) -> Bool
             let nestedFirst (l) = List.any(g -> List.contains("K", g.tags) && g.n > 3, l.groups)
             behavior nestedFirstAny : (l: Line) -> Bool
@@ -174,16 +179,16 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         for (String[] pair : new String[][] {
             { "alongside", "alongsideAny" }, { "either", "eitherAny" },
             { "inEachGroup", "inEachGroupAny" }, { "combined", "combinedAny" },
-            { "nestedFirst", "nestedFirstAny" }, { "exactlyOne", "exactlyOneAny" },
+            { "nestedFirst", "nestedFirstAny" }, { "nested", "nestedAny" }, { "exactlyOne", "exactlyOneAny" },
             { "hasTime", "anyTime" }, { "hasInstant", "anyInstant" }, { "hasAt", "anyAt" },
             { "hasEmoji", "anyEmoji" }, { "hasDay", "anyDay" } }) {
             assertEquals(pointsOf(pair[1]), pointsOf(pair[0]), pair[0]);
         }
         assertEquals(Set.of("l.n 3", "l.tags[*] K"), linesOf("combined"));
-        // The same lines where the statement follows another over the same element; the rows
-        // found for the line of an application there are fewer than for a comparison, as they are
-        // for every application line there is, and are not compared.
-        assertEquals(linesOf("nestedAny"), linesOf("nested"));
+        // The line of an application a comparison with an element of the closure precedes is the
+        // line it is where nothing does, whichever way round the two sides of it are written.
+        assertEquals(rowsFound("nestedDAny"), rowsFound("nestedD"));
+        assertEquals(9, rowsFound("nestedD"));
         assertEquals(Set.of("l.n 3", "l.tags[*] K"), linesOf("alongside"));
         assertEquals(Set.of("l.tags[*] K", "l.other[*] M"), linesOf("either"));
         assertEquals(Set.of("l.groups[*].tags[*] K"), linesOf("inEachGroup"));
@@ -332,6 +337,11 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             }
         }
         return out;
+    }
+
+    /** How many points of {@code behavior}'s lines a row was found for. */
+    private static long rowsFound(String behavior) {
+        return pointsOf(behavior).stream().filter(each -> each.endsWith("row=true")).count();
     }
 
     /** Which points of {@code behavior}'s lines a row was found for, by the name of the point. */

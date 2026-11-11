@@ -715,6 +715,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "types/BindingId;)Z", 1, COUNTS_THROUGH_IT);
         row(out, c + "partition/ComparisonReadings", "statedAt",
                 "(" + core + "Ljava/util/function/Supplier;L" + c
+                        + "partition/ClosureApplications;L" + c
                         + "partition/ComparisonReadings$StatedHere;)L" + c
                         + "partition/ComparisonReadings$StatedAt;", 2,
                 "whether the node the walk stands at is a construct a source wrote that states a"
