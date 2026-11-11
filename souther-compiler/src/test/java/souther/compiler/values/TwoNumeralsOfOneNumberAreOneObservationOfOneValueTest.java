@@ -1,6 +1,7 @@
 package souther.compiler.values;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
@@ -56,6 +57,14 @@ class TwoNumeralsOfOneNumberAreOneObservationOfOneValueTest {
 
         assertEquals(true, WrittenValues.denotes(worn, Value.number(1)));
         assertNull(WrittenValues.denotes(worn, Value.of(amount)));
+    }
+
+    @Test
+    void aFractionIsOnTheDenseOrderAndNotOnTheWholeOne() {
+        Value fraction = Value.number(new BigDecimal("1.5"));
+
+        assertNull(Carrier.WHOLE.placeOf(fraction));
+        assertTrue(Carrier.DENSE.placeOf(fraction).sameAs(Count.of(new BigDecimal("1.5"))));
     }
 
     @Test

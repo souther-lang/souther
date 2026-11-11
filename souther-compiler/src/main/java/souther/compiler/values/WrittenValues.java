@@ -56,7 +56,9 @@ public final class WrittenValues {
     public static Boolean denotes(ObservedValue seen, Value written) {
         ObservedValue bare = written instanceof Value.Case ? seen : ObservedValue.scalarInside(seen);
         Value actual = denotedBy(bare);
-        return actual == null || actual.getClass() != written.getClass() ? null
-                : written.equals(actual);
+        if (actual == null || actual.getClass() != written.getClass()) {
+            return null;
+        }
+        return written.equals(actual);
     }
 }
