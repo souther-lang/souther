@@ -31,6 +31,8 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
 
             data Line = { code: String, rates: Map<String, Int>, tags: List<String>,
                           nums: Set<Int>, amts: List<Decimal>, flags: List<Bool> }
+
+            let usd = "USD"
             """;
 
     private static final String BEHAVIOR = """
@@ -52,6 +54,9 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
             // The key is written.
             new Case("List.length(List.filter(l -> Map.containsKey(\"USD\", l.rates), lines))"
                     + " == k", true),
+            // A value written under a name is the value it is.
+            new Case("List.length(List.filter(l -> Map.containsKey(usd, l.rates), lines)) == k",
+                    true),
             // The same of the elements a list or a set holds, of any kind of value written.
             new Case("List.length(List.filter(l -> List.contains(\"K\", l.tags), lines)) == k",
                     true),
