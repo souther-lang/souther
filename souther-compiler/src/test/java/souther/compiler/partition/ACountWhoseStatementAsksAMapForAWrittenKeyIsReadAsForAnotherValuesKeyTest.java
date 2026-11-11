@@ -54,6 +54,11 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
             // The key is written.
             new Case("List.length(List.filter(l -> Map.containsKey(\"USD\", l.rates), lines))"
                     + " == k", true),
+            // More values written than the search tries subsets of: the ones a statement is
+            // likeliest to need are those at the ends, all of them and all but one.
+            new Case("List.length(List.filter(l -> " + allOf(9) + ", lines)) == k", true),
+            new Case("List.length(List.filter(l -> Bool.not(" + allOf(9) + "), lines)) == k",
+                    true),
             // A value written under a name is the value it is.
             new Case("List.length(List.filter(l -> Map.containsKey(usd, l.rates), lines)) == k",
                     true),
@@ -86,6 +91,13 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
                     + " == k", false),
             new Case("List.length(List.filter(l -> Map.containsKey(key, rates), lines))"
                     + " == k", false));
+
+    /** A map holding every one of {@code many} keys written. */
+    private static String allOf(int many) {
+        return java.util.stream.IntStream.rangeClosed(1, many)
+                .mapToObj(each -> "Map.containsKey(\"K" + each + "\", l.rates)")
+                .collect(java.util.stream.Collectors.joining(" && "));
+    }
 
     private static Map<String, PartitionEvidence> measured() {
         StringBuilder source = new StringBuilder(DECLARATIONS);

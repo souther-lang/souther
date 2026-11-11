@@ -540,7 +540,7 @@ public final class EntryHeld {
      * <p>A conjunction of what the rules ask: the numbers the rules leave together at each place,
      * which are none where they contradict one another.
      */
-    public static Map<Operand<RuleKey>, ValueAsked> valuesAsked(List<Requirement> requirements) {
+    private static Map<Operand<RuleKey>, ValueAsked> valuesAsked(List<Requirement> requirements) {
         Map<Operand<RuleKey>, ValueAsked> out = new LinkedHashMap<>();
         for (Requirement each : requirements) {
             if (each.valueIn() != null) {

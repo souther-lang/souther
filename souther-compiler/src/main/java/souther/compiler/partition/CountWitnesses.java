@@ -494,7 +494,7 @@ public final class CountWitnesses {
             }
         }
         List<FixtureTemplate> out = new ArrayList<>();
-        for (List<FixtureTemplate> some : subsetsBySize(members, MOST_VALUES + 1)) {
+        for (List<FixtureTemplate> some : subsetsFromTheEnds(members, MOST_VALUES + 1)) {
             FixtureTemplate holding = WornNames.collectionHolding(view, some, source);
             if (holding != null && !out.contains(holding)) {
                 out.add(holding);
@@ -504,16 +504,27 @@ public final class CountWitnesses {
     }
 
     /**
-     * The subsets of {@code members}, the empty one first and then those of one, two and so on,
-     * in the order the members stand — no more than {@code most} of them, so that a statement
-     * naming many values builds none past what the search tries. One past the figure is enough for
-     * the caller to say it was passed ({@link RowSearch#upTo}).
+     * The subsets of {@code members}, taken from the ends in: none of them and all of them, then
+     * one and all but one, then two and all but two, and so on, each size in the order the members
+     * stand — no more than {@code most} of them, so that a statement naming many values builds none
+     * past what the search tries. One past the figure is enough for the caller to say it was
+     * passed ({@link RowSearch#upTo}).
+     *
+     * <p>What a statement needs of them is not known here, and the subsets it needs are those the
+     * statement's structure makes extreme: a conjunction of holding each needs all of them, a
+     * disjunction one, a denial of either all but one or none. Counted up from none, a statement
+     * naming more values than the search tries subsets of would meet the figure before the one it
+     * needs.
      */
-    private static List<List<FixtureTemplate>> subsetsBySize(List<FixtureTemplate> members,
-                                                             int most) {
+    private static List<List<FixtureTemplate>> subsetsFromTheEnds(List<FixtureTemplate> members,
+                                                                  int most) {
         List<List<FixtureTemplate>> out = new ArrayList<>();
-        for (int size = 0; size <= members.size() && out.size() < most; size++) {
-            combinations(members, 0, size, new ArrayList<>(), out, most);
+        for (int low = 0, high = members.size(); low <= high && out.size() < most;
+                low++, high--) {
+            combinations(members, 0, low, new ArrayList<>(), out, most);
+            if (high != low && out.size() < most) {
+                combinations(members, 0, high, new ArrayList<>(), out, most);
+            }
         }
         return out;
     }
