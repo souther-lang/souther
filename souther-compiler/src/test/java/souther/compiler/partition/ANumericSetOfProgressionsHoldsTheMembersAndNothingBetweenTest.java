@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -77,7 +78,7 @@ class ANumericSetOfProgressionsHoldsTheMembersAndNothingBetweenTest {
     void aClassOfFewEnoughNumbersIsWalkedWhole() {
         AskedAt asked = AskedAt.theClass(evensFromTo(0, 6), Carrier.WHOLE);
         assertTrue(asked.walkIsOfTheWholeQuestion());
-        assertEquals(java.util.List.of(BigInteger.ZERO, BigInteger.TWO, BigInteger.valueOf(4),
+        assertEquals(List.of(BigInteger.ZERO, BigInteger.TWO, BigInteger.valueOf(4),
                 BigInteger.valueOf(6)), evensFromTo(0, 6).numbers().membersUpTo(8));
     }
 

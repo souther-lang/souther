@@ -151,8 +151,8 @@ class WholeNumberSetTest {
             if (set.isNone()) {
                 continue;
             }
-            BigInteger weightHere = n((random.nextInt(2) == 0 ? 1 : -1) * (1 + random.nextInt(6)));
-            BigInteger weightThere = n((random.nextInt(2) == 0 ? 1 : -1) * (1 + random.nextInt(6)));
+            BigInteger weightHere = aWeight(random);
+            BigInteger weightThere = aWeight(random);
             BigInteger constant = n(random.nextInt(19) - 9);
             WholeNumberSet left = set.valuesBeside(weightHere, weightThere, constant);
             for (long c = -150; c <= 150; c++) {
@@ -231,6 +231,11 @@ class WholeNumberSetTest {
             }
         }
         assertTrue(finite > 50 && tooMany > 50, finite + " finite, " + tooMany + " too many");
+    }
+
+    /** A weight of one to six, either sign. */
+    private static BigInteger aWeight(Random random) {
+        return n(random.nextBoolean() ? 1 + random.nextInt(6) : -1 - random.nextInt(6));
     }
 
     private static WholeNumberSet aSetOfSeveral(Random random) {
