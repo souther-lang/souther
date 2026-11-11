@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.numeric.Text;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -39,7 +40,31 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             data Group = { tags: List<String> }
             data Line = { code: String, rates: Map<String, Int>, tags: List<String>,
                           ids: Set<String>, nums: List<Int>, days: List<Date>, n: Int,
-                          other: List<String>, groups: List<Group>, s: String, i: Int }
+                          other: List<String>, groups: List<Group>, s: String, i: Int,
+                          times: List<Time>, instants: List<Instant>, ats: List<DateTime>,
+                          emo: List<String> }
+
+            behavior combined : (l: Line) -> Int
+            let combined (l) = if (List.contains("K", l.tags) && l.n > 3) == true then 1 else 0
+            behavior combinedAny : (l: Line) -> Int
+            let combinedAny (l) =
+                if (List.any(t -> t == "K", l.tags) && l.n > 3) == true then 1 else 0
+            behavior hasTime : (l: Line) -> Bool
+            let hasTime (l) = List.contains(Time("09:00"), l.times)
+            behavior anyTime : (l: Line) -> Bool
+            let anyTime (l) = List.any(e -> e == Time("09:00"), l.times)
+            behavior hasInstant : (l: Line) -> Bool
+            let hasInstant (l) = List.contains(Instant("2026-07-25T00:00:00Z"), l.instants)
+            behavior anyInstant : (l: Line) -> Bool
+            let anyInstant (l) = List.any(e -> e == Instant("2026-07-25T00:00:00Z"), l.instants)
+            behavior hasAt : (l: Line) -> Bool
+            let hasAt (l) = List.contains(DateTime("2026-07-25T09:00"), l.ats)
+            behavior anyAt : (l: Line) -> Bool
+            let anyAt (l) = List.any(e -> e == DateTime("2026-07-25T09:00"), l.ats)
+            behavior hasEmoji : (l: Line) -> Bool
+            let hasEmoji (l) = List.contains("😀", l.emo)
+            behavior anyEmoji : (l: Line) -> Bool
+            let anyEmoji (l) = List.any(e -> e == "😀", l.emo)
 
             behavior ofWrittenList : (l: Line) -> Bool
             let ofWrittenList (l) = List.contains(l.s, ["A", "B"])
@@ -48,9 +73,9 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             behavior ofWrittenSet : (l: Line) -> Bool
             let ofWrittenSet (l) = Set.contains(l.s, Set.fromList(["A", "B"]))
             behavior ofWrittenInts : (l: Line) -> Bool
-            let ofWrittenInts (l) = List.contains(l.i, [1, 2, 3])
+            let ofWrittenInts (l) = List.contains(l.i, [10, 20, 30])
             behavior ofWrittenIntsAny : (l: Line) -> Bool
-            let ofWrittenIntsAny (l) = List.any(e -> e == l.i, [1, 2, 3])
+            let ofWrittenIntsAny (l) = List.any(e -> e == l.i, [10, 20, 30])
 
             behavior any : (l: Line) -> Bool
             let any (l) = List.any(t -> t == "K", l.tags)
@@ -118,8 +143,8 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         assertEquals(linesOf("ofWrittenListAny"), linesOf("ofWrittenList"));
         assertEquals(linesOf("ofWrittenListAny"), linesOf("ofWrittenSet"));
         assertEquals(linesOf("ofWrittenIntsAny"), linesOf("ofWrittenInts"));
-        assertEquals(certifiedPointsOf("ofWrittenListAny"), certifiedPointsOf("ofWrittenList"));
-        assertEquals(certifiedPointsOf("ofWrittenIntsAny"), certifiedPointsOf("ofWrittenInts"));
+        assertEquals(pointsOf("ofWrittenListAny"), pointsOf("ofWrittenList"));
+        assertEquals(pointsOf("ofWrittenIntsAny"), pointsOf("ofWrittenInts"));
     }
 
     /** Written beside other statements, under a closure or twice over one container, the lines
@@ -128,10 +153,12 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
     void theLinesAreTheSameWhereTheStatementIsPartOfAnother() {
         for (String[] pair : new String[][] {
             { "alongside", "alongsideAny" }, { "either", "eitherAny" },
-            { "inEachGroup", "inEachGroupAny" } }) {
-            assertEquals(linesOf(pair[1]), linesOf(pair[0]), pair[0]);
-            assertEquals(certifiedPointsOf(pair[1]), certifiedPointsOf(pair[0]), pair[0]);
+            { "inEachGroup", "inEachGroupAny" }, { "combined", "combinedAny" },
+            { "hasTime", "anyTime" }, { "hasInstant", "anyInstant" }, { "hasAt", "anyAt" },
+            { "hasEmoji", "anyEmoji" }, { "hasDay", "anyDay" } }) {
+            assertEquals(pointsOf(pair[1]), pointsOf(pair[0]), pair[0]);
         }
+        assertEquals(Set.of("l.n 3", "l.tags[*] K"), linesOf("combined"));
         assertEquals(Set.of("l.n 3", "l.tags[*] K"), linesOf("alongside"));
         assertEquals(Set.of("l.tags[*] K", "l.other[*] M"), linesOf("either"));
         assertEquals(Set.of("l.groups[*].tags[*] K"), linesOf("inEachGroup"));
@@ -228,10 +255,13 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         assertTrue(checked >= 3, behavior + " " + checked);
     }
 
+    /** The order Souther puts the values of a position in, and not the order of the host's. */
     private static int compare(String element, String at, Kind kind) {
-        return kind == Kind.NUMBER
-                ? Long.compare(Long.parseLong(element), Long.parseLong(at))
-                : element.compareTo(at);
+        return switch (kind) {
+            case NUMBER -> Long.compare(Long.parseLong(element), Long.parseLong(at));
+            case TEXT, KEY -> new Text(element).compareTo(new Text(at));
+            case DAY -> element.compareTo(at);
+        };
     }
 
     /** The elements {@code field} holds in {@code row}, as the text of each: the strings, the
@@ -257,6 +287,25 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
     private static Set<String> linesOf(String behavior) {
         Set<String> out = new TreeSet<>();
         borders(behavior).forEach(each -> out.add(each.left() + " " + each.value()));
+        return out;
+    }
+
+    /**
+     * Each point of each line of {@code behavior}, one by one: the line it is of, the point, whether
+     * the rules say anyone is owed it, and whether a row was certified at it. Two statements that
+     * mean one thing have one of these, and a point one of them is not owed or has no row for is
+     * not hidden by a point of another line that has.
+     */
+    private static Set<String> pointsOf(String behavior) {
+        Set<String> out = new TreeSet<>();
+        for (BorderAssessment border : borders(behavior)) {
+            for (Map.Entry<DomainPoint, ItemAssessment> item : border.items().entrySet()) {
+                out.add(border.left() + " " + border.value() + " | "
+                        + item.getKey().toString().replace("[]", "")
+                        + " | owed=" + !border.border().about(item.getKey()).isEmpty()
+                        + " | row=" + (certified(item.getValue()) != null));
+            }
+        }
         return out;
     }
 
