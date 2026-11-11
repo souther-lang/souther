@@ -3520,7 +3520,7 @@ final class CardinalityComposer {
             }
             elements.add(one);
         }
-        return WornNames.under(view.wrappers(), FixtureTemplate.collection(elements), ruleSource);
+        return WornNames.collectionHolding(view, elements, ruleSource);
     }
 
     /**

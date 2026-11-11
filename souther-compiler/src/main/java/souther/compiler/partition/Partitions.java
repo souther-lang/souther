@@ -2657,9 +2657,7 @@ public final class Partitions {
             }
             elements.add(each);
         }
-        FixtureTemplate list = WornNames.under(view.wrappers(),
-                FixtureTemplate.collection(elements), source);
-        return Proposals.ofNullable(list);
+        return Proposals.ofNullable(WornNames.collectionHolding(view, elements, source));
     }
 
     /**
@@ -2919,8 +2917,8 @@ public final class Partitions {
 
     /** {@code number} written as a value of {@code type}, or null where the position holds no
      *  number of that kind or cannot name the names it wears. */
-    private static FixtureTemplate writtenNumberAt(Type type, BigDecimal number,
-                                                   RuleReadingContext reading) {
+    static FixtureTemplate writtenNumberAt(Type type, BigDecimal number,
+                                           RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());

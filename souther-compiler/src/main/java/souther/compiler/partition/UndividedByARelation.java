@@ -2931,12 +2931,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // relate as the way's own statements do: each is read over the run the region answers.
         Roomy room = offItsLine ? Roomy.NONE
                 : rulesLeavingRoomAroundTheLine(read, inWholeSteps);
-        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = withWhatARowShowsOfEachCount(
                 termsAlong(read, withoutWhatARowAtTheLineNeeds(sources, room, read), carriers,
                         beside.along().withoutTheRelationOf(room.parts()),
                         beside.declared().withoutTheRelationOf(room.parts()),
                         beside.conditions(), remainders, beside.stating(), heldWhole,
-                        beside.narrowing(), byTheFormat != null);
+                        beside.narrowing(), byTheFormat != null),
+                !offItsLine && heldWhole && remainder == null, conditions, witnesses, stopped,
+                runsStopped, read, along, carriers);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -5635,45 +5637,141 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (int part = 0; part < 2; part++) {
             Quantity.HowManyMeet counted = sides.get(part).counted();
-            if (counted == null
-                    || !(counted.container() instanceof DecisionSubject.AnInput(
-                            TermPath container, var _))
-                    || container.insideAContainer()
+            TermPath container = counted == null ? null : inputContainerOf(counted);
+            if (container == null
                     || !Quantity.PositionInTheWalk.counts(sides.get(1 - part).number(),
                             container)) {
                 continue;
             }
-            Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
-            if (read.isEmpty()) {
-                return null;
-            }
-            // What the statement reads is the element's own, or a place under another parameter:
-            // the container itself — how many it holds, another of its elements, a value taken of
-            // all of them — differs between the rows made of the witness, and so may what the
-            // statement says of the same element.
-            Set<TermPath> outside = new LinkedHashSet<>();
-            for (TermPath place : read.get()) {
-                if (place.isAtOrUnder(container.element()) || place.isAtOrUnder(container.key())) {
-                    continue;
-                }
-                if (place.head().equals(container.head())) {
-                    return null;
-                }
-                outside.add(place);
-            }
-            if (picksOut(conditions, container, outside)) {
-                return null;
-            }
-            CountWitnesses.Sought sought = witnesses.of(counted);
-            if (sought.found().isEmpty()) {
-                stopped.addAll(sought.stoppedAt());
-                runsStopped.addAll(sought.runsStopped());
+            if (!countIsShownEveryWhere(counted, container, conditions, witnesses, stopped,
+                    runsStopped)) {
                 return null;
             }
             return new Within(new WhatARelationLeavesUndivided.WithinTheWhole(part, 1 - part,
                     BigInteger.ZERO, BigInteger.ZERO), container, true);
         }
         return null;
+    }
+
+    /**
+     * {@code terms}, each that is how many elements of an input container meet a statement made to
+     * take every value a row shows it takes where {@code asked} and a row shows the number at
+     * every count of every size ({@link #countIsShownEveryWhere}): from none up to how many the
+     * container may hold ({@link #howManyAreHeld}), since a row holds that many elements it holds
+     * of and the rest it fails of. A count a row does not show is left as {@code termsAlong} has
+     * it, with nothing shown that it takes.
+     */
+    private List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> withWhatARowShowsOfEachCount(
+            List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms, boolean asked,
+            List<OnAWay> conditions, ComparisonWitnesses.AtAComparison witnesses,
+            Set<Figure> stopped, Set<WhereARunStopped> runsStopped, InputReading read,
+            SearchRegion along, List<Carrier> carriers) {
+        if (!asked) {
+            return terms;
+        }
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> out = new ArrayList<>(terms);
+        for (int at = 0; at < sides.size(); at++) {
+            Quantity.HowManyMeet counted = sides.get(at).counted();
+            TermPath container = counted == null ? null : inputContainerOf(counted);
+            if (container == null || !countIsShownEveryWhere(counted, container, conditions,
+                    witnesses, stopped, runsStopped)) {
+                continue;
+            }
+            NumericDomain.Bounds held = howManyAreHeld(container, read, along, true);
+            if (held == null || !held.holdsAValue()) {
+                continue;
+            }
+            CountTakes taken = countTakes(howManyMayBeHeld(container, read, along), held);
+            WhatARelationLeavesUndivided.Term<FilingCoordinate> was = terms.get(at);
+            // Made of the places it reads: the container, and what the statement reads in an
+            // element or outside the container. No term over one of them is apart from the count,
+            // which is what a term of no places is asked to be.
+            List<FilingCoordinate> reads = new ArrayList<>(was.madeOf());
+            Stream.concat(Stream.of(container), PositionsAStatementReads
+                    .of(counted.ofTheElement()).orElse(List.of()).stream())
+                    .map(FilingCoordinate::at).filter(place -> !reads.contains(place))
+                    .forEach(reads::add);
+            out.set(at, new WhatARelationLeavesUndivided.Term<>(reads, was.weight(),
+                    asARelationReadsIt(taken.lies(), carriers.get(at)),
+                    asARelationReadsIt(taken.takes(), carriers.get(at)), was.takes(),
+                    was.itsPlace(), was.spacing(), was.runsTo(), was.key()));
+        }
+        return out;
+    }
+
+    /**
+     * Where the count of the elements of a container that meet a statement lies, and which values a
+     * row shows it takes.
+     *
+     * @param lies  from none up to the most the rules and the way leave the container to hold
+     * @param takes from none up to the most a row holds, every value of it
+     */
+    record CountTakes(NumericDomain.Bounds lies, NumericDomain.Bounds takes) {}
+
+    /**
+     * What a count of the elements meeting a statement is, of a container that {@code mayBeHeld}
+     * says how many it may hold and a row shows {@code areHeld} of: a container of any size holds,
+     * of the elements it holds, some the statement holds of and the rest it fails of, so the count
+     * is none up to its size, and what the size is left is the most it is and never the least.
+     * Where nothing says how many the container may hold, the count lies from none on.
+     */
+    static CountTakes countTakes(NumericDomain.Bounds mayBeHeld, NumericDomain.Bounds areHeld) {
+        Endpoint none = Endpoint.inclusive(Count.of(0));
+        return new CountTakes(
+                new NumericDomain.Bounds(none, mayBeHeld == null ? null : mayBeHeld.max()),
+                new NumericDomain.Bounds(none, areHeld.max()));
+    }
+
+    /** The container of the input {@code counted} counts the elements of, or null where it counts
+     *  those of another, or of one inside a container: what a row shows is of a container a
+     *  parameter holds. */
+    private static TermPath inputContainerOf(Quantity.HowManyMeet counted) {
+        return counted.container() instanceof DecisionSubject.AnInput(TermPath container, var _)
+                && !container.insideAContainer() ? container : null;
+    }
+
+    /**
+     * Whether a row shows the number of elements of {@code container} that meet a statement at
+     * every count of every size: one element it holds of and one it fails of, beside one value of
+     * everything else, at a row that gets to this relation ({@link CountWitnesses}).
+     *
+     * <p>Where the search stopped short of everything it would have tried, the figures it stopped
+     * at go into {@code stopped}, and where the runs of the rows it tried stopped into
+     * {@code runsStopped}: nothing is shown, and a run allowed more may show it.
+     */
+    private static boolean countIsShownEveryWhere(Quantity.HowManyMeet counted,
+                                                  TermPath container, List<OnAWay> conditions,
+                                                  ComparisonWitnesses.AtAComparison witnesses,
+                                                  Set<Figure> stopped,
+                                                  Set<WhereARunStopped> runsStopped) {
+        Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
+        if (read.isEmpty()) {
+            return false;
+        }
+        // What the statement reads is the element's own, or a place under another parameter:
+        // the container itself — how many it holds, another of its elements, a value taken of
+        // all of them — differs between the rows made of the witness, and so may what the
+        // statement says of the same element.
+        Set<TermPath> outside = new LinkedHashSet<>();
+        for (TermPath place : read.get()) {
+            if (place.isAtOrUnder(container.element()) || place.isAtOrUnder(container.key())) {
+                continue;
+            }
+            if (place.head().equals(container.head())) {
+                return false;
+            }
+            outside.add(place);
+        }
+        if (picksOut(conditions, container, outside)) {
+            return false;
+        }
+        CountWitnesses.Sought sought = witnesses.of(counted);
+        if (sought.found().isEmpty()) {
+            stopped.addAll(sought.stoppedAt());
+            runsStopped.addAll(sought.runsStopped());
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -9704,6 +9802,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return howManyAreHeld(container, read, region, anElementShown, 1);
     }
 
+    /** How many {@code container} holds as a number of the quantities a region answers, or null
+     *  where its type counts no elements. */
+    private static NumericTerm.TakenOf howManyTheContainerHolds(TermPath container,
+                                                               InputReading read) {
+        RuleReadingSource rules = read.rules();
+        Type type = read.domain().typeAt(container, rules);
+        return type == null ? null
+                : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
+                        container, type, rules.inners(), rules.symbols());
+    }
+
+    /**
+     * The run of how many {@code container} may hold in {@code region}, whatever rows are written:
+     * what the rules and the way leave its count, which no count of the elements it holds passes.
+     * Null where nothing is said.
+     */
+    static NumericDomain.Bounds howManyMayBeHeld(TermPath container, InputReading read,
+                                                 SearchRegion region) {
+        NumericTerm.TakenOf count = howManyTheContainerHolds(container, read);
+        return count == null ? null : region.wholeRunOf(count);
+    }
+
     /**
      * The same, where the elements of a list a rule keeps apart are taken as far as
      * {@code wanted} of them, or as many as the rule leaves to be written together where that is
@@ -9714,9 +9834,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                int wanted) {
         RuleReadingSource rules = read.rules();
         Type type = read.domain().typeAt(container, rules);
-        NumericTerm.TakenOf count = type == null ? null
-                : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
-                        container, type, rules.inners(), rules.symbols());
+        NumericTerm.TakenOf count = howManyTheContainerHolds(container, read);
         List<TermPath> entry = read.domain().entryOf(container, rules);
         KeptApart apart = new KeptApart();
         for (TermPath part : entry) {

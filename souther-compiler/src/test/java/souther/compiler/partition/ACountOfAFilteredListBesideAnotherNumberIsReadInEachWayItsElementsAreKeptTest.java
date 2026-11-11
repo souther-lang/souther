@@ -412,9 +412,10 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     }
 
     /** A list the input holds is no list the body wrote out: its count is a number of its own,
-     *  and the comparison is a line on that count less {@code k}, as it was. Which values of
-     *  {@code k} settle it on their own is all it leaves unread, the count not being shown to
-     *  reach every value. */
+     *  and the comparison is a line on that count less {@code k}, as it was. A row holds one
+     *  element the statement holds of and one it fails of, so the count takes every value from
+     *  none and {@code k} is shown to be reached. The number the statement reads is filed beside
+     *  the count, which is at no place, and what is left unread is that number. */
     @Test
     void aCountOfAListTheInputHoldsIsALineOnTheCount() {
         Compilation compilation = Compilation.ofSource("""
@@ -435,7 +436,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
         assertTrue(unread.stream()
                 .allMatch(line -> line.contains("not shown to reach every value here")), report);
-        assertEquals(Set.of("k", "xs[*]"), unread.stream()
+        assertEquals(Set.of("xs[*]"), unread.stream()
                 .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
                 .collect(Collectors.toSet()), report);
     }
