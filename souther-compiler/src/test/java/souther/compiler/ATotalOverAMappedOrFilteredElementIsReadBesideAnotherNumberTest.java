@@ -7,6 +7,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The total of {@code 2·x} takes the even numbers and the total over a filter takes nought and
  * the numbers from the least it keeps, so neither takes every value of an interval. An order
  * asks a value on each side of a line, which the ends of such a set answer; an equality asks the
- * value itself, and is left unread.
+ * value itself, and divides the number by the values the total can be.
  */
 class ATotalOverAMappedOrFilteredElementIsReadBesideAnotherNumberTest {
 
@@ -69,11 +71,18 @@ class ATotalOverAMappedOrFilteredElementIsReadBesideAnotherNumberTest {
         }
     }
 
-    /** An equality asks the value itself, and a total of evens does not take every value. */
+    /**
+     * An equality asks the value itself, so it divides the number by what the total takes: it is
+     * read as the classes of the numbers the total can be and the numbers it never is, which
+     * {@code AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest} asks of rows.
+     */
     @Test
-    void anEqualityBesideAStepsTotalIsNotRead() {
-        assertTrue(report(model("xs: List<Int>", DOUBLED, "==")).contains("not read"));
-        assertTrue(report(model("lines: List<Line>", FILTERED, "==")).contains("not read"));
+    void anEqualityBesideAStepsTotalIsReadAsTheClassesItIsTrueAt() {
+        for (String said : List.of(report(model("xs: List<Int>", DOUBLED, "==")),
+                report(model("lines: List<Line>", FILTERED, "==")))) {
+            assertFalse(said.contains("not read"), said);
+            assertTrue(said.contains("cap is divided by"), said);
+        }
     }
 
     /** A number added to each element adds as many times as there are elements, so the totals

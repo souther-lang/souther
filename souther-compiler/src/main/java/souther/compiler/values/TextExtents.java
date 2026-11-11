@@ -97,7 +97,7 @@ public final class TextExtents {
             case ValueSet.Cofinite it ->
                     Language.EVERY_STRING.without(Sets.textsIn(it.excluded()), meter);
             // Whole numbers, none of which is a string.
-            case ValueSet.WholeRuns _ -> Language.ofWords(Set.of(), meter);
+            case ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> Language.ofWords(Set.of(), meter);
         };
     }
 
@@ -273,7 +273,7 @@ public final class TextExtents {
             case ValueSet.Cofinite cofinite -> most > 0 || cofinite.has(new Value.Text(""))
                     ? Emptiness.NONEMPTY : Emptiness.EMPTY;
             case ValueSet.Matching(Language language) -> heldWithin(language, shortest, most);
-            case ValueSet.WholeRuns _ -> Emptiness.EMPTY;
+            case ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> Emptiness.EMPTY;
         };
     }
 
@@ -302,7 +302,7 @@ public final class TextExtents {
         return switch (set) {
             case ValueSet.Matching it -> it.language().reachesEveryLength(wanted, endless);
             case ValueSet.Cofinite it -> leavesAStringOfEveryLength(it, wanted);
-            case ValueSet.Finite _, ValueSet.WholeRuns _ -> false;
+            case ValueSet.Finite _, ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> false;
         };
     }
 
@@ -351,7 +351,7 @@ public final class TextExtents {
         return switch (set) {
             case ValueSet.Matching it -> it.language().isEverything();
             case ValueSet.Cofinite it -> it.excluded().isEmpty();
-            case ValueSet.Finite _, ValueSet.WholeRuns _ -> false;
+            case ValueSet.Finite _, ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> false;
         };
     }
 

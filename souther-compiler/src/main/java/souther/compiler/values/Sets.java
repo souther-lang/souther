@@ -1,6 +1,7 @@
 package souther.compiler.values;
 
 import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -56,6 +57,10 @@ public final class Sets {
             throw new IllegalArgumentException(
                     "a language is put together where there is an allowance for it");
         }
+        if (one instanceof ValueSet.WholeSteps || other instanceof ValueSet.WholeSteps) {
+            throw new IllegalArgumentException(
+                    "progressions are put together where there is an allowance for them");
+        }
         // The table below takes a meter because a pair with a language in it builds; the pairs
         // above have none and reach no case that does. Which is a fact about the pairs and not a
         // promise anybody keeps, so what is handed over is a meter that pays for nothing
@@ -86,6 +91,8 @@ public final class Sets {
                 // The same, of runs: which of them a run holds is its ends against the value.
                 case ValueSet.WholeRuns there -> new ValueSet.Finite(
                         kept(here.values(), there::has));
+                case ValueSet.WholeSteps there -> new ValueSet.Finite(
+                        kept(here.values(), there::has));
             };
             case ValueSet.Cofinite here -> switch (other) {
                 case ValueSet.Finite _ -> metUnder(other, one, meter);
@@ -96,6 +103,10 @@ public final class Sets {
                 // number left out is one more end on each side of it.
                 case ValueSet.WholeRuns there -> ValueSet.wholeNumbers(
                         there.numbers().and(wholeNumbersIn(here.excluded()).others()));
+                // The same of progressions, each number left out cut out of every one of them.
+                case ValueSet.WholeSteps there -> ValueSet.wholeNumberSet(there.numbers().and(
+                        WholeNumberSet.ofRuns(wholeNumbersIn(here.excluded()).others()),
+                        payingWith(meter)));
             };
             case ValueSet.Matching here -> switch (other) {
                 case ValueSet.Finite there -> new ValueSet.Finite(
@@ -107,7 +118,7 @@ public final class Sets {
                 case ValueSet.Matching there ->
                         matching(here.language().and(there.language(), meter));
                 // Strings and whole numbers share no value.
-                case ValueSet.WholeRuns _ -> ValueSet.NONE;
+                case ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> ValueSet.NONE;
             };
             case ValueSet.WholeRuns here -> switch (other) {
                 case ValueSet.Finite _, ValueSet.Cofinite _, ValueSet.Matching _ ->
@@ -115,8 +126,26 @@ public final class Sets {
                 // What both hold is read off the ends of both, however many numbers they hold.
                 case ValueSet.WholeRuns there ->
                         ValueSet.wholeNumbers(here.numbers().and(there.numbers()));
+                case ValueSet.WholeSteps _ -> metUnder(other, one, meter);
+            };
+            case ValueSet.WholeSteps here -> switch (other) {
+                case ValueSet.Finite _, ValueSet.Cofinite _, ValueSet.Matching _ ->
+                        metUnder(other, one, meter);
+                case ValueSet.WholeRuns there -> ValueSet.wholeNumberSet(here.numbers().and(
+                        WholeNumberSet.ofRuns(there.numbers()), payingWith(meter)));
+                case ValueSet.WholeSteps there -> ValueSet.wholeNumberSet(
+                        here.numbers().and(there.numbers(), payingWith(meter)));
             };
         };
+    }
+
+    /**
+     * What the progressions of a set of numbers cost on {@code meter}: each set built is a
+     * machine's worth of states, as many as it holds progressions, and refused where the meter
+     * refuses them.
+     */
+    private static WholeNumberSet.Budget payingWith(Meter meter) {
+        return parts -> meter.making().states(parts);
     }
 
     /** The values either admits, on the same terms. */
@@ -130,13 +159,15 @@ public final class Sets {
                 // excluded from the two of them together.
                 case ValueSet.Cofinite there -> new ValueSet.Cofinite(
                         kept(there.excluded(), each -> !here.values().contains(each)));
-                case ValueSet.Matching _, ValueSet.WholeRuns _ -> joinedUnder(other, one, meter);
+                case ValueSet.Matching _, ValueSet.WholeRuns _, ValueSet.WholeSteps _ ->
+                        joinedUnder(other, one, meter);
             };
             case ValueSet.Cofinite here -> switch (other) {
                 case ValueSet.Finite _ -> joinedUnder(other, one, meter);
                 case ValueSet.Cofinite there -> new ValueSet.Cofinite(
                         kept(here.excluded(), there.excluded()::contains));
-                case ValueSet.Matching _, ValueSet.WholeRuns _ -> joinedUnder(other, one, meter);
+                case ValueSet.Matching _, ValueSet.WholeRuns _, ValueSet.WholeSteps _ ->
+                        joinedUnder(other, one, meter);
             };
             case ValueSet.Matching here -> switch (other) {
                 // The language and the values written beside it, which is a language: what a set of
@@ -153,7 +184,18 @@ public final class Sets {
                         matching(here.language().or(there.language(), meter));
                 // The language: whole numbers are no strings for it to take, as the numbers among
                 // values written beside it are not. A set is over one carrier ({@link ValueSet}).
-                case ValueSet.WholeRuns _ -> here;
+                case ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> here;
+            };
+            case ValueSet.WholeSteps here -> switch (other) {
+                case ValueSet.Finite there -> ValueSet.wholeNumberSet(here.numbers().or(
+                        WholeNumberSet.ofRuns(wholeNumbersIn(there.values())), payingWith(meter)));
+                case ValueSet.Cofinite there -> new ValueSet.Cofinite(
+                        kept(there.excluded(), each -> !here.has(each)));
+                case ValueSet.Matching _ -> joinedUnder(other, one, meter);
+                case ValueSet.WholeRuns there -> ValueSet.wholeNumberSet(here.numbers().or(
+                        WholeNumberSet.ofRuns(there.numbers()), payingWith(meter)));
+                case ValueSet.WholeSteps there -> ValueSet.wholeNumberSet(
+                        here.numbers().or(there.numbers(), payingWith(meter)));
             };
             case ValueSet.WholeRuns here -> switch (other) {
                 // The runs with the whole numbers written beside them, each a run of its own. A
@@ -167,6 +209,7 @@ public final class Sets {
                 case ValueSet.Matching _ -> joinedUnder(other, one, meter);
                 case ValueSet.WholeRuns there ->
                         ValueSet.wholeNumbers(here.numbers().or(there.numbers()));
+                case ValueSet.WholeSteps _ -> joinedUnder(other, one, meter);
             };
         };
     }

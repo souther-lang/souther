@@ -44,6 +44,7 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.WhereAnEquationHolds;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
@@ -679,9 +680,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         Set<WhereARunStopped> rowsStopped,
                         Set<FilingCoordinate> mayStopBefore,
                         Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered,
-                        Map<FilingCoordinate, GettingThere> gettingThere) {
+                        Map<FilingCoordinate, GettingThere> gettingThere,
+                        Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbersPartnered) {
 
         WhatItLeaves {
+            numbersPartnered = Collections.unmodifiableMap(new LinkedHashMap<>(numbersPartnered));
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
@@ -714,6 +717,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatItLeaves(Set<FilingCoordinate> undivided,
                      Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                      boolean rowsArrive, Set<Figure> stoppedAt,
+                     Set<WhereARunStopped> rowsStopped,
+                     Set<FilingCoordinate> mayStopBefore,
+                     Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered,
+                     Map<FilingCoordinate, GettingThere> gettingThere) {
+            this(undivided, settled, rowsArrive, stoppedAt, rowsStopped, mayStopBefore, partnered,
+                    gettingThere, Map.of());
+        }
+
+        /**
+         * This, with the numbers each position's partner can hold. A position so parted is no
+         * longer shown undivided: the equality is true at some of its values and false at the
+         * rest, which is what the relation shows of it.
+         */
+        WhatItLeaves numbersPartnered(
+                Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbers) {
+            Set<FilingCoordinate> parted = new LinkedHashSet<>();
+            numbers.keySet().forEach(term -> parted.add(FilingCoordinate.of(term)));
+            Set<FilingCoordinate> stillUndivided = new LinkedHashSet<>(undivided);
+            stillUndivided.removeAll(parted);
+            Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
+            stops.removeAll(parted);
+            Map<FilingCoordinate, GettingThere> shown = new LinkedHashMap<>(gettingThere);
+            shown.keySet().removeAll(parted);
+            return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, rowsStopped,
+                    stops, partnered, shown, numbers);
+        }
+
+        WhatItLeaves(Set<FilingCoordinate> undivided,
+                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
+                     boolean rowsArrive, Set<Figure> stoppedAt,
                      Set<WhereARunStopped> rowsStopped) {
             this(undivided, settled, rowsArrive, stoppedAt, rowsStopped, Set.of(), Map.of());
         }
@@ -738,7 +771,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Set<FilingCoordinate> both = new LinkedHashSet<>(undivided);
             both.addAll(places);
             return new WhatItLeaves(both, settled, rowsArrive, stoppedAt, rowsStopped,
-                    mayStopBefore, partnered, gettingThere);
+                    mayStopBefore, partnered, gettingThere, numbersPartnered);
         }
 
         /**
@@ -757,7 +790,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Map<FilingCoordinate, GettingThere> shown = new LinkedHashMap<>(gettingThere);
             shown.keySet().removeAll(parted);
             return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, rowsStopped,
-                    stops, strings, shown);
+                    stops, strings, shown, numbersPartnered);
         }
 
         /** What a way that no row comes along shows of {@code places}: every one of them, of the
@@ -793,7 +826,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             });
             return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, rowsStopped, stops,
-                    partnered, reached);
+                    partnered, reached, numbersPartnered);
         }
 
         /** What both this and {@code other} show, for rows that may come along either: a place
@@ -837,8 +870,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     alikeStrings.put(term, strings.orAnother(theirs));
                 }
             });
+            // The same of the numbers: parted by one way and not by the other is parted by neither.
+            Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> alikeNumbers =
+                    new LinkedHashMap<>();
+            numbersPartnered.forEach((term, numbers) -> {
+                NumbersAPartnerCanHold theirs = other.numbersPartnered.get(term);
+                if (numbers.equals(theirs)) {
+                    alikeNumbers.put(term, numbers);
+                }
+            });
             return new WhatItLeaves(both, alike, true, stopped, runs, stops, alikeStrings,
-                    reached);
+                    reached, alikeNumbers);
+        }
+    }
+
+    /**
+     * The numbers the other side of an equality can come to, which are the only ones of this side
+     * that some row can have the equality come out true at, as far as each is shown.
+     *
+     * <p>Where {@link WhereAnEquationHolds#shown} holds a number a row is shown to have the
+     * equality true at, and outside {@link WhereAnEquationHolds#possible} none has.
+     *
+     * @param holds   where the equality holds, as far as shown and as far as possible
+     * @param partner what the model calls the other side, as the number it weighs
+     */
+    record NumbersAPartnerCanHold(WhereAnEquationHolds holds, String partner) {
+
+        NumbersAPartnerCanHold {
+            if (holds == null || partner == null) {
+                throw new IllegalArgumentException("numbers a partner can come to are some numbers");
+            }
         }
     }
 
@@ -3130,6 +3191,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped, runsStopped);
+        // An equality with a weighed number is true at the values the weighing reaches, which are
+        // no run: the places not shown undivided are parted by them.
+        if (!offItsLine && heldWhole && sides.size() == 2 && standApart(0, 1, independent)) {
+            shown = shown.numbersPartnered(numbersAPartnerCanHold(terms, constant, relation,
+                    overlapping, independent, carriers, operations, out, leaves));
+        }
         Set<TermPath> accountedFor = Set.of();
         if (sides.size() == 2 && heldWhole && standApart(0, 1, independent)) {
             Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
@@ -3158,6 +3225,45 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                               Set<TermPath> accountedFor) {
 
         static final Partnering NONE = new Partnering(Map.of(), Set.of());
+    }
+
+    /**
+     * The numbers each side of an equality between two numbers is parted by, for the sides not
+     * already shown undivided: the values some value of the other side comes to once weighed, and
+     * the values none does ({@link WhatARelationLeavesUndivided#whereAnEquationHolds}).
+     *
+     * <p>Only a side that is the number of one position, since it is a position the classes are
+     * of; what stands beside it may be any number the relation is made of.
+     */
+    private Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbersAPartnerCanHold(
+            List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms, ExactRatio constant,
+            Rel relation, BiPredicate<FilingCoordinate, FilingCoordinate> overlapping,
+            WhatARelationLeavesUndivided.Independence independent, List<Carrier> carriers,
+            WhatARelationLeavesUndivided.Operations operations, Set<FilingCoordinate> shown,
+            List<WhatARelationLeavesUndivided.Leaves> leaves) {
+        Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> out = new LinkedHashMap<>();
+        for (int at = 0; at < 2; at++) {
+            // A side the relation already says something of, by runs, keeps what it said.
+            // Only a position of whole numbers: the classes are about the number read from it, and
+            // a case of an enumeration is counted on its order and is no number a row is asked at.
+            if (!(sides.get(at).number() instanceof NumericTerm.ValueOf mine)
+                    || !(carriers.get(at) instanceof Carrier.Whole)
+                    || sides.get(1 - at).number() == null || leaves.get(at) != null
+                    || shown.contains(FilingCoordinate.of(mine))) {
+                continue;
+            }
+            WhereAnEquationHolds holds = WhatARelationLeavesUndivided.whereAnEquationHolds(terms,
+                    at, constant, relation, overlapping, independent,
+                    greatestOf(carriers.get(1 - at)), operations);
+            if (holds != null) {
+                Side there = sides.get(1 - at);
+                String named = there.number() instanceof NumericTerm.ValueOf place
+                        ? place.subjectPath().toString() : there.number().toString();
+                out.put(mine, new NumbersAPartnerCanHold(holds, there.weight().abs().equals(
+                        ExactRatio.ONE) ? named : there.weight().abs() + " * " + named));
+            }
+        }
+        return out;
     }
 
     /**
@@ -3283,6 +3389,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // strings shown on a side are still parted from them.
             if (strings == null || strings.mayBe().isEmpty()
                     || strings.mayBe() instanceof ValueSet.WholeRuns
+                    || strings.mayBe() instanceof ValueSet.WholeSteps
                     || (!undivided && strings.mayBe().isAny() && strings.leavesNoneOpen())) {
                 continue;
             }
@@ -6766,6 +6873,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return out;
+    }
+
+    /** How many numbers {@code numbers} holds, counted one at a time and no further than
+     *  {@code wanted}. */
+    private static int membersUpTo(WholeNumberSet numbers, int wanted) {
+        BigInteger start = numbers.nearestMember(BigInteger.ZERO, Set.of());
+        int counted = 0;
+        // Upward from the member nearest nought, then downward from the one before it.
+        for (BigInteger at = start; at != null && counted < wanted;
+             at = numbers.leastAtOrAbove(at.add(BigInteger.ONE))) {
+            counted++;
+        }
+        for (BigInteger at = start == null ? null
+                : numbers.greatestAtOrBelow(start.subtract(BigInteger.ONE));
+             at != null && counted < wanted;
+             at = numbers.greatestAtOrBelow(at.subtract(BigInteger.ONE))) {
+            counted++;
+        }
+        return counted;
     }
 
     /**
@@ -10281,6 +10407,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
                 case ValueSet.WholeRuns(WholeNumberRuns numbers) -> numbers.count() == null
                         ? wanted : numbers.count().min(BigInteger.valueOf(wanted)).intValue();
+                // Members counted off one at a time up to the number asked for.
+                case ValueSet.WholeSteps(WholeNumberSet numbers) -> membersUpTo(numbers, wanted);
                 case ValueSet.Matching(Language _) -> Partitions
                         .admittedStrings(at.type(), read.ruleReading(), wanted).size();
             };

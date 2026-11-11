@@ -91,9 +91,11 @@ public sealed interface AdmittedPlan {
         }
 
         /** Whether putting this together with something costs nothing, which is what the values a
-         *  rule wrote out do. A language is the other kind. */
+         *  rule wrote out do. A language is the other kind, and so are progressions of whole
+         *  numbers: a meet of those is as many progressions as the two hold between them, paid for
+         *  under an allowance. */
         boolean isFree() {
-            return !(set instanceof ValueSet.Matching);
+            return !(set instanceof ValueSet.Matching) && !(set instanceof ValueSet.WholeSteps);
         }
     }
 

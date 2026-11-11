@@ -1,12 +1,18 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.WholeNumberSet;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The numbers a question is about, as the set of them.
@@ -234,6 +240,72 @@ public sealed interface NumericSet {
             List<Place> out = new ArrayList<>(endsOf(extent()));
             out.addAll(excluded);
             return List.copyOf(out);
+        }
+    }
+
+    /**
+     * Exactly the whole numbers {@code numbers} holds, which a comparison of a number against a
+     * weighed one leaves it: {@code 2·x = c} is true at the even numbers of {@code c} and no
+     * other.
+     *
+     * <p>Held as progressions and never as the runs between lines: the members of a remainder are
+     * no run, and a line drawn through them is no place the model's rules name. That is why this
+     * answers {@link #holds} exactly and is no run of the order ({@link #asOneRun} is none).
+     *
+     * <p><b>{@link #region} is the run the numbers lie in, and no more.</b> A search that walks
+     * this set takes its candidates from the numbers ({@link WholeNumberSet#nearestMember}) and
+     * asks {@link #holds} of each, so a place of the run that is no member is never offered; a
+     * reader that wants which numbers are held asks {@link #holds}.
+     */
+    record InTheNumbers(WholeNumberSet numbers) implements NumericSet {
+
+        public InTheNumbers {
+            if (numbers == null || numbers.isNone()) {
+                throw new IllegalArgumentException("a class holds some whole number");
+            }
+        }
+
+        @Override
+        public boolean holds(Place at, Carrier carrier) {
+            return Count.number(at).exactly().floor()
+                    instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                    && Count.number(at).exactly().isWhole() && numbers.holds(whole);
+        }
+
+        @Override
+        public NumericDomain.Bounds extent() {
+            return new NumericDomain.Bounds(end(numbers.least()), end(numbers.greatest()));
+        }
+
+        /** None: whatever the ends, the numbers between them are left out. */
+        @Override
+        public NumericDomain.Bounds asOneRun() {
+            return null;
+        }
+
+        @Override
+        public LevelRegion region(Carrier on) {
+            NumericDomain.Bounds lies = extent();
+            return LevelRegion.of(new LevelInterval(
+                    lies.min() == null ? null : Bound.at(new Level.OnACarrier(on,
+                            lies.min().at()), true),
+                    lies.max() == null ? null : Bound.at(new Level.OnACarrier(on,
+                            lies.max().at()), true)));
+        }
+
+        /** The ends of the numbers, and the member nearest nought where there is no end. */
+        @Override
+        public List<Place> turnsAt() {
+            List<Place> out = new ArrayList<>(endsOf(extent()));
+            if (out.isEmpty() && numbers.nearestMember(BigInteger.ZERO, Set.of()) != null) {
+                out.add(Count.of(new BigDecimal(numbers.nearestMember(BigInteger.ZERO,
+                        Set.of()))));
+            }
+            return List.copyOf(out);
+        }
+
+        private static Endpoint end(BigInteger at) {
+            return at == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(at)));
         }
     }
 

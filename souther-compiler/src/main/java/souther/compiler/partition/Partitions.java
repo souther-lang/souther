@@ -857,7 +857,7 @@ public final class Partitions {
         // here because this is where a witness for a row is paid for: a string offered for a row is
         // no answer about the position, and paying for it out of what the position may build would
         // let a representative decide how exactly the model was read.
-        Classing.Result answered = Classing.of(term, mine, blocked, carrier,
+        Classing.Result answered = Classing.of(term, orders, mine, blocked, carrier,
                 at.position().admits(), allowance, PatternPlan.Budget.OF_A_WITNESS::meter,
                 place -> standing(view, carrier, place, ruleSource));
         Classing.Classed classed = answered.classed();
@@ -931,9 +931,15 @@ public final class Partitions {
             // class drawn over strings is asked about a construction and holds none of them —
             // which is the classes of a position holding nothing the position holds.
             // And the rules that left values open, whose values beside the classes are in none.
+            // Unless every class can be asked about a place on the order, as a class of a number
+            // is: it holds the numbers it holds whatever they are, and a cut falls in the class
+            // that holds its place.
             case Classing.Classed.Composed(List<PartitionClass> it) ->
                     new Composition(it.stream().map(each -> each.under(view.wrappers())).toList(),
-                            composedFrom(dividing), false, null,
+                            composedFrom(dividing),
+                            !it.isEmpty() && it.stream()
+                                    .allMatch(each -> each.recognises().answersAboutAPlace()),
+                            null,
                             answered.leftOpen().stream()
                                     .<RuleEvidenceOrigin>map(each -> each.statement().origin())
                                     .distinct().toList());

@@ -129,6 +129,15 @@ final class Realizer {
             // The numbers it leaves out, which cost nothing either: the runs between its runs.
             case ValueSet.WholeRuns runs -> new Realization.Exact(
                     ValueSet.wholeNumbers(runs.numbers().others()));
+            // A progression's complement is as many as its divisor, paid for before it is made;
+            // past the meter it is refused and no smaller set stands for it.
+            case ValueSet.WholeSteps steps -> {
+                meter.starting();
+                ValueSet left = ValueSet.wholeNumberSet(steps.numbers().complement(
+                        parts -> meter.making().states(parts)));
+                yield left != null ? new Realization.Exact(left)
+                        : new Realization.OverTheAnswerLimit(budget.refusedBy(meter));
+            }
         };
     }
 

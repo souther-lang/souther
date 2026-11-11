@@ -5,7 +5,12 @@ import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrders;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Text;
@@ -19,6 +24,8 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.values.ValuesWithin;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -129,6 +136,12 @@ final class Classing {
             case RuleEvidence.BySet(SetStatement it) ->
                     new AsASet(it.whenTrue(), it.whenFalse(), it.statement());
             case RuleEvidence.Singles(GuardThresholds.Guards.Singled it) -> {
+                if (carrier instanceof Carrier.Whole && wholeOf(it.value()) != null) {
+                    // A whole number singled out is the one number and every other.
+                    Value one = Value.number(new BigDecimal(wholeOf(it.value())));
+                    yield new AsASet(ValuesWithin.all(ValueSet.just(one)), ValueSet.allBut(one),
+                            new PredicateStatement.Equalling(wholeOf(it.value()).toString()));
+                }
                 if (!(carrier instanceof Carrier.Text) || !(it.value() instanceof Text text)) {
                     yield null;
                 }
@@ -137,8 +150,32 @@ final class Classing {
                         new ValueSet.Cofinite(Set.of(one)),
                         new PredicateStatement.Equalling(text.at()));
             }
-            case RuleEvidence.Divides _ -> null;
+            // A line across whole numbers is the numbers up to it and the numbers from the next:
+            // the two are all of them only where nothing lies between the last value below the line
+            // and the first above it, and a line leaving some is not said as sets.
+            case RuleEvidence.Divides(Threshold line) -> {
+                if (!(carrier instanceof Carrier.Whole)) {
+                    yield null;
+                }
+                BigInteger below = line.parts().below() instanceof Level.OnACarrier on
+                        ? wholeOf(on.at()) : null;
+                BigInteger above = line.parts().above() instanceof Level.OnACarrier on
+                        ? wholeOf(on.at()) : null;
+                if (below == null || above == null || !above.equals(below.add(BigInteger.ONE))) {
+                    yield null;
+                }
+                yield new AsASet(ValuesWithin.all(ValueSet.wholeNumbers(WholeNumberRuns.one(null,
+                        below))), ValueSet.wholeNumbers(WholeNumberRuns.one(above, null)),
+                        new PredicateStatement.AtMost(below.toString()));
+            }
         };
+    }
+
+    /** The whole number {@code place} is, or null where it is none. */
+    private static BigInteger wholeOf(Place place) {
+        return place instanceof Count count && count.exactly().isWhole()
+                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
+                ? whole : null;
     }
 
     /**
@@ -301,6 +338,23 @@ final class Classing {
                      Allowance<NumericTerm.FromOnePosition> allowance,
                      Supplier<Meter> perWitness,
                      Function<Place, FixtureTemplate> writing) {
+        return of(term, null, mine, blocked, carrier, admits, allowance, perWitness, writing);
+    }
+
+    /**
+     * The same, of a position whose values are numbers counted on {@code orders}: the classes are
+     * about the number read from the position, so a place on that order can be asked of them
+     * ({@link Recognition.OfACount}). Null where the position's values are no numbers, and the
+     * classes are about the values themselves ({@link Recognition.OfASet}).
+     */
+    static Result of(NumericTerm.FromOnePosition term, TermOrders orders, List<RuleEvidence> mine,
+                     List<ClassingBlocker> blocked, Carrier carrier, ValueSet admits,
+                     Allowance<NumericTerm.FromOnePosition> allowance,
+                     Supplier<Meter> perWitness,
+                     Function<Place, FixtureTemplate> writing) {
+        if (orders != null) {
+            orders.areOf(term);
+        }
         // Which of the rules actually tell two of this position's values apart, asked before
         // anything else is decided. An invariant restricts and a behavior divides what is left, so
         // a rule whose two sides the position does not both hold states no distinction here — and
@@ -406,7 +460,7 @@ final class Classing {
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
-            out.add(classOf(term, cell, carrier, perWitness, writing).ofTheNumber(term));
+            out.add(classOf(term, orders, cell, carrier, perWitness, writing).ofTheNumber(term));
         }
         // The classes are sets, so everything that went into them went into them — a value singled
         // out of a string is one of these classes rather than a cut beside them.
@@ -689,10 +743,18 @@ final class Classing {
     }
 
     /** One cell as a class: what it holds, what it is called, and what a row would carry for it. */
-    private static PartitionClass classOf(NumericTerm.FromOnePosition term, Cell cell,
-                                          Carrier carrier, Supplier<Meter> perWitness,
+    private static PartitionClass classOf(NumericTerm.FromOnePosition term, TermOrders orders,
+                                          Cell cell, Carrier carrier, Supplier<Meter> perWitness,
                                           Function<Place, FixtureTemplate> writing) {
-        String label = said(cell);
+        if (orders != null) {
+            orders.areOf(term);
+        }
+        WholeNumberSet numbers = orders != null && carrier instanceof Carrier.Whole
+                ? ValueSet.wholeNumbersOf(cell.values().values()) : null;
+        if (numbers != null && !numbers.isNone()) {
+            return classOfNumbers(term, orders, cell, numbers, writing);
+        }
+        String label = said(cell, "x");
         // The words, and not a name of this method's own. What a document shows a reader is the
         // class identity — every kind of class here is named by what it means, prefixed by the
         // number it is a class of — so a name made out of which rules held would be published in
@@ -730,10 +792,39 @@ final class Classing {
      * what names one is what a value in it satisfies — sent to a line and a column, a reader would
      * have to go and read the rule to find out what the class is.
      */
-    private static String said(Cell cell) {
+    private static String said(Cell cell, String subject) {
         return cell.under().stream()
-                .map(each -> each.holds() ? each.states().saidOf("x") : each.states().deniedOf("x"))
+                .map(each -> each.holds() ? each.states().saidOf(subject)
+                        : each.states().deniedOf(subject))
                 .reduce((one, other) -> one + " and " + other).orElseThrow();
+    }
+
+    /**
+     * One cell of the numbers at a position as a class: asked about the number read from the
+     * position, on the order it is counted on, and a row's value for it is a member of the cell.
+     *
+     * <p>Called by the position it is a class of and not by a placeholder: the strings of a
+     * partner the position's classes are told by can be written with any name, but a number's
+     * partner is written in the same names as the position, and one called {@code x} among them
+     * would be read as the position {@code x}.
+     */
+    private static PartitionClass classOfNumbers(NumericTerm.FromOnePosition term,
+                                                 TermOrders orders, Cell cell,
+                                                 WholeNumberSet numbers,
+                                                 Function<Place, FixtureTemplate> writing) {
+        orders.areOf(term);
+        String label = said(cell, term.subjectPath().toString());
+        String id = PartitionClass.idOf(term, label);
+        NumericSet counted = new NumericSet.InTheNumbers(numbers);
+        Recognition is = new Recognition.OfACount(term, orders, counted);
+        // A member nearest nought, which the position's own values still have to admit.
+        Place stands = orders.answered().somewhereInHand(cell.values().values(),
+                new OrderedInterval(null, null), PlacesApart.NONE);
+        FixtureTemplate written = stands == null ? null : writing.apply(stands);
+        return written == null
+                ? PartitionClass.ungeneratable(id, label, is,
+                        new SearchMessage.NothingComposedAValueOfTheType("number"))
+                : PartitionClass.of(id, label, is, RepresentativeSource.of(written));
     }
 
 }

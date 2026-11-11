@@ -208,7 +208,12 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
             String written = beyond.replace("K", k);
             assertEquals(readingsOf(NUMBERS, "a <= 10 && " + written),
                     readingsOf(NUMBERS, written), beyond);
-            assertEquals(List.of(NOT_SHOWN), reasonsAt(NUMBERS, written, "b"), beyond);
+            // No run with {@code a} past ten gets to the equality, so {@code b} past ten is never
+            // equal to it: {@code b} is divided there and not left unanswered. Where the sum is
+            // worked out beside a number of the other side the equation is not the two terms alone
+            // and nothing is said.
+            assertEquals(beyond.endsWith("+ 1") ? List.of(NOT_SHOWN) : List.of(),
+                    reasonsAt(NUMBERS, written, "b"), beyond);
         }
         for (String theForm : List.of("a + K == b", "a + K - b > 0", "a + 1 == b",
                 "a < b + 1")) {

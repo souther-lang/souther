@@ -241,6 +241,10 @@ sealed interface ComparisonAssessment {
             left.partnered().keySet().stream().map(FilingCoordinate::of)
                     .filter(at -> partneredKept == null || partneredKept.contains(at))
                     .forEach(out::add);
+            // And the places the numbers their partner can come to part, on the same terms.
+            left.numbersPartnered().keySet().stream().map(FilingCoordinate::of)
+                    .filter(at -> partneredKept == null || partneredKept.contains(at))
+                    .forEach(out::add);
             return out;
         }
     }

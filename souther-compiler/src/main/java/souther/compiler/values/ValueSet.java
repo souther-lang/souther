@@ -3,6 +3,7 @@ package souther.compiler.values;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.numeric.WholeNumberSet;
 import net.unit8.notation199x.pattern.Meter;
 
 import java.math.BigDecimal;
@@ -131,6 +132,34 @@ public sealed interface ValueSet {
     }
 
     /**
+     * The whole numbers of some progressions: those that leave one remainder by a divisor above
+     * one, within a run, which comparisons of one number never leave and the values a weighed
+     * number comes to do.
+     *
+     * <p>A fifth shape because a run is what it is not. {@code 2·x = c} leaves {@code c} the even
+     * numbers, which have a least and a next only as far as every second number does, and held as
+     * {@link WholeRuns} they would be every number between.
+     *
+     * <p><b>Never a set the shapes above hold.</b> Every progression of a set that is runs only
+     * is a {@link WholeRuns}, or one of the shapes that has: {@link #wholeNumberSet} is where that
+     * is settled, and the only way to one of these.
+     *
+     * <p>Over the whole numbers, as every set here is over one carrier. Its numbers are those of
+     * the integers and not those of a type: what the type holds of them is met with it, where the
+     * type is known.
+     */
+    record WholeSteps(WholeNumberSet numbers) implements ValueSet {
+
+        public WholeSteps {
+            if (numbers == null || numbers.isNone() || numbers.asRuns() != null) {
+                throw new IllegalArgumentException(
+                        "progressions of whole numbers are no shape the others already hold: "
+                                + numbers);
+            }
+        }
+    }
+
+    /**
      * A set kept as it was given, and unable to be changed after.
      *
      * <p>The order is the order the model writes the values in, and it is kept because something
@@ -212,6 +241,20 @@ public sealed interface ValueSet {
         return new WholeRuns(numbers);
     }
 
+    /**
+     * The whole numbers {@code numbers} holds: runs where that is all they are, and otherwise
+     * {@link WholeSteps}.
+     *
+     * <p>The one way to a {@link WholeSteps}. Null stays null, as it does where a set is refused.
+     */
+    static ValueSet wholeNumberSet(WholeNumberSet numbers) {
+        if (numbers == null) {
+            return null;
+        }
+        WholeNumberRuns runs = numbers.asRuns();
+        return runs != null ? wholeNumbers(runs) : new WholeSteps(numbers);
+    }
+
     /** The one number of each run of {@code apart}, as values. */
     private static Set<Value> numbersOf(WholeNumberRuns apart) {
         Set<Value> out = new LinkedHashSet<>();
@@ -248,6 +291,8 @@ public sealed interface ValueSet {
             case Matching it -> value instanceof Value.Text text && it.language().has(text.value());
             case WholeRuns it -> wholeNumberOf(value) instanceof BigInteger whole
                     && it.numbers().holds(whole);
+            case WholeSteps it -> wholeNumberOf(value) instanceof BigInteger whole
+                    && it.numbers().holds(whole);
         };
     }
 
@@ -274,8 +319,12 @@ public sealed interface ValueSet {
         }
         // Runs against anything is what the two leave together, which is read off the ends and the
         // values written out and builds nothing.
-        if (this instanceof WholeRuns || other instanceof WholeRuns) {
-            return !Sets.metUnder(this, other, Meter.refusing()).isEmpty();
+        if (this instanceof WholeRuns || other instanceof WholeRuns
+                || this instanceof WholeSteps || other instanceof WholeSteps) {
+            // Met under a meter that pays for nothing: a pair of numbers builds no machine, and a
+            // meet too wide for the numbers' own budget is not shown to hold nothing.
+            ValueSet met = Sets.metUnder(this, other, Meter.refusing());
+            return met == null || !met.isEmpty();
         }
         // Neither is finite, so each admits values without end and no finite thing either of them
         // holds out can be the whole of what the other has.
@@ -292,11 +341,55 @@ public sealed interface ValueSet {
      * anything else, or a language, holds other values than they do.
      */
     default boolean holdsTheSameValuesAs(ValueSet other) {
+        if (this instanceof WholeSteps || other instanceof WholeSteps) {
+            return holdTheSameProgressions(this, other);
+        }
         if (!(this instanceof WholeRuns) && !(other instanceof WholeRuns)) {
             return equals(other);
         }
         WholeNumberRuns mine = runsOf(this);
         return mine != null && mine.equals(runsOf(other));
+    }
+
+    /** What a pair of numbers' sets is asked within, as progressions. A pair too wide for it is
+     *  not shown to be one set, which is what a reader that keeps both does. */
+    WholeNumberSet.Budget PROGRESSIONS_COMPARED = parts -> parts <= 4096;
+
+    /** Whether each holds every number the other does, asked of the numbers and not of how the
+     *  progressions are written: neither has a number the other leaves out. */
+    private static boolean holdTheSameProgressions(ValueSet one, ValueSet other) {
+        WholeNumberSet mine = numbersOf(one);
+        WholeNumberSet theirs = numbersOf(other);
+        if (mine == null || theirs == null) {
+            return false;
+        }
+        WholeNumberSet notMine = mine.complement(PROGRESSIONS_COMPARED);
+        WholeNumberSet notTheirs = theirs.complement(PROGRESSIONS_COMPARED);
+        if (notMine == null || notTheirs == null) {
+            return false;
+        }
+        WholeNumberSet onlyTheirs = theirs.and(notMine, PROGRESSIONS_COMPARED);
+        WholeNumberSet onlyMine = mine.and(notTheirs, PROGRESSIONS_COMPARED);
+        return onlyTheirs != null && onlyMine != null && onlyTheirs.isNone()
+                && onlyMine.isNone();
+    }
+
+    /**
+     * The whole numbers {@code set} holds as progressions, or null where it holds some other value
+     * or is no set of whole numbers: a set of every value but some strings is no set of numbers.
+     */
+    static WholeNumberSet wholeNumbersOf(ValueSet set) {
+        return numbersOf(set);
+    }
+
+    /** The whole numbers {@code set} holds as progressions, or null where it holds some other
+     *  value. */
+    private static WholeNumberSet numbersOf(ValueSet set) {
+        if (set instanceof WholeSteps it) {
+            return it.numbers();
+        }
+        WholeNumberRuns runs = runsOf(set);
+        return runs == null ? null : WholeNumberSet.ofRuns(runs);
     }
 
     /** The whole numbers {@code set} holds as runs, or null where it holds some other value or
@@ -309,7 +402,7 @@ public sealed interface ValueSet {
                 WholeNumberRuns excluded = wholeNumbersAmong(it.excluded());
                 yield excluded == null ? null : excluded.others();
             }
-            case Matching _ -> null;
+            case Matching _, WholeSteps _ -> null;
         };
     }
 
@@ -349,7 +442,7 @@ public sealed interface ValueSet {
             case Finite finite -> finite.values().stream()
                     .filter(Value.Text.class::isInstance)
                     .map(each -> ((Value.Text) each).value()).toList();
-            case Cofinite _, WholeRuns _ -> List.of();
+            case Cofinite _, WholeRuns _, WholeSteps _ -> List.of();
         };
     }
 }

@@ -3,6 +3,7 @@ package souther.compiler.numeric;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A set of whole numbers as a union of progressions: the numbers of a run that leave one remainder
@@ -235,6 +236,202 @@ public record WholeNumberSet(List<Part> parts) {
             }
         }
         return new WholeNumberSet(out);
+    }
+
+    /**
+     * These numbers as runs, or null where some progression is more than a run: one that steps
+     * over numbers between its members, and holds more than the one.
+     */
+    public WholeNumberRuns asRuns() {
+        WholeNumberRuns out = WholeNumberRuns.NONE;
+        for (Part each : parts) {
+            boolean single = each.run().from() != null && each.run().from().equals(each.run().to());
+            if (!single && each.within().modulus().compareTo(BigInteger.ONE) > 0) {
+                return null;
+            }
+            out = out.or(WholeNumberRuns.one(each.run().from(), each.run().to()));
+        }
+        return out;
+    }
+
+    /**
+     * What building a set may cost, in the progressions it holds.
+     *
+     * <p>Asked before the progressions are made: the complement of a remainder by a thousand
+     * million is as many progressions as remainders, and a set that was built to see whether it
+     * fits is the cost the question exists to avoid.
+     */
+    public interface Budget {
+
+        /** Whether a set of {@code parts} progressions may be built. */
+        boolean allows(long parts);
+    }
+
+    /**
+     * The numbers both hold, or null where a set within {@code budget} cannot hold them: the
+     * answer is never a part of the numbers standing for all of them.
+     */
+    public WholeNumberSet and(WholeNumberSet other, Budget budget) {
+        if (!budget.allows((long) parts.size() * other.parts.size())) {
+            return null;
+        }
+        WholeNumberSet met = and(other).simplified();
+        return budget.allows(met.parts.size()) ? met : null;
+    }
+
+    /** The numbers either holds, or null where a set within {@code budget} cannot hold them. */
+    public WholeNumberSet or(WholeNumberSet other, Budget budget) {
+        if (!budget.allows((long) parts.size() + other.parts.size())) {
+            return null;
+        }
+        WholeNumberSet joined = or(other).simplified();
+        return budget.allows(joined.parts.size()) ? joined : null;
+    }
+
+    /**
+     * The whole numbers none of these is, or null where a set within {@code budget} cannot hold
+     * them.
+     *
+     * <p>The complement of a progression is the numbers outside its run, and inside the run the
+     * other remainders of its divisor, so it costs as many progressions as its divisor is large.
+     * That is asked before they are made, and of the complement of each part met in turn.
+     */
+    public WholeNumberSet complement(Budget budget) {
+        WholeNumberSet out = EVERY;
+        for (Part part : parts) {
+            WholeNumberSet outside = complementOf(part, budget);
+            if (outside == null) {
+                return null;
+            }
+            out = out.and(outside, budget);
+            if (out == null) {
+                return null;
+            }
+        }
+        return out;
+    }
+
+    private static WholeNumberSet complementOf(Part part, Budget budget) {
+        BigInteger modulus = part.within().modulus();
+        BigInteger others = modulus.subtract(BigInteger.ONE);
+        if (others.bitLength() > 62 || !budget.allows(others.longValueExact() + 2)) {
+            return null;
+        }
+        List<Part> out = new ArrayList<>();
+        if (part.run().from() != null) {
+            out.add(new Part(new WholeNumberRuns.Run(null,
+                    part.run().from().subtract(BigInteger.ONE)), EVERY_NUMBER));
+        }
+        if (part.run().to() != null) {
+            out.add(new Part(new WholeNumberRuns.Run(part.run().to().add(BigInteger.ONE), null),
+                    EVERY_NUMBER));
+        }
+        for (BigInteger residue = BigInteger.ZERO; residue.compareTo(modulus) < 0;
+             residue = residue.add(BigInteger.ONE)) {
+            if (residue.equals(part.within().residue())) {
+                continue;
+            }
+            Part other = Part.orNone(part.run(), new Congruences(residue, modulus));
+            if (other != null) {
+                out.add(other);
+            }
+        }
+        return new WholeNumberSet(out);
+    }
+
+    /**
+     * The same numbers with no progression held by another and no two of one remainder that touch.
+     *
+     * <p>Not a normal form: evens and odds are not joined into every number, so two sets holding
+     * the same numbers may be spelled differently, and {@code equals} says how they are spelled.
+     */
+    WholeNumberSet simplified() {
+        List<Part> kept = new ArrayList<>();
+        for (Part each : parts) {
+            if (kept.stream().noneMatch(other -> holdsAll(other, each))) {
+                kept.removeIf(other -> holdsAll(each, other));
+                kept.add(each);
+            }
+        }
+        boolean joined = true;
+        while (joined) {
+            joined = false;
+            for (int i = 0; i < kept.size() && !joined; i++) {
+                for (int j = i + 1; j < kept.size() && !joined; j++) {
+                    Part together = joinedIfTouching(kept.get(i), kept.get(j));
+                    if (together != null) {
+                        kept.remove(j);
+                        kept.set(i, together);
+                        joined = true;
+                    }
+                }
+            }
+        }
+        return new WholeNumberSet(kept);
+    }
+
+    /** Whether every number of {@code inner} is one of {@code outer}. */
+    private static boolean holdsAll(Part outer, Part inner) {
+        BigInteger modulus = outer.within().modulus();
+        return inner.within().modulus().mod(modulus).signum() == 0
+                && inner.within().residue().subtract(outer.within().residue()).mod(modulus)
+                        .signum() == 0
+                && (outer.run().from() == null || (inner.run().from() != null
+                        && inner.run().from().compareTo(outer.run().from()) >= 0))
+                && (outer.run().to() == null || (inner.run().to() != null
+                        && inner.run().to().compareTo(outer.run().to()) <= 0));
+    }
+
+    /** One progression of both, where they are of one remainder and no number between is left
+     *  out; else null. */
+    private static Part joinedIfTouching(Part one, Part other) {
+        if (!one.within().equals(other.within())) {
+            return null;
+        }
+        BigInteger step = one.within().modulus();
+        BigInteger oneFrom = one.run().from();
+        BigInteger oneTo = one.run().to();
+        BigInteger otherFrom = other.run().from();
+        BigInteger otherTo = other.run().to();
+        boolean otherStartsInTime = otherFrom == null || oneTo == null
+                || otherFrom.compareTo(oneTo.add(step)) <= 0;
+        boolean oneStartsInTime = oneFrom == null || otherTo == null
+                || oneFrom.compareTo(otherTo.add(step)) <= 0;
+        if (!otherStartsInTime || !oneStartsInTime) {
+            return null;
+        }
+        return new Part(new WholeNumberRuns.Run(
+                oneFrom == null || otherFrom == null ? null : oneFrom.min(otherFrom),
+                oneTo == null || otherTo == null ? null : oneTo.max(otherTo)), one.within());
+    }
+
+    /**
+     * The member nearest {@code target} that is none of {@code excluded}, or null where there is
+     * none. Members are walked outward from the target, and no more of them than the excluded
+     * values can stand in the way of.
+     */
+    public BigInteger nearestMember(BigInteger target, Set<BigInteger> excluded) {
+        BigInteger above = target;
+        BigInteger below = target;
+        for (long step = 0; step <= 2L * excluded.size() + 2; step++) {
+            BigInteger up = above == null ? null : leastAtOrAbove(above);
+            BigInteger down = below == null ? null : greatestAtOrBelow(below);
+            if (up == null && down == null) {
+                return null;
+            }
+            boolean takeUp = down == null || (up != null
+                    && up.subtract(target).compareTo(target.subtract(down)) <= 0);
+            BigInteger pick = takeUp ? up : down;
+            if (!excluded.contains(pick)) {
+                return pick;
+            }
+            if (takeUp) {
+                above = up.add(BigInteger.ONE);
+            } else {
+                below = down.subtract(BigInteger.ONE);
+            }
+        }
+        return null;
     }
 
     private static BigInteger floorDivided(BigInteger number, BigInteger by) {

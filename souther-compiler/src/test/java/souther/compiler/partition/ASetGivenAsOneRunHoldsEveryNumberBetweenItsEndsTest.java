@@ -3,12 +3,15 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.WholeNumberSet;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -44,7 +47,11 @@ class ASetGivenAsOneRunHoldsEveryNumberBetweenItsEndsTest {
                     Band.endAt(null, Bound.at(at(3), true), Towards.BELOW))),
             new NumericSet.InARunExcept(run(0, true, 10, true), List.of(Count.of(0))),
             new NumericSet.InARunExcept(run(0, true, 10, true), List.of(Count.of(5))),
-            new NumericSet.AwayFrom(List.of(Count.of(3))));
+            new NumericSet.AwayFrom(List.of(Count.of(3))),
+            // The even numbers: a set that gives no ends holding what lies between them, since
+            // every second number is left out.
+            new NumericSet.InTheNumbers(WholeNumberSet.ofClass(
+                    new Congruences(BigInteger.ZERO, BigInteger.TWO))));
 
     @Test
     void theEndsHoldEveryNumberOfTheSetAndNoOther() {

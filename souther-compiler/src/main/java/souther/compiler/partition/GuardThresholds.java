@@ -7,6 +7,7 @@ import souther.compiler.collect.LatelyAsked;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.types.BindingId;
+import souther.compiler.values.ValueSet;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationAccess;
@@ -1269,6 +1270,25 @@ public final class GuardThresholds {
             out.add(new BehaviorSetStatements.Partnered(origin,
                     new PredicateStatement.CanBeTheValueOf(strings.partner()), each.getKey(),
                     strings));
+        }
+        // The numbers an equality between two numbers is true at are told from the rest as the
+        // strings are: the values the partner can come to, and those it never does. Shown at every
+        // length, since a number has none.
+        if (read instanceof ComparisonAssessment.AcrossPositions across) {
+            for (Map.Entry<NumericTerm.FromOnePosition,
+                    UndividedByARelation.NumbersAPartnerCanHold> each
+                    : across.left().numbersPartnered().entrySet()) {
+                UndividedByARelation.NumbersAPartnerCanHold numbers = each.getValue();
+                PredicateOrigin origin = new PredicateOrigin(
+                        new PredicateOccurrence(first + out.size()),
+                        new RuleRef.Comparison(behavior, wrote), anchor, Optional.of(stated));
+                out.add(new BehaviorSetStatements.Partnered(origin,
+                        new PredicateStatement.CanBeTheValueOf(numbers.partner()), each.getKey(),
+                        UndividedByARelation.StringsAPartnerCanHold.unreached(
+                                ValueSet.wholeNumberSet(numbers.holds().shown()),
+                                ValueSet.wholeNumberSet(numbers.holds().possible()), null,
+                                numbers.partner())));
+            }
         }
         return out;
     }

@@ -3,6 +3,8 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -120,6 +122,110 @@ class WholeNumberSetTest {
     void aWeightOfNoughtLeavesNothingToSolve() {
         assertNull(WholeNumberSet.EVERY.valuesBeside(n(0), n(1), n(0)));
         assertNull(WholeNumberSet.EVERY.valuesBeside(n(1), n(0), n(0)));
+    }
+
+    private static final WholeNumberSet.Budget ROOM = parts -> parts <= 64;
+
+    /** A few sets of runs and remainders, none of them written to suit what is asked of it. */
+    private static List<WholeNumberSet> family() {
+        WholeNumberSet threes = WholeNumberSet.ofClass(new Congruences(BigInteger.ONE, n(3)));
+        return List.of(WholeNumberSet.NONE, WholeNumberSet.EVERY, evens(), threes,
+                evens().and(nonNegative()),
+                threes.and(WholeNumberSet.ofRuns(WholeNumberRuns.one(n(-7), n(20)))),
+                WholeNumberSet.ofRuns(WholeNumberRuns.one(n(0), n(0)).or(
+                        WholeNumberRuns.one(n(6), null))),
+                evens().or(threes),
+                evens().and(WholeNumberSet.ofClass(new Congruences(BigInteger.ZERO, n(4)))));
+    }
+
+    private static final long LOW = -70;
+    private static final long HIGH = 70;
+
+    /** Every operation agrees with the same operation over the numbers, asked of each one. */
+    @Test
+    void theOperationsAreThoseOfSetsOfNumbers() {
+        for (WholeNumberSet one : family()) {
+            WholeNumberSet not = one.complement(ROOM);
+            assertTrue(not != null);
+            for (WholeNumberSet other : family()) {
+                WholeNumberSet both = one.and(other, ROOM);
+                WholeNumberSet either = one.or(other, ROOM);
+                for (long at = LOW; at <= HIGH; at++) {
+                    BigInteger number = n(at);
+                    assertEquals(!one.holds(number), not.holds(number), "not at " + at);
+                    assertEquals(one.holds(number) && other.holds(number), both.holds(number),
+                            "and at " + at);
+                    assertEquals(one.holds(number) || other.holds(number), either.holds(number),
+                            "or at " + at);
+                }
+            }
+        }
+    }
+
+    @Test
+    void aProgressionHeldByAnotherAndTwoThatTouchAreOneProgression() {
+        WholeNumberSet fours = WholeNumberSet.ofClass(new Congruences(BigInteger.ZERO, n(4)));
+        assertEquals(1, evens().or(fours, ROOM).parts().size());
+        WholeNumberSet low = WholeNumberSet.ofRuns(WholeNumberRuns.one(n(0), n(5)));
+        WholeNumberSet high = WholeNumberSet.ofRuns(WholeNumberRuns.one(n(6), n(9)));
+        assertEquals(1, low.or(high, ROOM).parts().size());
+    }
+
+    /** A complement costs a progression for each remainder, and is refused rather than cut. */
+    @Test
+    void aComplementTooWideForTheBudgetIsRefusedNotShortened() {
+        WholeNumberSet wide = WholeNumberSet.ofClass(new Congruences(BigInteger.ZERO,
+                n(1_000_000_000L)));
+        assertNull(wide.complement(ROOM));
+        assertNull(wide.and(evens(), parts -> false));
+        WholeNumberSet sized = WholeNumberSet.ofClass(new Congruences(BigInteger.ZERO, n(10)));
+        // The nine other remainders; the two ends a run could have are paid for and not made.
+        assertEquals(9, sized.complement(parts -> parts <= 11).parts().size());
+        assertNull(sized.complement(parts -> parts <= 10));
+    }
+
+    /** The ends of the type, a type being no more than the numbers between them. */
+    @Test
+    void theEndsOfIntAreMembersWhereTheirRemainderIs() {
+        BigInteger least = n(Integer.MIN_VALUE);
+        BigInteger greatest = n(Integer.MAX_VALUE);
+        WholeNumberSet type = WholeNumberSet.ofRuns(WholeNumberRuns.one(least, greatest));
+        WholeNumberSet inType = evens().and(type, ROOM);
+        assertTrue(inType.holds(least));
+        assertFalse(inType.holds(greatest));
+        assertTrue(inType.holds(greatest.subtract(BigInteger.ONE)));
+        assertFalse(inType.holds(least.subtract(BigInteger.TWO)));
+        assertEquals(least, inType.least());
+        assertEquals(greatest.subtract(BigInteger.ONE), inType.greatest());
+        WholeNumberSet odds = WholeNumberSet.ofClass(new Congruences(BigInteger.ONE, n(2)));
+        assertTrue(odds.and(type, ROOM).holds(greatest));
+        assertFalse(odds.and(type, ROOM).holds(least));
+    }
+
+    /** A set whose every number lies past the type holds none of the type. */
+    @Test
+    void aSetOfNoNumberOfTheTypeIsNone() {
+        WholeNumberSet type = WholeNumberSet.ofRuns(WholeNumberRuns.one(n(Integer.MIN_VALUE),
+                n(Integer.MAX_VALUE)));
+        WholeNumberSet past = WholeNumberSet.ofRuns(WholeNumberRuns.one(
+                n(Integer.MAX_VALUE).add(BigInteger.ONE), null));
+        assertTrue(past.and(type, ROOM).isNone());
+        // Odd numbers between nought and nought have none.
+        WholeNumberSet nought = WholeNumberSet.ofRuns(WholeNumberRuns.one(BigInteger.ZERO,
+                BigInteger.ZERO));
+        assertTrue(nought.and(WholeNumberSet.ofClass(new Congruences(BigInteger.ONE, n(2))), ROOM)
+                .isNone());
+    }
+
+    @Test
+    void theNearestMemberSkipsWhatIsExcludedAndStaysInTheSet() {
+        WholeNumberSet evensFromTwo = evens().and(WholeNumberSet.ofRuns(
+                WholeNumberRuns.one(n(2), null)));
+        assertEquals(n(2), evensFromTwo.nearestMember(n(-9), Set.of()));
+        assertEquals(n(4), evensFromTwo.nearestMember(n(3), Set.of(n(2))));
+        assertEquals(n(6), evensFromTwo.nearestMember(n(3), Set.of(n(2), n(4))));
+        WholeNumberSet only = WholeNumberSet.ofRuns(WholeNumberRuns.one(n(5), n(5)));
+        assertNull(only.nearestMember(n(0), Set.of(n(5))));
     }
 
     @Test

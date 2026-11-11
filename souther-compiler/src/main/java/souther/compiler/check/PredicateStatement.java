@@ -73,6 +73,35 @@ public sealed interface PredicateStatement {
     }
 
     /**
+     * A line the model draws across a number's values: the numbers at or below a written one, and
+     * those above it.
+     *
+     * <p>Its own arm because it is its own sentence, said as the comparison an author writes and
+     * not as an operation of the library, and because the number is the position's own and not a
+     * text: {@link Equalling} quotes what it holds.
+     *
+     * @param written the number the line is drawn at, as a source carries it
+     */
+    record AtMost(String written) implements PredicateStatement {
+
+        public AtMost {
+            if (written == null) {
+                throw new IllegalArgumentException("a line is drawn at some number");
+            }
+        }
+
+        @Override
+        public String saidOf(String subject) {
+            return subject + " <= " + written;
+        }
+
+        @Override
+        public String deniedOf(String subject) {
+            return subject + " > " + written;
+        }
+    }
+
+    /**
      * That some value of another position is the value here: the strings an equality between two
      * positions can hold at one of them, given what the other position may hold.
      *

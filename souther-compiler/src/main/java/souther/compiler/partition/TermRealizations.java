@@ -3112,6 +3112,59 @@ final class TermRealizations {
     }
 
     /**
+     * The members of {@code members} to try, nearest {@code named} first: where the place is none,
+     * the member nearest nought; then the least member and the greatest, where there are such.
+     * A member the declarations leave out, or the position's values refuse, is skipped for the
+     * next one the progressions hold, as many times as a figure of tries allows.
+     */
+    private static Tried membersOfTheNumbers(NumericSet.InTheNumbers members, Carrier carrier,
+                                             Place named, OrderedRuns declared,
+                                             ValueSet admits) {
+        Set<CompositionRepertoire> ofTheRun =
+                Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
+        BigInteger target = named instanceof Count count && count.exactly().isWhole()
+                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
+                ? whole : BigInteger.ZERO;
+        List<BigInteger> wanted = new ArrayList<>();
+        wanted.add(target);
+        if (members.numbers().least() != null) {
+            wanted.add(members.numbers().least());
+        }
+        if (members.numbers().greatest() != null) {
+            wanted.add(members.numbers().greatest());
+        }
+        List<Place> offered = new ArrayList<>();
+        Set<BigInteger> turnedDown = new LinkedHashSet<>();
+        boolean stopped = false;
+        for (BigInteger near : wanted) {
+            int tries = 0;
+            while (true) {
+                BigInteger member = members.numbers().nearestMember(near, turnedDown);
+                if (member == null) {
+                    break;
+                }
+                Place at = Count.of(new BigDecimal(member));
+                if ((declared == null || declared.admits(at)) && carrier.admitted(admits, at)) {
+                    if (!offered.contains(at)) {
+                        offered.add(at);
+                    }
+                    break;
+                }
+                if (++tries >= CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()) {
+                    stopped = true;
+                    break;
+                }
+                turnedDown.add(member);
+            }
+        }
+        // Nothing offered because the members ran out says the progressions hold none of the
+        // position's values, and because the figure was reached says no more than that.
+        return new Tried(offered, !offered.isEmpty() ? new Remainder.SomeOf(ofTheRun)
+                : stopped ? new Remainder.StoppedAt(CompositionBudget.NUMBERS_OF_A_SET_TRIED)
+                : new Remainder.Exhausted());
+    }
+
+    /**
      * A number of a set on the order its values are counted on, asked of the carrier.
      *
      * <p>For the accounts whose numbers are a place on an order rather than a count of something:
@@ -3161,6 +3214,11 @@ final class TermRealizations {
             // A run, with or without values taken out of it, is looked in below — in the runs the
             // set makes up, so a place a run holds is never offered for one that has it taken out.
             case NumericSet.InARun _, NumericSet.InARunExcept _ -> { }
+            // Progressions have members and no runs: the members nearest where the number is
+            // usually near are offered, each one the declarations and the position's values admit.
+            case NumericSet.InTheNumbers members -> {
+                return membersOfTheNumbers(members, orders.answered(), named, declared, admits);
+            }
         }
         // Where the rules leave the number room, which narrows the run this looks in. Exhaustive
         // over what the region answers, because one of its answers is not a range: a region that

@@ -10,6 +10,7 @@ import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.numeric.WholeNumberSet;
 
 import java.math.BigDecimal;
@@ -4134,6 +4135,159 @@ public final class WhatARelationLeavesUndivided {
                                        RowsComputed arithmetic) {
         return reachesOver(withTheSteppedRunOfAnOrder(terms, by, relation), by, of, within,
                 constant, relation, beside, arithmetic);
+    }
+
+    /**
+     * Where an equality between the term at {@code at} and the one beside it holds, as far as that
+     * is shown and as far as it is possible ({@link WhereAnEquationHolds}) — or null where the
+     * equality is not worked out that way.
+     *
+     * <p>For the weighed equality a run cannot say: {@code 2·x = c} is true at the even numbers of
+     * {@code c} and false at every other. Worked out only where every row of the form is computed
+     * ({@link RowsComputed#nothingStopsARow}), so that a value the other term is shown to take is
+     * a row, and only for the values {@code s} of the other term whose weighed size is within what
+     * the type holds: a row at a greater one may stop where its product is worked out, and its
+     * value of {@code c} is none this shows. The other term has to be apart from the one asked of
+     * and tied to none, and to take at least two values, so that where the equality can hold it
+     * can fail as well and the value is left either way and not settled.
+     *
+     * <p>Two terms of whole values, a whole constant, and weights that are whole numbers other than
+     * nought. Anything else is null, which says nothing.
+     *
+     * @param constant what the terms are held against, so that the equation is
+     *                 {@code Σ weight·value = constant}
+     * @param greatest the greatest value of the type the form is worked out in, or null where it
+     *                 has none
+     */
+    public static <P> WhereAnEquationHolds whereAnEquationHolds(
+            List<Term<P>> terms, int at, ExactRatio constant, Rel relation,
+            BiPredicate<P, P> overlap, Independence independent, BigInteger greatest,
+            Operations operations) {
+        if (terms.size() != 2 || (relation != Rel.EQ && relation != Rel.NE) || constant == null
+                || !constant.isWhole()
+                || !freeOf(terms, at, overlap, independent)[1 - at]) {
+            return null;
+        }
+        Term<P> here = terms.get(at);
+        Term<P> other = terms.get(1 - at);
+        if (here.spacing() != Granularity.DISCRETE || other.spacing() != Granularity.DISCRETE
+                || !here.weight().isWhole() || !other.weight().isWhole()
+                || here.weight().signum() == 0 || other.weight().signum() == 0
+                || !(here.weight().floor() instanceof ExactAnswer.Held<BigInteger>(var weightHere))
+                || !(other.weight().floor() instanceof ExactAnswer.Held<BigInteger>(var weightThere))
+                || !(constant.floor() instanceof ExactAnswer.Held<BigInteger>(var against))) {
+            return null;
+        }
+        Term<P> closed = closedWhereItLies(other);
+        WholeNumberSet lies = wholeNumbersOf(closed.holds());
+        // What a total of several elements may come to is the values of the remainder it is shown
+        // in, which a run of ends does not say.
+        WholeNumberSet possible = lies == null || other.stepped() == null ? lies
+                : other.stepped().possible().and(lies);
+        WholeNumberSet taken = other.stepped() != null ? other.stepped().witnessed()
+                : other.realizes() == null ? null
+                : other.realizes().saysNothing() ? possible
+                : wholeNumbersOf(other.realizes());
+        if (possible == null || taken == null) {
+            return null;
+        }
+        RowsComputed arithmetic = RowsComputed.upTo(greatest).withOperations(operations);
+        // The values of the other term a row is computed at are asked at, from the widest the
+        // type's ends say to the narrowest, and the first whose ends the program computes is the
+        // one used: a weighed value past what the type holds is a row that stops where its
+        // product is worked out. The ends are proposed from the type and settled by the rows,
+        // so what is shown is what the program does and not what the type is taken to be.
+        List<WholeNumberSet> reached = new ArrayList<>();
+        if (greatest == null) {
+            reached.add(taken);
+        } else {
+            BigInteger magnitude = weightThere.abs();
+            BigInteger below = greatest.add(BigInteger.ONE).negate();
+            BigInteger low = weightThere.signum() > 0 ? ceilDividedBy(below, weightThere)
+                    : ceilDividedBy(greatest, weightThere);
+            BigInteger high = weightThere.signum() > 0 ? greatest.divide(weightThere)
+                    : floorDividedBy(below, weightThere);
+            reached.add(taken.and(WholeNumberSet.ofRuns(WholeNumberRuns.one(low, high))));
+            reached.add(taken.and(WholeNumberSet.ofRuns(WholeNumberRuns.one(
+                    greatest.divide(magnitude).negate(), greatest.divide(magnitude)))));
+        }
+        for (WholeNumberSet within : reached) {
+            BigInteger one = within.nearestMember(BigInteger.ZERO, Set.of());
+            if (one == null || within.nearestMember(one, Set.of(one)) == null) {
+                continue;
+            }
+            // Σ = weightHere·c + weightThere·s - constant = 0, for the values s of the other term.
+            WhereAnEquationHolds holds = WhereAnEquationHolds.of(within, possible, weightThere,
+                    weightHere, against.negate());
+            if (holds != null && rowsAtTheEnds(holds, terms, at, weightHere, weightThere, against,
+                    constant, arithmetic)) {
+                // Said of the values this term may hold, which is all a row has: a value the
+                // weighing reaches past the type of this term is none of its values.
+                WholeNumberSet ofThis = wholeNumbersOf(closedWhereItLies(here).holds());
+                if (ofThis == null) {
+                    return holds;
+                }
+                WholeNumberSet shown = holds.shown().and(ofThis);
+                return shown.isNone() ? null
+                        : new WhereAnEquationHolds(shown, holds.possible().and(ofThis));
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether the program computes the row at each end of where {@code holds} shows the equation
+     * true: every addend is the same straight function of the value there, so a row between the
+     * two ends is computed where the ends are. Where an end is missing, nothing may stop a row.
+     */
+    private static <P> boolean rowsAtTheEnds(WhereAnEquationHolds holds, List<Term<P>> terms,
+                                             int at, BigInteger weightHere,
+                                             BigInteger weightThere, BigInteger against,
+                                             ExactRatio constant, RowsComputed arithmetic) {
+        BigInteger least = holds.shown().least();
+        BigInteger most = holds.shown().greatest();
+        if (least == null || most == null) {
+            return !arithmetic.stopsAtASize() && !arithmetic.mayStopARow();
+        }
+        for (BigInteger value : new BigInteger[] {least, most}) {
+            BigInteger[] beside = against.subtract(weightHere.multiply(value))
+                    .divideAndRemainder(weightThere);
+            if (beside[1].signum() != 0) {
+                return false;
+            }
+            ExactRatio here = ExactRatio.of(value);
+            ExactRatio there = ExactRatio.of(beside[0]);
+            if (!arithmetic.rowIsComputed(() -> new ExactRatio[] {
+                    ExactRatio.of(weightHere).times(here).orNull(),
+                    ExactRatio.of(weightThere).times(there).orNull(),
+                    constant.negated()},
+                    () -> valuesByKey(terms, i -> i == at ? here : there))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static BigInteger ceilDividedBy(BigInteger number, BigInteger by) {
+        BigInteger[] both = number.divideAndRemainder(by);
+        return both[1].signum() != 0 && both[1].signum() == by.signum()
+                ? both[0].add(BigInteger.ONE) : both[0];
+    }
+
+    private static BigInteger floorDividedBy(BigInteger number, BigInteger by) {
+        BigInteger[] both = number.divideAndRemainder(by);
+        return both[1].signum() != 0 && both[1].signum() != by.signum()
+                ? both[0].subtract(BigInteger.ONE) : both[0];
+    }
+
+    /** The whole numbers {@code bounds} holds, or null where an end is no number. */
+    private static WholeNumberSet wholeNumbersOf(NumericDomain.Bounds bounds) {
+        BigInteger low = bounds.min() == null ? null : bounds.min().wholeAdmitted(true);
+        BigInteger high = bounds.max() == null ? null : bounds.max().wholeAdmitted(false);
+        if ((bounds.min() != null && low == null) || (bounds.max() != null && high == null)) {
+            return null;
+        }
+        return WholeNumberSet.ofRuns(WholeNumberRuns.one(low, high));
     }
 
     /**
