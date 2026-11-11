@@ -93,6 +93,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         out.put("a string being one of a language",
                 "List.any(t -> String.matches(\"[A-Z]{2}[0-9]\", t), String.split(\";\", i.s))");
         out.put("some element being a value", "List.contains(i.key, i.keys)");
+        out.put("some element being a value written", "List.contains(\"K\", i.keys)");
         out.put("a string inside another", "String.contains(i.key, i.s)");
         out.put("the last element of a value",
                 "match Map.get(i.key, List.indexBy(k -> k, i.keys)) with"

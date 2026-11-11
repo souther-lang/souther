@@ -1081,8 +1081,7 @@ public sealed interface BorderQuantity
                 }
                 case Proposition.OfTheWays ways -> said(ways.written());
                 case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                     Proposition.InTheStrings _, Proposition.SameValue _,
-                     Proposition.StringInside _, Proposition.LastToHold _,
+                     Proposition.InTheStrings _, Proposition.SameValue _,                     Proposition.StringInside _, Proposition.LastToHold _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _ ->
                         stated.spelledOut();
@@ -1097,8 +1096,7 @@ public sealed interface BorderQuantity
                 // A count is written as a comparison, which binds tighter than a join.
                 case Proposition.SoManyHold _, Proposition.Always _, Proposition.Some _,
                      Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                     Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,                     Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> said(part);
             };

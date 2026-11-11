@@ -32,6 +32,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.values.Operand;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.semantics.ConditionJoin;
@@ -1710,18 +1711,16 @@ final class DemandReading {
                                      var _) ->
                     List.of(new Read.Narrows(at,
                             CasesLeft.of(Refinement.of(new Case.Presence(holds)))));
-            // A map's key being another position's value, read at one element of the map: the
-            // map holds an entry filed under it.
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
-                                       DecisionSubject.AnInput(TermPath other, var _), boolean _,
-                                       var _)
-                    when keyOf(one, other) != null -> ofAnEntryKeyedAs(keyOf(one, other), stated,
-                    read);
+            // A map's key being another position's value, or a value written, read at one element
+            // of the map: the map holds an entry filed under it.
+            case Proposition.SameValue same when keyOf(same) != null ->
+                    ofAnEntryKeyedAs(keyOf(same), stated, read);
             // A part of an element being the value at a position outside it, both on an order: the
             // difference of the two held at nought, which a region places and a composer writes the
             // element toward as it does for any other relation between them.
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
-                                       DecisionSubject.AnInput(TermPath other, var _),
+                                       Operand.At<DecisionSubject>(
+                                               DecisionSubject.AnInput(TermPath other, var _)),
                                        boolean holds, var _)
                     when aPartOfAnElementAgainstAnotherPosition(one, other, read) ->
                     List.of(ofAFormOfTheInput(LinearForm.difference(
@@ -1730,7 +1729,8 @@ final class DemandReading {
             // Two positions of the row being one value, or not, which is what a row writes at
             // them.
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
-                                       DecisionSubject.AnInput(TermPath other, var _),
+                                       Operand.At<DecisionSubject>(
+                                               DecisionSubject.AnInput(TermPath other, var _)),
                                        boolean holds, var _)
                     when RowDemand.OneValueAtBoth.of(one, other, holds) != null ->
                     List.of(new Read.Demands(RowDemand.OneValueAtBoth.of(one, other, holds)));
@@ -1865,13 +1865,7 @@ final class DemandReading {
             // What a container holding a value asks of an element is that it be that value, which
             // a composer writes into the container and no region narrows by. The element itself:
             // the key a map files it under being a value is no value the map holds.
-            List<AnElementsWay> these = part instanceof Proposition.SameValue(
-                    DecisionSubject.AnInput(TermPath one, var _),
-                    DecisionSubject.AnInput(TermPath at, var _), boolean holds, var _)
-                    && one.equals(held.element())
-                    ? List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(at)
-                            : new RowDemand.DifferentFrom(at)))
-                    : keyedWays(part, held, element);
+            List<AnElementsWay> these = memberWays(part, held, element);
             choices.add(these != null ? these
                     : waysOf(projected(part, read, projection), element, everyElement, some,
                     read));
@@ -2262,7 +2256,7 @@ final class DemandReading {
      */
     private static List<Read> ofAnEntryKeyedAs(TermPath map, Proposition stated,
                                                 InputReading read) {
-        List<AnElementsWay> ways = keyedWays(stated, map, elementOf(map));
+        List<AnElementsWay> ways = memberWays(stated, map, elementOf(map));
         if (ways == null) {
             return List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
         }
@@ -2270,32 +2264,62 @@ final class DemandReading {
     }
 
     /**
-     * The map one of {@code one} and {@code other} is the keys of, where the other is no position
-     * of it — or null where neither is a map's keys, or both stand at the same map.
+     * The map a sameness is about the keys of: one of the two values it relates is a key of it and
+     * the other is a value written or the value at a position outside it — or null where it is
+     * not about a map's keys.
      */
-    private static TermPath keyOf(TermPath one, TermPath other) {
-        TermPath map = one.mapOfTheKeys() != null ? one.mapOfTheKeys() : other.mapOfTheKeys();
-        TermPath at = one.mapOfTheKeys() != null ? other : one;
-        return map == null || at.isAtOrUnder(map) ? null : map;
+    private static TermPath keyOf(Proposition.SameValue same) {
+        if (!(same.one() instanceof DecisionSubject.AnInput(TermPath one, var _))) {
+            return null;
+        }
+        Operand<TermPath> other = same.other().placedAs(DemandReading::positionOf);
+        if (other == null) {
+            return null;
+        }
+        TermPath at = other.place().orElse(null);
+        TermPath map = one.mapOfTheKeys() != null ? one.mapOfTheKeys()
+                : at == null ? null : at.mapOfTheKeys();
+        TermPath outside = one.mapOfTheKeys() != null ? at : one;
+        return map == null || (outside != null && outside.isAtOrUnder(map)) ? null : map;
+    }
+
+    /** The position {@code subject} stands at, or null where it is no value of the input. */
+    private static TermPath positionOf(DecisionSubject subject) {
+        return subject instanceof DecisionSubject.AnInput(TermPath at, var _) ? at : null;
     }
 
     /**
-     * What an element of the map at {@code held} is asked where {@code part} says its key is, or is
-     * not, the value at another position — or null where {@code part} says no such thing.
+     * What an element of the container at {@code held} is asked where {@code part} says its
+     * element, or its key where it is a map's, is the value at another position or a value
+     * written — or null where {@code part} says no such thing.
+     *
+     * <p>A value written stands at no position, so nothing is read from the row for it: what a row
+     * has to do is to hold that value, or not to, in the container.
      */
-    private static List<AnElementsWay> keyedWays(Proposition part, TermPath held,
-                                                 List<TermPath> element) {
-        if (!(part instanceof Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
-                DecisionSubject.AnInput(TermPath other, var _), boolean holds, var _))) {
+    private static List<AnElementsWay> memberWays(Proposition part, TermPath held,
+                                                  List<TermPath> element) {
+        if (!(part instanceof Proposition.SameValue(
+                DecisionSubject.AnInput(TermPath one, var _), Operand<DecisionSubject> other,
+                boolean holds, var _))) {
             return null;
         }
+        Operand<TermPath> against = other.placedAs(DemandReading::positionOf);
+        if (against == null) {
+            return null;
+        }
+        if (one.equals(held.element())) {
+            return List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(against)
+                    : new RowDemand.DifferentFrom(against)));
+        }
+        // The key of an entry, whichever side of the sameness it is written on.
         TermPath key = held.key();
-        TermPath at = one.equals(key) ? other : other.equals(key) ? one : null;
-        if (at == null || inside(at, element)) {
+        Operand<TermPath> keyedAs = one.equals(key) ? against
+                : against.place().filter(key::equals).isPresent() ? new Operand.At<>(one) : null;
+        if (keyedAs == null || keyedAs.place().filter(at -> inside(at, element)).isPresent()) {
             return null;
         }
-        return List.of(AnElementsWay.asking(holds ? new RowDemand.KeyedAs(at)
-                : new RowDemand.NotKeyedAs(at)));
+        return List.of(AnElementsWay.asking(holds ? new RowDemand.KeyedAs(keyedAs)
+                : new RowDemand.NotKeyedAs(keyedAs)));
     }
 
     /**

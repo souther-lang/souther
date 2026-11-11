@@ -213,7 +213,7 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                 behavior greet : (name: String, xs: List<Int>) -> Int
                     depends on known
                 let greet (name, xs, known) =
-                    if known(name) && List.contains(0, xs) then 1 else 0
+                    if known(name) && List.contains(List.length(xs), xs) then 1 else 0
                 example greet
                     | "both" : ("a", [0]) with known = true -> 1
                     | "unknown" : ("b", [0]) with known = false -> 0

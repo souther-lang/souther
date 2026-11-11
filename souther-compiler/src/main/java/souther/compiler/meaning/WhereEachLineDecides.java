@@ -2003,8 +2003,9 @@ public final class WhereEachLineDecides {
                 case Proposition.Some _, Proposition.Always _, Proposition.Compared _,
                      Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
                      Proposition.InTheStrings _, Proposition.SameValue _,
-                     Proposition.StringInside _, Proposition.LastToHold _,
-                     Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.StringInside _,
+                     Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _ -> stated;
             };
         }

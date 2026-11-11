@@ -17,6 +17,8 @@ import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -228,7 +230,8 @@ public sealed interface Proposition {
             // string and no container's element.
             case InTheStrings _ -> false;
             case SameValue same -> mayBeAnElementOf(same.one(), container)
-                    || mayBeAnElementOf(same.other(), container);
+                    || (same.otherSubject() != null
+                            && mayBeAnElementOf(same.otherSubject(), container));
             case StringInside inside -> mayBeAnElementOf(inside.inner(), container)
                     || mayBeAnElementOf(inside.outer(), container);
             case LastToHold last -> isAnElementOf(last.position(), container);
@@ -569,28 +572,47 @@ public sealed interface Proposition {
     }
 
     /**
-     * Two subjects holding the same value, or not — what a container holding a value asks of one
-     * of its elements.
+     * A subject holding the same value as another subject, or as a value the source wrote, or not
+     * — what a container holding a value asks of one of its elements.
+     *
+     * <p>A value written stands at no position and is no {@link DecisionSubject}, which is a value
+     * a row controls, so it is the other side as an {@link Operand} and never the first. It is a
+     * {@link Value}, the thing it denotes and not the text it was written with.
      *
      * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record SameValue(DecisionSubject one, DecisionSubject other, boolean holds, Spelling spelling)
-            implements Proposition {
+    record SameValue(DecisionSubject one, Operand<DecisionSubject> other, boolean holds,
+                     Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
             return spelling.hashCode();
         }
 
-        public SameValue(DecisionSubject one, DecisionSubject other, boolean holds) {
+        public SameValue(DecisionSubject one, Operand<DecisionSubject> other, boolean holds) {
             this(one, other, holds, null);
+        }
+
+        public SameValue(DecisionSubject one, DecisionSubject other, boolean holds) {
+            this(one, new Operand.At<>(other), holds, null);
         }
 
         public SameValue {
             if (one == null || other == null) {
-                throw new IllegalArgumentException("a sameness is of two subjects");
+                throw new IllegalArgumentException("a sameness is of a subject and what it is"
+                        + " against");
             }
-            spelling = Spelling.of(one.spelled() + (holds ? " == " : " /= ") + other.spelled());
+            spelling = Spelling.of(one.spelled() + (holds ? " == " : " /= ") + switch (other) {
+                case Operand.At<DecisionSubject>(DecisionSubject subject) -> subject.spelled();
+                case Operand.Written<DecisionSubject>(Value value) -> value.identity();
+            });
+        }
+
+        /** The other subject, or null where the other is a value written. Read for every row a
+         *  statement is put to, so it allocates nothing. */
+        public DecisionSubject otherSubject() {
+            return other instanceof Operand.At<DecisionSubject>(DecisionSubject subject)
+                    ? subject : null;
         }
 
         @Override
@@ -2071,7 +2093,7 @@ public sealed interface Proposition {
             // Of the input, and of no answer.
             case InTheStrings _ -> false;
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
-                    || same.other() instanceof DecisionSubject.AnAnswer;
+                    || same.otherSubject() instanceof DecisionSubject.AnAnswer;
             case StringInside inside -> anAnswerIn(inside.inner()) || anAnswerIn(inside.outer());
             case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _,
                  WhereItAnswers _, OfTheWays _ ->
@@ -2282,10 +2304,11 @@ public sealed interface Proposition {
      * values are one is stated once a count is made of it.
      */
     public static List<TermPath> positionsHeldEqual(Proposition stated) {
-        if (stated instanceof SameValue(DecisionSubject one, DecisionSubject other, boolean holds,
-                var _)) {
+        if (stated instanceof SameValue(DecisionSubject one, Operand<DecisionSubject> other,
+                boolean holds, var _)) {
             return holds && one instanceof DecisionSubject.AnInput(TermPath at, var _)
-                    && other instanceof DecisionSubject.AnInput(TermPath alsoAt, var _)
+                    && other instanceof Operand.At<DecisionSubject>(
+                            DecisionSubject.AnInput(TermPath alsoAt, var _))
                     ? List.of(at, alsoAt) : null;
         }
         if (!(stated instanceof Compared(Relation relation, boolean holds, var _, var _))

@@ -97,6 +97,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.Operand;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.UnreadReason;
@@ -548,7 +549,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!(some.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
                 || !(some.ofTheElement() instanceof Proposition.SameValue(
                         DecisionSubject.AnInput(TermPath one, var _),
-                        DecisionSubject.AnInput(TermPath other, var _), boolean equal, var _))
+                        Operand.At<DecisionSubject>(
+                                DecisionSubject.AnInput(TermPath other, var _)),
+                        boolean equal, var _))
                 || !equal || one.isAtOrUnder(container) == other.isAtOrUnder(container)) {
             return this;
         }

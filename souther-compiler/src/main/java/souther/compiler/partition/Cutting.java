@@ -17,6 +17,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.values.Operand;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -2273,10 +2274,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<Proposition.SameValue> same = new ArrayList<>();
         sameValuesIn(stated, same);
         if (same.size() == 1 && same.getFirst() instanceof Proposition.SameValue(
-                DecisionSubject.AnInput(TermPath one, var _),
-                DecisionSubject.AnInput(TermPath other, var _), boolean _, Spelling _)) {
-            UndividedByARelation two = UndividedByARelation.ofTwoPositions(one, other);
-            return stated instanceof Proposition.Some some ? two.searchedBy(some) : two;
+                DecisionSubject.AnInput(TermPath one, var _), Operand<DecisionSubject> other,
+                boolean _, Spelling _)) {
+            // Against a value written, the value at one position is held for whether it is the
+            // same: no order is asked of it, so no line is drawn on the position.
+            UndividedByARelation relation = switch (other) {
+                case Operand.At<DecisionSubject>(DecisionSubject.AnInput(TermPath at, var _)) ->
+                        UndividedByARelation.ofTwoPositions(one, at);
+                case Operand.Written<DecisionSubject> _ -> UndividedByARelation.amongTheValuesAt(one);
+                default -> null;
+            };
+            if (relation != null) {
+                return stated instanceof Proposition.Some some ? relation.searchedBy(some)
+                        : relation;
+            }
         }
         List<Proposition.StringInside> inside = new ArrayList<>();
         stringsInsideIn(stated, inside);
@@ -2334,18 +2345,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // Which strings a string is one of is read where the rules about a position's strings
             // are, and is no line of numbers. Of the elements of a container it is the same
             // statement of each element, so that some element is in a language is no more a
-            // relation than that some element is a case.
+            // relation than that some element is a case. And of the elements, or the keys, of a
+            // container it is whether one is a value the source wrote, which no relation of two
+            // positions says.
             case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
                     && (statesNoRelation(some.ofTheElement())
-                            || some.ofTheElement() instanceof Proposition.InTheStrings);
+                            || some.ofTheElement() instanceof Proposition.InTheStrings
+                            || some.ofTheElement() instanceof Proposition.SameValue(
+                                    var _, Operand.Written<DecisionSubject> _, var _, var _));
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
                  Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
                     stated.partsHeld().stream().allMatch(Cutting::statesNoRelation);
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}). And which strings a string is one of, which is
             // read where the rules about a position's strings are, and is no line of numbers.
-            case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
-                 Proposition.StringInside _, Proposition.Unread _, Proposition.LastToHold _,
+            case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,                 Proposition.StringInside _, Proposition.Unread _, Proposition.LastToHold _,
                  Proposition.OnAnApplication _, Proposition.SomeReachable _,
                  Proposition.InTheStrings _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
@@ -2456,12 +2470,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     private static boolean relates(Proposition stated, List<FilingCoordinate> out) {
         return switch (stated) {
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
-                                       DecisionSubject.AnInput(TermPath other, var _), boolean _,
-                                       Spelling _) -> {
-                for (TermPath each : List.of(one, other)) {
-                    if (!out.contains(FilingCoordinate.at(each))) {
-                        out.add(FilingCoordinate.at(each));
+            // What a sameness relates is the places of its subjects: against a value written, the
+            // place of the one alone.
+            case Proposition.SameValue same when same.one() instanceof DecisionSubject.AnInput
+                    && (same.otherSubject() == null
+                            || same.otherSubject() instanceof DecisionSubject.AnInput) -> {
+                for (DecisionSubject each : same.otherSubject() == null ? List.of(same.one())
+                        : List.of(same.one(), same.otherSubject())) {
+                    FilingCoordinate at = FilingCoordinate.at(each.inputPosition());
+                    if (!out.contains(at)) {
+                        out.add(at);
                     }
                 }
                 yield true;

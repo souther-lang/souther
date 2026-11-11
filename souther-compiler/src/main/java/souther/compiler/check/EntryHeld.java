@@ -13,6 +13,7 @@ import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
@@ -58,10 +59,30 @@ public final class EntryHeld {
     public record Stated(Core container, Core key, ValueAsked valueIn) {}
 
     /**
-     * What a rule asks of the map at {@code container}: the place standing at the key, and the
-     * numbers the value under it is to be one of, or null where nothing is asked of the value.
+     * What a rule asks of the map at {@code container}: the key, which is the value at a place of
+     * the record or a value the rule writes, and the numbers the value under it is to be one of, or
+     * null where nothing is asked of the value.
      */
-    public record Requirement(RuleKey key, ValueAsked valueIn) {}
+    public record Requirement(Operand<RuleKey> key, ValueAsked valueIn) {
+
+        /** The key being the value at the place {@code at}. */
+        public Requirement(RuleKey at, ValueAsked valueIn) {
+            this(new Operand.At<>(at), valueIn);
+        }
+    }
+
+    /**
+     * What {@code key}, the key a rule of {@code rules} names, is: a place of the record, or a
+     * value the rule writes — or null where it is neither, which no map is built for.
+     */
+    private static Operand<RuleKey> keyOf(RecordRules rules, Core key, Symbols symbols) {
+        RuleKey field = rules.fieldAt(key);
+        if (field != null) {
+            return new Operand.At<>(field);
+        }
+        Value written = WrittenMember.of(key, symbols);
+        return written == null ? null : new Operand.Written<>(written);
+    }
 
     /**
      * {@code clause} read as asking a map for an entry, or null where it asks nothing of the kind.
@@ -302,7 +323,8 @@ public final class EntryHeld {
         for (InvariantStatement one : rules.statements()) {
             Stated stated = entryOf(one, source.newtypes());
             RuleKey where = stated == null ? null : rules.fieldAt(stated.container());
-            RuleKey key = stated == null ? null : rules.fieldAt(stated.key());
+            Operand<RuleKey> key =
+                    stated == null ? null : keyOf(rules, stated.key(), source.symbols());
             if (where != null && key != null) {
                 out.computeIfAbsent(where, _ -> new ArrayList<>())
                         .add(new Requirement(key, stated.valueIn()));
@@ -356,7 +378,8 @@ public final class EntryHeld {
         for (InvariantStatement one : rules.statements()) {
             Stated stated = entryOf(one, world.source().newtypes());
             RuleKey where = stated == null ? null : rules.fieldAt(stated.container());
-            RuleKey key = stated == null ? null : rules.fieldAt(stated.key());
+            Operand<RuleKey> key = stated == null ? null
+                    : keyOf(rules, stated.key(), world.source().symbols());
             if (where != null && key != null) {
                 asked.computeIfAbsent(where, _ -> new ArrayList<>())
                         .add(new Requirement(key, stated.valueIn()));
@@ -408,9 +431,13 @@ public final class EntryHeld {
     private static boolean keysStayFree(RuleKey map, List<Requirement> requirements,
                                         RecordRules rules, List<InvariantStatement> built,
                                         TypeSymbol.AtModule named, RuleReadingContext world) {
+        // A key the rule writes is no place a key is chosen at, so no key stands free there.
         Set<String> keys = new HashSet<>();
         for (Requirement each : requirements) {
-            keys.add(each.key().steps().getFirst());
+            if (each.key().place().isEmpty()) {
+                return false;
+            }
+            keys.add(each.key().place().get().steps().getFirst());
         }
         if (keys.size() != 1 || rules.readAtAll(built, map.steps().getFirst())) {
             return false;
@@ -495,8 +522,11 @@ public final class EntryHeld {
         if (map.steps().size() != 1) {
             return false;
         }
+        // A key that is a place of the record is chosen before the map; one the rule writes is
+        // known already.
         for (Requirement each : requirements) {
-            if (each.key().steps().size() != 1 || each.key().equals(map)) {
+            if (each.key().place().filter(at -> at.steps().size() != 1 || at.equals(map))
+                    .isPresent()) {
                 return false;
             }
         }
@@ -510,8 +540,8 @@ public final class EntryHeld {
      * <p>A conjunction of what the rules ask: the numbers the rules leave together at each place,
      * which are none where they contradict one another.
      */
-    public static Map<RuleKey, ValueAsked> valuesAsked(List<Requirement> requirements) {
-        Map<RuleKey, ValueAsked> out = new LinkedHashMap<>();
+    private static Map<Operand<RuleKey>, ValueAsked> valuesAsked(List<Requirement> requirements) {
+        Map<Operand<RuleKey>, ValueAsked> out = new LinkedHashMap<>();
         for (Requirement each : requirements) {
             if (each.valueIn() != null) {
                 out.merge(each.key(), each.valueIn(), ValueAsked::meet);

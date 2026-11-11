@@ -43,14 +43,19 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
     private final N names;
     private final Symbols symbols;
 
+    /** Which declarations are one value wearing a name, where the reader folds a construction of
+     *  one to the value it wraps; none where it does not. */
+    private final DeclarationNewtypes wearing;
+
     /** What each name came to, by what it stands for where it is read ({@link
      *  ValueStanding.Names#standingOf}), told apart by identity. */
     private final Map<Object, Map<BindingId, Optional<Object>>> folded;
 
-    private FoldedValue(N names, Symbols symbols,
+    private FoldedValue(N names, Symbols symbols, DeclarationNewtypes wearing,
                         Map<Object, Map<BindingId, Optional<Object>>> folded) {
         this.names = names;
         this.symbols = symbols;
+        this.wearing = wearing;
         this.folded = folded;
     }
 
@@ -59,7 +64,20 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
     public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> of(
             Core e, E at, N names, Symbols symbols) {
         // Most expressions read no name, or one standing: a table for a few, not for sixty-four.
-        return new FoldedValue<>(names, symbols, new IdentityHashMap<>(2)).eval(e, at);
+        return new FoldedValue<>(names, symbols, DeclarationNewtypes.NONE,
+                new IdentityHashMap<>(2)).eval(e, at);
+    }
+
+    /**
+     * The same, where a construction of a newtype of {@code wearing} is the value it wraps.
+     *
+     * <p>For a reader that asks for the value a position holds under whatever names it wears —
+     * the value a source writes where a place of a newtype's type is asked for — and not for what
+     * a rule is discharged on, which a construction is not a constant of.
+     */
+    public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> underItsNames(
+            Core e, E at, N names, Symbols symbols, DeclarationNewtypes wearing) {
+        return new FoldedValue<>(names, symbols, wearing, new IdentityHashMap<>(2)).eval(e, at);
     }
 
     /**
@@ -71,7 +89,8 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
      */
     public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> of(
             Core e, E at, N names, Symbols symbols, Kept kept) {
-        return new FoldedValue<>(names, symbols, kept.folded).eval(e, at);
+        return new FoldedValue<>(names, symbols, DeclarationNewtypes.NONE, kept.folded)
+                .eval(e, at);
     }
 
     /**
@@ -110,6 +129,10 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
             case Core.Decimal d -> Optional.of(d.value());
             case Core.Str s -> Optional.of(s.value());
             case Core.Bool b -> Optional.of(b.value());
+            // The value under the names it wears, for a reader that asks for it: a newtype is one
+            // value wearing a name.
+            case Core.Construct worn when worn.values().size() == 1 && wearing.wraps(worn.type()) ->
+                    eval(worn.values().getFirst().value(), at);
             case Core.Neg n -> ConstantAlgebra.negate(eval(n.operand(), at).orElse(null));
             case Core.Binary b -> binary(b, at);
             case Core.PreservedCall call -> call(call, at);

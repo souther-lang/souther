@@ -80,7 +80,7 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
                 "mb <= r.upperBound then", "mb.value + n <= r.upperBound.value then"),
                 "gradeRowFor(averageOf(pa), averageOf(pb)).grade",
                 "gradeRowFor(averageOf(pa), averageOf(pb),"
-                        + " List.length(List.filter(ys -> List.contains(0, ys), w.xs))).grade");
+                        + " List.length(List.filter(ys -> List.contains(List.length(ys), ys), w.xs))).grade");
     }
 
     private static String replaced(String in, String what, String with) {
