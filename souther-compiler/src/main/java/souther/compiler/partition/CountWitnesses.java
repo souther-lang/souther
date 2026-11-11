@@ -393,18 +393,27 @@ public final class CountWitnesses {
         Map<TermPath, List<ValuesAStatementNames.Named>> named = ValuesAStatementNames.of(stated);
         Map<List<String>, List<FixtureTemplate>> told = new LinkedHashMap<>();
         for (TermPath place : PositionsAStatementReads.of(stated).orElse(List.of())) {
-            // The keys of a map the element holds are told apart by the map: one holding the value
-            // the statement names as a key, and one holding none, beside what the map's own type
-            // tells apart.
-            if (place.mapOfTheKeys() != null) {
-                List<String> map = fieldsBelow(container.element(), place.mapOfTheKeys());
-                List<FixtureTemplate> maps = map == null ? List.of()
-                        : mapsTold(Witnesses.typeAt(element, map, reading),
+            // The keys of a map the element holds, and the elements of a list or a set it holds,
+            // are told apart by the collection: one holding the value the statement names there,
+            // and one holding none, beside what the collection's own type tells apart.
+            TermPath collection = place.mapOfTheKeys() != null ? place.mapOfTheKeys()
+                    : !place.steps().isEmpty()
+                    && place.steps().getLast() instanceof TermPath.Step.Element
+                    ? place.prefix(place.steps().size() - 1) : null;
+            List<String> fieldsToIt =
+                    collection == null ? null : fieldsBelow(container.element(), collection);
+            // A place that is an element of the container being counted is no such collection:
+            // it is read as the place it is, below.
+            if (fieldsToIt != null || place.mapOfTheKeys() != null) {
+                List<FixtureTemplate> collections = fieldsToIt == null ? List.of()
+                        : collectionsTold(Witnesses.typeAt(element, fieldsToIt, reading),
+                                place.mapOfTheKeys() != null,
                                 named.getOrDefault(place, List.of()), reading);
-                if (!maps.isEmpty()) {
-                    List<FixtureTemplate> both = new ArrayList<>(told.getOrDefault(map, List.of()));
-                    maps.stream().filter(each -> !both.contains(each)).forEach(both::add);
-                    told.put(map, RowSearch.upTo(both, stopped));
+                if (!collections.isEmpty()) {
+                    List<FixtureTemplate> both =
+                            new ArrayList<>(told.getOrDefault(fieldsToIt, List.of()));
+                    collections.stream().filter(each -> !both.contains(each)).forEach(both::add);
+                    told.put(fieldsToIt, RowSearch.upTo(both, stopped));
                 }
                 continue;
             }
@@ -449,38 +458,44 @@ public final class CountWitnesses {
     }
 
     /**
-     * The maps of {@code type} that tell apart what a statement names as their keys: one holding
-     * none, and one holding each value named, filed under a value its entries are written with —
-     * or none where {@code type} is no map, or a value to file under a key is not written.
+     * The collections of {@code type} that tell apart what a statement names as their keys, where
+     * {@code ofTheKeys}, or as their elements: one holding none, and one holding each value named
+     * — a map filing it under a value its entries are written with — or none where {@code type}
+     * is not such a collection, or a value named is not written at the type the collection holds.
      */
-    private static List<FixtureTemplate> mapsTold(Type type,
-                                                  List<ValuesAStatementNames.Named> names,
-                                                  RuleReadingContext reading) {
+    private static List<FixtureTemplate> collectionsTold(Type type, boolean ofTheKeys,
+                                                         List<ValuesAStatementNames.Named> names,
+                                                         RuleReadingContext reading) {
         if (type == null || names.isEmpty()) {
             return List.of();
         }
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
-        if (!(view.shape() instanceof Shape.Mapping mapping)) {
-            return List.of();
-        }
-        Proposals filed = Partitions.representativesOf(mapping.value(), reading);
-        FixtureTemplate none = WornNames.collectionHolding(view, List.of(), source);
-        if (filed.isEmpty() || none == null) {
+        Type held = switch (view.shape()) {
+            case Shape.Mapping mapping when ofTheKeys -> mapping.key();
+            case Shape.Sequence sequence when !ofTheKeys -> sequence.element();
+            default -> null;
+        };
+        FixtureTemplate none = held == null ? null
+                : WornNames.collectionHolding(view, List.of(), source);
+        Proposals filed = view.shape() instanceof Shape.Mapping mapping
+                ? Partitions.representativesOf(mapping.value(), reading) : Proposals.NONE;
+        if (none == null || (ofTheKeys && filed.isEmpty())) {
             return List.of();
         }
         List<FixtureTemplate> out = new ArrayList<>();
         out.add(none);
         for (ValuesAStatementNames.Named each : names) {
-            FixtureTemplate key = switch (each) {
+            FixtureTemplate value = switch (each) {
                 case ValuesAStatementNames.Named.Numeric number ->
-                        Partitions.writtenNumberAt(mapping.key(), number.at(), reading);
+                        Partitions.writtenNumberAt(held, number.at(), reading);
                 case ValuesAStatementNames.Named.Written text ->
-                        Witnesses.writtenAs(text.at(), mapping.key(), reading);
+                        Witnesses.writtenAs(text.at(), held, reading);
             };
-            FixtureTemplate holding = key == null ? null : WornNames.collectionHolding(view,
-                    List.of(FixtureTemplate.entry(key, filed.values().getFirst())), source);
+            FixtureTemplate holding = value == null ? null : WornNames.collectionHolding(view,
+                    List.of(ofTheKeys ? FixtureTemplate.entry(value, filed.values().getFirst())
+                            : value), source);
             if (holding != null && !out.contains(holding)) {
                 out.add(holding);
             }

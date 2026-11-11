@@ -29,7 +29,8 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
     private static final String DECLARATIONS = """
             module probe
 
-            data Line = { code: String, rates: Map<String, Int> }
+            data Line = { code: String, rates: Map<String, Int>, tags: List<String>,
+                          nums: Set<Int>, amts: List<Decimal>, flags: List<Bool> }
             """;
 
     private static final String BEHAVIOR = """
@@ -51,6 +52,14 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
             // The key is written.
             new Case("List.length(List.filter(l -> Map.containsKey(\"USD\", l.rates), lines))"
                     + " == k", true),
+            // The same of the elements a list or a set holds, of any kind of value written.
+            new Case("List.length(List.filter(l -> List.contains(\"K\", l.tags), lines)) == k",
+                    true),
+            new Case("List.length(List.filter(l -> Set.contains(7, l.nums), lines)) == k", true),
+            new Case("List.length(List.filter(l -> List.contains(1.5m, l.amts), lines)) == k",
+                    true),
+            new Case("List.length(List.filter(l -> List.contains(true, l.flags), lines)) == k",
+                    true),
             // A map that must not hold the key is the other class of the same place.
             new Case("List.length(List.filter(l -> Bool.not(Map.containsKey(\"USD\", l.rates)),"
                     + " lines)) == k", true),
