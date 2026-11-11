@@ -658,7 +658,9 @@ class RunnerTest {
         Runner.Program program = Runner.compile(file);
         Runner.RunException tooLongANumber = assertThrows(Runner.RunException.class,
                 () -> program.run("top", longNumber));
-        assertTrue(tooLongANumber.getMessage().contains("is not valid JSON"),
+        assertTrue(tooLongANumber.getMessage().contains("past a limit of the reader"),
+                tooLongANumber.getMessage());
+        assertFalse(tooLongANumber.getMessage().contains("not valid JSON"),
                 tooLongANumber.getMessage());
         assertFalse(tooLongANumber.getMessage().contains("nests deeper"),
                 tooLongANumber.getMessage());
@@ -667,7 +669,9 @@ class RunnerTest {
         String longName = "{\"" + "n".repeat(50001) + "\":1}";
         Runner.RunException tooLongAName = assertThrows(Runner.RunException.class,
                 () -> program.run("top", longName));
-        assertTrue(tooLongAName.getMessage().contains("is not valid JSON"),
+        assertTrue(tooLongAName.getMessage().contains("past a limit of the reader"),
+                tooLongAName.getMessage());
+        assertFalse(tooLongAName.getMessage().contains("not valid JSON"),
                 tooLongAName.getMessage());
         assertFalse(tooLongAName.getMessage().contains("nests deeper"), tooLongAName.getMessage());
     }
@@ -883,6 +887,16 @@ class RunnerTest {
             assertTrue(inField.getMessage().contains("/v/1"), inField.getMessage());
             assertFalse(inField.getMessage().contains("not valid JSON"), inField.getMessage());
         }
+
+        // a Decimal of more digits than the reader takes is a Decimal all the same
+        Runner.RunException tooManyDigits = assertThrows(Runner.RunException.class,
+                () -> program.run("bare", "1".repeat(1001)));
+        assertTrue(tooManyDigits.getMessage().contains("past a limit of the reader"),
+                tooManyDigits.getMessage());
+        assertFalse(tooManyDigits.getMessage().contains("not valid JSON"),
+                tooManyDigits.getMessage());
+        assertTrue(tooManyDigits.localized(java.util.Locale.JAPANESE).contains("上限"),
+                tooManyDigits.localized(java.util.Locale.JAPANESE));
 
         Runner.RunException truncated = assertThrows(Runner.RunException.class,
                 () -> program.run("bare", "1E-"));

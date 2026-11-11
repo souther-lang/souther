@@ -710,7 +710,9 @@ public final class Runner {
      * {@code Decimal}; the mapper throws a bare {@code NumberFormatException} for it while building
      * the node, and nothing else in a read throws one, since every syntax error is a
      * {@code StreamReadException}. It is the run having no room to write the number, and is said as
-     * that and not as malformed input (spec §jvm-abort).
+     * that and not as malformed input (spec §jvm-abort). The reader's other limits — a number, a name
+     * or a document too long — refuse text that is as much JSON, and are said as the reader's limit
+     * with its own wording, for the same reason.
      */
     private static JsonNode parseJson(String input) {
         JsonParser parser = JSON.createParser(input);
@@ -724,6 +726,9 @@ public final class Runner {
             }
             if (e instanceof NumberFormatException) {
                 throw fail("run.input.outofroom", depthPath(where));
+            }
+            if (e instanceof StreamConstraintsException) {
+                throw fail("run.input.limit", depthPath(where), e.getMessage());
             }
             throw fail("run.input.badjson", e.getMessage());
         } finally {
@@ -761,7 +766,7 @@ public final class Runner {
      * <p>Standing at {@code refusalDepth} is the depth refusal and can be nothing else. A value
      * refused for another reason stands shallower: the reader admits scalars at every level up to
      * the limit, so the deepest a long number can be refused at is one level short of where a
-     * refusal for depth stands. Every other constraint keeps the wording it had.
+     * refusal for depth stands. Every other constraint is the reader's limit and not a depth.
      */
     private static boolean refusedForDepth(Exception failure, TokenStreamContext where,
                                            int refusalDepth) {
