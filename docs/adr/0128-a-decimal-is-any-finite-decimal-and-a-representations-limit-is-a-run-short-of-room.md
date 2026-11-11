@@ -79,9 +79,9 @@ still have to prove where they do not.
 - `OutOfRoom` is reachable from inputs a few bytes long, such as a decimal written at the end of the
   scales a `BigDecimal` keeps. It was an abort before as well; what changed is what it says. A boundary
   handles it as the platform failing.
-- `Decimal.toInt` asks whether the value has more whole digits than an `Int` before it builds the whole
-  number, so a value no `Int` holds is the language's refusal even where building it would have been a
-  shortage.
+- A narrowing to an `Int` — `Decimal.toInt`, `Rational.toInt`, `Rational.toWholeNumber` — asks the
+  bound of an `Int` of the value's order, in one place, before it builds the whole number, so a value
+  no `Int` holds is the language's refusal even where building it would have been a shortage.
 - Reading the definitions of a record showed a defect the decimal partiality had been hiding. A place a
   rule defines as a number made of others was certified exact as a box; its values are the image of the
   number, and a product of a quantity of one or two and a price up to ten is never eleven. Only a
@@ -93,6 +93,11 @@ still have to prove where they do not.
   intermediate a `BigDecimal` has none for, such as the power of ten between two far scales. Those
   are worked out on the exact rational and narrowed once, so a run is short of room only where the
   answer is.
+- The cost of ordinary decimals is unchanged. They are the same `BigDecimal`s through the same
+  operations, and the narrowings through the exact rational run only where a `BigDecimal` has no room.
+  Profiled with JFR over the conformance corpus and the analysis tests this change touches, against
+  the commit it starts from, the samples differed by less than the runs of either commit differ
+  among themselves, and no sample landed in the code added.
 - An example row whose evaluation is short of room is undecided and not failed, and the check says
   so (E1941): the expected answer is a decimal the language defines, and nothing about the model was
   found out.

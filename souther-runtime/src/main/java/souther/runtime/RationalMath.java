@@ -1,15 +1,15 @@
 package souther.runtime;
 
 import java.math.BigDecimal;
-import java.util.Objects;
 
 /**
  * The {@code Rational} operators, as the runtime that owns them (ADR-0112).
  *
  * <p>Exact arithmetic has no overflow to check: the value is whatever the operands make. What is bounded
  * is what a representation holds — the width of an exponent, and a decimal's scale — and {@link Rational}
- * aborts on both for itself, at the point a value the bound excludes is asked for rather than at a step on
- * the way to one. What a numerator or a denominator may be is not among them: the operands these operators
+ * is short of room on both for itself ({@link OutOfRoom}), at the point a value past them is asked for
+ * rather than at a step on the way to one. The bound of an {@code Int} is the language's and not the
+ * representation's, and is asked where a narrowing to one asks it ({@link IntNarrowing}). What a numerator or a denominator may be is not among them: the operands these operators
  * read into a Rational include every {@code Decimal}, whose unscaled value is a whole number of whatever
  * size the platform holds, so a bound there would refuse a comparison over values the language says are
  * comparable. So what is here
@@ -24,10 +24,6 @@ import java.util.Objects;
  * sides and every reader below it — a container, a hash, an order — sees one kind of value.
  */
 public final class RationalMath {
-
-    /** The ends of what an {@code Int} holds, as the values the exact narrowing compares against. */
-    private static final Rational LEAST_INT = Rational.of(Long.MIN_VALUE);
-    private static final Rational GREATEST_INT = Rational.of(Long.MAX_VALUE);
 
     private RationalMath() {}
 
@@ -93,19 +89,11 @@ public final class RationalMath {
      * different sentences, one saying the number has a fraction and the other that an {@code Int}
      * cannot hold it, and only the first is a business outcome.
      *
-     * <p>Which of the two it is, is asked before the digits are. A whole number whose exponents run
-     * past what an {@code Int} holds has hundreds of millions of digits, and building them to find that
-     * out says the same thing the comparison says for nothing — the comparison reading bounds on the
-     * logs and the digits never being what this answers with.
+     * <p>Which of the two it is, is asked before the digits are, where every narrowing to an
+     * {@code Int} asks it ({@link IntNarrowing}).
      */
     public static Object toWholeNumber(Rational r) {
-        if (!r.isWhole()) {
-            return NotWhole.INSTANCE;
-        }
-        if (r.compareTo(LEAST_INT) < 0 || r.compareTo(GREATEST_INT) > 0) {
-            throw new ConstraintViolation("Rational does not fit in an Int: " + r);
-        }
-        return Objects.requireNonNull(r.asWholeNumber()).longValueExact();
+        return toWholeNumber(r, WorkCheckpoint.NONE);
     }
 
     /** {@code Rational.toFiniteDecimal(r)}: the {@code Decimal} this exactly is, or
@@ -118,7 +106,9 @@ public final class RationalMath {
 
     /**
      * {@code Rational.toInt(mode, r)}: the whole number this rounds to by {@code mode}. The lossy
-     * narrowing, which answers a value because the caller said what to do with the fraction.
+     * narrowing, which answers a value because the caller said what to do with the fraction. A
+     * value no {@code Int} holds aborts, asked as every narrowing to an {@code Int} asks it
+     * ({@link IntNarrowing}).
      */
     public static long toInt(RoundingMode mode, Rational r) {
         return toInt(mode, r, WorkCheckpoint.NONE);
@@ -182,10 +172,7 @@ public final class RationalMath {
         if (!r.isWhole()) {
             return NotWhole.INSTANCE;
         }
-        if (r.compareTo(LEAST_INT, checkpoint) < 0 || r.compareTo(GREATEST_INT, checkpoint) > 0) {
-            throw new ConstraintViolation("Rational does not fit in an Int: " + r);
-        }
-        return Objects.requireNonNull(r.asWholeNumber(checkpoint)).longValueExact();
+        return IntNarrowing.exactly(r, checkpoint, () -> "the Rational " + r);
     }
 
     /** {@link #toFiniteDecimal(Rational)}, paid for to {@code checkpoint}. */
@@ -196,12 +183,7 @@ public final class RationalMath {
 
     /** {@link #toInt(RoundingMode, Rational)}, paid for to {@code checkpoint}. */
     public static long toInt(RoundingMode mode, Rational r, WorkCheckpoint checkpoint) {
-        BigDecimal whole = r.asDecimal(0, DecimalMath.toJava(mode), checkpoint);
-        try {
-            return whole.longValueExact();
-        } catch (ArithmeticException _) {
-            throw new ConstraintViolation("Rational does not fit in an Int: " + r);
-        }
+        return IntNarrowing.rounded(r, DecimalMath.toJava(mode), checkpoint, () -> "the Rational " + r);
     }
 
     /** {@link #toDecimal(long, RoundingMode, Rational)}, paid for to {@code checkpoint}. */

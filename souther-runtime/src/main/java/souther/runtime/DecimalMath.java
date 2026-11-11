@@ -39,9 +39,6 @@ public final class DecimalMath {
 
     private DecimalMath() {}
 
-    /** How many whole digits the largest {@code Int} has: {@code 9223372036854775807}. */
-    private static final long DIGITS_OF_THE_LARGEST_INT = 19;
-
     /**
      * The shortage an answer this run cannot write is reported as.
      *
@@ -241,27 +238,12 @@ public final class DecimalMath {
      * mode.
      *
      * <p>A value too large for {@code Int} aborts, as an Int overflow does ({@link IntMath}): it is a
-     * model bug rather than a business result. That is asked of the digits before the whole number
-     * is built, because a value with more whole digits than an {@code Int} has is no {@code Int}
-     * whatever it rounds to, and building it is what a {@code BigDecimal} has no room for at the far
-     * end of its scales: the answer about the {@code Int} is the language's, and not this run's.
+     * model bug rather than a business result, and it is the language's answer and not this run's,
+     * so it is asked where every narrowing to an {@code Int} asks it ({@link IntNarrowing}).
      */
     public static long toInt(RoundingMode mode, BigDecimal d) {
-        if (d.signum() != 0 && (long) d.precision() - d.scale() > DIGITS_OF_THE_LARGEST_INT) {
-            throw new ConstraintViolation("Decimal does not fit in an Int: " + describe(d));
-        }
-        BigDecimal whole;
-        try {
-            whole = d.setScale(0, toJava(mode));
-        } catch (ArithmeticException _) {
-            whole = exactlyAt(Rational.of(d), 0, mode,
-                    () -> "the whole number " + describe(d) + " rounds to");
-        }
-        try {
-            return whole.longValueExact();
-        } catch (ArithmeticException _) {
-            throw new ConstraintViolation("Decimal does not fit in an Int: " + describe(d));
-        }
+        return IntNarrowing.rounded(d, toJava(mode), WorkCheckpoint.NONE,
+                () -> "the Decimal " + describe(d));
     }
 
     /** {@code Decimal.round(scale, mode, d)}: {@code d} rounded to {@code scale} places by
@@ -488,10 +470,10 @@ public final class DecimalMath {
         return compare(a, b);
     }
 
-    /** {@link #toInt(RoundingMode, BigDecimal)}, paid for to {@code checkpoint} first. */
+    /** {@link #toInt(RoundingMode, BigDecimal)}, paid for to {@code checkpoint} as it is worked
+     *  out. */
     public static long toInt(RoundingMode mode, BigDecimal d, WorkCheckpoint checkpoint) {
-        payRescaled(d, 0, checkpoint);
-        return toInt(mode, d);
+        return IntNarrowing.rounded(d, toJava(mode), checkpoint, () -> "the Decimal " + describe(d));
     }
 
     /** {@link #round(long, RoundingMode, BigDecimal)}, paid for to {@code checkpoint} first, where
@@ -590,7 +572,7 @@ public final class DecimalMath {
 
     /** Pays for {@code d} brought to {@code places}: multiplied by a power of ten to go up, divided
      *  by one to go down. A nought is a nought at every scale, and costs the reading. */
-    private static void payRescaled(BigDecimal d, int places, WorkCheckpoint checkpoint) {
+    static void payRescaled(BigDecimal d, int places, WorkCheckpoint checkpoint) {
         if (checkpoint == WorkCheckpoint.NONE) {
             return;
         }
