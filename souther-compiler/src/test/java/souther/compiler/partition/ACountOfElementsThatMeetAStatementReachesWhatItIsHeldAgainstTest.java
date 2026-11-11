@@ -104,6 +104,10 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                         true),
                 new Case("List.length(List.filter(l -> l.code == \"USD\", lines)) == k", "k",
                         true),
+                // A number the statement reads and the relation compares is the relation's to
+                // divide as well: it is held against the count, which the statement's own
+                // comparison of it does not say.
+                new Case("List.length(List.filter(l -> l.qty > k, lines)) == k", "k", false),
                 // The places the statement reads are the statement's own comparison's to divide,
                 // and the count leaves none of them unread.
                 new Case("List.length(List.filter(l -> l.qty > 5, lines)) == k", "lines[*].qty",
@@ -124,10 +128,15 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                         true),
                 new Case("List.length(List.filter(x -> x == \"USD\", pair.value)) == k", "k",
                         true),
-                // A set holds each element once, and what one element meets and another fails are
-                // two values already; a map's entries are a key and a value, built apart.
-                new Case("Set.size(Set.filter(x -> x > 5, members)) == k", "k", true),
-                new Case("Set.size(Set.filter(x -> x > 5, wornSet.value)) == k", "k", true),
+                // A set holds each element once: a row of it shows the statement holding of one
+                // element and failing of another, which is the count at none and at one, and no
+                // row of it shows two elements the statement holds of. A statement that no second
+                // element meets takes the count no further, and the number beside it is left
+                // where it is not shown.
+                new Case("Set.size(Set.filter(x -> x > 5, members)) == k", "k", false),
+                new Case("Set.size(Set.filter(x -> x > 5, wornSet.value)) == k", "k", false),
+                new Case("Set.size(Set.filter(x -> x == 0, members)) == k", "k", false),
+                // A map's entries are a key and a value, built apart.
                 new Case("Map.size(Map.filterEntries((key, v) -> v > 5, prices)) == k", "k",
                         false),
                 // What a way says of the size of the container is no more than the most the count

@@ -95,9 +95,13 @@ public final class CountWitnesses {
      * @param container which parameter is the container
      * @param kept      the element the statement holds of
      * @param dropped   the element it fails of
+     * @param overAgain whether the container may hold an element over again, so that a row holds
+     *                  the one the statement holds of as many times as it likes and the count takes
+     *                  every value up to its size; a container that holds each element once shows
+     *                  no more than the one
      */
     public record Witness(List<FixtureTemplate> inputs, int container, FixtureTemplate kept,
-                          FixtureTemplate dropped) {
+                          FixtureTemplate dropped, boolean overAgain) {
 
         public Witness {
             inputs = List.copyOf(inputs);
@@ -109,8 +113,10 @@ public final class CountWitnesses {
      * behavior answering — or, where none was found, the figures the search stopped at first and
      * where the runs of the rows it tried stopped.
      *
-     * <p>Only of a count of a parameter's own elements, of a container that may hold an element
-     * over again: the rows a count is read over hold the witness's elements so many times each.
+     * <p>Only of a count of a parameter's own elements, of a list or a set. Where it is a list the
+     * rows a count is read over hold the witness's elements so many times each; a set holds each
+     * once, and what the witness shows of it is the one element and the other
+     * ({@link Witness#overAgain}).
      *
      * @param named the values the model names at each parameter's type, tried before anything
      *              else is
@@ -178,7 +184,7 @@ public final class CountWitnesses {
                     stopped);
         }
         Container holder = new Container(at, container, spelled::holding, worn,
-                repeats ? fewestHeld(container, read) : 1);
+                repeats ? fewestHeld(container, read) : 1, repeats);
         each.set(at, each.get(at).subList(0, 1));
         // The rows of those, nearest first, as many as the search tries: one whose other values
         // leave no element to hold the statement of and another to fail it is no row shown that
@@ -261,7 +267,8 @@ public final class CountWitnesses {
             ran.stopped().ifPresent(runs::add);
             return Optional.empty();
         }
-        return Optional.of(new Witness(shown, container.at(), kept, dropped));
+        return Optional.of(
+                new Witness(shown, container.at(), kept, dropped, container.overAgain()));
     }
 
     /**
@@ -602,10 +609,11 @@ public final class CountWitnesses {
      * @param wrap  the container holding the elements it is handed, as a value of the type of the
      *              parameter, under the names that type wears
      * @param size  the fewest elements the boundary builds it with ({@link #fewestHeld})
+     * @param overAgain whether it may hold an element over again
      */
     private record Container(int at, TermPath place,
                              Function<List<FixtureTemplate>, FixtureTemplate> wrap,
-                             List<TypeSymbol> worn, int size) {
+                             List<TypeSymbol> worn, int size, boolean overAgain) {
 
         /** What the boundary built of the container, with the names it wears taken off. */
         ObservedValue inside(ObservedValue built) {

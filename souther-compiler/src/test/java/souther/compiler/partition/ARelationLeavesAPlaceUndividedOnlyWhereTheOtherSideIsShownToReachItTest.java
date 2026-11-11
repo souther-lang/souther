@@ -1617,7 +1617,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 read.rules().inners(), read.rules().symbols());
         ComparisonWitnesses.AtAComparison everyCount = _ -> new CountWitnesses.Sought(Optional.of(
                 new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
-                        FixtureTemplate.integer(1))), Set.of(), Set.of());
+                        FixtureTemplate.integer(1), true)), Set.of(), Set.of());
         DecisionSubject.AnInput currency =
                 new DecisionSubject.AnInput(deals.element().then("currency"));
         Map<Proposition, Boolean> undividedBy = new LinkedHashMap<>();
@@ -1733,7 +1733,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aCountIsLetThroughOnlyForTheCallTheReadingSaysItWasReadOff() {
         CountWitnesses.Sought found = new CountWitnesses.Sought(Optional.of(
                 new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
-                        FixtureTemplate.integer(1))), Set.of(), Set.of());
+                        FixtureTemplate.integer(1), true)), Set.of(), Set.of());
         ComparisonWitnesses.AtComparisons always = _ -> _ -> found;
         String filtered = countedInline("x.value > 2");
         ReadComparisons read = ReadComparisons.ofTheAnalysis(filtered, "m", always);

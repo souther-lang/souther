@@ -5673,11 +5673,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             container)) {
                 continue;
             }
-            if (!countIsShownEveryWhere(counted, container, conditions, witnesses, stopped,
-                    runsStopped)) {
+            CountWitnesses.Witness shown = rowShowingTheCount(counted, container, conditions,
+                    witnesses, stopped, runsStopped);
+            // Every size is a row of a container that may hold the element over again: how many
+            // distinct elements one that holds each once holds of is not what a row shows.
+            if (shown == null || !shown.overAgain()) {
                 return null;
             }
-            countsRead.addAll(placesTheStatementReads(sides.get(part)));
+            countsRead.addAll(placesTheStatementReads(part));
             return new Within(new WhatARelationLeavesUndivided.WithinTheWhole(part, 1 - part,
                     BigInteger.ZERO, BigInteger.ZERO), container, true);
         }
@@ -5687,7 +5690,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * {@code terms}, each that is how many elements of an input container meet a statement made to
      * take every value a row shows it takes where {@code asked} and a row shows the number at
-     * every count of every size ({@link #countIsShownEveryWhere}): from none up to how many the
+     * every count of every size ({@link #rowShowingTheCount}): from none up to how many the
      * container may hold ({@link #howManyAreHeld}), since a row holds that many elements it holds
      * of and the rest it fails of. A count a row does not show is left as {@code termsAlong} has
      * it, with nothing shown that it takes.
@@ -5704,16 +5707,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int at = 0; at < sides.size(); at++) {
             Quantity.HowManyMeet counted = sides.get(at).counted();
             TermPath container = counted == null ? null : inputContainerOf(counted);
-            if (container == null || !countIsShownEveryWhere(counted, container, conditions,
-                    witnesses, stopped, runsStopped)) {
+            CountWitnesses.Witness shown = container == null ? null
+                    : rowShowingTheCount(counted, container, conditions, witnesses, stopped,
+                            runsStopped);
+            if (shown == null) {
                 continue;
             }
             NumericDomain.Bounds held = howManyAreHeld(container, read, along, true);
             if (held == null || !held.holdsAValue()) {
                 continue;
             }
-            CountTakes taken = countTakes(howManyMayBeHeld(container, read, along), held);
-            countsRead.addAll(placesTheStatementReads(sides.get(at)));
+            CountTakes taken = countTakes(howManyMayBeHeld(container, read, along), held,
+                    shown.overAgain());
+            countsRead.addAll(placesTheStatementReads(at));
             WhatARelationLeavesUndivided.Term<FilingCoordinate> was = terms.get(at);
             // Made of the places it reads: the container, and what the statement reads in an
             // element or outside the container. No term over one of them is apart from the count,
@@ -5746,12 +5752,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * of the elements it holds, some the statement holds of and the rest it fails of, so the count
      * is none up to its size, and what the size is left is the most it is and never the least.
      * Where nothing says how many the container may hold, the count lies from none on.
+     *
+     * <p>That is of a container that may hold an element over again ({@code overAgain}): a row
+     * holds the one the statement holds of as many times as it likes. A container that holds each
+     * element once shows the statement holding of one element and failing of another and no
+     * more — how many distinct elements it holds of is the statement's and the element type's, and
+     * a row that holds of two shows nothing of three — so the count is shown at none and one.
      */
-    static CountTakes countTakes(NumericDomain.Bounds mayBeHeld, NumericDomain.Bounds areHeld) {
+    static CountTakes countTakes(NumericDomain.Bounds mayBeHeld, NumericDomain.Bounds areHeld,
+                                 boolean overAgain) {
         Endpoint none = Endpoint.inclusive(Count.of(0));
+        Endpoint mostShown = overAgain ? areHeld.max()
+                : Endpoint.upper(areHeld.max(), Endpoint.inclusive(Count.of(1)));
         return new CountTakes(
                 new NumericDomain.Bounds(none, mayBeHeld == null ? null : mayBeHeld.max()),
-                new NumericDomain.Bounds(none, areHeld.max()));
+                new NumericDomain.Bounds(none, mostShown));
     }
 
     /** The container of the input {@code counted} counts the elements of, or null where it counts
@@ -5763,22 +5778,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether a row shows the number of elements of {@code container} that meet a statement at
-     * every count of every size: one element it holds of and one it fails of, beside one value of
-     * everything else, at a row that gets to this relation ({@link CountWitnesses}).
+     * The row that shows the number of elements of {@code container} that meet a statement: one
+     * element it holds of and one it fails of, beside one value of everything else, at a row that
+     * gets to this relation ({@link CountWitnesses}), or null where there is none. What counts the
+     * row shows is the witness's to say ({@link CountWitnesses.Witness#overAgain}).
      *
      * <p>Where the search stopped short of everything it would have tried, the figures it stopped
      * at go into {@code stopped}, and where the runs of the rows it tried stopped into
      * {@code runsStopped}: nothing is shown, and a run allowed more may show it.
      */
-    private static boolean countIsShownEveryWhere(Quantity.HowManyMeet counted,
-                                                  TermPath container, List<OnAWay> conditions,
-                                                  ComparisonWitnesses.AtAComparison witnesses,
-                                                  Set<Figure> stopped,
-                                                  Set<WhereARunStopped> runsStopped) {
+    private static CountWitnesses.Witness rowShowingTheCount(Quantity.HowManyMeet counted,
+                                                             TermPath container,
+                                                             List<OnAWay> conditions,
+                                                             ComparisonWitnesses.AtAComparison
+                                                                     witnesses,
+                                                             Set<Figure> stopped,
+                                                             Set<WhereARunStopped> runsStopped) {
         Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
         if (read.isEmpty()) {
-            return false;
+            return null;
         }
         // What the statement reads is the element's own, or a place under another parameter:
         // the container itself — how many it holds, another of its elements, a value taken of
@@ -5790,20 +5808,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             if (place.head().equals(container.head())) {
-                return false;
+                return null;
             }
             outside.add(place);
         }
         if (picksOut(conditions, container, outside)) {
-            return false;
+            return null;
         }
         CountWitnesses.Sought sought = witnesses.of(counted);
         if (sought.found().isEmpty()) {
             stopped.addAll(sought.stoppedAt());
             runsStopped.addAll(sought.runsStopped());
-            return false;
+            return null;
         }
-        return true;
+        return sought.found().get();
     }
 
     /**
@@ -6778,11 +6796,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * count leaves them undivided, which is what a place a relation does not part is, and says
      * nothing of them past that. Where the count is not shown to be reached nothing is said, and
      * they are left as the comparison is filed at them.
+     *
+     * <p>Not one the relation's other sides read as well: {@code count(x > k) == k} holds
+     * {@code k} against the count, which the statement's comparison of it says nothing of, and the
+     * statement leaves the count nothing at the {@code k} it makes empty.
      */
-    private static List<FilingCoordinate> placesTheStatementReads(Side side) {
-        return side.counted() == null ? List.of()
-                : PositionsAStatementReads.of(side.counted().ofTheElement()).orElse(List.of())
-                        .stream().<FilingCoordinate>map(FilingCoordinate::at).toList();
+    private List<FilingCoordinate> placesTheStatementReads(int at) {
+        Side side = sides.get(at);
+        if (side.counted() == null) {
+            return List.of();
+        }
+        List<FilingCoordinate> beside = new ArrayList<>();
+        for (int other = 0; other < sides.size(); other++) {
+            if (other != at) {
+                beside.addAll(sides.get(other).madeOf());
+            }
+        }
+        return PositionsAStatementReads.of(side.counted().ofTheElement()).orElse(List.of())
+                .stream().<FilingCoordinate>map(FilingCoordinate::at)
+                .filter(place -> beside.stream().noneMatch(place::sharesAPlaceWith)).toList();
     }
 
     /**
