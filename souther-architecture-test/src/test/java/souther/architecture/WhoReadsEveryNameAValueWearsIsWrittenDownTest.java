@@ -353,6 +353,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Witnesses", "holdingAt",
                     "(" + TYPE + "Ljava/util/Map;" + CONTEXT + ")" + PROPOSALS,
                     THE_POSITION),
+            row(PARTITION + "Witnesses", "holdingMany",
+                    "(" + TYPE + "Ljava/math/BigInteger;" + CONTEXT + ")L" + PARTITION
+                            + "FixtureTemplate;",
+                    THE_POSITION),
             row(PARTITION + "Witnesses", "placed",
                     "(" + TYPE + ADMITTED + CONTEXT + "Ljava/util/Set;L" + PARTITION
                             + "Partitions$RulesAround;)L" + PARTITION + "Witnesses$Placed;",

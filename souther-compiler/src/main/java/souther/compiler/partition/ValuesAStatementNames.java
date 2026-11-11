@@ -11,6 +11,8 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Text;
+import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -33,11 +35,13 @@ import java.util.Map;
  * becomes is the type of the place it is named at, an {@code Int} or a {@code Decimal}, which the
  * language does not convert between ({@link Partitions#writtenNumberAt}).
  *
- * <p>Named at a place only where the statement compares the value at that place: the number of a
+ * <p>Named at a place where the statement compares the value at that place: the number of a
  * place itself, which is what a comparison written with a constant tells apart. A measure of a
- * place — how many characters it holds, how many elements — is no value of it, and a value its
- * comparison names is no value to put there; nothing is named for one, since what would be is
- * the place built to have that measure, which a measure alone does not say.
+ * place — how many characters it holds, how many elements — is no value of it, and the number its
+ * comparison names is no value to put there: what is named is a value that holds that many
+ * ({@link Named.Holding}), which the place's type builds ({@link Witnesses#ofSize}). Only the
+ * count of what the place holds as it stands is named so; another number taken of a place
+ * ({@code Time.hour(slot.at)}) is told apart by values no measure of it says how to build.
  *
  * <p>Each form of statement is said here, by the exhaustive switch below, to name values or to
  * name none, so that a form added to {@link Proposition} stops the build here until somebody says
@@ -61,6 +65,11 @@ final class ValuesAStatementNames {
 
         /** A text. */
         record Written(String at) implements Named {}
+
+        /** A value that holds this many: a string of that many characters, a collection of that
+         *  many elements. Which value it is, is what the type of the place builds for that many
+         *  ({@link Witnesses#ofSize}). */
+        record Holding(BigInteger many) implements Named {}
     }
 
     /**
@@ -107,6 +116,10 @@ final class ValuesAStatementNames {
                         case Text text -> named(place, List.of(new Named.Written(text.at())), out);
                     }
                 }
+                TermPath held = howManyHeldAt(term);
+                if (held != null && at instanceof Count count) {
+                    named(held, holdingBeside(besideThe(count.at())), out);
+                }
             }
             // One place weighed against a constant: it is told apart where the form is nought,
             // and at the whole numbers either side of it.
@@ -115,13 +128,45 @@ final class ValuesAStatementNames {
                     return;
                 }
                 Map.Entry<Quantity, ExactRatio> only = form.coefs().entrySet().iterator().next();
-                TermPath place = only.getKey() instanceof DecisionAtom atom ? valueAt(atom) : null;
-                if (place != null && form.constant().negated().dividedBy(only.getValue())
-                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio where)) {
-                    named(place, wholesBeside(where), out);
+                DecisionAtom atom = only.getKey() instanceof DecisionAtom each ? each : null;
+                TermPath place = atom == null ? null : valueAt(atom);
+                TermPath held = atom == null ? null : howManyHeldAt(atom);
+                if ((place != null || held != null)
+                        && form.constant().negated().dividedBy(only.getValue())
+                                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio where)) {
+                    if (place != null) {
+                        named(place, wholesBeside(where), out);
+                    }
+                    if (held != null) {
+                        named(held, holdingBeside(wholesBeside(where)), out);
+                    }
                 }
             }
         }
+    }
+
+    /** The place {@code term} is how many characters or elements of, as it stands, or null where
+     *  it is another number. */
+    private static TermPath howManyHeldAt(DecisionAtom term) {
+        return term instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOf taken, var _)
+                && taken.takenAs() instanceof TakenAs.HowManyItHolds
+                && taken.transformation().equals(ValueTransformation.NONE)
+                ? taken.position() : null;
+    }
+
+    /** What holds each of the numbers {@code counts} says, where it is a whole number of nought or
+     *  more. */
+    private static List<Named> holdingBeside(List<Named> counts) {
+        List<Named> out = new ArrayList<>();
+        for (Named each : counts) {
+            if (each instanceof Named.Numeric(BigDecimal at)
+                    && ExactRatio.of(at).floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger whole)
+                    && whole.signum() >= 0 && ExactRatio.of(at).isWhole()) {
+                out.add(new Named.Holding(whole));
+            }
+        }
+        return out;
     }
 
     /** The place {@code term} is the value at, or null where it is a measure of a place, a number

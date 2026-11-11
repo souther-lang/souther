@@ -1973,7 +1973,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /** A count of the elements meeting a statement, held against a position, divides that
-     *  position as far as the relation shows, and says nothing of the run of it. */
+     *  position as far as the relation shows, and says nothing of the run of it. Where the count
+     *  is not shown to be reached, the places its statement reads are left as the comparison is
+     *  filed at them. */
     @Test
     void aPositionBesideACountOfWhatMeetsAStatementIsAskedOfTheRelation() {
         assertEquals(Map.of("gross", NOT_SHOWN, "ns[*]", NOT_SHOWN),

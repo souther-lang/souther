@@ -45,14 +45,17 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
             data Capped = { items: List<Line> }
                 invariant List.length(items) <= 3
             data RateTable = Map<String, Int>
+            data Items = List<String>
+            data Pair = List<String>
+                invariant List.length(value) >= 2
             """;
 
     private static final String BEHAVIOR = """
 
             behavior %1$s : (lines: List<Line>, rates: Map<Cur, Int>, k: Int, capped: Capped,
                              flags: List<Bool>, names: List<String>, target: String,
-                             wide: List<Wide>, table: RateTable) -> Bool
-            let %1$s (lines, rates, k, capped, flags, names, target, wide, table) = %2$s
+                             wide: List<Wide>, table: RateTable, worn: Items, pair: Pair) -> Bool
+            let %1$s (lines, rates, k, capped, flags, names, target, wide, table, worn, pair) = %2$s
             """;
 
     private static final String PRICED = "Map.get(l.currency, rates)";
@@ -65,7 +68,13 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
             + "Bool.not(w.f9), wide)) == k";
 
     /** A count and the number it is held against, and whether that number is read. */
-    private record Case(String body, String against, boolean read) {}
+    private record Case(String body, String against, boolean read) {
+
+        /** The count and the place that is asked about it: one count is asked of more than one. */
+        String label() {
+            return against + " of " + body;
+        }
+    }
 
     private static final List<Case> CASES = cases();
 
@@ -92,6 +101,12 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                         true),
                 new Case("List.length(List.filter(l -> l.code == \"USD\", lines)) == k", "k",
                         true),
+                // The places the statement reads are the statement's own comparison's to divide,
+                // and the count leaves none of them unread.
+                new Case("List.length(List.filter(l -> l.qty > 5, lines)) == k", "lines[*].qty",
+                        true),
+                new Case("List.length(List.filter(l -> l.code == \"USD\", lines)) == k",
+                        "lines[*].code", true),
                 // The value a number is named at is written as the type of the place writes it.
                 new Case("List.length(List.filter(l -> l.amount > 5.0m, lines)) == k", "k", true),
                 // A statement about the element itself and not a field of it.
@@ -100,6 +115,12 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                 // A collection a newtype wraps is held as that newtype where a statement reads it.
                 new Case("List.length(List.filter(x -> Map.containsKey(x, table.value), names))"
                         + " == k", "k", true),
+                // The container counted is the parameter it is: held as the newtype that wraps it,
+                // and with as many elements as a rule on it asks for.
+                new Case("List.length(List.filter(x -> x == \"USD\", worn.value)) == k", "k",
+                        true),
+                new Case("List.length(List.filter(x -> x == \"USD\", pair.value)) == k", "k",
+                        true),
                 // What a way says of the size of the container is no more than the most the count
                 // is, and the count is none up to that.
                 new Case("if List.length(lines) == 2 then " + flagged + " == k else false", "k",
@@ -108,10 +129,10 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                         true),
                 new Case("if List.length(lines) <= 3 then " + flagged + " == k else false", "k",
                         true),
-                // A measure of a place is no value of it, so what the statement names of one is no
-                // value to put there, and the element is found only where a row supplies it.
+                // A measure of a place is no value of it: what the statement names of one is a
+                // value that holds that many, which the type of the place builds.
                 new Case("List.length(List.filter(l -> String.length(l.code) > 3, lines)) == k",
-                        "k", false),
+                        "k", true),
                 // No element meets the statement, so no row holds the count at anything but none.
                 new Case("List.length(List.filter(l -> l.flag && Bool.not(l.flag), lines)) == k",
                         "k", false),
@@ -145,13 +166,13 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
         for (Case each : CASES) {
             PartitionEvidence evidence = MEASURED.get("case" + at++);
             assertNotNull(evidence, each.body());
-            refused.put(each.body(), evidence.notRead().stream().anyMatch(left ->
+            refused.put(each.label(), evidence.notRead().stream().anyMatch(left ->
                     left.at().equals(each.against())
                             && left.reason() == UndividedPosition.Reason
                                     .RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE));
         }
         Map<String, Boolean> expected = new LinkedHashMap<>();
-        CASES.forEach(each -> expected.put(each.body(), !each.read()));
+        CASES.forEach(each -> expected.put(each.label(), !each.read()));
         assertEquals(expected, refused);
     }
 

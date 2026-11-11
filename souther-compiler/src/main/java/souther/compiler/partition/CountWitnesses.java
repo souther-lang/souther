@@ -14,8 +14,10 @@ import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -138,14 +140,16 @@ public final class CountWitnesses {
         TypeView parameter = inputs.viewOf(inputs.types().get(at));
         // Whether its names can be written is the type's, so a container whose names cannot be has
         // no row to show.
-        if (!(WornNames.of(parameter.wrappers(), source) instanceof WornNames.Spelled spelled)) {
+        List<TypeSymbol> worn = parameter.wrappers();
+        if (!(WornNames.of(worn, source) instanceof WornNames.Spelled spelled)) {
             return Sought.NOTHING;
         }
-        Container holder = new Container(at, container, spelled::holding);
         Set<Figure> stopped = new LinkedHashSet<>();
         Set<WhereARunStopped> runs = new LinkedHashSet<>();
-        // What each parameter may hold, as far as the boundary builds it: the container as what
-        // stands for a list of its element, which the elements tried below take the place of.
+        // What each parameter may hold, as far as the boundary builds it, the container as the
+        // parameter it is: a candidate of a bare list is no value of a parameter that wears a name
+        // or a rule, and the boundary refuses it. The elements tried below take the place of what
+        // the container holds.
         // Every parameter is tried at all its values: what the statement counted turns on may name
         // a parameter the body does not read, and no one has said which are named.
         Set<String> readOutside = new LinkedHashSet<>();
@@ -153,7 +157,7 @@ public final class CountWitnesses {
                 .filter(place -> !place.head().equals(container.head()))
                 .forEach(place -> readOutside.add(place.head()));
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
-                i -> i == at ? Type.list(element) : inputs.types().get(i),
+                inputs.types()::get,
                 i -> readOutside.contains(inputs.parameters().get(i)), _ -> false, reading,
                 building, stopped);
         if (each == null) {
@@ -163,8 +167,12 @@ public final class CountWitnesses {
         // the element's type, tried before what stands for that type.
         List<FixtureTemplate> written = new ArrayList<>();
         for (RowSearch.Built list : each.get(at)) {
-            elementsOf(list.value(), element, reading, written, stopped);
+            elementsOf(ObservedValue.inside(worn, list.value()), element, reading, written,
+                    stopped);
         }
+        Container holder = new Container(at, container, spelled::holding, worn,
+                fewestHeld(at, spelled::holding, written,
+                        ObservedValue.inside(worn, each.get(at).getFirst().value()), building));
         each.set(at, each.get(at).subList(0, 1));
         // The rows of those, nearest first, as many as the search tries: one whose other values
         // leave no element to hold the statement of and another to fail it is no row shown that
@@ -221,7 +229,9 @@ public final class CountWitnesses {
             if (meet == null) {
                 continue;
             }
-            if (meet == 1 && kept == null) {
+            // The container holds the element over again where a rule asks for more than one, so
+            // it holds the statement of all of them or of none.
+            if (meet == container.filled(List.of(each)).size() && kept == null) {
                 kept = each;
             } else if (meet == 0 && dropped == null) {
                 dropped = each;
@@ -235,9 +245,8 @@ public final class CountWitnesses {
         }
         List<FixtureTemplate> both = List.of(kept, dropped);
         Integer meet = metIn(both, container, built, inputs, statement, building);
-        FixtureTemplate whole = container.holding().apply(both);
         List<FixtureTemplate> shown = new ArrayList<>(row);
-        shown.set(container.at(), whole);
+        shown.set(container.at(), container.holding(both));
         if (meet == null || meet != 1) {
             return Optional.empty();
         }
@@ -293,8 +302,8 @@ public final class CountWitnesses {
     private static Integer metIn(List<FixtureTemplate> elements, Container container,
                                  List<ObservedValue> built, BehaviorInputs inputs,
                                  AStatementAtARow statement, RowSearch.Building building) {
-        FixtureTemplate whole = container.holding().apply(elements);
-        Optional<ObservedValue> held = building.build(container.at(), whole);
+        Optional<ObservedValue> held = building.build(container.at(),
+                container.holding(elements));
         if (held.isEmpty()) {
             return null;
         }
@@ -411,6 +420,8 @@ public final class CountWitnesses {
                             Partitions.writtenNumberAt(type, number.at(), reading);
                     case ValuesAStatementNames.Named.Written text ->
                             Witnesses.writtenAs(text.at(), type, reading);
+                    case ValuesAStatementNames.Named.Holding many ->
+                            Witnesses.holdingMany(type, many.many(), reading);
                 };
                 if (written != null && !values.contains(written)) {
                     values.add(written);
@@ -558,20 +569,66 @@ public final class CountWitnesses {
      *  parameter {@code at}, or null where it refuses it. */
     private static ObservedValue builtAlone(FixtureTemplate element, Container container,
                                             RowSearch.Building building) {
-        return building.build(container.at(), container.holding().apply(List.of(element)))
-                .map(held -> held instanceof ObservedValue.Sequence(List<ObservedValue> each)
-                        && each.size() == 1 ? each.getFirst() : null)
+        return building.build(container.at(), container.holding(List.of(element)))
+                .map(held -> container.inside(held)
+                        instanceof ObservedValue.Sequence(List<ObservedValue> each)
+                        && each.size() == container.filled(List.of(element)).size()
+                        ? each.getFirst() : null)
                 .orElse(null);
+    }
+
+    /**
+     * The fewest elements the boundary builds the container with: one, or where a rule keeps it
+     * from holding so few, the first number of copies of an element the model writes in it that
+     * it accepts — no more than the base value it built holds, which it did accept.
+     */
+    private static int fewestHeld(int at, Function<List<FixtureTemplate>, FixtureTemplate> wrap,
+                                  List<FixtureTemplate> written, ObservedValue base,
+                                  RowSearch.Building building) {
+        int most = base instanceof ObservedValue.Sequence(List<ObservedValue> held)
+                ? held.size() : 0;
+        if (!written.isEmpty()) {
+            for (int n = 1; n < most; n++) {
+                if (building.build(at, wrap.apply(Collections.nCopies(n, written.getFirst())))
+                        .isPresent()) {
+                    return n;
+                }
+            }
+        }
+        return Math.max(1, most);
     }
 
     /**
      * The container the elements are counted in, as a parameter of the behavior.
      *
-     * @param at      which parameter it is
-     * @param place   where it stands
-     * @param holding the container holding the elements it is handed, as a value of the type of
-     *                the parameter, under the names that type wears
+     * @param at    which parameter it is
+     * @param place where it stands
+     * @param wrap  the container holding the elements it is handed, as a value of the type of the
+     *              parameter, under the names that type wears
+     * @param size  the fewest elements the boundary builds it with ({@link #fewestHeld})
      */
     private record Container(int at, TermPath place,
-                             Function<List<FixtureTemplate>, FixtureTemplate> holding) {}
+                             Function<List<FixtureTemplate>, FixtureTemplate> wrap,
+                             List<TypeSymbol> worn, int size) {
+
+        /** What the boundary built of the container, with the names it wears taken off. */
+        ObservedValue inside(ObservedValue built) {
+            return ObservedValue.inside(worn, built);
+        }
+
+        /** {@code elements}, with the last of them over again up to the fewest the container is
+         *  held with: the statement holds of the repeats as it does of that element. */
+        List<FixtureTemplate> filled(List<FixtureTemplate> elements) {
+            List<FixtureTemplate> out = new ArrayList<>(elements);
+            while (out.size() < size) {
+                out.add(elements.getLast());
+            }
+            return out;
+        }
+
+        /** The container holding {@link #filled} {@code elements}. */
+        FixtureTemplate holding(List<FixtureTemplate> elements) {
+            return wrap.apply(filled(elements));
+        }
+    }
 }

@@ -22,6 +22,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -623,6 +624,25 @@ final class Witnesses {
             default -> null;
         };
         return written == null ? null : WornNames.under(view.wrappers(), written, source);
+    }
+
+    /**
+     * A value of {@code type} that holds {@code many} — that many characters, that many
+     * elements — under the names that type wears, or null where the type builds none of that
+     * many or the names cannot be written.
+     */
+    static FixtureTemplate holdingMany(Type type, BigInteger many, RuleReadingContext reading) {
+        if (type == null || many.signum() < 0 || many.bitLength() > Integer.SIZE - 2) {
+            return null;
+        }
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        for (FixtureTemplate each : ofSize(view, many.intValue(), List.of(), reading, Set.of())
+                .values()) {
+            return WornNames.under(view.wrappers(), each, source);
+        }
+        return null;
     }
 
     /**

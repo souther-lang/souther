@@ -727,6 +727,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             this(undivided, settled, rowsArrive, stoppedAt, Set.of());
         }
 
+        /** This, with {@code places} left undivided as well: places the relation parts none of,
+         *  which it was shown to reach a count that is made of. */
+        WhatItLeaves alsoUndivided(Set<FilingCoordinate> places) {
+            if (places.isEmpty() || !rowsArrive) {
+                return this;
+            }
+            Set<FilingCoordinate> both = new LinkedHashSet<>(undivided);
+            both.addAll(places);
+            return new WhatItLeaves(both, settled, rowsArrive, stoppedAt, rowsStopped,
+                    mayStopBefore, partnered, gettingThere);
+        }
+
         /**
          * This, with the strings each position's partner can hold. A position so parted is no
          * longer shown undivided: its strings are what the relation shows of it, over the region
@@ -2871,6 +2883,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                    Optional<Set<String>> declined, DemandReading.Answered past,
                                    Optional<List<TakenConstraint>> applied,
                                    ComparisonWitnesses.AtAComparison witnesses) {
+        Set<FilingCoordinate> countsRead = new LinkedHashSet<>();
+        return leftAlong(read, sources, carriers, region, written, remainders, heldWhole,
+                declined, past, applied, witnesses, countsRead).alsoUndivided(countsRead);
+    }
+
+    /**
+     * The same, with the places the statements of the counts shown to be reached read in
+     * {@code countsRead}.
+     */
+    private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
+                                   List<Carrier> carriers, SearchRegion region,
+                                   List<OnAWay> written, WholeNumberRuns remainders,
+                                   boolean heldWhole,
+                                   Optional<Set<String>> declined, DemandReading.Answered past,
+                                   Optional<List<TakenConstraint>> applied,
+                                   ComparisonWitnesses.AtAComparison witnesses,
+                                   Set<FilingCoordinate> countsRead) {
         // A way stating nothing but that the rows are off the line this relation draws — the form
         // held unequal to nought, as `sign == 0` taken the other way holds
         // `Decimal.compare(a, b)` — ties no side to anything: it takes the rows on the line away,
@@ -2938,7 +2967,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         beside.conditions(), remainders, beside.stating(), heldWhole,
                         beside.narrowing(), byTheFormat != null),
                 !offItsLine && heldWhole && remainder == null, conditions, witnesses, stopped,
-                runsStopped, read, along, carriers);
+                runsStopped, read, along, carriers, countsRead);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -3007,7 +3036,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Within lying = offItsLine || !heldWhole || remainder != null ? null
                 : Optional.ofNullable(positionWithinItsWalk(conditions))
                         .orElseGet(() -> countWithinItsContainer(conditions, witnesses, stopped,
-                                runsStopped));
+                                runsStopped, countsRead));
         if (lying != null) {
             WhatARelationLeavesUndivided.WithinTheWhole within = lying.within();
             // How many the container holds takes each of its values in some row where the region
@@ -5631,7 +5660,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private Within countWithinItsContainer(List<OnAWay> conditions,
                                            ComparisonWitnesses.AtAComparison witnesses,
                                            Set<Figure> stopped,
-                                           Set<WhereARunStopped> runsStopped) {
+                                           Set<WhereARunStopped> runsStopped,
+                                           Set<FilingCoordinate> countsRead) {
         if (sides.size() != 2) {
             return null;
         }
@@ -5647,6 +5677,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     runsStopped)) {
                 return null;
             }
+            countsRead.addAll(placesTheStatementReads(sides.get(part)));
             return new Within(new WhatARelationLeavesUndivided.WithinTheWhole(part, 1 - part,
                     BigInteger.ZERO, BigInteger.ZERO), container, true);
         }
@@ -5665,7 +5696,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms, boolean asked,
             List<OnAWay> conditions, ComparisonWitnesses.AtAComparison witnesses,
             Set<Figure> stopped, Set<WhereARunStopped> runsStopped, InputReading read,
-            SearchRegion along, List<Carrier> carriers) {
+            SearchRegion along, List<Carrier> carriers, Set<FilingCoordinate> countsRead) {
         if (!asked) {
             return terms;
         }
@@ -5682,6 +5713,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             CountTakes taken = countTakes(howManyMayBeHeld(container, read, along), held);
+            countsRead.addAll(placesTheStatementReads(sides.get(at)));
             WhatARelationLeavesUndivided.Term<FilingCoordinate> was = terms.get(at);
             // Made of the places it reads: the container, and what the statement reads in an
             // element or outside the container. No term over one of them is apart from the count,
@@ -6736,6 +6768,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
         }
+    }
+
+    /**
+     * The places the statement of the count {@code side} is reads, where it is one, as positions.
+     *
+     * <p>What the statement says of them is a comparison of its own, which divides them where it
+     * is made. The relation it is a term of parts none of them, so a relation shown to reach the
+     * count leaves them undivided, which is what a place a relation does not part is, and says
+     * nothing of them past that. Where the count is not shown to be reached nothing is said, and
+     * they are left as the comparison is filed at them.
+     */
+    private static List<FilingCoordinate> placesTheStatementReads(Side side) {
+        return side.counted() == null ? List.of()
+                : PositionsAStatementReads.of(side.counted().ofTheElement()).orElse(List.of())
+                        .stream().<FilingCoordinate>map(FilingCoordinate::at).toList();
     }
 
     /**
