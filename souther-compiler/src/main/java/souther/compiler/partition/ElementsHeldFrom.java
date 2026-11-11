@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
@@ -9,6 +12,7 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
+import souther.compiler.semantics.MapPart;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +44,22 @@ record ElementsHeldFrom(TermPath position, Proposition where) {
         Objects.requireNonNull(where, "and are held under something, if only nothing");
     }
 
+    /**
+     * The map a list is the keys or the values of, where that map is a position of the input: its
+     * keys or its values are the map's own, in the order the map holds its entries.
+     */
+    private static Optional<ElementsHeldFrom> ofTheMapListed(Denotation list, InputReading read) {
+        AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(list.value()));
+        BoundOperationFacts.Listed listed = applied == null ? null
+                : DefaultBoundOperationFacts.get().listsAPartOf(applied.operation());
+        if (listed == null || listed.part() == MapPart.ENTRIES
+                || !(list.at().pathOf(applied.argument(listed.map()), read.newtypes())
+                        instanceof PathResolution.At(TermPath map))) {
+            return Optional.empty();
+        }
+        return Optional.of(new ElementsHeldFrom(map, WhereAnApplicationIsMade.nothingAsked()));
+    }
+
     /** The position {@code container}'s elements are held from, or empty where they are not
      *  those of one position of the input. */
     static Optional<ElementsHeldFrom> of(Denotation container, InputReading read) {
@@ -49,6 +69,10 @@ record ElementsHeldFrom(TermPath position, Proposition where) {
             return Optional.of(new ElementsHeldFrom(at, WhereAnApplicationIsMade.nothingAsked()));
         }
         Denotation whole = container.at().standing(container.value(), read.symbols(), newtypes);
+        Optional<ElementsHeldFrom> listed = ofTheMapListed(whole, read);
+        if (listed.isPresent()) {
+            return listed;
+        }
         Core fork = Core.withoutStanding(whole.value());
         Choice choice = Choice.of(fork);
         if (choice == null) {

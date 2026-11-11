@@ -124,7 +124,7 @@ final class NeutralForm {
                     ? Position.at(map.value()) : Position.UNREAD;
             Map<Object, Object> out = new LinkedHashMap<>();
             for (Map.Entry<?, ?> e : m.entrySet()) {
-                out.put(of(e.getKey(), key, what), of(e.getValue(), value, what));
+                out.put(asAMapKey(of(e.getKey(), key, what)), of(e.getValue(), value, what));
             }
             return out;
         }
@@ -301,7 +301,7 @@ final class NeutralForm {
                 // Both sides. A key is a position of the same kind as a value, so an inner
                 // collection written in key position is the neutral form of that collection
                 // and not the list of pairs it was written as.
-                m.put(shaped(pair.get(0), Position.at(map.key())),
+                m.put(asAMapKey(shaped(pair.get(0), Position.at(map.key()))),
                         shaped(pair.get(1), Position.at(map.value())));
             }
             return m;
@@ -512,6 +512,16 @@ final class NeutralForm {
             throw new FixtureException("an optional's value cannot be read back: "
                     + unreadable(live, "value", e));
         }
+    }
+
+    /**
+     * The neutral form of a map's key, as the object the map decodes from has it: a key of a map is
+     * the text the key crosses as, and a temporal's neutral form elsewhere is the parsed value.
+     */
+    private static Object asAMapKey(Object neutral) {
+        return neutral instanceof java.time.LocalDate || neutral instanceof java.time.LocalTime
+                || neutral instanceof java.time.LocalDateTime || neutral instanceof java.time.Instant
+                ? neutral.toString() : neutral;
     }
 
     /** Whether a value is a neutral scalar, so it can be shown as written rather than by class name. */

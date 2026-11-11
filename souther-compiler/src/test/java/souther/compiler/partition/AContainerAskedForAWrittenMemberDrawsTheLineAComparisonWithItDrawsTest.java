@@ -44,7 +44,7 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
                           ids: Set<String>, nums: List<Int>, days: List<Date>, n: Int,
                           other: List<String>, groups: List<Group>, s: String, i: Int,
                           times: List<Time>, instants: List<Instant>, ats: List<DateTime>,
-                          emo: List<String> }
+                          emo: List<String>, dated: Map<Date, Int>, byTime: Map<Time, Int> }
 
             behavior nested : (l: Line) -> Bool
             let nested (l) = List.any(g -> g.n > 3 && List.contains("K", g.tags), l.groups)
@@ -131,6 +131,22 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             let hasDay (l) = List.contains(Date("2026-01-05"), l.days)
             behavior another : (l: Line) -> Bool
             let another (l) = Map.containsKey(l.code, l.rates)
+            behavior listedKeys : (l: Line) -> Bool
+            let listedKeys (l) = List.contains("USD", Map.keys(l.rates))
+            behavior listedValues : (l: Line) -> Bool
+            let listedValues (l) = List.contains(5, Map.values(l.rates))
+            behavior anyKey : (l: Line) -> Bool
+            let anyKey (l) = List.any(k -> k == "USD", Map.keys(l.rates))
+            behavior anyValue : (l: Line) -> Bool
+            let anyValue (l) = List.any(v -> v == 5, Map.values(l.rates))
+            behavior anyDatedKey : (l: Line) -> Bool
+            let anyDatedKey (l) = List.any(k -> k == Date("2026-01-05"), Map.keys(l.dated))
+            behavior anotherListed : (l: Line) -> Bool
+            let anotherListed (l) = List.contains(l.code, Map.keys(l.rates))
+            behavior datedKey : (l: Line) -> Bool
+            let datedKey (l) = Map.containsKey(Date("2026-01-05"), l.dated)
+            behavior timedKey : (l: Line) -> Bool
+            let timedKey (l) = Map.containsKey(Time("09:00"), l.byTime)
 
             behavior guarded : (l: Line) -> Int
             let guarded (l) = if Map.containsKey("USD", l.rates) then 1 else 0
@@ -301,10 +317,38 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
                 .getOrDefault("mapped", List.of()));
     }
 
+    /** The keys and the values of a map are asked for a member as the map is: the same line at the
+     *  same points, with the same rows. */
+    @Test
+    void theKeysAndTheValuesOfAMapAreAskedAsTheMapIs() {
+        assertEquals(pointsOf("keyed"), pointsOf("listedKeys"));
+        assertEquals(Set.of("l.rates[*] 5"), linesOf("listedValues"));
+        assertEquals(certifiedPointsOf("numbered"), certifiedPointsOf("listedValues"));
+    }
+
+    /** A map is composed holding the entry a line asks for beside the size the way asks of it, so
+     *  a comparison with the keys or the values of a map has its rows as one with a list's. */
+    @Test
+    void aMapHoldsTheEntryALineAsksForBesideTheSizeTheWayAsksOfIt() {
+        assertEquals(pointsOf("keyed"), pointsOf("anyKey"));
+        assertEquals(certifiedPointsOf("numbered"), certifiedPointsOf("anyValue"));
+        assertEquals(certifiedPointsOf("hasDay"), certifiedPointsOf("anyDatedKey"));
+    }
+
+    /** A map keyed by a date or a time is handed to a row as the text its keys cross as, so the
+     *  rows at the points of the line are found as they are for a list of dates or of times. */
+    @Test
+    void aMapKeyedByATemporalHasRowsAtTheLineOfItsKey() {
+        assertEquals(Set.of("l.dated[key] 2026-01-05"), linesOf("datedKey"));
+        assertEquals(certifiedPointsOf("hasDay"), certifiedPointsOf("datedKey"));
+        assertEquals(certifiedPointsOf("hasTime"), certifiedPointsOf("timedKey"));
+    }
+
     /** The member being another place of the row relates two values and divides neither. */
     @Test
     void aMemberThatIsAnotherPlaceDrawsNoLine() {
         assertEquals(Set.of(), linesOf("another"));
+        assertEquals(Set.of(), linesOf("anotherListed"));
     }
 
     private enum Kind { TEXT, KEY, NUMBER, DAY }
