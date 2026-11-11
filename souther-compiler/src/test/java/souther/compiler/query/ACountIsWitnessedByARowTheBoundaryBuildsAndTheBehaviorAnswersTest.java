@@ -212,7 +212,7 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
         Optional<CountWitnesses.Witness> found = witnessIn(compiled(forecast(notDollars, "")));
         assertTrue(found.isPresent(), "the other key is tried");
         assertEquals("Deal { currency = CurrencyCode(\"JPY\"), amount = 0m }",
-                found.get().kept().text());
+                found.get().one().text());
     }
 
     /** A behavior that depends on another runs only with it stood in for, which nothing here

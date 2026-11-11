@@ -32,8 +32,8 @@ class AFieldOfARecordAFoldCarriesIsReadAsAFoldOfThatFieldTest {
 
             data State = { score: Int, misses: Int, zeros: Int }
 
-            behavior state : (xs: List<Int>) -> State
-            let state (xs) = List.fold((s, x) -> State {
+            behavior folded : (xs: List<Int>) -> State
+            let folded (xs) = List.fold((s, x) -> State {
                     score = s.score + x,
                     misses = if x == 0 then s.misses + 1 else 0,
                     zeros = if x == 0 then s.zeros + 1 else s.zeros
@@ -95,16 +95,16 @@ class AFieldOfARecordAFoldCarriesIsReadAsAFoldOfThatFieldTest {
     /** A call of a behavior whose body is the walk is the walk. */
     @Test
     void throughACallAFieldIsReadAsWritten() {
-        String score = out("state(xs).score >= 10");
+        String score = out("folded(xs).score >= 10");
         assertTrue(score.contains("read as out/List.sum(xs): = 10"), score);
-        String zeros = out("state(xs).zeros >= 3");
+        String zeros = out("folded(xs).zeros >= 3");
         assertTrue(zeros.contains("#xs [xs[*] == 0]"), zeros);
     }
 
     /** A streak is no fold any form says, field or not: its runs place the rows. */
     @Test
     void aFieldThatStartsOverIsMeasuredOnItsRuns() {
-        String report = out("state(xs).misses >= 3");
+        String report = out("folded(xs).misses >= 3");
 
         assertTrue(report.contains(ON_ITS_RUNS), report);
         assertFalse(report.contains("not read: comparison"), report);

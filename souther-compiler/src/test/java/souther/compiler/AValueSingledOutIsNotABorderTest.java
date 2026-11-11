@@ -35,10 +35,10 @@ class AValueSingledOutIsNotABorderTest {
                 data A
                 data B
 
-                behavior b : (r: R) -> A | B
-                let b (r) = if %s then A else B
+                behavior pick : (r: R) -> A | B
+                let pick (r) = if %s then A else B
 
-                example b
+                example pick
                     | "one" : (R { cost = 1, a = 1, other = 2 }) -> B
                 """;
 

@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A row of a behavior's inputs at which a counted statement holds of one element of the container
@@ -94,13 +95,73 @@ public final class CountWitnesses {
     }
 
     /**
-     * The row shown: every input, with the container holding the element the statement holds of
-     * and then the one it fails of.
+     * What a count of a container's elements asks of each element, and which value of it is
+     * counted: the statement the elements meet, and where the count is of different values and
+     * not of elements, the place the values are taken at.
+     *
+     * @param container   where the container is a parameter's own, no step under it
+     * @param statement   what an element is asked: the statement counted of a count of elements
+     *                    that meet it, what keeps an element of a count of the values of those a
+     *                    statement keeps, and nothing of a count of every element's value
+     * @param differentAt where the values counted stand, empty where elements are counted
+     */
+    record Asked(TermPath container, Proposition statement,
+                 Optional<Quantity.TheValue> differentAt) {
+
+        /**
+         * What {@code count} asks, or null where it is not of the elements of a container a
+         * parameter holds, or keeps its elements by what the elements holding a value come to,
+         * which no one element answers.
+         */
+        static Asked of(Quantity.CountedOverAContainer count) {
+            if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
+                    || !container.steps().isEmpty()) {
+                return null;
+            }
+            return switch (count) {
+                case Quantity.HowManyMeet meet ->
+                        new Asked(container, meet.statement(), Optional.empty());
+                case Quantity.HowManyDifferent different ->
+                        new Asked(container, different.statement(),
+                                Optional.of(different.ofTheElement()));
+                case Quantity.HowManyDifferentMeet different
+                        when !different.across() && different.meeting()
+                                instanceof Quantity.HowManyDifferentMeet.Selection.OfEachElement ->
+                        new Asked(container, different.statement(),
+                                Optional.of(different.ofTheElement()));
+                case Quantity.HowManyDifferentMeet _ -> null;
+            };
+        }
+
+        /** The places the values counted are taken at, none where elements are counted. */
+        List<TermPath> valuePlaces() {
+            return differentAt.map(Quantity.TheValue::places).orElse(List.of());
+        }
+
+        /** Every place the count reads of an element or outside the container: what the statement
+         *  reads and where the values stand — or empty where the statement is not read through. */
+        Optional<List<TermPath>> reads() {
+            return PositionsAStatementReads.of(statement).map(read -> {
+                List<TermPath> out = new ArrayList<>(read);
+                valuePlaces().stream().filter(place -> !out.contains(place)).forEach(out::add);
+                return out;
+            });
+        }
+    }
+
+    /**
+     * The row shown: every input, with the container holding two elements that tell the count
+     * apart — for a count of the elements that meet a statement, one it holds of and then one it
+     * fails of; for a count of different values, two that the statement keeps and that hold
+     * different values.
      *
      * @param inputs    the row, one fixture per parameter
      * @param container which parameter is the container
-     * @param kept      the element the statement holds of
-     * @param dropped   the element it fails of
+     * @param one       the first of the two
+     * @param other     the second
+     * @param failing   an element the statement fails of that the boundary builds a container of,
+     *                  or null where none was found — or where nothing is asked of an element, so
+     *                  that there is none to fail
      * @param overAgain whether the container is a list, which may hold an element over again, so
      *                  that a row holds the one the statement holds of as many times as it likes
      *                  and the count takes every value up to its size; a container that holds each
@@ -109,8 +170,8 @@ public final class CountWitnesses {
      *                  what {@code UndividedByARelation#howManyAreHeld} says of it, and a count is
      *                  shown only as far as that
      */
-    public record Witness(List<FixtureTemplate> inputs, int container, FixtureTemplate kept,
-                          FixtureTemplate dropped, boolean overAgain) {
+    public record Witness(List<FixtureTemplate> inputs, int container, FixtureTemplate one,
+                          FixtureTemplate other, FixtureTemplate failing, boolean overAgain) {
 
         public Witness {
             inputs = List.copyOf(inputs);
@@ -119,8 +180,9 @@ public final class CountWitnesses {
 
     /**
      * A row at which {@code count}'s statement holds of one element and fails of another, the
-     * behavior answering — or, where none was found, the figures the search stopped at first and
-     * where the runs of the rows it tried stopped.
+     * behavior answering — or, for a count of different values, a row whose container holds two
+     * elements the statement keeps that hold different values — or, where none was found, the
+     * figures the search stopped at first and where the runs of the rows it tried stopped.
      *
      * <p>Only of a count of a parameter's own elements, of a list or a set. Where it is a list the
      * rows a count is read over hold the witness's elements so many times each; a set holds each
@@ -133,13 +195,15 @@ public final class CountWitnesses {
      *              run held it: tried next, each written back from what was built, and the
      *              elements of the container among them tried before what stands for the element
      */
-    public static Sought of(Quantity.HowManyMeet count, String behavior, InputReading read,
-                            List<List<FixtureTemplate>> named, List<List<ObservedValue>> taken,
-                            RowSearch.Building building, RowSearch.Running running) {
-        if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
-                || !container.steps().isEmpty()) {
+    public static Sought of(Quantity.CountedOverAContainer count, String behavior,
+                            InputReading read, List<List<FixtureTemplate>> named,
+                            List<List<ObservedValue>> taken, RowSearch.Building building,
+                            RowSearch.Running running) {
+        Asked asked = Asked.of(count);
+        if (asked == null) {
             return Sought.NOTHING;
         }
+        TermPath container = asked.container();
         // A list may hold an element over again, which is how it is held to the fewest elements
         // its rules ask; a set holds each once, and what one element meets and another fails are
         // two values already.
@@ -155,7 +219,7 @@ public final class CountWitnesses {
         }
         RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
                 read.domain().machines(), read.domain().today());
-        AStatementAtARow statement = AStatementAtARow.of(count.ofTheElement(), behavior,
+        AStatementAtARow statement = AStatementAtARow.of(asked.statement(), behavior,
                 read.quantities());
         // The container as the parameter it is: a list a newtype wraps is written as the newtype.
         RuleReadingSource source = reading.source();
@@ -175,7 +239,7 @@ public final class CountWitnesses {
         // Every parameter is tried at all its values: what the statement counted turns on may name
         // a parameter the body does not read, and no one has said which are named.
         Set<String> readOutside = new LinkedHashSet<>();
-        PositionsAStatementReads.of(count.ofTheElement()).orElse(List.of()).stream()
+        PositionsAStatementReads.of(asked.statement()).orElse(List.of()).stream()
                 .filter(place -> !place.head().equals(container.head()))
                 .forEach(place -> readOutside.add(place.head()));
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
@@ -200,7 +264,7 @@ public final class CountWitnesses {
         // leave no element to hold the statement of and another to fail it is no row shown that
         // none does, so the next is tried.
         for (List<RowSearch.Built> row : RowSearch.rowsOf(each, stopped)) {
-            Optional<Witness> found = beside(row, holder, element, count, inputs, statement,
+            Optional<Witness> found = beside(row, holder, element, asked, inputs, statement,
                     reading, building, running, written, stopped, runs);
             if (found.isPresent()) {
                 return new Sought(found, Set.of(), Set.of());
@@ -234,8 +298,8 @@ public final class CountWitnesses {
      *  and, where the run of the row that met the statement both ways stopped, where it did,
      *  added to {@code runs}. */
     private static Optional<Witness> beside(List<RowSearch.Built> beside, Container container,
-                                            Type element, Quantity.HowManyMeet count,
-                                            BehaviorInputs inputs, AStatementAtARow statement,
+                                            Type element, Asked asked, BehaviorInputs inputs,
+                                            AStatementAtARow statement,
                                             RuleReadingContext reading,
                                             RowSearch.Building building,
                                             RowSearch.Running running,
@@ -243,42 +307,179 @@ public final class CountWitnesses {
                                             Set<Figure> stopped, Set<WhereARunStopped> runs) {
         List<FixtureTemplate> row = beside.stream().map(RowSearch.Built::fixture).toList();
         List<ObservedValue> built = beside.stream().map(RowSearch.Built::value).toList();
-        FixtureTemplate kept = null;
-        FixtureTemplate dropped = null;
-        for (FixtureTemplate each : elementsTried(element, container, count.ofTheElement(),
-                inputs, built, reading, building, written, stopped)) {
+        List<FixtureTemplate> tried = elementsTried(element, container, asked, inputs, built,
+                reading, building, written, stopped);
+        boolean ofValues = asked.differentAt().isPresent();
+        // A pair is a witness only once the container holds it, the statement tells it apart as
+        // the count asks, and a run of the row it makes gets to the comparison: the three are one
+        // question of one pair, so a pair that fails the last is no reason to look at no other.
+        Predicate<List<FixtureTemplate>> getsThere = pair -> {
+            RowSearch.Run ran = running.run(rowHolding(row, container, pair));
+            if (!ran.getsThere()) {
+                ran.stopped().ifPresent(runs::add);
+            }
+            return ran.getsThere();
+        };
+        List<FixtureTemplate> both = ofValues
+                ? twoThatDiffer(tried, container, asked.differentAt().get(), built, inputs,
+                        statement, building, getsThere, stopped)
+                : oneKeptAndOneDropped(tried, container, built, inputs, statement, building,
+                        getsThere, stopped);
+        if (both == null) {
+            return Optional.empty();
+        }
+        // What fails the statement is the second of a count of elements; of a count of values it is
+        // one more element, which none is where every element meets the statement.
+        FixtureTemplate failing = ofValues
+                ? aFailingElement(tried, container, built, inputs, statement, building)
+                : both.getLast();
+        return Optional.of(new Witness(rowHolding(row, container, both), container.at(),
+                both.getFirst(), both.getLast(), failing, container.overAgain()));
+    }
+
+    /** {@code row} with the container holding {@code elements}. */
+    private static List<FixtureTemplate> rowHolding(List<FixtureTemplate> row, Container container,
+                                                    List<FixtureTemplate> elements) {
+        List<FixtureTemplate> shown = new ArrayList<>(row);
+        shown.set(container.at(), container.holding(elements));
+        return shown;
+    }
+
+    /**
+     * An element of {@code tried} the statement fails of, in a container the boundary builds of it
+     * alone — or null where there is none.
+     */
+    private static FixtureTemplate aFailingElement(List<FixtureTemplate> tried,
+                                                   Container container, List<ObservedValue> built,
+                                                   BehaviorInputs inputs,
+                                                   AStatementAtARow statement,
+                                                   RowSearch.Building building) {
+        for (FixtureTemplate each : tried) {
+            Integer meet = metIn(List.of(each), container, built, inputs, statement, building);
+            if (meet != null && meet == 0) {
+                return each;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * An element of {@code tried} the statement holds of and one it fails of, in a container that
+     * holds both and the statement holds of one of — or null where there are not both.
+     */
+    private static List<FixtureTemplate> oneKeptAndOneDropped(List<FixtureTemplate> tried,
+                                                              Container container,
+                                                              List<ObservedValue> built,
+                                                              BehaviorInputs inputs,
+                                                              AStatementAtARow statement,
+                                                              RowSearch.Building building,
+                                                              Predicate<List<FixtureTemplate>>
+                                                                      getsThere,
+                                                              Set<Figure> stopped) {
+        List<FixtureTemplate> kept = new ArrayList<>();
+        List<FixtureTemplate> dropped = new ArrayList<>();
+        for (FixtureTemplate each : tried) {
             Integer meet = metIn(List.of(each), container, built, inputs, statement, building);
             if (meet == null) {
                 continue;
             }
             // The container holds the element over again where a rule asks for more than one, so
             // it holds the statement of all of them or of none.
-            if (meet == container.filled(List.of(each)).size() && kept == null) {
-                kept = each;
-            } else if (meet == 0 && dropped == null) {
-                dropped = each;
-            }
-            if (kept != null && dropped != null) {
-                break;
+            if (meet == container.filled(List.of(each)).size()) {
+                kept.add(each);
+            } else if (meet == 0) {
+                dropped.add(each);
             }
         }
-        if (kept == null || dropped == null) {
-            return Optional.empty();
+        return firstPairThat(kept, dropped, false, pair -> {
+            Integer meet = metIn(pair, container, built, inputs, statement, building);
+            return meet != null && meet == 1 && getsThere.test(pair);
+        }, stopped);
+    }
+
+    /**
+     * The first pair of an element of {@code ones} and one of {@code others} — two of {@code ones}
+     * where {@code ofOne}, the earlier first — that {@code holds} of, in the order the elements were
+     * tried, or null where none does.
+     *
+     * <p>A pair is a witness only where everything that is asked of it holds of it together: that
+     * the container holds the two, that they are what the count tells apart, that a run of the row
+     * they make gets to the comparison. What the container asks of the elements it holds together
+     * is its own, and a run is of the row and not of each, so the whole of it is the one question
+     * {@code holds} answers, and a pair that fails any part is no reason to look at no other. Held
+     * to the figure the elements are tried to; where the figure stops the asking it is said, and
+     * nothing is shown that the pairs left unasked would.
+     */
+    static <T> List<T> firstPairThat(List<T> ones, List<T> others, boolean ofOne,
+                                     Predicate<List<T>> holds, Set<Figure> stopped) {
+        int asked = 0;
+        for (int one = 0; one < ones.size(); one++) {
+            for (int other = ofOne ? one + 1 : 0; other < (ofOne ? ones : others).size();
+                    other++) {
+                if (asked++ >= MOST_VALUES) {
+                    stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+                    return null;
+                }
+                List<T> pair = List.of(ones.get(one), (ofOne ? ones : others).get(other));
+                if (holds.test(pair)) {
+                    return pair;
+                }
+            }
         }
-        List<FixtureTemplate> both = List.of(kept, dropped);
-        Integer meet = metIn(both, container, built, inputs, statement, building);
-        List<FixtureTemplate> shown = new ArrayList<>(row);
-        shown.set(container.at(), container.holding(both));
-        if (meet == null || meet != 1) {
-            return Optional.empty();
+        return null;
+    }
+
+    /**
+     * Two elements of {@code tried} the statement holds of, in a container that holds both and
+     * whose elements hold two different values at {@code at} — or null where there are no two.
+     * Asked of the container itself, as the count is, so that what the two are is what the row
+     * counts.
+     */
+    private static List<FixtureTemplate> twoThatDiffer(List<FixtureTemplate> tried,
+                                                       Container container,
+                                                       Quantity.TheValue at,
+                                                       List<ObservedValue> built,
+                                                       BehaviorInputs inputs,
+                                                       AStatementAtARow statement,
+                                                       RowSearch.Building building,
+                                                       Predicate<List<FixtureTemplate>> getsThere,
+                                                       Set<Figure> stopped) {
+        List<FixtureTemplate> kept = new ArrayList<>();
+        for (FixtureTemplate each : tried) {
+            Integer meet = metIn(List.of(each), container, built, inputs, statement, building);
+            if (meet != null && meet == container.filled(List.of(each)).size()) {
+                kept.add(each);
+            }
         }
-        RowSearch.Run ran = running.run(shown);
-        if (!ran.getsThere()) {
-            ran.stopped().ifPresent(runs::add);
-            return Optional.empty();
+        return firstPairThat(kept, kept, true, pair -> {
+            Integer different = differentIn(pair, container, at, built, inputs, statement,
+                    building);
+            return different != null && different == 2 && getsThere.test(pair);
+        }, stopped);
+    }
+
+    /**
+     * How many different values the elements {@code elements} hold at {@code at}, in a row
+     * otherwise {@code built}, among those the statement holds of — or null where the boundary
+     * refused the container, or the statement or a value could not be read of some element.
+     */
+    private static Integer differentIn(List<FixtureTemplate> elements, Container container,
+                                       Quantity.TheValue at, List<ObservedValue> built,
+                                       BehaviorInputs inputs, AStatementAtARow statement,
+                                       RowSearch.Building building) {
+        Optional<ObservedValue> held = building.build(container.at(),
+                container.holding(elements));
+        if (held.isEmpty()) {
+            return null;
         }
-        return Optional.of(
-                new Witness(shown, container.at(), kept, dropped, container.overAgain()));
+        List<ObservedValue> values = new ArrayList<>(built);
+        values.set(container.at(), held.get());
+        AStatementAtARow.HowManyAtARow counted = statement.howManyIn(container.place(),
+                Optional.of(at), Optional.empty(),
+                new StandingAtAPoint.DiscoveringRow(new StandingAtAPoint.RowWalk(inputs,
+                        new ObservedInputs(values, new Generator.Watched.NotRun(),
+                                new AnswerObservation.NotAnswered()))));
+        return counted == null || counted.unread() != 0 ? null : counted.meet();
     }
 
     /**
@@ -286,10 +487,12 @@ public final class CountWitnesses {
      * counts holds of — or empty where the boundary refused some input, or the statement could not
      * tell of some element. The reading a witness is held to, for a row written out.
      */
-    public static Optional<Integer> metOn(Quantity.HowManyMeet count, String behavior,
+    public static Optional<Integer> metOn(Quantity.CountedOverAContainer counted, String behavior,
                                           InputReading read, List<FixtureTemplate> inputs,
                                           RowSearch.Building building) {
-        if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
+        if (!(counted instanceof Quantity.HowManyMeet count)
+                || !(count.container() instanceof DecisionSubject.AnInput(TermPath container,
+                        var _))
                 || !container.steps().isEmpty()) {
             return Optional.empty();
         }
@@ -340,14 +543,15 @@ public final class CountWitnesses {
      * for the element's type, and each of the latter made to hold, at a place the statement says
      * is the same value as a place outside the container, every value the row holds there.
      */
-    private static List<FixtureTemplate> elementsTried(Type element, Container held,
-                                                       Proposition stated, BehaviorInputs inputs,
+    private static List<FixtureTemplate> elementsTried(Type element, Container held, Asked asked,
+                                                       BehaviorInputs inputs,
                                                        List<ObservedValue> built,
                                                        RuleReadingContext reading,
                                                        RowSearch.Building building,
                                                        List<FixtureTemplate> inTheRows,
                                                        Set<Figure> stopped) {
         TermPath container = held.place();
+        Proposition stated = asked.statement();
         // In the order they are tried, and held to the figure once, over all of them: where they
         // come from decides which are tried first and never whether the figure applies.
         List<FixtureTemplate> standing = Partitions.representativesOf(element, reading).values();
@@ -359,7 +563,7 @@ public final class CountWitnesses {
             return RowSearch.upTo(out, stopped);
         }
         if (alike.isEmpty()) {
-            return RowSearch.upTo(withWhatItReadsDiffering(out, element, held, stated,
+            return RowSearch.upTo(withWhatItReadsDiffering(out, element, held, asked,
                     reading, stopped), stopped);
         }
         BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
@@ -391,7 +595,7 @@ public final class CountWitnesses {
                 }
             }
         }
-        return RowSearch.upTo(withWhatItReadsDiffering(out, element, held, stated, reading,
+        return RowSearch.upTo(withWhatItReadsDiffering(out, element, held, asked, reading,
                 stopped), stopped);
     }
 
@@ -418,13 +622,14 @@ public final class CountWitnesses {
      * found otherwise.
      */
     private static List<FixtureTemplate> withWhatItReadsDiffering(
-            List<FixtureTemplate> tried, Type element, Container held, Proposition stated,
+            List<FixtureTemplate> tried, Type element, Container held, Asked asked,
             RuleReadingContext reading, Set<Figure> stopped) {
         TermPath container = held.place();
         RuleReadingSource source = reading.source();
-        Map<TermPath, List<ValuesAStatementNames.Named>> named = ValuesAStatementNames.of(stated);
+        Map<TermPath, List<ValuesAStatementNames.Named>> named =
+                ValuesAStatementNames.of(asked.statement());
         Map<List<String>, List<FixtureTemplate>> told = new LinkedHashMap<>();
-        for (TermPath place : PositionsAStatementReads.of(stated).orElse(List.of())) {
+        for (TermPath place : asked.reads().orElse(List.of())) {
             // The keys of a map the element holds, and the elements of a list or a set it holds,
             // are told apart by the collection: one holding the value the statement names there,
             // and one holding none, beside what the collection's own type tells apart.
