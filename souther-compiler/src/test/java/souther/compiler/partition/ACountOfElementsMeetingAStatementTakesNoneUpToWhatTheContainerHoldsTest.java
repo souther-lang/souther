@@ -28,7 +28,7 @@ class ACountOfElementsMeetingAStatementTakesNoneUpToWhatTheContainerHoldsTest {
     @Test
     void aContainerOfExactlyTwoHoldsNoneOneOrTwoAndNeverThree() {
         UndividedByARelation.CountTakes taken =
-                UndividedByARelation.countTakes(between(2, 2), between(2, 2));
+                UndividedByARelation.countTakes(between(2, 2), between(2, 2), true);
         for (long each : new long[] {0, 1, 2}) {
             assertTrue(taken.lies().admits(Count.of(each)), "lies at " + each);
             assertTrue(taken.takes().admits(Count.of(each)), "takes " + each);
@@ -41,7 +41,7 @@ class ACountOfElementsMeetingAStatementTakesNoneUpToWhatTheContainerHoldsTest {
     @Test
     void aContainerOfAtLeastTwoHoldsNoneAndOneToo() {
         UndividedByARelation.CountTakes taken =
-                UndividedByARelation.countTakes(from(2), between(2, 10));
+                UndividedByARelation.countTakes(from(2), between(2, 10), true);
         assertTrue(taken.lies().admits(Count.of(0)));
         assertTrue(taken.lies().admits(Count.of(1_000_000)));
         assertTrue(taken.takes().admits(Count.of(0)));
@@ -52,10 +52,24 @@ class ACountOfElementsMeetingAStatementTakesNoneUpToWhatTheContainerHoldsTest {
     @Test
     void nothingSaidOfHowManyItMayHoldLeavesTheCountLyingFromNoneOn() {
         UndividedByARelation.CountTakes taken =
-                UndividedByARelation.countTakes(null, between(0, 3));
+                UndividedByARelation.countTakes(null, between(0, 3), true);
         assertTrue(taken.lies().admits(Count.of(0)));
         assertTrue(taken.lies().admits(Count.of(1_000)));
         assertFalse(taken.lies().admits(Count.of(-1)));
         assertFalse(taken.takes().admits(Count.of(4)));
+    }
+
+    /** A container that holds each element once shows the statement holding of one element and
+     *  failing of another: the count is shown at none and one, however many it may hold. */
+    @Test
+    void aContainerThatHoldsEachElementOnceIsShownTheCountAtNoneAndOneOnly() {
+        UndividedByARelation.CountTakes taken =
+                UndividedByARelation.countTakes(from(0), between(0, 10), false);
+        assertTrue(taken.lies().admits(Count.of(1_000)));
+        assertTrue(taken.takes().admits(Count.of(0)));
+        assertTrue(taken.takes().admits(Count.of(1)));
+        assertFalse(taken.takes().admits(Count.of(2)));
+        assertFalse(UndividedByARelation.countTakes(from(0), between(0, 0), false).takes()
+                .admits(Count.of(1)));
     }
 }

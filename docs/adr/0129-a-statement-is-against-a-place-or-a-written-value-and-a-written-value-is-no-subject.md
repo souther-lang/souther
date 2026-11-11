@@ -53,8 +53,17 @@ nothing handed on from another parameter, so under a quantifier that does not as
 asked of the container once where some element is asked it, and not at all where none is.
 
 A collection an element holds is told apart by which of the values a statement names it holds, so a
-search for an element builds the collections holding some of them, the fewest first, within the
-figure a search tries and with that figure said where it is passed.
+search for an element builds the collections holding some of them, taken from the ends — none of
+them and all of them, then one and all but one, and so on — within the figure a search tries and
+with that figure said where it is passed. What a statement needs of them is not known there, and
+the subsets it needs are those its structure makes extreme: a conjunction needs all, a disjunction
+one, a denial all but one or none. The subsets are made and not walked to, so the work is that of
+the ones made however many values are named.
+
+What a statement names at a place is a value written there or how many the place holds, and the two
+are cases of one type and not one kind of number: a value is put at the place, and a number of
+elements is no value to put there. Where a statement names both of one collection, it is built
+holding the values and that many.
 
 ## Consequences
 
@@ -62,9 +71,13 @@ A written member is read and composed wherever the same member at another place 
 count, in a rule of a declaration, and where a record is built. A reader that names a member by a
 place and nothing else is the defect this closes, and a new reader of a member takes an operand.
 
-What is folded to a value is the fold's: the primitives. A value built by a newtype's constructor,
-or a case, is not folded, so `Name("q")` stays unread. Widening the fold changes every reader of a
-folded constant and is a decision of its own.
+A newtype's constructor written where a place of that newtype's type is asked for is the value it
+wraps: the place holds it under the name it wears, and a row writes it back under that name. The
+fold that reads a written value takes the construction so only for the reader that asks, with the
+newtypes of its own reading; a rule is discharged on what the fold alone says, which a construction
+is not a constant of, and a case is no value a member is asked to be. A rule of a declaration
+cannot make a construction at all, so the readers of its clauses read primitives only. A row's value
+is compared with a written scalar under the names it wears.
 
 A container beside the elements, asked the same thing by every element, is asked the same thing of
 the row however it is written, so a count over it takes no number between none and all of the

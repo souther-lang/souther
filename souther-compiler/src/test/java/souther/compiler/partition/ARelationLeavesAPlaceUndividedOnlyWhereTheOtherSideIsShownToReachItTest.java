@@ -1154,8 +1154,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * A count of a list's elements, and what they sum to, are terms of the relation beside an input
      * the list does not hold: a list of as many whole numbers as asked is a row at each count, and
      * a list of one whole number is a row at that number. Where the declarations hold the list to
-     * two elements or more no list of one is a row, so the total is shown to reach nothing and
-     * the input beside it is left unshown, as the count is shown only from two.
+     * two elements or more no list of one is a row, and the total is that of two: one number and
+     * the rest at nought, which a whole number is, so every total one element takes is a total
+     * of the list, and the input beside it is reached as the count is shown only from two.
      */
     @Test
     void aCountAndATotalOfAListAreReachedWhereTheListMayHoldWhatTheyAreAskedAt() {
@@ -1169,8 +1170,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String pairs = "data Pair = List<Int> invariant List.length(value) >= 2";
         String held = "limit: Int, p: Pair";
         String heldTotal = "limit >= List.sum(p.value)";
-        assertEquals(Map.of("List.sum(p)", RELATES, "limit", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(p)", RELATES, "limit", RELATES),
                 left(held, pairs, heldTotal, atThe(">=", pairs, held, heldTotal)));
+        // Where the elements are held apart the rest are not at nought, and nothing is shown.
+        String apart = "data Apart = List<Int> invariant List.length(value) >= 2"
+                + " && Set.size(Set.fromList(value)) == List.length(value)";
+        String heldApart = "limit: Int, p: Apart";
+        assertEquals(Map.of("List.sum(p)", RELATES, "limit", NOT_SHOWN),
+                left(heldApart, apart, heldTotal, atThe(">=", apart, heldApart, heldTotal)));
     }
 
     /**
@@ -1610,7 +1617,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 read.rules().inners(), read.rules().symbols());
         ComparisonWitnesses.AtAComparison everyCount = _ -> new CountWitnesses.Sought(Optional.of(
                 new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
-                        FixtureTemplate.integer(1))), Set.of(), Set.of());
+                        FixtureTemplate.integer(1), true)), Set.of(), Set.of());
         DecisionSubject.AnInput currency =
                 new DecisionSubject.AnInput(deals.element().then("currency"));
         Map<Proposition, Boolean> undividedBy = new LinkedHashMap<>();
@@ -1726,7 +1733,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aCountIsLetThroughOnlyForTheCallTheReadingSaysItWasReadOff() {
         CountWitnesses.Sought found = new CountWitnesses.Sought(Optional.of(
                 new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
-                        FixtureTemplate.integer(1))), Set.of(), Set.of());
+                        FixtureTemplate.integer(1), true)), Set.of(), Set.of());
         ComparisonWitnesses.AtComparisons always = _ -> _ -> found;
         String filtered = countedInline("x.value > 2");
         ReadComparisons read = ReadComparisons.ofTheAnalysis(filtered, "m", always);
@@ -1788,17 +1795,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * Reached along a way holding the list to two elements or more, no list there totals one
-     * element, and which totals two reach is not asked. Along a way holding every element to five
+     * element, and the total is that of two: an element and the rest at nought, so the gross is
+     * reached as it is where one element stands alone. Along a way holding every element to five
      * or less, an element is not every value the declarations leave it. Held by a rule of the list
-     * to a total of ten or less, an element is not every value it takes alone. Each time the total
-     * is shown to take nothing, and nothing is shown of the gross — though under the third a gross
-     * of eleven or more holds whatever a total is.
+     * to a total of ten or less, an element is not every value it takes alone. Each of those two
+     * times the total is shown to take nothing, and nothing is shown of the gross — though under
+     * the second a gross of eleven or more holds whatever a total is.
      */
     @Test
-    void aTotalIsWhatOneElementTakesOnlyWhereOneElementStandsAlone() {
+    void aTotalIsWhatOneElementTakesWhereTheRestAreAtNought() {
         String inputs = "gross: Int, ns: List<Nat>";
         String body = "if List.length(ns) >= 2 then gross >= " + TOTAL + " else false";
-        assertEquals(NOT_SHOWN, left(inputs, NAT, body,
+        assertEquals(null, left(inputs, NAT, body,
                 atThe(">= List.sum", NAT, inputs, body)).get("gross"));
         String small = "if List.all(n -> n.value <= 5, ns) then gross >= " + TOTAL + " else false";
         assertEquals(NOT_SHOWN, left(inputs, NAT, small,
@@ -1973,7 +1981,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /** A count of the elements meeting a statement, held against a position, divides that
-     *  position as far as the relation shows, and says nothing of the run of it. */
+     *  position as far as the relation shows, and says nothing of the run of it. Where the count
+     *  is not shown to be reached, the places its statement reads are left as the comparison is
+     *  filed at them. */
     @Test
     void aPositionBesideACountOfWhatMeetsAStatementIsAskedOfTheRelation() {
         assertEquals(Map.of("gross", NOT_SHOWN, "ns[*]", NOT_SHOWN),

@@ -20,6 +20,7 @@ import souther.compiler.diag.Messages;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.query.Bodies;
 import souther.compiler.types.ValueName;
+import souther.runtime.OutOfRoom;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.ResourceBundleMessageResolver;
 
@@ -30,8 +31,10 @@ import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.StreamWriteConstraints;
 import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.exc.StreamConstraintsException;
+import tools.jackson.core.exc.StreamReadException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.exc.MismatchedInputException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.File;
@@ -551,22 +554,27 @@ public final class Runner {
      * decodes on the first attempt and never reaches it. Being an array is not the mistake; failing as
      * the value while succeeding as the array's sole element is. When the element fails too, the input
      * is wrong for some other reason and the decoder's own report is what says so.
+     *
+     * <p>Only a refusal asks for the second reading. A run with no room for what decoding computed
+     * is not a refusal of the value, so it ends the read where it happened and nothing is decoded
+     * again after it.
      */
     private static Object decodeSoleInput(ClassLoader loader, BoundaryInput shape,
                                           JsonNode tree) {
-        try {
-            return decode(loader, shape, tree, 0);
-        } catch (RunException asWritten) {
-            if (tree.isArray() && tree.size() == 1 && decodes(loader, shape, tree.get(0))) {
-                throw fail("run.input.wrapped");
+        return switch (read(loader, shape, tree, 0)) {
+            case JsonBoundary.Read.Value v -> v.value();
+            case JsonBoundary.Read.Refused r -> {
+                if (tree.isArray() && tree.size() == 1 && decodes(loader, shape, tree.get(0))) {
+                    throw fail("run.input.wrapped");
+                }
+                throw refusal(r, 0);
             }
-            throw asWritten;
-        }
+        };
     }
 
     /** Whether {@code raw} decodes as {@code type}, asked without reporting anything. */
     private static boolean decodes(ClassLoader loader, BoundaryInput shape, JsonNode raw) {
-        return JsonBoundary.reads(loader, shape, raw);
+        return read(loader, shape, raw, 0) instanceof JsonBoundary.Read.Value;
     }
 
     // --- decode / encode ----------------------------------------------------------------------
@@ -580,13 +588,32 @@ public final class Runner {
      */
     private static Object decode(ClassLoader loader, BoundaryInput shape, JsonNode raw,
                                  int index) {
-        return switch (JsonBoundary.read(loader, shape, raw)) {
+        return switch (read(loader, shape, raw, index)) {
             case JsonBoundary.Read.Value v -> v.value();
-            case JsonBoundary.Read.Malformed m -> throw fail("run.decode.malformed",
-                    index + 1, m.type());
-            case JsonBoundary.Read.Refused r -> throw new RunException("run.decode.failed", 1,
-                    r.issues(), index + 1, detail(r.issues()));
+            case JsonBoundary.Read.Refused r -> throw refusal(r, index);
         };
+    }
+
+    /** A decoder's refusal of the input at {@code index}, as the message a reader gets. */
+    private static RunException refusal(JsonBoundary.Read.Refused refused, int index) {
+        return new RunException("run.decode.failed", 1, refused.issues(), index + 1,
+                detail(refused.issues()));
+    }
+
+    /**
+     * {@link JsonBoundary#read}, with the one thing a decoder throws that is not a defect said as
+     * what it is: the run having no room for what the decoder computed, an invariant's arithmetic
+     * past what a {@code BigDecimal} keeps. It is the platform failing and says nothing about the
+     * input's shape, so it is neither a refusal of the value nor an input that is not shaped like its
+     * type (spec §jvm-abort).
+     */
+    private static JsonBoundary.Read read(ClassLoader loader, BoundaryInput shape, JsonNode raw,
+                                          int index) {
+        try {
+            return JsonBoundary.read(loader, shape, raw);
+        } catch (OutOfRoom e) {
+            throw fail("run.decode.outofroom", index + 1, e.getMessage());
+        }
     }
 
     /** The decoder's issues as one line: each at its JSON pointer, in the order they were found. */
@@ -677,9 +704,19 @@ public final class Runner {
      * nearest binary value instead of the number that was written (spec
      * §a-boundary-scalar-is-read-not-converted); the decoder refuses that, so a program's input
      * could not be read at all.
+     *
+     * <p>An object that names a member twice is refused rather than read as the last of them: the
+     * tree would keep one value and drop the other before any decoder saw either, and what a program
+     * is run on would not be what was written.
+     *
+     * <p>What follows the first value is asked of the parser in {@link #parseJson}, not left to the
+     * mapper. The mapper reports it as the same exception type it reports a repeated member with, and
+     * a type that stands for two reasons cannot say which one happened.
      */
     private static final JsonMapper JSON = JsonMapper.builder()
-            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build();
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+            .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+            .disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
 
     /** How deep the mapper reads and writes before it refuses, counted in levels of JSON. */
     private static final int READ_DEPTH_LIMIT =
@@ -705,18 +742,46 @@ public final class Runner {
      *
      * <p>Input with nothing in it reads as the missing node rather than as no node at all, so an
      * empty {@code --input} reaches the same refusal as input of the wrong shape.
+     *
+     * <p>What fails is told apart by the type the mapper throws, never by its text, and each type is
+     * said as what it is. A number whose exponent no {@code BigDecimal} keeps in its 32-bit scale is
+     * valid JSON and a {@code Decimal}, and is the run having no room to write it (spec §jvm-abort).
+     * The reader's own limits — a number, a name or a document too long — refuse text that is as much
+     * JSON. A member named twice is valid JSON that the tree would read as the last of them, so it is
+     * refused. A second value after the first is not JSON as a document, which is asked of the parser
+     * directly so that the mapper's one exception type for a repeated member stands for that alone.
+     * Only a {@code StreamReadException} that is none of these is a syntax error. Which type the
+     * mapper uses for each is what was measured against the version this module builds with, and
+     * {@code RunnerTest} pins it: an upgrade that wraps one of them fails there and not in a
+     * diagnostic. A failure of any other type is not attributed to the input; it reaches the caller
+     * as thrown.
      */
     private static JsonNode parseJson(String input) {
         JsonParser parser = JSON.createParser(input);
         try {
             JsonNode tree = JSON.readTree(parser);
+            if (tree != null && parser.nextToken() != null) {
+                throw fail("run.input.trailing");
+            }
             return tree == null ? JSON.missingNode() : tree;
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             TokenStreamContext where = parser.streamReadContext();
             if (refusedForDepth(e, where, READ_REFUSAL_DEPTH)) {
                 throw tooDeep("run.input.toodeep", where, READ_DEPTH_LIMIT);
             }
-            throw fail("run.input.badjson", e.getMessage());
+            if (e instanceof NumberFormatException) {
+                throw fail("run.input.outofroom", depthPath(where));
+            }
+            if (e instanceof MismatchedInputException) {
+                throw fail("run.input.duplicate", depthPath(where));
+            }
+            if (e instanceof StreamConstraintsException) {
+                throw fail("run.input.limit", depthPath(where), e.getMessage());
+            }
+            if (e instanceof StreamReadException) {
+                throw fail("run.input.badjson", e.getMessage());
+            }
+            throw e;
         } finally {
             parser.close();
         }
@@ -752,7 +817,7 @@ public final class Runner {
      * <p>Standing at {@code refusalDepth} is the depth refusal and can be nothing else. A value
      * refused for another reason stands shallower: the reader admits scalars at every level up to
      * the limit, so the deepest a long number can be refused at is one level short of where a
-     * refusal for depth stands. Every other constraint keeps the wording it had.
+     * refusal for depth stands. Every other constraint is the reader's limit and not a depth.
      */
     private static boolean refusedForDepth(Exception failure, TokenStreamContext where,
                                            int refusalDepth) {

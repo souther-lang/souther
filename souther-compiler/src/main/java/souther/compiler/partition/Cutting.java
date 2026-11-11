@@ -6,6 +6,7 @@ import souther.compiler.check.NonAffineOperation;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -35,6 +36,7 @@ import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.ReadThroughNames;
@@ -2238,7 +2240,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
             }
         } else {
-            relations.add(oneValue(stated));
+            relations.addAll(ofEachArm(stated));
         }
         return new Read.AgainstAnotherValue(over, relations);
     }
@@ -2365,6 +2367,96 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * The relation each arm of {@code stated} states, where {@code stated} is the arms of one
+     * choice by cases; null where it is anything else.
+     *
+     * <p>Said of what the statement holds and not of how it is shaped: every part is one relation
+     * beside the cases of one subject that choose it, and no two parts choose a case in common.
+     * Those are the arms of a match as the language reads one — a value takes one arm — and what
+     * is left of an arm when its cases are taken away is the relation that arm states. A
+     * disjunction of two relations each beside cases of its own is not that unless the cases
+     * keep the arms apart: where two arms may both hold, the statement is not one arm's relation
+     * or the other's, and the cases cannot be taken away from either.
+     *
+     * <p>And the relation must stand only where its cases hold ({@link
+     * #standsOnlyWhereTheCasesHold}): a relation is read over every row that gets to it, and what
+     * is left of an arm without its cases says nothing of where it is the statement. Where the
+     * arms do not cover every case of the subject the rest are rows the statement is false at,
+     * and no arm's relation is the statement there.
+     */
+    static List<Proposition> armsOfAChoice(Proposition stated) {
+        if (!(stated instanceof Proposition.Any any) || any.parts().isEmpty()) {
+            return null;
+        }
+        DecisionSubject chosenOn = null;
+        List<CasesLeft> taken = new ArrayList<>();
+        List<Proposition> relations = new ArrayList<>();
+        for (Proposition part : any.parts()) {
+            if (!(part instanceof Proposition.All all)) {
+                return null;
+            }
+            Proposition.InCases cases = null;
+            Proposition relation = null;
+            for (Proposition each : all.parts()) {
+                if (each instanceof Proposition.InCases chosen && chosen.holds()
+                        && cases == null) {
+                    cases = chosen;
+                } else if (relation == null) {
+                    relation = each;
+                } else {
+                    return null;
+                }
+            }
+            if (cases == null || relation == null
+                    || (chosenOn != null && !chosenOn.equals(cases.of()))
+                    || !standsOnlyWhereTheCasesHold(relation, cases)) {
+                return null;
+            }
+            for (CasesLeft before : taken) {
+                if (before.meet(cases.cases()) != null) {
+                    return null;
+                }
+            }
+            chosenOn = cases.of();
+            taken.add(cases.cases());
+            relations.add(relation);
+        }
+        return relations;
+    }
+
+    /**
+     * Whether {@code relation} reads a place that is there only where {@code cases} hold: one
+     * whose path narrows the subject the cases are of to cases no wider than them. The cases are
+     * then carried by the relation's own place, so a row has a value there only where the arm is
+     * the one taken, and the relation can be read without them. A relation that reads no such
+     * place is the arm's only where the cases say so, and they cannot be taken off it.
+     */
+    private static boolean standsOnlyWhereTheCasesHold(Proposition relation,
+                                                       Proposition.InCases cases) {
+        if (!(cases.of() instanceof DecisionSubject.AnInput(TermPath subject, var _))) {
+            return false;
+        }
+        for (TermPath each : PositionsAStatementReads.of(relation).orElse(List.of())) {
+            CasesLeft there = each.requirements().refinements().get(subject);
+            if (there != null && there.within(cases.cases())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * What {@code stated} shows of the values it relates, one reading for each arm where it is the
+     * arms of one choice by cases ({@link #armsOfAChoice}), and the one reading of the statement
+     * as it stands anywhere else.
+     */
+    private static List<UndividedByARelation> ofEachArm(Proposition stated) {
+        List<Proposition> arms = armsOfAChoice(stated);
+        return arms == null ? List.of(oneValue(stated))
+                : arms.stream().map(Cutting::oneValue).toList();
+    }
+
+    /**
      * Where every part of {@code stated} says that two values of the input are one value — some
      * element of a container being one, or not — the places of those values; null otherwise.
      *
@@ -2412,7 +2504,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // value's own, which the sameness has already filed.
             case Proposition.LastToHold _ -> true;
             case Proposition.All all -> all.parts().stream().allMatch(each -> relates(each, out));
-            case Proposition.Any any -> any.parts().stream().allMatch(each -> relates(each, out));
+            // The cases an arm is chosen by say which arm's relation holds and relate nothing of
+            // their own: the match chooses them, and dividing its subject by case is its rule. So
+            // of the arms of one choice it is the relation of each that is asked.
+            case Proposition.Any any -> {
+                List<Proposition> arms = armsOfAChoice(any);
+                yield (arms == null ? any.parts() : arms).stream()
+                        .allMatch(each -> relates(each, out));
+            }
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().allMatch(each -> relates(each, out));
             case Proposition.WhereItAnswers where ->

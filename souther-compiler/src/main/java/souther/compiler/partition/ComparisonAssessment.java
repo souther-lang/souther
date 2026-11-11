@@ -3,13 +3,10 @@ package souther.compiler.partition;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredBounds;
-import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleCitation;
-import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.TypeView;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
@@ -2184,19 +2181,8 @@ sealed interface ComparisonAssessment {
             Endpoint only = Endpoint.inclusive(Count.of(number.value()));
             return new NumericDomain.Bounds(only, only);
         }
-        Core.FieldAccess access = switch (seen) {
-            case Core.FieldAccess one -> one;
-            case Core.FieldProjection projection -> projection.lastAccess();
-            default -> null;
-        };
-        if (access == null
-                || Location.isStep(access.target().type(), access.field(), read.newtypes())) {
-            return NumericDomain.Bounds.OPEN;
-        }
-        RuleReadingSource rules = read.rules();
-        TypeView view = TypeView.of(access.target().type(), rules.inners(), rules.symbols(),
-                rules.kinds(), rules.sums());
-        DeclaredBounds.Range own = DeclaredBounds.of(view, read.ruleReading());
+        DeclaredBounds.Range own = DeclaredBounds.ofTheValueReadOff(seen, read.rules(),
+                read.newtypes(), read.ruleReading());
         return own == null ? NumericDomain.Bounds.OPEN
                 : new NumericDomain.Bounds(own.min(), own.max());
     }
@@ -2606,10 +2592,29 @@ sealed interface ComparisonAssessment {
                     runs.put(at, across.left().rowsStopped()));
         }
         return relatingAt(across.filedAt().stream()
-                .filter(place -> !divided.contains(place)).toList(), across.undivided(),
+                .filter(place -> !divided.contains(place)).toList(),
+                undividedAtTheirPositions(across.filedAt(), across.undivided()),
                 stopped, runs, across.left().mayStopBefore(),
                 noRowShownComputedAt(across.left().settled().entrySet()),
                 across.left().gettingThere());
+    }
+
+    /**
+     * {@code undivided}, and each of {@code filed} that is a number taken of a position some
+     * coordinate of it names as the position: a relation said to leave a position undivided says
+     * it of the numbers taken of that position as well, since it parts none of them.
+     */
+    private static Set<FilingCoordinate> undividedAtTheirPositions(
+            List<FilingCoordinate> filed, Set<FilingCoordinate> undivided) {
+        Set<TermPath> positions = new LinkedHashSet<>();
+        undivided.stream().filter(each -> each instanceof FilingCoordinate.AtPosition)
+                .forEach(each -> positions.add(each.path()));
+        if (positions.isEmpty()) {
+            return undivided;
+        }
+        Set<FilingCoordinate> out = new LinkedHashSet<>(undivided);
+        filed.stream().filter(each -> positions.contains(each.path())).forEach(out::add);
+        return out;
     }
 
     /** The same, of a relation to another value. */
@@ -2617,7 +2622,8 @@ sealed interface ComparisonAssessment {
                                          Set<FilingCoordinate> partneredKept) {
         Set<FilingCoordinate> divided = against.dividedBySettling(partneredKept);
         return relatingAt(against.filedAt().stream()
-                .filter(place -> !divided.contains(place)).toList(), against.undivided(),
+                .filter(place -> !divided.contains(place)).toList(),
+                undividedAtTheirPositions(against.filedAt(), against.undivided()),
                 against.stoppedAt(), against.rowsStopped(), against.mayStopBefore(),
                 against.noRowShownComputed(), against.gettingThere());
     }

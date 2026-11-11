@@ -730,6 +730,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             this(undivided, settled, rowsArrive, stoppedAt, Set.of());
         }
 
+        /** This, with {@code places} left undivided as well: places the relation parts none of,
+         *  which it was shown to reach a count that is made of. */
+        WhatItLeaves alsoUndivided(Set<FilingCoordinate> places) {
+            if (places.isEmpty() || !rowsArrive) {
+                return this;
+            }
+            Set<FilingCoordinate> both = new LinkedHashSet<>(undivided);
+            both.addAll(places);
+            return new WhatItLeaves(both, settled, rowsArrive, stoppedAt, rowsStopped,
+                    mayStopBefore, partnered, gettingThere);
+        }
+
         /**
          * This, with the strings each position's partner can hold. A position so parted is no
          * longer shown undivided: its strings are what the relation shows of it, over the region
@@ -2874,6 +2886,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                    Optional<Set<String>> declined, DemandReading.Answered past,
                                    Optional<List<TakenConstraint>> applied,
                                    ComparisonWitnesses.AtAComparison witnesses) {
+        Set<FilingCoordinate> countsRead = new LinkedHashSet<>();
+        return leftAlong(read, sources, carriers, region, written, remainders, heldWhole,
+                declined, past, applied, witnesses, countsRead).alsoUndivided(countsRead);
+    }
+
+    /**
+     * The same, with the places the statements of the counts shown to be reached read in
+     * {@code countsRead}.
+     */
+    private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
+                                   List<Carrier> carriers, SearchRegion region,
+                                   List<OnAWay> written, WholeNumberRuns remainders,
+                                   boolean heldWhole,
+                                   Optional<Set<String>> declined, DemandReading.Answered past,
+                                   Optional<List<TakenConstraint>> applied,
+                                   ComparisonWitnesses.AtAComparison witnesses,
+                                   Set<FilingCoordinate> countsRead) {
         // A way stating nothing but that the rows are off the line this relation draws — the form
         // held unequal to nought, as `sign == 0` taken the other way holds
         // `Decimal.compare(a, b)` — ties no side to anything: it takes the rows on the line away,
@@ -2941,7 +2970,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         beside.conditions(), remainders, beside.stating(), heldWhole,
                         beside.narrowing(), byTheFormat != null),
                 !offItsLine && heldWhole && remainder == null, conditions, witnesses, stopped,
-                runsStopped, read, along, carriers);
+                runsStopped, read, along, carriers, countsRead);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -3010,7 +3039,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Within lying = offItsLine || !heldWhole || remainder != null ? null
                 : Optional.ofNullable(positionWithinItsWalk(conditions))
                         .orElseGet(() -> countWithinItsContainer(conditions, witnesses, stopped,
-                                runsStopped));
+                                runsStopped, countsRead));
         if (lying != null) {
             WhatARelationLeavesUndivided.WithinTheWhole within = lying.within();
             // How many the container holds takes each of its values in some row where the region
@@ -5634,7 +5663,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private Within countWithinItsContainer(List<OnAWay> conditions,
                                            ComparisonWitnesses.AtAComparison witnesses,
                                            Set<Figure> stopped,
-                                           Set<WhereARunStopped> runsStopped) {
+                                           Set<WhereARunStopped> runsStopped,
+                                           Set<FilingCoordinate> countsRead) {
         if (sides.size() != 2) {
             return null;
         }
@@ -5646,10 +5676,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             container)) {
                 continue;
             }
-            if (!countIsShownEveryWhere(counted, container, conditions, witnesses, stopped,
-                    runsStopped)) {
+            CountWitnesses.Witness shown = rowShowingTheCount(counted, container, conditions,
+                    witnesses, stopped, runsStopped);
+            // Every size is a row of a container that may hold the element over again: how many
+            // distinct elements one that holds each once holds of is not what a row shows.
+            if (shown == null || !shown.overAgain()) {
                 return null;
             }
+            countsRead.addAll(placesTheStatementReads(part));
             return new Within(new WhatARelationLeavesUndivided.WithinTheWhole(part, 1 - part,
                     BigInteger.ZERO, BigInteger.ZERO), container, true);
         }
@@ -5659,7 +5693,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * {@code terms}, each that is how many elements of an input container meet a statement made to
      * take every value a row shows it takes where {@code asked} and a row shows the number at
-     * every count of every size ({@link #countIsShownEveryWhere}): from none up to how many the
+     * every count of every size ({@link #rowShowingTheCount}): from none up to how many the
      * container may hold ({@link #howManyAreHeld}), since a row holds that many elements it holds
      * of and the rest it fails of. A count a row does not show is left as {@code termsAlong} has
      * it, with nothing shown that it takes.
@@ -5668,7 +5702,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms, boolean asked,
             List<OnAWay> conditions, ComparisonWitnesses.AtAComparison witnesses,
             Set<Figure> stopped, Set<WhereARunStopped> runsStopped, InputReading read,
-            SearchRegion along, List<Carrier> carriers) {
+            SearchRegion along, List<Carrier> carriers, Set<FilingCoordinate> countsRead) {
         if (!asked) {
             return terms;
         }
@@ -5676,15 +5710,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int at = 0; at < sides.size(); at++) {
             Quantity.HowManyMeet counted = sides.get(at).counted();
             TermPath container = counted == null ? null : inputContainerOf(counted);
-            if (container == null || !countIsShownEveryWhere(counted, container, conditions,
-                    witnesses, stopped, runsStopped)) {
+            CountWitnesses.Witness shown = container == null ? null
+                    : rowShowingTheCount(counted, container, conditions, witnesses, stopped,
+                            runsStopped);
+            if (shown == null) {
                 continue;
             }
             NumericDomain.Bounds held = howManyAreHeld(container, read, along, true);
             if (held == null || !held.holdsAValue()) {
                 continue;
             }
-            CountTakes taken = countTakes(howManyMayBeHeld(container, read, along), held);
+            CountTakes taken = countTakes(howManyMayBeHeld(container, read, along), held,
+                    shown.overAgain());
+            countsRead.addAll(placesTheStatementReads(at));
             WhatARelationLeavesUndivided.Term<FilingCoordinate> was = terms.get(at);
             // Made of the places it reads: the container, and what the statement reads in an
             // element or outside the container. No term over one of them is apart from the count,
@@ -5717,12 +5755,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * of the elements it holds, some the statement holds of and the rest it fails of, so the count
      * is none up to its size, and what the size is left is the most it is and never the least.
      * Where nothing says how many the container may hold, the count lies from none on.
+     *
+     * <p>That is of a container that may hold an element over again ({@code overAgain}): a row
+     * holds the one the statement holds of as many times as it likes. A container that holds each
+     * element once shows the statement holding of one element and failing of another and no
+     * more — how many distinct elements it holds of is the statement's and the element type's, and
+     * a row that holds of two shows nothing of three — so the count is shown at none and one.
      */
-    static CountTakes countTakes(NumericDomain.Bounds mayBeHeld, NumericDomain.Bounds areHeld) {
+    static CountTakes countTakes(NumericDomain.Bounds mayBeHeld, NumericDomain.Bounds areHeld,
+                                 boolean overAgain) {
         Endpoint none = Endpoint.inclusive(Count.of(0));
+        Endpoint mostShown = overAgain ? areHeld.max()
+                : Endpoint.upper(areHeld.max(), Endpoint.inclusive(Count.of(1)));
         return new CountTakes(
                 new NumericDomain.Bounds(none, mayBeHeld == null ? null : mayBeHeld.max()),
-                new NumericDomain.Bounds(none, areHeld.max()));
+                new NumericDomain.Bounds(none, mostShown));
     }
 
     /** The container of the input {@code counted} counts the elements of, or null where it counts
@@ -5734,22 +5781,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether a row shows the number of elements of {@code container} that meet a statement at
-     * every count of every size: one element it holds of and one it fails of, beside one value of
-     * everything else, at a row that gets to this relation ({@link CountWitnesses}).
+     * The row that shows the number of elements of {@code container} that meet a statement: one
+     * element it holds of and one it fails of, beside one value of everything else, at a row that
+     * gets to this relation ({@link CountWitnesses}), or null where there is none. What counts the
+     * row shows is the witness's to say ({@link CountWitnesses.Witness#overAgain}).
      *
      * <p>Where the search stopped short of everything it would have tried, the figures it stopped
      * at go into {@code stopped}, and where the runs of the rows it tried stopped into
      * {@code runsStopped}: nothing is shown, and a run allowed more may show it.
      */
-    private static boolean countIsShownEveryWhere(Quantity.HowManyMeet counted,
-                                                  TermPath container, List<OnAWay> conditions,
-                                                  ComparisonWitnesses.AtAComparison witnesses,
-                                                  Set<Figure> stopped,
-                                                  Set<WhereARunStopped> runsStopped) {
+    private static CountWitnesses.Witness rowShowingTheCount(Quantity.HowManyMeet counted,
+                                                             TermPath container,
+                                                             List<OnAWay> conditions,
+                                                             ComparisonWitnesses.AtAComparison
+                                                                     witnesses,
+                                                             Set<Figure> stopped,
+                                                             Set<WhereARunStopped> runsStopped) {
         Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
         if (read.isEmpty()) {
-            return false;
+            return null;
         }
         // What the statement reads is the element's own, or a place under another parameter:
         // the container itself — how many it holds, another of its elements, a value taken of
@@ -5761,20 +5811,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             if (place.head().equals(container.head())) {
-                return false;
+                return null;
             }
             outside.add(place);
         }
         if (picksOut(conditions, container, outside)) {
-            return false;
+            return null;
         }
         CountWitnesses.Sought sought = witnesses.of(counted);
         if (sought.found().isEmpty()) {
             stopped.addAll(sought.stoppedAt());
             runsStopped.addAll(sought.runsStopped());
-            return false;
+            return null;
         }
-        return true;
+        return sought.found().get();
     }
 
     /**
@@ -6742,6 +6792,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * The places the statement of the count at side {@code at} reads, where it is one, as
+     * positions.
+     *
+     * <p>What the statement says of them is a comparison of its own, which divides them where it
+     * is made. The relation it is a term of parts none of them, so a relation shown to reach the
+     * count leaves them undivided, which is what a place a relation does not part is, and says
+     * nothing of them past that. Where the count is not shown to be reached nothing is said, and
+     * they are left as the comparison is filed at them.
+     *
+     * <p>Not one the relation's other sides read as well: {@code count(x > k) == k} holds
+     * {@code k} against the count, which the statement's own comparison of it says nothing of.
+     */
+    private List<FilingCoordinate> placesTheStatementReads(int at) {
+        Side side = sides.get(at);
+        if (side.counted() == null) {
+            return List.of();
+        }
+        List<FilingCoordinate> beside = new ArrayList<>();
+        for (int other = 0; other < sides.size(); other++) {
+            if (other != at) {
+                beside.addAll(sides.get(other).madeOf());
+            }
+        }
+        return PositionsAStatementReads.of(side.counted().ofTheElement()).orElse(List.of())
+                .stream().<FilingCoordinate>map(FilingCoordinate::at)
+                .filter(place -> beside.stream().noneMatch(place::sharesAPlaceWith)).toList();
+    }
+
+    /**
      * Whether {@code leaves} settles the relation one way at every value its term may hold: one
      * run, and no line between it and a value it leaves. Every row then holds the term at one of
      * those values, so the relation comes out that way in every row, as it does where a way decides
@@ -7131,7 +7210,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? declared : region;
             NumericDomain.Bounds realizes = source != null
                     ? asARelationReadsIt(realizedAlong(each.atOnePosition(), source, answering, way,
-                            read, conditions, heldWhole, carriers.get(i)), carriers.get(i))
+                            read, conditions, heldWhole, carriers.get(i), working.partials()),
+                            carriers.get(i))
                     : each.number() instanceof NumericTerm.ProductOf product
                     ? asARelationReadsIt(realizedProduct(product, read, region, declared,
                             conditions, narrowedByTheRun, heldWhole, working.partials()),
@@ -8864,7 +8944,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static NumericDomain.Bounds realizedAlong(NumericTerm.FromOnePosition term,
                                                       Source source, SearchRegion region, Way way,
                                                       InputReading read, List<OnAWay> conditions,
-                                                      boolean heldWhole, Carrier carrier) {
+                                                      boolean heldWhole, Carrier carrier,
+                                                      Collection<NumericTerm> atOneElement) {
         NumericDomain.Bounds ofTheValue = realized(term, source, region, way);
         if (ofTheValue != null) {
             return ofTheValue;
@@ -8885,6 +8966,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         ? null
                         : shownOfAnElementAlone(List.of(new NumericTerm.ValueOf(entry.getFirst())),
                                 taken.position(), read, region, stated.rest(), carrier);
+                if (alone == null && stated != null && entry.size() == 1
+                        && !atOneElement.contains(term)) {
+                    // A container that must hold several is composed of as many elements as it
+                    // may hold, as the totals over what a walk hands are ({@link #ofTheElements}).
+                    NumericDomain.Bounds each = shownOfAnElement(
+                            List.of(new NumericTerm.ValueOf(entry.getFirst())), read, region,
+                            stated.rest());
+                    NumericDomain.Bounds held = howManyAreHeld(taken.position(), read, region);
+                    alone = each == null || held == null || held.admits(Count.of(1)) ? null
+                            : ofTheElements(each, List.of(held), carrier, true);
+                }
                 return alone == null ? null : alone.meet(stated.run());
             }
         }
@@ -9011,9 +9103,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         } else if (elements.isEmpty()) {
             alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
         } else {
+            // One element's run, and how many the container may hold is asked of the counts below
+            // ({@link #ofTheElements}): a container that must hold several is composed, one that
+            // may hold one is that element.
             alone = containers.size() != 1 ? null
-                    : shownOfAnElementAlone(elements, containers.getFirst(), read, region,
-                            stated.rest(), null);
+                    : shownOfAnElement(elements, read, region, stated.rest());
         }
         NumericDomain.Bounds totals = alone == null || containers.isEmpty() ? null
                 : ofTheElements(alone, counts, carrier, !atOneElement.contains(over));
@@ -9365,7 +9459,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             SearchRegion answering = way == Way.UNTOUCHED
                     && conditions.stream().anyMatch(statement -> statement.leavesAlone(one))
                     ? declared : region;
-            run = realizedAlong(one, source, answering, way, read, conditions, heldWhole, carrier);
+            run = realizedAlong(one, source, answering, way, read, conditions, heldWhole, carrier,
+                    atOneElement);
         } else if (term instanceof NumericTerm.TakenOver over) {
             run = summedOverTheElements(over, read, region, conditions, heldWhole, carrier,
                     atOneElement);
@@ -9500,6 +9595,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                               SearchRegion region,
                                                               List<OnAWay> conditions,
                                                               Carrier nought) {
+        NumericDomain.Bounds each = shownOfAnElement(places, read, region, conditions);
+        NumericDomain.Bounds held = howManyAreHeld(container, read, region);
+        if (each == null || held == null || !held.admits(Count.of(1))) {
+            return null;
+        }
+        return nought != null && held.admits(Count.ZERO) ? withNought(each, nought) : each;
+    }
+
+    /**
+     * A run every value of which one element is shown to take at whichever of {@code places} its
+     * case puts it, whatever the container holds besides: what {@link #shownOfAnElementAlone} asks
+     * of how many it may hold is left to the reader, which composes the totals of as many as it
+     * may hold ({@link #ofTheElements}) or asks for one.
+     */
+    private static NumericDomain.Bounds shownOfAnElement(
+            List<? extends NumericTerm.FromOnePosition> places, InputReading read,
+            SearchRegion region, List<OnAWay> conditions) {
         NumericDomain.Bounds each = null;
         for (NumericTerm.FromOnePosition element : places) {
             Source source = sourceOf(element, read);
@@ -9513,11 +9625,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             each = here;
         }
-        NumericDomain.Bounds held = howManyAreHeld(container, read, region);
-        if (each == null || !each.holdsAValue() || held == null || !held.admits(Count.of(1))) {
-            return null;
-        }
-        return nought != null && held.admits(Count.ZERO) ? withNought(each, nought) : each;
+        return each != null && each.holdsAValue() ? each : null;
     }
 
     /** Whether {@code number} is an end of the numbers of the elements of one key. */

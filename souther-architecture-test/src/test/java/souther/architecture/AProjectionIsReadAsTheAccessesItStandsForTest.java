@@ -622,10 +622,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + ")Ljava/lang/String;", Reading.NAMES,
                 "spells a side of a comparison for a report, a projection as the accesses it"
                         + " stands for, written from the last of them");
-        row(out, c + "partition/ComparisonAssessment", "sideRuns", "(" + core + "L" + c
-                + "inputs/InputReading;)L" + c + "numeric/NumericDomain$Bounds;", Reading.NAMES,
-                "reads a side of a comparison that is a newtype's value, a projection as the"
-                        + " accesses it stands for, the last of them holding the rest");
         row(out, c + "partition/ComparisonReadings", "collectWritten", "(" + core + "L" + c
                 + "partition/ComparisonReadings$Body;Ljava/util/Set;)V", Reading.STRUCTURE,
                 "which comparisons of the model are written in a condition, which no name read is");
@@ -679,6 +675,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 CHOICES_AND_CALLS);
         row(out, c + "partition/Pullback", "comparisonHolding",
                 "(" + core + "L" + c + "core/Core$Read;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "check/DeclaredBounds", "ofTheValueReadOff",
+                "(" + core + "L" + c + "check/RuleReadingSource;L" + c
+                        + "check/DeclarationNewtypes;L" + c + "check/RuleReadingContext;)L" + c
+                        + "check/DeclaredBounds$Range;", Reading.ONE_ACCESS,
+                "reads the type a value is read off, of the access, or of the last access of a"
+                        + " projection, and of nothing under it");
         row(out, c + "partition/Pullback", "leaveUnsaidWhatMayEndARunUnder",
                 "(" + core + reads + "L" + c + "partition/Pullback$Bound;)V", Reading.STRUCTURE,
                 "asks each node what it ends a run for, of the owner of that: a name read off a"
@@ -758,7 +760,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node whether it is the quotient by a divisor, and goes down to its"
                         + " parts: a projection holds it where its base does");
         row(out, c + "check/WhatARunMayEndFor", "forEachWorkedOut", "(L" + c
-                        + "core/Core$IfConstructed;Ljava/util/function/Consumer;)V",
+                        + "core/Core$IfConstructed;Ljava/util/function/BiConsumer;)V",
                 Reading.STRUCTURE,
                 "hands the parts of an attempt to a reader, the operands of the construction it"
                         + " tests and its arms, and reads none of them: a projection among them is"

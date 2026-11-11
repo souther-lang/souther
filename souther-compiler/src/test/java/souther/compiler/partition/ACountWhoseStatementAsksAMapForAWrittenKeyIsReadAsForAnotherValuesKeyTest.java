@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -63,6 +64,8 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
             new Case("List.length(List.filter(l -> " + allOf(9) + ", lines)) == k", true),
             new Case("List.length(List.filter(l -> Bool.not(" + allOf(9) + "), lines)) == k",
                     true),
+            // So many that the subsets of them are more than could be walked one by one.
+            new Case("List.length(List.filter(l -> " + allOf(40) + ", lines)) == k", true),
             // A value written under a name is the value it is.
             new Case("List.length(List.filter(l -> Map.containsKey(usd, l.rates), lines)) == k",
                     true),
@@ -95,6 +98,12 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
                     + " && List.contains(\"L\", l.tags), lines)) == k", true),
             new Case("List.length(List.filter(l -> Set.contains(7, l.nums)"
                     + " || Set.contains(8, l.nums), lines)) == k", true),
+            // The same collection asked to hold a value and to hold so many: the one value is
+            // among the three.
+            new Case("List.length(List.filter(l -> List.length(l.tags) == 3"
+                    + " && List.contains(\"USD\", l.tags), lines)) == k", true),
+            new Case("List.length(List.filter(l -> Set.size(l.nums) == 2"
+                    + " && Set.contains(7, l.nums), lines)) == k", true),
             // A map that must not hold the key is the other class of the same place.
             new Case("List.length(List.filter(l -> Bool.not(Map.containsKey(\"USD\", l.rates)),"
                     + " lines)) == k", true),
@@ -127,14 +136,16 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
         return compilation.db().ask(new Adequacy.Coverage("probe")).value();
     }
 
-    private static final Map<String, PartitionEvidence> MEASURED = measured();
-
+    /** The time is bounded in the statements a model writes, whatever number of values it names:
+     *  the subsets of them are made and not walked to. */
     @Test
+    @Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void aCountIsHeldAgainstANumberThatReachesEveryValueWhereARowShowsEveryCount() {
+        Map<String, PartitionEvidence> measured = measured();
         Map<String, Boolean> shown = new LinkedHashMap<>();
         int at = 0;
         for (Case each : CASES) {
-            PartitionEvidence evidence = MEASURED.get("case" + at++);
+            PartitionEvidence evidence = measured.get("case" + at++);
             assertNotNull(evidence, each.body());            shown.put(each.body(), evidence.notRead().stream().noneMatch(left ->
                     left.at().equals("k")));
         }

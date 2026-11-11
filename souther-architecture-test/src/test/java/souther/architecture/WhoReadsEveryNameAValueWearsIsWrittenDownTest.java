@@ -202,9 +202,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer$Standing$WhereItIsWritten", "written",
                     "(Ljava/util/List;I)" + REALIZATION, THE_POSITION),
-            row(PARTITION + "ComparisonAssessment", "sideRuns",
-                    "(Lsouther/compiler/core/Core;L" + INPUTS + "InputReading;)" + BOUNDS,
-                    THE_POSITION),
             row(PARTITION + "ConstructionPlan", "applying",
                     "(L" + PARTITION + "ConstructionPlan$Settled;L" + INPUTS + "Refinement;" + INNERS
                             + SYMBOLS + KINDS + SUMS + ")L" + PARTITION
@@ -226,7 +223,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "DemandsInside;" + REALIZATION + ")" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "CountWitnesses", "collectionsTold",
-                    "(" + TYPE + "ZLjava/util/List;" + CONTEXT + ")Ljava/util/List;",
+                    "(" + TYPE + "ZLjava/util/List;Ljava/util/List;" + CONTEXT
+                            + ")Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "ElementsKeptApart", "keysMayRepeat",
                     "(Lsouther/compiler/core/Core;Lsouther/compiler/core/Core$Block;" + CONTEXT
@@ -355,6 +353,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "Witnesses", "holdingAt",
                     "(" + TYPE + "Ljava/util/Map;" + CONTEXT + ")" + PROPOSALS,
+                    THE_POSITION),
+            row(PARTITION + "Witnesses", "holdingMany",
+                    "(" + TYPE + "Ljava/math/BigInteger;" + CONTEXT + ")L" + PARTITION
+                            + "FixtureTemplate;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "placed",
                     "(" + TYPE + ADMITTED + CONTEXT + "Ljava/util/Set;L" + PARTITION

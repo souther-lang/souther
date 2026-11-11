@@ -12,6 +12,8 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Text;
+import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
 
@@ -36,11 +38,13 @@ import java.util.Map;
  * becomes is the type of the place it is named at, an {@code Int} or a {@code Decimal}, which the
  * language does not convert between ({@link Partitions#writtenNumberAt}).
  *
- * <p>Named at a place only where the statement compares the value at that place: the number of a
+ * <p>Named at a place where the statement compares the value at that place: the number of a
  * place itself, which is what a comparison written with a constant tells apart. A measure of a
- * place — how many characters it holds, how many elements — is no value of it, and a value its
- * comparison names is no value to put there; nothing is named for one, since what would be is
- * the place built to have that measure, which a measure alone does not say.
+ * place — how many characters it holds, how many elements — is no value of it, and the number its
+ * comparison names is no value to put there: what is named is a value that holds that many
+ * ({@link Named.Holding}), which the place's type builds ({@link Witnesses#ofSize}). Only the
+ * count of what the place holds as it stands is named so; another number taken of a place
+ * ({@code Time.hour(slot.at)}) is told apart by values no measure of it says how to build.
  *
  * <p>Each form of statement is said here, by the exhaustive switch below, to name values or to
  * name none, so that a form added to {@link Proposition} stops the build here until somebody says
@@ -57,17 +61,35 @@ final class ValuesAStatementNames {
     private ValuesAStatementNames() {}
 
     /**
+     * What a statement names at a place: a value written there, or a measure of what the place
+     * holds. The two are not one kind of thing — a value is put at the place, and a number of
+     * elements is no value to put there — so they are told apart by the case and not by what
+     * the number happens to be.
+     */
+    sealed interface Named {
+
+        /** A value the statement is written with, which the type of the place writes: the same
+         *  number is the same at an {@code Int} place and at a {@code Decimal} one. */
+        record AtValue(Value value) implements Named {}
+
+        /** A value that holds this many: a string of that many characters, a collection of that
+         *  many elements. Which value it is, is what the type of the place builds for that many
+         *  ({@link Witnesses#ofSize}). */
+        record Holding(BigInteger many) implements Named {}
+    }
+
+    /**
      * Each place {@code stated} names values at, and the values in the order they are named: the
      * value a comparison is written with, and the whole numbers beside it a comparison to a number
      * is told apart at.
      */
-    static Map<TermPath, List<Value>> of(Proposition stated) {
-        Map<TermPath, List<Value>> out = new LinkedHashMap<>();
+    static Map<TermPath, List<Named>> of(Proposition stated) {
+        Map<TermPath, List<Named>> out = new LinkedHashMap<>();
         collect(stated, out);
         return out;
     }
 
-    private static void collect(Proposition stated, Map<TermPath, List<Value>> out) {
+    private static void collect(Proposition stated, Map<TermPath, List<Named>> out) {
         switch (stated) {
             case Proposition.Compared compared -> relation(compared.relation(), out);
             case Proposition.All all -> all.parts().forEach(each -> collect(each, out));
@@ -93,7 +115,7 @@ final class ValuesAStatementNames {
         }
     }
 
-    private static void relation(Relation relation, Map<TermPath, List<Value>> out) {
+    private static void relation(Relation relation, Map<TermPath, List<Named>> out) {
         switch (relation) {
             // A place written with a value on the order it stands on: the value, and where it
             // counts the whole numbers beside it, which a strict order is told apart at.
@@ -105,6 +127,10 @@ final class ValuesAStatementNames {
                         case Text text -> named(place, List.of(Value.text(text.at())), out);
                     }
                 }
+                TermPath held = howManyHeldAt(term);
+                if (held != null && at instanceof Count count) {
+                    holding(held, besideThe(count.at()), out);
+                }
             }
             // One place weighed against a constant: it is told apart where the form is nought,
             // and at the whole numbers either side of it.
@@ -113,11 +139,44 @@ final class ValuesAStatementNames {
                     return;
                 }
                 Map.Entry<Quantity, ExactRatio> only = form.coefs().entrySet().iterator().next();
-                TermPath place = only.getKey() instanceof DecisionAtom atom ? valueAt(atom) : null;
-                if (place != null && form.constant().negated().dividedBy(only.getValue())
-                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio where)) {
-                    named(place, wholesBeside(where), out);
+                DecisionAtom atom = only.getKey() instanceof DecisionAtom each ? each : null;
+                TermPath place = atom == null ? null : valueAt(atom);
+                TermPath held = atom == null ? null : howManyHeldAt(atom);
+                if ((place != null || held != null)
+                        && form.constant().negated().dividedBy(only.getValue())
+                                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio where)) {
+                    if (place != null) {
+                        named(place, wholesBeside(where), out);
+                    }
+                    if (held != null) {
+                        holding(held, wholesBeside(where), out);
+                    }
                 }
+            }
+        }
+    }
+
+    /** The place {@code term} is how many characters or elements of, as it stands, or null where
+     *  it is another number. */
+    private static TermPath howManyHeldAt(DecisionAtom term) {
+        return term instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOf taken, var _)
+                && taken.takenAs() instanceof TakenAs.HowManyItHolds
+                && taken.transformation().equals(ValueTransformation.NONE)
+                ? taken.position() : null;
+    }
+
+    /** What holds each of the numbers {@code counts} says at {@code place}, where it is a whole
+     *  number of nought or more. */
+    private static void holding(TermPath place, List<Value> counts,
+                                Map<TermPath, List<Named>> out) {
+        List<Named> at = out.computeIfAbsent(place, _ -> new ArrayList<>());
+        for (Value each : counts) {
+            if (each instanceof Value.Number(BigDecimal count)
+                    && ExactRatio.of(count).floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger whole)
+                    && whole.signum() >= 0 && ExactRatio.of(count).isWhole()
+                    && !at.contains(new Named.Holding(whole))) {
+                at.add(new Named.Holding(whole));
             }
         }
     }
@@ -164,8 +223,13 @@ final class ValuesAStatementNames {
     }
 
     private static void named(TermPath place, List<Value> values,
-                              Map<TermPath, List<Value>> out) {
-        List<Value> at = out.computeIfAbsent(place, _ -> new ArrayList<>());
-        values.stream().filter(value -> !at.contains(value)).forEach(at::add);
+                              Map<TermPath, List<Named>> out) {
+        List<Named> at = out.computeIfAbsent(place, _ -> new ArrayList<>());
+        for (Value value : values) {
+            Named written = new Named.AtValue(value);
+            if (!at.contains(written)) {
+                at.add(written);
+            }
+        }
     }
 }

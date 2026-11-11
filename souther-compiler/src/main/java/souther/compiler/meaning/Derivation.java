@@ -1258,7 +1258,7 @@ public sealed interface Derivation {
                     // reading to.
                     case WrittenOut _ -> positionOf(some.container()) == null;
                     default -> {
-                        List<Derivation> oneOf = read.oneOf();
+                        List<Derivation> oneOf = armsTakenAtTheCall(read);
                         yield oneOf != null && !oneOf.isEmpty()
                                 && oneOf.stream().allMatch(each -> meets(some, each));
                     }
@@ -1281,7 +1281,7 @@ public sealed interface Derivation {
                             && standsAsANumber(law.one(), one)
                             && standsAsANumber(law.other(), other);
                     default -> {
-                        List<Derivation> oneOf = read.oneOf();
+                        List<Derivation> oneOf = armsTakenAtTheCall(read);
                         yield oneOf != null && !oneOf.isEmpty()
                                 && oneOf.stream().allMatch(each -> isTheSame(law, each));
                     }
@@ -1311,9 +1311,44 @@ public sealed interface Derivation {
                             .allMatch(number -> numberStands(number, leaf.numbers().get(number),
                                     leaf));
                 }
-                List<Derivation> oneOf = read.oneOf();
+                List<Derivation> oneOf = armsTakenAtTheCall(read);
                 return oneOf != null && !oneOf.isEmpty()
                         && oneOf.stream().allMatch(each -> compares(law, each));
+            }
+
+            /**
+             * What the choice {@code read} states, in the arms a value the call is made of can be
+             * taken by.
+             *
+             * <p>A call stands at a position, and a position says which cases the value is. An arm
+             * of a {@code match} that selects cases of a subject the position narrows to cases
+             * sharing none with them is one no value of the call takes, and what it reads is of
+             * another position than the call's whatever it reads. Only where the position itself
+             * narrows that subject apart from the arm: an arm a shared name may make the same
+             * value is read, as every arm of any other choice is.
+             */
+            private List<Derivation> armsTakenAtTheCall(Derivation read) {
+                if (!(read instanceof MatchArms(List<MatchArms.Arm> arms))) {
+                    return read.oneOf();
+                }
+                List<Derivation> taken = new ArrayList<>(arms.size());
+                for (MatchArms.Arm arm : arms) {
+                    if (!(arm.selects() instanceof CasesOfASubject(
+                            DecisionSubject.AnInput(TermPath of, var _), CasesLeft cases))
+                            || call.standingAt().values().stream()
+                                    .noneMatch(at -> narrowsApartFrom(at, of, cases))) {
+                        taken.add(arm.states());
+                    }
+                }
+                return taken;
+            }
+
+            /** Whether {@code at} is of a value {@code subject} narrowed to cases that share none
+             *  with {@code cases}. */
+            private static boolean narrowsApartFrom(TermPath at, TermPath subject,
+                                                    CasesLeft cases) {
+                CasesLeft there = at.requirements().refinements().get(subject);
+                return there != null && there.meet(cases) == null;
             }
 
             /** Whether the container {@code argument} is, read at {@code container}, stands
