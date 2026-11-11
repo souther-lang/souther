@@ -2336,7 +2336,7 @@ final class CardinalityComposer {
             }
 
             /** Where standing in the set turns over, which the set says
-             *  ({@link NumericSet#turnsAt}), for the number this is about. */
+             *  ({@link NumericSet.OfRuns#turnsAt}), for the number this is about. */
             @Override
             public List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside) {
                 return element.subjectPath().equals(at)
