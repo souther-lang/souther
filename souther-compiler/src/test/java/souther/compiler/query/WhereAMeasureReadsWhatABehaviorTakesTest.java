@@ -46,11 +46,11 @@ class WhereAMeasureReadsWhatABehaviorTakesTest {
                 constructs Invoice
             let issue (a) = Invoice { amount = a }
 
-            behavior receipt : (i: Invoice) -> Receipt
+            behavior receiptOf : (i: Invoice) -> Receipt
                 constructs Receipt
-            let receipt (i) = Receipt { n = 1 }
+            let receiptOf (i) = Receipt { n = 1 }
 
-            behavior whole = issue >-> receipt
+            behavior whole = issue >-> receiptOf
             """;
 
     private static Compilation measured() {

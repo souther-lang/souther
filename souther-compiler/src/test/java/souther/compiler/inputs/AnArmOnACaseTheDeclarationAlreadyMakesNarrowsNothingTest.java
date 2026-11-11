@@ -103,16 +103,16 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
             data Rising = { slope: Up }
             data Sloped = { slope: Slope }
 
-            behavior rising : (r: Rising) -> Int
-            let rising (r) = height(r.slope)
+            behavior risen : (r: Rising) -> Int
+            let risen (r) = height(r.slope)
 
-            behavior sloped : (s: Sloped) -> Int
-            let sloped (s) = height(s.slope)
+            behavior leaning : (s: Sloped) -> Int
+            let leaning (s) = height(s.slope)
 
             data Whole = { digits: WholeDigits }
 
-            behavior whole : (x: Whole) -> String
-            let whole (x) = coefficientText(x.digits)
+            behavior wholeText : (x: Whole) -> String
+            let wholeText (x) = coefficientText(x.digits)
 
             data On
             data Off
@@ -124,8 +124,8 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
                 | On -> 1
                 | Off -> 9
 
-            behavior opened : (o: Opened) -> Int
-            let opened (o) = look(o.flag.value)
+            behavior openedLook : (o: Opened) -> Int
+            let openedLook (o) = look(o.flag.value)
 
             data Station = { code: String }
             data Hospital = { code: String }
@@ -148,11 +148,11 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
             behavior once : (r: Request) -> String
             let once (r) = visitText(r.kind)
 
-            behavior visit : (v: Visit) -> String
-            let visit (v) = visitText(v.kind)
+            behavior visitName : (v: Visit) -> String
+            let visitName (v) = visitText(v.kind)
 
-            behavior linked : (l: Linked) -> String
-            let linked (l) = visitText(l.kind)
+            behavior linkedName : (l: Linked) -> String
+            let linkedName (l) = visitText(l.kind)
             """;
 
     /**
@@ -216,10 +216,10 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
      */
     @Test
     void whatAFieldCanBeIsTheLeavesUnderItsType() {
-        assertEquals(Set.of("r.slope.u"), underTheField(named("rising"), "r.slope"),
+        assertEquals(Set.of("r.slope.u"), underTheField(named("risen"), "r.slope"),
                 "a field that is one leaf is read unnarrowed, and nothing under the other leaf");
         assertEquals(Set.of("s.slope@Up", "s.slope@Up.u", "s.slope@Down", "s.slope@Down.d"),
-                underTheField(named("sloped"), "s.slope"),
+                underTheField(named("leaning"), "s.slope"),
                 "a field of the inner sum is narrowed to the leaf each arm selects");
     }
 
@@ -233,12 +233,12 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
      */
     @Test
     void anArmIsAskedOfEveryNameTheValueWears() {
-        assertEquals(Set.of(), underTheField(named("whole"), "x.digits"),
+        assertEquals(Set.of(), underTheField(named("wholeText"), "x.digits"),
                 "a field that is the case is named unnarrowed: what is under its name is no value"
                         + " the arm can be matching");
-        assertEquals(List.of(List.of("x.digits -> DecimalPart")), outOfReach("whole"),
+        assertEquals(List.of(List.of("x.digits -> DecimalPart")), outOfReach("wholeText"),
                 "a field that is the case leaves only the other arm out of reach");
-        assertEquals(List.of(), outOfReach("opened"),
+        assertEquals(List.of(), outOfReach("openedLook"),
                 "a field holding the sum under a name of its own leaves every arm in reach");
     }
 
@@ -268,14 +268,14 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
      */
     @Test
     void aFieldNoneOfTheLeavesOfACaseIsOutOfReachThroughIt() {
-        assertEquals(List.of(List.of("l.kind -> {Hospital|Station}")), outOfReach("linked"),
+        assertEquals(List.of(List.of("l.kind -> {Hospital|Station}")), outOfReach("linkedName"),
                 "a field none of the case's leaves is out of reach through the case");
     }
 
     /** And a field the declaration leaves every case, which the arms divide as they always did. */
     @Test
     void aFieldOfEveryCaseHasEveryArmInReach() {
-        assertEquals(List.of(), outOfReach("visit"));
+        assertEquals(List.of(), outOfReach("visitName"));
     }
 
     /**

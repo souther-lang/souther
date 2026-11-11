@@ -68,11 +68,11 @@ final class WhatARunWorksOutBeforeACount {
                                       Supplier<Map<Quantity.HowManyMeet, Core>> readOff,
                                       Map<BindingId, String> parameters,
                                       ComparisonWitnesses.AtAComparison witnesses) {
-        Map<Quantity.HowManyMeet, Boolean> getsThrough = new HashMap<>();
+        Map<Quantity.CountedOverAContainer, Boolean> getsThrough = new HashMap<>();
         List<Optional<List<Core>>> worked = new ArrayList<>(1);
         return new ComparisonWitnesses.AtAComparison() {
             @Override
-            public CountWitnesses.Sought of(Quantity.HowManyMeet count) {
+            public CountWitnesses.Sought of(Quantity.CountedOverAContainer count) {
                 if (root == null) {
                     return CountWitnesses.Sought.NOTHING;
                 }
@@ -81,8 +81,10 @@ final class WhatARunWorksOutBeforeACount {
                 }
                 boolean through = worked.getFirst().isPresent()
                         && getsThrough.computeIfAbsent(count, asked -> getsThrough(
-                                worked.getFirst().get(), asked, readOff.get().get(asked), root,
-                                reads, parameters));
+                                worked.getFirst().get(), asked,
+                                asked instanceof Quantity.HowManyMeet meet
+                                        ? readOff.get().get(meet) : null,
+                                root, reads, parameters));
                 return through ? witnesses.of(count) : CountWitnesses.Sought.NOTHING;
             }
 
@@ -100,12 +102,17 @@ final class WhatARunWorksOutBeforeACount {
         };
     }
 
-    /** Whether every one of {@code parts} is let through for {@code count}, read off
-     *  {@code counted} — never where the reading names no call it was read off. */
-    private static boolean getsThrough(List<Core> parts, Quantity.HowManyMeet count,
+    /**
+     * Whether every one of {@code parts} is let through for {@code count}, a count of elements
+     * that meet a statement read off {@code counted} — never where the reading names no call it was
+     * read off — or a count of different values, which is read off no one call but a chain of
+     * them over the container: each part reading the container is then let through where nothing
+     * under it, the closures written at it included, ends a run, whatever the container holds.
+     */
+    private static boolean getsThrough(List<Core> parts, Quantity.CountedOverAContainer count,
                                        Core counted, Core root, InputReads reads,
                                        Map<BindingId, String> parameters) {
-        if (counted == null
+        if ((counted == null && count instanceof Quantity.HowManyMeet)
                 || !(count.container() instanceof DecisionSubject.AnInput(TermPath container,
                         var _))) {
             return false;
@@ -114,8 +121,12 @@ final class WhatARunWorksOutBeforeACount {
         if (parameter == null) {
             return false;
         }
-        Within asked = new Within(parameter,
-                WhatABodyReads.namesMadeOf(root, Set.of(parameter)), reads,
+        Set<BindingId> ofTheContainer = WhatABodyReads.namesMadeOf(root, Set.of(parameter));
+        if (counted == null) {
+            return parts.stream().noneMatch(part -> WhatABodyReads.anyOf(part, ofTheContainer)
+                    && !WhatARunMayEndFor.endsNoneBeneath(part));
+        }
+        Within asked = new Within(parameter, ofTheContainer, reads,
                 Core.withoutStanding(counted));
         return parts.stream().allMatch(asked::letsThrough);
     }

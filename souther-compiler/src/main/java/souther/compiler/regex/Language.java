@@ -1,5 +1,6 @@
 package souther.compiler.regex;
 
+import java.math.BigInteger;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
@@ -359,6 +360,14 @@ public final class Language {
         Automaton theirs = Automaton.ofWords(words, meter);
         Automaton left = theirs == null ? null : theirs.not(meter);
         return left == null ? null : canonical(machine.and(left, meter), meter);
+    }
+
+    /**
+     * How many strings it holds, or null where it holds endlessly many. Read off the canonical
+     * machine, and nothing is built ({@link HowManyStringsAMachineHolds}).
+     */
+    public BigInteger howManyStrings() {
+        return HowManyStringsAMachineHolds.of(machine);
     }
 
     /** How many states hold it, which is what a caller answering for its work counts. */

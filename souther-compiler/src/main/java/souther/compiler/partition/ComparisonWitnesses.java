@@ -22,7 +22,7 @@ public final class ComparisonWitnesses {
 
         /** What the search for a witness of {@code count} whose row gets to the comparison came
          *  to. */
-        CountWitnesses.Sought of(Quantity.HowManyMeet count);
+        CountWitnesses.Sought of(Quantity.CountedOverAContainer count);
 
         /** What the search for a row that gets to the comparison came to. */
         default ReachWitnesses.Sought reached() {
@@ -50,7 +50,7 @@ public final class ComparisonWitnesses {
             AtAComparison found = this;
             return new AtAComparison() {
                 @Override
-                public CountWitnesses.Sought of(Quantity.HowManyMeet count) {
+                public CountWitnesses.Sought of(Quantity.CountedOverAContainer count) {
                     return found.of(count);
                 }
 

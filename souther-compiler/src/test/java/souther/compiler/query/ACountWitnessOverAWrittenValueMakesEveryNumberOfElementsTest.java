@@ -101,7 +101,7 @@ class ACountWitnessOverAWrittenValueMakesEveryNumberOfElementsTest {
             "viaFloor");
 
     /** The counts the measure of the model asked a witness of, by behavior. */
-    private static Map<String, List<Adequacy.WitnessOfACount>> askedOf(Compilation compilation) {
+    static Map<String, List<Adequacy.WitnessOfACount>> askedOf(Compilation compilation) {
         Set<Key<?>> reached = new HashSet<>();
         Deque<Key<?>> left = new ArrayDeque<>(List.of(new Adequacy.Coverage("demo")));
         Map<String, List<Adequacy.WitnessOfACount>> out = new LinkedHashMap<>();
@@ -123,7 +123,7 @@ class ACountWitnessOverAWrittenValueMakesEveryNumberOfElementsTest {
     private static List<FixtureTemplate> rowKeeping(CountWitnesses.Witness witness, int kept) {
         List<FixtureTemplate> elements = new ArrayList<>();
         for (int each = 0; each < 2; each++) {
-            elements.add(each < kept ? witness.kept() : witness.dropped());
+            elements.add(each < kept ? witness.one() : witness.other());
         }
         List<FixtureTemplate> row = new ArrayList<>(witness.inputs());
         row.set(witness.container(), FixtureTemplate.collection(elements));

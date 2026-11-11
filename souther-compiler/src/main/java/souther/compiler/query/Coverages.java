@@ -149,7 +149,7 @@ final class Coverages {
 
         /** A row showing {@code count} takes every value beside how many its container holds, at
          *  a run recorded at one of {@code reaching}. */
-        CountWitnesses.Sought ofACount(Quantity.HowManyMeet count,
+        CountWitnesses.Sought ofACount(Quantity.CountedOverAContainer count,
                                        Set<ConditionOutcomeSite> reaching);
 
         /** A row a run of which is recorded at one of {@code reaching}. */
@@ -185,7 +185,8 @@ final class Coverages {
             return reaching.isEmpty() ? ComparisonWitnesses.AtAComparison.NONE
                     : new ComparisonWitnesses.AtAComparison() {
                         @Override
-                        public CountWitnesses.Sought of(Quantity.HowManyMeet count) {
+                        public CountWitnesses.Sought of(
+                                Quantity.CountedOverAContainer count) {
                             return found.ofACount(count, reaching);
                         }
 
