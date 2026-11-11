@@ -63,10 +63,15 @@ the ones made however many values are named.
 What a statement names at a place is a value written there or how many the place holds, and the two
 are cases of one type and not one kind of number: a value is put at the place, and a number of
 elements is no value to put there. Where a statement names both of one collection, it is built
-holding the values chosen and that many, the others being values of the element type that differ
-from one another and from every value the statement names: a value it names and the choice leaves
-out is a value the collection does not hold, and a set or a map holds none twice. A collection
-beyond what a proposal may hold is not built, and the budget is said.
+holding the values chosen and that many.
+
+Each collection is asked of the builder that owns collections (`Witnesses.holding`), with the
+values named and not chosen kept out of it and with the range of how many the place may hold, which
+the rules of its type and of the record holding it leave. What may stand beside the values chosen is
+that builder's to say: a list may hold a value again and a set or a map may not, the rules give a
+floor, and a collection beyond what a proposal may hold is not built and the budget is said. A
+second builder of collections in the search would have to repeat each of those and would come apart
+from the first at the first it missed.
 
 ## Consequences
 
