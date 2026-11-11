@@ -24,9 +24,6 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
-import souther.compiler.inputs.DecimalAdditiveWalk;
-import souther.compiler.inputs.DecimalOperation;
-import souther.compiler.inputs.DecimalWork;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementsMet;
@@ -58,7 +55,6 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -561,10 +557,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void composed(Core operation, LinearForm<NumericTerm> form,
                                  List<LinearForm<NumericTerm>> operands) {
-                if (Core.withoutStanding(operation) instanceof Core.Neg && operands.size() == 1) {
-                    told.negatedFrom(operands.get(0), form);
-                }
-                tell(operation, form, operands, AffineForms.whereItAnswers(operation));
+                tell(operation, form, AffineForms.whereItAnswers(operation));
             }
 
             /**
@@ -585,25 +578,21 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     told.exact = false;
                     return;
                 }
-                tell(construct, value, List.of(value), where);
+                tell(construct, value, where);
             }
 
             /**
-             * {@code operation}, worked out as {@code form} over {@code operands} where a run
-             * stops at it as {@code where} says, told as the operations of this comparison.
+             * {@code operation}, worked out as {@code form} where a run stops at it as
+             * {@code where} says, told as the operations of this comparison.
              */
             private void tell(Core operation, LinearForm<NumericTerm> form,
-                              List<LinearForm<NumericTerm>> operands,
                               WhereAnOperatorAnswers where) {
                 if (heldAside(operation, where, form, told.workedOutOf(operation))) {
                     return;
                 }
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
                     tellHeld(operation, held, form, told.workedOutOf(operation));
-                } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)
-                        // A decimal operation has no region; a row is asked by working it out.
-                        && !(where instanceof WhereAnOperatorAnswers.NotStated
-                                && told.addsDecimal(operation, form, operands))) {
+                } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
                     told.exact = false;
                 }
             }
@@ -632,19 +621,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void answeredByTheLibrary(Core call, LinearForm<NumericTerm> form,
                                              WhereAnOperatorAnswers where) {
-                if (aDecimalMadeOfWholeNumbers(call)) {
-                    told.readsTheInput(form);
-                }
-                tell(call, form, List.of(form), where);
-            }
-
-            /** Whether {@code call} is the library's widening of a whole number to a decimal, which
-             *  holds no places beyond the point: {@code Decimal.fromInt(n)} is the number
-             *  {@code n} is. Only that operation, and not any that answers a decimal from whole
-             *  numbers: a division of two of them has as many places as it is asked for. */
-            private boolean aDecimalMadeOfWholeNumbers(Core call) {
-                return Core.withoutStanding(call) instanceof Core.PreservedCall kept
-                        && DefaultBoundOperationFacts.get().widensAWholeNumber(kept.operation());
+                tell(call, form, where);
             }
 
             /**
@@ -866,8 +843,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 WhatWasTold apart = new WhatWasTold();
                 LinearForm<NumericTerm> form = rest[0] ? composedBy(operand, at,
                         reading(ofTheInput, new LinkedHashSet<>(), met.copied(), apart)) : null;
-                if (form == null || !apart.exact || !apart.partials.isEmpty()
-                        || !apart.decimals.isEmpty()) {
+                if (form == null || !apart.exact || !apart.partials.isEmpty()) {
                     return false;
                 }
                 // An operation that is no addend of the form, a sum with a number it is moved
@@ -912,7 +888,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         : stoppedAt.heldAt(bound.iterator().next());
                 if (composedBy(dividend, at, reading(ofTheInput, new LinkedHashSet<>(),
                         met.copied(), apart, byTheValue)) == null
-                        || !apart.partials.isEmpty() || !apart.decimals.isEmpty()) {
+                        || !apart.partials.isEmpty()) {
                     return false;
                 }
                 for (SumOverTheStop sum : apart.sumsOverTheStop) {
@@ -1116,11 +1092,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // where. What may stop one is its owners' to say, and a node they do not say
                     // of is one that may. What each name it reads was given is asked with it, so
                     // a binding of one of them is answered for here.
-                    // A total of what a closure makes of each element is told as a walk from
-                    // nought: the library adds the decimals up exactly, at the scale such a walk
-                    // ends at. An Int total is told as the one operation it is, where what the
-                    // closure works out of each element gets through; where it is shown to only
-                    // on a row of one element, what it works out is left to the running totals.
+                    // A total of what a closure makes of each element: a total of decimals is a
+                    // decimal and stops no run of its own, and an Int total is told as the one
+                    // operation it is, where what the closure works out of each element gets
+                    // through; where it is shown to only on a row of one element, what it works
+                    // out is left to the running totals.
                     if (!NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, numbers,
                             ofTheInput, at)) {
                         NumericTerm total = addedAsItIs(numbers);
@@ -1129,20 +1105,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                 : AddedOfEachElement.ofAClosure(closure);
                         if (each == null || !preparedWithoutAStop(node, at, closure, node)) {
                             told.exact = false;
-                        } else if (Core.withoutStanding(node).type() == Type.DECIMAL) {
-                            told.walksAddingDecimals(numbers, BigDecimal.ZERO,
-                                    asTheRelationNamesIt(total), each.shapeOfEveryPart());
-                        } else if (!(total instanceof NumericTerm.TakenOver)
+                        } else if (Core.withoutStanding(node).type() == Type.INT
+                                && (!(total instanceof NumericTerm.TakenOver)
                                 || !tellAnIntTotalThrough(throughOverWholeNumbers(each,
                                         BigInteger.ZERO, closure.params().getFirst().binding(),
-                                        total), node, numbers, total)) {
+                                        total), node, numbers, total))) {
                             told.exact = false;
                         }
                     }
                     told.readByATerm(node);
-                    if (isAPlainRead(node) || aDecimalMadeOfWholeNumbers(node)) {
-                        told.readsTheInput(numbers);
-                    }
                     return new AffineForms.Leaf.Form<>(numbers);
                 }
                 if (stoppedAt == null) {
@@ -1227,17 +1198,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 named.add(product.product());
                 LinearForm<NumericTerm> atom = product.asAForm();
                 if (mul.type() == Type.DECIMAL) {
-                    // A decimal product has no region; a row is asked by working it out.
-                    if (!told.addsDecimal(mul, atom, List.of(left, right))) {
-                        told.exact = false;
-                    }
+                    // A product of decimals is a decimal, and stops no run.
                     return atom;
                 }
                 // Told whatever the type of the number says of it: the product is the number the
                 // factors come to, which is not held to an Int by being typed as one, and a run
                 // stops where it passes the ends.
-                if (WhereAnOperatorAnswers.ofAnOperator(BinOp.MUL, Type.INT,
-                        List.of(Type.INT, Type.INT))
+                if (WhereAnOperatorAnswers.ofAnOperator(BinOp.MUL, Type.INT)
                         instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
                     told.add(mul, UndividedByARelation.IntOperation.overTheInput(atom,
                             held.least(), held.greatest(), told.workedOutOf(mul)));
@@ -1361,11 +1328,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)) {
                     return new Attempt.NotApplicable();
                 }
-                // A total of decimals stops where the sum has no room, which is told of the
-                // answers as the library adds them ({@link WhatWasTold#addsUpDecimals}).
+                // A total of whole numbers answers where it fits an Int; one of decimals or of
+                // rationals answers always, and is read off the list it adds up all the same.
                 int operand = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
                         instanceof GetsPast.WhereTheTotalFits(int list) ? list
-                        : call.type() == Type.DECIMAL
+                        : call.type() != Type.INT
                         ? WhatARunMayEndFor.theListItAddsUp(call).orElse(-1) : -1;
                 if (operand < 0 || operand >= call.args().size()) {
                     return new Attempt.NotApplicable();
@@ -1548,7 +1515,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private Attempt totalOfApplications(Core.PreservedCall call, int from,
                                                 List<Denotation> made) {
                 LinearForm<NumericTerm> total = LinearForm.constant(ExactRatio.ZERO);
-                List<LinearForm<NumericTerm>> answers = new ArrayList<>();
                 for (Denotation application : made) {
                     Attempt answered = Attempt.ofAPart(AffineForms.outcome(application.value(),
                             application.at(), this));
@@ -1559,15 +1525,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             LinearForm<NumericTerm> sum))) {
                         return new Attempt.NotApplicable();
                     }
-                    answers.add(one);
                     total = sum;
                 }
-                if (call.type() == Type.DECIMAL) {
-                    if (!told.addsUpDecimals(made.stream().map(Denotation::value).toList(),
-                            answers, total)) {
-                        told.exact = false;
-                    }
-                } else {
+                // A total of decimals or of rationals is one of its type and stops no run; one of
+                // whole numbers is held to an Int.
+                if (call.type() == Type.INT) {
                     tellAnIntTotal(call, total,
                             IntStream.range(from, told.operations.size()).boxed().toList());
                 }
@@ -1602,7 +1564,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 named.addAll(answer.coefs().keySet());
                 SeededWalk seeded = SeededWalk.of(node, closure -> Core.withoutStanding(closure)
                         instanceof Core.Block block ? block : null);
-                if (Core.withoutStanding(node).type() != Type.DECIMAL
+                if (Core.withoutStanding(node).type() == Type.INT
                         && NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, answer,
                                 ofTheInput, at)) {
                     tellAnIntTotal(node, answer, List.of());
@@ -1659,12 +1621,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * walk of one field of what it carries. Nothing is told where working {@code node} out
              * may stop beside the steps ({@link #preparedWithoutAStop}).
              *
-             * <p>A walk of decimals stops where a step has no room for its digits, which is no
-             * fact of the numbers on the way: it is told as the walk it is
-             * ({@link DecimalAdditiveWalk}) where its step adds or takes away a part of the element
-             * and its seed is written out. The walk joining two maps adds the product of two
-             * numbers of a row, or of one and a nought written at no more places than a row is
-             * built at.
+             * <p>A walk of decimals stops nowhere of its own: every answer so far is a decimal. What
+             * is told of it is that its step adds or takes away a part of the element and works out
+             * nothing else ({@link AddedOfEachElement}).
              *
              * <p>A walk of whole numbers from a written one stops beside the answer at a running
              * total. Where each step adds the same written number, every answer so far lies
@@ -1684,14 +1643,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 AddedOfEachElement each = total == null ? null : joinsTwoMaps(total)
                         ? AddedOfEachElement.ofAJoin()
                         : AddedOfEachElement.ofTheStep(seeded);
-                if (seeded.step().body().type() == Type.DECIMAL) {
-                    BigDecimal seed = aDecimalWrittenOut(seeded.seed());
-                    if (seed == null || each == null) {
-                        return false;
-                    }
-                    told.walksAddingDecimals(answer, seed, asTheRelationNamesIt(total),
-                            each.shapeOfEveryPart());
-                    return true;
+                // What a walk of decimals or of rationals carries is one of its type at every step,
+                // so the walk stops a run nowhere the step does; a step read as adding a part of
+                // the element works out nothing else, and one that is not is not read.
+                if (seeded.step().body().type() != Type.INT) {
+                    return each != null;
                 }
                 if (!(Core.withoutStanding(seeded.seed()) instanceof Core.Int seed)) {
                     return false;
@@ -1823,28 +1779,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         && carried.equals(read.binding());
             }
 
-            /**
-             * {@code total} as the form of the comparison names it: the totals of one run over a
-             * type with no ends are read as the one total of what each element comes to
-             * ({@link TotalsOfOneRun#addedUp}), so a total of what is taken away is that total of
-             * what is taken, weighed by minus one. A row holds the terms of that form.
-             */
-            private LinearForm<NumericTerm> asTheRelationNamesIt(NumericTerm total) {
-                return TotalsOfOneRun.addedUp(new LinearForm<>(ExactRatio.ZERO,
-                        Map.of(total, ExactRatio.ONE)), inputs, ruleSource);
-            }
-
-            /** The decimal {@code e} is written as, at the scale it is written, or null where it
-             *  is no decimal written out. */
-            private static BigDecimal aDecimalWrittenOut(Core e) {
-                return switch (Core.withoutStanding(e)) {
-                    case Core.Decimal written -> written.value();
-                    case Core.Neg negated when Core.withoutStanding(negated.operand())
-                            instanceof Core.Decimal written -> written.value().negate();
-                    default -> null;
-                };
-            }
-
             /** Whether {@code total} is the walk joining two maps, whose step is read where the
              *  total is ({@link InputNumber#ofAWalkJoiningTwoMaps}) and is asked nothing again. */
             private static boolean joinsTwoMaps(NumericTerm total) {
@@ -1941,8 +1875,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private void operandsOfTheQuotient(Core node, InputReads at) {
                 if (!(Core.withoutStanding(node) instanceof Core.Binary quotient)
                         || quotient.op() != BinOp.DIV
-                        || !(WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type(),
-                                List.of(quotient.left().type(), quotient.right().type()))
+                        || !(WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type())
                                 instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought)) {
                     told.exact = false;
                     return;
@@ -2022,27 +1955,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     }
 
     /**
-     * Whether {@code node} is a place of the input read as it is: a name or a field of one, with
-     * no call or operation between it and the place. A row is built with the number at such a
-     * place, so the representation it has is the one the row is built with.
-     */
-    private static boolean isAPlainRead(Core node) {
-        Core at = Core.withoutStanding(node);
-        while (true) {
-            switch (at) {
-                case Core.Read _ -> {
-                    return true;
-                }
-                case Core.FieldAccess access -> at = Core.withoutStanding(access.target());
-                case Core.FieldProjection projection -> at = Core.withoutStanding(projection.base());
-                default -> {
-                    return false;
-                }
-            }
-        }
-    }
-
-    /**
      * An operation of whole numbers over the expression a reading stopped at, held aside: the
      * form, over the atom the expression is held as; where a run stops at it; and the node that
      * works it out after the operations {@code after}.
@@ -2088,13 +2000,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final Set<UndividedByARelation.IntOperation> toldOnce = new HashSet<>();
         /** The node each of {@link #operations} was told at, by where it is among them. */
         private final List<Core> at = new ArrayList<>();
-        /** The operations and walks of decimals, in the order they were told. */
-        private final List<DecimalWork> decimals = new ArrayList<>();
-        /** Where in {@link #decimals} the operation a form is the result of is, by the form. */
-        private final Map<LinearForm<NumericTerm>, Integer> resultOf = new IdentityHashMap<>();
-        /** The forms that are a place of the input read as it is, a number a row is built with. */
-        private final Set<LinearForm<NumericTerm>> inputReads =
-                Collections.newSetFromMap(new IdentityHashMap<>());
         /** The operations over a stopped value that are told of nowhere, to be asked of the form
          *  of the comparison. */
         private final List<SumOverTheStop> sumsOverTheStop = new ArrayList<>();
@@ -2201,12 +2106,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             for (int i = 0; i < apart.operations.size(); i++) {
                 add(apart.at.get(i), apart.operations.get(i).shifted(ofWholeNumbers));
             }
-            int ofDecimals = decimals.size();
-            for (DecimalWork each : apart.decimals) {
-                decimals.add(each.shifted(ofDecimals));
-            }
-            apart.resultOf.forEach((form, where) -> resultOf.put(form, where + ofDecimals));
-            inputReads.addAll(apart.inputReads);
             sumsOverTheStop.addAll(apart.sumsOverTheStop);
             countsOverTheStop.addAll(apart.countsOverTheStop);
             readByATerm.addAll(apart.readByATerm);
@@ -2313,174 +2212,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return out;
         }
 
-        /**
-         * Tells {@code operation}, a sum, a difference or a product of decimals, as an operation a
-         * row is asked by working it out, over the numbers of {@code operands}; false where it is
-         * none of those, and nothing is told.
-         *
-         * <p>An operand is told only where the scale it is worked out at is known, since the scale
-         * is what a decimal operation has room for: a decimal as the program wrote it; the result
-         * of an operation told before, at the scale that operation left; or a number the row
-         * itself holds, which the row is built with at the fewest places. An operand that is
-         * anything else — a negated value, a constant the program folded, a call's answer — has a
-         * scale nothing here knows, and the operation is then not told: no row is shown to get
-         * past it.
-         *
-         * <p>An operand is known by the form it was composed as, which a name carries to where it
-         * is read: {@code let x = h.value} reads {@code x} as the form of {@code h.value}.
-         */
-        boolean addsDecimal(Core operation, LinearForm<NumericTerm> result,
-                            List<LinearForm<NumericTerm>> operands) {
-            if (!(AffineForms.asOperator(operation) instanceof Core.Binary binary)
-                    || binary.type() != Type.DECIMAL
-                    || (binary.op() != BinOp.ADD && binary.op() != BinOp.SUB
-                    && binary.op() != BinOp.MUL)
-                    || operands.size() != 2) {
-                return false;
-            }
-            List<DecimalOperation.Operand> over = new ArrayList<>();
-            List<Integer> after = new ArrayList<>();
-            List<Core> written = List.of(binary.left(), binary.right());
-            for (int i = 0; i < 2; i++) {
-                DecimalOperation.Operand operand = operandOf(written.get(i), operands.get(i));
-                if (operand == null) {
-                    return false;
-                }
-                over.add(operand);
-                if (operand instanceof DecimalOperation.Worked worked) {
-                    after.add(worked.operation());
-                    after.addAll(decimals.get(worked.operation()).after());
-                }
-            }
-            DecimalOperation told = new DecimalOperation(binary.op(), over, after);
-            int at = decimals.indexOf(told);
-            if (at < 0) {
-                at = decimals.size();
-                decimals.add(told);
-            }
-            resultOf.put(result, at);
-            return true;
-        }
-
-        /**
-         * Tells a walk adding {@code added} to {@code seed}, every operation worked out of an
-         * element of a shape no further from nought than {@code ofEveryPart}
-         * ({@link DecimalAdditiveWalk}), as what {@code answer} is worked out by. The walk is
-         * worked out of the seed and the input alone.
-         */
-        void walksAddingDecimals(LinearForm<NumericTerm> answer, BigDecimal seed,
-                                 LinearForm<NumericTerm> added,
-                                 DecimalOperation.Shape ofEveryPart) {
-            DecimalAdditiveWalk told = new DecimalAdditiveWalk(seed, new DecimalOperation.Formed(
-                    new LinkedHashMap<Object, ExactRatio>(added.coefs()), added.constant()),
-                    ofEveryPart);
-            int at = decimals.indexOf(told);
-            if (at < 0) {
-                at = decimals.size();
-                decimals.add(told);
-            }
-            resultOf.put(answer, at);
-        }
-
-        /**
-         * Tells the total the library works out of {@code answers}, the numbers {@code nodes}
-         * compose to, as what {@code total} is worked out by; false where an answer's scale is not
-         * known, and nothing is told. The library adds the decimals up exactly from nought and
-         * writes the total at the greatest of their scales and nought's, which is the number and
-         * the scale a sum from a written nought adding them one at a time comes to: so it is told
-         * as those sums, worked out after what each answer was worked out of.
-         */
-        boolean addsUpDecimals(List<Core> nodes, List<LinearForm<NumericTerm>> answers,
-                               LinearForm<NumericTerm> total) {
-            List<DecimalOperation.Operand> added = new ArrayList<>();
-            for (int i = 0; i < nodes.size(); i++) {
-                DecimalOperation.Operand each = operandOf(nodes.get(i), answers.get(i));
-                if (each == null) {
-                    return false;
-                }
-                added.add(each);
-            }
-            DecimalOperation.Operand so = new DecimalOperation.Written(BigDecimal.ZERO);
-            Integer last = null;
-            for (DecimalOperation.Operand each : added) {
-                List<Integer> after = new ArrayList<>();
-                for (DecimalOperation.Operand operand : List.of(so, each)) {
-                    if (operand instanceof DecimalOperation.Worked worked) {
-                        after.add(worked.operation());
-                        after.addAll(decimals.get(worked.operation()).after());
-                    }
-                }
-                DecimalOperation sum = new DecimalOperation(BinOp.ADD, List.of(so, each), after);
-                last = decimals.indexOf(sum);
-                if (last < 0) {
-                    last = decimals.size();
-                    decimals.add(sum);
-                }
-                so = new DecimalOperation.Worked(last);
-            }
-            if (last != null) {
-                resultOf.put(total, last);
-            }
-            return true;
-        }
-
-        /** What {@code node}, composed as {@code form}, is worked out of by an operation of
-         *  decimals, or null where the scale it has is not known. */
-        private DecimalOperation.Operand operandOf(Core node, LinearForm<NumericTerm> form) {
-            Core bare = Core.withoutStanding(node);
-            if (bare instanceof Core.Decimal literal) {
-                return new DecimalOperation.Written(literal.value());
-            }
-            if (bare instanceof Core.Neg negated
-                    && Core.withoutStanding(negated.operand()) instanceof Core.Decimal literal) {
-                return new DecimalOperation.Written(literal.value().negate());
-            }
-            Integer worked = resultOf.get(form);
-            if (worked != null) {
-                return new DecimalOperation.Worked(worked);
-            }
-            if (inputReads.contains(form)) {
-                return new DecimalOperation.Formed(
-                        new LinkedHashMap<Object, ExactRatio>(form.coefs()), form.constant());
-            }
-            NumericTerm total = bare.type() == Type.DECIMAL ? aPlainTotal(form) : null;
-            return total == null ? null : new DecimalOperation.Total(total);
-        }
-
-        /** The term {@code form} is, where it is the total of the decimals a container holds or
-         *  of one path inside each element, added as they are; null where it is anything else.
-         *  The scale of such a total is that of the elements, which a row writes at the places of
-         *  the total: a total of products has the sum of the scales of their factors, which
-         *  {@link DecimalOperation.Total} does not bound. */
-        private static NumericTerm aPlainTotal(LinearForm<NumericTerm> form) {
-            if (form.coefs().size() != 1 || !form.constant().isZero()) {
-                return null;
-            }
-            Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
-            boolean added = ExactRatio.ONE.equals(only.getValue()) && switch (only.getKey()) {
-                case NumericTerm.TakenOf taken ->
-                        taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
-                case NumericTerm.TakenOver over ->
-                        over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
-                                && over.source() instanceof RunSource.ProjectedOccurrences;
-                default -> false;
-            };
-            return added ? only.getKey() : null;
-        }
-
-        /** That {@code form} is the number a row holds at a place of the input, read as it is. */
-        void readsTheInput(LinearForm<NumericTerm> form) {
-            inputReads.add(form);
-        }
-
-        /** That {@code form}, {@code operand} negated, is written at the places {@code operand}
-         *  is: a row holds the number it has at a place, and negating one leaves its places. */
-        void negatedFrom(LinearForm<NumericTerm> operand, LinearForm<NumericTerm> form) {
-            if (inputReads.contains(operand)) {
-                inputReads.add(form);
-            }
-        }
-
 
         /** What a row of a line gets past: not every operation where some were told beside the
          *  rows, since nothing says a row is made where those are worked out. */
@@ -2493,7 +2224,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return new UndividedByARelation.Working(told, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    true, decimals, exact ? partials : List.of());
+                    true, exact ? partials : List.of());
         }
     }
 

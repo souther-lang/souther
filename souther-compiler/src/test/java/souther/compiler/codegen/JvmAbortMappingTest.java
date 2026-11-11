@@ -4,6 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelContracts;
+import souther.compiler.types.Type;
 import souther.runtime.ConstraintFailure;
 import souther.runtime.ConstraintViolation;
 import souther.runtime.DecimalMath;
@@ -12,6 +13,7 @@ import souther.runtime.HALF_UP;
 import souther.runtime.IntMath;
 import souther.runtime.InvariantFailure;
 import souther.runtime.Lists;
+import souther.runtime.OutOfRoom;
 import souther.runtime.Rational;
 import souther.runtime.RationalMath;
 import souther.runtime.Strings;
@@ -76,52 +78,56 @@ class JvmAbortMappingTest {
                 () -> IntMath.floorMod(7, 0));
     }
 
-    /** {@code Decimal}'s three checked operators, each pushed past {@code BigDecimal}'s own scale
-     *  range. */
+    /** {@code Decimal}'s three operators, each pushed past {@code BigDecimal}'s own scales: the
+     *  answer is a decimal this run has no room to write, and the contract names no reason. */
     @Test
-    void decimalArithmeticOverflowsAsAnswerHasNoPlace() {
+    void decimalArithmeticPastWhatABigDecimalHoldsIsShortOfRoom() {
         BigDecimal huge = new BigDecimal(BigDecimal.ONE.unscaledValue(), Integer.MIN_VALUE + 1);
-        assertKernelAborts(Kernel.DECIMAL_ADD, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+        assertShortOfRoom(Kernel.DECIMAL_ADD, Type.DECIMAL,
                 () -> DecimalMath.add(huge, BigDecimal.valueOf(0.1)));
-        assertKernelAborts(Kernel.DECIMAL_SUBTRACT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+        assertShortOfRoom(Kernel.DECIMAL_SUBTRACT, Type.DECIMAL,
                 () -> DecimalMath.subtract(huge, BigDecimal.valueOf(0.1)));
-        assertKernelAborts(Kernel.DECIMAL_MULTIPLY, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+        assertShortOfRoom(Kernel.DECIMAL_MULTIPLY, Type.DECIMAL,
                 () -> DecimalMath.multiply(huge, huge));
     }
 
-    /** {@code Decimal.round} and {@code Decimal.toInt} refuse a scale the run time does not take. */
+    /** {@code Decimal.round} at a scale a {@code BigDecimal} does not take is short of room, and
+     *  {@code Decimal.toInt} of a value past every {@code Int} is refused as the language refuses
+     *  one. */
     @Test
-    void decimalRoundAndToIntAbortOnAScaleTheRunTimeDoesNotTake() {
-        assertKernelAborts(Kernel.DECIMAL_ROUND, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+    void decimalRoundIsShortOfRoomAndToIntRefusesWhatNoIntHolds() {
+        assertShortOfRoom(Kernel.DECIMAL_ROUND, Type.DECIMAL,
                 () -> DecimalMath.round(Long.MAX_VALUE, HALF_UP.INSTANCE, BigDecimal.ONE));
         assertKernelAborts(Kernel.DECIMAL_TO_INT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> DecimalMath.toInt(HALF_UP.INSTANCE,
                         new BigDecimal(BigDecimal.valueOf(Long.MAX_VALUE).unscaledValue())
                                 .multiply(BigDecimal.TEN)));
+        assertKernelAborts(Kernel.DECIMAL_TO_INT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> DecimalMath.toInt(HALF_UP.INSTANCE,
+                        new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE)));
     }
 
-    /** {@code Decimal.divide} answers a zero divisor as a case; its abort is the scale the
-     *  quotient has no place at. */
+    /** {@code Decimal.divide} answers a zero divisor as a case; a quotient at a scale a
+     *  {@code BigDecimal} does not take is short of room. */
     @Test
-    void decimalDivideAbortsOnlyWhereTheQuotientHasNoPlace() {
-        assertKernelAborts(Kernel.DECIMAL_DIVIDE, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+    void decimalDivideIsShortOfRoomOnlyWhereTheQuotientHasNoPlaceHere() {
+        assertShortOfRoom(Kernel.DECIMAL_DIVIDE, Type.DECIMAL,
                 () -> DecimalMath.divide(BigDecimal.ONE, BigDecimal.valueOf(3), Long.MAX_VALUE,
                         HALF_UP.INSTANCE));
     }
 
     /**
-     * {@code Rational.toFiniteDecimal}: a mathematically finite decimal whose required form still
-     * asks for more exponent than {@code Rational} holds. Reached without a huge intermediate — a
-     * {@code Decimal} of scale {@code Integer.MAX_VALUE} read into {@code Rational} exactly stays
-     * compact, and multiplying by a tenth pushes the required scale one step past what
-     * {@link Rational#asDecimal()} can name.
+     * {@code Rational.toFiniteDecimal}: a finite decimal whose scale is one step past what a
+     * {@code BigDecimal} counts. Reached without a huge intermediate — a {@code Decimal} of scale
+     * {@code Integer.MAX_VALUE} read into {@code Rational} exactly stays compact, and multiplying by
+     * a tenth pushes the scale one step past what {@link Rational#asDecimal()} can name.
      */
     @Test
-    void rationalToFiniteDecimalAbortsWhereTheRequiredFormHasNoPlace() {
+    void rationalToFiniteDecimalPastAScaleIsShortOfRoom() {
         Rational compact = RationalMath.fromDecimal(new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE));
         Rational beyond = compact.times(RationalMath.fromDecimal(new BigDecimal("0.1")));
 
-        assertKernelAborts(Kernel.RATIONAL_TO_FINITE_DECIMAL, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+        assertShortOfRoom(Kernel.RATIONAL_TO_FINITE_DECIMAL, Type.DECIMAL,
                 () -> RationalMath.toFiniteDecimal(beyond));
     }
 
@@ -194,14 +200,15 @@ class JvmAbortMappingTest {
                 () -> Lists.productInt(List.of(Long.MAX_VALUE, 2L)));
     }
 
-    /** And through their {@code Decimal} instantiation, which one kernel names as well: the same
-     *  pairs {@code +} and {@code *} are pushed past the scale range with above. */
+    /** And through their {@code Decimal} instantiation, which the kernel answers at the number it
+     *  answers: the same pairs {@code +} and {@code *} are pushed past a {@code BigDecimal}'s
+     *  scales with above, and are short of room. */
     @Test
-    void listSumAndProductRunOffTheScaleRangeThroughTheirDecimalInstantiation() {
+    void listSumAndProductOfDecimalsAreShortOfRoomPastABigDecimalsScales() {
         BigDecimal huge = new BigDecimal(BigDecimal.ONE.unscaledValue(), Integer.MIN_VALUE + 1);
-        assertKernelAborts(Kernel.LIST_SUM, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+        assertShortOfRoom(Kernel.LIST_SUM, Type.DECIMAL,
                 () -> Lists.sumDecimal(List.of(huge, BigDecimal.valueOf(0.1))));
-        assertKernelAborts(Kernel.LIST_PRODUCT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+        assertShortOfRoom(Kernel.LIST_PRODUCT, Type.DECIMAL,
                 () -> Lists.productDecimal(List.of(huge, huge)));
     }
 
@@ -286,5 +293,19 @@ class JvmAbortMappingTest {
         } else {
             assertTrue(thrown instanceof ConstraintViolation);
         }
+    }
+
+    /**
+     * Calls {@code raises}, checks the run is short of room ({@link OutOfRoom}), and checks that
+     * {@code kernel} answering {@code answer} names no reason a run may end for: the shortage is
+     * the platform's, and no contract of the language is about it.
+     */
+    private static void assertShortOfRoom(Kernel kernel, Type answer, Executable raises) {
+        assertTrue(KernelContracts.abortsAnswering(kernel, answer).isEmpty(),
+                () -> kernel + " answering " + Type.show(answer) + " names "
+                        + KernelContracts.abortsAnswering(kernel, answer)
+                        + ", and its answer is a number of its type wherever it is handed one");
+        assertThrows(OutOfRoom.class, raises,
+                () -> kernel + " was expected to be short of room");
     }
 }

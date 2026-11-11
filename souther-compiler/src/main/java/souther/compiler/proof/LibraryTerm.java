@@ -3,6 +3,7 @@ package souther.compiler.proof;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -39,6 +40,12 @@ public sealed interface LibraryTerm {
 
     /** A truth written out. */
     record Truth(boolean value) implements LibraryTerm {}
+
+    /**
+     * A unit data named as its one value ({@code HALF_UP}). It has no fields and can carry no
+     * invariant, so naming it works nothing out; what it is a value of is {@code type}.
+     */
+    record UnitValue(TypeSymbol type) implements LibraryTerm {}
 
     /** A list written out, element by element. */
     record ListOf(List<LibraryTerm> elements) implements LibraryTerm {
@@ -133,7 +140,8 @@ public sealed interface LibraryTerm {
      */
     static void forEachPart(LibraryTerm term, Consumer<LibraryTerm> each) {
         switch (term) {
-            case Parameter _, Bound _, WholeNumber _, DecimalNumber _, Truth _, Unread _ -> { }
+            case Parameter _, Bound _, WholeNumber _, DecimalNumber _, Truth _, UnitValue _,
+                 Unread _ -> { }
             case ListOf(List<LibraryTerm> elements) -> elements.forEach(each);
             case TupleOf(List<LibraryTerm> elements) -> elements.forEach(each);
             case Component(LibraryTerm tuple, var _) -> each.accept(tuple);

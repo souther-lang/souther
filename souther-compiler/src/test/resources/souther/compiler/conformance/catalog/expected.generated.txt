@@ -190,7 +190,7 @@ example namedUnpriced
 // fills the fold stopping after its first element (in `souther.list.map` this build holds no source of)
 // fills each step of the fold handed the seed (in `souther.list.map` this build holds no source of)
 // fills each step of the fold handed the seed (in `souther.list.filter` this build holds no source of)
-// fills OUT point of comparison@counting.sou:64:32
+// fills OUT point of comparison@counting.sou:65:32
     | (
         [
             Deal { currency = CurrencyCode("EUR"), amount = 10m },

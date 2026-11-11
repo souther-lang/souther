@@ -246,10 +246,16 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
     /** An operator no region is written for is not read as answering everywhere. */
     @Test
     void anOperatorWithNoRegionLeavesTheBoundsShortOfTheRule() {
-        FieldDomains read = domainsOf("Decimal", "value + 1.5m > 0.0m");
+        FieldDomains read = domainsOf("String", "String.length(value ++ value) >= 1");
         assertInstanceOf(ProjectionEvidence.NotCertified.class, read.projection(),
-                "a Decimal sum may stop a run for want of room, which nothing here says where");
-        assertTrue(read.shownToHoldAValue(),
-                "yet a value is exhibited, nought, and the sum is worked out at it");
+                "a join may be longer than a String holds, which nothing here says where");
+    }
+
+    /** A decimal sum answers wherever its operands are, and is read as any other part is. */
+    @Test
+    void aDecimalSumIsReadAsAnyOtherPartIs() {
+        FieldDomains read = domainsOf("Decimal", "value + 1.5m > 0.0m");
+        assertInstanceOf(ProjectionEvidence.CertifiedExact.class, read.projection());
+        assertTrue(read.shownToHoldAValue(), "a value is exhibited, nought");
     }
 }

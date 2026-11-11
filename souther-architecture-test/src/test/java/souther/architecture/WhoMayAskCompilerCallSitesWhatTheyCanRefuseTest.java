@@ -115,12 +115,6 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "try/catch(ArithmeticException) answers Cardinality.UNKNOWN, which is already"
                             + " this method's own answer for a span it cannot bound."),
             new Permission(
-                    "souther/compiler/check/ScaleRange#receivedUnchanged(Ljava/math/BigDecimal;)"
-                            + "Ljava/lang/Integer; intValueExact()I",
-                    Reason.REFUSAL_TRANSLATED,
-                    "try/catch(ArithmeticException) answers null, this method's own documented"
-                            + " answer for a scale the run time could not be handed."),
-            new Permission(
                     "souther/compiler/frontend/AstBuilder#decimalWritten(Ljava/lang/String;"
                             + "Lsouther/compiler/diag/SourcePos;)Ljava/math/BigDecimal;"
                             + " <init>(Ljava/lang/String;)V",
@@ -128,7 +122,7 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "The method checks the text is digits with at most one point between two runs"
                             + " of them, so its places fit an int scale; a text with more digits"
                             + " than a whole number the host holds is caught and reported as"
-                            + " ADecimalLiteralHasMoreDigitsThanADecimalHolds."),
+                            + " ADecimalLiteralHasMoreDigitsThanThisCompilerReads."),
             new Permission(
                     "souther/compiler/inputs/Distinctions#whole(Ljava/math/BigDecimal;)Z"
                             + " longValueExact()J",

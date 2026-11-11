@@ -395,7 +395,7 @@ public final class AppliedClosures {
                 case LibraryTerm.Negated negated -> walk(negated.operand(), scope, always);
                 case LibraryTerm.Unread _ -> unread = true;
                 case LibraryTerm.Bound _, LibraryTerm.WholeNumber _, LibraryTerm.DecimalNumber _,
-                     LibraryTerm.Truth _ -> { }
+                     LibraryTerm.Truth _, LibraryTerm.UnitValue _ -> { }
             }
         }
 
@@ -597,7 +597,7 @@ public final class AppliedClosures {
                 case LibraryTerm.Component component -> mentions(component.tuple());
                 case LibraryTerm.Negated negated -> mentions(negated.operand());
                 case LibraryTerm.Bound _, LibraryTerm.WholeNumber _, LibraryTerm.DecimalNumber _,
-                     LibraryTerm.Truth _, LibraryTerm.Unread _ -> false;
+                     LibraryTerm.Truth _, LibraryTerm.UnitValue _, LibraryTerm.Unread _ -> false;
             };
         }
     }

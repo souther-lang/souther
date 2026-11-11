@@ -9,15 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * An element of a list a total is the sum of is written through
- * {@code DecimalOperation.writtenForARow}, and through nothing else.
+ * {@code DecimalPoints.writtenForARow}, and through nothing else.
  *
- * <p>What the analysis shows of an operation worked out of a total takes the scale of the total
- * to be no more than the places a row is built at, and that is true of the lists that are built
- * only because every number the builder derives for an element is written there. It derives them
- * (a share of what is owed, a number moved from the start), so they are no number the analysis
- * chose and filtered. A direct {@code ExactRatio.writtenDecimal} in the builder, named as a call or
- * as a reference, is an element whose places nothing bounds, and a claim made of the rows built
- * would no longer be a claim of the rows that are.
+ * <p>The places a row is built at are the generation's budget: which lists are tried, and not
+ * which decimals there are. The builder holds to it only because every number it derives for an
+ * element (a share of what is owed, a number moved from the start) is written there. A direct
+ * {@code ExactRatio.writtenDecimal} in the builder, named as a call or as a reference, is an element
+ * whose places nothing bounds, and the budget would no longer be what bounds the lists built.
  */
 class ADecimalAListIsBuiltWithIsWrittenThroughTheOneThatBoundsItsPlacesTest {
 

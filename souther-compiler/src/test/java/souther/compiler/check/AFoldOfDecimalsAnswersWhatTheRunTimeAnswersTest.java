@@ -2,8 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.BinOp;
-import souther.runtime.ConstraintViolation;
 import souther.runtime.DecimalMath;
+import souther.runtime.OutOfRoom;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -16,11 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What the compiler folds of two {@code Decimal} constants is what the program computes of them
- * when it runs: the same value, or nothing where the run time aborts.
+ * when it runs: the same value, or nothing where the run time has no room to write it.
  *
- * <p>The pairs are put at the ends of the scale range and on both sides of a nought, because that
- * is where {@code BigDecimal} and the language part: a nought factor on the left is multiplied at
- * a scale moved back into range, and the same factor on the right is refused.
+ * <p>The pairs are put at the ends of a {@code BigDecimal}'s scales and on both sides of a nought,
+ * because that is where {@code BigDecimal} and the language part: a nought factor on the left is
+ * multiplied at a scale moved back into range, and the same factor on the right is refused.
  */
 class AFoldOfDecimalsAnswersWhatTheRunTimeAnswersTest {
 
@@ -49,7 +49,7 @@ class AFoldOfDecimalsAnswersWhatTheRunTimeAnswersTest {
     }
 
     private static void agree(BinOp op, BinaryOperator<BigDecimal> runTime) {
-        int refused = 0;
+        int shortOfRoom = 0;
         for (BigDecimal a : DECIMALS) {
             for (BigDecimal b : DECIMALS) {
                 if (op != BinOp.MUL && (Math.abs((long) a.scale() - b.scale()) > 1 << 20
@@ -60,18 +60,20 @@ class AFoldOfDecimalsAnswersWhatTheRunTimeAnswersTest {
                 BigDecimal ran = null;
                 try {
                     ran = runTime.apply(a, b);
-                } catch (ConstraintViolation _) {
-                    refused++;
+                } catch (OutOfRoom _) {
+                    shortOfRoom++;
                 }
                 String pair = op + " " + a + " " + b;
                 if (ran == null) {
-                    assertTrue(folded.isEmpty(), "the run time aborts and the fold answers: " + pair);
+                    assertTrue(folded.isEmpty(),
+                            "the run time has no room and the fold answers: " + pair);
                 } else {
                     assertEquals(0, ran.compareTo((BigDecimal) folded.orElseThrow()), pair);
                     assertEquals(ran.scale(), ((BigDecimal) folded.orElseThrow()).scale(), pair);
                 }
             }
         }
-        assertTrue(op != BinOp.MUL || refused > 0, "the pairs include some the run time refuses");
+        assertTrue(op != BinOp.MUL || shortOfRoom > 0,
+                "the pairs include some the run time has no room for");
     }
 }

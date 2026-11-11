@@ -23,6 +23,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -69,6 +70,64 @@ public final class LibraryProofsAsBuilt {
         }
         LibraryProofsAsBuilt record = new LibraryProofsAsBuilt(read);
         return (stdlib, facts, _, stated, awaiting) -> record.over(stdlib, facts, stated, awaiting);
+    }
+
+    /**
+     * How what a library's written operations state is proved, for a library that may differ from
+     * the shipped one: each operation whose proofs read nothing other than the shipped library's
+     * ({@link WhatALibraryLeavesAsShipped}) is read off the record, and every other is proved here.
+     * Where there is no record that holds everything stated proved, every one is proved here.
+     *
+     * <p>What a reading of the bodies asks once every law is settled is asked of the library itself
+     * over the facts as they are settled, as it is of the shipped library.
+     */
+    static LibraryProofs.Source provingWhatDiffers() {
+        Map<String, String> read = read();
+        if (read == null || read.containsValue(OPEN) || read.containsValue(DOES_NOT_HOLD)) {
+            return LibraryProofs.PROVING;
+        }
+        LibraryProofsAsBuilt record = new LibraryProofsAsBuilt(read);
+        return (stdlib, facts, settled, stated, awaiting) -> {
+            Predicate<ValueName.Stdlib.Operation> asShipped = WhatALibraryLeavesAsShipped.of(stdlib);
+            LibraryProofs recorded = record.over(stdlib, facts, stated, awaiting);
+            Supplier<LibraryProofs> proving = new Supplier<>() {
+                private LibraryProofs proofs;
+
+                @Override
+                public synchronized LibraryProofs get() {
+                    if (proofs == null) {
+                        proofs = LibraryProofs.PROVING.over(stdlib, facts, settled, stated, awaiting);
+                    }
+                    return proofs;
+                }
+            };
+            return new LibraryProofs() {
+
+                @Override
+                public BoundOperationFacts.Settled settle(ValueName.Stdlib.Operation operation,
+                                                          OperationLaw.Observed observed) {
+                    return asShipped.test(operation) ? recorded.settle(operation, observed)
+                            : proving.get().settle(operation, observed);
+                }
+
+                @Override
+                public boolean proves(BoundOperationFact fact) {
+                    return asShipped.test((ValueName.Stdlib.Operation) fact.operation().operation())
+                            ? recorded.proves(fact) : proving.get().proves(fact);
+                }
+
+                @Override
+                public Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation,
+                                                      LibraryTerm body) {
+                    return recorded.typesOf(operation, body);
+                }
+
+                @Override
+                public OnTheWay onTheWay(AskedOnTheWay asked) {
+                    return recorded.onTheWay(asked);
+                }
+            };
+        };
     }
 
     /** Proves the library here and writes what each proof came to at {@code args[0]}. */

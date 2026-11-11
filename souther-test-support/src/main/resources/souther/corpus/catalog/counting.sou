@@ -49,9 +49,9 @@ example everyDealPriced
          , Deal { currency = CurrencyCode("EUR"), amount = 10.0m } ], yenRates) -> false
 
 // The currencies no rate covers, named where a deal was dropped. Which currency a deal is in is
-// asked of the table only past the walk that weighs them, and that walk multiplies by a rate the
-// table holds, which may be past what a decimal holds: so not every currency is shown to get to
-// the question. A deal in a currency the table does not rate gets there, and is shown to.
+// asked of the table only past the walk that weighs them, and that walk rounds each deal to whole
+// yen, which may be past what an Int holds: so not every currency is shown to get to the
+// question. A deal in a currency the table does not rate gets there, and is shown to.
 data Priced
 data Unpriced = { currencies: Set<CurrencyCode> }
 
@@ -60,7 +60,8 @@ behavior namedUnpriced : (deals: List<Deal>, rates: RateTable) -> Priced | Unpri
 
 let namedUnpriced (deals, rates) = {
     let weighed = List.filterMap(
-        d -> Option.map(r -> r.value * d.amount, Map.get(d.currency, rates.rates)), deals)
+        d -> Option.map(r -> Decimal.toInt(HALF_UP, r.value * d.amount),
+            Map.get(d.currency, rates.rates)), deals)
     guard List.length(weighed) == List.length(deals)
         else Unpriced { currencies = Set.fromList(List.map(.currency,
             List.filter(d -> Bool.not(Map.containsKey(d.currency, rates.rates)), deals))) }

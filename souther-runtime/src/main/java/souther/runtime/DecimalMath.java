@@ -8,6 +8,7 @@ import souther.exact.ExactParts;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Every Decimal operation the language has (spec §stdlib-decimal), and the one place
@@ -19,34 +20,35 @@ import java.util.List;
  * not {@code BigDecimal.add}. Representation is the backend's; what an operation means is this
  * class's (ADR-0112).
  *
- * <p>That line is what closes the two ways {@code java.math} used to reach a Souther boundary as
- * itself. A scale is a Souther {@code Int}, which is 64 bits, and a {@code BigDecimal} takes an
- * {@code int}: the narrowing is {@link #scale}, and it is exact or it aborts, so no division runs at
- * a scale other than the one written. And every one of these operations is partial — a sum, a
- * difference, a product or a quotient can have no value a {@code Decimal} holds — and each reports
- * that as {@link #outOfRange}, the way an {@code Int} overflow is reported (spec §jvm-abort).
- * Neither is a business result.
+ * <p>A {@code Decimal} is a finite decimal number, and no scale or count of digits bounds which
+ * ones there are (spec §stdlib-decimal). A sum, a difference, a product, a rounding and a quotient
+ * at a scale therefore always have an answer. What a {@code BigDecimal} holds is narrower: a scale
+ * of 32 bits and a whole number of as many bits as the host builds. An answer past that is one this
+ * run has no room to write, and it is reported as {@link OutOfRoom} — the platform failing, never a
+ * value refused (spec §jvm-abort). A scale is a Souther {@code Int}, which is 64 bits, and the
+ * narrowing to the {@code int} a {@code BigDecimal} takes is {@link #scale}: exact, or the same
+ * shortage, so no division runs at a scale other than the one written.
  *
- * <p>Whether {@code BigDecimal} refuses an operation is not the same question as whether the
- * language has an answer for it. So where the language's rule decides the result's scale from the
- * operands, as it does for a product, the scale is worked out here and checked against the range
- * before {@code BigDecimal} is asked; what {@code BigDecimal} still refuses is caught and reported
- * the same way.
+ * <p>Whether {@code BigDecimal} refuses an operation is not the same question as whether this run
+ * has room for its answer. So where the language's rule decides the result's scale from the
+ * operands, as it does for a product, the scale is worked out here and checked against what a
+ * {@code BigDecimal} holds before it is asked; what {@code BigDecimal} still refuses is caught and
+ * reported the same way.
  */
 public final class DecimalMath {
 
     private DecimalMath() {}
 
     /**
-     * The abort an operation with no value a {@code Decimal} holds is reported as.
+     * The shortage an answer this run cannot write is reported as.
      *
-     * <p>An operation here answers on a range and not on every pair: a result whose scale leaves
-     * the 32 bits a scale is kept in, or whose digits the representation has no room for, is not a
-     * {@code Decimal}. {@code BigDecimal} refuses most of those with {@code ArithmeticException} —
-     * "Overflow", "Underflow", or "BigInteger would overflow supported range" — which left alone
-     * arrives at a boundary as a {@code java.math} exception from a program that has no such type.
-     * It is the same kind of thing an {@code Int} overflow is ({@link IntMath}): a model bug rather
-     * than a business result, so it aborts.
+     * <p>A result whose scale leaves the 32 bits a {@code BigDecimal} keeps a scale in, or whose
+     * digits are more than the host builds a whole number of, is still a {@code Decimal}; it is one
+     * this representation has no place for. {@code BigDecimal} refuses most of those with
+     * {@code ArithmeticException} — "Overflow", "Underflow", or "BigInteger would overflow
+     * supported range" — which left alone arrives at a boundary as a {@code java.math} exception
+     * from a program that has no such type. It is not a model bug and not a business result: it
+     * says what the platform could not supply, as {@link OutOfRoom} does wherever it is raised.
      *
      * <p>Each operation catches the exception itself and builds {@code what} in the {@code catch}.
      * The message names both operands through {@link #describe}, which walks their digits, and an
@@ -54,8 +56,8 @@ public final class DecimalMath {
      * message of the one that does not. So the operation is written where it stands, as a call and
      * a return, and only this is shared.
      */
-    private static ConstraintViolation outOfRange(String what) {
-        return new ConstraintViolation(what + " is outside the range a Decimal holds");
+    private static OutOfRoom noRoom(String what) {
+        return new OutOfRoom("no room to write " + what);
     }
 
     /**
@@ -72,27 +74,25 @@ public final class DecimalMath {
     }
 
     /**
-     * The scale as the run time takes it: the same number, or an abort.
+     * The scale as a {@code BigDecimal} takes it: the same number, or the shortage.
      *
      * <p>A scale is a Souther {@code Int}, which is 64 bits (spec §primitives), and what a
      * {@code BigDecimal} is given is an {@code int}. A raw narrowing drops the high bits, so a scale
      * of {@code 4294967298} would divide at scale 2 — a division at a scale that is neither what was
-     * written nor an error, which is the shape §stdlib-int refuses everywhere else. So it is exact
-     * or it is nothing.
+     * written nor an error. So it is exact or it is nothing.
      *
      * <p>This answers whether the number can be handed over unchanged, and nothing else. Whether the
-     * operation asked for at that scale has an answer is {@link #outOfRange}'s question: a scale of
-     * {@code 2147483647} passes here — an {@code int} holds it exactly — and a division at it still
-     * has no result a {@code BigDecimal} can hold. The two are separate because they fail for
-     * separate reasons, and a message calling the second one a scale out of range would be wrong
-     * about a scale that was handed over exactly.
+     * answer at that scale has room is {@link #noRoom}'s question: a scale of {@code 2147483647}
+     * passes here — an {@code int} holds it exactly — and a division at it can still want more
+     * digits than the host builds. The messages are separate because what ran short is, and a
+     * message calling the second a scale past what is taken would be wrong about a scale that was
+     * handed over exactly.
      */
     private static int scale(long scale, String what) {
         try {
             return Math.toIntExact(scale);
         } catch (ArithmeticException _) {
-            throw new ConstraintViolation(
-                    what + " scale is outside the range the run time takes: " + scale);
+            throw new OutOfRoom(what + " at a scale a BigDecimal does not take: " + scale);
         }
     }
 
@@ -117,7 +117,7 @@ public final class DecimalMath {
     public static BigDecimal add(BigDecimal a, BigDecimal b) {
         BigDecimal sum = ExactDecimals.sumWhereThereIsRoom(a, b);
         if (sum == null) {
-            throw outOfRange("the sum of " + describe(a) + " and " + describe(b));
+            throw noRoom("the sum of " + describe(a) + " and " + describe(b));
         }
         return sum;
     }
@@ -126,22 +126,23 @@ public final class DecimalMath {
     public static BigDecimal subtract(BigDecimal a, BigDecimal b) {
         BigDecimal difference = ExactDecimals.differenceWhereThereIsRoom(a, b);
         if (difference == null) {
-            throw outOfRange("the difference of " + describe(a) + " and " + describe(b));
+            throw noRoom("the difference of " + describe(a) + " and " + describe(b));
         }
         return difference;
     }
 
     /**
      * {@code Decimal.multiply(a, b)}, and the {@code *} operator. A product's scale is the sum of
-     * its factors' scales, so this is the operation that reaches the end of the range first.
+     * its factors' scales, so this is the operation that reaches the end of what a
+     * {@code BigDecimal} holds first.
      *
-     * <p>Whether there is room is {@link ExactDecimals#timesWhereThereIsRoom}'s, which the compiler
-     * asks too; a product it has no room for aborts, whatever the product's value is.
+     * <p>Whether there is room is {@link ExactDecimals#timesWhereThereIsRoom}'s; a product it has
+     * no room for is this run's shortage, whatever the product's value is.
      */
     public static BigDecimal multiply(BigDecimal a, BigDecimal b) {
         BigDecimal product = ExactDecimals.timesWhereThereIsRoom(a, b);
         if (product == null) {
-            throw outOfRange("the product of " + describe(a) + " and " + describe(b));
+            throw noRoom("the product of " + describe(a) + " and " + describe(b));
         }
         return product;
     }
@@ -149,7 +150,8 @@ public final class DecimalMath {
     /**
      * {@code Decimal.divide(dividend, divisor, scale, mode)}: the quotient rounded to {@code scale}
      * places by {@code mode}, or {@link DivisionByZero} (spec §stdlib-decimal). A zero divisor is a
-     * possible input rather than a model bug, so it is a case; everything else here aborts.
+     * possible input rather than a model bug, so it is a case, and it is the only one: every other
+     * division has a quotient at every scale, and what is left to fail is this run's room.
      *
      * <p>The zero divisor is answered before the scale is looked at. A division that does not run
      * needs no scale to run at, so a call with both a zero divisor and a scale no {@code int} holds
@@ -171,8 +173,31 @@ public final class DecimalMath {
         try {
             return dividend.divide(divisor, places, toJava(mode));
         } catch (ArithmeticException _) {
-            throw outOfRange("the quotient of " + describe(dividend) + " and " + describe(divisor)
-                    + " at scale " + scale);
+            return exactlyAt(RationalMath.divide(Rational.of(dividend), Rational.of(divisor)),
+                    places, mode, () -> "the quotient of " + describe(dividend) + " and "
+                            + describe(divisor) + " at scale " + scale);
+        }
+    }
+
+    /**
+     * {@code exact} at {@code places} by {@code mode}, where a {@code BigDecimal} gave up on the
+     * way to it.
+     *
+     * <p>A {@code BigDecimal} brings a number to another scale by building the power of ten between
+     * the two, so a value far nearer nought than the scale asked for — one at the end of its
+     * scales, rounded to a whole number — asks it for a number it has no room for, though the
+     * answer is nought or one step from it. That is an intermediate the representation chose, and
+     * not a reason to run short (spec
+     * §an-operation-refuses-only-what-its-own-answer-has-no-place-for). The exact narrowing builds
+     * only the answer's own digits; where it is short as well, the answer itself has no room, and
+     * {@code what} says which answer that was.
+     */
+    private static BigDecimal exactlyAt(Rational exact, int places, RoundingMode mode,
+                                        Supplier<String> what) {
+        try {
+            return exact.asDecimal(places, toJava(mode));
+        } catch (OutOfRoom _) {
+            throw noRoom(what.get());
         }
     }
 
@@ -213,21 +238,12 @@ public final class DecimalMath {
      * mode.
      *
      * <p>A value too large for {@code Int} aborts, as an Int overflow does ({@link IntMath}): it is a
-     * model bug rather than a business result. So does a value the rounding to a whole number cannot
-     * be taken of at all, which is a different failure of the same operation and says so.
+     * model bug rather than a business result, and it is the language's answer and not this run's,
+     * so it is asked where every narrowing to an {@code Int} asks it ({@link IntNarrowing}).
      */
     public static long toInt(RoundingMode mode, BigDecimal d) {
-        BigDecimal whole;
-        try {
-            whole = d.setScale(0, toJava(mode));
-        } catch (ArithmeticException _) {
-            throw outOfRange("the whole number " + describe(d) + " rounds to");
-        }
-        try {
-            return whole.longValueExact();
-        } catch (ArithmeticException _) {
-            throw new ConstraintViolation("Decimal does not fit in an Int: " + describe(d));
-        }
+        return IntNarrowing.rounded(d, toJava(mode), WorkCheckpoint.NONE,
+                () -> "the Decimal " + describe(d));
     }
 
     /** {@code Decimal.round(scale, mode, d)}: {@code d} rounded to {@code scale} places by
@@ -238,7 +254,8 @@ public final class DecimalMath {
         try {
             return d.setScale(places, toJava(mode));
         } catch (ArithmeticException _) {
-            throw outOfRange(describe(d) + " rounded to scale " + scale);
+            return exactlyAt(Rational.of(d), places, mode,
+                    () -> describe(d) + " rounded to scale " + scale);
         }
     }
 
@@ -341,7 +358,7 @@ public final class DecimalMath {
             return new BigDecimal(ExactArithmetic.roundedTimesTenTo(sum, scale,
                     java.math.RoundingMode.UNNECESSARY), scale);
         } catch (ExactFailure failure) {
-            throw outOfRange("the sum of a list of " + terms.size() + " decimals");
+            throw noRoom("the sum of a list of " + terms.size() + " decimals");
         }
     }
 
@@ -382,7 +399,7 @@ public final class DecimalMath {
             all = all > Long.MAX_VALUE - bits ? Long.MAX_VALUE : all + bits;
         }
         if (allScales.bitLength() >= Integer.SIZE) {
-            throw outOfRange("the product of a list of " + factors.size() + " decimals");
+            throw noRoom("the product of a list of " + factors.size() + " decimals");
         }
         int scale = allScales.intValueExact();
         if (checkpoint != WorkCheckpoint.NONE) {
@@ -453,10 +470,10 @@ public final class DecimalMath {
         return compare(a, b);
     }
 
-    /** {@link #toInt(RoundingMode, BigDecimal)}, paid for to {@code checkpoint} first. */
+    /** {@link #toInt(RoundingMode, BigDecimal)}, paid for to {@code checkpoint} as it is worked
+     *  out. */
     public static long toInt(RoundingMode mode, BigDecimal d, WorkCheckpoint checkpoint) {
-        payRescaled(d, 0, checkpoint);
-        return toInt(mode, d);
+        return IntNarrowing.rounded(d, toJava(mode), checkpoint, () -> "the Decimal " + describe(d));
     }
 
     /** {@link #round(long, RoundingMode, BigDecimal)}, paid for to {@code checkpoint} first, where
@@ -555,7 +572,7 @@ public final class DecimalMath {
 
     /** Pays for {@code d} brought to {@code places}: multiplied by a power of ten to go up, divided
      *  by one to go down. A nought is a nought at every scale, and costs the reading. */
-    private static void payRescaled(BigDecimal d, int places, WorkCheckpoint checkpoint) {
+    static void payRescaled(BigDecimal d, int places, WorkCheckpoint checkpoint) {
         if (checkpoint == WorkCheckpoint.NONE) {
             return;
         }

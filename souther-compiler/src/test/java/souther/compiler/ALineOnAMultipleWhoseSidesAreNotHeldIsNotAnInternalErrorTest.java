@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reported as one whose side was not worked out, and never as a line with no place. Compiling it
  * raises nothing, and the measurement of it says so in the document's {@code notRead}.
  *
- * <p>A model whose own example computes the multiple aborts at run time, and that is a diagnostic
- * about the example — the report of the rule is the same.
+ * <p>A model whose own example computes the multiple is short of room at run time, and that is a
+ * diagnostic about the example — the report of the rule is the same.
  */
 class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
 
@@ -116,14 +116,14 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
         assertFalse(words.contains(THE_LINE), () -> "and the line has a place: " + words);
     }
 
-    /** The example aborts when it runs the multiple, which is its own diagnostic; the rule beside
-     *  it is reported the same. */
+    /** The example is short of room when it runs the multiple, which is its own diagnostic; the
+     *  rule beside it is reported the same. */
     @Test
-    void anExampleThatRunsTheMultipleIsRefusedAsAnExampleAndTheRuleIsReportedTheSame() {
+    void anExampleThatRunsTheMultipleIsShortOfRoomAndTheRuleIsReportedTheSame() {
         Measured measured = measured(model(squarings(62), THE_GUARD, EXAMPLE));
 
-        assertEquals(List.of("E1905"), measured.errors(),
-                "the example does not hold, and that is all it says");
+        assertEquals(List.of("E1941"), measured.errors(),
+                "the example has no room for its answer, and that is all it says");
         assertTrue(measured.notRead().contains(THE_SIDE));
     }
 

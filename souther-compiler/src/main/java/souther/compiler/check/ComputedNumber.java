@@ -321,7 +321,7 @@ final class ComputedNumber {
         Term mode = term.parts().get(rounds.mode().position());
         WholeRounding way = mode.shape() == Term.Shape.UNIT
                 ? rounds.ways().get((TypeSymbol) mode.carried()) : null;
-        if (scale == null || way == null || !ARounding.answersAtAScale(BigInteger.valueOf(scale))) {
+        if (scale == null || way == null || !ARounding.hasRoomAtAScale(BigInteger.valueOf(scale))) {
             return null;
         }
         Expr inner = argumentAt(term, rounds.value().position(), aPlace, found);

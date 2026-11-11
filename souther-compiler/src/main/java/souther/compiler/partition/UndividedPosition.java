@@ -278,9 +278,8 @@ public record UndividedPosition(TermPath at, Why why) {
          * rule leaves open.
          *
          * <p>It is also the word for numbers the relation settles in which no row is shown to
-         * get past an operation of decimals told: the run stops there on what the operation has
-         * no room for, no class is drawn for the term, and the numbers are in the reason and not
-         * in the document.
+         * get past an operation told: the run stops there where the operation stops it, no class
+         * is drawn for the term, and the numbers are in the reason and not in the document.
          */
         RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
         /**

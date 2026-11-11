@@ -419,7 +419,7 @@ public final class RowTrial {
     /**
      * Where {@code stopped} ended, read off the language's own ends among the causes the
      * application wrapped it in: a {@link ConstraintViolation} — a construction refused, an
-     * {@code ensures} not kept, or an operation the runtime would not finish — or an
+     * {@code ensures} not kept, or an operation the language refuses to finish — or an
      * {@link UnreachableReached}. None where it ended some other way.
      */
     private static Optional<RunStop> stopOf(InvocationFailure stopped) {

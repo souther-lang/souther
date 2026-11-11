@@ -88,17 +88,6 @@ class TheKeyAndTheMapOfALookupAreWhatTheLibraryDeclaresTest {
                 "an operation that states no order is no comparison");
     }
 
-    /** What widens a whole number is declared to answer the number of a whole number as it is,
-     *  and an operation answering another kind of number as it is does not. */
-    @Test
-    void onlyAnOperationAnsweringAWholeNumberAsItIsWidensOne() {
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-
-        assertTrue(facts.widensAWholeNumber(ValueName.Stdlib.operation("Decimal", "fromInt")));
-        assertFalse(facts.widensAWholeNumber(ValueName.Stdlib.operation("Decimal", "add")));
-        assertFalse(facts.widensAWholeNumber(MAP_GET));
-    }
-
     /** What folds numbers is what the library declares to add up or multiply what a container
      *  holds, and not what joins lists or strings. */
     @Test

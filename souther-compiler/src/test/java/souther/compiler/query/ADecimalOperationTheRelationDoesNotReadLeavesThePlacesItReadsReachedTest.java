@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A sum, a difference or a product of decimals that decides nothing changes nothing of what the
@@ -152,12 +151,11 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
         assertEquals(reasonsOf(evidence, "controlTruth"), reasonsOf(evidence, "differenceTruth"));
         assertEquals(reasonsOf(evidence, "ageingControl"), reasonsOf(evidence, "ageing"));
         assertEquals(reasonsOf(evidence, "plainSide"), reasonsOf(evidence, "negatedSide"));
-        // A walk that adds parts to what it carries has the digits of its parts and of how many
-        // there are; one that adds it to itself or squares it does not, whatever scale it keeps.
-        assertEquals(reasonsOf(evidence, "controlWalked"), reasonsOf(evidence, "addedWalk"));
-        for (String behavior : List.of("doubledWalk", "squaredWalk")) {
-            assertTrue(reasonsOf(evidence, behavior).stream().anyMatch(each -> each.endsWith(
-                    "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE")), behavior);
+        // A walk of decimals carries a decimal at every step, whatever the step does to it: one
+        // that adds parts to what it carries, adds it to itself or squares it decides nothing.
+        for (String behavior : List.of("addedWalk", "doubledWalk", "squaredWalk")) {
+            assertEquals(reasonsOf(evidence, "controlWalked"), reasonsOf(evidence, behavior),
+                    behavior);
         }
     }
 }

@@ -1129,9 +1129,6 @@ final class DerivedNumericFacts {
         Bounds numerator = boundsOf(rounded.numerator(), base, terms, done, deriving, copies);
         Operand<Integer> scale = placesOf(
                 boundsOf(rounded.scale(), base, terms, done, deriving, copies), terms.policy());
-        if (scale instanceof Operand.AndSoNoValueCameOfIt) {
-            return scale.saying(atom);
-        }
         Integer places = scale instanceof Operand.Usable<Integer>(Integer at) ? at : null;
         int grid = places == null ? 0 : places;
         Bounds answered = divisor.each(side -> Intervals.roundedQuotient(numerator, side, grid));
@@ -1151,34 +1148,18 @@ final class DerivedNumericFacts {
     }
 
     /**
-     * The scale as the run time takes it, or null where this reading does not hold the argument to
-     * one such number.
+     * The scale a grid is laid out at, where this reading holds the argument to one such number.
      *
      * <p>One number, which is a range holding a single value and reaching both of its ends. A scale
      * the reading leaves anywhere else is a grid this cannot name — the answer lands on one grid and
      * a rule stated over two of them is a rule about neither.
      *
-     * <p>And a number the run time can receive as the number it is. A scale is an {@code Int}, which
-     * is 64 bits, and what a divide is given is 32; a scale outside those aborts rather than being
-     * narrowed (spec §stdlib-decimal), so a division at one produces no value and there is nothing
-     * for a range to hold. This is the same question the run time asks and not a reading of what the
-     * backend happens to emit: the specification states the range, and the compiler and the run time
-     * answer it separately — a reading that called into the run time would be a reading whose
-     * soundness depended on which backend was linked. The two are held together by a test over the
-     * ends rather than by shared code.
-     *
-     * <p>And a grid this reading will lay out, which is a third question and not a sharpening of the
-     * second. What the run time takes is what the language says; what a reading can afford to name
-     * is settled by the compilation ({@link ReadingPolicy#laysOutAGridAt}) — a scale of a million
-     * places is a number a megabyte wide at every corner of the divide. Asked only the first two,
-     * what a reading costs would be the source's to decide.
-     *
-     * <p>What none of them asks is whether the division at that scale has an answer. A scale of
-     * {@code 2147483647} is received exactly and still leaves no quotient a {@code Decimal} holds,
-     * which the run time reports as an abort of that operation (spec §stdlib-decimal). A range
-     * stated here is a range over the values the operation produced, and a call that produces none
-     * leaves it nothing to be wrong about — the same reading a divide that aborts already gets
-     * (spec §invariant-discharge-arithmetic).
+     * <p>And a grid this reading will lay out ({@link ReadingPolicy#laysOutAGridAt}), which is what
+     * a compilation is prepared to spend — a scale of a million places is a number a megabyte wide
+     * at every corner of the divide — and not a statement about which divisions have a quotient.
+     * Every scale has one: a {@code Decimal} is any finite decimal (spec §stdlib-decimal), and a
+     * division at a scale the run has no room to write the answer at is the platform failing, which
+     * no range here is about.
      */
     private static Operand<Integer> placesOf(Bounds scale, ReadingPolicy policy) {
         Endpoint low = scale.min();
@@ -1188,18 +1169,17 @@ final class DerivedNumericFacts {
             // More than one grid, and a rule stated over two of them is a rule about neither.
             return new Operand.AndNotEnoughIsKnown<>();
         }
-        Integer places = ScaleRange.receivedUnchanged(Count.number(low.at()).at());
-        if (places == null) {
-            // The one scale this reading holds it to is one the run time cannot receive, so the
-            // division at it aborts and produces no value (spec §stdlib-decimal). Which is a thing
-            // known and not a thing missing, and it was answered as the second.
-            return new Operand.AndSoNoValueCameOfIt<>();
-        }
+        BigDecimal places = Count.number(low.at()).at();
         // A grid this compilation will not lay out, which is what a reading can afford and not what
         // the operation does.
-        return policy.laysOutAGridAt(places)
-                ? new Operand.Usable<>(places) : new Operand.AndNotEnoughIsKnown<>();
+        return places.compareTo(LEAST_PLACES) >= 0 && places.compareTo(MOST_PLACES) <= 0
+                && policy.laysOutAGridAt(places.intValue())
+                ? new Operand.Usable<>(places.intValue()) : new Operand.AndNotEnoughIsKnown<>();
     }
+
+    /** The places a grid is counted in, as the reading's policy takes them. */
+    private static final BigDecimal LEAST_PLACES = BigDecimal.valueOf(Integer.MIN_VALUE);
+    private static final BigDecimal MOST_PLACES = BigDecimal.valueOf(Integer.MAX_VALUE);
 
     /**
      * How far from nought the divisor can be, or null where this reading leaves it no such number.

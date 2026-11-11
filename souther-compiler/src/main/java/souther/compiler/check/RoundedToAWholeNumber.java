@@ -189,7 +189,7 @@ public final class RoundedToAWholeNumber {
      */
     static ConstantComparison statementAtAScale(WholeRounding way, Rel rel, ExactRatio against,
                                                 BigInteger places) {
-        if (!ARounding.answersAtAScale(places)) {
+        if (!ARounding.hasRoomAtAScale(places)) {
             return null;
         }
         ExactRatio steps = ExactRatio.tenTo(places.longValueExact());

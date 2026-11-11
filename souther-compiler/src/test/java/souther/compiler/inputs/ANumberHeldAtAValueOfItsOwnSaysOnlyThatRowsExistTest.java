@@ -46,7 +46,7 @@ class ANumberHeldAtAValueOfItsOwnSaysOnlyThatRowsExistTest {
             sum(0, 1, 1, 0));
 
     private static Operations heldAtNought() {
-        return new Operations(SUMS, List.of(), Told.EVERY_AT_HELD_VALUES,
+        return new Operations(SUMS,Told.EVERY_AT_HELD_VALUES,
                 Map.of("c", ExactRatio.ZERO));
     }
 
@@ -117,10 +117,10 @@ class ANumberHeldAtAValueOfItsOwnSaysOnlyThatRowsExistTest {
     @Test
     void numbersAreHeldAtValuesExactlyWhereTheOperationsAreToldAtThem() {
         assertThrows(IllegalArgumentException.class,
-                () -> new Operations(SUMS, List.of(), Told.EVERY_AT_HELD_VALUES, Map.of()));
+                () -> new Operations(SUMS,Told.EVERY_AT_HELD_VALUES, Map.of()));
         assertThrows(IllegalArgumentException.class,
-                () -> new Operations(SUMS, List.of(), Told.EVERY, Map.of("c", ExactRatio.ZERO)));
+                () -> new Operations(SUMS,Told.EVERY, Map.of("c", ExactRatio.ZERO)));
         assertThrows(IllegalArgumentException.class,
-                () -> new Operations(SUMS, List.of(), Told.SOME, Map.of("c", ExactRatio.ZERO)));
+                () -> new Operations(SUMS,Told.SOME, Map.of("c", ExactRatio.ZERO)));
     }
 }

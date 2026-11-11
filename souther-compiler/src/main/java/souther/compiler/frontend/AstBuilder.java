@@ -2147,7 +2147,7 @@ public final class AstBuilder {
         try {
             return new BigDecimal(digits);
         } catch (NumberFormatException | ArithmeticException tooManyDigits) {
-            throw error(pos, new ParseMessage.ADecimalLiteralHasMoreDigitsThanADecimalHolds());
+            throw error(pos, new ParseMessage.ADecimalLiteralHasMoreDigitsThanThisCompilerReads());
         }
     }
 
