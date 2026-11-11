@@ -124,6 +124,9 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
         canBe.forEach(cap -> assertTrue(even(cap), "can be " + cap));
         capsFor(rows, "cap: cap is never 2 * x at cap")
                 .forEach(cap -> assertFalse(even(cap), "never " + cap));
+        // The class where it never holds is covered by a row of the rows there are, which is an
+        // odd value, and that row is not one said to be for the other class.
+        assertTrue(rows.stream().anyMatch(row -> !even(capOf(row))), rows.toString());
     }
 
     /** The least of the type is an even number and twice a number of it, so it is a value the
@@ -185,6 +188,9 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
         String source = model(ITEM, "items: List<Item>", BOUNDED + " == cap");
         List<RowsOfABlock.Row> rows = rows(source);
         String sum = "List.sum({2·v + 0 | items[*]})";
+        // The classes are covered by the rows there are, so a row named for one need not exist;
+        // what is claimed is of each row that is, and of the rows that there are some.
+        assertFalse(rows.isEmpty());
         rows.stream().filter(row -> row.isFor("cap: cap is never " + sum + " at cap")
                 || row.fills().stream().anyMatch(line -> line.startsWith("cap: cap is never")))
                 .forEach(row -> assertFalse(even(capOf(row)),
@@ -196,6 +202,8 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
     void aLineAndAWeighedEqualityPartOnePositionTogether() {
         String source = model("", "x: Int", "x * 2 == cap && cap > 10");
         List<RowsOfABlock.Row> rows = rows(source);
+        assertFalse(capsFor(rows, "cap: cap <= 10 and cap can be 2 * x at cap").isEmpty(),
+                rows.toString());
         capsFor(rows, "cap: cap <= 10 and cap can be 2 * x at cap").forEach(cap -> {
             assertTrue(even(cap), "can be " + cap);
             assertTrue(cap.compareTo(BigInteger.TEN) <= 0, "at most ten " + cap);
@@ -263,6 +271,8 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
                 "can be " + row.values()));
         rowsOfTheClass(rows, "cap: cap is never").forEach(row -> assertTrue(
                 capOf(row).mod(BigInteger.valueOf(3)).intValue() != 1, "never " + row.values()));
+        assertTrue(rows.stream().anyMatch(
+                row -> capOf(row).mod(BigInteger.valueOf(3)).intValue() != 1), rows.toString());
     }
 
     /** What a way to the comparison holds {@code x} to is what the equation reaches: past
@@ -272,6 +282,7 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
         List<RowsOfABlock.Row> rows = rows(model("", "x: Int",
                 "if x >= 0 then x * 2 == cap else false"));
         List<RowsOfABlock.Row> canBe = rowsOfTheClass(rows, "cap: cap can be");
+        assertFalse(canBe.isEmpty(), rows.toString());
         canBe.forEach(row -> {
             assertTrue(even(capOf(row)), "can be " + row.values());
             assertTrue(capOf(row).signum() >= 0, "no row reaches the equality at " + row.values());
@@ -386,9 +397,8 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
     void aRowForAClassIsAValueTheDeclarationsLeaveTheNumber() {
         String source = boundedCap("x * 2 == cap.value");
         List<RowsOfABlock.Row> rows = rows(source);
-        List<RowsOfABlock.Row> never = rowsOfTheClass(rows, "cap: cap is never");
         List<RowsOfABlock.Row> canBe = rowsOfTheClass(rows, "cap: cap can be");
-        assertFalse(never.isEmpty() && canBe.isEmpty(), rows.toString());
+        assertFalse(canBe.isEmpty(), rows.toString());
         for (RowsOfABlock.Row row : rows) {
             if (row.isFor("cap: cap is never 2 * x at cap")
                     || row.isFor("cap: cap can be 2 * x at cap")) {

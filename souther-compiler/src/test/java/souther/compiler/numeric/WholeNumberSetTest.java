@@ -199,6 +199,40 @@ class WholeNumberSetTest {
         assertEquals(List.of(), apart.stream().limit(3).toList());
     }
 
+    /**
+     * The members a set names are those it holds in the window its ends make, in order and each
+     * once, and a set with no end one way or more members than the limit names none.
+     */
+    @Test
+    void theMembersAFiniteSetNamesAreThoseItHoldsInOrder() {
+        Random random = new Random(314611);
+        int finite = 0;
+        int tooMany = 0;
+        for (int trial = 0; trial < 1500; trial++) {
+            WholeNumberSet set = aSetOfSeveral(random);
+            List<BigInteger> members = set.membersUpTo(8);
+            if (set.least() == null || set.greatest() == null) {
+                assertNull(members, set.toString());
+                continue;
+            }
+            List<BigInteger> held = new ArrayList<>();
+            for (long at = set.least().longValueExact(); at <= set.greatest().longValueExact();
+                    at++) {
+                if (set.holds(n(at))) {
+                    held.add(n(at));
+                }
+            }
+            if (held.size() > 8) {
+                assertNull(members, set.toString());
+                tooMany++;
+            } else {
+                assertEquals(held, members, set.toString());
+                finite++;
+            }
+        }
+        assertTrue(finite > 50 && tooMany > 50, finite + " finite, " + tooMany + " too many");
+    }
+
     private static WholeNumberSet aSetOfSeveral(Random random) {
         WholeNumberSet out = WholeNumberSet.NONE;
         for (int part = 0; part <= random.nextInt(3); part++) {
