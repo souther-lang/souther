@@ -5715,16 +5715,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             runsStopped)) {
                 continue;
             }
-            NumericDomain.Bounds shown = howManyAreHeld(container, read, along, true);
-            if (shown == null) {
+            NumericDomain.Bounds held = howManyAreHeld(container, read, along, true);
+            if (held == null || !held.holdsAValue()) {
                 continue;
             }
+            // From none: a container of any size holds an element the statement fails of for
+            // every one it holds of, so what the rules leave its size is the most the count is
+            // and not the least. It lies where the size may, and takes every value up to the
+            // most a row holds.
+            NumericDomain.Bounds none = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                    null);
+            NumericDomain.Bounds may = howManyMayBeHeld(container, read, along);
             WhatARelationLeavesUndivided.Term<FilingCoordinate> was = terms.get(at);
-            out.set(at, new WhatARelationLeavesUndivided.Term<>(was.madeOf(), was.weight(),
-                    asARelationReadsIt(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
-                            null), carriers.get(at)),
-                    asARelationReadsIt(shown, carriers.get(at)), was.takes(), was.itsPlace(),
-                    was.spacing(), was.runsTo(), was.key()));
+            // Made of the places it reads: the container, and what the statement reads in an
+            // element or outside the container. No term over one of them is apart from the count,
+            // which is what a term of no places is asked to be.
+            List<FilingCoordinate> reads = new ArrayList<>(was.madeOf());
+            Stream.concat(Stream.of(container), PositionsAStatementReads
+                    .of(counted.ofTheElement()).orElse(List.of()).stream())
+                    .map(FilingCoordinate::at).filter(place -> !reads.contains(place))
+                    .forEach(reads::add);
+            out.set(at, new WhatARelationLeavesUndivided.Term<>(reads, was.weight(),
+                    asARelationReadsIt(may == null ? none
+                            : new NumericDomain.Bounds(none.min(), may.max()), carriers.get(at)),
+                    asARelationReadsIt(new NumericDomain.Bounds(none.min(), held.max()),
+                            carriers.get(at)), was.takes(), was.itsPlace(), was.spacing(),
+                    was.runsTo(), was.key()));
         }
         return out;
     }
@@ -9805,6 +9821,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return howManyAreHeld(container, read, region, anElementShown, 1);
     }
 
+    /** How many {@code container} holds as a number of the quantities a region answers, or null
+     *  where its type counts no elements. */
+    private static NumericTerm.TakenOf howManyTheContainerHolds(TermPath container,
+                                                               InputReading read) {
+        RuleReadingSource rules = read.rules();
+        Type type = read.domain().typeAt(container, rules);
+        return type == null ? null
+                : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
+                        container, type, rules.inners(), rules.symbols());
+    }
+
+    /**
+     * The run of how many {@code container} may hold in {@code region}, whatever rows are written:
+     * what the rules and the way leave its count, which no count of the elements it holds passes.
+     * Null where nothing is said.
+     */
+    static NumericDomain.Bounds howManyMayBeHeld(TermPath container, InputReading read,
+                                                 SearchRegion region) {
+        NumericTerm.TakenOf count = howManyTheContainerHolds(container, read);
+        return count == null ? null : region.wholeRunOf(count);
+    }
+
     /**
      * The same, where the elements of a list a rule keeps apart are taken as far as
      * {@code wanted} of them, or as many as the rule leaves to be written together where that is
@@ -9815,9 +9853,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                int wanted) {
         RuleReadingSource rules = read.rules();
         Type type = read.domain().typeAt(container, rules);
-        NumericTerm.TakenOf count = type == null ? null
-                : NumericTerm.TakenOf.howManyHeldAt(NumericMeasures.takenOf(type, rules.inners()),
-                        container, type, rules.inners(), rules.symbols());
+        NumericTerm.TakenOf count = howManyTheContainerHolds(container, read);
         List<TermPath> entry = read.domain().entryOf(container, rules);
         KeptApart apart = new KeptApart();
         for (TermPath part : entry) {

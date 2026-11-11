@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * A row of a behavior's inputs at which a counted statement holds of one element of the container
@@ -359,12 +360,20 @@ public final class CountWitnesses {
      * every value that divides it, and any other at two values that differ
      * ({@link Witnesses#distinctValuesOf}): one a statement holds of and one it fails of is what
      * is looked for, and a type with no division of its own has no more than that to tell apart.
+     * And at the values the statement itself names there ({@link ValuesAStatementNames}), which
+     * are what it tells apart where the type tells nothing.
+     *
+     * <p>Each place alone first, then every place at once: a statement over two of them holds only
+     * where both are at the values it asks for. The ways the places can be together are counted as
+     * far as the figure the elements are tried to ({@link RowSearch#upTo}), which is said where
+     * they come to more.
      */
     private static List<FixtureTemplate> withWhatItReadsDiffering(
             List<FixtureTemplate> tried, Type element, TermPath container, Proposition stated,
             RuleReadingContext reading) {
-        List<FixtureTemplate> out = new ArrayList<>(tried);
         RuleReadingSource source = reading.source();
+        Map<TermPath, List<Object>> named = ValuesAStatementNames.of(stated);
+        Map<List<String>, List<FixtureTemplate>> told = new LinkedHashMap<>();
         for (TermPath place : PositionsAStatementReads.of(stated).orElse(List.of())) {
             List<String> fields = fieldsBelow(container.element(), place);
             Type type = fields == null ? null : Witnesses.typeAt(element, fields, reading);
@@ -374,15 +383,41 @@ public final class CountWitnesses {
             int divided = Distinctions.ofType(TypeView.shapeOf(type, source.inners(),
                     source.symbols(), source.kinds(), source.sums()), source.symbols(),
                     source.kinds(), source.sums()).size();
-            for (FixtureTemplate kind : Witnesses.distinctValuesOf(type, Math.max(2, divided),
-                    reading, Set.of()).values()) {
-                for (FixtureTemplate one : Witnesses.holdingAt(element, Map.of(fields, kind),
-                        reading).values()) {
-                    if (!out.contains(one)) {
-                        out.add(one);
-                    }
-                    break;
+            List<FixtureTemplate> values = new ArrayList<>(Witnesses.distinctValuesOf(type,
+                    Math.max(2, divided), reading, Set.of()).values());
+            for (Object constant : named.getOrDefault(place, List.of())) {
+                FixtureTemplate written = Witnesses.writtenAs(constant, type, reading);
+                if (written != null && !values.contains(written)) {
+                    values.add(written);
                 }
+            }
+            if (!values.isEmpty()) {
+                told.putIfAbsent(fields, values);
+            }
+        }
+        List<FixtureTemplate> out = new ArrayList<>(tried);
+        List<Map<List<String>, FixtureTemplate>> together = List.of(Map.of());
+        for (Map.Entry<List<String>, List<FixtureTemplate>> place : told.entrySet()) {
+            List<Map<List<String>, FixtureTemplate>> next = new ArrayList<>();
+            for (Map<List<String>, FixtureTemplate> so : together) {
+                for (FixtureTemplate value : place.getValue()) {
+                    Map<List<String>, FixtureTemplate> more = new LinkedHashMap<>(so);
+                    more.put(place.getKey(), value);
+                    next.add(more);
+                }
+            }
+            // Past the figure, one more is as much as is needed to say it is passed.
+            together = next.size() > MOST_VALUES ? next.subList(0, MOST_VALUES + 1) : next;
+        }
+        List<Map<List<String>, FixtureTemplate>> alone = new ArrayList<>();
+        told.forEach((fields, values) -> values.forEach(value -> alone.add(Map.of(fields, value))));
+        for (Map<List<String>, FixtureTemplate> placed : Stream.concat(alone.stream(),
+                together.stream()).toList()) {
+            for (FixtureTemplate one : Witnesses.holdingAt(element, placed, reading).values()) {
+                if (!out.contains(one)) {
+                    out.add(one);
+                }
+                break;
             }
         }
         return out;

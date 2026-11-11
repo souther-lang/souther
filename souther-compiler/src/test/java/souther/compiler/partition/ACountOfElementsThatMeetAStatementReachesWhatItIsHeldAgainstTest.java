@@ -17,13 +17,19 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * How many elements of a container meet a statement, held against another number, is shown to
  * reach every value the other number stands at wherever a row shows it: one element the statement
  * holds of and one it fails of, beside one value of everything else the behavior takes, at a row
- * that gets to the comparison. No row of the model is needed for it, since the rows are looked
- * for among what the types tell apart — the values of the places the statement reads, and a
- * collection it reads a place in holding one of what it holds.
+ * that gets to the comparison. No row of the model is needed, since the rows are looked for among
+ * the elements the statement itself tells apart: the values its type divides into, the values it
+ * names, and each place it reads at once with the others.
  *
- * <p>Where no such row exists the count is not shown to reach, and the relation stays unread:
- * a statement no element meets, and a container whose rules cap how many it holds, which the
- * count's values past it are no row of.
+ * <p>A count so shown takes every value from none up to how many its container may hold, whatever
+ * its container holds fewer of where a way to the comparison says so — a count of the elements of
+ * a container of exactly two is none, one or two. Where no such row exists the count is not shown
+ * to reach, and the relation stays unread there: a statement no element meets, and a container
+ * whose rules cap how many it holds, which a count past it is no row of.
+ *
+ * <p>The numbers the statement reads are filed beside the count where there are any, and the
+ * relation, whose count is at no place, shows nothing of them; what is asked here is the number
+ * the count is held against.
  */
 class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
 
@@ -32,7 +38,7 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
 
             data Cur = String
                 invariant String.matches("[A-Z]{3}", value)
-            data Line = { currency: Cur, flag: Bool }
+            data Line = { currency: Cur, flag: Bool, a: Bool, b: Bool, qty: Int, code: String }
             data Capped = { items: List<Line> }
                 invariant List.length(items) <= 3
             """;
@@ -46,32 +52,55 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
 
     private static final String PRICED = "Map.get(l.currency, rates)";
 
-    /** Each count by name, and whether it is read, which is that no relation is left not shown
-     *  to reach every value. */
-    private static final Map<String, Boolean> CASES = cases();
+    /** A count and the number it is held against, and whether that number is read. */
+    private record Case(String body, String against, boolean read) {}
 
-    private static Map<String, Boolean> cases() {
-        Map<String, Boolean> out = new LinkedHashMap<>();
-        out.put("List.length(List.filter(l -> l.flag, lines)) == List.length(lines)", true);
-        out.put("List.length(List.filter(l -> l.flag, lines)) <= List.length(lines)", true);
-        out.put("List.length(List.filterMap(l -> " + PRICED + ", lines)) == List.length(lines)",
-                true);
-        out.put("List.length(List.filter(l -> Map.containsKey(l.currency, rates), lines))"
-                + " == List.length(lines)", true);
-        out.put("List.length(List.filter(l -> l.flag, lines)) == k", true);
-        out.put("List.length(List.filterMap(l -> " + PRICED + ", lines)) == k", true);
-        // No element meets the statement, so no row holds the count at anything but nought.
-        out.put("List.length(List.filter(l -> l.flag && Bool.not(l.flag), lines)) == k", false);
-        // A container the rules cap holds no more than three, and the count is no row past it.
-        out.put("List.length(List.filter(l -> l.flag, capped.items)) == k", false);
-        return out;
+    private static final List<Case> CASES = cases();
+
+    private static List<Case> cases() {
+        String size = "List.length(lines)";
+        String flagged = "List.length(List.filter(l -> l.flag, lines))";
+        String priced = "List.length(List.filterMap(l -> " + PRICED + ", lines))";
+        return List.of(
+                // Beside how many its container holds.
+                new Case(flagged + " == " + size, size, true),
+                new Case(flagged + " <= " + size, size, true),
+                new Case(priced + " == " + size, size, true),
+                new Case("List.length(List.filter(l -> Map.containsKey(l.currency, rates),"
+                        + " lines)) == " + size, size, true),
+                // Beside a number no place of the container ties.
+                new Case(flagged + " == k", "k", true),
+                new Case(priced + " == k", "k", true),
+                // A statement over two places holds only where both are at the values it asks.
+                new Case("List.length(List.filter(l -> Bool.not(l.a) && Bool.not(l.b), lines))"
+                        + " == k", "k", true),
+                // A statement that names a value tells the places it names apart there.
+                new Case("List.length(List.filter(l -> l.qty > 5, lines)) == k", "k", true),
+                new Case("List.length(List.filter(l -> l.qty > 5, lines)) == " + size, size,
+                        true),
+                new Case("List.length(List.filter(l -> l.code == \"USD\", lines)) == k", "k",
+                        true),
+                // What a way says of the size of the container is no more than the most the count
+                // is, and the count is none up to that.
+                new Case("if List.length(lines) == 2 then " + flagged + " == k else false", "k",
+                        true),
+                new Case("if List.length(lines) >= 2 then " + flagged + " == k else false", "k",
+                        true),
+                new Case("if List.length(lines) <= 3 then " + flagged + " == k else false", "k",
+                        true),
+                // No element meets the statement, so no row holds the count at anything but none.
+                new Case("List.length(List.filter(l -> l.flag && Bool.not(l.flag), lines)) == k",
+                        "k", false),
+                // A container the rules cap holds no more than three, and a count past it is no
+                // row of.
+                new Case("List.length(List.filter(l -> l.flag, capped.items)) == k", "k", false));
     }
 
     private static Map<String, PartitionEvidence> measured() {
         StringBuilder source = new StringBuilder(DECLARATIONS);
         int at = 0;
-        for (Map.Entry<String, Boolean> each : CASES.entrySet()) {
-            source.append(BEHAVIOR.formatted("case" + at++, each.getKey()));
+        for (Case each : CASES) {
+            source.append(BEHAVIOR.formatted("case" + at++, each.body()));
         }
         Compilation compilation = Compilation.ofSource(source.toString(), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -84,13 +113,18 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
 
     @Test
     void aCountIsShownToReachTheNumberItIsHeldAgainstWhereARowShowsEveryCount() {
+        Map<String, Boolean> refused = new LinkedHashMap<>();
         int at = 0;
-        for (Map.Entry<String, Boolean> each : CASES.entrySet()) {
+        for (Case each : CASES) {
             PartitionEvidence evidence = MEASURED.get("case" + at++);
-            assertNotNull(evidence, each.getKey());
-            boolean refused = evidence.notRead().stream().anyMatch(left -> left.reason()
-                    == UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE);
-            assertEquals(!each.getValue(), refused, each.getKey());
+            assertNotNull(evidence, each.body());
+            refused.put(each.body(), evidence.notRead().stream().anyMatch(left ->
+                    left.at().equals(each.against())
+                            && left.reason() == UndividedPosition.Reason
+                                    .RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE));
         }
+        Map<String, Boolean> expected = new LinkedHashMap<>();
+        CASES.forEach(each -> expected.put(each.body(), !each.read()));
+        assertEquals(expected, refused);
     }
 }
