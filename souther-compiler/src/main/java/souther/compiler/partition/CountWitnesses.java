@@ -11,13 +11,14 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.numeric.CountDomain;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -121,8 +122,14 @@ public final class CountWitnesses {
                             List<List<FixtureTemplate>> named, List<List<ObservedValue>> taken,
                             RowSearch.Building building, RowSearch.Running running) {
         if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
-                || !container.steps().isEmpty()
-                || !read.domain().holdsAnElementOverAgain(container, read.rules())) {
+                || !container.steps().isEmpty()) {
+            return Sought.NOTHING;
+        }
+        // A list may hold an element over again, which is how it is held to the fewest elements
+        // its rules ask; a set holds each once, and what one element meets and another fails are
+        // two values already.
+        boolean repeats = read.domain().holdsAnElementOverAgain(container, read.rules());
+        if (!repeats && !read.domain().holdsEachElementOnce(container, read.rules())) {
             return Sought.NOTHING;
         }
         BehaviorInputs inputs = BehaviorInputs.of(read);
@@ -171,8 +178,7 @@ public final class CountWitnesses {
                     stopped);
         }
         Container holder = new Container(at, container, spelled::holding, worn,
-                fewestHeld(at, spelled::holding, written,
-                        ObservedValue.inside(worn, each.get(at).getFirst().value()), building));
+                repeats ? fewestHeld(container, read) : 1);
         each.set(at, each.get(at).subList(0, 1));
         // The rows of those, nearest first, as many as the search tries: one whose other values
         // leave no element to hold the statement of and another to fail it is no row shown that
@@ -578,24 +584,14 @@ public final class CountWitnesses {
     }
 
     /**
-     * The fewest elements the boundary builds the container with: one, or where a rule keeps it
-     * from holding so few, the first number of copies of an element the model writes in it that
-     * it accepts — no more than the base value it built holds, which it did accept.
+     * The fewest elements the container is held with: one, or where the rules of its type ask
+     * for more, that many. What a type asks is the count's own reading ({@link CountDomain}), so
+     * it is asked of that and not found by building containers until the boundary takes one.
      */
-    private static int fewestHeld(int at, Function<List<FixtureTemplate>, FixtureTemplate> wrap,
-                                  List<FixtureTemplate> written, ObservedValue base,
-                                  RowSearch.Building building) {
-        int most = base instanceof ObservedValue.Sequence(List<ObservedValue> held)
-                ? held.size() : 0;
-        if (!written.isEmpty()) {
-            for (int n = 1; n < most; n++) {
-                if (building.build(at, wrap.apply(Collections.nCopies(n, written.getFirst())))
-                        .isPresent()) {
-                    return n;
-                }
-            }
-        }
-        return Math.max(1, most);
+    private static int fewestHeld(TermPath container, InputReading read) {
+        NumericDomain.Bounds may = UndividedByARelation.howManyMayBeHeld(container, read,
+                read.quantities().region());
+        return may == null ? 1 : Math.max(1, CountDomain.leastFrom(may.min()));
     }
 
     /**

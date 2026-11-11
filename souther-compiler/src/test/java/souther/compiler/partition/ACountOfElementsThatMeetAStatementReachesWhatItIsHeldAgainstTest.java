@@ -48,14 +48,17 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
             data Items = List<String>
             data Pair = List<String>
                 invariant List.length(value) >= 2
+            data Ids = Set<Int>
             """;
 
     private static final String BEHAVIOR = """
 
             behavior %1$s : (lines: List<Line>, rates: Map<Cur, Int>, k: Int, capped: Capped,
                              flags: List<Bool>, names: List<String>, target: String,
-                             wide: List<Wide>, table: RateTable, worn: Items, pair: Pair) -> Bool
-            let %1$s (lines, rates, k, capped, flags, names, target, wide, table, worn, pair) = %2$s
+                             wide: List<Wide>, table: RateTable, worn: Items, pair: Pair,
+                             members: Set<Int>, wornSet: Ids, prices: Map<String, Int>) -> Bool
+            let %1$s (lines, rates, k, capped, flags, names, target, wide, table, worn, pair,
+                      members, wornSet, prices) = %2$s
             """;
 
     private static final String PRICED = "Map.get(l.currency, rates)";
@@ -121,6 +124,12 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                         true),
                 new Case("List.length(List.filter(x -> x == \"USD\", pair.value)) == k", "k",
                         true),
+                // A set holds each element once, and what one element meets and another fails are
+                // two values already; a map's entries are a key and a value, built apart.
+                new Case("Set.size(Set.filter(x -> x > 5, members)) == k", "k", true),
+                new Case("Set.size(Set.filter(x -> x > 5, wornSet.value)) == k", "k", true),
+                new Case("Map.size(Map.filterEntries((key, v) -> v > 5, prices)) == k", "k",
+                        false),
                 // What a way says of the size of the container is no more than the most the count
                 // is, and the count is none up to that.
                 new Case("if List.length(lines) == 2 then " + flagged + " == k else false", "k",

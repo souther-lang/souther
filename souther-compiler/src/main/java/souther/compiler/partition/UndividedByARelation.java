@@ -7175,7 +7175,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? declared : region;
             NumericDomain.Bounds realizes = source != null
                     ? asARelationReadsIt(realizedAlong(each.atOnePosition(), source, answering, way,
-                            read, conditions, heldWhole, carriers.get(i)), carriers.get(i))
+                            read, conditions, heldWhole, carriers.get(i), working.partials()),
+                            carriers.get(i))
                     : each.number() instanceof NumericTerm.ProductOf product
                     ? asARelationReadsIt(realizedProduct(product, read, region, declared,
                             conditions, narrowedByTheRun, heldWhole, working.partials()),
@@ -8908,7 +8909,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static NumericDomain.Bounds realizedAlong(NumericTerm.FromOnePosition term,
                                                       Source source, SearchRegion region, Way way,
                                                       InputReading read, List<OnAWay> conditions,
-                                                      boolean heldWhole, Carrier carrier) {
+                                                      boolean heldWhole, Carrier carrier,
+                                                      Collection<NumericTerm> atOneElement) {
         NumericDomain.Bounds ofTheValue = realized(term, source, region, way);
         if (ofTheValue != null) {
             return ofTheValue;
@@ -8929,6 +8931,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         ? null
                         : shownOfAnElementAlone(List.of(new NumericTerm.ValueOf(entry.getFirst())),
                                 taken.position(), read, region, stated.rest(), carrier);
+                if (alone == null && stated != null && entry.size() == 1
+                        && !atOneElement.contains(term)) {
+                    // A container that must hold several is composed of as many elements as it
+                    // may hold, as the totals over what a walk hands are ({@link #ofTheElements}).
+                    NumericDomain.Bounds each = shownOfAnElement(
+                            List.of(new NumericTerm.ValueOf(entry.getFirst())), read, region,
+                            stated.rest());
+                    NumericDomain.Bounds held = howManyAreHeld(taken.position(), read, region);
+                    alone = each == null || held == null || held.admits(Count.of(1)) ? null
+                            : ofTheElements(each, List.of(held), carrier, true);
+                }
                 return alone == null ? null : alone.meet(stated.run());
             }
         }
@@ -9055,9 +9068,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         } else if (elements.isEmpty()) {
             alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
         } else {
+            // One element's run, and how many the container may hold is asked of the counts below
+            // ({@link #ofTheElements}): a container that must hold several is composed, one that
+            // may hold one is that element.
             alone = containers.size() != 1 ? null
-                    : shownOfAnElementAlone(elements, containers.getFirst(), read, region,
-                            stated.rest(), null);
+                    : shownOfAnElement(elements, read, region, stated.rest());
         }
         NumericDomain.Bounds totals = alone == null || containers.isEmpty() ? null
                 : ofTheElements(alone, counts, carrier, !atOneElement.contains(over));
@@ -9409,7 +9424,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             SearchRegion answering = way == Way.UNTOUCHED
                     && conditions.stream().anyMatch(statement -> statement.leavesAlone(one))
                     ? declared : region;
-            run = realizedAlong(one, source, answering, way, read, conditions, heldWhole, carrier);
+            run = realizedAlong(one, source, answering, way, read, conditions, heldWhole, carrier,
+                    atOneElement);
         } else if (term instanceof NumericTerm.TakenOver over) {
             run = summedOverTheElements(over, read, region, conditions, heldWhole, carrier,
                     atOneElement);
@@ -9544,6 +9560,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                               SearchRegion region,
                                                               List<OnAWay> conditions,
                                                               Carrier nought) {
+        NumericDomain.Bounds each = shownOfAnElement(places, read, region, conditions);
+        NumericDomain.Bounds held = howManyAreHeld(container, read, region);
+        if (each == null || held == null || !held.admits(Count.of(1))) {
+            return null;
+        }
+        return nought != null && held.admits(Count.ZERO) ? withNought(each, nought) : each;
+    }
+
+    /**
+     * A run every value of which one element is shown to take at whichever of {@code places} its
+     * case puts it, whatever the container holds besides: what {@link #shownOfAnElementAlone} asks
+     * of how many it may hold is left to the reader, which composes the totals of as many as it
+     * may hold ({@link #ofTheElements}) or asks for one.
+     */
+    private static NumericDomain.Bounds shownOfAnElement(
+            List<? extends NumericTerm.FromOnePosition> places, InputReading read,
+            SearchRegion region, List<OnAWay> conditions) {
         NumericDomain.Bounds each = null;
         for (NumericTerm.FromOnePosition element : places) {
             Source source = sourceOf(element, read);
@@ -9557,11 +9590,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             each = here;
         }
-        NumericDomain.Bounds held = howManyAreHeld(container, read, region);
-        if (each == null || !each.holdsAValue() || held == null || !held.admits(Count.of(1))) {
-            return null;
-        }
-        return nought != null && held.admits(Count.ZERO) ? withNought(each, nought) : each;
+        return each != null && each.holdsAValue() ? each : null;
     }
 
     /** Whether {@code number} is an end of the numbers of the elements of one key. */
