@@ -1353,8 +1353,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * may stop on a product nothing here bounds, and is applied to the witness's elements alone,
      * on which it answered: the same is shown of it.
      *
-     * <p>With no rates named, nothing the model writes is a rate table its rule admits, no run
-     * shows the count, and nothing is shown of the length.
+     * <p>With no rates named, the table is what the boundary builds from what stands for its type,
+     * and the deals tried beside it are one in its currency and one in another, so the count is
+     * shown as it is with the rates the model names.
      */
     @Test
     void aCountAfterAFilterReachesEveryValueUpToTheLengthWhereARunShowsItHoldingAndFailing() {
@@ -1370,8 +1371,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         }
         String unnamed = FORECAST.substring(0, FORECAST.indexOf("let yenRates"))
                 + FORECAST.substring(FORECAST.indexOf("data Deal"));
-        assertEquals(Map.of("List.length(deals)", NOT_SHOWN),
-                leftIn(reported(unnamed), whereWritten(unnamed, "== List")));
+        assertEquals(Map.of(), leftIn(reported(unnamed), whereWritten(unnamed, "== List")));
     }
 
     /**

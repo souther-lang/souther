@@ -1,6 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
+import souther.compiler.check.TypeView;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -85,12 +88,15 @@ public final class RowSearch {
      * @param atItsFirst which parameters are tried with their first value alone: the ones a run
      *                 of the behavior does not turn on, since another value of one of them is the
      *                 same run, and the rows of the others are not to be spent on them
+     * @param holdingOne which parameters are tried holding one of what stands for what they hold
+     *                 as well, where they are collections: the ones a statement reads a place in,
+     *                 which nothing is read of in what holds none
      */
     static List<List<Built>> tried(List<Type> types, List<List<FixtureTemplate>> named,
                                    List<List<ObservedValue>> taken, IntFunction<Type> standing,
                                    IntFunction<Type> listing, IntPredicate atItsFirst,
-                                   RuleReadingContext reading, Building building,
-                                   Set<Figure> stopped) {
+                                   IntPredicate holdingOne, RuleReadingContext reading,
+                                   Building building, Set<Figure> stopped) {
         List<List<Built>> each = new ArrayList<>();
         for (int i = 0; i < types.size(); i++) {
             if (atItsFirst.test(i)) {
@@ -108,6 +114,9 @@ public final class RowSearch {
             takenAt(i, types.get(i), taken, reading, tried, stopped);
             tried.addAll(Partitions.representativesOf(standing.apply(i), reading).values());
             addListsOf(listing.apply(i), reading, tried);
+            if (holdingOne.test(i)) {
+                addHoldingOne(types.get(i), reading, tried);
+            }
             List<Built> made = new ArrayList<>();
             for (FixtureTemplate one : upTo(tried, stopped)) {
                 building.build(i, one).ifPresent(value -> made.add(new Built(one, value)));
@@ -195,6 +204,37 @@ public final class RowSearch {
                     && !into.contains(fixture)) {
                 into.add(fixture);
             }
+        }
+    }
+
+    /**
+     * Adds to {@code into} what holds one of what stands for what {@code type} holds, where it is
+     * a collection: one of what stands for its element, or one entry of what stand for its key and
+     * its value.
+     */
+    private static void addHoldingOne(Type type, RuleReadingContext reading,
+                                      List<FixtureTemplate> into) {
+        RuleReadingSource source = reading.source();
+        FixtureTemplate holding = switch (TypeView.shapeOf(type, source.inners(), source.symbols(),
+                source.kinds(), source.sums())) {
+            case Shape.Sequence sequence -> {
+                List<FixtureTemplate> element =
+                        Partitions.representativesOf(sequence.element(), reading).values();
+                yield element.isEmpty() ? null
+                        : FixtureTemplate.collection(List.of(element.getFirst()));
+            }
+            case Shape.Mapping mapping -> {
+                List<FixtureTemplate> key =
+                        Partitions.representativesOf(mapping.key(), reading).values();
+                List<FixtureTemplate> value =
+                        Partitions.representativesOf(mapping.value(), reading).values();
+                yield key.isEmpty() || value.isEmpty() ? null : FixtureTemplate.collection(
+                        List.of(FixtureTemplate.entry(key.getFirst(), value.getFirst())));
+            }
+            default -> null;
+        };
+        if (holding != null && !into.contains(holding)) {
+            into.add(holding);
         }
     }
 

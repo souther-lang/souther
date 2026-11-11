@@ -1,9 +1,13 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.TypeView;
+import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.observe.AnswerObservation;
@@ -134,9 +138,14 @@ public final class CountWitnesses {
         // stands for a list of its element, which the elements tried below take the place of.
         // Every parameter is tried at all its values: what the statement counted turns on may name
         // a parameter the body does not read, and no one has said which are named.
+        Set<String> readOutside = new LinkedHashSet<>();
+        PositionsAStatementReads.of(count.ofTheElement()).orElse(List.of()).stream()
+                .filter(place -> !place.head().equals(container.head()))
+                .forEach(place -> readOutside.add(place.head()));
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
                 i -> i == at ? Type.list(element) : inputs.types().get(i), _ -> null,
-                _ -> false, reading, building, stopped);
+                _ -> false, i -> readOutside.contains(inputs.parameters().get(i)), reading,
+                building, stopped);
         if (each == null) {
             return new Sought(Optional.empty(), stopped, runs);
         }
@@ -304,7 +313,8 @@ public final class CountWitnesses {
         Map<List<String>, TermPath> alike = new LinkedHashMap<>();
         sameValuesIn(stated, container.element(), alike);
         if (alike.isEmpty() || out.size() > MOST_VALUES) {
-            return RowSearch.upTo(out, stopped);
+            return RowSearch.upTo(withWhatItReadsDiffering(out, element, container, stated,
+                    reading), stopped);
         }
         BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
                 new StandingAtAPoint.RowWalk(inputs, new ObservedInputs(built,
@@ -335,7 +345,47 @@ public final class CountWitnesses {
                 }
             }
         }
-        return RowSearch.upTo(out, stopped);
+        return RowSearch.upTo(withWhatItReadsDiffering(out, element, container, stated, reading),
+                stopped);
+    }
+
+    /**
+     * {@code tried}, then the element with each place {@code stated} reads inside it at each of the
+     * values its type tells apart, and everything else as the rules admit: the elements a
+     * statement may tell apart by a place of their own, which the one value that stands for the
+     * element does not. After what was tried, so that a row found without them is the row found.
+     *
+     * <p>A type that states a division — both of a {@code Bool}, each case of a sum — is taken at
+     * every value that divides it, and any other at two values that differ
+     * ({@link Witnesses#distinctValuesOf}): one a statement holds of and one it fails of is what
+     * is looked for, and a type with no division of its own has no more than that to tell apart.
+     */
+    private static List<FixtureTemplate> withWhatItReadsDiffering(
+            List<FixtureTemplate> tried, Type element, TermPath container, Proposition stated,
+            RuleReadingContext reading) {
+        List<FixtureTemplate> out = new ArrayList<>(tried);
+        RuleReadingSource source = reading.source();
+        for (TermPath place : PositionsAStatementReads.of(stated).orElse(List.of())) {
+            List<String> fields = fieldsBelow(container.element(), place);
+            Type type = fields == null ? null : Witnesses.typeAt(element, fields, reading);
+            if (type == null) {
+                continue;
+            }
+            int divided = Distinctions.ofType(TypeView.shapeOf(type, source.inners(),
+                    source.symbols(), source.kinds(), source.sums()), source.symbols(),
+                    source.kinds(), source.sums()).size();
+            for (FixtureTemplate kind : Witnesses.distinctValuesOf(type, Math.max(2, divided),
+                    reading, Set.of()).values()) {
+                for (FixtureTemplate one : Witnesses.holdingAt(element, Map.of(fields, kind),
+                        reading).values()) {
+                    if (!out.contains(one)) {
+                        out.add(one);
+                    }
+                    break;
+                }
+            }
+        }
+        return out;
     }
 
     /**

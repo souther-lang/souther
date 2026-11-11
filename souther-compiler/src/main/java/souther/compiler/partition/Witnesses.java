@@ -660,7 +660,7 @@ final class Witnesses {
 
     /** The type at the end of {@code fields} taken from a value of {@code type}, or null where one
      *  of them is no field of a record. */
-    private static Type typeAt(Type type, List<String> fields, RuleReadingContext reading) {
+    static Type typeAt(Type type, List<String> fields, RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
         Type at = type;
         for (String field : fields) {
@@ -681,8 +681,8 @@ final class Witnesses {
      * and whatever the rules admit everywhere else — or nothing where one of them cannot be, with
      * what composing the rest met.
      */
-    private static Proposals holdingAt(Type type, Map<List<String>, FixtureTemplate> placed,
-                                       RuleReadingContext reading) {
+    static Proposals holdingAt(Type type, Map<List<String>, FixtureTemplate> placed,
+                               RuleReadingContext reading) {
         if (placed.containsKey(List.of())) {
             // The value itself, which two runs cannot both be.
             return placed.size() == 1 ? Proposals.of(List.of(placed.get(List.of())))

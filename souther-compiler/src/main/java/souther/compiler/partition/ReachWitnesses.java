@@ -401,8 +401,8 @@ public final class ReachWitnesses {
         Set<WhereARunStopped> runs = new LinkedHashSet<>();
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
                 i -> inputs.types().get(i), i -> elementOfAList(inputs.parameters().get(i), read),
-                i -> parametersTheBodyDoesNotRead.contains(inputs.parameters().get(i)), reading,
-                building, stopped);
+                i -> parametersTheBodyDoesNotRead.contains(inputs.parameters().get(i)),
+                _ -> false, reading, building, stopped);
         if (each == null) {
             return new Sought(Optional.empty(), stopped, runs);
         }

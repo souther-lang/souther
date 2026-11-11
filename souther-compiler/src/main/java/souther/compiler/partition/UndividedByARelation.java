@@ -2966,12 +2966,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // relate as the way's own statements do: each is read over the run the region answers.
         Roomy room = offItsLine ? Roomy.NONE
                 : rulesLeavingRoomAroundTheLine(read, inWholeSteps);
-        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = withWhatARowShowsOfEachCount(
                 termsAlong(read, withoutWhatARowAtTheLineNeeds(sources, room, read), carriers,
                         beside.along().withoutTheRelationOf(room.parts()),
                         beside.declared().withoutTheRelationOf(room.parts()),
                         beside.conditions(), remainders, beside.stating(), heldWhole,
-                        beside.narrowing(), byTheFormat != null);
+                        beside.narrowing(), byTheFormat != null),
+                !offItsLine && heldWhole && remainder == null, conditions, witnesses, stopped,
+                runsStopped, read, along, carriers);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
@@ -5678,37 +5680,97 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             container)) {
                 continue;
             }
-            Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
-            if (read.isEmpty()) {
-                return null;
-            }
-            // What the statement reads is the element's own, or a place under another parameter:
-            // the container itself — how many it holds, another of its elements, a value taken of
-            // all of them — differs between the rows made of the witness, and so may what the
-            // statement says of the same element.
-            Set<TermPath> outside = new LinkedHashSet<>();
-            for (TermPath place : read.get()) {
-                if (place.isAtOrUnder(container.element()) || place.isAtOrUnder(container.key())) {
-                    continue;
-                }
-                if (place.head().equals(container.head())) {
-                    return null;
-                }
-                outside.add(place);
-            }
-            if (picksOut(conditions, container, outside)) {
-                return null;
-            }
-            CountWitnesses.Sought sought = witnesses.of(counted);
-            if (sought.found().isEmpty()) {
-                stopped.addAll(sought.stoppedAt());
-                runsStopped.addAll(sought.runsStopped());
+            if (!countIsShownEveryWhere(counted, container, conditions, witnesses, stopped,
+                    runsStopped)) {
                 return null;
             }
             return new Within(new WhatARelationLeavesUndivided.WithinTheWhole(part, 1 - part,
                     BigInteger.ZERO, BigInteger.ZERO), container, true);
         }
         return null;
+    }
+
+    /**
+     * {@code terms}, each that is how many elements of an input container meet a statement made to
+     * take every value a row shows it takes where {@code asked} and a row shows the number at
+     * every count of every size ({@link #countIsShownEveryWhere}): from none up to how many the
+     * container may hold ({@link #howManyAreHeld}), since a row holds that many elements it holds
+     * of and the rest it fails of. A count a row does not show is left as {@code termsAlong} has
+     * it, with nothing shown that it takes.
+     */
+    private List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> withWhatARowShowsOfEachCount(
+            List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms, boolean asked,
+            List<OnAWay> conditions, ComparisonWitnesses.AtAComparison witnesses,
+            Set<Figure> stopped, Set<WhereARunStopped> runsStopped, InputReading read,
+            SearchRegion along, List<Carrier> carriers) {
+        if (!asked) {
+            return terms;
+        }
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> out = new ArrayList<>(terms);
+        for (int at = 0; at < sides.size(); at++) {
+            Quantity.HowManyMeet counted = sides.get(at).counted();
+            if (counted == null || !(counted.container() instanceof DecisionSubject.AnInput(
+                    TermPath container, var _)) || container.insideAContainer()
+                    || !countIsShownEveryWhere(counted, container, conditions, witnesses, stopped,
+                            runsStopped)) {
+                continue;
+            }
+            NumericDomain.Bounds shown = howManyAreHeld(container, read, along, true);
+            if (shown == null) {
+                continue;
+            }
+            WhatARelationLeavesUndivided.Term<FilingCoordinate> was = terms.get(at);
+            out.set(at, new WhatARelationLeavesUndivided.Term<>(was.madeOf(), was.weight(),
+                    asARelationReadsIt(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                            null), carriers.get(at)),
+                    asARelationReadsIt(shown, carriers.get(at)), was.takes(), was.itsPlace(),
+                    was.spacing(), was.runsTo(), was.key()));
+        }
+        return out;
+    }
+
+    /**
+     * Whether a row shows the number of elements of {@code container} that meet a statement at
+     * every count of every size: one element it holds of and one it fails of, beside one value of
+     * everything else, at a row that gets to this relation ({@link CountWitnesses}).
+     *
+     * <p>Where the search stopped short of everything it would have tried, the figures it stopped
+     * at go into {@code stopped}, and where the runs of the rows it tried stopped into
+     * {@code runsStopped}: nothing is shown, and a run allowed more may show it.
+     */
+    private static boolean countIsShownEveryWhere(Quantity.HowManyMeet counted,
+                                                  TermPath container, List<OnAWay> conditions,
+                                                  ComparisonWitnesses.AtAComparison witnesses,
+                                                  Set<Figure> stopped,
+                                                  Set<WhereARunStopped> runsStopped) {
+        Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
+        if (read.isEmpty()) {
+            return false;
+        }
+        // What the statement reads is the element's own, or a place under another parameter:
+        // the container itself — how many it holds, another of its elements, a value taken of
+        // all of them — differs between the rows made of the witness, and so may what the
+        // statement says of the same element.
+        Set<TermPath> outside = new LinkedHashSet<>();
+        for (TermPath place : read.get()) {
+            if (place.isAtOrUnder(container.element()) || place.isAtOrUnder(container.key())) {
+                continue;
+            }
+            if (place.head().equals(container.head())) {
+                return false;
+            }
+            outside.add(place);
+        }
+        if (picksOut(conditions, container, outside)) {
+            return false;
+        }
+        CountWitnesses.Sought sought = witnesses.of(counted);
+        if (sought.found().isEmpty()) {
+            stopped.addAll(sought.stoppedAt());
+            runsStopped.addAll(sought.runsStopped());
+            return false;
+        }
+        return true;
     }
 
     /**
