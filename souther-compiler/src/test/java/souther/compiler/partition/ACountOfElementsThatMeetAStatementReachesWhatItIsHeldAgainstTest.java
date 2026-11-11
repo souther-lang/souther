@@ -136,6 +136,9 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                 new Case("Set.size(Set.filter(x -> x > 5, members)) == k", "k", false),
                 new Case("Set.size(Set.filter(x -> x > 5, wornSet.value)) == k", "k", false),
                 new Case("Set.size(Set.filter(x -> x == 0, members)) == k", "k", false),
+                // And beside how many the set holds, where the count would be every size of it.
+                new Case("Set.size(Set.filter(x -> x > 5, members)) == Set.size(members)",
+                        "Set.size(members)", false),
                 // A map's entries are a key and a value, built apart.
                 new Case("Map.size(Map.filterEntries((key, v) -> v > 5, prices)) == k", "k",
                         false),
