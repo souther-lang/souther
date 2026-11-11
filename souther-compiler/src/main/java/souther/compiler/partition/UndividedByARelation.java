@@ -5962,9 +5962,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Endpoint none = Endpoint.inclusive(Count.of(0));
         Endpoint mostShown = everySize ? areHeld.max()
                 : Endpoint.upper(areHeld.max(), Endpoint.inclusive(Count.of(1)));
+        // The row holds one element it fails of beside one it holds of, so a container that must
+        // hold elements is shown at none only where it holds the ones it fails of over again.
+        boolean mustHold = mayBeHeld != null && CountDomain.leastFrom(mayBeHeld.min()) > 0;
+        Endpoint leastShown = everySize || !mustHold ? none : Endpoint.inclusive(Count.of(1));
         return new CountTakes(
                 new NumericDomain.Bounds(none, mayBeHeld == null ? null : mayBeHeld.max()),
-                new NumericDomain.Bounds(none, mostShown));
+                new NumericDomain.Bounds(leastShown, mostShown));
     }
 
     /** The container of the input {@code counted} counts the elements of, or null where it counts
