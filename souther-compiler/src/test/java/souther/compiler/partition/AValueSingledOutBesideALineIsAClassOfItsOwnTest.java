@@ -111,7 +111,8 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
         Recognition.OfACount count =
                 assertInstanceOf(Recognition.OfACount.class, rest.recognises());
         Carrier on = count.orders().answered();
-        LevelRegion asked = NumbersAskedFor.ofTheClass(count.is(), on).values();
+        LevelRegion asked = NumbersAskedFor.ofTheClass(
+                assertInstanceOf(NumericSet.OfRuns.class, count.is()), on).values();
         assertFalse(asked.contains(new Level.OnACarrier(on, Count.of(3))), asked.toString());
         assertTrue(asked.contains(new Level.OnACarrier(on, Count.of(2))), asked.toString());
         assertTrue(asked.contains(new Level.OnACarrier(on, Count.of(4))), asked.toString());

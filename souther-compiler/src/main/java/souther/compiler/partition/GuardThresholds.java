@@ -7,7 +7,6 @@ import souther.compiler.collect.LatelyAsked;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.types.BindingId;
-import souther.compiler.values.ValueSet;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationAccess;
@@ -1284,9 +1283,7 @@ public final class GuardThresholds {
                         new RuleRef.Comparison(behavior, wrote), anchor, Optional.of(stated));
                 out.add(new BehaviorSetStatements.Partnered(origin,
                         new PredicateStatement.CanBeTheValueOf(numbers.partner()), each.getKey(),
-                        UndividedByARelation.StringsAPartnerCanHold.unreached(
-                                ValueSet.wholeNumberSet(numbers.holds().shown()),
-                                ValueSet.wholeNumberSet(numbers.holds().possible()), null,
+                        new BehaviorSetStatements.PartnerHolds.OfNumbers(numbers.holds(),
                                 numbers.partner())));
             }
         }

@@ -529,11 +529,13 @@ final class CardinalityComposer {
             AskedAt at = demands.get(each);
             TermOrders orders = measuring.ordersOf(each.term());
             Carrier on = orders == null ? null : orders.observed();
-            if (at == null || at.walking() == null || on == null) {
+            // Only a set of runs: the elements are chosen where standing in the set turns over, and
+            // a set of progressions turns at every number it steps over, which no list holds.
+            if (at == null || !(at.walking() instanceof NumericSet.OfRuns runs) || on == null) {
                 return none(new SearchMessage.NothingSaysWhereItStandsInsideAnElement(
                         String.valueOf(each.term()), String.valueOf(container)));
             }
-            asked.add(new Asked.SomeElementAt(each.term().subjectPath(), at.walking(), on));
+            asked.add(new Asked.SomeElementAt(each.term().subjectPath(), runs, on));
         }
         // What each statement of the elements together says of one element, once however many of
         // them say it, with no count of it asked: where in what is asked each is.
@@ -2243,7 +2245,7 @@ final class CardinalityComposer {
          * the order {@code on} — what a row placing a number inside an element asks, where the
          * elements are chosen among the values each is read at whole.
          */
-        record SomeElementAt(TermPath at, NumericSet set, Carrier on) implements Asked {
+        record SomeElementAt(TermPath at, NumericSet.OfRuns set, Carrier on) implements Asked {
 
             /** Whether the element {@code row} is read as holds a number at {@code at} in the
              *  set; failing where it holds nothing there. */

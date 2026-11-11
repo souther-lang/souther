@@ -10,7 +10,11 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -191,6 +195,101 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
         });
         assertFalse(capsFor(rows, "cap: cap > 10 and cap is never 2 * x at cap").isEmpty(),
                 rows.toString());
+    }
+
+    /** The rows said to be for a class whose name starts {@code prefix}, by name or by what is
+     *  said over them. */
+    private static List<RowsOfABlock.Row> rowsOfTheClass(List<RowsOfABlock.Row> rows,
+                                                        String prefix) {
+        return rows.stream().filter(row -> row.name().orElse("").startsWith(prefix)
+                || row.fills().stream().anyMatch(line -> line.startsWith(prefix))).toList();
+    }
+
+    /** What {@code x * 2 /= cap} leaves of {@code cap} is what {@code ==} leaves: the equality is
+     *  what is told apart, and which way a row comes out is the borders'. */
+    @Test
+    void anInequalityPartsTheNumberByTheSameValues() {
+        List<RowsOfABlock.Row> rows = rows(model("", "x: Int", "x * 2 /= cap"));
+        String said = report(model("", "x: Int", "x * 2 /= cap"));
+        assertFalse(said.contains("not read"), said);
+        capsFor(rows, "cap: cap can be 2 * x at cap")
+                .forEach(cap -> assertTrue(even(cap), "can be " + cap));
+        rowsOfTheClass(rows, "cap: cap is never 2 * x")
+                .forEach(row -> assertFalse(even(capOf(row)), "never " + row.values()));
+    }
+
+    /** A negative weight and a constant: {@code 1 - 3x} is one more than a multiple of three. */
+    @Test
+    void aNegativeWeightAndAConstantLeaveTheNumbersTheyReach() {
+        List<RowsOfABlock.Row> rows = rows(model("", "x: Int", "1 - x * 3 == cap"));
+        List<RowsOfABlock.Row> canBe = rowsOfTheClass(rows, "cap: cap can be");
+        assertFalse(canBe.isEmpty(), rows.toString());
+        canBe.forEach(row -> assertEquals(1, capOf(row).mod(BigInteger.valueOf(3)).intValue(),
+                "can be " + row.values()));
+        rowsOfTheClass(rows, "cap: cap is never").forEach(row -> assertTrue(
+                capOf(row).mod(BigInteger.valueOf(3)).intValue() != 1, "never " + row.values()));
+    }
+
+    /** What a way to the comparison holds {@code x} to is what the equation reaches: past
+     *  {@code x >= 0} no negative number is twice {@code x}. */
+    @Test
+    void aWayThatHoldsTheOtherSideBoundsWhatTheEquationReaches() {
+        List<RowsOfABlock.Row> rows = rows(model("", "x: Int",
+                "if x >= 0 then x * 2 == cap else false"));
+        List<RowsOfABlock.Row> canBe = rowsOfTheClass(rows, "cap: cap can be");
+        canBe.forEach(row -> {
+            assertTrue(even(capOf(row)), "can be " + row.values());
+            assertTrue(capOf(row).signum() >= 0, "no row reaches the equality at " + row.values());
+        });
+    }
+
+    /** The rows written for the borders are read by running the relation: those at the line are
+     *  rows where the two sides are equal, and those off it are rows where they are not. */
+    @Test
+    void theRowsAtTheLineAreRowsWhereTheSidesAreEqual() {
+        List<RowsOfABlock.Row> rows = rows(model("", "x: Int", "x * 2 == cap"));
+        Pattern both = Pattern.compile("\\((-?\\d+), (-?\\d+)\\)\\s*->");
+        int checked = 0;
+        for (RowsOfABlock.Row row : rows) {
+            Matcher found = both.matcher(row.values());
+            if (!found.find()) {
+                continue;
+            }
+            BigInteger twice = new BigInteger(found.group(1)).shiftLeft(1);
+            boolean equal = twice.equals(new BigInteger(found.group(2)));
+            if (row.fills().stream().anyMatch(line -> line.startsWith("ON point"))) {
+                assertTrue(equal, row.values());
+                checked++;
+            } else if (row.fills().stream().anyMatch(line -> line.startsWith("OFF point"))) {
+                assertFalse(equal, row.values());
+                checked++;
+            }
+        }
+        assertTrue(checked >= 2, "the borders were checked: " + rows);
+    }
+
+    /**
+     * A number whose declarations already enumerate its values keeps those classes, and the
+     * equality is decided at each of them: it is not offered as a second list beside them.
+     */
+    @Test
+    void aNumberTheDeclarationsEnumerateKeepsItsClasses() {
+        String source = model("""
+                data Small = Int
+                    invariant small = value == 1 || value == 2 || value == 3
+                """, "x: Int", "x * 2 == cap.value").replace("cap: Int", "cap: Small");
+        Compilation compilation = compile(source);
+        String json = AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts()));
+        JsonNode axes = JsonMapper.builder().build().readTree(json).get("modules").get(0)
+                .get("behaviors").get(0).get("partition").get("axes");
+        List<String> classes = new ArrayList<>();
+        for (JsonNode axis : axes) {
+            if (axis.get("axis").asString().equals("check/cap")) {
+                axis.get("classes").forEach(each -> classes.add(each.asString()));
+            }
+        }
+        assertEquals(List.of("1", "2", "3"), classes, json);
     }
 
     /** The borders of the equality are what they were. */

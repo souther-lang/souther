@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.numeric.Count;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -154,6 +155,15 @@ public final class ClassCoexistence {
     }
 
     private static boolean holdsNothingFromOne(NumericSet counts, Carrier carrier) {
+        return switch (counts) {
+            // Progressions say it of their members: none from one is none at or above one.
+            case NumericSet.InTheNumbers members ->
+                    members.numbers().leastAtOrAbove(BigInteger.ONE) == null;
+            case NumericSet.OfRuns runs -> holdsNothingFromOne(runs, carrier);
+        };
+    }
+
+    private static boolean holdsNothingFromOne(NumericSet.OfRuns counts, Carrier carrier) {
         LevelRegion fromOne = counts.region(carrier).meet(LevelRegion.of(new LevelInterval(
                 Bound.at(new Level.OnACarrier(carrier, Count.of(1)), true), null)));
         LevelSpace space = LevelSpace.onACarrier(carrier);

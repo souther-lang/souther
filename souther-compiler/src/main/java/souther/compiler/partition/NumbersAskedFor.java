@@ -76,7 +76,7 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
      * rest of the row turned out to be. So a walk of one of these is a walk of the question, and
      * which runs a class makes up is the class's own answer.
      */
-    public static NumbersAskedFor ofTheClass(NumericSet admitted, Carrier on) {
+    public static NumbersAskedFor ofTheClass(NumericSet.OfRuns admitted, Carrier on) {
         return of(admitted.region(on));
     }
 

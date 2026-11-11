@@ -341,37 +341,99 @@ public sealed interface ValueSet {
      * anything else, or a language, holds other values than they do.
      */
     default boolean holdsTheSameValuesAs(ValueSet other) {
-        if (this instanceof WholeSteps || other instanceof WholeSteps) {
-            return holdTheSameProgressions(this, other);
-        }
-        if (!(this instanceof WholeRuns) && !(other instanceof WholeRuns)) {
-            return equals(other);
-        }
-        WholeNumberRuns mine = runsOf(this);
-        return mine != null && mine.equals(runsOf(other));
+        return comparedWith(other) == Likeness.SAME;
     }
 
-    /** What a pair of numbers' sets is asked within, as progressions. A pair too wide for it is
-     *  not shown to be one set, which is what a reader that keeps both does. */
+    /**
+     * What comparing the values two sets hold came to.
+     *
+     * <p>Three answers, because two of them are about the numbers and one is about the work: a
+     * pair of progressions too wide for what comparing them may cost is not shown to be one set,
+     * and is not shown to be two either.
+     */
+    enum Likeness {
+
+        /** Each holds every value the other does. */
+        SAME,
+
+        /** Some value is one's and not the other's. */
+        DIFFERENT,
+
+        /** The comparison was over what it may cost, so neither is shown. */
+        NOT_SHOWN
+    }
+
+    /**
+     * Whether this and {@code other} hold the same values, as far as that is shown.
+     *
+     * <p>A set is the same as itself however wide it is: what is spelled alike holds alike, asked
+     * before anything is worked out. Past that, progressions are compared by what each holds that
+     * the other does not, which is paid for in progressions ({@link #PROGRESSIONS_COMPARED}) and
+     * answers {@link Likeness#NOT_SHOWN} where it is more than that.
+     */
+    default Likeness comparedWith(ValueSet other) {
+        if (equals(other)) {
+            return Likeness.SAME;
+        }
+        if (this instanceof WholeSteps || other instanceof WholeSteps) {
+            return progressionsCompared(this, other);
+        }
+        if (!(this instanceof WholeRuns) && !(other instanceof WholeRuns)) {
+            return Likeness.DIFFERENT;
+        }
+        WholeNumberRuns mine = runsOf(this);
+        return mine != null && mine.equals(runsOf(other)) ? Likeness.SAME : Likeness.DIFFERENT;
+    }
+
+    /** How many members of one set are asked of the other for one it does not hold. */
+    int MEMBERS_COMPARED = 64;
+
+    /** Whether one of the first members of {@code from} nearest nought is none of {@code other}'s. */
+    private static boolean holdsAMemberOutside(WholeNumberSet from, WholeNumberSet other) {
+        Set<BigInteger> asked = new LinkedHashSet<>();
+        for (int each = 0; each < MEMBERS_COMPARED; each++) {
+            BigInteger member = from.nearestMember(BigInteger.ZERO, asked);
+            if (member == null) {
+                return false;
+            }
+            if (!other.holds(member)) {
+                return true;
+            }
+            asked.add(member);
+        }
+        return false;
+    }
+
+    /** What a pair of numbers' sets is asked within, as progressions. */
     WholeNumberSet.Budget PROGRESSIONS_COMPARED = parts -> parts <= 4096;
 
     /** Whether each holds every number the other does, asked of the numbers and not of how the
      *  progressions are written: neither has a number the other leaves out. */
-    private static boolean holdTheSameProgressions(ValueSet one, ValueSet other) {
+    private static Likeness progressionsCompared(ValueSet one, ValueSet other) {
         WholeNumberSet mine = numbersOf(one);
         WholeNumberSet theirs = numbersOf(other);
+        // A set that holds a value that is no whole number holds one the progressions do not.
         if (mine == null || theirs == null) {
-            return false;
+            return Likeness.DIFFERENT;
+        }
+        // A member the other does not hold, among the first of them: it shows a difference
+        // whatever the width of the remainders, which is paid for nowhere.
+        if (holdsAMemberOutside(mine, theirs) || holdsAMemberOutside(theirs, mine)) {
+            return Likeness.DIFFERENT;
         }
         WholeNumberSet notMine = mine.complement(PROGRESSIONS_COMPARED);
-        WholeNumberSet notTheirs = theirs.complement(PROGRESSIONS_COMPARED);
-        if (notMine == null || notTheirs == null) {
-            return false;
+        WholeNumberSet onlyTheirs = notMine == null ? null
+                : theirs.and(notMine, PROGRESSIONS_COMPARED);
+        if (onlyTheirs != null && !onlyTheirs.isNone()) {
+            return Likeness.DIFFERENT;
         }
-        WholeNumberSet onlyTheirs = theirs.and(notMine, PROGRESSIONS_COMPARED);
-        WholeNumberSet onlyMine = mine.and(notTheirs, PROGRESSIONS_COMPARED);
-        return onlyTheirs != null && onlyMine != null && onlyTheirs.isNone()
-                && onlyMine.isNone();
+        WholeNumberSet notTheirs = theirs.complement(PROGRESSIONS_COMPARED);
+        WholeNumberSet onlyMine = notTheirs == null ? null
+                : mine.and(notTheirs, PROGRESSIONS_COMPARED);
+        if (onlyMine != null && !onlyMine.isNone()) {
+            return Likeness.DIFFERENT;
+        }
+        return onlyTheirs != null && onlyMine != null ? Likeness.SAME : Likeness.NOT_SHOWN;
     }
 
     /**

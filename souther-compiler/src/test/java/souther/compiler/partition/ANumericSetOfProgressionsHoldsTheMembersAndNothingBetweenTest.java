@@ -10,6 +10,9 @@ import souther.compiler.numeric.WholeNumberSet;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -62,6 +65,18 @@ class ANumericSetOfProgressionsHoldsTheMembersAndNothingBetweenTest {
         assertNull(fromZero.extent().max());
         assertNull(fromZero.asOneRun());
         assertFalse(fromZero.holds(Count.of(3), Carrier.WHOLE));
+    }
+
+    /**
+     * What the runs of a set are, and where its membership turns, is asked of a set of runs and of
+     * nothing else: progressions are no {@code OfRuns}, so a reader asking either of one does not
+     * compile, and none is handed the run they lie in as if it were the set.
+     */
+    @Test
+    void progressionsAreNoSetOfRunsAndSoHaveNoRegionToAsk() {
+        assertEquals(Set.of(NumericSet.OfRuns.class, NumericSet.InTheNumbers.class),
+                new HashSet<>(Arrays.asList(NumericSet.class.getPermittedSubclasses())));
+        assertFalse(NumericSet.OfRuns.class.isAssignableFrom(NumericSet.InTheNumbers.class));
     }
 
     @Test

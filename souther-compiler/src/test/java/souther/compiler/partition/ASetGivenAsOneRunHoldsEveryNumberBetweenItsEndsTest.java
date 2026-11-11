@@ -13,7 +13,7 @@ import souther.compiler.numeric.WholeNumberSet;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -94,10 +94,22 @@ class ASetGivenAsOneRunHoldsEveryNumberBetweenItsEndsTest {
     /** Every shape a set comes in is among the ones checked. */
     @Test
     void everyShapeIsChecked() {
-        Set<Class<?>> shapes = Arrays.stream(NumericSet.class.getPermittedSubclasses())
-                .collect(Collectors.toSet());
+        Set<Class<?>> shapes = shapesBelow(NumericSet.class);
         Set<Class<?>> checked = SETS.stream().map(Object::getClass).collect(Collectors.toSet());
         assertEquals(shapes, checked);
+    }
+
+    /** The shapes a sealed type comes in, those a sealed one among them is made of in its place. */
+    private static Set<Class<?>> shapesBelow(Class<?> sealed) {
+        Set<Class<?>> out = new LinkedHashSet<>();
+        for (Class<?> each : sealed.getPermittedSubclasses()) {
+            if (each.isSealed()) {
+                out.addAll(shapesBelow(each));
+            } else {
+                out.add(each);
+            }
+        }
+        return out;
     }
 
     private static boolean above(Endpoint end, int k) {

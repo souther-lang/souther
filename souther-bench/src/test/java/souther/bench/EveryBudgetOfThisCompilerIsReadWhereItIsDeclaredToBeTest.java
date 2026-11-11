@@ -592,7 +592,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "puts the figure beside the answer where a run held more members of the class"
                             + " than were looked at"),
             Map.entry("souther.compiler.partition.TermRealizations#membersOnTheOrder("
-                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/partition/NumericSet$OfRuns;"
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/check/HeldClass;"
                             + "Ljava/util/List;Lsouther/compiler/values/ValueSet;"

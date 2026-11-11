@@ -3194,7 +3194,17 @@ final class TermRealizations {
                 ? it : null;
         OrderedRuns declared = value == null ? null : within.orderedRegionAt(value);
         ValueSet admits = value == null ? ValueSet.ANY : within.admittedAt(value);
+        // Progressions have members and no runs: the members nearest where the number is usually
+        // near are offered, each one the declarations and the position's values admit. What is
+        // left is a set of runs, which the rest of this looks in.
+        NumericSet.OfRuns ofRuns;
         switch (wanted) {
+            case NumericSet.InTheNumbers members -> {
+                return membersOfTheNumbers(members, orders.answered(), named, declared, admits);
+            }
+            case NumericSet.OfRuns each -> ofRuns = each;
+        }
+        switch (ofRuns) {
             // A set of one number is that number, and there is nothing else it could have been —
             // and where the order the declarations leave the value holds it nowhere, the set holds
             // no value of the position at all.
@@ -3214,11 +3224,6 @@ final class TermRealizations {
             // A run, with or without values taken out of it, is looked in below — in the runs the
             // set makes up, so a place a run holds is never offered for one that has it taken out.
             case NumericSet.InARun _, NumericSet.InARunExcept _ -> { }
-            // Progressions have members and no runs: the members nearest where the number is
-            // usually near are offered, each one the declarations and the position's values admit.
-            case NumericSet.InTheNumbers members -> {
-                return membersOfTheNumbers(members, orders.answered(), named, declared, admits);
-            }
         }
         // Where the rules leave the number room, which narrows the run this looks in. Exhaustive
         // over what the region answers, because one of its answers is not a range: a region that
@@ -3248,7 +3253,7 @@ final class TermRealizations {
         // else is asked of it afterwards.
         HeldClass members = value == null ? HeldClass.NONE : within.classAt(value);
         if (!(members instanceof HeldClass.None)) {
-            return membersOnTheOrder(wanted, orders, members, runs, admits, ofTheRun, usual);
+            return membersOnTheOrder(ofRuns, orders, members, runs, admits, ofTheRun, usual);
         }
         // One place of each run of the set inside each of those, standing for it — and where the
         // one standing for it is a value the position's values refuse, one of the run they take,
@@ -3262,7 +3267,7 @@ final class TermRealizations {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<Place> offered = new ArrayList<>();
         for (NumericDomain.Bounds run : runs) {
-            for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
+            for (LevelInterval look : Criterion.Within.runsInside(ofRuns.region(carrier), carrier,
                     run == null ? null : run.min(), run == null ? null : run.max())) {
                 if (!(space.standingFor(look, usual).level() instanceof Level.OnACarrier on)) {
                     continue;
@@ -3301,7 +3306,7 @@ final class TermRealizations {
      *
      * @param leaves the runs the declarations and the region leave the number, lowest first
      */
-    private static Tried membersOnTheOrder(NumericSet wanted, TermOrders orders,
+    private static Tried membersOnTheOrder(NumericSet.OfRuns wanted, TermOrders orders,
                                            HeldClass members, List<NumericDomain.Bounds> leaves,
                                            ValueSet admits, Set<CompositionRepertoire> ofTheRun,
                                            UsualPlace usual) {

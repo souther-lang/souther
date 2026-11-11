@@ -147,6 +147,33 @@ class EveryShapeOfWholeNumbersIsOneSetTest {
                 Meter.refusing()));
     }
 
+    /**
+     * A set is the same as itself however wide its remainder is, a pair too wide to compare is not
+     * shown to be the same or to differ, and a pair that differs is shown to whatever its width.
+     */
+    @Test
+    void aSetIsTheSameAsItselfAndAWidePairIsNotShownEitherWay() {
+        ValueSet wide = ValueSet.wholeNumberSet(WholeNumberSet.ofClass(new Congruences(
+                BigInteger.ZERO, n(5000))));
+        assertTrue(wide.holdsTheSameValuesAs(wide));
+        assertEquals(ValueSet.Likeness.SAME, wide.comparedWith(wide));
+        // The same numbers written as two halves: equal, and too wide to be shown so.
+        ValueSet halves = ValueSet.wholeNumberSet(
+                WholeNumberSet.ofClass(new Congruences(BigInteger.ZERO, n(10_000))).or(
+                        WholeNumberSet.ofClass(new Congruences(n(5000), n(10_000)))));
+        assertEquals(ValueSet.Likeness.NOT_SHOWN, wide.comparedWith(halves));
+        assertFalse(wide.holdsTheSameValuesAs(halves));
+        // A pair that differs is shown to, whatever its width.
+        ValueSet other = ValueSet.wholeNumberSet(WholeNumberSet.ofClass(new Congruences(
+                BigInteger.ONE, n(5000))));
+        assertEquals(ValueSet.Likeness.DIFFERENT, wide.comparedWith(other));
+        ValueSet evens = ValueSet.wholeNumberSet(evens());
+        ValueSet odds = ValueSet.wholeNumberSet(WholeNumberSet.ofClass(new Congruences(
+                BigInteger.ONE, n(2))));
+        assertEquals(ValueSet.Likeness.DIFFERENT, evens.comparedWith(odds));
+        assertEquals(ValueSet.Likeness.DIFFERENT, wide.comparedWith(evens));
+    }
+
     /** Two ways of writing one set of numbers hold the same values, and a set of one shape does
      *  not pass for the other. */
     @Test

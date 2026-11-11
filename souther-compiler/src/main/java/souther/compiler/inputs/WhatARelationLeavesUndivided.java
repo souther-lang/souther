@@ -4154,8 +4154,8 @@ public final class WhatARelationLeavesUndivided {
      * <p>Two terms of whole values, a whole constant, and weights that are whole numbers other than
      * nought. Anything else is null, which says nothing.
      *
-     * @param constant what the terms are held against, so that the equation is
-     *                 {@code Σ weight·value = constant}
+     * @param constant what is added to the terms, so that the equation is
+     *                 {@code Σ weight·value + constant = 0} ({@link #restOf})
      * @param greatest the greatest value of the type the form is worked out in, or null where it
      *                 has none
      */
@@ -4175,7 +4175,7 @@ public final class WhatARelationLeavesUndivided {
                 || here.weight().signum() == 0 || other.weight().signum() == 0
                 || !(here.weight().floor() instanceof ExactAnswer.Held<BigInteger>(var weightHere))
                 || !(other.weight().floor() instanceof ExactAnswer.Held<BigInteger>(var weightThere))
-                || !(constant.floor() instanceof ExactAnswer.Held<BigInteger>(var against))) {
+                || !(constant.floor() instanceof ExactAnswer.Held<BigInteger>(var added))) {
             return null;
         }
         Term<P> closed = closedWhereItLies(other);
@@ -4216,10 +4216,10 @@ public final class WhatARelationLeavesUndivided {
             if (one == null || within.nearestMember(one, Set.of(one)) == null) {
                 continue;
             }
-            // Σ = weightHere·c + weightThere·s - constant = 0, for the values s of the other term.
+            // weightHere·c + weightThere·s + added = 0, for the values s of the other term.
             WhereAnEquationHolds holds = WhereAnEquationHolds.of(within, possible, weightThere,
-                    weightHere, against.negate());
-            if (holds != null && rowsAtTheEnds(holds, terms, at, weightHere, weightThere, against,
+                    weightHere, added);
+            if (holds != null && rowsAtTheEnds(holds, terms, at, weightHere, weightThere, added,
                     constant, arithmetic)) {
                 // Said of the values this term may hold, which is all a row has: a value the
                 // weighing reaches past the type of this term is none of its values.
@@ -4242,7 +4242,7 @@ public final class WhatARelationLeavesUndivided {
      */
     private static <P> boolean rowsAtTheEnds(WhereAnEquationHolds holds, List<Term<P>> terms,
                                              int at, BigInteger weightHere,
-                                             BigInteger weightThere, BigInteger against,
+                                             BigInteger weightThere, BigInteger added,
                                              ExactRatio constant, RowsComputed arithmetic) {
         BigInteger least = holds.shown().least();
         BigInteger most = holds.shown().greatest();
@@ -4250,7 +4250,8 @@ public final class WhatARelationLeavesUndivided {
             return !arithmetic.stopsAtASize() && !arithmetic.mayStopARow();
         }
         for (BigInteger value : new BigInteger[] {least, most}) {
-            BigInteger[] beside = against.subtract(weightHere.multiply(value))
+            // weightHere·value + weightThere·beside + added = 0
+            BigInteger[] beside = added.negate().subtract(weightHere.multiply(value))
                     .divideAndRemainder(weightThere);
             if (beside[1].signum() != 0) {
                 return false;
@@ -4260,7 +4261,7 @@ public final class WhatARelationLeavesUndivided {
             if (!arithmetic.rowIsComputed(() -> new ExactRatio[] {
                     ExactRatio.of(weightHere).times(here).orNull(),
                     ExactRatio.of(weightThere).times(there).orNull(),
-                    constant.negated()},
+                    constant},
                     () -> valuesByKey(terms, i -> i == at ? here : there))) {
                 return false;
             }

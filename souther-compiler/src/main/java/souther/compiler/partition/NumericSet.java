@@ -12,7 +12,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * The numbers a question is about, as the set of them.
@@ -42,11 +41,46 @@ import java.util.Set;
  * two on one position leave a run with the values singled out of it taken out. A shape added is an
  * arm here, and everything that reads one of these stops compiling until it says what it does
  * about the new shape.
+ *
+ * <p><b>Two kinds, because two questions are not asked alike.</b> Whether a number is one of these
+ * ({@link #holds}) and where they lie ({@link #extent}) every shape answers exactly. Which runs
+ * they make up and where membership turns ({@link OfRuns#region}, {@link OfRuns#turnsAt}) only a
+ * set of runs has an answer to: the even numbers turn at every number, and held as the runs they
+ * lie in they would be every number between. So a reader of either is handed a {@link OfRuns} and
+ * says what it does with the other kind, and no reader takes an outer run for the set.
  */
-public sealed interface NumericSet {
+public sealed interface NumericSet permits NumericSet.OfRuns, NumericSet.InTheNumbers {
+
+    /**
+     * A set that is the runs of an order, possibly with values taken out of them: what a line or a
+     * value singled out leaves. {@link #region} says exactly which numbers they are.
+     */
+    sealed interface OfRuns extends NumericSet
+            permits At, AwayFrom, InARun, InARunExcept {
+
+        /**
+         * These numbers as the runs of {@code on}'s order they make up, exactly.
+         *
+         * <p>What a search for a value walks, which is the same set {@link #holds} answers about
+         * and is said beside it for the same reason: a reader turning the shapes into runs itself
+         * would be a second account of what each shape means.
+         */
+        LevelRegion region(Carrier on);
+
+        /**
+         * Every place whether a value is one of these can change at: the ends of a run and each
+         * value singled out or taken out.
+         *
+         * <p>Not {@link #extent()}. The extent says nothing lies outside it, and a value taken out
+         * of a run is inside the extent and still a place a value stops being one of these. A
+         * reader choosing a value either side of each place where membership turns, from the
+         * extent alone, would offer the hole as a member and never the values around it.
+         */
+        List<Place> turnsAt();
+    }
 
     /** Exactly the value a rule singled out. */
-    record At(Place value) implements NumericSet {
+    record At(Place value) implements OfRuns {
 
         @Override
         public boolean holds(Place at, Carrier carrier) {
@@ -81,7 +115,7 @@ public sealed interface NumericSet {
      * out need not be on an order that has runs at all, and what this says — anything but these —
      * is what a search for a value is asked and is what a row is read against.
      */
-    record AwayFrom(List<Place> values) implements NumericSet {
+    record AwayFrom(List<Place> values) implements OfRuns {
 
         public AwayFrom {
             values = List.copyOf(values);
@@ -125,7 +159,7 @@ public sealed interface NumericSet {
     }
 
     /** Inside one of the runs the lines a rule drew cut the position into. */
-    record InARun(Band run) implements NumericSet {
+    record InARun(Band run) implements OfRuns {
 
         @Override
         public boolean holds(Place at, Carrier carrier) {
@@ -163,7 +197,7 @@ public sealed interface NumericSet {
      *
      * @param excluded the values singled out that fall inside {@code run}, none of them twice
      */
-    record InARunExcept(Band run, List<Place> excluded) implements NumericSet {
+    record InARunExcept(Band run, List<Place> excluded) implements OfRuns {
 
         public InARunExcept {
             excluded = List.copyOf(excluded);
@@ -252,9 +286,8 @@ public sealed interface NumericSet {
      * no run, and a line drawn through them is no place the model's rules name. That is why this
      * answers {@link #holds} exactly and is no run of the order ({@link #asOneRun} is none).
      *
-     * <p><b>{@link #region} is the run the numbers lie in, and no more.</b> A search that walks
-     * this set takes its candidates from the numbers ({@link WholeNumberSet#nearestMember}) and
-     * asks {@link #holds} of each, so a place of the run that is no member is never offered; a
+     * <p><b>No runs and no turning places.</b> A search that walks this set takes its candidates
+     * from the numbers ({@link WholeNumberSet#nearestMember}) and asks {@link #holds} of each; a
      * reader that wants which numbers are held asks {@link #holds}.
      */
     record InTheNumbers(WholeNumberSet numbers) implements NumericSet {
@@ -281,27 +314,6 @@ public sealed interface NumericSet {
         @Override
         public NumericDomain.Bounds asOneRun() {
             return null;
-        }
-
-        @Override
-        public LevelRegion region(Carrier on) {
-            NumericDomain.Bounds lies = extent();
-            return LevelRegion.of(new LevelInterval(
-                    lies.min() == null ? null : Bound.at(new Level.OnACarrier(on,
-                            lies.min().at()), true),
-                    lies.max() == null ? null : Bound.at(new Level.OnACarrier(on,
-                            lies.max().at()), true)));
-        }
-
-        /** The ends of the numbers, and the member nearest nought where there is no end. */
-        @Override
-        public List<Place> turnsAt() {
-            List<Place> out = new ArrayList<>(endsOf(extent()));
-            if (out.isEmpty() && numbers.nearestMember(BigInteger.ZERO, Set.of()) != null) {
-                out.add(Count.of(new BigDecimal(numbers.nearestMember(BigInteger.ZERO,
-                        Set.of()))));
-            }
-            return List.copyOf(out);
         }
 
         private static Endpoint end(BigInteger at) {
@@ -353,26 +365,6 @@ public sealed interface NumericSet {
      * unbounded.
      */
     NumericDomain.Bounds asOneRun();
-
-    /**
-     * These numbers as the runs of {@code on}'s order they make up.
-     *
-     * <p>What a search for a value walks, which is the same set {@link #holds} answers about and
-     * is said beside it for the same reason: a reader turning the shapes into runs itself would be
-     * a second account of what each shape means.
-     */
-    LevelRegion region(Carrier on);
-
-    /**
-     * Every place whether a value is one of these can change at: the ends of a run and each value
-     * singled out or taken out.
-     *
-     * <p>Not {@link #extent()}. The extent says nothing lies outside it, and a value taken out of a
-     * run is inside the extent and still a place a value stops being one of these. A reader choosing
-     * a value either side of each place where membership turns, from the extent alone, would offer
-     * the hole as a member and never the values around it.
-     */
-    List<Place> turnsAt();
 
     /** The places of the ends {@code bounds} has. */
     private static List<Place> endsOf(NumericDomain.Bounds bounds) {

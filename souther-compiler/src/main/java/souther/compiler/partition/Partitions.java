@@ -935,6 +935,11 @@ public final class Partitions {
             // Unless every class can be asked about a place on the order, as a class of a number
             // is: it holds the numbers it holds whatever they are, and a cut falls in the class
             // that holds its place.
+            case Classing.Classed.Composed(List<PartitionClass> it)
+                    when axis != null && axis.derivable() && !it.isEmpty()
+                            && it.stream().allMatch(each ->
+                                    each.recognises() instanceof Recognition.OfACount) ->
+                    besideTheDeclared(axis, composedFrom(dividing));
             case Classing.Classed.Composed(List<PartitionClass> it) ->
                     new Composition(it.stream().map(each -> each.under(view.wrappers())).toList(),
                             composedFrom(dividing),
@@ -1151,6 +1156,36 @@ public final class Partitions {
             return why != null || onAnOrder() || (axis != null && axis.derivable())
                     ? List.of() : leftOpenBy;
         }
+    }
+
+    /**
+     * What the rules of a body leave a number the declarations already divide into classes: those
+     * classes, divided no further.
+     *
+     * <p>The common refinement of the declared classes and the classes the rules tell, and it is
+     * the declared classes where each of them holds one number: a class of one number is on one
+     * side of every distinction a rule draws, so no rule cuts it, and the rule is decided at each.
+     * Where a declared class holds more than one number the refinement is not built, and the
+     * answer is that the classes are not composed — never the declared classes standing as if the
+     * rule had been taken up.
+     */
+    private static Composition besideTheDeclared(Axis axis, List<RuleEvidenceOrigin> composed) {
+        boolean eachOfOne = axis.classes().stream().allMatch(each ->
+                heldOneNumberAt(each.recognises()));
+        return eachOfOne
+                ? new Composition(axis.classes(), composed, true, null, List.of())
+                : new Composition(List.of(), List.of(), true,
+                        new BlockReason.ClassesNotComposed(), List.of());
+    }
+
+    /** Whether a class holds the one value a rule singled out, under whatever names the position
+     *  wears it. */
+    private static boolean heldOneNumberAt(Recognition class_) {
+        return switch (class_) {
+            case Recognition.Under under -> heldOneNumberAt(under.inner());
+            case Recognition.AtAValue one -> one.at() != null;
+            default -> false;
+        };
     }
 
     /** Which rules the classes were composed out of, which is every distinction that went in. */
