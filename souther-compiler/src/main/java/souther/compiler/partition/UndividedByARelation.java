@@ -687,7 +687,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbersPartnered) {
 
         WhatItLeaves {
-            numbersPartnered = Collections.unmodifiableMap(new LinkedHashMap<>(numbersPartnered));
+            numbersPartnered = keptInOrder(numbersPartnered);
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
@@ -695,8 +695,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             mayStopBefore = Set.copyOf(mayStopBefore);
             // In the order the sides were said in: whoever files a reading for each numbers them
             // as it goes, and an order the keys' hashes decide numbers them differently each run.
-            partnered = Collections.unmodifiableMap(new LinkedHashMap<>(partnered));
-            gettingThere = Collections.unmodifiableMap(new LinkedHashMap<>(gettingThere));
+            partnered = keptInOrder(partnered);
+            gettingThere = keptInOrder(gettingThere);
             if (!undivided.containsAll(mayStopBefore)) {
                 throw new IllegalArgumentException("a run stopping before the relation is said of"
                         + " a place the relation is shown to leave undivided");
@@ -705,6 +705,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 throw new IllegalArgumentException("a row is searched for getting to the relation"
                         + " at a place a run may stop on the way from");
             }
+        }
+
+        /** {@code map} unchangeable and in the order it was given, which is the one thing a copy is
+         *  for: an empty one is the one empty map and builds nothing. */
+        private static <K, V> Map<K, V> keptInOrder(Map<K, V> map) {
+            return map.isEmpty() ? Map.of()
+                    : Collections.unmodifiableMap(new LinkedHashMap<>(map));
         }
 
         WhatItLeaves(Set<FilingCoordinate> undivided,

@@ -13,6 +13,7 @@ import souther.compiler.report.GeneratedRows;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -57,11 +58,16 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
                 parameters.substring(0, parameters.indexOf(':')), body);
     }
 
+    /** A model is compiled and measured once, whichever of its report and rows a test asks. */
+    private static final Map<String, Compilation> COMPILED = new ConcurrentHashMap<>();
+
     private static Compilation compile(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return COMPILED.computeIfAbsent(model, source -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
     }
 
     private static String report(String model) {
