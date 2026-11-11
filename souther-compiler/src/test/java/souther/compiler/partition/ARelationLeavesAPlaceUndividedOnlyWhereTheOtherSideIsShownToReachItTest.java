@@ -1054,10 +1054,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * undivided. A list of one element totals that element, so the total takes every value the
      * element does: never below nought, and every value from there. So a gross below nought fails
      * whatever the total is, and every other gross has a total on either side. Doubled, the total
-     * is still never below nought and never odd: what each element is made into is not what it
-     * takes, and nothing is shown of the gross. The doubled total is left either way: every
-     * element is at least nought, so each doubling lies between nought and the total, and a run
-     * gets through wherever the total is an {@code Int}.
+     * is still never below nought and never odd, and a list of one element totals twice that
+     * element: it takes the even numbers from nought, which is a total on either side of every
+     * gross as an order asks. The doubled total is left either way: every element is at least
+     * nought, so each doubling lies between nought and the total, and a run gets through
+     * wherever the total is an {@code Int}.
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
@@ -1069,8 +1070,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
         assertEquals(List.of("gross: x <= -1", "gross: -1 < x"), classesAt("gross: Int, ns: List<Nat>",
                 NAT, "gross >= " + TOTAL, "gross"));
-        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
-                        "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
     }
@@ -1198,8 +1198,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("List.sum(ms)", RELATES, "limit", RELATES),
                 left(map, NAT, entries, atThe(">=", NAT, map, entries)));
         String doubled = "limit >= List.fold((acc, x) -> acc + x * 2, 0, xs)";
-        assertEquals(Map.of("List.sum({2·the element itself + 0 | xs[*]})", NOT_SHOWN,
-                "limit", NOT_SHOWN), left(list, NAT, doubled, atThe(">=", NAT, list, doubled)));
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | xs[*]})", RELATES,
+                "limit", RELATES), left(list, NAT, doubled, atThe(">=", NAT, list, doubled)));
         String beside = "limit >= List.length(xs) + List.fold((acc, x) -> acc + x, 0, xs)";
         assertEquals(Map.of("List.length(xs)", NOT_SHOWN, "List.sum(xs)", NOT_SHOWN,
                 "limit", NOT_SHOWN), left(list, NAT, beside, atThe(">=", NAT, list, beside)));
@@ -1215,8 +1215,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String two = "limit: Int, xs: List<Int>, ys: List<Int>";
         String untold = "limit >= List.fold((acc, x) -> acc + x, 0, xs)"
                 + " + List.fold((acc, y) -> acc + y * 2, 0, ys)";
-        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN,
-                "List.sum({2·the element itself + 0 | ys[*]})", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(xs)", RELATES, "limit", NOT_SHOWN,
+                "List.sum({2·the element itself + 0 | ys[*]})", RELATES),
                 left(two, NAT, untold, atThe(">=", NAT, two, untold)));
         // A third of a whole number added to the total is a rational sum, which stops no row: the
         // walk is all that is told.

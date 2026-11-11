@@ -624,9 +624,10 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
         String backAgain = report(inputs, NAT,
                 "gross >= List.sum(List.map(n -> n.value + 1 - 1, ns))");
         assertEquals(Set.of(), related(backAgain), backAgain);
-        assertEquals(Set.of("List.sum({2·the element itself + 0 | ns[*]})", "gross"),
-                notShown(report("gross: Int, ns: List<Int>", UNUSED,
-                        "gross >= List.sum(List.map(n -> 2 * n, ns))")));
+        // Over numbers that may be below nought the doubled total takes the even numbers, which is
+        // a total on either side of every gross, and is read as an order asks.
+        assertEquals(Set.of(), notShown(report("gross: Int, ns: List<Int>", UNUSED,
+                "gross >= List.sum(List.map(n -> 2 * n, ns))")));
     }
 
     /**

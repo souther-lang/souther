@@ -62,6 +62,7 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.DateTranslation;
@@ -1674,8 +1675,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 // The product is held at a value by the total alone standing at it.
                 total = way.carrier();
             }
+            // The values a term takes that leave one remainder are those a list of one element
+            // comes to ({@link #steppedTotalOver}), which is a total a row writes with one element.
             if (total == null || !working.partials().contains(total)
-                    || terms.get(i).realizes() == null) {
+                    || (terms.get(i).realizes() == null && terms.get(i).stepped() == null)) {
                 continue;
             }
             boolean askedByNoOther = true;
@@ -7234,10 +7237,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             NumericDomain.Bounds runsTo = each.position() != null
                     ? positionsOrderStops(each.position(), carriers.get(i))
                     : whereItStops(carriers.get(i));
-            terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
-                    withinTheEnds(realizes, runsTo), takes,
-                    each.number() instanceof NumericTerm.ValueOf, spacingOf(carriers.get(i)),
-                    runsTo, each.key()));
+            // A total of a field weighed by a whole number takes its multiples and no run, and a
+            // total over what a filter keeps takes nought and the values from the least it keeps.
+            WhatARelationLeavesUndivided.Term.Stepped stepped = realizes == null
+                    && source == null && each.number() instanceof NumericTerm.TakenOver over
+                    ? steppedTotalOver(over, read, region, conditions, heldWhole,
+                            carriers.get(i), working.partials())
+                    : null;
+            // Where every total lies no lower than the least the term takes, it lies there.
+            NumericDomain.Bounds lies = stepped == null || !stepped.noneBelow()
+                    || stepped.run().min() == null ? holds
+                    : holds.meet(new NumericDomain.Bounds(stepped.run().min(), null));
+            WhatARelationLeavesUndivided.Term<FilingCoordinate> term =
+                    new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), lies,
+                            withinTheEnds(realizes, runsTo), takes,
+                            each.number() instanceof NumericTerm.ValueOf,
+                            spacingOf(carriers.get(i)), runsTo, each.key());
+            terms.add(stepped == null ? term : term.takingEvery(stepped));
         }
         return terms;
     }
@@ -9068,6 +9084,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                               List<OnAWay> conditions,
                                                               boolean heldWhole, Carrier carrier,
                                                               Collection<NumericTerm> atOneElement) {
+        return summedOverTheElements(over, read, region, conditions, heldWhole, carrier,
+                atOneElement, false);
+    }
+
+    /**
+     * The run of totals of {@code over}, or — where {@code unitWeight} — of the field it weighs,
+     * each taken once ({@link #steppedTotalOver}), which is no run the total itself takes.
+     */
+    private static NumericDomain.Bounds summedOverTheElements(NumericTerm.TakenOver over,
+                                                              InputReading read,
+                                                              SearchRegion region,
+                                                              List<OnAWay> conditions,
+                                                              boolean heldWhole, Carrier carrier,
+                                                              Collection<NumericTerm> atOneElement,
+                                                              boolean unitWeight) {
         List<NumericTerm.ValueOf> elements = valuesOfOneElement(over);
         if (!heldWhole || carrier == null
                 || !SUMMED.equals(DefaultBoundOperationFacts.get().accumulation(over.operation()))) {
@@ -9096,7 +9127,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (elements.isEmpty() && over.source() instanceof RunSource.ComputedOccurrences computed
                 && computed.computation() instanceof ElementValue.Affine weighed) {
             alone = summedOverWeighedFieldsOfOneElement(computed.elements(), weighed, read,
-                    region, stated.rest(), carrier);
+                    region, stated.rest(), carrier, unitWeight);
         } else if (elements.isEmpty()) {
             alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
         } else {
@@ -9107,8 +9138,155 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : shownOfAnElement(elements, read, region, stated.rest());
         }
         NumericDomain.Bounds totals = alone == null || containers.isEmpty() ? null
-                : ofTheElements(alone, counts, carrier, !atOneElement.contains(over));
-        return totals == null ? null : totals.meet(stated.run());
+                : ofTheElements(alone, counts, carrier,
+                        !unitWeight && !atOneElement.contains(over));
+        return totals == null || unitWeight ? totals : totals.meet(stated.run());
+    }
+
+    /**
+     * The totals of {@code over} that leave one remainder, where it adds up one field of each
+     * element weighed by a whole number other than one and minus one — or null where none is
+     * shown: a list of the one element at {@code u} comes to {@code k·u}, so what is taken is the
+     * multiples of {@code k} between the ends, and between them no other value is: an interval
+     * would say it took every one.
+     *
+     * <p>Only where nothing the way states bounds the total, since a bound would cut the run at
+     * a value the multiples do not stand at, and only on an order that steps. A number added to
+     * each element is left unread: it adds as many times as there are elements, and so no one
+     * remainder.
+     */
+    private static WhatARelationLeavesUndivided.Term.Stepped steppedTotalOver(
+            NumericTerm.TakenOver over, InputReading read, SearchRegion region,
+            List<OnAWay> conditions, boolean heldWhole, Carrier carrier,
+            Collection<NumericTerm> atOneElement) {
+        if (carrier != null && carrier.spacing() == Granularity.DISCRETE
+                && over.source() instanceof RunSource.ComputedOccurrences chosen
+                && chosen.computation() instanceof ElementValue.Choose choice) {
+            return steppedTotalOverWhatAFilterKeeps(over, chosen, choice, read, region,
+                    conditions, heldWhole, carrier);
+        }
+        if (carrier == null || carrier.spacing() != Granularity.DISCRETE
+                || !(over.source() instanceof RunSource.ComputedOccurrences computed)
+                || !(computed.computation() instanceof ElementValue.Affine weighed)
+                || weighed.form().coefs().size() != 1 || !weighed.form().constant().isZero()) {
+            return null;
+        }
+        ExactRatio weight = weighed.form().coefs().values().iterator().next();
+        BigInteger step = weight.isWhole() ? weight.abs().floor().orNull() : null;
+        StatedOfATotal stated = statedOfTheTotalAlone(over, conditions);
+        if (step == null || step.equals(BigInteger.ONE) || stated == null
+                || stated.run().min() != null || stated.run().max() != null) {
+            return null;
+        }
+        NumericDomain.Bounds units = summedOverTheElements(over, read, region, conditions,
+                heldWhole, carrier, atOneElement, true);
+        // Only the totals of one element are taken: {@code k·x} is the element at {@code x}
+        // weighed, a list of that one element comes to it, and no step before it can stop. The
+        // total of several is the total of their {@code k·x}, each of which may be past the
+        // order where the {@code x} is not. And the multiples of {@code k} are every one of the
+        // run only where the run holds nought, so that nought, the total of none, is among them.
+        NumericDomain.Bounds wholeUnits = units == null || !units.admits(Count.ZERO) ? null
+                : onWholeNumbers(units);
+        NumericDomain.Bounds multiples = wholeUnits == null ? null
+                : wholeUnits.timesEach(weight);
+        NumericDomain.Bounds order = whereItStops(carrier);
+        if (multiples == null) {
+            return null;
+        }
+        Congruences remainder = new Congruences(BigInteger.ZERO, step);
+        // An end the totals have is held to the order's; a side they have none on stays open, as
+        // far as the order runs ({@link WhatARelationLeavesUndivided.Term#runsTo}).
+        NumericDomain.Bounds met = order == null ? multiples : multiples.noFurtherOutThan(order);
+        BigInteger first = met.min() == null ? null : met.min().wholeAdmitted(true);
+        BigInteger last = met.max() == null ? null : met.max().wholeAdmitted(false);
+        if ((met.min() != null && first == null) || (met.max() != null && last == null)) {
+            return null;
+        }
+        first = first == null ? null : remainder.leastAtOrAbove(first);
+        last = last == null ? null : remainder.greatestAtOrBelow(last);
+        if (first != null && last != null && first.compareTo(last) > 0) {
+            return null;
+        }
+        return new WhatARelationLeavesUndivided.Term.Stepped(new NumericDomain.Bounds(
+                first == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(first))),
+                last == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(last)))),
+                remainder);
+    }
+
+    /**
+     * The totals of {@code over}, a field of each element a filter keeps added up, that a list of
+     * one element comes to — or null where none is shown: nought where the element is one the
+     * filter leaves out, and the field's own value where it keeps it. The field is kept from
+     * {@code least} on, so the totals are nought, and every whole number of the field's run
+     * from {@code least}, and none of the numbers between.
+     *
+     * <p>Only a field kept by the test {@code field > c} or {@code field >= c} of that one
+     * field, added as it stands, and left out by every other value of it. The field must be shown
+     * to take values on both sides of the test and the container to hold one element.
+     */
+    private static WhatARelationLeavesUndivided.Term.Stepped steppedTotalOverWhatAFilterKeeps(
+            NumericTerm.TakenOver over, RunSource.ComputedOccurrences computed,
+            ElementValue.Choose choice, InputReading read, SearchRegion region,
+            List<OnAWay> conditions, boolean heldWhole, Carrier carrier) {
+        if (!heldWhole
+                || !(choice.test() instanceof ElementValue.Test.Compared(var tested, var relation))
+                || !(choice.whenHolds() instanceof ElementValue.Affine kept)
+                || !(choice.otherwise() instanceof ElementValue.Affine left)
+                || !left.form().coefs().isEmpty() || !left.form().constant().isZero()
+                || kept.form().coefs().size() != 1 || !kept.form().constant().isZero()
+                || tested.coefs().size() != 1 || (relation != Rel.GT && relation != Rel.GE)) {
+            return null;
+        }
+        ElementProjection field = kept.form().coefs().keySet().iterator().next();
+        if (!ExactRatio.ONE.equals(kept.form().coefs().get(field))
+                || !ExactRatio.ONE.equals(tested.coefs().get(field))
+                || !tested.constant().isWhole()) {
+            return null;
+        }
+        // The least whole number the test keeps.
+        BigInteger kernel = tested.constant().negated().floor().orNull();
+        BigInteger least = kernel == null ? null
+                : relation == Rel.GT ? kernel.add(BigInteger.ONE) : kernel;
+        StatedOfATotal stated = statedOfTheTotalAlone(over, conditions);
+        TermPath place = field.from(computed.elements());
+        List<TermPath> containers = place.containersHoldingIt();
+        if (least == null || least.signum() <= 0 || stated == null
+                || stated.run().min() != null || stated.run().max() != null
+                || containers.size() != 1) {
+            return null;
+        }
+        NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
+        NumericDomain.Bounds run = held == null || !held.admits(Count.of(1)) ? null
+                : shownOfAnElementAlone(List.of(new NumericTerm.ValueOf(place)),
+                        containers.getFirst(), read, region, stated.rest(), null);
+        NumericDomain.Bounds wholeRun = run == null ? null : onWholeNumbers(run);
+        if (wholeRun == null) {
+            return null;
+        }
+        NumericDomain.Bounds keptRun = wholeRun.meet(new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(new BigDecimal(least))), null));
+        NumericDomain.Bounds leftRun = wholeRun.meet(new NumericDomain.Bounds(null,
+                Endpoint.inclusive(Count.of(new BigDecimal(least.subtract(BigInteger.ONE))))));
+        if (!keptRun.holdsAValue() || !leftRun.holdsAValue()) {
+            return null;
+        }
+        NumericDomain.Bounds order = whereItStops(carrier);
+        NumericDomain.Bounds ends = order == null ? keptRun : keptRun.noFurtherOutThan(order);
+        BigInteger first = ends.min() == null ? null : ends.min().wholeAdmitted(true);
+        BigInteger last = ends.max() == null ? null : ends.max().wholeAdmitted(false);
+        if (first == null || (ends.max() != null && last == null)
+                || (last != null && first.compareTo(last) > 0)) {
+            return null;
+        }
+        // Nought is the total of an element left out, and the least total of one kept is
+        // {@code first}: between them is no total.
+        boolean apart = first.compareTo(BigInteger.ONE) > 0;
+        return new WhatARelationLeavesUndivided.Term.Stepped(new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.ZERO),
+                last == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(last)))),
+                new Congruences(BigInteger.ZERO, BigInteger.ONE),
+                apart ? BigInteger.ONE : null, apart ? first.subtract(BigInteger.ONE) : null,
+                true);
     }
 
     /** The one total a container of no element comes to. */
@@ -9323,14 +9501,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static NumericDomain.Bounds summedOverWeighedFieldsOfOneElement(
             TermPath elements, ElementValue.Affine weighed, InputReading read, SearchRegion region,
-            List<OnAWay> conditions, Carrier carrier) {
+            List<OnAWay> conditions, Carrier carrier, boolean unitWeight) {
         List<TermPath> places = new ArrayList<>();
         TermPath container = null;
         NumericDomain.Bounds sum = null;
         for (Map.Entry<ElementProjection, ExactRatio> each : weighed.form().coefs().entrySet()) {
             // A run is an interval and says nothing of a step between its values: a field weighed
-            // two takes every other whole number of the interval it is moved to.
-            if (!ExactRatio.ONE.equals(each.getValue().abs())) {
+            // two takes every other whole number of the interval it is moved to. Read unweighed
+            // ({@code unitWeight}), the field takes the run it is shown to and the weight is the
+            // caller's to apply.
+            if (unitWeight ? weighed.form().coefs().size() != 1
+                    : !ExactRatio.ONE.equals(each.getValue().abs())) {
                 return null;
             }
             TermPath place = each.getKey().from(elements);
@@ -9343,7 +9524,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             NumericDomain.Bounds field = shownOfAnElementAlone(
                     List.of(new NumericTerm.ValueOf(place)), container, read, region, conditions,
                     null);
-            NumericDomain.Bounds part = field == null ? null : field.timesEach(each.getValue());
+            NumericDomain.Bounds part = field == null ? null
+                    : unitWeight ? field : field.timesEach(each.getValue());
             if (part == null) {
                 return null;
             }
