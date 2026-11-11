@@ -848,4 +848,44 @@ class RunnerTest {
         assertEquals("{\"v\":0.10000000000000001}",
                 Runner.run(file, "wrapped", "{\"v\":0.10000000000000001}").trim());
     }
+
+    /**
+     * A number whose exponent no {@code BigDecimal} keeps is valid JSON and a {@code Decimal}, so the
+     * run says it has no room to write it and names where it stands, and never calls the input
+     * malformed. The last exponent a scale holds still reads, and text that is not a number at all is
+     * still bad JSON.
+     */
+    @Test
+    void aNumberWithNoRoomIsNotReportedAsBadJson() throws Exception {
+        Path file = write("amount.sou", """
+                data Holder = { v: List<Decimal> }
+                behavior bare : (d: Decimal) -> Decimal
+                let bare (d) = d
+                behavior wrapped : (h: Holder) -> Holder
+                let wrapped (h) = h
+                """);
+        Runner.Program program = Runner.compile(file);
+        assertEquals("1E-2147483647", program.run("bare", "1E-2147483647").trim());
+
+        for (String number : new String[] {"1E-2147483648", "1E-3000000000", "1E+3000000000",
+                "0E-3000000000", "1.000E-2147483650"}) {
+            Runner.RunException bare = assertThrows(Runner.RunException.class,
+                    () -> program.run("bare", number), number);
+            assertEquals(1, bare.exitCode);
+            assertTrue(bare.getMessage().contains("no room"), bare.getMessage());
+            assertTrue(bare.getMessage().contains("(root)"), bare.getMessage());
+            assertFalse(bare.getMessage().contains("not valid JSON"), bare.getMessage());
+            assertTrue(bare.localized(java.util.Locale.JAPANESE).contains("余裕"),
+                    bare.localized(java.util.Locale.JAPANESE));
+
+            Runner.RunException inField = assertThrows(Runner.RunException.class,
+                    () -> program.run("wrapped", "{\"v\":[1," + number + "]}"), number);
+            assertTrue(inField.getMessage().contains("/v/1"), inField.getMessage());
+            assertFalse(inField.getMessage().contains("not valid JSON"), inField.getMessage());
+        }
+
+        Runner.RunException truncated = assertThrows(Runner.RunException.class,
+                () -> program.run("bare", "1E-"));
+        assertTrue(truncated.getMessage().contains("not valid JSON"), truncated.getMessage());
+    }
 }

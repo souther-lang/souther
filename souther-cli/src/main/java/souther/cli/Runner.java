@@ -705,6 +705,12 @@ public final class Runner {
      *
      * <p>Input with nothing in it reads as the missing node rather than as no node at all, so an
      * empty {@code --input} reaches the same refusal as input of the wrong shape.
+     *
+     * <p>A number whose exponent no {@code BigDecimal} keeps in its 32-bit scale is valid JSON and a
+     * {@code Decimal}; the mapper throws a bare {@code NumberFormatException} for it while building
+     * the node, and nothing else in a read throws one, since every syntax error is a
+     * {@code StreamReadException}. It is the run having no room to write the number, and is said as
+     * that and not as malformed input (spec §jvm-abort).
      */
     private static JsonNode parseJson(String input) {
         JsonParser parser = JSON.createParser(input);
@@ -715,6 +721,9 @@ public final class Runner {
             TokenStreamContext where = parser.streamReadContext();
             if (refusedForDepth(e, where, READ_REFUSAL_DEPTH)) {
                 throw tooDeep("run.input.toodeep", where, READ_DEPTH_LIMIT);
+            }
+            if (e instanceof NumberFormatException) {
+                throw fail("run.input.outofroom", depthPath(where));
             }
             throw fail("run.input.badjson", e.getMessage());
         } finally {
