@@ -371,13 +371,14 @@ public final class CountWitnesses {
                 kept.add(each);
             }
         }
-        for (int one = 0; one < kept.size(); one++) {
-            for (int other = one + 1; other < kept.size(); other++) {
-                List<FixtureTemplate> both = List.of(kept.get(one), kept.get(other));
-                Integer different = differentIn(both, container, at, built, inputs, statement,
-                        building);                if (different != null && different == 2) {
-                    return both;
-                }
+        // Holding the same value is an equivalence, so two that differ exist exactly where some
+        // element differs from the first: each is asked of it alone.
+        for (int other = 1; other < kept.size(); other++) {
+            List<FixtureTemplate> both = List.of(kept.getFirst(), kept.get(other));
+            Integer different = differentIn(both, container, at, built, inputs, statement,
+                    building);
+            if (different != null && different == 2) {
+                return both;
             }
         }
         return null;

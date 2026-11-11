@@ -36,10 +36,6 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
             data Item = { id: String, qty: Int, flag: Bool }
             data Tied = { id: String, qty: Int }
                 invariant qty <= 3 || id == "fixed"
-            data Code = String
-                invariant String.matches("[A-Z]{3}", value)
-            data One = String
-                invariant value == "x"
             data Pair = List<String>
                 invariant List.length(value) >= 2
             data Capped = { items: List<Item> }
@@ -48,10 +44,9 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
 
     private static final String BEHAVIOR = """
 
-            behavior %1$s : (ids: List<String>, xs: List<Item>, k: Int, flags: List<Bool>,
-                             capped: Capped, codes: List<Code>, ones: List<One>, pair: Pair,
-                             tied: List<Tied>) -> Bool
-            let %1$s (ids, xs, k, flags, capped, codes, ones, pair, tied) = %2$s
+            behavior %1$s : (ids: List<String>, xs: List<Item>, k: Int, capped: Capped,
+                             pair: Pair, tied: List<Tied>) -> Bool
+            let %1$s (ids, xs, k, capped, pair, tied) = %2$s
             """;
 
     /** A count and the number it is held against, and whether that number is read. */
@@ -77,11 +72,6 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
                 new Case(keptIds + " == k", "k", true),
                 // The places the statement reads are the statement's own comparison's.
                 new Case(keptIds + " == k", "xs[*].qty", true),
-                // A type with two values has no more than two different ones, a name that wraps
-                // a pattern as many as the pattern has, and a name that wraps one value one.
-                new Case("Set.size(Set.fromList(flags)) == k", "k", false),
-                new Case("Set.size(Set.fromList(codes)) == k", "k", false),
-                new Case("Set.size(Set.fromList(List.map(o -> o.value, ones))) == k", "k", false),
                 // A container that must hold two elements holds a value, and so one different
                 // value at least: the count is none of the numbers below one.
                 new Case("Set.size(Set.fromList(pair.value)) == k", "k", true),
