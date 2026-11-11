@@ -58,9 +58,9 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
 
             data Ok
 
-            behavior grade : (g: Grade, code: Code) -> Ok
+            behavior grading : (g: Grade, code: Code) -> Ok
 
-            let grade (g, code) = Ok
+            let grading (g, code) = Ok
             """;
 
     /** The same with a count beside the format, which is two rules about the strings to meet. */
@@ -83,9 +83,9 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
 
             data Ok
 
-            behavior grade : (g: Grade, codes: Codes) -> Ok
+            behavior grading : (g: Grade, codes: Codes) -> Ok
 
-            let grade (g, codes) = Ok
+            let grading (g, codes) = Ok
             """;
 
     /**
@@ -106,9 +106,9 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
 
             data Ok
 
-            behavior grade : (t: Ticket) -> Ok
+            behavior grading : (t: Ticket) -> Ok
 
-            let grade (t) = Ok
+            let grading (t) = Ok
             """;
 
     private static final Generator.CandidateCheck REFUSING_EVERYTHING =
@@ -271,7 +271,7 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
     private static final Asked NOTHING_KEPT = new Asked();
 
     /**
-     * The input of {@code grade}: read in the compilation's own world, with what is asked of it
+     * The input of {@code grading}: read in the compilation's own world, with what is asked of it
      * recorded where {@code asked} is given, or in one that keeps nothing where it is
      * {@link #NOTHING_KEPT}.
      */
@@ -288,11 +288,11 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
                 : RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES, asked == null
                         ? compilation.db().readings() : asked.over(compilation.db().readings()),
                         TestDay.TODAY);
-        InputDomain domain = InputDomain.of(sigs.get("grade"), world,
+        InputDomain domain = InputDomain.of(sigs.get("grading"), world,
                 TypeCardinality.Counts.workedOutIn(world), Membership.none());
         Partitions.Partitioning partitioning =
-                Partitions.of("grade", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
-        return MeasuredInput.of("grade", domain.reading(rules), partitioning);
+                Partitions.of("grading", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
+        return MeasuredInput.of("grading", domain.reading(rules), partitioning);
     }
 
     /** The different pieces of work a reading asked the revision for. */

@@ -39,14 +39,14 @@ class TheStringsABodyPartsAndBuildsANewtypeOfAreReadAsFlowsTest {
                 invariant String.matches("[0-9]+", value)
             data Both = { words: List<Word>, numbers: List<Digits> }
 
-            behavior both : (left: Left, right: Right) -> Both
+            behavior joined : (left: Left, right: Right) -> Both
                 constructs Both, Word, Digits
 
             let wordsOf (left: Left): List<Word> =
                 List.flatMap(w -> if Word(w) as word then [ word ] else [],
                              List.drop(1, String.split("@", left.value)))
 
-            let both (left, right) = Both
+            let joined (left, right) = Both
                 { words = wordsOf(left)
                 , numbers = List.flatMap(n -> if Digits(n) as digits then [ digits ] else [],
                                          String.split(";", right.value))
@@ -70,7 +70,7 @@ class TheStringsABodyPartsAndBuildsANewtypeOfAreReadAsFlowsTest {
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + compilation.errors());
-        String behavior = "both";
+        String behavior = "joined";
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, "the behavior under test has a body");
         RuleReadingSource rules = RuleReadings.of(compilation, module);

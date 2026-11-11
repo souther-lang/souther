@@ -53,6 +53,7 @@ import souther.compiler.check.HelperTable;
 import souther.compiler.check.InjectionSigs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.ValueDefinitions;
+import souther.compiler.jvm.JvmClassNames;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
@@ -3679,13 +3680,26 @@ public final class Bodies {
             for (CompileException e : reported.errors()) {
                 reports.addAll(Report.of(e));
             }
+            // Whether the classes the module is generated as keep to one class each: a module the
+            // JVM cannot hold is refused here, where what is wrong with it is said, and reaches
+            // neither a measure nor the backend.
+            boolean namesKept = true;
+            try {
+                JvmClassNames.rejectCollisions(lowering.value().settled(),
+                        behavior -> signatures.present() && signatures.value().get(behavior) != null
+                                ? signatures.value().get(behavior).outputType() : null,
+                        Shapes.declarationKinds(db), Shapes.sumCases(db));
+            } catch (CompileException e) {
+                namesKept = false;
+                reports.addAll(Report.of(e));
+            }
             // What a behavior declares about its answer is read by its own key, which owns both the
             // contracts and what reading them found. Asked here so that a module with a clause that
             // cannot be read is a module that does not reach codegen: the reports are that key's and
             // are not repeated, and what is read off them here is whether there was a refusal.
             Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Contracts(name));
             boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty()
-                    && contracts.present() && !contracts.hasError()
+                    && namesKept && contracts.present() && !contracts.hasError()
                     && shapes.present() && !shapes.hasError();
             Map<String, EmittedDefinition> definitions = new LinkedHashMap<>();
             reported.emittedDefinitions().forEach((h, definition) ->

@@ -63,10 +63,10 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
             data Fee = Int
                 invariant value >= 0
 
-            behavior fee : (n: Int) -> Fee
+            behavior feeFor : (n: Int) -> Fee
                 constructs Fee
 
-            let fee (n) = if n > 0 then Fee(1) else Fee(0)
+            let feeFor (n) = if n > 0 then Fee(1) else Fee(0)
             """;
 
     /** The way in to a comparison's arm is the comparison, which is what makes the rest of this a
@@ -180,10 +180,10 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                    .filter(b -> b.name().equals("fee")).findFirst().orElseThrow();
+                    .filter(b -> b.name().equals("feeFor")).findFirst().orElseThrow();
             InputDomain inputs = compilation.db()
-                    .ask(new Adequacy.Inputs(module)).value().get("fee");
-            Core body = checked.behaviorBodies().get("fee");
+                    .ask(new Adequacy.Inputs(module)).value().get("feeFor");
+            Core body = checked.behaviorBodies().get("feeFor");
             assertNotNull(body, "the behavior under test has a body");
             CoverageSites.Plan plan = checked.plan();
             // What the compilation divides this behavior into, and not what the classes alone come
@@ -191,14 +191,14 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
             // that only asked the declarations would leave the position with no classes — and a
             // search with nothing to compose says nothing about what certifies what.
             Partitions.Partitioning partitioning =
-                    compilation.db().ask(new Adequacy.Divided(module, "fee")).value();
+                    compilation.db().ask(new Adequacy.Divided(module, "feeFor")).value();
             assertNotNull(partitioning, "the model divides the position the fork reads");
             assertFalse(partitioning.axes().isEmpty() || partitioning.axes().stream()
                             .allMatch(axis -> axis.classes().isEmpty()),
                     "and divides it into classes a row can be composed at");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of("fee", checked.run("fee"), inputs.reading(rules)),
+                    CoverageRead.of("feeFor", checked.run("feeFor"), inputs.reading(rules)),
                     plan.numbering());
         }
     }
