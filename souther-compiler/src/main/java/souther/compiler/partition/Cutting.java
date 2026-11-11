@@ -2173,18 +2173,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 AuthorsLines authors) {
         // A statement holding counts whose choices are past their figure is no rule of the
         // application's own, as one holding a part nothing read is not: what it reads is read
-        // where its comparisons are written, each on its own.
+        // where its comparisons are written, each on its own. The rest is read as lines once,
+        // the counts written out first and what a written value is held to read as the
+        // comparison with it after, so that what is written out is read the way the rest is.
         if (CountsWrittenOut.outsideElementsOf(stated)
                 instanceof CountsWrittenOut.Written(Proposition written)
-                && several(behavior, application, written, read, reads, Optional.of(authors),
-                        _ -> UndividedByARelation.Working.UNREAD, false)
-                        instanceof TheParts.Drawn(Read.Several lines)) {
-            return lines;
-        }
-        Proposition shown = stated.withTheValuesItHoldsCompared();
-        if (shown != stated
-                && several(behavior, application, shown, read, reads, Optional.of(authors),
-                        _ -> UndividedByARelation.Working.UNREAD, false)
+                && several(behavior, application, written.withTheValuesItHoldsCompared(), read,
+                        reads, Optional.of(authors), _ -> UndividedByARelation.Working.UNREAD,
+                        false)
                         instanceof TheParts.Drawn(Read.Several lines)) {
             return lines;
         }

@@ -213,6 +213,12 @@ public sealed interface Proposition {
      * this of the statement as a whole, so a written value is a comparison to all of them and
      * wherever it stands in the statement. The value it is held to stays a value for a reader that
      * asks which one: this is a second reading of the statement and does not replace it.
+     *
+     * <p>Asked of a statement whose counts were written out ({@link CountsWrittenOut}), and after
+     * that was done. A count of statements is left as it stands, and so is a statement over the
+     * ways of one and a search of a tree: what the first two come to is the statements their
+     * choices are written out as, which this is then asked of, and one that is not written out is
+     * past a figure, which no line is read of.
      */
     default Proposition withTheValuesItHoldsCompared() {
         return switch (this) {
@@ -248,14 +254,18 @@ public sealed interface Proposition {
     /** {@code parts}, each read so ({@link #withTheValuesItHoldsCompared}) — or null where none
      *  of them is read as anything else. */
     private static List<Proposition> comparedEach(List<Proposition> parts) {
-        List<Proposition> out = new ArrayList<>();
-        boolean changed = false;
-        for (Proposition part : parts) {
+        List<Proposition> out = null;
+        for (int at = 0; at < parts.size(); at++) {
+            Proposition part = parts.get(at);
             Proposition compared = part.withTheValuesItHoldsCompared();
-            changed |= compared != part;
-            out.add(compared);
+            if (out == null && compared != part) {
+                out = new ArrayList<>(parts.subList(0, at));
+            }
+            if (out != null) {
+                out.add(compared);
+            }
         }
-        return changed ? out : null;
+        return out;
     }
 
     /**

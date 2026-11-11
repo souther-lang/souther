@@ -37,12 +37,32 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
 
     private static final String MODEL = """
             module probe
-            data Group = { tags: List<String> }
+            data Group = { tags: List<String>, n: Int }
             data Line = { code: String, rates: Map<String, Int>, tags: List<String>,
                           ids: Set<String>, nums: List<Int>, days: List<Date>, n: Int,
                           other: List<String>, groups: List<Group>, s: String, i: Int,
                           times: List<Time>, instants: List<Instant>, ats: List<DateTime>,
                           emo: List<String> }
+
+            behavior nested : (l: Line) -> Bool
+            let nested (l) = List.any(g -> g.n > 3 && List.contains("K", g.tags), l.groups)
+            behavior nestedFirst : (l: Line) -> Bool
+            let nestedFirst (l) = List.any(g -> List.contains("K", g.tags) && g.n > 3, l.groups)
+            behavior nestedFirstAny : (l: Line) -> Bool
+            let nestedFirstAny (l) =
+                List.any(g -> List.any(t -> t == "K", g.tags) && g.n > 3, l.groups)
+            behavior nestedAny : (l: Line) -> Bool
+            let nestedAny (l) =
+                List.any(g -> g.n > 3 && List.any(t -> t == "K", g.tags), l.groups)
+
+            behavior exactlyOne : (l: Line) -> Bool
+            let exactlyOne (l) =
+                List.length(List.filter(b -> b,
+                    [List.contains("K", l.tags), List.contains("L", l.tags)])) == 1
+            behavior exactlyOneAny : (l: Line) -> Bool
+            let exactlyOneAny (l) =
+                List.length(List.filter(b -> b,
+                    [List.any(t -> t == "K", l.tags), List.any(t -> t == "L", l.tags)])) == 1
 
             behavior combined : (l: Line) -> Int
             let combined (l) = if (List.contains("K", l.tags) && l.n > 3) == true then 1 else 0
@@ -154,11 +174,16 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         for (String[] pair : new String[][] {
             { "alongside", "alongsideAny" }, { "either", "eitherAny" },
             { "inEachGroup", "inEachGroupAny" }, { "combined", "combinedAny" },
+            { "nestedFirst", "nestedFirstAny" }, { "exactlyOne", "exactlyOneAny" },
             { "hasTime", "anyTime" }, { "hasInstant", "anyInstant" }, { "hasAt", "anyAt" },
             { "hasEmoji", "anyEmoji" }, { "hasDay", "anyDay" } }) {
             assertEquals(pointsOf(pair[1]), pointsOf(pair[0]), pair[0]);
         }
         assertEquals(Set.of("l.n 3", "l.tags[*] K"), linesOf("combined"));
+        // The same lines where the statement follows another over the same element; the rows
+        // found for the line of an application there are fewer than for a comparison, as they are
+        // for every application line there is, and are not compared.
+        assertEquals(linesOf("nestedAny"), linesOf("nested"));
         assertEquals(Set.of("l.n 3", "l.tags[*] K"), linesOf("alongside"));
         assertEquals(Set.of("l.tags[*] K", "l.other[*] M"), linesOf("either"));
         assertEquals(Set.of("l.groups[*].tags[*] K"), linesOf("inEachGroup"));
