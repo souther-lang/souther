@@ -77,6 +77,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.observe.Figure;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
@@ -7245,9 +7246,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             carriers.get(i), working.partials())
                     : null;
             // Where every total lies no lower than the least the term takes, it lies there.
-            NumericDomain.Bounds lies = stepped == null || !stepped.noneBelow()
-                    || stepped.run().min() == null ? holds
-                    : holds.meet(new NumericDomain.Bounds(stepped.run().min(), null));
+            BigInteger leastTotal = stepped == null ? null : stepped.possible().least();
+            NumericDomain.Bounds lies = leastTotal == null ? holds
+                    : holds.meet(new NumericDomain.Bounds(
+                            Endpoint.inclusive(Count.of(new BigDecimal(leastTotal))), null));
             WhatARelationLeavesUndivided.Term<FilingCoordinate> term =
                     new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), lies,
                             withinTheEnds(realizes, runsTo), takes,
@@ -9202,15 +9204,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if ((met.min() != null && first == null) || (met.max() != null && last == null)) {
             return null;
         }
-        first = first == null ? null : remainder.leastAtOrAbove(first);
-        last = last == null ? null : remainder.greatestAtOrBelow(last);
         if (first != null && last != null && first.compareTo(last) > 0) {
             return null;
         }
-        return new WhatARelationLeavesUndivided.Term.Stepped(new NumericDomain.Bounds(
-                first == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(first))),
-                last == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(last)))),
-                remainder);
+        // Every total is a multiple of the weight; the ones a list of one element comes to are
+        // those of the run the units were shown to take.
+        WholeNumberSet multiplesOfTheWeight = WholeNumberSet.ofClass(remainder);
+        WholeNumberSet shown = multiplesOfTheWeight.and(
+                WholeNumberSet.ofRuns(WholeNumberRuns.one(first, last)));
+        return shown.isNone() ? null
+                : new WhatARelationLeavesUndivided.Term.Stepped(shown, multiplesOfTheWeight);
     }
 
     /**
@@ -9278,15 +9281,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 || (last != null && first.compareTo(last) > 0)) {
             return null;
         }
-        // Nought is the total of an element left out, and the least total of one kept is
-        // {@code first}: between them is no total.
-        boolean apart = first.compareTo(BigInteger.ONE) > 0;
-        return new WhatARelationLeavesUndivided.Term.Stepped(new NumericDomain.Bounds(
-                Endpoint.inclusive(Count.ZERO),
-                last == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(last)))),
-                new Congruences(BigInteger.ZERO, BigInteger.ONE),
-                apart ? BigInteger.ONE : null, apart ? first.subtract(BigInteger.ONE) : null,
-                true);
+        // Nought is the total of an element left out, and a total of one kept is from the least
+        // the field takes there. A list of any number of elements totals nought, or adds up
+        // elements each kept at {@code least} or more, and so lies at {@code least} or more:
+        // between them is no total.
+        WholeNumberSet noughtAlone = WholeNumberSet.ofRuns(WholeNumberRuns.one(BigInteger.ZERO,
+                BigInteger.ZERO));
+        return new WhatARelationLeavesUndivided.Term.Stepped(
+                noughtAlone.or(WholeNumberSet.ofRuns(WholeNumberRuns.one(first, last))),
+                noughtAlone.or(WholeNumberSet.ofRuns(WholeNumberRuns.one(least, null))));
     }
 
     /** The one total a container of no element comes to. */

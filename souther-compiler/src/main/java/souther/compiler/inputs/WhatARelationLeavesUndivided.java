@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -11,6 +10,7 @@ import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberSet;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -124,82 +124,40 @@ public final class WhatARelationLeavesUndivided {
                           Stepped stepped) {
 
         /**
-         * Values a term takes that leave one remainder by one divisor: every whole number of
-         * {@code run} in {@code remainder} is taken, and no other. Both ends of the run are
-         * taken, or the side is open and the class has a member as far out as the order goes.
-         * Each value is one a list of a single element comes to, and no value is taken that
-         * needs more than one.
+         * What a term takes where that is no run of every value: {@code witnessed} are values a
+         * row is shown to take, and {@code possible} are those every value it takes lies in. So
+         * the values it is shown to take are a part of the values it takes, which are a part of
+         * the values it may take, and a value past {@code possible} is one it takes in no row.
          *
-         * @param gapFrom the least whole number of a stretch inside the run that is taken by none,
-         *                or null where there is none
-         * @param gapTo   the greatest of that stretch
-         * @param noneBelow whether no total of any number of elements lies below the run: the
-         *                least value the run takes is the least the term lies at
+         * <p>What is witnessed is no more than a list of one element comes to, and what is
+         * possible holds for a list of any number of elements: the second is only what the totals
+         * of every length keep ({@code 2·x} added up stays even, and what a filter keeps from
+         * six on added up stays nought or six and more), and a set that is not closed under
+         * adding is no such set.
          */
-        public record Stepped(NumericDomain.Bounds run, Congruences remainder,
-                              BigInteger gapFrom, BigInteger gapTo, boolean noneBelow) {
+        public record Stepped(WholeNumberSet witnessed, WholeNumberSet possible) {
 
             public Stepped {
-                Objects.requireNonNull(run, "a stepped set lies in a run");
-                Objects.requireNonNull(remainder, "a stepped set is of a remainder");
-                if ((gapFrom == null) != (gapTo == null)
-                        || (gapFrom != null && gapFrom.compareTo(gapTo) > 0)) {
-                    throw new IllegalArgumentException("a stretch taken by none has two ends"
-                            + " that are in order: " + gapFrom + " to " + gapTo);
+                Objects.requireNonNull(witnessed, "a stepped term takes some values");
+                Objects.requireNonNull(possible, "a stepped term lies in some values");
+                if (witnessed.isNone() || possible.isNone()) {
+                    throw new IllegalArgumentException("a stepped term takes a value");
                 }
             }
 
-            /** The values of {@code remainder} in {@code run}, no stretch left out. */
-            public Stepped(NumericDomain.Bounds run, Congruences remainder) {
-                this(run, remainder, null, null, false);
+            /** Whether {@code value}, a whole number, is one the term is shown to take. */
+            boolean takes(BigInteger value) {
+                return witnessed.holds(value);
             }
 
-            /** Whether {@code value}, a whole number, is one the term takes: in the run, of the
-             *  remainder, and outside the stretch taken by none. */
-            boolean takesOfTheRemainder(BigInteger value) {
-                return inTheRun(value) && remainder.greatestAtOrBelow(value).equals(value)
-                        && !inTheGap(value);
-            }
-
-            private boolean inTheRun(BigInteger value) {
-                BigInteger least = run.min() == null ? null : run.min().wholeAdmitted(true);
-                BigInteger greatest = run.max() == null ? null : run.max().wholeAdmitted(false);
-                return (run.min() == null || (least != null && value.compareTo(least) >= 0))
-                        && (run.max() == null
-                                || (greatest != null && value.compareTo(greatest) <= 0));
-            }
-
-            private boolean inTheGap(BigInteger value) {
-                return gapFrom != null && value.compareTo(gapFrom) >= 0
-                        && value.compareTo(gapTo) <= 0;
-            }
-
-            /** The greatest value taken at or below {@code value}, or null where the term takes
-             *  none there. */
-            BigInteger takenAtOrBelow(BigInteger value) {
-                BigInteger at = remainder.greatestAtOrBelow(value);
-                if (inTheGap(at)) {
-                    at = remainder.greatestAtOrBelow(gapFrom.subtract(BigInteger.ONE));
-                }
-                BigInteger greatest = run.max() == null ? null : run.max().wholeAdmitted(false);
-                if (greatest != null && at.compareTo(greatest) > 0) {
-                    return takenAtOrBelow(greatest);
-                }
-                return takesOfTheRemainder(at) ? at : null;
-            }
-
-            /** The least value taken at or above {@code value}, or null where the term takes
-             *  none there. */
-            BigInteger takenAtOrAbove(BigInteger value) {
-                BigInteger at = remainder.leastAtOrAbove(value);
-                if (inTheGap(at)) {
-                    at = remainder.leastAtOrAbove(gapTo.add(BigInteger.ONE));
-                }
-                BigInteger least = run.min() == null ? null : run.min().wholeAdmitted(true);
-                if (least != null && at.compareTo(least) < 0) {
-                    return takenAtOrAbove(least);
-                }
-                return takesOfTheRemainder(at) ? at : null;
+            /** The ends of the values the term is shown to take, as a run with its ends taken. */
+            NumericDomain.Bounds hull() {
+                BigInteger least = witnessed.least();
+                BigInteger greatest = witnessed.greatest();
+                return new NumericDomain.Bounds(
+                        least == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(least))),
+                        greatest == null ? null
+                                : Endpoint.inclusive(Count.of(new BigDecimal(greatest))));
             }
         }
 
@@ -241,7 +199,7 @@ public final class WhatARelationLeavesUndivided {
          */
         Term<P> asSteppedRun() {
             return stepped == null || realizes != null ? this
-                    : new Term<>(madeOf, weight, holds, stepped.run(), takes, itsPlace, spacing,
+                    : new Term<>(madeOf, weight, holds, stepped.hull(), takes, itsPlace, spacing,
                             runsTo, key, stepped);
         }
 
@@ -250,9 +208,9 @@ public final class WhatARelationLeavesUndivided {
                 throw new IllegalArgumentException("a term of a relation is made of something,"
                         + " weighed by something other than nought and held somewhere");
             }
-            if (stepped != null && realizes != null && !stepped.run().equals(realizes)) {
+            if (stepped != null && realizes != null && !stepped.hull().equals(realizes)) {
                 throw new IllegalArgumentException("a stepped term is read over the run its"
-                        + " values lie in: " + realizes + " against " + stepped.run());
+                        + " values lie in: " + realizes + " against " + stepped.hull());
             }
             Interval taken = realizes == null || runsTo == null ? null : Interval.of(realizes);
             Interval order = taken == null ? null : Interval.of(runsTo);
@@ -2960,7 +2918,7 @@ public final class WhatARelationLeavesUndivided {
     /** Whether the whole number {@code value} is one {@code stepped} takes. */
     private static boolean inTheStepped(Term.Stepped stepped, ExactRatio value) {
         BigInteger whole = value.isWhole() ? value.floor().orNull() : null;
-        return whole != null && stepped.takesOfTheRemainder(whole);
+        return whole != null && stepped.takes(whole);
     }
 
     /**
@@ -4236,20 +4194,21 @@ public final class WhatARelationLeavesUndivided {
         NumericDomain.Bounds held = term.runsTo() == null ? term.holds()
                 : term.holds().meet(term.runsTo());
         if (term.stepped() != null) {
-            // Every total is of the remainder, so an end of the order that is not one is no value
-            // the term takes. The run it is shown to take says nothing of where it lies: a total
-            // of several elements lies past the total of one.
-            Congruences remainder = term.stepped().remainder();
-            BigInteger low = held.min() == null ? null : held.min().wholeAdmitted(true);
-            BigInteger high = held.max() == null ? null : held.max().wholeAdmitted(false);
-            if (low != null && high != null) {
-                low = remainder.leastAtOrAbove(low);
-                high = remainder.greatestAtOrBelow(high);
-                if (low.compareTo(high) <= 0) {
-                    held = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(
-                            new BigDecimal(low))), Endpoint.inclusive(Count.of(
-                            new BigDecimal(high))));
-                }
+            // Every total lies in the values it may take, so an end of the order that is none of
+            // them is no value the term takes. What it is shown to take says nothing of where it
+            // lies: a total of several elements lies past the total of one.
+            WholeNumberSet possible = term.stepped().possible();
+            BigInteger low = held.min() == null ? possible.least()
+                    : held.min().wholeAdmitted(true) instanceof BigInteger from
+                    ? possible.leastAtOrAbove(from) : null;
+            BigInteger high = held.max() == null ? possible.greatest()
+                    : held.max().wholeAdmitted(false) instanceof BigInteger to
+                    ? possible.greatestAtOrBelow(to) : null;
+            if (low == null || high == null || low.compareTo(high) <= 0) {
+                held = new NumericDomain.Bounds(low == null ? held.min()
+                        : Endpoint.inclusive(Count.of(new BigDecimal(low))),
+                        high == null ? held.max()
+                                : Endpoint.inclusive(Count.of(new BigDecimal(high))));
             }
         }
         return held.equals(term.holds()) ? term : term.holding(held);
@@ -4628,8 +4587,8 @@ public final class WhatARelationLeavesUndivided {
             if (first == null || last == null) {
                 return null;
             }
-            BigInteger taken = term.stepped().takenAtOrAbove(first);
-            BigInteger takenLast = term.stepped().takenAtOrBelow(last);
+            BigInteger taken = term.stepped().witnessed().leastAtOrAbove(first);
+            BigInteger takenLast = term.stepped().witnessed().greatestAtOrBelow(last);
             if (taken == null || takenLast == null) {
                 return null;
             }
@@ -4688,8 +4647,9 @@ public final class WhatARelationLeavesUndivided {
         }
         if (reaching.stepped() != null) {
             // The last value of the remainder on one side and the first on the other.
-            BigInteger below = reaching.stepped().takenAtOrBelow(from);
-            BigInteger above = reaching.stepped().takenAtOrAbove(from.add(BigInteger.ONE));
+            BigInteger below = reaching.stepped().witnessed().greatestAtOrBelow(from);
+            BigInteger above = reaching.stepped().witnessed()
+                    .leastAtOrAbove(from.add(BigInteger.ONE));
             return below == null || above == null ? null
                     : List.of(ExactRatio.of(below), ExactRatio.of(above));
         }
