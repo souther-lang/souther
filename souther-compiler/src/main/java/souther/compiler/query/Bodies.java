@@ -2,11 +2,9 @@ package souther.compiler.query;
 
 import souther.compiler.check.ClauseLocations;
 import souther.compiler.check.InvariantFinding;
-import souther.compiler.check.ListedCases;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.SumCases;
 import souther.compiler.check.StandingSignature;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.DefinitionName;
@@ -3690,9 +3688,7 @@ public final class Bodies {
                 JvmClassNames.rejectCollisions(lowering.value().settled(),
                         behavior -> signatures.present() && signatures.value().get(behavior) != null
                                 ? signatures.value().get(behavior).outputType() : null,
-                        Shapes.declarationKinds(db),
-                        SumCases.asWrittenOnceEach(Shapes.declarationKinds(db),
-                                ListedCases.asWritten(scope.value())));
+                        Shapes.declarationKinds(db), Shapes.sumCases(db));
             } catch (CompileException e) {
                 namesKept = false;
                 reports.addAll(Report.of(e));
