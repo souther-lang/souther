@@ -28,6 +28,8 @@ import souther.compiler.semantics.StringContainment;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -121,6 +123,11 @@ class WhatAnElementAnswersIsTheSameHoweverTheElementsAreSharedOutTest {
         decided.put(Proposition.SameValue.class, new Boolean[] {
             sameWhereverTheyAreWritten(new Proposition.SameValue(at(CURRENCY), at(AMOUNT), true)),
             sameWhereverTheyAreWritten(new Proposition.SameValue(at(CURRENCY), at(FLOOR), true))});
+        // Against a value written it is the first's alone that decides.
+        assertTrue(sameWhereverTheyAreWritten(new Proposition.SameValue(at(CURRENCY),
+                new Operand.Written<>(Value.text("USD")), true)), "a value written, of the element");
+        assertFalse(sameWhereverTheyAreWritten(new Proposition.SameValue(at(FLOOR),
+                new Operand.Written<>(Value.text("USD")), true)), "a value written, around it");
         decided.put(Proposition.StringInside.class, new Boolean[] {
             sameWhereverTheyAreWritten(new Proposition.StringInside(
                     new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(CURRENCY)),

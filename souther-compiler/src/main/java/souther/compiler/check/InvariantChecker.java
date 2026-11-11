@@ -1537,9 +1537,11 @@ public final class InvariantChecker {
         // not be able to for the key chosen is one whose key the rule does say something of.
         EntryHeld.freelyKeyedOn(named, world).forEach((map, requirements) -> {
             for (FactSubject container : subjectsAt(map, atoms, keys)) {
+                // A map keyed by a value written has no free key, so every key here is a place.
                 for (EntryHeld.Requirement each : requirements) {
-                    entryKeys.computeIfAbsent(container, _ -> new LinkedHashSet<>())
-                            .addAll(subjectsAt(each.key(), atoms, keys));
+                    each.key().place().ifPresent(at ->
+                            entryKeys.computeIfAbsent(container, _ -> new LinkedHashSet<>())
+                                    .addAll(subjectsAt(at, atoms, keys)));
                 }
             }
         });

@@ -1,7 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.InputReading;
@@ -17,8 +19,12 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -187,7 +193,8 @@ public final class CountWitnesses {
                     stopped);
         }
         Container holder = new Container(at, container, spelled::holding, worn,
-                repeats ? fewestHeld(container, read) : 1, repeats);
+                repeats ? fewestHeld(container, read) : 1, repeats,
+                place -> mayHold(place, read));
         each.set(at, each.get(at).subList(0, 1));
         // The rows of those, nearest first, as many as the search tries: one whose other values
         // leave no element to hold the statement of and another to fail it is no row shown that
@@ -352,7 +359,7 @@ public final class CountWitnesses {
             return RowSearch.upTo(out, stopped);
         }
         if (alike.isEmpty()) {
-            return RowSearch.upTo(withWhatItReadsDiffering(out, element, container, stated,
+            return RowSearch.upTo(withWhatItReadsDiffering(out, element, held, stated,
                     reading, stopped), stopped);
         }
         BorderQuantity.Observation row = new StandingAtAPoint.DiscoveringRow(
@@ -384,7 +391,7 @@ public final class CountWitnesses {
                 }
             }
         }
-        return RowSearch.upTo(withWhatItReadsDiffering(out, element, container, stated, reading,
+        return RowSearch.upTo(withWhatItReadsDiffering(out, element, held, stated, reading,
                 stopped), stopped);
     }
 
@@ -411,12 +418,39 @@ public final class CountWitnesses {
      * found otherwise.
      */
     private static List<FixtureTemplate> withWhatItReadsDiffering(
-            List<FixtureTemplate> tried, Type element, TermPath container, Proposition stated,
+            List<FixtureTemplate> tried, Type element, Container held, Proposition stated,
             RuleReadingContext reading, Set<Figure> stopped) {
+        TermPath container = held.place();
         RuleReadingSource source = reading.source();
         Map<TermPath, List<ValuesAStatementNames.Named>> named = ValuesAStatementNames.of(stated);
         Map<List<String>, List<FixtureTemplate>> told = new LinkedHashMap<>();
         for (TermPath place : PositionsAStatementReads.of(stated).orElse(List.of())) {
+            // The keys of a map the element holds, and the elements of a list or a set it holds,
+            // are told apart by the collection: one holding the value the statement names there,
+            // and one holding none, beside what the collection's own type tells apart.
+            TermPath collection = place.mapOfTheKeys() != null ? place.mapOfTheKeys()
+                    : !place.steps().isEmpty()
+                    && place.steps().getLast() instanceof TermPath.Step.Element
+                    ? place.prefix(place.steps().size() - 1) : null;
+            List<String> fieldsToIt =
+                    collection == null ? null : fieldsBelow(container.element(), collection);
+            // A place that is an element of the container being counted is no such collection:
+            // it is read as the place it is, below.
+            if (fieldsToIt != null || place.mapOfTheKeys() != null) {
+                List<FixtureTemplate> collections = fieldsToIt == null ? List.of()
+                        : collectionsTold(Witnesses.typeAt(element, fieldsToIt, reading),
+                                place.mapOfTheKeys() != null,
+                                named.getOrDefault(place, List.of()),
+                                named.getOrDefault(collection, List.of()),
+                                held.mayHold().apply(collection), reading, stopped);
+                if (!collections.isEmpty()) {
+                    List<FixtureTemplate> both =
+                            new ArrayList<>(told.getOrDefault(fieldsToIt, List.of()));
+                    collections.stream().filter(each -> !both.contains(each)).forEach(both::add);
+                    told.put(fieldsToIt, RowSearch.upTo(both, stopped));
+                }
+                continue;
+            }
             List<String> fields = fieldsBelow(container.element(), place);
             Type type = fields == null ? null : Witnesses.typeAt(element, fields, reading);
             if (type == null) {
@@ -432,12 +466,10 @@ public final class CountWitnesses {
                     break;
                 }
                 FixtureTemplate written = switch (each) {
-                    case ValuesAStatementNames.Named.Numeric number ->
-                            Partitions.writtenNumberAt(type, number.at(), reading);
-                    case ValuesAStatementNames.Named.Written text ->
-                            Witnesses.writtenAs(text.at(), type, reading);
-                    case ValuesAStatementNames.Named.Holding many ->
-                            Witnesses.holdingMany(type, many.many(), reading);
+                    case ValuesAStatementNames.Named.AtValue(Value value) ->
+                            Witnesses.writtenAs(value, type, reading);
+                    case ValuesAStatementNames.Named.Holding(BigInteger many) ->
+                            Witnesses.holdingMany(type, many, reading);
                 };
                 if (written != null && !values.contains(written)) {
                     values.add(written);
@@ -457,6 +489,153 @@ public final class CountWitnesses {
             }
         }
         return out;
+    }
+
+    /**
+     * The collections of {@code type} that tell apart what a statement names as their keys, where
+     * {@code ofTheKeys}, or as their elements: one holding none of the values named, and one
+     * holding each way of some of them — a map filing each under a value its entries are written
+     * with — or none where {@code type} is not such a collection. A value named that is not
+     * written at the type the collection holds is left out.
+     *
+     * <p>A statement may also say how many the collection holds ({@code sizes}, which
+     * {@link ValuesAStatementNames.Named.Holding} names at the collection's own place), and the
+     * one collection has to meet both: each way of holding some of the values is also made
+     * holding that many.
+     *
+     * <p>Each is asked of the collection's own builder ({@link Witnesses#holding}), with the
+     * values named and not chosen kept out of it: what may stand beside the ones chosen — a list
+     * may say the same value again and a set may not, a map's keys are apart, and a floor the
+     * rules give — is the carrier's and the rules' to say, as it is for a plan composed into a
+     * row. What that build met of this compiler's figures is said in {@code stopped}.
+     */
+    private static List<FixtureTemplate> collectionsTold(
+            Type type, boolean ofTheKeys, List<ValuesAStatementNames.Named> names,
+            List<ValuesAStatementNames.Named> sizes, DeclaredBounds.CountRange rules,
+            RuleReadingContext reading, Set<Figure> stopped) {
+        if (type == null || names.isEmpty()) {
+            return List.of();
+        }
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        Type held = switch (view.shape()) {
+            case Shape.Mapping mapping when ofTheKeys -> mapping.key();
+            case Shape.Sequence sequence when !ofTheKeys -> sequence.element();
+            default -> null;
+        };
+        if (held == null) {
+            return List.of();
+        }
+        // Each value named is a membership the collection has or has not, independent of the
+        // others: a statement over several holds of the collections that have some of them, and
+        // fails of those that have the rest.
+        List<FixtureTemplate> named = new ArrayList<>();
+        for (ValuesAStatementNames.Named each : names) {
+            if (each instanceof ValuesAStatementNames.Named.AtValue(Value written)
+                    && Witnesses.writtenAs(written, held, reading) instanceof FixtureTemplate value) {
+                named.add(value);
+            }
+        }
+        // As few as the rules allow, and each number of them the statement names within what the
+        // rules allow.
+        List<DeclaredBounds.CountRange> ranges = new ArrayList<>(List.of(rules));
+        for (ValuesAStatementNames.Named each : sizes) {
+            if (each instanceof ValuesAStatementNames.Named.Holding(BigInteger many)) {
+                int count = many.min(BigInteger.valueOf(Integer.MAX_VALUE)).intValue();
+                ranges.add(new DeclaredBounds.CountRange(Math.max(count, rules.least()),
+                        Math.min(count, rules.most())));
+            }
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (List<FixtureTemplate> chosen : subsetsFromTheEnds(named, MOST_VALUES + 1)) {
+            Set<String> chosenTexts = new HashSet<>();
+            chosen.forEach(each -> chosenTexts.add(each.text()));
+            List<FixtureTemplate> keptOut = named.stream()
+                    .filter(each -> !chosenTexts.contains(each.text())).toList();
+            for (DeclaredBounds.CountRange holds : ranges) {
+                if (holds.empty()) {
+                    continue;
+                }
+                Proposals made = switch (view.shape()) {
+                    case Shape.Sequence carrier -> Witnesses.holding(carrier,
+                            ElementsKeptApart.at(view, List.of(), reading), chosen, keptOut, holds,
+                            reading);
+                    case Shape.Mapping map -> Witnesses.holding(map, List.of(), List.of(), null,
+                            chosen.stream().map(key -> new Witnesses.Filed(key, null)).toList(),
+                            keptOut, holds, reading);
+                    default -> Proposals.NONE;
+                };
+                for (CompositionBudget met : made.met().figures()) {
+                    stopped.add(met.figure());
+                }
+                FixtureTemplate worn = made.values().isEmpty() ? null
+                        : WornNames.under(view.wrappers(), made.values().getFirst(), source);
+                if (worn != null && !out.contains(worn) && out.size() <= MOST_VALUES) {
+                    out.add(worn);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The subsets of {@code members}, taken from the ends in: none of them and all of them, then
+     * one and all but one, then two and all but two, and so on, each size in the order the members
+     * stand — no more than {@code most} of them, so that a statement naming many values builds none
+     * past what the search tries. One past the figure is enough for the caller to say it was
+     * passed ({@link RowSearch#upTo}).
+     *
+     * <p>What a statement needs of them is not known here, and the subsets it needs are those the
+     * statement's structure makes extreme: a conjunction of holding each needs all of them, a
+     * disjunction one, a denial of either all but one or none. Counted up from none, a statement
+     * naming more values than the search tries subsets of would meet the figure before the one it
+     * needs.
+     */
+    static List<List<FixtureTemplate>> subsetsFromTheEnds(List<FixtureTemplate> members,
+                                                          int most) {
+        List<List<FixtureTemplate>> out = new ArrayList<>();
+        for (int low = 0, high = members.size(); low <= high && out.size() < most;
+                low++, high--) {
+            choosing(members, low, most, out);
+            if (high != low) {
+                choosing(members, high, most, out);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Each way of choosing {@code size} of {@code members}, in the order the members stand, added
+     * to {@code into} until it holds {@code most}.
+     *
+     * <p>Made one after the next from the positions chosen and not by recursion, so that the stack
+     * does not grow with how many are chosen and the work is that of the subsets made.
+     */
+    private static void choosing(List<FixtureTemplate> members, int size, int most,
+                                 List<List<FixtureTemplate>> into) {
+        int[] at = new int[size];
+        for (int each = 0; each < size; each++) {
+            at[each] = each;
+        }
+        while (into.size() < most) {
+            List<FixtureTemplate> chosen = new ArrayList<>(size);
+            for (int each : at) {
+                chosen.add(members.get(each));
+            }
+            into.add(chosen);
+            int moving = size - 1;
+            while (moving >= 0 && at[moving] == members.size() - size + moving) {
+                moving--;
+            }
+            if (moving < 0) {
+                return;
+            }
+            at[moving]++;
+            for (int after = moving + 1; after < size; after++) {
+                at[after] = at[after - 1] + 1;
+            }
+        }
     }
 
     /**
@@ -521,7 +700,8 @@ public final class CountWitnesses {
                                      Map<List<String>, TermPath> into) {
         switch (stated) {
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
-                                       DecisionSubject.AnInput(TermPath other, var _),
+                                       Operand.At<DecisionSubject>(
+                                               DecisionSubject.AnInput(TermPath other, var _)),
                                        boolean holds, var _) when holds -> {
                 List<String> inOne = fieldsBelow(element, one);
                 List<String> inOther = fieldsBelow(element, other);
@@ -594,14 +774,25 @@ public final class CountWitnesses {
     }
 
     /**
+     * How many the collection at {@code place} may hold, whatever rows are written: what its own
+     * type's rules and those of the record holding it leave, which is the count's own reading
+     * ({@link CountDomain}) and the one the boundary refuses a collection by.
+     */
+    private static DeclaredBounds.CountRange mayHold(TermPath place, InputReading read) {
+        NumericDomain.Bounds may = UndividedByARelation.howManyMayBeHeld(place, read,
+                read.quantities().region());
+        return may == null ? new DeclaredBounds.CountRange(0, Integer.MAX_VALUE)
+                : new DeclaredBounds.CountRange(CountDomain.leastFrom(may.min()),
+                        CountDomain.mostFrom(may.max()));
+    }
+
+    /**
      * The fewest elements the container is held with: one, or where the rules of its type ask
-     * for more, that many. What a type asks is the count's own reading ({@link CountDomain}), so
-     * it is asked of that and not found by building containers until the boundary takes one.
+     * for more, that many. It is asked of the count's reading and not found by building
+     * containers until the boundary takes one.
      */
     private static int fewestHeld(TermPath container, InputReading read) {
-        NumericDomain.Bounds may = UndividedByARelation.howManyMayBeHeld(container, read,
-                read.quantities().region());
-        return may == null ? 1 : Math.max(1, CountDomain.leastFrom(may.min()));
+        return Math.max(1, mayHold(container, read).least());
     }
 
     /**
@@ -613,10 +804,12 @@ public final class CountWitnesses {
      *              parameter, under the names that type wears
      * @param size  the fewest elements the boundary builds it with ({@link #fewestHeld})
      * @param overAgain whether it may hold an element over again
+     * @param mayHold   how many the collection at a place of the container's elements may hold
      */
     private record Container(int at, TermPath place,
                              Function<List<FixtureTemplate>, FixtureTemplate> wrap,
-                             List<TypeSymbol> worn, int size, boolean overAgain) {
+                             List<TypeSymbol> worn, int size, boolean overAgain,
+                             Function<TermPath, DeclaredBounds.CountRange> mayHold) {
 
         /** What the boundary built of the container, with the names it wears taken off. */
         ObservedValue inside(ObservedValue built) {

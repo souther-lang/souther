@@ -4925,6 +4925,17 @@ public final class InputReads {
     }
 
     /**
+     * The same, where a construction of a newtype is the value it wraps: what a source writes
+     * where a place of a newtype's type is asked for, which is the value the place holds under
+     * the name it wears. A reader that discharges a rule on a constant asks {@link #folded}.
+     */
+    public Optional<Object> foldedUnderItsNames(Core e, Symbols symbols,
+                                                DeclarationNewtypes newtypes) {
+        return FoldedValue.underItsNames(e, this,
+                new Followed(symbols, newtypes, new HashSet<>()), symbols, newtypes);
+    }
+
+    /**
      * This, where each field of a declaration stands for what a construction handed it, by its
      * binding in {@code given}. A value is read where the construction is, {@code reads}, and the
      * clause that names the field where the declaration is written: the two are not one tree, and

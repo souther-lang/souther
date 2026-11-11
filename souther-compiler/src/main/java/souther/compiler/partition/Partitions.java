@@ -40,6 +40,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
+import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.inputs.NumericTerm;
@@ -2368,7 +2369,7 @@ public final class Partitions {
         }
         List<String> order = new ArrayList<>(fields.keySet());
         order.sort(Comparator.comparingInt(name -> standsAsAKeyOf(name, asked) ? 0 : 1));
-        Map<String, Set<String>> apart = keysThatMustDiffer(asked);
+        Map<String, Set<Operand<RuleKey>>> apart = keysThatMustDiffer(asked);
         Map<String, FixtureTemplate> chosenByName = new LinkedHashMap<>();
         for (String name : order) {
             Map.Entry<String, Type> field = Map.entry(name, fields.get(name));
@@ -2402,8 +2403,14 @@ public final class Partitions {
                 // the first took is the next one's to pass over.
                 Set<String> taken = new LinkedHashSet<>();
                 apart.getOrDefault(name, Set.of()).forEach(other -> {
-                    if (chosenByName.containsKey(other)) {
-                        taken.add(chosenByName.get(other).text());
+                    FixtureTemplate there = switch (other) {
+                        case Operand.At<RuleKey>(RuleKey place) ->
+                                chosenByName.get(place.steps().getFirst());
+                        case Operand.Written<RuleKey>(Value written) ->
+                                Witnesses.writtenAs(written, field.getValue(), reading);
+                    };
+                    if (there != null) {
+                        taken.add(there.text());
                     }
                 });
                 Proposals stands = holding != null ? holding.firstOf(1)
@@ -2469,19 +2476,22 @@ public final class Partitions {
     }
 
     /**
-     * For each field standing as a key, the fields standing as keys it may not be the same value
-     * as: those asked for another number under the same map.
+     * For each field standing as a key, the keys it may not be the same value as: those asked for
+     * another number under the same map, whether another field or a value a rule writes.
      */
-    private static Map<String, Set<String>> keysThatMustDiffer(
+    private static Map<String, Set<Operand<RuleKey>>> keysThatMustDiffer(
             Map<String, List<EntryHeld.Requirement>> asked) {
-        Map<String, Set<String>> apart = new LinkedHashMap<>();
+        Map<String, Set<Operand<RuleKey>>> apart = new LinkedHashMap<>();
         for (List<EntryHeld.Requirement> inOneMap : asked.values()) {
             for (EntryHeld.Requirement one : inOneMap) {
                 for (EntryHeld.Requirement other : inOneMap) {
+                    // Only a key that is a place of the record is chosen, and so only it is kept
+                    // apart; a key a rule writes is the value it is.
                     if (one.valueIn() != null && other.valueIn() != null
+                            && one.key().place().isPresent()
                             && EntryHeld.leaveNoNumberInCommon(one.valueIn(), other.valueIn())) {
-                        apart.computeIfAbsent(one.key().steps().getFirst(),
-                                _ -> new LinkedHashSet<>()).add(other.key().steps().getFirst());
+                        apart.computeIfAbsent(one.key().place().get().steps().getFirst(),
+                                _ -> new LinkedHashSet<>()).add(other.key());
                     }
                 }
             }
@@ -2493,7 +2503,8 @@ public final class Partitions {
     private static boolean standsAsAKeyOf(String field,
                                           Map<String, List<EntryHeld.Requirement>> asked) {
         return asked.values().stream().flatMap(List::stream)
-                .anyMatch(each -> each.key().steps().equals(List.of(field)));
+                .anyMatch(each -> each.key().place()
+                        .filter(at -> at.steps().equals(List.of(field))).isPresent());
     }
 
     /**
@@ -2517,20 +2528,28 @@ public final class Partitions {
         if (!(view.shape() instanceof Shape.Mapping map)) {
             return Proposals.NONE;
         }
-        List<Witnesses.Filed> entries = new ArrayList<>();
-        Map<RuleKey, ValueAsked> ranges = EntryHeld.valuesAsked(asked);
+        // Each demand on a key, the key as it came to be: the one chosen for the place it names, or
+        // the value written, written as the map's keys are. What a key is is that value, and not
+        // how a rule named it, so the demands are put together by it and not by the naming.
+        List<ContainerContents.KeyAsked> keys = new ArrayList<>();
         for (EntryHeld.Requirement each : asked) {
-            FixtureTemplate key = chosen.get(each.key().steps().getFirst());
-            // A number the value's type admits and can be written as: a value written under a name
-            // is a value of the type only if its rules let it be.
-            ValueAsked range = ranges.get(each.key());
-            FixtureTemplate value = range == null ? null : valueFiledAs(map.value(), range, reading);
-            if (key == null || (range != null && value == null)) {
+            FixtureTemplate key = switch (each.key()) {
+                case Operand.At<RuleKey>(RuleKey at) -> chosen.get(at.steps().getFirst());
+                case Operand.Written<RuleKey>(Value written) ->
+                        Witnesses.writtenAs(written, map.key(), reading);
+            };
+            if (key == null) {
                 return Proposals.NONE;
             }
-            entries.add(new Witnesses.Filed(key, value));
+            keys.add(new ContainerContents.KeyAsked(key, Optional.ofNullable(each.valueIn())));
         }
-        Proposals made = Witnesses.holdingEntries(map, entries,
+        // The one place the entries asked of a map are made one entry for each key, which is how
+        // a map is composed under a plan as well.
+        EntriesAsked entries = EntriesAsked.of(map, null, null, keys, List.of(), reading);
+        if (entries == null) {
+            return Proposals.NONE;
+        }
+        Proposals made = Witnesses.holdingEntries(map, entries.others(),
                 heldRange(type, reading, limits.held()), reading);
         List<FixtureTemplate> worn = new ArrayList<>();
         for (FixtureTemplate each : made.values()) {

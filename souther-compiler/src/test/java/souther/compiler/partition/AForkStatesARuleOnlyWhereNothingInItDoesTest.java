@@ -158,7 +158,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
 
                 behavior pick : (xs: List<Bag>) -> Low | High
                 let pick (xs) =
-                    if List.any(p -> if List.contains(0, p.tags) then true else false, xs)
+                    if List.any(p -> if List.contains(List.length(p.tags), p.tags) then true else false, xs)
                         then High else Low"""));
     }
 
@@ -201,8 +201,8 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
 
                 behavior pick : (xs: List<Bag>, ys: List<Int>) -> Low | High
                 let pick (xs, ys) =
-                    if List.any(p -> if List.contains(0, p.tags) then true else false, xs)
-                            && List.contains(0, ys)
+                    if List.any(p -> if List.contains(List.length(p.tags), p.tags) then true else false, xs)
+                            && List.contains(List.length(ys), ys)
                         then High else Low"""));
     }
 
@@ -222,7 +222,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
 
                 behavior pick : (xs: List<Row>) -> Low | High
                 let pick (xs) =
-                    if List.any(p -> p.age > 18 && List.contains(0, p.tags), xs)
+                    if List.any(p -> p.age > 18 && List.contains(List.length(p.tags), p.tags), xs)
                         then High else Low"""));
     }
 
@@ -243,8 +243,8 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
                 behavior pick : (xs: List<Row>) -> Low | High
                 let pick (xs) =
                     if List.any(
-                            p -> (if List.contains(0, p.tags) then true else false)
-                                    && List.contains(0, p.other),
+                            p -> (if List.contains(List.length(p.tags), p.tags) then true else false)
+                                    && List.contains(List.length(p.other), p.other),
                             xs)
                         then High else Low"""));
     }
@@ -284,7 +284,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
     void aForkOnWhatAnOperationAnswersIsTheForksOwn() {
         assertEquals(new Owned(0, 1), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
-                let pick (xs) = if List.contains(0, xs) then High else Low"""));
+                let pick (xs) = if List.contains(List.length(xs), xs) then High else Low"""));
     }
 
     /**
@@ -300,7 +300,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
     void aForkOwningOnePartOfItsConditionStillStatesTheOtherOne() {
         assertEquals(new Owned(1, 1), read("""
                 behavior pick : (n: Int, xs: List<Int>) -> Low | High
-                let pick (n, xs) = if n > 0 && List.contains(0, xs) then High else Low"""));
+                let pick (n, xs) = if n > 0 && List.contains(List.length(xs), xs) then High else Low"""));
     }
 
     /**
@@ -309,7 +309,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      * <p>Cutting a condition stops at a name — following it there would make the parts depend on
      * how many names an author put between the fork and what it tests — and the owner holding the
      * part asks the reading what the name stands for. So this fork is answered about
-     * {@code List.contains(0, xs)} rather than about {@code ok}, and states a rule of its own for the
+     * {@code List.contains(List.length(xs), xs)} rather than about {@code ok}, and states a rule of its own for the
      * same reason the one above it does.
      */
     @Test
@@ -317,7 +317,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         assertEquals(new Owned(0, 1), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = {
-                    let ok = List.contains(0, xs)
+                    let ok = List.contains(List.length(xs), xs)
                     if ok then High else Low
                 }"""));
     }
@@ -377,9 +377,9 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      */
     @Test
     void anEmptinessCheckOverAFilterIsWhatItsClosureAnswers() {
-        String empty = "List.isEmpty(List.filter(ys -> List.contains(0, ys), xs))";
-        String size = "List.length(List.filter(ys -> List.contains(0, ys), xs)) == 0";
-        String some = "Bool.not(List.any(ys -> List.contains(0, ys), xs))";
+        String empty = "List.isEmpty(List.filter(ys -> List.contains(List.length(ys), ys), xs))";
+        String size = "List.length(List.filter(ys -> List.contains(List.length(ys), ys), xs)) == 0";
+        String some = "Bool.not(List.any(ys -> List.contains(List.length(ys), ys), xs))";
         assertEquals(everythingSaid(nested("xs", size)), everythingSaid(nested("xs", empty)));
         assertEquals(read(nested("xs", some)), read(nested("xs", empty)),
                 "what the fork owns is what the quantifier it denies owns");
@@ -411,7 +411,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      */
     @Test
     void aTruthNothingReadsInsideAClosureIsStillTheForks() {
-        assertEquals(List.of("xs[*]"), filedAt(nested("xs", "List.any(p -> List.contains(0, p), xs)")));
+        assertEquals(List.of("xs[*]"), filedAt(nested("xs", "List.any(p -> List.contains(List.length(p), p), xs)")));
     }
 
     /** {@code pick} forking on {@code condition}, over a list of lists named {@code name}. */
@@ -459,7 +459,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         assertEquals(new Owned(0, 0), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = {
-                    let unread = if List.contains(0, xs) then 1 else 2
+                    let unread = if List.contains(List.length(xs), xs) then 1 else 2
                     High
                 }"""));
     }
@@ -470,7 +470,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         Compilation compilation = Compilation.ofSource(PRELUDE + """
 
                 behavior pick : (xs: List<Int>) -> Low | High
-                let pick (xs) = if List.contains(0, xs) then High else Low
+                let pick (xs) = if List.contains(List.length(xs), xs) then High else Low
                 """, "Main");
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
