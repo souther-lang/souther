@@ -414,8 +414,9 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     /** A list the input holds is no list the body wrote out: its count is a number of its own,
      *  and the comparison is a line on that count less {@code k}, as it was. A row holds one
      *  element the statement holds of and one it fails of, so the count takes every value from
-     *  none and {@code k} is shown to be reached. The number the statement reads is filed beside
-     *  the count, which is at no place, and what is left unread is that number. */
+     *  none and {@code k} is shown to be reached. The number the statement reads is the
+     *  statement's own comparison's to divide, so the count is filed at {@code k} alone and leaves
+     *  nothing unread. */
     @Test
     void aCountOfAListTheInputHoldsIsALineOnTheCount() {
         Compilation compilation = Compilation.ofSource("""
@@ -433,12 +434,8 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("read as f/#xs [xs[*] > 0] - k: = 0"), report);
-        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
-        assertTrue(unread.stream()
-                .allMatch(line -> line.contains("not shown to reach every value here")), report);
-        assertEquals(Set.of("xs[*]"), unread.stream()
-                .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
-                .collect(Collectors.toSet()), report);
+        assertEquals(List.of(),
+                report.lines().filter(line -> line.contains("not read")).toList(), report);
     }
 
     /** What the way to the comparison leaves of {@code k} is read before the ways: where it is at

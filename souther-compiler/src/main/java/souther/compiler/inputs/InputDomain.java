@@ -768,6 +768,15 @@ public final class InputDomain {
         return isAList(path, source);
     }
 
+    /**
+     * Whether what stands at {@code path} holds each of its elements once and in no order: a set,
+     * under whatever names it wears. A map holds a key once, and is not asked this.
+     */
+    public boolean holdsEachElementOnce(TermPath path, RuleReadingSource source) {
+        return shapeAt(path, source) instanceof Shape.Sequence(Shape.Sequence.Kind kind, var _)
+                && kind == Shape.Sequence.Kind.SET;
+    }
+
     /** What one entry of the container at {@code path} holds: its element, and the key a map
      *  files it under. */
     public List<TermPath> entryOf(TermPath path, RuleReadingSource source) {

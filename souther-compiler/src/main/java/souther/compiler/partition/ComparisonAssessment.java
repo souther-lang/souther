@@ -2592,10 +2592,29 @@ sealed interface ComparisonAssessment {
                     runs.put(at, across.left().rowsStopped()));
         }
         return relatingAt(across.filedAt().stream()
-                .filter(place -> !divided.contains(place)).toList(), across.undivided(),
+                .filter(place -> !divided.contains(place)).toList(),
+                undividedAtTheirPositions(across.filedAt(), across.undivided()),
                 stopped, runs, across.left().mayStopBefore(),
                 noRowShownComputedAt(across.left().settled().entrySet()),
                 across.left().gettingThere());
+    }
+
+    /**
+     * {@code undivided}, and each of {@code filed} that is a number taken of a position some
+     * coordinate of it names as the position: a relation said to leave a position undivided says
+     * it of the numbers taken of that position as well, since it parts none of them.
+     */
+    private static Set<FilingCoordinate> undividedAtTheirPositions(
+            List<FilingCoordinate> filed, Set<FilingCoordinate> undivided) {
+        Set<TermPath> positions = new LinkedHashSet<>();
+        undivided.stream().filter(each -> each instanceof FilingCoordinate.AtPosition)
+                .forEach(each -> positions.add(each.path()));
+        if (positions.isEmpty()) {
+            return undivided;
+        }
+        Set<FilingCoordinate> out = new LinkedHashSet<>(undivided);
+        filed.stream().filter(each -> positions.contains(each.path())).forEach(out::add);
+        return out;
     }
 
     /** The same, of a relation to another value. */
@@ -2603,7 +2622,8 @@ sealed interface ComparisonAssessment {
                                          Set<FilingCoordinate> partneredKept) {
         Set<FilingCoordinate> divided = against.dividedBySettling(partneredKept);
         return relatingAt(against.filedAt().stream()
-                .filter(place -> !divided.contains(place)).toList(), against.undivided(),
+                .filter(place -> !divided.contains(place)).toList(),
+                undividedAtTheirPositions(against.filedAt(), against.undivided()),
                 against.stoppedAt(), against.rowsStopped(), against.mayStopBefore(),
                 against.noRowShownComputed(), against.gettingThere());
     }
