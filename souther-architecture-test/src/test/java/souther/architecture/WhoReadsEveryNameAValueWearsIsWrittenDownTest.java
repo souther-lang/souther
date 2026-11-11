@@ -202,9 +202,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer$Standing$WhereItIsWritten", "written",
                     "(Ljava/util/List;I)" + REALIZATION, THE_POSITION),
-            row(PARTITION + "ComparisonAssessment", "sideRuns",
-                    "(Lsouther/compiler/core/Core;L" + INPUTS + "InputReading;)" + BOUNDS,
-                    THE_POSITION),
             row(PARTITION + "ConstructionPlan", "applying",
                     "(L" + PARTITION + "ConstructionPlan$Settled;L" + INPUTS + "Refinement;" + INNERS
                             + SYMBOLS + KINDS + SUMS + ")L" + PARTITION

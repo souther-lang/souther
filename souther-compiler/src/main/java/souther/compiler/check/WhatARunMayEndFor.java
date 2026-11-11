@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.Set;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * What working a tree out may end a run without a value for, read in a tree where the library's
@@ -64,7 +64,7 @@ public final class WhatARunMayEndFor {
         Core node = Core.withoutStanding(e);
         if (node instanceof Core.IfConstructed attempt) {
             Endings[] out = {NONE};
-            forEachWorkedOut(attempt, part -> out[0] = out[0].and(of(part)));
+            forEachWorkedOut(attempt, (part, _) -> out[0] = out[0].and(of(part)));
             return out[0];
         }
         Endings[] out = {itself(node)};
@@ -77,18 +77,20 @@ public final class WhatARunMayEndFor {
     }
 
     /**
-     * What working out {@code attempt} is made of, each part handed to {@code visit}: what the
-     * construction it tests is built of, then its arms.
+     * What working out {@code attempt} is made of, each part handed to {@code visit} with the step
+     * into it ({@link ScopeStep}): what the construction it tests is built of, then its arms.
      *
      * <p>Not the construction itself. It takes the other arm where it is refused, and ends
      * nothing; what it is built of is worked out first all the same. The one place that is said,
      * for every reader that walks a tree for what working it out may end a run for.
      */
-    public static void forEachWorkedOut(Core.IfConstructed attempt, Consumer<Core> visit) {
-        Core.forEachChild(attempt.construct(), visit);
-        visit.accept(attempt.then());
+    public static void forEachWorkedOut(Core.IfConstructed attempt,
+                                        BiConsumer<Core, ScopeStep> visit) {
+        Core.forEachChild(attempt.construct(), part -> visit.accept(part, ScopeStep.SAME));
+        visit.accept(attempt.then(), new ScopeStep.Chosen(Choice.Decides.ofBuilt(attempt)));
         for (Core.ElseArm arm : attempt.els()) {
-            visit.accept(arm.body());
+            visit.accept(arm.body(),
+                    new ScopeStep.Chosen(Choice.Decides.ofDeparture(attempt, arm)));
         }
     }
 
