@@ -434,6 +434,29 @@ public record WholeNumberSet(List<Part> parts) {
         return null;
     }
 
+    /**
+     * Every member in order, or null where there are more than {@code limit} or no end to them.
+     *
+     * <p>Asked where a walk is to try each number of a set, which it can only where the set is
+     * finite and small enough to be paid for: no more than {@code limit + 1} members are looked
+     * for, so a set with no end costs the same as one just past the limit.
+     */
+    public List<BigInteger> membersUpTo(int limit) {
+        if (least() == null || greatest() == null) {
+            return null;
+        }
+        List<BigInteger> members = new ArrayList<>();
+        BigInteger next = leastAtOrAbove(least());
+        while (next != null) {
+            if (members.size() == limit) {
+                return null;
+            }
+            members.add(next);
+            next = leastAtOrAbove(next.add(BigInteger.ONE));
+        }
+        return members;
+    }
+
     private static BigInteger floorDivided(BigInteger number, BigInteger by) {
         BigInteger[] both = number.divideAndRemainder(by);
         return both[1].signum() != 0 && (both[1].signum() != by.signum())

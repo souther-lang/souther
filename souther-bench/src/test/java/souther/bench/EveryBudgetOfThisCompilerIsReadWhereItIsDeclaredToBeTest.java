@@ -202,6 +202,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the runs kept of what the elements can come to, or at the values"
                             + " an element is tried moved to, and puts that figure in the set it is"
                             + " handed"),
+            Map.entry("souther.compiler.partition.NumbersAskedFor#ofTheClass("
+                            + "Lsouther/compiler/partition/NumericSet$InTheNumbers;"
+                            + "Lsouther/compiler/check/Carrier;)"
+                            + "Lsouther/compiler/partition/NumbersAskedFor;",
+                    "names every member of a class of few enough numbers, and answers null"
+                            + " past the figure, which is a walk of some of something unsaid"
+                            + " and so no claim about the class"),
             Map.entry("souther.compiler.partition.TermRealizations#membersOfTheNumbers("
                             + "Lsouther/compiler/partition/NumericSet$InTheNumbers;"
                             + "Lsouther/compiler/check/Carrier;Lsouther/compiler/numeric/Place;"

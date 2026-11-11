@@ -3,9 +3,12 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -78,6 +81,26 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
      */
     public static NumbersAskedFor ofTheClass(NumericSet.OfRuns admitted, Carrier on) {
         return of(admitted.region(on));
+    }
+
+    /**
+     * The numbers a class of progressions is about, where it is few enough to name each of them:
+     * a walk that tries every one has walked the class, and one that builds at none has shown the
+     * rules leave it nothing. Null where it has no end or more members than are tried, and then
+     * a walk of some of them is a walk of some of something unsaid.
+     */
+    public static NumbersAskedFor ofTheClass(NumericSet.InTheNumbers admitted, Carrier on) {
+        List<BigInteger> members = admitted.numbers()
+                .membersUpTo(CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+        if (members == null) {
+            return null;
+        }
+        List<LevelInterval> points = new ArrayList<>();
+        for (BigInteger member : members) {
+            points.addAll(LevelRegion.point(new Level.OnACarrier(on,
+                    Count.of(new BigDecimal(member)))).parts());
+        }
+        return of(new LevelRegion(points));
     }
 
     /**

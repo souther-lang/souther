@@ -67,6 +67,32 @@ class ANumericSetOfProgressionsHoldsTheMembersAndNothingBetweenTest {
         assertFalse(fromZero.holds(Count.of(3), Carrier.WHOLE));
     }
 
+    private static NumericSet.InTheNumbers evensFromTo(long from, long to) {
+        return new NumericSet.InTheNumbers(evens().numbers().and(WholeNumberSet.ofRuns(
+                WholeNumberRuns.one(BigInteger.valueOf(from), BigInteger.valueOf(to)))));
+    }
+
+    /** A class of a few numbers is walked whole, since each of them is one the walk tries. */
+    @Test
+    void aClassOfFewEnoughNumbersIsWalkedWhole() {
+        AskedAt asked = AskedAt.theClass(evensFromTo(0, 6), Carrier.WHOLE);
+        assertTrue(asked.walkIsOfTheWholeQuestion());
+        assertEquals(java.util.List.of(BigInteger.ZERO, BigInteger.TWO, BigInteger.valueOf(4),
+                BigInteger.valueOf(6)), evensFromTo(0, 6).numbers().membersUpTo(8));
+    }
+
+    /** One with no end, or more numbers than are tried, is some of something unsaid. */
+    @Test
+    void aClassWithNoEndOrTooManyNumbersIsNotWalkedWhole() {
+        assertFalse(AskedAt.theClass(evens(), Carrier.WHOLE).walkIsOfTheWholeQuestion());
+        assertFalse(AskedAt.theClass(evensFromTo(0, 16), Carrier.WHOLE)
+                .walkIsOfTheWholeQuestion());
+        assertTrue(AskedAt.theClass(evensFromTo(0, 14), Carrier.WHOLE)
+                .walkIsOfTheWholeQuestion());
+        assertNull(evensFromTo(0, 16).numbers().membersUpTo(8));
+        assertNull(evens().numbers().membersUpTo(8));
+    }
+
     /**
      * What the runs of a set are, and where its membership turns, is asked of a set of runs and of
      * nothing else: progressions are no {@code OfRuns}, so a reader asking either of one does not

@@ -3125,6 +3125,21 @@ final class TermRealizations {
         BigInteger target = named instanceof Count count && count.exactly().isWhole()
                 && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
                 ? whole : BigInteger.ZERO;
+        // A set small enough to name each member is walked member by member, nearest where the
+        // number is usually near first: what none of them builds is a class the rules leave
+        // nothing, which a walk of some of them could not say.
+        List<BigInteger> every = members.numbers()
+                .membersUpTo(CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+        if (every != null) {
+            List<Place> all = new ArrayList<>();
+            every.stream().sorted(Comparator.comparing((BigInteger each) ->
+                            each.subtract(target).abs()).thenComparing(Comparator.reverseOrder()))
+                    .map(each -> (Place) Count.of(new BigDecimal(each)))
+                    .filter(at -> (declared == null || declared.admits(at))
+                            && carrier.admitted(admits, at))
+                    .forEach(all::add);
+            return new Tried(all, new Remainder.Exhausted());
+        }
         List<BigInteger> wanted = new ArrayList<>();
         wanted.add(target);
         if (members.numbers().least() != null) {
