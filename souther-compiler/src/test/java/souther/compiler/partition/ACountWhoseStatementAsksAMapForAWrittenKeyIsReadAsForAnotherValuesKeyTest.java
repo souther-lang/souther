@@ -60,6 +60,16 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
                     true),
             new Case("List.length(List.filter(l -> List.contains(true, l.flags), lines)) == k",
                     true),
+            // Several values written at one container: the elements holding all of them, some of
+            // them, and none are each a class of the container.
+            new Case("List.length(List.filter(l -> Map.containsKey(\"USD\", l.rates)"
+                    + " && Map.containsKey(\"EUR\", l.rates), lines)) == k", true),
+            new Case("List.length(List.filter(l -> Map.containsKey(\"USD\", l.rates)"
+                    + " && Bool.not(Map.containsKey(\"EUR\", l.rates)), lines)) == k", true),
+            new Case("List.length(List.filter(l -> List.contains(\"K\", l.tags)"
+                    + " && List.contains(\"L\", l.tags), lines)) == k", true),
+            new Case("List.length(List.filter(l -> Set.contains(7, l.nums)"
+                    + " || Set.contains(8, l.nums), lines)) == k", true),
             // A map that must not hold the key is the other class of the same place.
             new Case("List.length(List.filter(l -> Bool.not(Map.containsKey(\"USD\", l.rates)),"
                     + " lines)) == k", true),

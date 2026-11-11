@@ -20,6 +20,8 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -94,6 +96,65 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         ContentsAsked.Resolution resolution = asked.resolvedFor(head, handed);
         return assertInstanceOf(ContentsAsked.Resolution.Resolved.class, resolution,
                 () -> "what the container is handed is told: " + resolution).here();
+    }
+
+    /**
+     * A value written is the same for every element, but the container it is asked of is each
+     * element's own: asked of the first element's and not the second's, it is not asked of the plan
+     * as it stands, which writes the container alike in every element it builds.
+     */
+    @Test
+    void aWrittenValueAskedOfOneRunOfTheElementsIsNotAskedOfThePlan() {
+        TermPath lines = TermPath.of("lines");
+        TermPath rates = lines.element().then("rates");
+        Operand<TermPath> usd = new Operand.Written<>(Value.text("USD"));
+
+        ContentsAsked.Asked first = new ContentsAsked.Asked(rates, usd, true, true,
+                Optional.of(new ContentsAsked.Around(lines, false, 0, 1)));
+        ContentsAsked.Asked every = new ContentsAsked.Asked(rates, usd, true, true,
+                Optional.of(ContentsAsked.Around.over(lines, false)));
+
+        assertFalse(first.askedOfThePlan());
+        assertTrue(every.askedOfThePlan());
+    }
+
+    /**
+     * And a container beside the elements, asked of each of them, is asked only where there is an
+     * element: a row with none of them holds nothing the demand asks of it.
+     */
+    @Test
+    void aWrittenValueAskedOfAContainerBesideEveryElementIsAskedOnlyWhereThereAreElements() {
+        TermPath lines = TermPath.of("lines");
+        TermPath rates = TermPath.of("rates");
+        ContentsAsked.Asked asked = new ContentsAsked.Asked(rates,
+                new Operand.Written<>(Value.text("USD")), true, true,
+                Optional.of(ContentsAsked.Around.over(lines, false)));
+
+        assertFalse(asked.askedOfThePlan());
+    }
+
+    /**
+     * A key written, asked of a container beside the elements for each of them, is filed once,
+     * where the list was built with an element at all. A row with no element is asked nothing, as
+     * it is for a key read off each element.
+     */
+    @Test
+    void aWrittenKeyAskedOfEveryElementIsFiledOnceAndOnlyWhereThereAreElements() {
+        ContentsAsked asked = asked(new RowDemand.ForAll(KS, RowDemand.AnElementMeets.only(
+                List.of(new RowDemand.WithinIt(SHELF, true,
+                        new RowDemand.KeyedAs(new Operand.Written<>(Value.text("USD")))))),
+                HOLDING, Optional.empty()));
+
+        assertEquals(List.of("\"USD\""), keysEachFiledWriting(
+                resolved(asked, "shelf", ksBuiltAs("a", "b"))));
+        assertEquals(List.of(), keysEachFiledWriting(resolved(asked, "shelf", ksBuiltAs())));
+    }
+
+    private static List<String> keysEachFiledWriting(ContentsAsked.Here here) {
+        ContainerContents contents = here.contentsOf(SHELF, _ -> null, (value, asKey) ->
+                value instanceof Value.Text text ? FixtureTemplate.string(text.value()) : null);
+        assertNotNull(contents, "what is asked is written");
+        return contents.keysEachFiled().stream().map(each -> each.key().text()).toList();
     }
 
     private static List<String> keysEachFiled(ContentsAsked.Here here) {

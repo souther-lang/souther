@@ -456,9 +456,10 @@ public final class CountWitnesses {
 
     /**
      * The collections of {@code type} that tell apart what a statement names as their keys, where
-     * {@code ofTheKeys}, or as their elements: one holding none, and one holding each value named
-     * — a map filing it under a value its entries are written with — or none where {@code type}
-     * is not such a collection, or a value named is not written at the type the collection holds.
+     * {@code ofTheKeys}, or as their elements: one holding none of the values named, and one
+     * holding each way of some of them — a map filing each under a value its entries are written
+     * with — or none where {@code type} is not such a collection. A value named that is not
+     * written at the type the collection holds is left out.
      */
     private static List<FixtureTemplate> collectionsTold(Type type, boolean ofTheKeys,
                                                          List<Value> names,
@@ -481,18 +482,54 @@ public final class CountWitnesses {
         if (none == null || (ofTheKeys && filed.isEmpty())) {
             return List.of();
         }
-        List<FixtureTemplate> out = new ArrayList<>();
-        out.add(none);
+        // Each value named is a membership the collection has or has not, independent of the
+        // others: a statement over several holds of the collections that have some of them, and
+        // fails of those that have the rest.
+        List<FixtureTemplate> members = new ArrayList<>();
         for (Value each : names) {
             FixtureTemplate value = Witnesses.writtenAs(each, held, reading);
-            FixtureTemplate holding = value == null ? null : WornNames.collectionHolding(view,
-                    List.of(ofTheKeys ? FixtureTemplate.entry(value, filed.values().getFirst())
-                            : value), source);
+            if (value != null) {
+                members.add(ofTheKeys ? FixtureTemplate.entry(value, filed.values().getFirst())
+                        : value);
+            }
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (List<FixtureTemplate> some : subsetsBySize(members, MOST_VALUES + 1)) {
+            FixtureTemplate holding = WornNames.collectionHolding(view, some, source);
             if (holding != null && !out.contains(holding)) {
                 out.add(holding);
             }
         }
         return out;
+    }
+
+    /**
+     * The subsets of {@code members}, the empty one first and then those of one, two and so on,
+     * in the order the members stand — no more than {@code most} of them, so that a statement
+     * naming many values builds none past what the search tries. One past the figure is enough for
+     * the caller to say it was passed ({@link RowSearch#upTo}).
+     */
+    private static List<List<FixtureTemplate>> subsetsBySize(List<FixtureTemplate> members,
+                                                             int most) {
+        List<List<FixtureTemplate>> out = new ArrayList<>();
+        for (int size = 0; size <= members.size() && out.size() < most; size++) {
+            combinations(members, 0, size, new ArrayList<>(), out, most);
+        }
+        return out;
+    }
+
+    private static void combinations(List<FixtureTemplate> members, int from, int size,
+                                     List<FixtureTemplate> chosen,
+                                     List<List<FixtureTemplate>> into, int most) {
+        if (chosen.size() == size) {
+            into.add(List.copyOf(chosen));
+            return;
+        }
+        for (int at = from; at < members.size() && into.size() < most; at++) {
+            chosen.add(members.get(at));
+            combinations(members, at + 1, size, chosen, into, most);
+            chosen.removeLast();
+        }
     }
 
     /**

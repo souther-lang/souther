@@ -621,8 +621,7 @@ final class Clauses {
             if (at != null) {
                 return new Operand.At<>(keyOf(at));
             }
-            Value written = Value.folded(
-                    CoreConstantEval.against(symbols, Denotations.none()).eval(e).orElse(null));
+            Value written = WrittenMember.of(e, symbols);
             return written == null ? null : new Operand.Written<>(written);
         }
 

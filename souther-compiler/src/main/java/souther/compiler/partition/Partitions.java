@@ -40,6 +40,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
+import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.inputs.NumericTerm;
@@ -2478,10 +2479,14 @@ public final class Partitions {
         for (List<EntryHeld.Requirement> inOneMap : asked.values()) {
             for (EntryHeld.Requirement one : inOneMap) {
                 for (EntryHeld.Requirement other : inOneMap) {
+                    // Only keys that are places of the record are chosen, and so only they are kept
+                    // apart here; a key a rule writes is the value it is.
                     if (one.valueIn() != null && other.valueIn() != null
+                            && one.key().place().isPresent() && other.key().place().isPresent()
                             && EntryHeld.leaveNoNumberInCommon(one.valueIn(), other.valueIn())) {
-                        apart.computeIfAbsent(one.key().steps().getFirst(),
-                                _ -> new LinkedHashSet<>()).add(other.key().steps().getFirst());
+                        apart.computeIfAbsent(one.key().place().get().steps().getFirst(),
+                                _ -> new LinkedHashSet<>())
+                                .add(other.key().place().get().steps().getFirst());
                     }
                 }
             }
@@ -2493,7 +2498,8 @@ public final class Partitions {
     private static boolean standsAsAKeyOf(String field,
                                           Map<String, List<EntryHeld.Requirement>> asked) {
         return asked.values().stream().flatMap(List::stream)
-                .anyMatch(each -> each.key().steps().equals(List.of(field)));
+                .anyMatch(each -> each.key().place()
+                        .filter(at -> at.steps().equals(List.of(field))).isPresent());
     }
 
     /**
@@ -2518,9 +2524,15 @@ public final class Partitions {
             return Proposals.NONE;
         }
         List<Witnesses.Filed> entries = new ArrayList<>();
-        Map<RuleKey, ValueAsked> ranges = EntryHeld.valuesAsked(asked);
+        Map<Operand<RuleKey>, ValueAsked> ranges = EntryHeld.valuesAsked(asked);
         for (EntryHeld.Requirement each : asked) {
-            FixtureTemplate key = chosen.get(each.key().steps().getFirst());
+            // The key chosen for the place it is, or the value written written as the map's keys
+            // are.
+            FixtureTemplate key = switch (each.key()) {
+                case Operand.At<RuleKey>(RuleKey at) -> chosen.get(at.steps().getFirst());
+                case Operand.Written<RuleKey>(Value written) ->
+                        Witnesses.writtenAs(written, map.key(), reading);
+            };
             // A number the value's type admits and can be written as: a value written under a name
             // is a value of the type only if its rules let it be.
             ValueAsked range = ranges.get(each.key());

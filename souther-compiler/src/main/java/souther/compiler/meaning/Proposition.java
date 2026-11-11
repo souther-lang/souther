@@ -604,7 +604,7 @@ public sealed interface Proposition {
             }
             spelling = Spelling.of(one.spelled() + (holds ? " == " : " /= ") + switch (other) {
                 case Operand.At<DecisionSubject>(DecisionSubject subject) -> subject.spelled();
-                case Operand.Written<DecisionSubject>(Value value) -> value.spelled();
+                case Operand.Written<DecisionSubject>(Value value) -> value.identity();
             });
         }
 

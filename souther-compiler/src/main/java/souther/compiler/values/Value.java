@@ -91,6 +91,15 @@ public sealed interface Value {
     }
 
     /**
+     * What tells this value from every other where a spelling stands for it: the spelling, and for
+     * a case the declaration it is, since two modules may each declare a case of one name. For a
+     * reader that is shown a value use {@link #spelled}.
+     */
+    default String identity() {
+        return this instanceof Case(TypeSymbol data) ? data.toString() : spelled();
+    }
+
+    /**
      * What a compile-time fold of a written expression came to, as the value it denotes — or null
      * where it came to something no value here stands for: a case of an enumeration, a record, a
      * collection.
