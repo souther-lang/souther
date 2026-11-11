@@ -38,7 +38,16 @@ class TheValuesATermTakesOfARemainderLeaveOutWhatNoElementComesToTest {
         assertFalse(evens.takesOfTheRemainder(n(3)));
         assertEquals(n(2), evens.takenAtOrBelow(n(3)));
         assertEquals(n(4), evens.takenAtOrAbove(n(3)));
-        assertEquals(n(-4), evens.takenAtOrBelow(n(-3)));
+        // The run starts at nought: nothing below it is taken.
+        assertEquals(null, evens.takenAtOrBelow(n(-3)));
+        assertFalse(evens.takesOfTheRemainder(n(-4)));
+        // And a run with an end takes nothing past it.
+        WhatARelationLeavesUndivided.Term.Stepped upTo = new WhatARelationLeavesUndivided.Term
+                .Stepped(new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO),
+                        Endpoint.inclusive(Count.of(new BigDecimal(10)))),
+                new Congruences(BigInteger.ZERO, n(2)));
+        assertEquals(n(10), upTo.takenAtOrBelow(n(99)));
+        assertEquals(null, upTo.takenAtOrAbove(n(11)));
     }
 
     /** What a filter keeps from six on and leaves out otherwise totals nought or six and more. */

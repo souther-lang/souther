@@ -154,10 +154,19 @@ public final class WhatARelationLeavesUndivided {
                 this(run, remainder, null, null, false);
             }
 
-            /** Whether {@code value}, a whole number, is one the term takes of the remainder and
-             *  outside the stretch taken by none. */
+            /** Whether {@code value}, a whole number, is one the term takes: in the run, of the
+             *  remainder, and outside the stretch taken by none. */
             boolean takesOfTheRemainder(BigInteger value) {
-                return remainder.greatestAtOrBelow(value).equals(value) && !inTheGap(value);
+                return inTheRun(value) && remainder.greatestAtOrBelow(value).equals(value)
+                        && !inTheGap(value);
+            }
+
+            private boolean inTheRun(BigInteger value) {
+                BigInteger least = run.min() == null ? null : run.min().wholeAdmitted(true);
+                BigInteger greatest = run.max() == null ? null : run.max().wholeAdmitted(false);
+                return (run.min() == null || (least != null && value.compareTo(least) >= 0))
+                        && (run.max() == null
+                                || (greatest != null && value.compareTo(greatest) <= 0));
             }
 
             private boolean inTheGap(BigInteger value) {
@@ -165,23 +174,32 @@ public final class WhatARelationLeavesUndivided {
                         && value.compareTo(gapTo) <= 0;
             }
 
-            /** The greatest value taken at or below {@code value}, or null where the run has
+            /** The greatest value taken at or below {@code value}, or null where the term takes
              *  none there. */
             BigInteger takenAtOrBelow(BigInteger value) {
                 BigInteger at = remainder.greatestAtOrBelow(value);
                 if (inTheGap(at)) {
                     at = remainder.greatestAtOrBelow(gapFrom.subtract(BigInteger.ONE));
                 }
-                return at;
+                BigInteger greatest = run.max() == null ? null : run.max().wholeAdmitted(false);
+                if (greatest != null && at.compareTo(greatest) > 0) {
+                    return takenAtOrBelow(greatest);
+                }
+                return takesOfTheRemainder(at) ? at : null;
             }
 
-            /** The least value taken at or above {@code value}. */
+            /** The least value taken at or above {@code value}, or null where the term takes
+             *  none there. */
             BigInteger takenAtOrAbove(BigInteger value) {
                 BigInteger at = remainder.leastAtOrAbove(value);
                 if (inTheGap(at)) {
                     at = remainder.leastAtOrAbove(gapTo.add(BigInteger.ONE));
                 }
-                return at;
+                BigInteger least = run.min() == null ? null : run.min().wholeAdmitted(true);
+                if (least != null && at.compareTo(least) < 0) {
+                    return takenAtOrAbove(least);
+                }
+                return takesOfTheRemainder(at) ? at : null;
             }
         }
 
@@ -4610,8 +4628,13 @@ public final class WhatARelationLeavesUndivided {
             if (first == null || last == null) {
                 return null;
             }
-            lowest = ExactRatio.of(term.stepped().takenAtOrAbove(first));
-            highest = ExactRatio.of(term.stepped().takenAtOrBelow(last));
+            BigInteger taken = term.stepped().takenAtOrAbove(first);
+            BigInteger takenLast = term.stepped().takenAtOrBelow(last);
+            if (taken == null || takenLast == null) {
+                return null;
+            }
+            lowest = ExactRatio.of(taken);
+            highest = ExactRatio.of(takenLast);
         }
         at.add(lowest);
         at.add(highest);
@@ -4665,8 +4688,10 @@ public final class WhatARelationLeavesUndivided {
         }
         if (reaching.stepped() != null) {
             // The last value of the remainder on one side and the first on the other.
-            return List.of(ExactRatio.of(reaching.stepped().takenAtOrBelow(from)),
-                    ExactRatio.of(reaching.stepped().takenAtOrAbove(from.add(BigInteger.ONE))));
+            BigInteger below = reaching.stepped().takenAtOrBelow(from);
+            BigInteger above = reaching.stepped().takenAtOrAbove(from.add(BigInteger.ONE));
+            return below == null || above == null ? null
+                    : List.of(ExactRatio.of(below), ExactRatio.of(above));
         }
         return List.of(ExactRatio.of(from), ExactRatio.of(from.add(BigInteger.ONE)));
     }
