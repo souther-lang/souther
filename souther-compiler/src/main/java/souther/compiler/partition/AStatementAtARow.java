@@ -1144,6 +1144,39 @@ final class AStatementAtARow {
         return howManyMeetIn(container, Optional.empty(), row);
     }
 
+    /**
+     * What the statement says of one element of a container, and the key the element is filed
+     * under where the container is a map.
+     *
+     * @param answer what the statement says of the element
+     * @param key    the key, or null where the container is not a map or it could not be read
+     */
+    record OfAnElement(Answer answer, ObservedValue key) {}
+
+    /**
+     * What the statement says of each element of the container at {@code container}, one by one, in
+     * the order the row writes them — or null where the walk could not reach the container.
+     *
+     * <p>{@link #howManyMeetIn} counts them, and a count says nothing of which element met the
+     * statement: asked of a map filled to the fewest it is held with, it cannot tell the entry that
+     * is the question from the entries that were put beside it.
+     */
+    List<OfAnElement> eachIn(TermPath container, BorderQuantity.Observation row) {
+        if (!(elementsIn(row, container, Optional.empty())
+                instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+            return null;
+        }
+        List<OfAnElement> out = new ArrayList<>();
+        for (BorderQuantity.Observation element : reached.value()) {
+            // The one the element is read with chosen: a row holds as many keys as it wrote.
+            ObservedValue key = element.at(container.key())
+                    instanceof WalkResult.Reached<ObservationAtPoint>(
+                            ObservationAtPoint.Value(ObservedValue value)) ? value : null;
+            out.add(new OfAnElement(at(element), key));
+        }
+        return out;
+    }
+
     /** The same, of every element of the containers at {@code container} inside the elements of
      *  the container at {@code across}, put end to end, where it names one. */
     private HowManyAtARow howManyMeetIn(TermPath container, Optional<TermPath> across,

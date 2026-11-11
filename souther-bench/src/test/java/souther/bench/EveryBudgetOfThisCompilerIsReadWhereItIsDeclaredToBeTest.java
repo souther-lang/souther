@@ -960,6 +960,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the ways the places a statement reads can be at the values it"
                             + " names, made one at a time, and adds the figure to what the search"
                             + " came to"),
+            Map.entry("souther.compiler.partition.CountWitnesses#keysToFillWith("
+                            + "Lsouther/compiler/types/Type;ILsouther/compiler/check/"
+                            + "RuleReadingContext;Ljava/util/Set;)Ljava/util/List;",
+                    "stops at the keys a map is filled to the fewest it is held with under, and"
+                            + " adds the figure to what the search came to"),
             Map.entry("souther.compiler.partition.CountWitnesses#entriesTried("
                             + "Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/CountWitnesses$Container;"

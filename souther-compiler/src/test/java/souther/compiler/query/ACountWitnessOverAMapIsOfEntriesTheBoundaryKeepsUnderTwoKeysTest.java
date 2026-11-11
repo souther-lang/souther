@@ -37,6 +37,10 @@ class ACountWitnessOverAMapIsOfEntriesTheBoundaryKeepsUnderTwoKeysTest {
             let named (m, k) =
                 Map.size(Map.filterEntries((key, v) -> key == "%s", m)) == k
 
+            behavior target : (m: Exactly, target: String, k: Int) -> Bool
+            let target (m, target, k) =
+                Map.size(Map.filterEntries((key, v) -> key == target && v > 5, m.value)) == k
+
             behavior held : (m: Exactly, k: Int) -> Bool
             let held (m, k) = Map.size(Map.filterEntries((key, v) -> v > 5, m.value)) == k
             """.formatted(KEY);
@@ -87,6 +91,16 @@ class ACountWitnessOverAMapIsOfEntriesTheBoundaryKeepsUnderTwoKeysTest {
         CountWitnesses.Witness witness = witnessOf("named");
         holdsTwoEntriesUnderTwoKeys("named", witness);
         assertTrue(witness.one().text().startsWith("(\"" + KEY + "\""), witness.one().text());
+    }
+
+    /** The key the row holds beside the map is the key of the entry the statement holds of, in a
+     *  map that must hold two: the entry is told from the one beside it by the key. */
+    @Test
+    void aKeyTheRowHoldsBesideAMapHeldToTwoIsTheKeyOfTheEntryItHoldsOf() {
+        CountWitnesses.Witness witness = witnessOf("target");
+        holdsTwoEntriesUnderTwoKeys("target", witness);
+        assertTrue(witness.one().text().startsWith("(" + witness.inputs().get(1).text() + ","),
+                witness.one().text() + " is not under the target " + witness.inputs().get(1).text());
     }
 
     /** A map that must hold two is held to the two the witness names, under two keys. */
