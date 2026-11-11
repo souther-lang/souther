@@ -42,6 +42,17 @@ class ACountWitnessOverAWrittenValueMakesEveryNumberOfElementsTest {
             data Line = { rates: Map<String, Int>, tags: List<String>, nums: Set<Int>,
                           coded: Map<Code, Int> }
 
+            behavior viaMapSize : (lines: List<Line>, k: Int) -> Bool
+            let viaMapSize (lines, k) =
+                List.length(List.filter(l -> Map.size(l.rates) == 2
+                    && Map.containsKey("USD", l.rates), lines)) == k
+
+            behavior viaSetSize : (lines: List<Line>, k: Int) -> Bool
+            let viaSetSize (lines, k) =
+                List.length(List.filter(l -> Set.size(l.nums) == 3
+                    && Set.contains(0, l.nums) && Bool.not(Set.contains(1, l.nums)),
+                    lines)) == k
+
             behavior viaMap : (lines: List<Line>, k: Int) -> Bool
             let viaMap (lines, k) =
                 List.length(List.filter(l -> Map.containsKey("USD", l.rates), lines)) == k
@@ -71,7 +82,7 @@ class ACountWitnessOverAWrittenValueMakesEveryNumberOfElementsTest {
 
     /** The behaviors the model writes, each counted over its lines. */
     private static final List<String> BEHAVIORS = List.of("viaMap", "viaMapNot", "viaList",
-            "viaSet", "viaNewtype", "viaSizeAndMember");
+            "viaSet", "viaNewtype", "viaSizeAndMember", "viaMapSize", "viaSetSize");
 
     /** The counts the measure of the model asked a witness of, by behavior. */
     private static Map<String, List<Adequacy.WitnessOfACount>> askedOf(Compilation compilation) {

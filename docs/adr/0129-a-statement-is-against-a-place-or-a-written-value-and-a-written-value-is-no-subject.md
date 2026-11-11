@@ -63,7 +63,10 @@ the ones made however many values are named.
 What a statement names at a place is a value written there or how many the place holds, and the two
 are cases of one type and not one kind of number: a value is put at the place, and a number of
 elements is no value to put there. Where a statement names both of one collection, it is built
-holding the values and that many.
+holding the values chosen and that many, the others being values of the element type that differ
+from one another and from every value the statement names: a value it names and the choice leaves
+out is a value the collection does not hold, and a set or a map holds none twice. A collection
+beyond what a proposal may hold is not built, and the budget is said.
 
 ## Consequences
 

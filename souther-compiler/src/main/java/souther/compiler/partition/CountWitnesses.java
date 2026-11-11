@@ -23,6 +23,7 @@ import souther.compiler.values.Value;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -437,7 +438,7 @@ public final class CountWitnesses {
                         : collectionsTold(Witnesses.typeAt(element, fieldsToIt, reading),
                                 place.mapOfTheKeys() != null,
                                 named.getOrDefault(place, List.of()),
-                                named.getOrDefault(collection, List.of()), reading);
+                                named.getOrDefault(collection, List.of()), reading, stopped);
                 if (!collections.isEmpty()) {
                     List<FixtureTemplate> both =
                             new ArrayList<>(told.getOrDefault(fieldsToIt, List.of()));
@@ -496,11 +497,13 @@ public final class CountWitnesses {
      * <p>A statement may also say how many the collection holds ({@code sizes}, which
      * {@link ValuesAStatementNames.Named.Holding} names at the collection's own place), and the
      * one collection has to meet both: each way of holding some of the values is also made
-     * holding that many, the others being what the type builds for the rest.
+     * holding that many, the others being values of the type that differ from one another and
+     * from every value the statement names.
      */
     private static List<FixtureTemplate> collectionsTold(
             Type type, boolean ofTheKeys, List<ValuesAStatementNames.Named> names,
-            List<ValuesAStatementNames.Named> sizes, RuleReadingContext reading) {
+            List<ValuesAStatementNames.Named> sizes, RuleReadingContext reading,
+            Set<Figure> stopped) {
         if (type == null || names.isEmpty()) {
             return List.of();
         }
@@ -522,28 +525,31 @@ public final class CountWitnesses {
         // Each value named is a membership the collection has or has not, independent of the
         // others: a statement over several holds of the collections that have some of them, and
         // fails of those that have the rest.
-        List<FixtureTemplate> members = new ArrayList<>();
+        List<FixtureTemplate> named = new ArrayList<>();
         for (ValuesAStatementNames.Named each : names) {
             if (each instanceof ValuesAStatementNames.Named.AtValue(Value written)
                     && Witnesses.writtenAs(written, held, reading) instanceof FixtureTemplate value) {
-                members.add(ofTheKeys ? FixtureTemplate.entry(value, filed.values().getFirst())
-                        : value);
+                named.add(value);
             }
         }
+        Built built = new Built(view, held, named, ofTheKeys ? filed.values().getFirst() : null,
+                reading);
         List<FixtureTemplate> out = new ArrayList<>();
-        for (List<FixtureTemplate> some : subsetsFromTheEnds(members, MOST_VALUES + 1)) {
-            FixtureTemplate holding = WornNames.collectionHolding(view, some, source);
-            if (holding != null && !out.contains(holding)) {
-                out.add(holding);
+        for (List<FixtureTemplate> some : subsetsFromTheEnds(named, MOST_VALUES + 1)) {
+            if (Witnesses.pastTheElements(some.size()) != null) {
+                stopped.add(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.figure());
+                continue;
             }
+            List<FixtureTemplate> ways = new ArrayList<>();
+            ways.add(built.holding(some));
             for (ValuesAStatementNames.Named each : sizes) {
-                if (out.size() > MOST_VALUES) {
-                    break;
+                if (each instanceof ValuesAStatementNames.Named.Holding(BigInteger many)) {
+                    ways.add(built.holding(some, many, stopped));
                 }
-                FixtureTemplate sized = each instanceof ValuesAStatementNames.Named.Holding(
-                        BigInteger many) ? holdingAlso(view, some, many, reading) : null;
-                if (sized != null && !out.contains(sized)) {
-                    out.add(sized);
+            }
+            for (FixtureTemplate way : ways) {
+                if (way != null && !out.contains(way) && out.size() <= MOST_VALUES) {
+                    out.add(way);
                 }
             }
         }
@@ -551,23 +557,55 @@ public final class CountWitnesses {
     }
 
     /**
-     * A collection of {@code view} holding {@code members} and {@code many} in all, the ones
-     * beyond {@code members} being what the type builds for that many less — or null where the
-     * type builds none of that many, or where {@code many} is no more than {@code members}.
+     * The collections of one type that hold the values a statement names, each of them or some.
+     *
+     * @param held  the type of what the collection holds: its elements, or its keys
+     * @param named the values the statement names there, written at {@code held}
+     * @param filed what each entry of a map is filed under its key, null for a list or a set
      */
-    private static FixtureTemplate holdingAlso(TypeView view, List<FixtureTemplate> members,
-                                               BigInteger many, RuleReadingContext reading) {
-        if (many.bitLength() > Integer.SIZE - 2 || many.intValue() <= members.size()) {
-            return null;
+    private record Built(TypeView view, Type held, List<FixtureTemplate> named,
+                         FixtureTemplate filed, RuleReadingContext reading) {
+
+        /** A collection holding {@code chosen} and nothing else — or null where a name the
+         *  collection wears cannot be written. */
+        FixtureTemplate holding(List<FixtureTemplate> chosen) {
+            return WornNames.collectionHolding(view,
+                    chosen.stream().map(each -> filed == null ? each
+                            : FixtureTemplate.entry(each, filed)).toList(), reading.source());
         }
-        for (FixtureTemplate rest : Witnesses.ofSize(view, many.intValue() - members.size(),
-                List.of(), reading, Set.of()).values()) {
-            FixtureTemplate joined = FixtureTemplate.concatenated(
-                    List.of(FixtureTemplate.collection(members), rest));
-            return joined == null ? null
-                    : WornNames.under(view.wrappers(), joined, reading.source());
+
+        /**
+         * A collection holding {@code chosen} and {@code many} in all, the others being values of
+         * the type that differ from one another and from every value the statement names: a
+         * value it names and {@code chosen} leaves out is a value the collection does not hold,
+         * and a set or a map holds none twice. Which values the type has that differ is the
+         * type's to say ({@link Witnesses#distinctValuesOf}). Null where the type has not so many,
+         * and the figure said where that many is more than a proposal holds.
+         */
+        FixtureTemplate holding(List<FixtureTemplate> chosen, BigInteger many,
+                                Set<Figure> stopped) {
+            if (many.bitLength() > Integer.SIZE - 2
+                    || Witnesses.pastTheElements(many.intValue()) != null) {
+                stopped.add(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.figure());
+                return null;
+            }
+            if (many.intValue() <= chosen.size()) {
+                return null;
+            }
+            Set<String> taken = new HashSet<>();
+            named.forEach(each -> taken.add(each.text()));
+            List<FixtureTemplate> all = new ArrayList<>(chosen);
+            for (FixtureTemplate each : Witnesses.distinctValuesOf(held,
+                    many.intValue() + named.size(), reading, Set.of()).values()) {
+                if (all.size() == many.intValue()) {
+                    break;
+                }
+                if (!taken.contains(each.text())) {
+                    all.add(each);
+                }
+            }
+            return all.size() == many.intValue() ? holding(all) : null;
         }
-        return null;
     }
 
     /**
@@ -583,33 +621,49 @@ public final class CountWitnesses {
      * naming more values than the search tries subsets of would meet the figure before the one it
      * needs.
      */
-    private static List<List<FixtureTemplate>> subsetsFromTheEnds(List<FixtureTemplate> members,
-                                                                  int most) {
+    static List<List<FixtureTemplate>> subsetsFromTheEnds(List<FixtureTemplate> members,
+                                                          int most) {
         List<List<FixtureTemplate>> out = new ArrayList<>();
         for (int low = 0, high = members.size(); low <= high && out.size() < most;
                 low++, high--) {
-            combinations(members, 0, low, new ArrayList<>(), out, most);
-            if (high != low && out.size() < most) {
-                combinations(members, 0, high, new ArrayList<>(), out, most);
+            choosing(members, low, most, out);
+            if (high != low) {
+                choosing(members, high, most, out);
             }
         }
         return out;
     }
 
-    private static void combinations(List<FixtureTemplate> members, int from, int size,
-                                     List<FixtureTemplate> chosen,
-                                     List<List<FixtureTemplate>> into, int most) {
-        if (chosen.size() == size) {
-            into.add(List.copyOf(chosen));
-            return;
+    /**
+     * Each way of choosing {@code size} of {@code members}, in the order the members stand, added
+     * to {@code into} until it holds {@code most}.
+     *
+     * <p>Made one after the next from the positions chosen and not by recursion, so that the stack
+     * does not grow with how many are chosen and the work is that of the subsets made.
+     */
+    private static void choosing(List<FixtureTemplate> members, int size, int most,
+                                 List<List<FixtureTemplate>> into) {
+        int[] at = new int[size];
+        for (int each = 0; each < size; each++) {
+            at[each] = each;
         }
-        // Only as far as the members left can still make {@code size}, so that no branch is
-        // walked that comes to none: the work is that of the subsets made.
-        int last = members.size() - (size - chosen.size());
-        for (int at = from; at <= last && into.size() < most; at++) {
-            chosen.add(members.get(at));
-            combinations(members, at + 1, size, chosen, into, most);
-            chosen.removeLast();
+        while (into.size() < most) {
+            List<FixtureTemplate> chosen = new ArrayList<>(size);
+            for (int each : at) {
+                chosen.add(members.get(each));
+            }
+            into.add(chosen);
+            int moving = size - 1;
+            while (moving >= 0 && at[moving] == members.size() - size + moving) {
+                moving--;
+            }
+            if (moving < 0) {
+                return;
+            }
+            at[moving]++;
+            for (int after = moving + 1; after < size; after++) {
+                at[after] = at[after - 1] + 1;
+            }
         }
     }
 
