@@ -554,17 +554,22 @@ public final class Runner {
      * decodes on the first attempt and never reaches it. Being an array is not the mistake; failing as
      * the value while succeeding as the array's sole element is. When the element fails too, the input
      * is wrong for some other reason and the decoder's own report is what says so.
+     *
+     * <p>Only a refusal asks for the second reading. A run with no room for what decoding computed
+     * is not a refusal of the value, so it ends the read where it happened and nothing is decoded
+     * again after it.
      */
     private static Object decodeSoleInput(ClassLoader loader, BoundaryInput shape,
                                           JsonNode tree) {
-        try {
-            return decode(loader, shape, tree, 0);
-        } catch (RunException asWritten) {
-            if (tree.isArray() && tree.size() == 1 && decodes(loader, shape, tree.get(0))) {
-                throw fail("run.input.wrapped");
+        return switch (read(loader, shape, tree, 0)) {
+            case JsonBoundary.Read.Value v -> v.value();
+            case JsonBoundary.Read.Refused r -> {
+                if (tree.isArray() && tree.size() == 1 && decodes(loader, shape, tree.get(0))) {
+                    throw fail("run.input.wrapped");
+                }
+                throw refusal(r, 0);
             }
-            throw asWritten;
-        }
+        };
     }
 
     /** Whether {@code raw} decodes as {@code type}, asked without reporting anything. */
@@ -585,9 +590,14 @@ public final class Runner {
                                  int index) {
         return switch (read(loader, shape, raw, index)) {
             case JsonBoundary.Read.Value v -> v.value();
-            case JsonBoundary.Read.Refused r -> throw new RunException("run.decode.failed", 1,
-                    r.issues(), index + 1, detail(r.issues()));
+            case JsonBoundary.Read.Refused r -> throw refusal(r, index);
         };
+    }
+
+    /** A decoder's refusal of the input at {@code index}, as the message a reader gets. */
+    private static RunException refusal(JsonBoundary.Read.Refused refused, int index) {
+        return new RunException("run.decode.failed", 1, refused.issues(), index + 1,
+                detail(refused.issues()));
     }
 
     /**
@@ -698,10 +708,15 @@ public final class Runner {
      * <p>An object that names a member twice is refused rather than read as the last of them: the
      * tree would keep one value and drop the other before any decoder saw either, and what a program
      * is run on would not be what was written.
+     *
+     * <p>What follows the first value is asked of the parser in {@link #parseJson}, not left to the
+     * mapper. The mapper reports it as the same exception type it reports a repeated member with, and
+     * a type that stands for two reasons cannot say which one happened.
      */
     private static final JsonMapper JSON = JsonMapper.builder()
             .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
-            .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY).build();
+            .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+            .disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
 
     /** How deep the mapper reads and writes before it refuses, counted in levels of JSON. */
     private static final int READ_DEPTH_LIMIT =
@@ -733,8 +748,10 @@ public final class Runner {
      * valid JSON and a {@code Decimal}, and is the run having no room to write it (spec §jvm-abort).
      * The reader's own limits — a number, a name or a document too long — refuse text that is as much
      * JSON. A member named twice is valid JSON that the tree would read as the last of them, so it is
-     * refused. Only a {@code StreamReadException} that is none of these is a syntax error. Which type
-     * the mapper uses for each is what was measured against the version this module builds with, and
+     * refused. A second value after the first is not JSON as a document, which is asked of the parser
+     * directly so that the mapper's one exception type for a repeated member stands for that alone.
+     * Only a {@code StreamReadException} that is none of these is a syntax error. Which type the
+     * mapper uses for each is what was measured against the version this module builds with, and
      * {@code RunnerTest} pins it: an upgrade that wraps one of them fails there and not in a
      * diagnostic. A failure of any other type is not attributed to the input; it reaches the caller
      * as thrown.
@@ -743,6 +760,9 @@ public final class Runner {
         JsonParser parser = JSON.createParser(input);
         try {
             JsonNode tree = JSON.readTree(parser);
+            if (tree != null && parser.nextToken() != null) {
+                throw fail("run.input.trailing");
+            }
             return tree == null ? JSON.missingNode() : tree;
         } catch (RuntimeException e) {
             TokenStreamContext where = parser.streamReadContext();

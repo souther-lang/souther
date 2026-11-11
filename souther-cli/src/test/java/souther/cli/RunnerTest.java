@@ -658,7 +658,7 @@ class RunnerTest {
         Runner.Program program = Runner.compile(file);
         Runner.RunException tooLongANumber = assertThrows(Runner.RunException.class,
                 () -> program.run("top", longNumber));
-        assertTrue(tooLongANumber.getMessage().contains("past a limit of the reader"),
+        assertTrue(tooLongANumber.getMessage().contains("limit of the JSON reader"),
                 tooLongANumber.getMessage());
         assertFalse(tooLongANumber.getMessage().contains("not valid JSON"),
                 tooLongANumber.getMessage());
@@ -669,7 +669,7 @@ class RunnerTest {
         String longName = "{\"" + "n".repeat(50001) + "\":1}";
         Runner.RunException tooLongAName = assertThrows(Runner.RunException.class,
                 () -> program.run("top", longName));
-        assertTrue(tooLongAName.getMessage().contains("past a limit of the reader"),
+        assertTrue(tooLongAName.getMessage().contains("limit of the JSON reader"),
                 tooLongAName.getMessage());
         assertFalse(tooLongAName.getMessage().contains("not valid JSON"),
                 tooLongAName.getMessage());
@@ -881,6 +881,26 @@ class RunnerTest {
         Runner.RunException nested = assertThrows(Runner.RunException.class,
                 () -> program.run("same", "{\"a\":1,\"b\":[{\"a\":2,\"b\":[],\"b\":[]}]}"));
         assertTrue(nested.getMessage().contains("/b/0/b"), nested.getMessage());
+
+        // Text that is not JSON is bad JSON whatever the mapper calls it, and none of it is a repeat.
+        for (String input : new String[] {"}", "{", "{\"a\"}", "[1,]", "{\"a\":1,}", "'x'", "nul", "",
+                "{,}", "{\"a\":1 \"b\":2}"}) {
+            Runner.RunException syntax = assertThrows(Runner.RunException.class,
+                    () -> program.run("same", input), input);
+            assertFalse(syntax.getMessage().contains("twice"), input + ": " + syntax.getMessage());
+        }
+
+        // A second value after the first is a document that is not JSON, and no member is repeated
+        // in any of them: it must not be said as a repeat.
+        for (String input : new String[] {"{\"a\":1,\"b\":[]} true", "1 2",
+                "{\"a\":1,\"b\":[]}{\"a\":2,\"b\":[]}"}) {
+            Runner.RunException trailing = assertThrows(Runner.RunException.class,
+                    () -> program.run("same", input), input);
+            assertTrue(trailing.getMessage().contains("not valid JSON"), trailing.getMessage());
+            assertFalse(trailing.getMessage().contains("twice"), trailing.getMessage());
+            assertTrue(trailing.localized(java.util.Locale.JAPANESE).contains("正しい JSON ではありません"),
+                    trailing.localized(java.util.Locale.JAPANESE));
+        }
     }
 
     /**
@@ -951,12 +971,21 @@ class RunnerTest {
         // a Decimal of more digits than the reader takes is a Decimal all the same
         Runner.RunException tooManyDigits = assertThrows(Runner.RunException.class,
                 () -> program.run("bare", "1".repeat(1001)));
-        assertTrue(tooManyDigits.getMessage().contains("past a limit of the reader"),
+        assertTrue(tooManyDigits.getMessage().contains("limit of the JSON reader"),
                 tooManyDigits.getMessage());
         assertFalse(tooManyDigits.getMessage().contains("not valid JSON"),
                 tooManyDigits.getMessage());
         assertTrue(tooManyDigits.localized(java.util.Locale.JAPANESE).contains("上限"),
                 tooManyDigits.localized(java.util.Locale.JAPANESE));
+
+        // The reader stops at the first number it cannot hold, so what follows it is not read and
+        // the diagnostic does not say the whole input is JSON.
+        Runner.RunException followed = assertThrows(Runner.RunException.class,
+                () -> program.run("bare", "1E-2147483648 0"));
+        assertTrue(followed.getMessage().contains("no room"), followed.getMessage());
+        assertTrue(followed.getMessage().contains("was not read"), followed.getMessage());
+        assertFalse(followed.getMessage().contains("not valid JSON"), followed.getMessage());
+        assertFalse(followed.getMessage().contains("input is valid JSON"), followed.getMessage());
 
         Runner.RunException truncated = assertThrows(Runner.RunException.class,
                 () -> program.run("bare", "1E-"));
