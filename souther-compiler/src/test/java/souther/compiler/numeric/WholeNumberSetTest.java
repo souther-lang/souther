@@ -73,6 +73,55 @@ class WholeNumberSetTest {
         assertNull(kept.greatest());
     }
 
+    /** {@code 2·x - c = 0} for any {@code x}: {@code c} is even. */
+    @Test
+    void whatTwiceANumberLeavesOfTheOneBesideItIsTheEvens() {
+        WholeNumberSet cs = WholeNumberSet.EVERY.valuesBeside(n(2), n(-1), n(0));
+        assertTrue(cs.holds(n(4)));
+        assertTrue(cs.holds(n(-6)));
+        assertFalse(cs.holds(n(3)));
+        // With weight one, c = x: every number.
+        assertTrue(WholeNumberSet.EVERY.valuesBeside(n(1), n(-1), n(0)).holds(n(3)));
+    }
+
+    /** {@code x ≥ 6}, twice: {@code c = 2·x} is the even numbers from twelve. */
+    @Test
+    void theEndsOfTheRunAreCarriedToTheOtherNumber() {
+        WholeNumberSet x = WholeNumberSet.ofRuns(WholeNumberRuns.one(n(6), null));
+        WholeNumberSet cs = x.valuesBeside(n(2), n(-1), n(0));
+        assertEquals(n(12), cs.least());
+        assertNull(cs.greatest());
+        assertTrue(cs.holds(n(12)));
+        assertFalse(cs.holds(n(10)));
+        assertFalse(cs.holds(n(13)));
+    }
+
+    /** {@code 3·x + 2·c = 7} has solutions {@code x = 1, c = 2} and nothing for even {@code x}. */
+    @Test
+    void aWeightedEquationLeavesTheClassItsSolutionsAreIn() {
+        WholeNumberSet cs = WholeNumberSet.EVERY.valuesBeside(n(3), n(2), n(-7));
+        // 2c = 7 - 3x: c is whole where x is odd, and then c runs over every number.
+        assertTrue(cs.holds(n(2)));
+        assertTrue(cs.holds(n(-1)));
+        // A negative weight and a shifted constant: c = 5 - x for x in 0..3.
+        WholeNumberSet x = WholeNumberSet.ofRuns(WholeNumberRuns.one(n(0), n(3)));
+        WholeNumberSet shifted = x.valuesBeside(n(1), n(1), n(-5));
+        assertEquals(n(2), shifted.least());
+        assertEquals(n(5), shifted.greatest());
+        assertTrue(shifted.holds(n(3)));
+        assertFalse(shifted.holds(n(6)));
+        // s - c + 5 = 0 for s in 0..3: c = s + 5, from five to eight.
+        WholeNumberSet turned = x.valuesBeside(n(1), n(-1), n(5));
+        assertEquals(n(5), turned.least());
+        assertEquals(n(8), turned.greatest());
+    }
+
+    @Test
+    void aWeightOfNoughtLeavesNothingToSolve() {
+        assertNull(WholeNumberSet.EVERY.valuesBeside(n(0), n(1), n(0)));
+        assertNull(WholeNumberSet.EVERY.valuesBeside(n(1), n(0), n(0)));
+    }
+
     @Test
     void aRunWithNoMemberOfTheRemainderHoldsNothing() {
         WholeNumberSet oneToOne = WholeNumberSet.ofRuns(WholeNumberRuns.one(n(1), n(1)))

@@ -188,6 +188,67 @@ public record WholeNumberSet(List<Part> parts) {
         return best;
     }
 
+    /**
+     * The values {@code c} of another number for which a number {@code s} of this exists with
+     * {@code weightHere·s + weightThere·c + constant = 0} — or null where a weight is nought.
+     *
+     * <p>What one number leaves of another beside it in an equation: {@code 2·x = c} leaves the
+     * even numbers of {@code c} where {@code x} may be any, and {@code x = c} leaves those of
+     * {@code x}. Worked out for each progression as a remainder of {@code c}, and the ends of the
+     * run it is of carried over, so no number of the sets is listed.
+     */
+    public WholeNumberSet valuesBeside(BigInteger weightHere, BigInteger weightThere,
+                                       BigInteger constant) {
+        if (weightHere.signum() == 0 || weightThere.signum() == 0) {
+            return null;
+        }
+        List<Part> out = new ArrayList<>();
+        for (Part part : parts) {
+            Congruences leaves = Congruences.solving(weightThere,
+                    constant.add(weightHere.multiply(part.within().residue())),
+                    weightHere.abs().multiply(part.within().modulus()));
+            if (leaves == null) {
+                continue;
+            }
+            // weightThere·c = -weightHere·s - constant, for s from the run's least to greatest.
+            BigInteger atLeast = part.run().from() == null ? null
+                    : weightHere.negate().multiply(part.run().from()).subtract(constant);
+            BigInteger atGreatest = part.run().to() == null ? null
+                    : weightHere.negate().multiply(part.run().to()).subtract(constant);
+            BigInteger smallest = weightHere.signum() > 0 ? atGreatest : atLeast;
+            BigInteger largest = weightHere.signum() > 0 ? atLeast : atGreatest;
+            BigInteger from;
+            BigInteger to;
+            if (weightThere.signum() > 0) {
+                from = smallest == null ? null : ceilDivided(smallest, weightThere);
+                to = largest == null ? null : floorDivided(largest, weightThere);
+            } else {
+                from = largest == null ? null : ceilDivided(largest, weightThere);
+                to = smallest == null ? null : floorDivided(smallest, weightThere);
+            }
+            if (from != null && to != null && from.compareTo(to) > 0) {
+                continue;
+            }
+            Part found = Part.orNone(new WholeNumberRuns.Run(from, to), leaves);
+            if (found != null) {
+                out.add(found);
+            }
+        }
+        return new WholeNumberSet(out);
+    }
+
+    private static BigInteger floorDivided(BigInteger number, BigInteger by) {
+        BigInteger[] both = number.divideAndRemainder(by);
+        return both[1].signum() != 0 && (both[1].signum() != by.signum())
+                ? both[0].subtract(BigInteger.ONE) : both[0];
+    }
+
+    private static BigInteger ceilDivided(BigInteger number, BigInteger by) {
+        BigInteger[] both = number.divideAndRemainder(by);
+        return both[1].signum() != 0 && (both[1].signum() == by.signum())
+                ? both[0].add(BigInteger.ONE) : both[0];
+    }
+
     private static BigInteger later(BigInteger one, BigInteger other) {
         return one == null ? other : other == null ? one : one.max(other);
     }
