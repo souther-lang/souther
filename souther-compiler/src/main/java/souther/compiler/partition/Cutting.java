@@ -2366,7 +2366,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (stated instanceof Proposition.Any any && !any.parts().isEmpty()
                 && any.parts().stream().allMatch(each -> each instanceof Proposition.All all
                         && besideItsChosenCases(all).size() == 1
-                        && all.parts().size() == 2)) {
+                        && all.parts().size() > 1)) {
             return any.parts().stream()
                     .map(each -> oneValue(besideItsChosenCases((Proposition.All) each).getFirst()))
                     .toList();
@@ -2422,7 +2422,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // beside a relation they choose, since a statement of the cases alone divides.
             case Proposition.All all -> {
                 List<Proposition> relating = besideItsChosenCases(all);
-                yield (relating.size() == all.parts().size() || !relating.isEmpty())
+                // Cases that choose an arm say nothing beside what they choose, which the relation
+                // beside them is.
+                yield (!relating.isEmpty() || all.parts().isEmpty())
                         && relating.stream().allMatch(each -> relates(each, out));
             }
             case Proposition.Any any -> any.parts().stream().allMatch(each -> relates(each, out));
