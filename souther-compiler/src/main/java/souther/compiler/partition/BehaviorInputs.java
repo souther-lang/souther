@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.TypeViews;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
@@ -15,7 +16,6 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -125,17 +125,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * something an observation did, and no observation says why because nothing went wrong with one.
      */
     WalkResult<List<ObservedValue>> valuesAt(List<ObservedValue> inputs, TermPath path) {
-        return valuesAt(inputs, path, new HashMap<>());
-    }
-
-    /**
-     * The same, reading what each type is out of {@code views} and adding to it, for a caller that
-     * reads many values back at the positions of one behavior ({@link #occurrencesAt(List,
-     * TermPath, Map)}).
-     */
-    WalkResult<List<ObservedValue>> valuesAt(List<ObservedValue> inputs, TermPath path,
-                                             Map<Type, TypeView> views) {
-        return switch (occurrencesAt(inputs, path, views)) {
+        return switch (occurrencesAt(inputs, path)) {
             case WalkResult.Reached(List<Occurrence> found) ->
                     WalkResult.reached(found.stream().map(Occurrence::value).toList());
             case WalkResult.CouldNotWalk<List<Occurrence>> _ -> WalkResult.couldNotWalk();
@@ -179,24 +169,11 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * the way a written row is or the classes they land in are two readings rather than one.
      */
     WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
-        return occurrencesAt(inputs, path, new HashMap<>());
-    }
-
-    /**
-     * The same, reading what each type is out of {@code views} and adding to it.
-     *
-     * <p>For a caller walking one row to many positions. Every walk starts at a parameter's type
-     * and passes the same few types on the way down, and what a type is — its names and the fields
-     * it lays out — is a fact about the declarations this was read against and not about the walk.
-     * Worked out again at every step of every walk, it is most of what reading a row costs.
-     */
-    WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path,
-                                               Map<Type, TypeView> views) {
         int at = indexOf(path);
         if (at < 0 || at >= inputs.size()) {
             return WalkResult.couldNotWalk();
         }
-        return switch (standingAt(inputs.get(at), at, path, views)) {
+        return switch (standingAt(inputs.get(at), at, path)) {
             case WalkResult.Reached(List<Standing> found) -> WalkResult.reached(found.stream()
                     .map(each -> new Occurrence(each.at(), each.value())).toList());
             case WalkResult.CouldNotWalk<List<Standing>> _ -> WalkResult.couldNotWalk();
@@ -348,7 +325,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         if (at < 0) {
             return WalkResult.couldNotWalk();
         }
-        return switch (standingAt(value, at, path, new HashMap<>())) {
+        return switch (standingAt(value, at, path)) {
             case WalkResult.Reached(List<Standing> found) -> WalkResult.reached(found.stream()
                     .map(each -> new ObservedAt(each.value(), each.type(), each.at())).toList());
             case WalkResult.CouldNotWalk<List<Standing>> _ -> WalkResult.couldNotWalk();
@@ -397,11 +374,10 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      *  walks that start from one say nothing of where they arrived, so this is never read. */
     private static final TermPath NOT_A_PARAMETER = TermPath.of("value");
 
-    /** What a type is under these declarations, worked out once for each type asked of it. Not
-     *  safe to share between threads: it is the memo of one caller. */
+    /** What a type is under these declarations, worked out once for each type asked of it by any
+     *  walk of any reading made from them ({@link TypeViews}). */
     Function<Type, TypeView> cachedViews() {
-        Map<Type, TypeView> views = new HashMap<>();
-        return type -> views.computeIfAbsent(type, this::view);
+        return type -> rules.views().of(type, this::view);
     }
 
     /**
@@ -450,9 +426,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
     }
 
     /** What stands at {@code path}, walked down from {@code value} at the {@code at}-th input. */
-    private WalkResult<List<Standing>> standingAt(ObservedValue value, int at, TermPath path,
-                                                  Map<Type, TypeView> views) {
-        Function<Type, TypeView> viewOf = type -> views.computeIfAbsent(type, this::view);
+    private WalkResult<List<Standing>> standingAt(ObservedValue value, int at, TermPath path) {
+        Function<Type, TypeView> viewOf = cachedViews();
         List<Standing> standing = List.of(new Standing(value, types.get(at),
                 TermPath.of(path.head()), ElementsTaken.NONE));
         for (TermPath.Step step : path.steps()) {

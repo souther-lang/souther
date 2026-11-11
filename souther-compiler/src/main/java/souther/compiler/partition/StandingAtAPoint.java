@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.TypeView;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.SeenComparison;
@@ -16,7 +15,6 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.BorderQuantity.Lastness;
-import souther.compiler.types.Type;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -1333,9 +1331,6 @@ public final class StandingAtAPoint {
         private final BehaviorInputs where;
         private final ObservedInputs observed;
 
-        /** What each type is under the declarations, for every walk into the row. */
-        private final Map<Type, TypeView> views = new HashMap<>();
-
         private final Map<TermPath, Written> written = new HashMap<>();
 
         /**
@@ -1412,7 +1407,7 @@ public final class StandingAtAPoint {
         Written at(TermPath path) {
             Written known = written.get(path);
             if (known == null) {
-                known = new Written(this, where.occurrencesAt(observed.inputs(), path, views));
+                known = new Written(this, where.occurrencesAt(observed.inputs(), path));
                 written.put(path, known);
             }
             return known;

@@ -9447,9 +9447,6 @@ public final class Generator {
     private static CandidateCheck certifying(CandidateCheck check, MeasuredInput subject, int parameter,
                                              Map<RealizationTarget, Place> fixing,
                                              FoundOut found) {
-        // What each type on the way down to a fixed number is, which every candidate is read back
-        // through and none of them changes: worked out at the first candidate and read after.
-        Map<Type, TypeView> views = new HashMap<>();
         return new CandidateCheck() {
 
             @Override
@@ -9477,7 +9474,7 @@ public final class Generator {
                     // a search that pruned on it would be spending this compiler's own limit as
                     // though it were an answer about the value. The whole-row reading that
                     // follows is where not being able to tell is recorded.
-                    if (readsBackAt(subject, parameter, observed, number, each.getValue(), views)
+                    if (readsBackAt(subject, parameter, observed, number, each.getValue())
                             instanceof RealizationReadback.Elsewhere(SearchMessage why)) {
                         found.turnedAway();
                         return new CandidateCheck.Built.Refused(why);
@@ -9509,13 +9506,11 @@ public final class Generator {
      * <p>One occurrence is enough, as it is for a row that was written: a row stands at a point
      * where one of its readings does. And a reading that could not be made at one occurrence does
      * not take back another that placed the value — the answers are looked at in that order.
-     *
-     * @param views what each type on the walk is, read and added to
      */
     private static RealizationReadback readsBackAt(MeasuredInput subject, int parameter,
                                                    souther.compiler.observe.ObservedValue observed,
                                                    RealizationTarget.OfANumber target,
-                                                   Place at, Map<Type, TypeView> views) {
+                                                   Place at) {
         // The orders to read it back on, asked of the reading that answered them when the value was
         // built. Carried over from there instead, the two ends of one question would be two values
         // free to part, and a row would be read back on an order nothing composed it against.
@@ -9556,7 +9551,7 @@ public final class Generator {
         };
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
-        return switch (subject.inputs().valuesAt(row, readAt, views)) {
+        return switch (subject.inputs().valuesAt(row, readAt)) {
             case WalkResult.CouldNotWalk<List<souther.compiler.observe.ObservedValue>> _ ->
                     new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
             case WalkResult.Reached(List<souther.compiler.observe.ObservedValue> values) ->
