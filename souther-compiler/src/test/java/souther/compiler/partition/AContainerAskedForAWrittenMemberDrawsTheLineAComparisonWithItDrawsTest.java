@@ -20,6 +20,8 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -101,6 +103,11 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             let ofWrittenInts (l) = List.contains(l.i, [10, 20, 30])
             behavior ofWrittenIntsAny : (l: Line) -> Bool
             let ofWrittenIntsAny (l) = List.any(e -> e == l.i, [10, 20, 30])
+
+            behavior mapped : (l: Line) -> List<Bool>
+            let mapped (l) = List.map(k -> List.contains(k, l.tags), ["K", "L"])
+            behavior mappedAny : (l: Line) -> List<Bool>
+            let mappedAny (l) = List.map(k -> List.any(t -> t == k, l.tags), ["K", "L"])
 
             behavior any : (l: Line) -> Bool
             let any (l) = List.any(t -> t == "K", l.tags)
@@ -249,6 +256,31 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         assertEquals(linesOf("comparedTrue"), Set.of("l.tags[*] K"));
     }
 
+    /** A closure applied to each element of a written list states, on each application, what it is
+     *  handed there: one line for each of the values the list writes, as {@code any} draws. */
+    @Test
+    void anApplicationInAClosureStatesWhatEachApplicationIsHanded() {
+        assertEquals(Set.of("l.tags[*] K", "l.tags[*] L"), linesOf("mappedAny"));
+        assertEquals(linesOf("mappedAny"), linesOf("mapped"));
+    }
+
+    /** More values written than the readings of one condition allow draw no line for the
+     *  application, as they draw none for the comparison. */
+    @Test
+    void applicationsCuttingOneQuantityAtMoreValuesThanTheFigureAllowsDrawNoLine() {
+        int past = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() + 1;
+        String written = IntStream.range(0, past).mapToObj(i -> "\"v" + i + "\"")
+                .collect(Collectors.joining(", "));
+        String source = """
+                module probe
+                data Line = { tags: List<String> }
+                behavior mapped : (l: Line) -> List<Bool>
+                let mapped (l) = List.map(k -> List.contains(k, l.tags), [%s])
+                """.formatted(written);
+        assertEquals(List.of(), Adequacy.readingsOf(measured(source).db(), "probe")
+                .getOrDefault("mapped", List.of()));
+    }
+
     /** The member being another place of the row relates two values and divides neither. */
     @Test
     void aMemberThatIsAnotherPlaceDrawsNoLine() {
@@ -380,7 +412,11 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
     }
 
     private static Compilation measured() {
-        return MEASURED.computeIfAbsent(MODEL, source -> {
+        return measured(MODEL);
+    }
+
+    private static Compilation measured(String model) {
+        return MEASURED.computeIfAbsent(model, source -> {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
