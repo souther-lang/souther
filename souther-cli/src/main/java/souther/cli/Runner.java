@@ -20,6 +20,7 @@ import souther.compiler.diag.Messages;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.query.Bodies;
 import souther.compiler.types.ValueName;
+import souther.runtime.OutOfRoom;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.ResourceBundleMessageResolver;
 
@@ -30,6 +31,7 @@ import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.StreamWriteConstraints;
 import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.exc.StreamConstraintsException;
+import tools.jackson.core.exc.StreamReadException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.exc.MismatchedInputException;
@@ -567,7 +569,7 @@ public final class Runner {
 
     /** Whether {@code raw} decodes as {@code type}, asked without reporting anything. */
     private static boolean decodes(ClassLoader loader, BoundaryInput shape, JsonNode raw) {
-        return JsonBoundary.reads(loader, shape, raw);
+        return read(loader, shape, raw, 0) instanceof JsonBoundary.Read.Value;
     }
 
     // --- decode / encode ----------------------------------------------------------------------
@@ -581,13 +583,27 @@ public final class Runner {
      */
     private static Object decode(ClassLoader loader, BoundaryInput shape, JsonNode raw,
                                  int index) {
-        return switch (JsonBoundary.read(loader, shape, raw)) {
+        return switch (read(loader, shape, raw, index)) {
             case JsonBoundary.Read.Value v -> v.value();
-            case JsonBoundary.Read.Malformed m -> throw fail("run.decode.malformed",
-                    index + 1, m.type());
             case JsonBoundary.Read.Refused r -> throw new RunException("run.decode.failed", 1,
                     r.issues(), index + 1, detail(r.issues()));
         };
+    }
+
+    /**
+     * {@link JsonBoundary#read}, with the one thing a decoder throws that is not a defect said as
+     * what it is: the run having no room for what the decoder computed, an invariant's arithmetic
+     * past what a {@code BigDecimal} keeps. It is the platform failing and says nothing about the
+     * input's shape, so it is neither a refusal of the value nor an input that is not shaped like its
+     * type (spec §jvm-abort).
+     */
+    private static JsonBoundary.Read read(ClassLoader loader, BoundaryInput shape, JsonNode raw,
+                                          int index) {
+        try {
+            return JsonBoundary.read(loader, shape, raw);
+        } catch (OutOfRoom e) {
+            throw fail("run.decode.outofroom", index + 1, e.getMessage());
+        }
     }
 
     /** The decoder's issues as one line: each at its JSON pointer, in the order they were found. */
@@ -712,22 +728,23 @@ public final class Runner {
      * <p>Input with nothing in it reads as the missing node rather than as no node at all, so an
      * empty {@code --input} reaches the same refusal as input of the wrong shape.
      *
-     * <p>A number whose exponent no {@code BigDecimal} keeps in its 32-bit scale is valid JSON and a
-     * {@code Decimal}; the mapper throws a bare {@code NumberFormatException} for it while building
-     * the node, and nothing else in a read throws one, since every syntax error is a
-     * {@code StreamReadException}. It is the run having no room to write the number, and is said as
-     * that and not as malformed input (spec §jvm-abort). The reader's other limits — a number, a name
-     * or a document too long — refuse text that is as much JSON, and are said as the reader's limit
-     * with its own wording, for the same reason. A member named twice is the one thing the tree
-     * builder refuses as a mismatch rather than as syntax, and its context stands on the second
-     * name.
+     * <p>What fails is told apart by the type the mapper throws, never by its text, and each type is
+     * said as what it is. A number whose exponent no {@code BigDecimal} keeps in its 32-bit scale is
+     * valid JSON and a {@code Decimal}, and is the run having no room to write it (spec §jvm-abort).
+     * The reader's own limits — a number, a name or a document too long — refuse text that is as much
+     * JSON. A member named twice is valid JSON that the tree would read as the last of them, so it is
+     * refused. Only a {@code StreamReadException} that is none of these is a syntax error. Which type
+     * the mapper uses for each is what was measured against the version this module builds with, and
+     * {@code RunnerTest} pins it: an upgrade that wraps one of them fails there and not in a
+     * diagnostic. A failure of any other type is not attributed to the input; it reaches the caller
+     * as thrown.
      */
     private static JsonNode parseJson(String input) {
         JsonParser parser = JSON.createParser(input);
         try {
             JsonNode tree = JSON.readTree(parser);
             return tree == null ? JSON.missingNode() : tree;
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             TokenStreamContext where = parser.streamReadContext();
             if (refusedForDepth(e, where, READ_REFUSAL_DEPTH)) {
                 throw tooDeep("run.input.toodeep", where, READ_DEPTH_LIMIT);
@@ -741,7 +758,10 @@ public final class Runner {
             if (e instanceof StreamConstraintsException) {
                 throw fail("run.input.limit", depthPath(where), e.getMessage());
             }
-            throw fail("run.input.badjson", e.getMessage());
+            if (e instanceof StreamReadException) {
+                throw fail("run.input.badjson", e.getMessage());
+            }
+            throw e;
         } finally {
             parser.close();
         }

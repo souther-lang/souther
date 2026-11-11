@@ -884,6 +884,36 @@ class RunnerTest {
     }
 
     /**
+     * An invariant whose arithmetic has no room is the platform failing, said as that: not as input
+     * that is not shaped like its type, and not as a refusal of the value. Both ways in are walked,
+     * the argument as it stands and the argument inside the one-element array the sole-input retry
+     * reads again, because each reaches the decoder on its own.
+     */
+    @Test
+    void aDecoderWithNoRoomIsNotReportedAsAnInputOfTheWrongShape() throws Exception {
+        Path file = write("wide.sou", """
+                data Wide = { v: Decimal }
+                  invariant squares = v * v >= 0.0m
+                behavior keep : (w: Wide) -> Wide
+                let keep (w) = w
+                """);
+        Runner.Program program = Runner.compile(file);
+        assertEquals("{\"v\":2}", program.run("keep", "{\"v\":2}").trim());
+
+        for (String input : new String[] {"{\"v\":1E-2000000000}", "[{\"v\":1E-2000000000}]"}) {
+            Runner.RunException e = assertThrows(Runner.RunException.class,
+                    () -> program.run("keep", input), input);
+            assertEquals(1, e.exitCode);
+            assertTrue(e.getMessage().contains("no room"), e.getMessage());
+            assertTrue(e.getMessage().contains("input #1"), e.getMessage());
+            assertFalse(e.getMessage().contains("not shaped"), e.getMessage());
+            assertFalse(e.getMessage().contains("could not be decoded —"), e.getMessage());
+            assertTrue(e.localized(java.util.Locale.JAPANESE).contains("余裕"),
+                    e.localized(java.util.Locale.JAPANESE));
+        }
+    }
+
+    /**
      * A number whose exponent no {@code BigDecimal} keeps is valid JSON and a {@code Decimal}, so the
      * run says it has no room to write it and names where it stands, and never calls the input
      * malformed. The last exponent a scale holds still reads, and text that is not a number at all is
