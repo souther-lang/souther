@@ -1060,14 +1060,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "looks for no more assignments than there is room for among the ways looked"
                             + " along, and says that figure when it leaves some"),
             Map.entry("souther.compiler.partition.Cutting#linesOnOneQuantityPastTheFigure("
-                            + "Ljava/util/Set;"
-                            + "Lsouther/compiler/check/StatedComparison;"
-                            + "Lsouther/compiler/inputs/InputReading;"
-                            + "Lsouther/compiler/inputs/InputReads;"
-                            + "Lsouther/compiler/coverage/Arrivals;)"
-                            + "Lsouther/compiler/partition/Cutting$Read;",
+                            + "Ljava/util/Set;)"
+                            + "Lsouther/compiler/inputs/BlockReason$WhereALineDecidesNotWorkedOut;",
                     "counts the lines one quantity is cut by against the readings figure, and"
-                            + " says that figure where a statement's lines are not worked out"),
+                            + " hands over that figure as the reason where a statement's lines are"
+                            + " not worked out, for a comparison to be said stopped at it and for an"
+                            + " application drawing them to be left to the comparisons inside it"),
             Map.entry("souther.compiler.partition.DecisionCondition$AStatement#of("
                             + "Lsouther/compiler/meaning/Proposition;Z)Ljava/util/Optional;",
                     "walks the denials of a statement as far as the readings figure to name the"

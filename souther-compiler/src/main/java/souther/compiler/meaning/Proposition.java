@@ -10,6 +10,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Text;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.StringContainment;
@@ -200,6 +201,71 @@ public sealed interface Proposition {
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, StringInside _, LastToHold _, Unread _, Carried _ -> List.of();
         };
+    }
+
+    /**
+     * This statement with each place held to a string or a number the source wrote put as the
+     * comparison of the place with it ({@link SameValue#asAComparison}), or this statement where
+     * none is.
+     *
+     * <p>The one place that says how a statement about a written value is read as a relation on
+     * the order its place stands on, which is what draws a line there. Every reader of lines asks
+     * this of the statement as a whole, so a written value is a comparison to all of them and
+     * wherever it stands in the statement. The value it is held to stays a value for a reader that
+     * asks which one: this is a second reading of the statement and does not replace it.
+     *
+     * <p>Asked of a statement whose counts were written out ({@link CountsWrittenOut}), and after
+     * that was done. A count of statements is left as it stands, and so is a statement over the
+     * ways of one and a search of a tree: what the first two come to is the statements their
+     * choices are written out as, which this is then asked of, and one that is not written out is
+     * past a figure, which no line is read of.
+     */
+    default Proposition withTheValuesItHoldsCompared() {
+        return switch (this) {
+            case SameValue same -> same.asAComparison() instanceof Compared compared
+                    ? compared : this;
+            case All all -> {
+                List<Proposition> parts = comparedEach(all.parts());
+                yield parts == null ? this : all(parts);
+            }
+            case Any any -> {
+                List<Proposition> parts = comparedEach(any.parts());
+                yield parts == null ? this : any(parts);
+            }
+            case OnAnApplication applications -> {
+                List<Proposition> each = comparedEach(applications.each());
+                yield each == null ? this : onAnApplication(each);
+            }
+            case WhereItAnswers where -> {
+                Proposition answers = where.answers().withTheValuesItHoldsCompared();
+                Proposition states = where.states().withTheValuesItHoldsCompared();
+                yield answers == where.answers() && states == where.states() ? this
+                        : whereItAnswers(answers, states);
+            }
+            case Some some -> {
+                Proposition element = some.ofTheElement().withTheValuesItHoldsCompared();
+                yield element == some.ofTheElement() ? this
+                        : new Some(some.container(), element, some.holds());
+            }
+            default -> this;
+        };
+    }
+
+    /** {@code parts}, each read so ({@link #withTheValuesItHoldsCompared}) — or null where none
+     *  of them is read as anything else. */
+    private static List<Proposition> comparedEach(List<Proposition> parts) {
+        List<Proposition> out = null;
+        for (int at = 0; at < parts.size(); at++) {
+            Proposition part = parts.get(at);
+            Proposition compared = part.withTheValuesItHoldsCompared();
+            if (out == null && compared != part) {
+                out = new ArrayList<>(parts.subList(0, at));
+            }
+            if (out != null) {
+                out.add(compared);
+            }
+        }
+        return out;
     }
 
     /**
@@ -613,6 +679,40 @@ public sealed interface Proposition {
         public DecisionSubject otherSubject() {
             return other instanceof Operand.At<DecisionSubject>(DecisionSubject subject)
                     ? subject : null;
+        }
+
+        /**
+         * What this states of a place against a string or a number the source wrote, as the
+         * comparison with it written with {@code ==} states it — or null where it is anything
+         * else.
+         *
+         * <p>The one statement read two ways: as a value the place is told apart at, which is how
+         * a container is asked to hold it, and as a relation on the order the place stands on,
+         * which is what draws a line there.
+         */
+        public Compared asAComparison() {
+            if (!(one instanceof DecisionSubject.AnInput(TermPath place, ValueIdentity identity))
+                    || !(other instanceof Operand.Written<DecisionSubject>(Value written))) {
+                return null;
+            }
+            // Which value at the place it is says which element of a container it is, so the
+            // relation is about the same value the sameness was.
+            DecisionAtom atom = new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(place),
+                    identity);
+            Rel states = holds ? Rel.EQ : Rel.NE;
+            return switch (written) {
+                case Value.Text(String text) -> new Compared(
+                        new Relation.Ordered(atom, new Text(text), Rel.EQ), holds);
+                case Value.Number(var number) -> LinearForm.<Quantity>atom(atom)
+                        .minus(LinearForm.constant(ExactRatio.of(number)))
+                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(var form)
+                        ? comparedAs(Relation.OneWay.of(form, states)) : null;
+                case Value.Truth _, Value.Case _ -> null;
+            };
+        }
+
+        private static Compared comparedAs(Relation.OneWay<Quantity> one) {
+            return new Compared(new Relation.Affine(one.form(), one.proposition()), one.holds());
         }
 
         @Override

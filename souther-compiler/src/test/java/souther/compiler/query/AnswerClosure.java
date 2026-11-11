@@ -1183,6 +1183,9 @@ final class AnswerClosure {
                 "souther.compiler.check.BoundaryOutput$Nominal#type",
                 // How each entry a helper table emits is reached, read off the entries.
                 "souther.compiler.check.HelperTable#heldAs",
+                // What each type is under the declarations a source reads, worked out once for each
+                // type asked of it, which the declarations decide ({@code TypeViews}).
+                "souther.compiler.check.RuleReadingSource#views",
                 // The denial a proposition keeps, which is what denying its parts makes and is
                 // equal to what any other making makes ({@code Proposition.Denial}).
                 "souther.compiler.meaning.Proposition$All#denial",

@@ -121,7 +121,8 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
      *
      * <p>By the weekday alone no three days running are closed, so a run reaches only the first
      * three candidates, and those are the only ones drawn on; with holidays beside it any candidate
-     * may be reached, and each is drawn on.
+     * may be reached, and each is drawn on — by the weekday, and by the holidays the calendar holds,
+     * a container holding the day that candidate is, which a row at the line has among them.
      */
     @Test
     void theLinesOfWhatASearchFindsFirstAreDrawnBesideAHoliday() {
@@ -139,11 +140,24 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
             }
         }
         assertEquals(theFirstThree, linesOf(FINDS.formatted(CALENDAR.formatted(""))));
-        assertEquals(everyCandidate, linesOf(withHolidays));
+        Set<String> holidaysOfEveryCandidate = new TreeSet<>();
+        for (int j = 0; j < 7; j++) {
+            holidaysOfEveryCandidate.add("d cal.holidays[*]" + (j == 0 ? "" : " - " + j));
+        }
+        Set<String> everyLine = new TreeSet<>(everyCandidate);
+        everyLine.addAll(holidaysOfEveryCandidate);
+        assertEquals(everyLine, linesOf(withHolidays));
         Pattern candidate = Pattern.compile(
                 "Int\\.floorMod\\(-cal\\.aSunday \\+ d(?: \\+ (\\d))?, 7\\) (\\d)");
         List<String> reachedPastAClosedDay = new ArrayList<>();
+        Pattern holidayOf = Pattern.compile("d cal\\.holidays\\[\\*](?: - (\\d))?");
         everyRowAt(withHolidays, (line, row) -> {
+            Matcher holiday = holidayOf.matcher(line);
+            if (holiday.matches()) {
+                int k = holiday.group(1) == null ? 0 : Integer.parseInt(holiday.group(1));
+                return dates(field(row.getFirst(), "holidays"))
+                        .contains(date(row.get(1)).plusDays(k));
+            }
             Matcher on = candidate.matcher(line);
             assertTrue(on.matches(), line);
             int j = on.group(1) == null ? 0 : Integer.parseInt(on.group(1));

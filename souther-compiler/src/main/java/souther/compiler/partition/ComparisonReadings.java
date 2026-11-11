@@ -19,6 +19,7 @@ import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -304,8 +305,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param onTheArms  what a run taking each arm of a choice the comparison is read through
      *                   works out there, with where the arm is taken, where it is read once;
      *                   none otherwise. Independent of the lines it draws
-     * @param metOn   which elements of the input a run makes the comparison on, where it stands
-     *                   inside closures an operation stopping at an answer applies to them
+     * @param applying   the applications of the closures the comparison stands in, which say which
+     *                   elements of the input a run makes the comparison on, where an operation
+     *                   stopping at an answer applies them
      * @param runsAs     the construct as the tree that runs holds it, which is {@code occurrence}
      *                   wherever the body read is the one that runs. A helper's body read at a call
      *                   is not: it runs as the helper's own method, which every call shares, so
@@ -335,7 +337,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Optional<Condition> statedAsACondition, Optional<Proposition> stopsWhere,
                    Optional<List<Cutting.OnAnApplication>> worksOutOnEach,
                    Optional<StopEvidence> stopsIn, List<StopEvidence.OnAnArm> onTheArms,
-                   ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
+                   ClosureApplications applying, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay, ComparisonWitnesses.AtAComparison witnesses,
                    DemandReading.Answered getsPast, List<ConstructionAsk> asks,
                    ElementsNamed readsTheElements, LinesReadOn readOn) {
@@ -343,13 +345,25 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         Reading {
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null || worksOutOnEach == null
-                    || stopsIn == null || onTheArms == null || metOn == null || runsAs == null || context == null
+                    || stopsIn == null || onTheArms == null || applying == null || runsAs == null
+                    || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null
                     || asks == null || readsTheElements == null || readOn == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
             asks = List.copyOf(asks);
+        }
+
+        /** Which elements of the input a run makes the comparison on, as every application says. */
+        ElementsMetOn metOn() {
+            return applying.elementsMetOn();
+        }
+
+        /** Which elements a run makes the comparison on where a line is read by {@code by} of the
+         *  applications. */
+        ElementsMetOn metOn(ApplicationsReadOn by) {
+            return applying.elementsMetOn(by);
         }
 
         /**
@@ -882,7 +896,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // The way this node is reached on, for whoever asks whether a part of a fork's condition is
         // evaluated at all.
         in.ways().reached(e, assumed);
-        StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), in.stated());
+        StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), applying,
+                in.stated());
         if (stated != null) {
             // Which construct of the model it is, off the node. The two readings of a body hold
             // different copies of it and agree about this, so it is what a reader below joins on.
@@ -967,7 +982,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             out.add(new Reading(stands, stated.statement(), where, reads, besideIt.way(), standing,
                     statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
                             numbering), stopsWhere,
-                    worksOutOnEach, stopsIn, onTheArms, applying.elementsMetOn(), stated.written(), in.context(),
+                    worksOutOnEach, stopsIn, onTheArms, applying, stated.written(), in.context(),
                     besideIt.said(), witnesses,
                     past.answered(), past.asks(), readsTheElements, readOn));
         }
@@ -1554,6 +1569,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private static StatedAt statedAt(Core e, Supplier<WhatNamesStandFor> names,
                                      StatedHere here) {
+        return statedAt(e, names, null, here);
+    }
+
+    /**
+     * The same, where {@code applying} are the applications of the closures {@code e} stands
+     * inside, which an application of an operation is read on each of; null where it is asked
+     * only whether {@code e} states something.
+     */
+    private static StatedAt statedAt(Core e, Supplier<WhatNamesStandFor> names,
+                                     ClosureApplications applying, StatedHere here) {
         ConstructOccurrence written = switch (e) {
             case Core.Binary binary -> binary.occurrence();
             case Core.PreservedCall call -> call.occurrence();
@@ -1569,7 +1594,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         Cutting.Read answered = e instanceof Core.PreservedCall call
                 && (Type.BOOL.equals(call.type()) || statesWhetherItHoldsAValue(call))
-                ? here.ofAnApplication(call, names) : null;
+                ? here.ofAnApplication(call, names, applying) : null;
         return answered == null ? null
                 : new StatedAt(written, new Stated.AnApplication(e, answered));
     }
@@ -1611,7 +1636,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
 
         private final String behavior;
-        private final Map<Asked, Optional<Cutting.Read>> applications = new HashMap<>();
+        private final Map<Asked, Optional<Cutting.AppliedOn>> applications = new HashMap<>();
 
         StatedHere(String behavior) {
             this.behavior = behavior;
@@ -1643,8 +1668,26 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          * positions it came from.
          */
         Cutting.Read ofAnApplication(Core.PreservedCall application,
-                                     Supplier<WhatNamesStandFor> names) {
+                                     Supplier<WhatNamesStandFor> names,
+                                     ClosureApplications applying) {
             WhatNamesStandFor standing = names.get();
+            // Inside a closure whose applications are said, it is read on each application, as a
+            // comparison there is: what each application is handed is what the application states
+            // of, and what stands before it in the closure is what each is reached under, where
+            // its lines decide. One reading under the names every application shares has neither.
+            if (applying instanceof ClosureApplications.Each(var made)
+                    && made.stream().anyMatch(ClosureApplications.Application::isMadeOnSomeRow)) {
+                return Cutting.ofAnApplicationOnEach(made, one -> appliedOn(application,
+                        WhatNamesStandFor.in(one.reads(), standing.read())));
+            }
+            Cutting.AppliedOn applied = appliedOn(application, standing);
+            return applied == null ? null : applied.read();
+        }
+
+        /** What {@code application} reads as under the names {@code standing} holds, or null where
+         *  it states nothing of its own. */
+        private Cutting.AppliedOn appliedOn(Core.PreservedCall application,
+                                            WhatNamesStandFor standing) {
             return applications.computeIfAbsent(new Asked(application, standing.reads()), _ -> {
                 // Whether an optional holds a value is what it states, as a truth is what it
                 // answers.
@@ -1654,14 +1697,21 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         : state.presence(application, standing.reads(), standing.read());
                 boolean itsOwn = stated.turnsOn().stream().anyMatch(leaf ->
                         Core.withoutStanding(leaf.from().value()) == application);
-                if (!itsOwn || Proposition.leavesSomethingUnread(stated.proposition())) {
+                if (Proposition.leavesSomethingUnread(stated.proposition())) {
                     return Optional.empty();
                 }
-                return Optional.ofNullable(Cutting.ofAnApplication(behavior, application,
+                if (!itsOwn) {
+                    return Optional.of(new Cutting.AppliedOn(null, stated.meaning().how(),
+                            stated.proposition()));
+                }
+                Cutting.Read read = Cutting.ofAnApplication(behavior, application,
                         stated.proposition(), standing.read(), standing.reads(),
                         WrittenLines.of(stated.meaning().how(),
                                 application.occurrence().lineage().expansionProjection(),
-                                Optional.empty(), Optional.empty())));
+                                Optional.empty(), Optional.empty()));
+                return read == null ? Optional.empty()
+                        : Optional.of(new Cutting.AppliedOn(read, stated.meaning().how(),
+                                stated.proposition()));
             }).orElse(null);
         }
     }

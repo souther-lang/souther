@@ -91,6 +91,12 @@ A container beside the elements, asked the same thing by every element, is asked
 the row however it is written, so a count over it takes no number between none and all of the
 elements.
 
-Two questions are left. Whether holding a written member divides the place of the members, as a
-comparison against a constant divides a position, is not decided (#3144). Where the question of
-whether an observed value is a written value lives is not settled (#3145).
+A container asked for a written string, number or date is asked of its elements what a comparison of
+them with that value written with `==` is, so it draws that comparison's line: at the value, with
+a row at it holding the value and a row on either side holding another. The statement is one and is
+read two ways, as the value a place is told apart at and as a relation on the order the place
+stands on, and `SameValue.asAComparison` is the one place that says how the second follows from the
+first. A member that is another place of the row is a relation of two values and draws no line.
+
+One question is left. Where the question of whether an observed value is a written value lives is
+not settled (#3145).

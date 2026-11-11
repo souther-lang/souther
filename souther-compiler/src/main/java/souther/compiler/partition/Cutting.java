@@ -914,10 +914,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     ? new Read.AnswersNowhere(answeringNowhere)
                     : new Read.CutsNothing(settled);
         }
-        Read tooMany = linesOnOneQuantityPastTheFigure(lines.keySet(), comparison, read, reads,
-                answering);
+        BlockReason.WhereALineDecidesNotWorkedOut tooMany =
+                linesOnOneQuantityPastTheFigure(lines.keySet());
         if (tooMany != null) {
-            return tooMany;
+            return new Read.Stopped(ComparisonAssessment.atEachOf(
+                    GuardThresholds.filedAt(comparison, read, reads, answering), tooMany),
+                    WhereAReadingStopped.ELSEWHERE);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
         // A relation of a statement that is no line, and relates no other value, is read in no
@@ -946,6 +948,105 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read.Several derivedOnEach(Read.Several lines, List<Derivation> derived) {
         return lines.mayBePastTheCasesTakenApart() ? lines.derivedAs(derived) : lines;
+    }
+
+    /**
+     * What an application of an operation reads as on one application of the closure it stands in:
+     * the reading, how its statement was derived there, and the statement. The reading is null
+     * where the application states nothing of its own there: what it says is said by what is
+     * inside it, and it draws no line.
+     */
+    record AppliedOn(Read read, Derivation how, Proposition stated) {}
+
+    /**
+     * What an application of an operation states inside a closure whose applications are said,
+     * read on each of them as {@link #onEachApplication} reads a comparison: a line two
+     * applications draw is one line, and it decides where it decides on one of them, met where a
+     * run makes that one ({@link WhereAnApplicationIsMade#decidesOn}). What stands before the
+     * application in the closure — the left of a conjunction it is the right of — is what each
+     * application is reached under, and so is where the lines of the application decide.
+     *
+     * <p>An application that states nothing of its own adds nothing, and the others are read.
+     * Null where some application is not read to the end, as a single reading of it is, or where
+     * none draws a line, or where they draw more lines on one quantity than a comparison's
+     * applications may ({@link #linesOnOneQuantityPastTheFigure}).
+     *
+     * @param readingOn what the application reads as on one of the applications, or null where it
+     *                  is not read to the end
+     */
+    static Read ofAnApplicationOnEach(List<ClosureApplications.Application> each,
+                                      Function<ClosureApplications.Application, AppliedOn> readingOn) {
+        List<Derivation> derived = new ArrayList<>();
+        Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
+        Map<ALineRead, List<UndividedByARelation.Working>> workings = new HashMap<>();
+        Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> relating = new LinkedHashMap<>();
+        List<FilingCoordinate> against = new ArrayList<>();
+        List<UndividedByARelation> relations = new ArrayList<>();
+        boolean relatedOnlySomewhere = false;
+        for (ClosureApplications.Application one : each) {
+            if (!one.isMadeOnSomeRow()) {
+                continue;
+            }
+            AppliedOn applied = readingOn.apply(one);
+            if (applied == null) {
+                return null;
+            }
+            if (applied.read() == null) {
+                continue;
+            }
+            derived.add(one.statedOn(applied.how()));
+            switch (applied.read()) {
+                case Read.Several several -> {
+                    for (Read.Several.Part part : several.parts()) {
+                        ALineRead key = new ALineRead(part.id(), part.line());
+                        lines.computeIfAbsent(key, _ -> new ArrayList<>())
+                                .add(new WhereAnApplicationIsMade.OnOne(part.cases(),
+                                        one.reached()));
+                        workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                                .add(part.working());
+                    }
+                }
+                case Read.AgainstAnotherValue alone -> {
+                    alone.over().forEach(at -> {
+                        if (!against.contains(at)) {
+                            against.add(at);
+                        }
+                    });
+                    relations.addAll(alone.relations());
+                    ALineRead key = new ALineRead(
+                            new PlaceOfALine(THE_COMPARISON, spelled(applied.stated())), alone);
+                    relating.computeIfAbsent(key, _ -> new ArrayList<>())
+                            .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
+                    workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                            .add(UndividedByARelation.Working.UNREAD);
+                    relatedOnlySomewhere |= !(one.reached() instanceof Proposition.Always(
+                            boolean holds) && holds);
+                }
+                default -> {
+                    return null;
+                }
+            }
+        }
+        if (!against.isEmpty()) {
+            List<Read.Several.Part> parts = new ArrayList<>();
+            relating.forEach((relation, readings) -> parts.add(new Read.Several.Part(
+                    relation.id(), relation.read(), WhereAnApplicationIsMade.decidesOn(readings),
+                    UndividedByARelation.Working.together(workings.get(relation)))));
+            return relatedOnlySomewhere && lines.isEmpty() && parts.stream().allMatch(part ->
+                    part.cases().stream().allMatch(one -> AStatementAtARow.askable(
+                            one.condition()) && saysNothingOfAnElement(one.condition())))
+                    ? derivedOnEach(new Read.Several(parts), derived)
+                    : new Read.AgainstAnotherValue(against, relations);
+        }
+        if (lines.isEmpty() || linesOnOneQuantityPastTheFigure(lines.keySet()) != null) {
+            return null;
+        }
+        List<Read.Several.Part> parts = new ArrayList<>();
+        lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(), line.read(),
+                Read.Several.Part.isReadInCases(line.read())
+                        ? WhereAnApplicationIsMade.decidesOn(readings) : List.of(),
+                UndividedByARelation.Working.together(workings.get(line)))));
+        return derivedOnEach(new Read.Several(parts), derived);
     }
 
     /**
@@ -982,19 +1083,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * decides grows faster than the lines on one quantity do. Past the figure it is not done,
      * which is what the readings were held to before they were shared.
      */
-    private static Read linesOnOneQuantityPastTheFigure(Set<ALineRead> lines,
-                                                        StatedComparison comparison,
-                                                        InputReading read, InputReads reads,
-                                                        Arrivals answering) {
+    private static BlockReason.WhereALineDecidesNotWorkedOut linesOnOneQuantityPastTheFigure(
+            Set<ALineRead> lines) {
         CompositionBudget figure = CompositionBudget.READINGS_OF_ONE_CONDITION;
         Map<BorderQuantity, Integer> onOne = new HashMap<>();
         for (ALineRead each : lines) {
             if (each.read() instanceof Read.Cuts cuts
                     && onOne.merge(cuts.cutting().of(), 1, Integer::sum) > figure.maximum()) {
-                return new Read.Stopped(ComparisonAssessment.atEachOf(
-                        GuardThresholds.filedAt(comparison, read, reads, answering),
-                        new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())),
-                        WhereAReadingStopped.ELSEWHERE);
+                return new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure());
             }
         }
         return null;
@@ -1438,6 +1534,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                      Pullback.OnTheInput onTheInput, boolean onEveryElement,
                                      Supplier<Optional<AuthorsLines>> lines) {
         Pullback.Pulled stated = onTheInput.stated();
+        // What a written value is held to is read as the comparison with it, wherever it stands
+        // in the statement ({@link Proposition#withTheValuesItHoldsCompared}), so that a container
+        // asked for it draws the line the same comparison draws and is not told to relate it to
+        // another value.
+        Proposition asLinesAre = stated.proposition().withTheValuesItHoldsCompared();
         // A remainder of a form over a value read off a binding is no number a row's numbers put
         // anywhere: no line on it and no relation of it to another value. Over the element of a
         // list of every whole number between two, the comparison is read on the elements the
@@ -1456,19 +1557,19 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     : noLine(comparison, stated.proposition(), List.of(), Set.of(),
                             onTheInput.arithmetic(), read, reads, answering);
         }
-        Read line = stated.proposition() instanceof Proposition.Compared(
+        Read line = asLinesAre instanceof Proposition.Compared(
                 Relation.Affine affine, boolean holds, Spelling _, var _)
                 ? lineOn(behavior, affine, holds, comparison.left(), read, reads) : null;
         List<FilingCoordinate> related = line == null
-                ? relatedToAnotherValue(stated.proposition()) : null;
-        return switch (stated.proposition()) {
+                ? relatedToAnotherValue(asLinesAre) : null;
+        return switch (asLinesAre) {
             case Proposition.Always _ -> new Read.CutsNothing(
                     settledAt(stated, comparison, read, reads, answering));
             case Proposition.WhereItAnswers nowhere when Proposition.answersNowhere(nowhere) ->
                     new Read.AnswersNowhere(settledAt(stated, comparison, read, reads, answering));
             case Proposition.Compared _ when line != null -> line;
             case Proposition.Compared _ when related != null ->
-                    against(related, stated.proposition(), workingOf(onTheInput));
+                    against(related, asLinesAre, workingOf(onTheInput));
             case Proposition.Some some
                     when valuesItRelates(some) instanceof List<FilingCoordinate> values ->
                     against(values, some);
@@ -1490,13 +1591,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
                  Proposition.Some _, Proposition.InCases _, Proposition.Truth _,
                  Proposition.Present _, Proposition.WhereItAnswers _
-                    when statesNoRelation(stated.proposition()) -> new Read.StatesNoRelation();
+                    when statesNoRelation(asLinesAre) -> new Read.StatesNoRelation();
             // A statement read where an operation in it answers is the lines of what it states,
             // each deciding only where the operation answers ({@link WhereEachLineDecides}).
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
                  Proposition.WhereItAnswers _
-                    when !Proposition.leavesSomethingUnread(stated.proposition()) ->
-                    asLines(behavior, comparison, stated.proposition(), onTheInput.arithmetic(),
+                    when !Proposition.leavesSomethingUnread(asLinesAre) ->
+                    asLines(behavior, comparison, asLinesAre, onTheInput.arithmetic(),
                             onTheInput.working(), onTheInput.workingOfRelation(), read, reads,
                             answering, lines.get());
             // Some element meeting several parts, which is the parts read of that element: a
@@ -1511,12 +1612,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             answering, lines.get());
             // And one some part of which nothing read, as the lines it draws beside that part.
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
-                 Proposition.WhereItAnswers _ when holdsARelation(stated.proposition()) ->
-                    besideWhatWasNotRead(behavior, comparison, stated.proposition(),
+                 Proposition.WhereItAnswers _ when holdsARelation(asLinesAre) ->
+                    besideWhatWasNotRead(behavior, comparison, asLinesAre,
                             onTheInput.arithmetic(), onTheInput.working(),
                             onTheInput.workingOfRelation(), read, reads, answering, lines.get());
-            default -> noLine(comparison, stated.proposition(),
-                    Proposition.stopsIn(stated.proposition()), Set.of(), onTheInput.arithmetic(),
+            default -> noLine(comparison, asLinesAre,
+                    Proposition.stopsIn(asLinesAre), Set.of(), onTheInput.arithmetic(),
                     read, reads, answering);
         };
     }
@@ -2168,11 +2269,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 AuthorsLines authors) {
         // A statement holding counts whose choices are past their figure is no rule of the
         // application's own, as one holding a part nothing read is not: what it reads is read
-        // where its comparisons are written, each on its own.
+        // where its comparisons are written, each on its own. The rest is read as lines once,
+        // the counts written out first and what a written value is held to read as the
+        // comparison with it after, so that what is written out is read the way the rest is.
         if (CountsWrittenOut.outsideElementsOf(stated)
                 instanceof CountsWrittenOut.Written(Proposition written)
-                && several(behavior, application, written, read, reads, Optional.of(authors),
-                        _ -> UndividedByARelation.Working.UNREAD, false)
+                && several(behavior, application, written.withTheValuesItHoldsCompared(), read,
+                        reads, Optional.of(authors), _ -> UndividedByARelation.Working.UNREAD,
+                        false)
                         instanceof TheParts.Drawn(Read.Several lines)) {
             return lines;
         }

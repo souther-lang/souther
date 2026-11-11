@@ -333,7 +333,8 @@ public final class WrittenLines {
             known = new LinkedHashSet<>();
             Proposition out = concluded.of(step);
             conclusions.put(step, out);
-            gather(out, known, stated);
+            // The relations a line is read from are those of the statement read as lines are.
+            gather(out.withTheValuesItHoldsCompared(), known, stated);
             made.put(step, known);
         }
         return known;
@@ -363,7 +364,8 @@ public final class WrittenLines {
                  Proposition.OfTheWays _, Proposition.SomeReachable _ ->
                     stated.partsHeld().forEach(each -> gather(each, into, found));
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
                  Proposition.Unread _ -> { }
         }
     }

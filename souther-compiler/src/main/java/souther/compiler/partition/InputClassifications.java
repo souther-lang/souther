@@ -1,14 +1,11 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Membership;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,11 +80,9 @@ public final class InputClassifications {
                                                 MeasuredInput.MeasuredAxes axes,
                                                 Incompleteness unreached) {
         BehaviorInputs where = axes.subject().inputs();
-        // One row walked to every position, through the same few types each time.
-        Map<Type, TypeView> views = new HashMap<>();
         List<Classification> out = new ArrayList<>(axes.size());
         for (Axis axis : axes.axes()) {
-            out.add(axis.derivable() ? classify(inputs, where, axis, views, unreached) : null);
+            out.add(axis.derivable() ? classify(inputs, where, axis, unreached) : null);
         }
         return java.util.Collections.unmodifiableList(out);
     }
@@ -105,11 +100,10 @@ public final class InputClassifications {
      * had to guess.
      */
     private static Classification classify(List<ObservedValue> inputs, BehaviorInputs where,
-                                           Axis axis, Map<Type, TypeView> views,
-                                           Incompleteness unreached) {
+                                           Axis axis, Incompleteness unreached) {
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one folded into the word for a walk that could not be made.
-        return switch (where.occurrencesAt(inputs, axis.path(), views)) {
+        return switch (where.occurrencesAt(inputs, axis.path())) {
             case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
                     unreached != null ? new Classification.Unclassified(unreached)
                             : Classification.unreadable(

@@ -1,5 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.identity.DecidedByTheRest;
+
+import java.util.Objects;
+
 /**
  * What reading a module's declarations as a static analysis takes: the scope the names resolve in,
  * where the clauses in the representation it reads come from, and where a clause it reports about
@@ -60,16 +64,40 @@ package souther.compiler.check;
  */
 public record RuleReadingSource(Symbols symbols, ExpandedClauseLookup invariants,
                                 DeclarationAccess declarations, DeclarationNewtypes newtypes,
-                                FieldBindings bindings, ClauseLocations written, Origin origin) {
+                                FieldBindings bindings, ClauseLocations written, Origin origin,
+                                @DecidedByTheRest TypeViews views) {
 
     public RuleReadingSource {
         if (symbols == null || invariants == null || declarations == null || newtypes == null
-                || bindings == null || written == null || origin == null) {
+                || bindings == null || written == null || origin == null || views == null) {
             throw new IllegalArgumentException(
                     "reading a declaration's rules takes a scope, somewhere to read clauses from,"
                             + " somewhere to ask what a declaration says, somewhere to read where"
                             + " one is written, and which source that is");
         }
+    }
+
+    /** The same source whatever it has worked out of its types: that is decided by the rest. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof RuleReadingSource that && symbols.equals(that.symbols)
+                && invariants.equals(that.invariants) && declarations.equals(that.declarations)
+                && newtypes.equals(that.newtypes) && bindings.equals(that.bindings)
+                && written.equals(that.written) && origin.equals(that.origin);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(symbols, invariants, declarations, newtypes, bindings, written,
+                origin);
+    }
+
+    /** A source that has worked out nothing yet of what its types are. */
+    public RuleReadingSource(Symbols symbols, ExpandedClauseLookup invariants,
+                             DeclarationAccess declarations, DeclarationNewtypes newtypes,
+                             FieldBindings bindings, ClauseLocations written, Origin origin) {
+        this(symbols, invariants, declarations, newtypes, bindings, written, origin,
+                new TypeViews());
     }
 
     /**

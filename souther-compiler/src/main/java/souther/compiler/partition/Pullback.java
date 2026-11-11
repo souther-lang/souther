@@ -5341,10 +5341,17 @@ final class Pullback {
             if (read != null) {
                 return new Operand.At<>(read);
             }
-            Value written = subject instanceof LawSubject.Argument<DeclaredArgument>(
-                    DeclaredArgument at)
-                    ? Value.folded(foldedUnderItsNames(applied.argument(at), reads).orElse(null))
-                    : null;
+            Value written = switch (subject) {
+                case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) -> Value.folded(
+                        foldedUnderItsNames(applied.argument(at), reads).orElse(null));
+                // An element of a container the source wrote out is a value it wrote as much as
+                // an argument it handed over is.
+                case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
+                        elements.get(at) instanceof ElementAt.AValue(Core value, InputReads in)
+                                ? Value.folded(foldedUnderItsNames(value, in).orElse(null))
+                                : null;
+                default -> null;
+            };
             return written == null ? null : new Operand.Written<>(written);
         }
 
@@ -5373,8 +5380,9 @@ final class Pullback {
          * The value {@code subject} names as a form over numbers, each a number of the input read
          * on an order or one a binding names, as a comparison the source wrote of it reads it — or
          * null where it is no such form: the element of a container that is no position, a value
-         * whose arithmetic is not read, one on no order, or a constant: a container holding a
-         * constant is no relation of the input's numbers, and is left unread at the container.
+         * whose arithmetic is not read, or one on no order. A constant is a form of no atom, which
+         * the container holding it is compared with: a date written out is a number of days the
+         * element is told apart at, as a whole number written is.
          */
         private LinearForm<Quantity> numberOf(LawSubject<DeclaredArgument> subject) {
             LinearForm<Quantity> form = switch (subject) {
@@ -5391,7 +5399,7 @@ final class Pullback {
                         };
                 default -> null;
             };
-            return form != null && !form.coefs().isEmpty()
+            return form != null
                     && form.coefs().keySet().stream().allMatch(atom -> switch (atom) {
                 case DecisionAtom.OfTheInput(NumericTerm term, var _) -> readOnAnOrder(term);
                 case Quantity.OfABinding _ -> true;

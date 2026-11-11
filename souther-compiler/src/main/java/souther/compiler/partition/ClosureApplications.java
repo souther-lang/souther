@@ -306,13 +306,35 @@ sealed interface ClosureApplications {
             case Outside(var metOn, var _) -> metOn;
             case NotSaid(var metOn) -> metOn;
             case None _ -> ElementsMetOn.EVERY;
-            case Each(var each) -> {
-                ElementsMetOn first = each.getFirst().metOn();
-                yield each.stream().allMatch(one -> one.metOn().equals(first)) ? first
-                        : ElementsMetOn.EVERY.notSaidAnywhere(
-                                ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
-            }
+            case Each(var each) -> agreed(each);
         };
+    }
+
+    /**
+     * Which elements a line is met on, where it is drawn by {@code readBy} of the applications and
+     * not by all of them: what those applications agree on, as {@link #elementsMetOn} says it of
+     * all. A line one application draws is met through that application, and what another says of
+     * the elements it is made on is no part of whether a run met this one.
+     *
+     * <p>Every application's answer where {@code readBy} names none of them.
+     */
+    default ElementsMetOn elementsMetOn(ApplicationsReadOn readBy) {
+        if (!(this instanceof Each(var each))) {
+            return elementsMetOn();
+        }
+        List<Application> drawing = each.stream()
+                .filter(one -> !one.readOn().isEmpty()
+                        && readBy.each().containsAll(one.readOn().each()))
+                .toList();
+        return drawing.isEmpty() ? agreed(each) : agreed(drawing);
+    }
+
+    /** What {@code applications} agree on, and where they say different things, that which of
+     *  them a row's element was met through is not said. */
+    private static ElementsMetOn agreed(List<Application> applications) {
+        ElementsMetOn first = applications.getFirst().metOn();
+        return applications.stream().allMatch(one -> one.metOn().equals(first)) ? first
+                : ElementsMetOn.EVERY.notSaidAnywhere(ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
     }
 
     /**
