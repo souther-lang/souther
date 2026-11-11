@@ -253,16 +253,16 @@ public final class BehaviorSetStatements {
      * rest and under the same allowance. Whether the position holds values on both sides of it is
      * settled where its values are known ({@link Classing}), as for any rule that states a set.
      *
-     * <p>As far as each string is shown, which is the three regions {@code strings} holds: the
-     * strings shown to be the partner's, those shown to be none of its values, and the rest, told
+     * <p>As far as each value is shown, which is the three regions {@code holds} keeps: the
+     * values shown to be the partner's, those shown to be none of its values, and the rest, told
      * neither way, which are in no class this draws and are said to be left open
      * ({@link SetStatement#notShown}). Held as the one value they are read off, so what is open is
      * said in one place.
      *
-     * @param by      which reading of which comparison this is
-     * @param states  what it states, called by the partner it is relative to
-     * @param term    the position it is about
-     * @param strings the strings the partner can hold, as far as each is shown
+     * @param by     which reading of which comparison this is
+     * @param states what it states, called by the partner it is relative to
+     * @param term   the position it is about
+     * @param holds  the strings or the numbers the partner can hold, as far as each is shown
      */
     public record Partnered(PredicateOrigin by, PredicateStatement states,
                             NumericTerm.FromOnePosition term, PartnerHolds holds) {

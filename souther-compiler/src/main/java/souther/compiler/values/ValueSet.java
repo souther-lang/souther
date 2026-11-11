@@ -370,6 +370,12 @@ public sealed interface ValueSet {
      * before anything is worked out. Past that, progressions are compared by what each holds that
      * the other does not, which is paid for in progressions ({@link #PROGRESSIONS_COMPARED}) and
      * answers {@link Likeness#NOT_SHOWN} where it is more than that.
+     *
+     * <p>Where either is a set of whole numbers, the comparison is of the whole numbers each
+     * holds, as it is for runs: a set naming every value but some whole numbers is read as the
+     * whole numbers it leaves, and a set that names a value that is no whole number, or holds a
+     * language, is {@link Likeness#DIFFERENT} from every set of them. The sets are compared over
+     * the numbers a position of whole numbers takes, which is the only place this is asked.
      */
     default Likeness comparedWith(ValueSet other) {
         if (equals(other)) {

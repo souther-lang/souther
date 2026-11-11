@@ -3292,11 +3292,49 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 Side there = sides.get(1 - at);
                 String named = there.number() instanceof NumericTerm.ValueOf place
                         ? place.subjectPath().toString() : there.number().toString();
-                out.put(mine, new NumbersAPartnerCanHold(holds, there.weight().abs().equals(
-                        ExactRatio.ONE) ? named : there.weight().abs() + " * " + named));
+                String partner = whatTheEquationMakesOf(sides.get(at).weight(), there.weight(),
+                        constant, named);
+                if (partner != null) {
+                    out.put(mine, new NumbersAPartnerCanHold(holds, partner));
+                }
             }
         }
         return out;
+    }
+
+    /**
+     * The other side of an equality as the number the position beside it is: for
+     * {@code weightHere·here + weightThere·there + constant = 0}, the value
+     * {@code (-weightThere·there - constant) / weightHere}, written with the sign of
+     * {@code weightHere} taken out so that what is divided by is positive.
+     *
+     * @return the text, or null where a weight or the constant is no whole number
+     */
+    private static String whatTheEquationMakesOf(ExactRatio weightHere, ExactRatio weightThere,
+                                                 ExactRatio constant, String there) {
+        if (!(weightHere.floor() instanceof ExactAnswer.Held<BigInteger>(var divisor))
+                || !(weightThere.floor() instanceof ExactAnswer.Held<BigInteger>(var weighed))
+                || !(constant.floor() instanceof ExactAnswer.Held<BigInteger>(var added))
+                || divisor.signum() == 0) {
+            return null;
+        }
+        BigInteger factor = weighed.negate();
+        BigInteger offset = added.negate();
+        if (divisor.signum() < 0) {
+            divisor = divisor.negate();
+            factor = factor.negate();
+            offset = offset.negate();
+        }
+        String weighedText = factor.equals(BigInteger.ONE) ? there
+                : factor.equals(BigInteger.ONE.negate()) ? "-" + there
+                : factor + " * " + there;
+        String whole = offset.signum() == 0 ? weighedText
+                : weighedText + (offset.signum() > 0 ? " + " : " - ") + offset.abs();
+        if (divisor.equals(BigInteger.ONE)) {
+            return whole;
+        }
+        return weighedText.equals(whole) && factor.equals(BigInteger.ONE)
+                ? whole + " / " + divisor : "(" + whole + ") / " + divisor;
     }
 
     /**

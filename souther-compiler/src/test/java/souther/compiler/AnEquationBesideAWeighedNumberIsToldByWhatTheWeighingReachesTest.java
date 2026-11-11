@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -157,19 +158,24 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
         assertFalse(said.contains("not read"), said);
         List<RowsOfABlock.Row> rows = rows(source);
         String sum = "List.sum({if 1·qty + -5 > 0 then 1·qty + 0 else 0 | lines[*]})";
-        rows.stream().filter(row -> row.fills().stream()
-                .anyMatch(line -> line.startsWith("cap: cap can be " + sum))).forEach(row -> {
-                    BigInteger cap = capOf(row);
-                    assertTrue(cap.signum() == 0 || cap.compareTo(BigInteger.valueOf(6)) >= 0,
-                            "can be " + cap);
-                });
-        rows.stream().filter(row -> row.fills().stream()
-                .anyMatch(line -> line.startsWith("cap: cap is never " + sum))).forEach(row -> {
-                    BigInteger cap = capOf(row);
-                    assertTrue(cap.signum() < 0
-                            || (cap.signum() > 0 && cap.compareTo(BigInteger.valueOf(6)) < 0),
-                            "never " + cap);
-                });
+        List<BigInteger> canBe = rows.stream().filter(row -> row.fills().stream()
+                .anyMatch(line -> line.startsWith("cap: cap can be " + sum)))
+                .map(AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest::capOf)
+                .toList();
+        List<BigInteger> never = rows.stream().filter(row -> row.fills().stream()
+                .anyMatch(line -> line.startsWith("cap: cap is never " + sum)))
+                .map(AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest::capOf)
+                .toList();
+        // What is checked below is not an empty list: the class where it holds has a row written
+        // for it, and the class where it never does is covered by a row of the rows there are.
+        assertFalse(canBe.isEmpty(), rows.toString());
+        Predicate<BigInteger> reached = cap -> cap.signum() == 0
+                || cap.compareTo(BigInteger.valueOf(6)) >= 0;
+        canBe.forEach(cap -> assertTrue(reached.test(cap), "can be " + cap));
+        never.forEach(cap -> assertFalse(reached.test(cap), "never " + cap));
+        assertTrue(rows.stream().map(
+                AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest::capOf)
+                .anyMatch(reached.negate()), "no row has a value the total never comes to");
     }
 
     /** What several elements add up to is the evens from nought, so an even value past what one
@@ -217,10 +223,34 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
         List<RowsOfABlock.Row> rows = rows(model("", "x: Int", "x * 2 /= cap"));
         String said = report(model("", "x: Int", "x * 2 /= cap"));
         assertFalse(said.contains("not read"), said);
-        capsFor(rows, "cap: cap can be 2 * x at cap")
-                .forEach(cap -> assertTrue(even(cap), "can be " + cap));
-        rowsOfTheClass(rows, "cap: cap is never 2 * x")
-                .forEach(row -> assertFalse(even(capOf(row)), "never " + row.values()));
+        List<BigInteger> canBe = capsFor(rows, "cap: cap can be 2 * x at cap");
+        List<RowsOfABlock.Row> never = rowsOfTheClass(rows, "cap: cap is never 2 * x");
+        assertFalse(canBe.isEmpty(), rows.toString());
+        canBe.forEach(cap -> assertTrue(even(cap), "can be " + cap));
+        never.forEach(row -> assertFalse(even(capOf(row)), "never " + row.values()));
+        // The class of the values the equality is never true at is covered by a row that has one.
+        assertTrue(rows.stream().anyMatch(row -> !even(capOf(row))), rows.toString());
+    }
+
+    /**
+     * A class is named by the number the position is when the equation holds, with the sign and
+     * the constant it has: the numbers {@code 1 - 3x} comes to are not the multiples of three.
+     * The expectations are solved by hand for the position beside the weighed number.
+     */
+    @Test
+    void theClassSaysWhatTheEquationMakesOfThePositionBesideTheWeighedNumber() {
+        Map<String, String> theClassOfAPosition = Map.of(
+                "x * 2 == cap", "cap can be 2 * x",
+                "1 - x * 3 == cap", "cap can be -3 * x + 1",
+                "x * 2 + 3 == cap", "cap can be 2 * x + 3",
+                "x * 2 - 3 == cap", "cap can be 2 * x - 3",
+                "cap * 2 == x", "x can be 2 * cap",
+                "cap * 2 == x + 4", "x can be 2 * cap - 4",
+                "0 - cap * 2 == x * 3", "x can be (-2 * cap) / 3");
+        theClassOfAPosition.forEach((body, phrase) -> {
+            String said = rowsText(model("", "x: Int", body));
+            assertTrue(said.contains(phrase), body + " should read as " + phrase + "\n" + said);
+        });
     }
 
     /** A negative weight and a constant: {@code 1 - 3x} is one more than a multiple of three. */
