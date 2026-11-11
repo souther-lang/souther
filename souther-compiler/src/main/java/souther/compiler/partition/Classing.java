@@ -8,6 +8,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.numeric.WholeNumberSet;
@@ -338,7 +339,8 @@ final class Classing {
                      Allowance<NumericTerm.FromOnePosition> allowance,
                      Supplier<Meter> perWitness,
                      Function<Place, FixtureTemplate> writing) {
-        return of(term, null, mine, blocked, carrier, admits, allowance, perWitness, writing);
+        return of(term, null, null, mine, blocked, carrier, admits, allowance, perWitness,
+                writing);
     }
 
     /**
@@ -346,8 +348,13 @@ final class Classing {
      * about the number read from the position, so a place on that order can be asked of them
      * ({@link Recognition.OfACount}). Null where the position's values are no numbers, and the
      * classes are about the values themselves ({@link Recognition.OfASet}).
+     *
+     * @param within where the declarations leave the number, or null where they leave it as far as
+     *               its order runs: a class holds numbers of that and no others, and one that
+     *               holds none is no class of the position
      */
-    static Result of(NumericTerm.FromOnePosition term, TermOrders orders, List<RuleEvidence> mine,
+    static Result of(NumericTerm.FromOnePosition term, TermOrders orders,
+                     NumericDomain.Bounds within, List<RuleEvidence> mine,
                      List<ClassingBlocker> blocked, Carrier carrier, ValueSet admits,
                      Allowance<NumericTerm.FromOnePosition> allowance,
                      Supplier<Meter> perWitness,
@@ -460,7 +467,14 @@ final class Classing {
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
-            out.add(classOf(term, orders, cell, carrier, perWitness, writing).ofTheNumber(term));
+            WholeNumberSet numbers = numbersOfTheCell(orders, carrier, cell, within);
+            // A cell holding no number the declarations leave is no class of the position: it
+            // would be counted, and asked a row for, and no row can stand in it.
+            if (numbers != null && numbers.isNone()) {
+                continue;
+            }
+            out.add(classOf(term, orders, cell, numbers, carrier, perWitness, writing)
+                    .ofTheNumber(term));
         }
         // The classes are sets, so everything that went into them went into them — a value singled
         // out of a string is one of these classes rather than a cut beside them.
@@ -744,14 +758,13 @@ final class Classing {
 
     /** One cell as a class: what it holds, what it is called, and what a row would carry for it. */
     private static PartitionClass classOf(NumericTerm.FromOnePosition term, TermOrders orders,
-                                          Cell cell, Carrier carrier, Supplier<Meter> perWitness,
+                                          Cell cell, WholeNumberSet numbers, Carrier carrier,
+                                          Supplier<Meter> perWitness,
                                           Function<Place, FixtureTemplate> writing) {
         if (orders != null) {
             orders.areOf(term);
         }
-        WholeNumberSet numbers = orders != null && carrier instanceof Carrier.Whole
-                ? ValueSet.wholeNumbersOf(cell.values().values()) : null;
-        if (numbers != null && !numbers.isNone()) {
+        if (numbers != null) {
             return classOfNumbers(term, orders, cell, numbers, writing);
         }
         String label = said(cell, "x");
@@ -800,6 +813,25 @@ final class Classing {
     }
 
     /**
+     * The whole numbers of {@code cell} that the declarations leave the position ({@code within}),
+     * or null where the cell is no set of whole numbers or the position's values are none: the
+     * classes are then about the values themselves.
+     */
+    private static WholeNumberSet numbersOfTheCell(TermOrders orders, Carrier carrier, Cell cell,
+                                                   NumericDomain.Bounds within) {
+        if (orders == null || !(carrier instanceof Carrier.Whole)) {
+            return null;
+        }
+        WholeNumberSet numbers = ValueSet.wholeNumbersOf(cell.values().values());
+        if (numbers == null || within == null) {
+            return numbers;
+        }
+        BigInteger low = within.min() == null ? null : within.min().wholeAdmitted(true);
+        BigInteger high = within.max() == null ? null : within.max().wholeAdmitted(false);
+        return numbers.and(WholeNumberSet.ofRuns(WholeNumberRuns.one(low, high)));
+    }
+
+    /**
      * One cell of the numbers at a position as a class: asked about the number read from the
      * position, on the order it is counted on, and a row's value for it is a member of the cell.
      *
@@ -817,8 +849,9 @@ final class Classing {
         String id = PartitionClass.idOf(term, label);
         NumericSet counted = new NumericSet.InTheNumbers(numbers);
         Recognition is = new Recognition.OfACount(term, orders, counted);
-        // A member nearest nought, which the position's own values still have to admit.
-        Place stands = orders.answered().somewhereInHand(cell.values().values(),
+        // A member of the numbers the position is left, the one at the end of them the order
+        // reaches first: the class holds only those, so any of them is a value of the class.
+        Place stands = orders.answered().somewhereInHand(ValueSet.wholeNumberSet(numbers),
                 new OrderedInterval(null, null), PlacesApart.NONE);
         FixtureTemplate written = stands == null ? null : writing.apply(stands);
         return written == null

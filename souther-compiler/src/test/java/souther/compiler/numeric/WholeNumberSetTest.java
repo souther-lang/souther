@@ -3,7 +3,9 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -116,6 +118,103 @@ class WholeNumberSetTest {
         WholeNumberSet turned = x.valuesBeside(n(1), n(-1), n(5));
         assertEquals(n(5), turned.least());
         assertEquals(n(8), turned.greatest());
+    }
+
+    /**
+     * For every sign and size of the weights and the constant, and every kind of set (bounded,
+     * open either way, a remainder or not), {@code c} is one of what is left exactly where the
+     * number it fixes is a whole number of the set. The oracle asks the equation of each {@code c}
+     * and no run of the answer, so a rounding of an end the wrong way, or a sign carried across a
+     * weight, is a {@code c} the two disagree at.
+     */
+    @Test
+    void whatAWeighedEquationLeavesIsTheNumbersWhoseOtherNumberIsInTheSet() {
+        Random random = new Random(3146);
+        List<String> apart = new ArrayList<>();
+        for (int trial = 0; trial < 4000; trial++) {
+            BigInteger modulus = n(1 + random.nextInt(6));
+            Congruences within = new Congruences(n(random.nextInt(7)), modulus);
+            BigInteger from = random.nextInt(4) == 0 ? null : n(random.nextInt(31) - 15);
+            BigInteger to = random.nextInt(4) == 0 ? null : n(random.nextInt(31) - 15);
+            if (from != null && to != null && from.compareTo(to) > 0) {
+                BigInteger swap = from;
+                from = to;
+                to = swap;
+            }
+            WholeNumberSet set;
+            try {
+                set = WholeNumberSet.ofClass(within).and(
+                        WholeNumberSet.ofRuns(WholeNumberRuns.one(from, to)));
+            } catch (IllegalArgumentException none) {
+                continue;
+            }
+            if (set.isNone()) {
+                continue;
+            }
+            BigInteger weightHere = n((random.nextInt(2) == 0 ? 1 : -1) * (1 + random.nextInt(6)));
+            BigInteger weightThere = n((random.nextInt(2) == 0 ? 1 : -1) * (1 + random.nextInt(6)));
+            BigInteger constant = n(random.nextInt(19) - 9);
+            WholeNumberSet left = set.valuesBeside(weightHere, weightThere, constant);
+            for (long c = -150; c <= 150; c++) {
+                // weightHere·s + weightThere·c + constant = 0
+                BigInteger rest = weightThere.multiply(n(c)).add(constant).negate();
+                boolean expected = rest.mod(weightHere.abs()).signum() == 0
+                        && set.holds(rest.divide(weightHere));
+                if (left.holds(n(c)) != expected) {
+                    apart.add("s of " + set + ", " + weightHere + "·s + " + weightThere
+                            + "·c + " + constant + " = 0 at c = " + c + ": said "
+                            + left.holds(n(c)) + ", is " + expected);
+                    break;
+                }
+            }
+        }
+        assertEquals(List.of(), apart.stream().limit(5).toList());
+    }
+
+    /** A set built of several progressions, some of them touching, nested or open: what the
+     *  operations leave is what the numbers do, however the parts are joined and dropped. */
+    @Test
+    void theOperationsAreThoseOfNumbersForSetsOfManyProgressions() {
+        Random random = new Random(31461);
+        List<String> apart = new ArrayList<>();
+        WholeNumberSet.Budget room = parts -> parts <= 512;
+        for (int trial = 0; trial < 1500; trial++) {
+            WholeNumberSet one = aSetOfSeveral(random);
+            WholeNumberSet other = aSetOfSeveral(random);
+            WholeNumberSet both = one.and(other, room);
+            WholeNumberSet either = one.or(other, room);
+            WholeNumberSet not = one.complement(room);
+            for (long at = -60; at <= 60; at++) {
+                BigInteger number = n(at);
+                boolean inOne = one.holds(number);
+                boolean inOther = other.holds(number);
+                if ((both != null && both.holds(number) != (inOne && inOther))
+                        || (either != null && either.holds(number) != (inOne || inOther))
+                        || (not != null && not.holds(number) == inOne)) {
+                    apart.add(one + " with " + other + " at " + at);
+                    break;
+                }
+            }
+        }
+        assertEquals(List.of(), apart.stream().limit(3).toList());
+    }
+
+    private static WholeNumberSet aSetOfSeveral(Random random) {
+        WholeNumberSet out = WholeNumberSet.NONE;
+        for (int part = 0; part <= random.nextInt(3); part++) {
+            Congruences within = new Congruences(n(random.nextInt(5)), n(1 + random.nextInt(4)));
+            BigInteger from = random.nextInt(3) == 0 ? null : n(random.nextInt(41) - 20);
+            BigInteger to = random.nextInt(3) == 0 ? null : n(random.nextInt(41) - 20);
+            if (from != null && to != null && from.compareTo(to) > 0) {
+                BigInteger swap = from;
+                from = to;
+                to = swap;
+            }
+            WholeNumberSet each = WholeNumberSet.ofClass(within).and(
+                    WholeNumberSet.ofRuns(WholeNumberRuns.one(from, to)));
+            out = out.or(each);
+        }
+        return out;
     }
 
     @Test

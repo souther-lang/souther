@@ -50,7 +50,7 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
             + " List.filter(l -> l.qty > 5, lines)))";
     private static final String BOUNDED = "List.sum(List.map(i -> i.v * 2, items))";
 
-    private static final Pattern CAP = Pattern.compile("\\(.*?(-?\\d+)\\)\\s*->");
+    private static final Pattern CAP = Pattern.compile("\\(.*?(-?\\d+)\\)+\\s*->");
 
     private static String model(String declarations, String parameters, String body) {
         return """
@@ -80,13 +80,18 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    private static List<RowsOfABlock.Row> rows(String model) {
+    /** The block a person is handed for the model, as written. */
+    private static String rowsText(String model) {
         Compilation compilation = compile(model);
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule("probe"));
-        return RowsOfABlock.of(GeneratedRows.of(offering, Map.of(),
+        return GeneratedRows.of(offering, Map.of(),
                 SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .textInEnglish());
+                .textInEnglish();
+    }
+
+    private static List<RowsOfABlock.Row> rows(String model) {
+        return RowsOfABlock.of(rowsText(model));
     }
 
     /** The {@code cap} a row writes, which is the last number of its values. */
@@ -290,6 +295,97 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
             }
         }
         assertEquals(List.of("1", "2", "3"), classes, json);
+    }
+
+    /**
+     * Whatever the weights and the constants of the two sides, a row written for the class where
+     * the equation can hold has a {@code cap} some whole {@code x} reaches, and one written for
+     * the class where it never holds has none that does. The oracle is the equation itself,
+     * {@code a·x + b = c·cap + d} solved for {@code x}: it is whole exactly where {@code a}
+     * divides what is left of the other side.
+     */
+    @Test
+    void everyWeighedEquationPartsTheNumberByTheNumbersItReaches() {
+        int[][] forms = {
+                // a, b, c, d
+                {2, 0, 1, 0}, {-3, 1, 1, 0}, {4, -2, 1, 3}, {1, 0, 2, 0}, {2, 1, -1, 0},
+                {3, 0, 2, 1}, {-2, 5, 3, 0}, {4, 0, 6, 2}, {5, -2, -1, 3}, {1, 3, 1, -2},
+        };
+        List<String> apart = new ArrayList<>();
+        int asked = 0;
+        for (int[] form : forms) {
+            String body = "x * " + form[0] + " + " + form[1] + " == cap * " + form[2] + " + "
+                    + form[3];
+            List<RowsOfABlock.Row> rows = rows(model("", "x: Int", body));
+            asked += rowsOfTheClass(rows, "cap: cap can be").size();
+            for (RowsOfABlock.Row row : rowsOfTheClass(rows, "cap: cap can be")) {
+                if (!reaches(form, capOf(row))) {
+                    apart.add(body + ": the class where it can hold has " + row.values());
+                }
+            }
+            for (RowsOfABlock.Row row : rowsOfTheClass(rows, "cap: cap is never")) {
+                if (reaches(form, capOf(row))) {
+                    apart.add(body + ": the class where it never holds has " + row.values());
+                }
+            }
+        }
+        assertEquals(List.of(), apart);
+        assertTrue(asked >= forms.length / 2, "the classes were offered rows: " + asked);
+    }
+
+    /** Whether {@code a·x + b = c·cap + d} has a whole {@code x}. */
+    private static boolean reaches(int[] form, BigInteger cap) {
+        BigInteger left = cap.multiply(BigInteger.valueOf(form[2]))
+                .add(BigInteger.valueOf(form[3])).subtract(BigInteger.valueOf(form[1]));
+        return left.mod(BigInteger.valueOf(Math.abs(form[0]))).signum() == 0;
+    }
+
+    private static final String BOUNDED_CAP = """
+            data Cap = Int
+                invariant low = value >= 0
+                invariant high = value <= 100
+            """;
+
+    private static String boundedCap(String body) {
+        return model(BOUNDED_CAP, "x: Int", body).replace("cap: Int", "cap: Cap");
+    }
+
+    /** A value written for a class is one the position's declarations leave it: a number held to
+     *  nought through a hundred is offered a row in both classes, each inside those. */
+    @Test
+    void aRowForAClassIsAValueTheDeclarationsLeaveTheNumber() {
+        String source = boundedCap("x * 2 == cap.value");
+        List<RowsOfABlock.Row> rows = rows(source);
+        List<RowsOfABlock.Row> never = rowsOfTheClass(rows, "cap: cap is never");
+        List<RowsOfABlock.Row> canBe = rowsOfTheClass(rows, "cap: cap can be");
+        assertFalse(never.isEmpty() && canBe.isEmpty(), rows.toString());
+        for (RowsOfABlock.Row row : rows) {
+            if (row.isFor("cap: cap is never 2 * x at cap")
+                    || row.isFor("cap: cap can be 2 * x at cap")) {
+                BigInteger cap = capOf(row);
+                assertTrue(cap.signum() >= 0 && cap.compareTo(BigInteger.valueOf(100)) <= 0,
+                        "a value of the declared range: " + row.values());
+            }
+        }
+        // And no class is left without a row for want of a value the declarations leave.
+        assertFalse(rowsText(source).contains("no row for `cap: cap"), rowsText(source));
+    }
+
+    /** A class no number the declarations leave is in is no class: a hundred is the most. */
+    @Test
+    void aClassNoNumberTheDeclarationsLeaveIsInIsNoClass() {
+        Compilation compilation = compile(boundedCap("x * 2 == cap.value && cap.value > 200"));
+        String json = AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts()));
+        JsonNode axes = JsonMapper.builder().build().readTree(json).get("modules").get(0)
+                .get("behaviors").get(0).get("partition").get("axes");
+        List<String> classes = new ArrayList<>();
+        for (JsonNode axis : axes) {
+            if (axis.get("axis").asString().equals("check/cap")) {
+                axis.get("classes").forEach(each -> classes.add(each.asString()));
+            }
+        }
+        assertTrue(classes.stream().noneMatch(each -> each.contains("> 200")), classes.toString());
     }
 
     /** The borders of the equality are what they were. */

@@ -858,7 +858,7 @@ public final class Partitions {
         // here because this is where a witness for a row is paid for: a string offered for a row is
         // no answer about the position, and paying for it out of what the position may build would
         // let a representative decide how exactly the model was read.
-        Classing.Result answered = Classing.of(term, orders, mine, blocked, carrier,
+        Classing.Result answered = Classing.of(term, orders, domain, mine, blocked, carrier,
                 at.position().admits(), allowance, PatternPlan.Budget.OF_A_WITNESS::meter,
                 place -> standing(view, carrier, place, ruleSource));
         Classing.Classed classed = answered.classed();
