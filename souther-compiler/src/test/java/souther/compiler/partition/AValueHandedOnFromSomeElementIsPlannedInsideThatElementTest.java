@@ -174,7 +174,8 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
                 ? new RowDemand.Exists(ITEMS, only(inside), HOLDING, Optional.empty())
                 : new RowDemand.ForAll(ITEMS, only(inside), HOLDING, Optional.empty()));
         ContentsAsked.Asked one = asked.asked().getFirst();
-        assertEquals(value, one.value(), () -> "the one thing asked: " + asked);
+        assertEquals(new MembershipTarget.AtPosition(value), one.value(),
+                () -> "the one thing asked: " + asked);
         return one.standsWhereMet();
     }
 

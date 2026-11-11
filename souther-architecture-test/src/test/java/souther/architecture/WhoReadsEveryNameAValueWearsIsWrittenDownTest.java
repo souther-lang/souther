@@ -225,6 +225,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ContainersAddingUp$HowManyIsAskedFor;Ljava/util/List;L" + PARTITION
                             + "DemandsInside;" + REALIZATION + ")" + REALIZATION,
                     THE_POSITION),
+            row(PARTITION + "CountWitnesses", "mapsTold",
+                    "(" + TYPE + "Ljava/util/List;" + CONTEXT + ")Ljava/util/List;",
+                    THE_POSITION),
             row(PARTITION + "ElementsKeptApart", "keysMayRepeat",
                     "(Lsouther/compiler/core/Core;Lsouther/compiler/core/Core$Block;" + CONTEXT
                             + ")Z",

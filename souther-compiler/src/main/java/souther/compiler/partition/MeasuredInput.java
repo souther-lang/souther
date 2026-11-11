@@ -368,8 +368,9 @@ public final class MeasuredInput {
             for (ClauseRead read : PlacesTheRulesRead.membersNeeded(root.type(), source)) {
                 ClauseRead.Member member = read.member().orElseThrow();
                 out.add(new ContentsAsked.Asked(root.at().then(read.at().steps()),
-                        root.at().then(member.lookedFor().steps()), true, member.asAKey(),
-                        member.valueIn(), around));
+                        new MembershipTarget.AtPosition(
+                                root.at().then(member.lookedFor().steps())),
+                        true, member.asAKey(), member.valueIn(), around));
             }
         }
         List<RowDemand.OneValueAtBoth> apart = new ArrayList<>();
@@ -382,7 +383,8 @@ public final class MeasuredInput {
                         && EntryHeld.leaveNoNumberInCommon(one.valueIn().get(),
                                 other.valueIn().get())) {
                     RowDemand.OneValueAtBoth pair =
-                            RowDemand.OneValueAtBoth.of(one.value(), other.value(), false);
+                            RowDemand.OneValueAtBoth.of(one.valueAt().orElseThrow(),
+                                    other.valueAt().orElseThrow(), false);
                     if (pair != null) {
                         apart.add(pair);
                     }

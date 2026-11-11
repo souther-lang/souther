@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.InputReading;
@@ -392,6 +393,21 @@ public final class CountWitnesses {
         Map<TermPath, List<ValuesAStatementNames.Named>> named = ValuesAStatementNames.of(stated);
         Map<List<String>, List<FixtureTemplate>> told = new LinkedHashMap<>();
         for (TermPath place : PositionsAStatementReads.of(stated).orElse(List.of())) {
+            // The keys of a map the element holds are told apart by the map: one holding the value
+            // the statement names as a key, and one holding none, beside what the map's own type
+            // tells apart.
+            if (place.mapOfTheKeys() != null) {
+                List<String> map = fieldsBelow(container.element(), place.mapOfTheKeys());
+                List<FixtureTemplate> maps = map == null ? List.of()
+                        : mapsTold(Witnesses.typeAt(element, map, reading),
+                                named.getOrDefault(place, List.of()), reading);
+                if (!maps.isEmpty()) {
+                    List<FixtureTemplate> both = new ArrayList<>(told.getOrDefault(map, List.of()));
+                    maps.stream().filter(each -> !both.contains(each)).forEach(both::add);
+                    told.put(map, RowSearch.upTo(both, stopped));
+                }
+                continue;
+            }
             List<String> fields = fieldsBelow(container.element(), place);
             Type type = fields == null ? null : Witnesses.typeAt(element, fields, reading);
             if (type == null) {
@@ -427,6 +443,46 @@ public final class CountWitnesses {
                     out.add(one);
                 }
                 break;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The maps of {@code type} that tell apart what a statement names as their keys: one holding
+     * none, and one holding each value named, filed under a value its entries are written with —
+     * or none where {@code type} is no map, or a value to file under a key is not written.
+     */
+    private static List<FixtureTemplate> mapsTold(Type type,
+                                                  List<ValuesAStatementNames.Named> names,
+                                                  RuleReadingContext reading) {
+        if (type == null || names.isEmpty()) {
+            return List.of();
+        }
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Mapping mapping)) {
+            return List.of();
+        }
+        Proposals filed = Partitions.representativesOf(mapping.value(), reading);
+        FixtureTemplate none = WornNames.collectionHolding(view, List.of(), source);
+        if (filed.isEmpty() || none == null) {
+            return List.of();
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        out.add(none);
+        for (ValuesAStatementNames.Named each : names) {
+            FixtureTemplate key = switch (each) {
+                case ValuesAStatementNames.Named.Numeric number ->
+                        Partitions.writtenNumberAt(mapping.key(), number.at(), reading);
+                case ValuesAStatementNames.Named.Written text ->
+                        Witnesses.writtenAs(text.at(), mapping.key(), reading);
+            };
+            FixtureTemplate holding = key == null ? null : WornNames.collectionHolding(view,
+                    List.of(FixtureTemplate.entry(key, filed.values().getFirst())), source);
+            if (holding != null && !out.contains(holding)) {
+                out.add(holding);
             }
         }
         return out;

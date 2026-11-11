@@ -160,7 +160,7 @@ public final class WhatTheDeclarationsLeave {
                     amongCases(at, cases, holds == want, read);
             // Whether two values are one is no rule of either position alone, so asked of each
             // on its own, nothing rules it out.
-            case Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
+            case Proposition.SameValue _, Proposition.SameAsWritten _, Proposition.StringInside _, Proposition.LastToHold _,
                  Proposition.InTheStrings _ -> LEFT;
             // The elements of what a dependency answered are what a row stands it in with, the
             // same as the answer itself.

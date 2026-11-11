@@ -16,6 +16,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.values.Value;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -1958,7 +1959,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
             case Proposition.Always _, Proposition.Unread _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.SameValue _, Proposition.SameAsWritten _, Proposition.StringInside _, Proposition.LastToHold _,
                  Proposition.All _, Proposition.Any _,
                  Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _, Proposition.WhereItAnswers _,
@@ -2276,6 +2277,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             UndividedByARelation two = UndividedByARelation.ofTwoPositions(one, other);
             return stated instanceof Proposition.Some some ? two.searchedBy(some) : two;
         }
+        // A value written is held against the value at one position, for whether they are the
+        // same: no order is asked of it, so no line is drawn on the position.
+        List<Proposition.SameAsWritten> written = new ArrayList<>();
+        writtenValuesIn(stated, written);
+        if (same.isEmpty() && written.size() == 1 && written.getFirst().subject()
+                instanceof DecisionSubject.AnInput(TermPath at, var _)) {
+            UndividedByARelation one = UndividedByARelation.amongTheValuesAt(at);
+            return stated instanceof Proposition.Some some ? one.searchedBy(some) : one;
+        }
         List<Proposition.StringInside> inside = new ArrayList<>();
         stringsInsideIn(stated, inside);
         return same.isEmpty() && inside.size() == 1
@@ -2296,6 +2306,23 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.WhereItAnswers where -> {
                 stringsInsideIn(where.answers(), out);
                 stringsInsideIn(where.states(), out);
+            }
+            default -> { }
+        }
+    }
+
+    /** Every statement of a value being one the source wrote that {@code stated} is made of. */
+    private static void writtenValuesIn(Proposition stated, List<Proposition.SameAsWritten> out) {
+        switch (stated) {
+            case Proposition.SameAsWritten written -> out.add(written);
+            case Proposition.Some some -> writtenValuesIn(some.ofTheElement(), out);
+            case Proposition.All all -> all.parts().forEach(each -> writtenValuesIn(each, out));
+            case Proposition.Any any -> any.parts().forEach(each -> writtenValuesIn(each, out));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(each -> writtenValuesIn(each, out));
+            case Proposition.WhereItAnswers where -> {
+                writtenValuesIn(where.answers(), out);
+                writtenValuesIn(where.states(), out);
             }
             default -> { }
         }
@@ -2332,17 +2359,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // Which strings a string is one of is read where the rules about a position's strings
             // are, and is no line of numbers. Of the elements of a container it is the same
             // statement of each element, so that some element is in a language is no more a
-            // relation than that some element is a case.
+            // relation than that some element is a case. And of the elements, or the keys, of a
+            // container it is whether one is a value the source wrote, which no relation of two
+            // positions says.
             case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
                     && (statesNoRelation(some.ofTheElement())
-                            || some.ofTheElement() instanceof Proposition.InTheStrings);
+                            || some.ofTheElement() instanceof Proposition.InTheStrings
+                            || some.ofTheElement() instanceof Proposition.SameAsWritten);
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
                  Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
                     stated.partsHeld().stream().allMatch(Cutting::statesNoRelation);
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}). And which strings a string is one of, which is
             // read where the rules about a position's strings are, and is no line of numbers.
-            case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
+            case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _, Proposition.SameAsWritten _,
                  Proposition.StringInside _, Proposition.Unread _, Proposition.LastToHold _,
                  Proposition.OnAnApplication _, Proposition.SomeReachable _,
                  Proposition.InTheStrings _ -> false;
@@ -2371,6 +2401,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     if (!out.contains(FilingCoordinate.at(each))) {
                         out.add(FilingCoordinate.at(each));
                     }
+                }
+                yield true;
+            }
+            // A value written holds at no place, so what the sameness relates is the place of the
+            // other value alone.
+            case Proposition.SameAsWritten(DecisionSubject.AnInput(TermPath at, var _), Value _,
+                                           boolean _, Spelling _) -> {
+                if (!out.contains(FilingCoordinate.at(at))) {
+                    out.add(FilingCoordinate.at(at));
                 }
                 yield true;
             }

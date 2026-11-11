@@ -1,5 +1,6 @@
 package souther.compiler.values;
 
+import souther.compiler.cst.CstLexer;
 import souther.compiler.types.TypeSymbol;
 import souther.exact.ExactDecimals;
 
@@ -74,6 +75,34 @@ public sealed interface Value {
                 throw new IllegalArgumentException("a case is named by a declaration");
             }
         }
+    }
+
+    /**
+     * The value as it is written in a model: a string as a literal, a number plain, a case by the
+     * declaration's name.
+     */
+    default String spelled() {
+        return switch (this) {
+            case Text(String value) -> CstLexer.literalOf(value);
+            case Number(BigDecimal value) -> value.toPlainString();
+            case Truth(boolean value) -> Boolean.toString(value);
+            case Case(TypeSymbol data) -> data.name();
+        };
+    }
+
+    /**
+     * What a compile-time fold of a written expression came to, as the value it denotes — or null
+     * where it came to something no value here stands for: a case of an enumeration, a record, a
+     * collection.
+     */
+    static Value folded(Object written) {
+        return switch (written) {
+            case String text -> new Text(text);
+            case Long whole -> number(whole);
+            case BigDecimal decimal -> number(decimal);
+            case Boolean truth -> truth(truth);
+            case null, default -> null;
+        };
     }
 
     static Value text(String value) {

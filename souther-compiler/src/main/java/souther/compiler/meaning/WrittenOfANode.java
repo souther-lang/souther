@@ -68,6 +68,7 @@ public final class WrittenOfANode {
             // Which strings a string is one of is not shown to be asked of a node's own places.
             case Proposition.InTheStrings _ -> false;
             case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
+            case Proposition.SameAsWritten written -> reads(written.subject());
             case Proposition.StringInside inside -> reads(inside.inner()) && reads(inside.outer());
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,

@@ -231,6 +231,8 @@ public final class PositionsAStatementReads {
             // statement is about is no part of this statement to collect.
             case Proposition.InTheStrings _ -> false;
             case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
+            // The written value stands at no position, so what is read is the subject alone.
+            case Proposition.SameAsWritten written -> reads(written.subject());
             case Proposition.StringInside inside -> reads(inside.inner()) && reads(inside.outer());
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
             case Proposition.OnAnApplication _ -> {

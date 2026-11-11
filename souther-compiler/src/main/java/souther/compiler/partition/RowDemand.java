@@ -280,7 +280,7 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> positions() {
-            return elementAndValue(one, other);
+            return elementAndValue(one, new MembershipTarget.AtPosition(other));
         }
 
         /** None: a row held to this writes both. */
@@ -523,10 +523,15 @@ public sealed interface RowDemand {
      * <p>The element is not named here: it is always the element of the container the demand
      * holding this is about, and named twice the two could name different containers.
      */
-    record SameAs(TermPath value) implements OfAnElement {
+    record SameAs(MembershipTarget value) implements OfAnElement {
 
         public SameAs {
-            Objects.requireNonNull(value, "the position whose value the element is");
+            Objects.requireNonNull(value, "what the element is");
+        }
+
+        /** The element being the value at {@code at}. */
+        public SameAs(TermPath at) {
+            this(new MembershipTarget.AtPosition(at));
         }
 
         @Override
@@ -536,15 +541,20 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> valuesRead() {
-            return Set.of(value);
+            return value.positions();
         }
     }
 
     /** That the element is unequal to the value at {@code value}. */
-    record DifferentFrom(TermPath value) implements OfAnElement {
+    record DifferentFrom(MembershipTarget value) implements OfAnElement {
 
         public DifferentFrom {
-            Objects.requireNonNull(value, "the position whose value the element is not");
+            Objects.requireNonNull(value, "what the element is not");
+        }
+
+        /** The element being unequal to the value at {@code at}. */
+        public DifferentFrom(TermPath at) {
+            this(new MembershipTarget.AtPosition(at));
         }
 
         @Override
@@ -554,7 +564,7 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> valuesRead() {
-            return Set.of(value);
+            return value.positions();
         }
     }
 
@@ -566,10 +576,15 @@ public sealed interface RowDemand {
      * is asked whatever else of it, so what else the element is asked of its value — a relation
      * over it — is asked of the entry under that key.
      */
-    record KeyedAs(TermPath value) implements OfAnElement {
+    record KeyedAs(MembershipTarget value) implements OfAnElement {
 
         public KeyedAs {
-            Objects.requireNonNull(value, "the position whose value the key is");
+            Objects.requireNonNull(value, "what the key is");
+        }
+
+        /** The key being the value at {@code at}. */
+        public KeyedAs(TermPath at) {
+            this(new MembershipTarget.AtPosition(at));
         }
 
         @Override
@@ -579,15 +594,20 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> valuesRead() {
-            return Set.of(value);
+            return value.positions();
         }
     }
 
     /** That the key of the element is unequal to the value at {@code value}. */
-    record NotKeyedAs(TermPath value) implements OfAnElement {
+    record NotKeyedAs(MembershipTarget value) implements OfAnElement {
 
         public NotKeyedAs {
-            Objects.requireNonNull(value, "the position whose value the key is not");
+            Objects.requireNonNull(value, "what the key is not");
+        }
+
+        /** The key being unequal to the value at {@code at}. */
+        public NotKeyedAs(TermPath at) {
+            this(new MembershipTarget.AtPosition(at));
         }
 
         @Override
@@ -597,23 +617,24 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> valuesRead() {
-            return Set.of(value);
+            return value.positions();
         }
     }
 
-    /** The key of the entry {@code element} is the value of, and then {@code value}. */
-    private static Set<TermPath> keyAndValue(TermPath element, TermPath value) {
+    /** The key of the entry {@code element} is the value of, and then what the key is against:
+     *  its position, where it is the value at one. */
+    private static Set<TermPath> keyAndValue(TermPath element, MembershipTarget value) {
         Set<TermPath> out = new LinkedHashSet<>();
         out.add(element.prefix(element.steps().size() - 1).key());
-        out.add(value);
+        out.addAll(value.positions());
         return Collections.unmodifiableSet(out);
     }
 
-    /** {@code element} and then {@code value}, in that order whatever run it is. */
-    private static Set<TermPath> elementAndValue(TermPath element, TermPath value) {
+    /** {@code element} and then what it is against, in that order whatever run it is. */
+    private static Set<TermPath> elementAndValue(TermPath element, MembershipTarget value) {
         Set<TermPath> out = new LinkedHashSet<>();
         out.add(element);
-        out.add(value);
+        out.addAll(value.positions());
         return Collections.unmodifiableSet(out);
     }
 

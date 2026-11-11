@@ -423,6 +423,12 @@ public final class ReadThroughNames {
                         : one == same.one() && other == same.other() ? stated
                         : new Proposition.SameValue(one, other, same.holds());
             }
+            // The value written is the same whatever the names are: only the subject is told.
+            case Proposition.SameAsWritten written -> {
+                DecisionSubject of = told(written.subject(), telling);
+                yield of == null ? twoAsOne.get() : of == written.subject() ? stated
+                        : new Proposition.SameAsWritten(of, written.written(), written.holds());
+            }
             // A statement none of whose parts was told anything is the statement it was, and is
             // not put together again: joining parts orders them, which is no small thing to do
             // for each statement a reader tells.

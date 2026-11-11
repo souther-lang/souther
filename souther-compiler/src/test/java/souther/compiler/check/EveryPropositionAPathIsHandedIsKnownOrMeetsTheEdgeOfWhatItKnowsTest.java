@@ -26,6 +26,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
 import souther.compiler.query.ReadAs;
 import souther.compiler.semantics.StringContainment;
+import souther.compiler.values.Value;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -160,6 +161,8 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
         out.put("two values being one", new Proposition.SameValue(
                 new DecisionSubject.AnInput(TermPath.of("n")),
                 new DecisionSubject.AnInput(TermPath.of("s")), true));
+        out.put("a value being the one written", new Proposition.SameAsWritten(
+                new DecisionSubject.AnInput(TermPath.of("s")), Value.text("USD"), true));
         out.put("one string inside another", new Proposition.StringInside(
                 new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("n"))),
                 new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("s"))),

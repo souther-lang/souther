@@ -5,7 +5,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeReachName;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,8 +65,22 @@ final class PlanComposer {
          *
          * @param under composes a position of the plan, which is how a value read at a position of
          *              the same value is reached — composed the one way every position is
+         * @param writing writes a value the source wrote as the container holds it, which no
+         *              position of the plan stands for
          */
-        ContainerContents contentsOf(TermPath container, Under under);
+        ContainerContents contentsOf(TermPath container, Under under, Writing writing);
+    }
+
+    /**
+     * How a value the source wrote is written into a container, as one of its elements or as one
+     * of its keys. Each is null where nothing in the language writes the value at the type the
+     * container holds there.
+     */
+    interface Writing {
+
+        FixtureTemplate asElement(Value value);
+
+        FixtureTemplate asKey(Value value);
     }
 
     /** Composing one position of the plan, which is what a caller is given to reach below a field. */
@@ -104,6 +120,23 @@ final class PlanComposer {
             case ConstructionPlan.Exact exact ->
                     Proposals.ofNullable(WornNames.under(exact.worn(), exact.exact(), ruleSource));
         };
+    }
+
+    /**
+     * {@code value} written as an element, or a key, of a container of type {@code type} — or null
+     * where the container holds nothing of that kind or the value is none the type is written
+     * with.
+     */
+    private static FixtureTemplate writtenAs(Value value, Type type, boolean asKey,
+                                             RuleReadingSource source) {
+        if (!(TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums()) instanceof Shape.Container container)) {
+            return null;
+        }
+        Type held = asKey ? container instanceof Shape.Mapping map ? map.key() : null
+                : container.element();
+        return held == null ? null : ValueClasses.written(value, TypeView.shapeOf(held,
+                source.inners(), source.symbols(), source.kinds(), source.sums()));
     }
 
     /** What composing the positions a container is handed values from met. */
@@ -149,8 +182,20 @@ final class PlanComposer {
         }
         if (plan.handed()) {
             Met handed = new Met();
+            RuleReadingSource written = reading.source();
             ContainerContents contents = values.contentsOf(plan.at(),
-                    node -> handed.noting(compose(node, values, reading)));
+                    node -> handed.noting(compose(node, values, reading)),
+                    new Writing() {
+                        @Override
+                        public FixtureTemplate asElement(Value value) {
+                            return writtenAs(value, plan.type(), false, written);
+                        }
+
+                        @Override
+                        public FixtureTemplate asKey(Value value) {
+                            return writtenAs(value, plan.type(), true, written);
+                        }
+                    });
             met = met.and(handed.met);
             if (contents == null) {
                 return Proposals.NONE.meeting(met);

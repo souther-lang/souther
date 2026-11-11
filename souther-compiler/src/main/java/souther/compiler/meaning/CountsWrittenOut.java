@@ -186,7 +186,7 @@ public final class CountsWrittenOut {
             }
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.SameValue _, Proposition.SameAsWritten _,Proposition.StringInside _, Proposition.LastToHold _,
                  Proposition.Carried _, Proposition.Unread _ -> stated;
         };
     }

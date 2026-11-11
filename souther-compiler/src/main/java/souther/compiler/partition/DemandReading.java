@@ -32,6 +32,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.values.Value;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.semantics.ConditionJoin;
@@ -1736,6 +1737,16 @@ final class DemandReading {
                     List.of(new Read.Demands(RowDemand.OneValueAtBoth.of(one, other, holds)));
             case Proposition.SameValue _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
+            // A map's key being a value the source wrote, read at one element of the map: the map
+            // holds an entry filed under that value, or none does.
+            case Proposition.SameAsWritten(DecisionSubject.AnInput(TermPath at, var _), Value _,
+                                           boolean _, var _)
+                    when at.mapOfTheKeys() != null && writtenWays(stated, at.mapOfTheKeys()) != null ->
+                    someElementMeeting(at.mapOfTheKeys(),
+                            writtenWays(stated, at.mapOfTheKeys()), read, Optional.empty(),
+                            Optional.of(stated));
+            case Proposition.SameAsWritten _ ->
+                    List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
             // A piece held to a language depends on the string it is a piece of, which the
             // proposition does not say and the way the piece was read does.
             case Proposition.InTheStrings(
@@ -1869,9 +1880,13 @@ final class DemandReading {
                     DecisionSubject.AnInput(TermPath one, var _),
                     DecisionSubject.AnInput(TermPath at, var _), boolean holds, var _)
                     && one.equals(held.element())
-                    ? List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(at)
-                            : new RowDemand.DifferentFrom(at)))
+                    ? List.of(AnElementsWay.asking(holds
+                            ? new RowDemand.SameAs(new MembershipTarget.AtPosition(at))
+                            : new RowDemand.DifferentFrom(new MembershipTarget.AtPosition(at))))
                     : keyedWays(part, held, element);
+            if (these == null) {
+                these = writtenWays(part, held);
+            }
             choices.add(these != null ? these
                     : waysOf(projected(part, read, projection), element, everyElement, some,
                     read));
@@ -2294,8 +2309,34 @@ final class DemandReading {
         if (at == null || inside(at, element)) {
             return null;
         }
-        return List.of(AnElementsWay.asking(holds ? new RowDemand.KeyedAs(at)
-                : new RowDemand.NotKeyedAs(at)));
+        MembershipTarget target = new MembershipTarget.AtPosition(at);
+        return List.of(AnElementsWay.asking(holds ? new RowDemand.KeyedAs(target)
+                : new RowDemand.NotKeyedAs(target)));
+    }
+
+    /**
+     * What an element of the container at {@code held} is asked where {@code part} says it, or the
+     * key of it, is a value the source wrote — or null where {@code part} says no such thing.
+     *
+     * <p>The value stands at no position, so nothing is read from the row for it: what a row has
+     * to do is to hold that value, or not to, in the container.
+     */
+    private static List<AnElementsWay> writtenWays(Proposition part, TermPath held) {
+        if (!(part instanceof Proposition.SameAsWritten(
+                DecisionSubject.AnInput(TermPath at, var _), Value written, boolean holds,
+                var _))) {
+            return null;
+        }
+        MembershipTarget target = new MembershipTarget.Written(written);
+        if (at.equals(held.element())) {
+            return List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(target)
+                    : new RowDemand.DifferentFrom(target)));
+        }
+        if (at.equals(held.key())) {
+            return List.of(AnElementsWay.asking(holds ? new RowDemand.KeyedAs(target)
+                    : new RowDemand.NotKeyedAs(target)));
+        }
+        return null;
     }
 
     /**

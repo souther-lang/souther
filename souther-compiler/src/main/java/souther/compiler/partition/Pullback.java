@@ -147,6 +147,7 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -323,9 +324,9 @@ final class Pullback {
                         stated.partsHeld().forEach(part -> partsOf(part, into));
                 case Proposition.Unread _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                     Proposition.SameValue _, Proposition.StringInside _,
-                     Proposition.LastToHold _, Proposition.Carried _,
-                     Proposition.SomeReachable _ -> {
+                     Proposition.SameValue _, Proposition.SameAsWritten _,
+                     Proposition.StringInside _, Proposition.LastToHold _,
+                     Proposition.Carried _, Proposition.SomeReachable _ -> {
                     into.add(stated.spelling());
                     into.add(stated.deniedSpelling());
                 }
@@ -5250,6 +5251,10 @@ final class Pullback {
             if (one != null && other != null) {
                 return leaf(new Derivation.TheSameValue(same, one, other), e, reads);
             }
+            Derivation.TheSameAsWritten asWritten = sameAsWritten(same, one, other);
+            if (asWritten != null) {
+                return leaf(asWritten, e, reads);
+            }
             // A value chosen by cases is the same as the other on each of them, as a comparison
             // the source wrote of it is read ({@link #comparedWhereItsCountsAre}).
             List<Denotation> values = new ArrayList<>();
@@ -5267,6 +5272,29 @@ final class Pullback {
             return numbers != null ? leaf(numbers, e, reads)
                     : unread(e, reads,
                             new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE));
+        }
+
+        /**
+         * {@code same}, where one of the two values is a subject and the other is a value the
+         * source wrote — or null where neither is, or both are, or the one that is not a subject
+         * comes to no value written: a name chosen by cases, a value worked out of the input.
+         */
+        private Derivation.TheSameAsWritten sameAsWritten(
+                LawProposition.Same<DeclaredArgument> same, DecisionSubject one,
+                DecisionSubject other) {
+            if ((one == null) == (other == null)) {
+                return null;
+            }
+            boolean subjectIsOne = one != null;
+            Value written = writtenValue(subjectIsOne ? same.other() : same.one());
+            return written == null ? null : new Derivation.TheSameAsWritten(same,
+                    subjectIsOne ? one : other, subjectIsOne, written);
+        }
+
+        /** The value the source wrote as {@code subject}, or null where it is not written. */
+        private Value writtenValue(LawSubject<DeclaredArgument> subject) {
+            return subject instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at)
+                    ? Value.folded(folded(applied.argument(at), reads).orElse(null)) : null;
         }
 
         /**

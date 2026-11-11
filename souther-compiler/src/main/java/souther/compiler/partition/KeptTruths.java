@@ -42,7 +42,7 @@ final class KeptTruths {
                 }
                 case Proposition.Always _ -> { }
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _, Proposition.SameAsWritten _,
                      Proposition.StringInside _, Proposition.LastToHold _, Proposition.All _,
                      Proposition.Any _,
                      Proposition.Some _,

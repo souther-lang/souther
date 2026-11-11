@@ -131,8 +131,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         isIn(inside.inner()) || isIn(inside.outer());
                 case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.Carried _,
-                     Proposition.Unread _ -> false;
+                     Proposition.SameAsWritten _, Proposition.LastToHold _,
+                     Proposition.Carried _, Proposition.Unread _ -> false;
                 case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                      Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _,
                      Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
@@ -1384,6 +1384,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         case Proposition.InCases cases -> alike(cases.of(), apart);
                         case Proposition.SameValue same ->
                                 alike(same.one(), apart) && alike(same.other(), apart);
+                        case Proposition.SameAsWritten written -> alike(written.subject(), apart);
                         case Proposition.StringInside inside ->
                                 alike(inside.inner(), apart) && alike(inside.outer(), apart);
                         // Which element holding the value is the last to, what some element of a

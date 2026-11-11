@@ -9,6 +9,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -170,7 +171,8 @@ public final class AnswerAsAnInput {
             // of it is the answer's to meet.
             case Proposition.Compared _, Proposition.Some _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.StringInside _, Proposition.SomeReachable _ ->
+                 Proposition.SameAsWritten _, Proposition.StringInside _,
+                 Proposition.SomeReachable _ ->
                     heldAt(inputNumbersIn(stated), pinned, positive);
             // A statement of the input alone is about no answer, and was returned above.
             case Proposition.Always _, Proposition.Unread _, Proposition.LastToHold _,
@@ -393,6 +395,11 @@ public final class AnswerAsAnInput {
                 yield left == null || right == null ? null
                         : new Proposition.SameValue(left, right, holds);
             }
+            case Proposition.SameAsWritten(DecisionSubject of, Value written, boolean holds,
+                                           var _) -> {
+                DecisionSubject at = subject(of);
+                yield at == null ? null : new Proposition.SameAsWritten(at, written, holds);
+            }
             case Proposition.All all -> {
                 List<Proposition> parts = propositions(all.parts());
                 yield parts == null ? null : Proposition.all(parts);
@@ -467,7 +474,8 @@ public final class AnswerAsAnInput {
             case Proposition.Always _, Proposition.Unread _, Proposition.Carried _ -> false;
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
-                 Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.SameAsWritten _, Proposition.StringInside _,
+                 Proposition.LastToHold _,
                  Proposition.SomeReachable _, Proposition.All _, Proposition.Any _,
                  Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Some _,
                  Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->

@@ -466,7 +466,8 @@ final class MeaningAssumptions {
             // is not read here.
             case Proposition.InCases _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT);
-            case Proposition.SameValue _, Proposition.LastToHold _ ->
+            case Proposition.SameValue _, Proposition.SameAsWritten _,
+                 Proposition.LastToHold _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES);
             // One string inside another, or which language a string is in, is no fact a path holds
             // of a place: what it holds is what the statement says of how long each string is.

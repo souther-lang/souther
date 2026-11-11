@@ -18,8 +18,10 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.values.Value;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -82,6 +84,17 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
 
             behavior keyed : (ledger: Ledger, wanted: String) -> Bool
             let keyed (ledger, wanted) = Map.containsKey(wanted, ledger.totals)
+
+            behavior keyedWritten : (ledger: Ledger) -> Bool
+            let keyedWritten (ledger) = Map.containsKey("USD", ledger.totals)
+
+            data Roll = { codes: List<String>, sizes: List<Int> }
+
+            behavior listedWritten : (roll: Roll) -> Bool
+            let listedWritten (roll) = List.contains("USD", roll.codes)
+
+            behavior listedWrittenNumber : (roll: Roll) -> Bool
+            let listedWrittenNumber (roll) = List.contains(7, roll.sizes)
             """;
 
     @Test
@@ -234,6 +247,40 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                                     && over.equals(totals) && one.equals(totals.key())
                                     && other.equals(wanted)))),
                     () -> "the key is what is asked: " + stated);
+        }
+    }
+
+    /**
+     * A key the source wrote stands at no position, so what the map is asked is that it hold the
+     * value as a key, or that it hold none: the two classes of the map's place, as for a key
+     * another value names — with the value itself and not a position to read it from.
+     */
+    @Test
+    void aKeyWrittenIsAskedOfTheMapAsTheValueItself() {
+        MembershipTarget usd = new MembershipTarget.Written(Value.text("USD"));
+        RowDemand.Exists holds =
+                assertInstanceOf(RowDemand.Exists.class, asked("keyedWritten", true));
+        assertEquals("ledger.totals", holds.container().toString());
+        assertEquals(List.of(new RowDemand.KeyedAs(usd)), holds.ofAnElement().theWay());
+        RowDemand.ForAll fails =
+                assertInstanceOf(RowDemand.ForAll.class, asked("keyedWritten", false));
+        assertEquals("ledger.totals", fails.container().toString());
+        assertEquals(List.of(new RowDemand.NotKeyedAs(usd)), fails.ofEachElement().theWay());
+    }
+
+    /** A value written beside a list or a set is the element the container is asked to hold, or
+     *  to hold none equal to, whatever kind of value it is. */
+    @Test
+    void anElementWrittenIsAskedOfTheContainerAsTheValueItself() {
+        for (Map.Entry<String, Value> each : Map.of("listedWritten", Value.text("USD"),
+                "listedWrittenNumber", Value.number(7)).entrySet()) {
+            MembershipTarget written = new MembershipTarget.Written(each.getValue());
+            assertEquals(List.of(new RowDemand.SameAs(written)),
+                    assertInstanceOf(RowDemand.Exists.class, asked(each.getKey(), true))
+                            .ofAnElement().theWay());
+            assertEquals(List.of(new RowDemand.DifferentFrom(written)),
+                    assertInstanceOf(RowDemand.ForAll.class, asked(each.getKey(), false))
+                            .ofEachElement().theWay());
         }
     }
 

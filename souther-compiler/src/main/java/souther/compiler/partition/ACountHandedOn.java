@@ -80,8 +80,16 @@ record ACountHandedOn(TermPath counted, RowDemand.WithinIt meeting) {
      */
     private static boolean composed(RowDemand.WithinIt within) {
         return switch (within.asked()) {
-            case RowDemand.SameAs _, RowDemand.KeyedAs _ -> within.some();
-            case RowDemand.DifferentFrom _, RowDemand.NotKeyedAs _ -> !within.some();
+            case RowDemand.SameAs(MembershipTarget.AtPosition _),
+                 RowDemand.KeyedAs(MembershipTarget.AtPosition _) -> within.some();
+            case RowDemand.DifferentFrom(MembershipTarget.AtPosition _),
+                 RowDemand.NotKeyedAs(MembershipTarget.AtPosition _) -> !within.some();
+            // A value written is the same for every element, so no element is told apart from
+            // another by it: there is no first so many to hold it and rest to fail it.
+            case RowDemand.SameAs(MembershipTarget.Written _),
+                 RowDemand.KeyedAs(MembershipTarget.Written _),
+                 RowDemand.DifferentFrom(MembershipTarget.Written _),
+                 RowDemand.NotKeyedAs(MembershipTarget.Written _) -> false;
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
                  RowDemand.WithinIt _ -> false;
         };
@@ -94,10 +102,10 @@ record ACountHandedOn(TermPath counted, RowDemand.WithinIt meeting) {
      */
     List<String> fieldsToTheValue() {
         TermPath value = switch (meeting.asked()) {
-            case RowDemand.SameAs(TermPath at) -> at;
-            case RowDemand.DifferentFrom(TermPath at) -> at;
-            case RowDemand.KeyedAs(TermPath at) -> at;
-            case RowDemand.NotKeyedAs(TermPath at) -> at;
+            case RowDemand.SameAs(MembershipTarget target) -> positionOf(target);
+            case RowDemand.DifferentFrom(MembershipTarget target) -> positionOf(target);
+            case RowDemand.KeyedAs(MembershipTarget target) -> positionOf(target);
+            case RowDemand.NotKeyedAs(MembershipTarget target) -> positionOf(target);
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
                  RowDemand.WithinIt _ -> throw new IllegalStateException(
                     "a demand handed on is one a container is written for: " + meeting);
@@ -117,13 +125,20 @@ record ACountHandedOn(TermPath counted, RowDemand.WithinIt meeting) {
         return out;
     }
 
+    /** The position a demand handed on is about: only one at a position is handed on
+     *  ({@link #composed}). */
+    private static TermPath positionOf(MembershipTarget target) {
+        return target.position().orElseThrow(() -> new IllegalStateException(
+                "a demand handed on is of a value at a position: " + target));
+    }
+
     /** What the other container is asked about an element not meeting the statement. */
     RowDemand.WithinIt denied() {
         RowDemand.OfAnElement asked = switch (meeting.asked()) {
-            case RowDemand.SameAs(TermPath value) -> new RowDemand.DifferentFrom(value);
-            case RowDemand.DifferentFrom(TermPath value) -> new RowDemand.SameAs(value);
-            case RowDemand.KeyedAs(TermPath value) -> new RowDemand.NotKeyedAs(value);
-            case RowDemand.NotKeyedAs(TermPath value) -> new RowDemand.KeyedAs(value);
+            case RowDemand.SameAs(MembershipTarget value) -> new RowDemand.DifferentFrom(value);
+            case RowDemand.DifferentFrom(MembershipTarget value) -> new RowDemand.SameAs(value);
+            case RowDemand.KeyedAs(MembershipTarget value) -> new RowDemand.NotKeyedAs(value);
+            case RowDemand.NotKeyedAs(MembershipTarget value) -> new RowDemand.KeyedAs(value);
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
                  RowDemand.WithinIt _ -> throw new IllegalStateException(
                     "a demand handed on is one a container is written for: " + meeting);

@@ -20,6 +20,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,6 +65,19 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     private static final TermPath KS = TermPath.of("ks");
     private static final TermPath SHELF = TermPath.of("shelf");
 
+    /** Nothing here asks for a value the source wrote. */
+    private static final PlanComposer.Writing NOTHING_WRITTEN = new PlanComposer.Writing() {
+        @Override
+        public FixtureTemplate asElement(Value value) {
+            return null;
+        }
+
+        @Override
+        public FixtureTemplate asKey(Value value) {
+            return null;
+        }
+    };
+
     private static ContentsAsked asked(RowDemand.OfACondition demand) {
         return ContentsAsked.of(List.of(new OnTheWay.TakenIn(WHERE, demand, NamedElements.NONE)));
     }
@@ -94,7 +108,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     }
 
     private static List<String> keysEachFiled(ContentsAsked.Here here) {
-        ContainerContents contents = here.contentsOf(SHELF, _ -> null);
+        ContainerContents contents = here.contentsOf(SHELF, _ -> null, NOTHING_WRITTEN);
         assertNotNull(contents, "nothing is read off the shelf's own parameter");
         return contents.keysEachFiled().stream().map(each -> each.key().text()).toList();
     }
@@ -285,7 +299,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
                 new RowDemand.WithinIt(SHELF, true, new RowDemand.KeyedAs(KS.element())))
                 .asked(1), List.of(), List.of());
         ContainerContents contents = resolved(asked, "shelf", ksBuiltAs("a", "b"))
-                .contentsOf(SHELF, _ -> null);
+                .contentsOf(SHELF, _ -> null, NOTHING_WRITTEN);
 
         assertNotNull(contents);
         assertEquals(List.of("\"a\""), contents.keysEachFiled().stream()

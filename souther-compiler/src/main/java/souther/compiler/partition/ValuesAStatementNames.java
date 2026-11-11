@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -11,6 +12,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Text;
+import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -88,8 +90,18 @@ final class ValuesAStatementNames {
                     counted.statements().forEach(each -> collect(each, out));
             case Proposition.OnAnApplication applied ->
                     applied.each().forEach(each -> collect(each, out));
-            case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+            // A place the statement says holds a value it wrote is told apart at that value. A
+            // truth or a case is told apart by what the type divides into.
+            case Proposition.SameAsWritten(DecisionSubject.AnInput(TermPath place, var _),
+                                           Value written, boolean _, var _) ->
+                    named(place, switch (written) {
+                        case Value.Text(String text) -> List.of(new Named.Written(text));
+                        case Value.Number(BigDecimal number) -> List.of(new Named.Numeric(number));
+                        case Value.Truth _, Value.Case _ -> List.<Named>of();
+                    }, out);
+            case Proposition.SameAsWritten _, Proposition.Always _, Proposition.Truth _,
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _,
                  Proposition.StringInside _, Proposition.LastToHold _, Proposition.OfTheWays _,
                  Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _ -> { }
         }
