@@ -214,15 +214,17 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
     }
 
     /**
-     * What a container is held to and what the place takes are two ends, and the count is read only
-     * where the first is no further than the second: a list of truths held to two holds at most the
-     * two values a truth has, and one held to three may hold a count no row shows. (How an end is
-     * written as a number is the unit test's: a bound at the greatest whole number is no model's,
-     * the rules not leaving a container so many.)
+     * A count lies no further than the place has values, and is read as far as that: a list of
+     * truths holds at most the two values a truth has however many it holds, so the count of
+     * different ones is none, one or two and each is shown. The values a pattern leaves are counted
+     * and not listed: a list of codes of three capital letters held to more than the figure a
+     * listing stops at is shown to the number the letters make. (How an end is written as a number
+     * is the unit test's: a bound at the greatest whole number is no model's, the rules not
+     * leaving a container so many.)
      */
     @Test
-    void aCountIsReadOnlyWhereTheContainerHoldsNoMoreThanThePlaceTakes() {
-        String model = """
+    void aCountIsReadAsFarAsThePlaceHasValuesWhateverTheContainerMayHold() {
+        String bools = """
                 module probe
 
                 data Held = List<Bool>
@@ -231,8 +233,44 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
                 behavior heldCount : (xs: Held, k: Int) -> Bool
                 let heldCount (xs, k) = Set.size(Set.fromList(xs.value)) == k
                 """;
-        assertEquals(true, kIsRead(model.formatted("2"), "heldCount"));
-        assertEquals(false, kIsRead(model.formatted("3"), "heldCount"));
+        assertEquals(true, kIsRead(bools.formatted("2"), "heldCount"));
+        assertEquals(true, kIsRead(bools.formatted("3"), "heldCount"));
+        String codes = """
+                module probe
+
+                data Code = String
+                    invariant String.matches("[A-Z]{3}", value)
+                data Held = List<Code>
+                    invariant List.length(value) <= %s
+
+                behavior heldCount : (xs: Held, k: Int) -> Bool
+                let heldCount (xs, k) = Set.size(Set.fromList(xs.value)) == k
+                """;
+        assertEquals(true, kIsRead(codes.formatted("300"), "heldCount"));
+        assertEquals(true, kIsRead(codes.formatted("20000"), "heldCount"));
+    }
+
+    /**
+     * What a container asks of the elements it holds together is its own, and two elements that
+     * differ say nothing of three: a list that holds at most two different strings, however many
+     * strings it holds, is no row of a count of three. The count is not shown at what two elements
+     * could not reach, whatever the type of the strings has, and a reading that learns to follow
+     * what the rule says of the values must still show nothing past what it follows.
+     */
+    @Test
+    void aRuleOnTheValuesTheContainerHoldsTogetherLeavesTheCountNotShownPastWhatItSays() {
+        String model = """
+                module probe
+
+                data K = Int
+                    invariant value >= 0 && value <= 3
+                data AtMostTwo = List<String>
+                    invariant Set.size(Set.fromList(value)) <= 2
+
+                behavior twoCount : (xs: AtMostTwo, k: K) -> Bool
+                let twoCount (xs, k) = Set.size(Set.fromList(xs.value)) == k.value
+                """;
+        assertEquals(false, kIsRead(model, "twoCount"));
     }
 
     /**

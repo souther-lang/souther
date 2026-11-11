@@ -311,8 +311,9 @@ public final class CountWitnesses {
         boolean ofValues = asked.differentAt().isPresent();
         List<FixtureTemplate> both = ofValues
                 ? twoThatDiffer(tried, container, asked.differentAt().get(), built, inputs,
-                        statement, building)
-                : oneKeptAndOneDropped(tried, container, built, inputs, statement, building);
+                        statement, building, stopped)
+                : oneKeptAndOneDropped(tried, container, built, inputs, statement, building,
+                        stopped);
         if (both == null) {
             return Optional.empty();
         }
@@ -359,9 +360,10 @@ public final class CountWitnesses {
                                                               List<ObservedValue> built,
                                                               BehaviorInputs inputs,
                                                               AStatementAtARow statement,
-                                                              RowSearch.Building building) {
-        FixtureTemplate kept = null;
-        FixtureTemplate dropped = null;
+                                                              RowSearch.Building building,
+                                                              Set<Figure> stopped) {
+        List<FixtureTemplate> kept = new ArrayList<>();
+        List<FixtureTemplate> dropped = new ArrayList<>();
         for (FixtureTemplate each : tried) {
             Integer meet = metIn(List.of(each), container, built, inputs, statement, building);
             if (meet == null) {
@@ -369,21 +371,31 @@ public final class CountWitnesses {
             }
             // The container holds the element over again where a rule asks for more than one, so
             // it holds the statement of all of them or of none.
-            if (meet == container.filled(List.of(each)).size() && kept == null) {
-                kept = each;
-            } else if (meet == 0 && dropped == null) {
-                dropped = each;
-            }
-            if (kept != null && dropped != null) {
-                break;
+            if (meet == container.filled(List.of(each)).size()) {
+                kept.add(each);
+            } else if (meet == 0) {
+                dropped.add(each);
             }
         }
-        if (kept == null || dropped == null) {
-            return null;
+        // Two that the statement tells apart are no two the container holds: what it asks of the
+        // elements it holds together is its own, so each pair is asked of it, in the order the
+        // elements were tried and held to the figure they are tried to. Where the figure stops the
+        // asking it is said, and nothing is shown that the pairs left unasked would.
+        int asked = 0;
+        for (FixtureTemplate one : kept) {
+            for (FixtureTemplate other : dropped) {
+                if (asked++ >= MOST_VALUES) {
+                    stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+                    return null;
+                }
+                List<FixtureTemplate> both = List.of(one, other);
+                Integer meet = metIn(both, container, built, inputs, statement, building);
+                if (meet != null && meet == 1) {
+                    return both;
+                }
+            }
         }
-        List<FixtureTemplate> both = List.of(kept, dropped);
-        Integer meet = metIn(both, container, built, inputs, statement, building);
-        return meet == null || meet != 1 ? null : both;
+        return null;
     }
 
     /**
@@ -398,7 +410,8 @@ public final class CountWitnesses {
                                                        List<ObservedValue> built,
                                                        BehaviorInputs inputs,
                                                        AStatementAtARow statement,
-                                                       RowSearch.Building building) {
+                                                       RowSearch.Building building,
+                                                       Set<Figure> stopped) {
         List<FixtureTemplate> kept = new ArrayList<>();
         for (FixtureTemplate each : tried) {
             Integer meet = metIn(List.of(each), container, built, inputs, statement, building);
@@ -406,14 +419,23 @@ public final class CountWitnesses {
                 kept.add(each);
             }
         }
-        // Holding the same value is an equivalence, so two that differ exist exactly where some
-        // element differs from the first: each is asked of it alone.
-        for (int other = 1; other < kept.size(); other++) {
-            List<FixtureTemplate> both = List.of(kept.getFirst(), kept.get(other));
-            Integer different = differentIn(both, container, at, built, inputs, statement,
-                    building);
-            if (different != null && different == 2) {
-                return both;
+        // Two that differ are no two the container holds: what it asks of the elements it holds
+        // together is its own, so each pair is asked of it, the first element's with the others
+        // before any other, and held to the figure the elements are tried to. Where the figure
+        // stops the asking, it is said, and nothing is shown that the pairs left unasked would.
+        int asked = 0;
+        for (int one = 0; one < kept.size(); one++) {
+            for (int other = one + 1; other < kept.size(); other++) {
+                if (asked++ >= MOST_VALUES) {
+                    stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
+                    return null;
+                }
+                List<FixtureTemplate> both = List.of(kept.get(one), kept.get(other));
+                Integer different = differentIn(both, container, at, built, inputs, statement,
+                        building);
+                if (different != null && different == 2) {
+                    return both;
+                }
             }
         }
         return null;

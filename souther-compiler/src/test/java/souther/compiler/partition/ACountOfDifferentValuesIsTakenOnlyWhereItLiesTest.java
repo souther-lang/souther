@@ -51,13 +51,14 @@ class ACountOfDifferentValuesIsTakenOnlyWhereItLiesTest {
             for (Long mayLeast : ENDS) {
                 for (Long mayMost : ENDS) {
                     for (Long heldMost : ENDS) {
-                        for (int flags = 0; flags < 8; flags++) {
+                        for (int flags = 0; flags < 16; flags++) {
                             boolean overAgain = (flags & 1) != 0;
                             boolean everyElement = (flags & 2) != 0;
                             boolean someFail = (flags & 4) != 0;
+                            boolean allValues = (flags & 8) != 0;
                             UndividedByARelation.CountTakes taken =
                                     UndividedByARelation.differentTakes(
-                                            values == null ? null : at(values),
+                                            values == null ? null : at(values), allValues,
                                             between(mayLeast == null ? 0L : mayLeast, mayMost),
                                             between(0L, heldMost), overAgain, everyElement,
                                             someFail);
@@ -80,12 +81,12 @@ class ACountOfDifferentValuesIsTakenOnlyWhereItLiesTest {
      */
     @Test
     void aBoundAtTheGreatestWholeNumberIsABoundAndNotNone() {
-        UndividedByARelation.CountTakes taken = UndividedByARelation.differentTakes(null,
+        UndividedByARelation.CountTakes taken = UndividedByARelation.differentTakes(null, false,
                 between(0L, null), between(0L, (long) Integer.MAX_VALUE), true, true, false);
         assertNotNull(taken);
         assertEquals(at(Integer.MAX_VALUE), taken.takes().max());
 
-        UndividedByARelation.CountTakes none = UndividedByARelation.differentTakes(null,
+        UndividedByARelation.CountTakes none = UndividedByARelation.differentTakes(null, false,
                 between(0L, null), between(0L, null), true, true, false);
         assertNotNull(none);
         assertNull(none.takes().max(), "a container held to no most holds as many as it likes");
@@ -95,13 +96,41 @@ class ACountOfDifferentValuesIsTakenOnlyWhereItLiesTest {
      *  more than that many is shown at no value at all. */
     @Test
     void whatThePlaceTakesIsTheMostAndAContainerThatMustHoldMoreIsShownAtNone() {
-        UndividedByARelation.CountTakes few = UndividedByARelation.differentTakes(at(2),
+        UndividedByARelation.CountTakes few = UndividedByARelation.differentTakes(at(2), false,
                 between(0L, null), between(0L, null), true, true, false);
         assertNotNull(few);
         assertEquals(at(2), few.takes().max());
 
-        assertNull(UndividedByARelation.differentTakes(at(2), between(3L, null),
+        assertNull(UndividedByARelation.differentTakes(at(2), false, between(3L, null),
                 between(3L, null), false, true, false));
+    }
+
+    /**
+     * Where the values the place has are all of them, no count lies past how many there are: a
+     * container of any size holds at most that many different values, and is read against a number
+     * as far as it reaches. Where what was counted is no more than what was shown, the count lies
+     * as far as the container does.
+     */
+    @Test
+    void whereTheValuesCountedAreAllOfThemTheCountLiesNoFurtherThanTheyGo() {
+        UndividedByARelation.CountTakes all = UndividedByARelation.differentTakes(at(2), true,
+                between(0L, null), between(0L, null), true, true, false);
+        assertNotNull(all);
+        assertEquals(at(2), all.lies().max());
+        assertEquals(at(2), all.takes().max());
+
+        UndividedByARelation.CountTakes shown = UndividedByARelation.differentTakes(at(2), false,
+                between(0L, null), between(0L, null), true, true, false);
+        assertNotNull(shown);
+        assertNull(shown.lies().max());
+        assertEquals(at(2), shown.takes().max());
+
+        UndividedByARelation.CountTakes capped = UndividedByARelation.differentTakes(at(17576),
+                true, between(0L, 300L), between(0L, 300L), true, true, false);
+        assertNotNull(capped);
+        assertEquals(at(300), capped.lies().max());
+        assertEquals(at(300), capped.takes().max(),
+                "up to the cap, and not to the figure a listing of the values stops at");
     }
 
     /**
@@ -112,17 +141,19 @@ class ACountOfDifferentValuesIsTakenOnlyWhereItLiesTest {
     @Test
     void theFewestIsNoneOnlyWhereAnEmptyCountIsAWayToBeHeld() {
         NumericDomain.Bounds twoOrMore = between(2L, null);
-        assertEquals(at(0), UndividedByARelation.differentTakes(null, twoOrMore, twoOrMore, true,
-                false, true).takes().min(), "a list of elements the statement fails of");
-        assertEquals(at(1), UndividedByARelation.differentTakes(null, twoOrMore, twoOrMore, true,
-                false, false).takes().min(), "no element is shown to fail it");
-        assertEquals(at(1), UndividedByARelation.differentTakes(null, twoOrMore, twoOrMore, true,
-                true, true).takes().min(), "every element is kept");
-        assertEquals(at(2), UndividedByARelation.differentTakes(null, twoOrMore, twoOrMore, false,
-                false, true).takes().min(), "a container that holds each once");
-        assertEquals(at(0), UndividedByARelation.differentTakes(null, between(0L, null),
+        assertEquals(at(0), UndividedByARelation.differentTakes(null, false, twoOrMore,
+                twoOrMore, true, false, true).takes().min(),
+                "a list of elements the statement fails of");
+        assertEquals(at(1), UndividedByARelation.differentTakes(null, false, twoOrMore,
+                twoOrMore, true, false, false).takes().min(), "no element is shown to fail it");
+        assertEquals(at(1), UndividedByARelation.differentTakes(null, false, twoOrMore,
+                twoOrMore, true, true, true).takes().min(), "every element is kept");
+        assertEquals(at(2), UndividedByARelation.differentTakes(null, false, twoOrMore,
+                twoOrMore, false, false, true).takes().min(), "a container that holds each once");
+        assertEquals(at(0), UndividedByARelation.differentTakes(null, false, between(0L, null),
                 between(0L, null), false, true, false).takes().min());
-        assertTrue(UndividedByARelation.differentTakes(null, twoOrMore, twoOrMore, true, true,
-                false).lies().min().at().compareTo(at(1).at()) == 0, "and the count lies from one");
+        assertTrue(UndividedByARelation.differentTakes(null, false, twoOrMore, twoOrMore, true,
+                true, false).lies().min().at().compareTo(at(1).at()) == 0,
+                "and the count lies from one");
     }
 }

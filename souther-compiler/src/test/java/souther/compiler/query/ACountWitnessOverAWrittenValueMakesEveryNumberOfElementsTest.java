@@ -101,7 +101,7 @@ class ACountWitnessOverAWrittenValueMakesEveryNumberOfElementsTest {
             "viaFloor");
 
     /** The counts the measure of the model asked a witness of, by behavior. */
-    private static Map<String, List<Adequacy.WitnessOfACount>> askedOf(Compilation compilation) {
+    static Map<String, List<Adequacy.WitnessOfACount>> askedOf(Compilation compilation) {
         Set<Key<?>> reached = new HashSet<>();
         Deque<Key<?>> left = new ArrayDeque<>(List.of(new Adequacy.Coverage("demo")));
         Map<String, List<Adequacy.WitnessOfACount>> out = new LinkedHashMap<>();
