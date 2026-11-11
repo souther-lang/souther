@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.SequencedSet;
@@ -163,6 +164,19 @@ public final class Stdlib {
                 all.add(supplying.apply(constant));
             }
             return List.copyOf(all);
+        }
+
+        /** Two rewrites are one where they write the same call: the same target, as many
+         *  arguments kept, and the same constants supplied after them. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Rewrite that && target.equals(that.target)
+                    && supplied.equals(that.supplied) && keptArgs == that.keptArgs;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(target, supplied, keptArgs);
         }
     }
 
