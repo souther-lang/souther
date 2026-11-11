@@ -658,7 +658,9 @@ class RunnerTest {
         Runner.Program program = Runner.compile(file);
         Runner.RunException tooLongANumber = assertThrows(Runner.RunException.class,
                 () -> program.run("top", longNumber));
-        assertTrue(tooLongANumber.getMessage().contains("is not valid JSON"),
+        assertTrue(tooLongANumber.getMessage().contains("limit of the JSON reader"),
+                tooLongANumber.getMessage());
+        assertFalse(tooLongANumber.getMessage().contains("not valid JSON"),
                 tooLongANumber.getMessage());
         assertFalse(tooLongANumber.getMessage().contains("nests deeper"),
                 tooLongANumber.getMessage());
@@ -667,7 +669,9 @@ class RunnerTest {
         String longName = "{\"" + "n".repeat(50001) + "\":1}";
         Runner.RunException tooLongAName = assertThrows(Runner.RunException.class,
                 () -> program.run("top", longName));
-        assertTrue(tooLongAName.getMessage().contains("is not valid JSON"),
+        assertTrue(tooLongAName.getMessage().contains("limit of the JSON reader"),
+                tooLongAName.getMessage());
+        assertFalse(tooLongAName.getMessage().contains("not valid JSON"),
                 tooLongAName.getMessage());
         assertFalse(tooLongAName.getMessage().contains("nests deeper"), tooLongAName.getMessage());
     }
@@ -847,5 +851,144 @@ class RunnerTest {
         assertEquals("0.10000000000000001", Runner.run(file, "bare", "0.10000000000000001").trim());
         assertEquals("{\"v\":0.10000000000000001}",
                 Runner.run(file, "wrapped", "{\"v\":0.10000000000000001}").trim());
+    }
+
+    /**
+     * An object that names a member twice is refused with the path of the second name, wherever it
+     * stands, and not read as the last of them. The same name in two objects, or at two levels, is
+     * not a repeat.
+     */
+    @Test
+    void aMemberNamedTwiceIsRefusedAndNotReadAsTheLastOfThem() throws Exception {
+        Path file = write("pair.sou", """
+                data Pair = { a: Int, b: List<Pair> }
+                behavior same : (p: Pair) -> Pair
+                let same (p) = p
+                """);
+        Runner.Program program = Runner.compile(file);
+        assertEquals("{\"a\":1,\"b\":[{\"a\":2,\"b\":[]}]}",
+                program.run("same", "{\"a\":1,\"b\":[{\"a\":2,\"b\":[]}]}").trim());
+
+        Runner.RunException top = assertThrows(Runner.RunException.class,
+                () -> program.run("same", "{\"a\":1,\"a\":2,\"b\":[]}"));
+        assertEquals(1, top.exitCode);
+        assertTrue(top.getMessage().contains("/a"), top.getMessage());
+        assertTrue(top.getMessage().contains("twice"), top.getMessage());
+        assertFalse(top.getMessage().contains("not valid JSON"), top.getMessage());
+        assertTrue(top.localized(java.util.Locale.JAPANESE).contains("2回"),
+                top.localized(java.util.Locale.JAPANESE));
+
+        Runner.RunException nested = assertThrows(Runner.RunException.class,
+                () -> program.run("same", "{\"a\":1,\"b\":[{\"a\":2,\"b\":[],\"b\":[]}]}"));
+        assertTrue(nested.getMessage().contains("/b/0/b"), nested.getMessage());
+
+        // Text that is not JSON is bad JSON whatever the mapper calls it, and none of it is a repeat.
+        for (String input : new String[] {"}", "{", "{\"a\"}", "[1,]", "{\"a\":1,}", "'x'", "nul", "",
+                "{,}", "{\"a\":1 \"b\":2}"}) {
+            Runner.RunException syntax = assertThrows(Runner.RunException.class,
+                    () -> program.run("same", input), input);
+            assertFalse(syntax.getMessage().contains("twice"), input + ": " + syntax.getMessage());
+        }
+
+        // A second value after the first is a document that is not JSON, and no member is repeated
+        // in any of them: it must not be said as a repeat.
+        for (String input : new String[] {"{\"a\":1,\"b\":[]} true", "1 2",
+                "{\"a\":1,\"b\":[]}{\"a\":2,\"b\":[]}"}) {
+            Runner.RunException trailing = assertThrows(Runner.RunException.class,
+                    () -> program.run("same", input), input);
+            assertTrue(trailing.getMessage().contains("not valid JSON"), trailing.getMessage());
+            assertFalse(trailing.getMessage().contains("twice"), trailing.getMessage());
+            assertTrue(trailing.localized(java.util.Locale.JAPANESE).contains("正しい JSON ではありません"),
+                    trailing.localized(java.util.Locale.JAPANESE));
+        }
+    }
+
+    /**
+     * An invariant whose arithmetic has no room is the platform failing, said as that: not as input
+     * that is not shaped like its type, and not as a refusal of the value. Both ways in are walked,
+     * the argument as it stands and the argument inside the one-element array the sole-input retry
+     * reads again, because each reaches the decoder on its own.
+     */
+    @Test
+    void aDecoderWithNoRoomIsNotReportedAsAnInputOfTheWrongShape() throws Exception {
+        Path file = write("wide.sou", """
+                data Wide = { v: Decimal }
+                  invariant squares = v * v >= 0.0m
+                behavior keep : (w: Wide) -> Wide
+                let keep (w) = w
+                """);
+        Runner.Program program = Runner.compile(file);
+        assertEquals("{\"v\":2}", program.run("keep", "{\"v\":2}").trim());
+
+        for (String input : new String[] {"{\"v\":1E-2000000000}", "[{\"v\":1E-2000000000}]"}) {
+            Runner.RunException e = assertThrows(Runner.RunException.class,
+                    () -> program.run("keep", input), input);
+            assertEquals(1, e.exitCode);
+            assertTrue(e.getMessage().contains("no room"), e.getMessage());
+            assertTrue(e.getMessage().contains("input #1"), e.getMessage());
+            assertFalse(e.getMessage().contains("not shaped"), e.getMessage());
+            assertFalse(e.getMessage().contains("could not be decoded —"), e.getMessage());
+            assertTrue(e.localized(java.util.Locale.JAPANESE).contains("余裕"),
+                    e.localized(java.util.Locale.JAPANESE));
+        }
+    }
+
+    /**
+     * A number whose exponent no {@code BigDecimal} keeps is valid JSON and a {@code Decimal}, so the
+     * run says it has no room to write it and names where it stands, and never calls the input
+     * malformed. The last exponent a scale holds still reads, and text that is not a number at all is
+     * still bad JSON.
+     */
+    @Test
+    void aNumberWithNoRoomIsNotReportedAsBadJson() throws Exception {
+        Path file = write("amount.sou", """
+                data Holder = { v: List<Decimal> }
+                behavior bare : (d: Decimal) -> Decimal
+                let bare (d) = d
+                behavior wrapped : (h: Holder) -> Holder
+                let wrapped (h) = h
+                """);
+        Runner.Program program = Runner.compile(file);
+        assertEquals("1E-2147483647", program.run("bare", "1E-2147483647").trim());
+
+        for (String number : new String[] {"1E-2147483648", "1E-3000000000", "1E+3000000000",
+                "0E-3000000000", "1.000E-2147483650"}) {
+            Runner.RunException bare = assertThrows(Runner.RunException.class,
+                    () -> program.run("bare", number), number);
+            assertEquals(1, bare.exitCode);
+            assertTrue(bare.getMessage().contains("no room"), bare.getMessage());
+            assertTrue(bare.getMessage().contains("(root)"), bare.getMessage());
+            assertFalse(bare.getMessage().contains("not valid JSON"), bare.getMessage());
+            assertTrue(bare.localized(java.util.Locale.JAPANESE).contains("余裕"),
+                    bare.localized(java.util.Locale.JAPANESE));
+
+            Runner.RunException inField = assertThrows(Runner.RunException.class,
+                    () -> program.run("wrapped", "{\"v\":[1," + number + "]}"), number);
+            assertTrue(inField.getMessage().contains("/v/1"), inField.getMessage());
+            assertFalse(inField.getMessage().contains("not valid JSON"), inField.getMessage());
+        }
+
+        // a Decimal of more digits than the reader takes is a Decimal all the same
+        Runner.RunException tooManyDigits = assertThrows(Runner.RunException.class,
+                () -> program.run("bare", "1".repeat(1001)));
+        assertTrue(tooManyDigits.getMessage().contains("limit of the JSON reader"),
+                tooManyDigits.getMessage());
+        assertFalse(tooManyDigits.getMessage().contains("not valid JSON"),
+                tooManyDigits.getMessage());
+        assertTrue(tooManyDigits.localized(java.util.Locale.JAPANESE).contains("上限"),
+                tooManyDigits.localized(java.util.Locale.JAPANESE));
+
+        // The reader stops at the first number it cannot hold, so what follows it is not read and
+        // the diagnostic does not say the whole input is JSON.
+        Runner.RunException followed = assertThrows(Runner.RunException.class,
+                () -> program.run("bare", "1E-2147483648 0"));
+        assertTrue(followed.getMessage().contains("no room"), followed.getMessage());
+        assertTrue(followed.getMessage().contains("was not read"), followed.getMessage());
+        assertFalse(followed.getMessage().contains("not valid JSON"), followed.getMessage());
+        assertFalse(followed.getMessage().contains("input is valid JSON"), followed.getMessage());
+
+        Runner.RunException truncated = assertThrows(Runner.RunException.class,
+                () -> program.run("bare", "1E-"));
+        assertTrue(truncated.getMessage().contains("not valid JSON"), truncated.getMessage());
     }
 }
