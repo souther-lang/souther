@@ -433,8 +433,7 @@ public final class CountWitnesses {
                 ? twoThatDiffer(tried, container, asked.differentAt().get(), built, inputs,
                         statement, building, getsThere, stopped)
                 : oneKeptAndOneDropped(tried, container, built, inputs, statement, building,
-                        pair -> holdsEach(pair, container, building) && getsThere.test(pair),
-                        stopped);
+                        getsThere, stopped);
         if (both == null) {
             return Optional.empty();
         }
@@ -448,22 +447,6 @@ public final class CountWitnesses {
                 ? Expansion.INDEPENDENT_KEYS : Expansion.ONLY_THESE;
         return Optional.of(new Witness(rowHolding(row, container, both), container.at(),
                 both.getFirst(), both.getLast(), failing, expansion));
-    }
-
-    /**
-     * Whether the container holds each of {@code elements}: where it is a map, as many entries as
-     * there are elements, so that two entries filed under one key — which the boundary may keep as
-     * one — are not taken for two.
-     */
-    private static boolean holdsEach(List<FixtureTemplate> elements, Container container,
-                                     RowSearch.Building building) {
-        if (container.key() == null) {
-            return true;
-        }
-        return building.build(container.at(), container.holding(elements))
-                .map(held -> container.inside(held) instanceof ObservedValue.Mapping(var entries)
-                        && entries.size() == container.filled(elements).size())
-                .orElse(false);
     }
 
     /** {@code row} with the container holding {@code elements}. */
@@ -652,14 +635,18 @@ public final class CountWitnesses {
     /**
      * How many of {@code elements}, the container's elements in a row otherwise {@code row}, the
      * statement holds of — or null where the boundary refused the container, or the statement
-     * could not tell of some element.
+     * could not tell of some element. A map the boundary built with fewer entries than it was
+     * given, two filed under one key and kept as one, is refused: the elements are not what it
+     * holds.
      */
     private static Integer metIn(List<FixtureTemplate> elements, Container container,
                                  List<ObservedValue> built, BehaviorInputs inputs,
                                  AStatementAtARow statement, RowSearch.Building building) {
         Optional<ObservedValue> held = building.build(container.at(),
                 container.holding(elements));
-        if (held.isEmpty()) {
+        if (held.isEmpty() || (container.key() != null
+                && !(container.inside(held.get()) instanceof ObservedValue.Mapping(var entries)
+                        && entries.size() == container.filled(elements).size()))) {
             return null;
         }
         List<ObservedValue> values = new ArrayList<>(built);
