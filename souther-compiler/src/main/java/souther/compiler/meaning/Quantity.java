@@ -1076,7 +1076,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * the ones beside it, so it is no count of elements meeting something.
      */
     record HowManyDifferent(DecisionSubject container, TheValue ofTheElement)
-            implements Quantity {
+            implements Quantity, CountedOverAContainer {
 
         /** A count. */
         @Override
@@ -1159,7 +1159,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param meeting      what keeps an element or a value, and which of the two it is asked of
      */
     record HowManyDifferentMeet(DecisionSubject container, TheValue ofTheElement,
-                                Selection meeting) implements Quantity {
+                                Selection meeting) implements Quantity, CountedOverAContainer {
 
         /** A count. */
         @Override
@@ -1682,7 +1682,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * said of.
      */
     record HowManyMeet(DecisionSubject container, Proposition ofTheElement)
-            implements Quantity, ReadAlongAContainer {
+            implements Quantity, CountedOverAContainer {
 
         /** A count. */
         @Override
@@ -1887,7 +1887,32 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>One type for every such thing, for the reason {@link HandedToTheStep} is one: a reader of
      * a relation carrying one carries all of them.
      */
-    public sealed interface ReadAlongAContainer permits ReadOffABinding, HowManyMeet {}
+    public sealed interface ReadAlongAContainer permits ReadOffABinding, CountedOverAContainer {}
+
+    /**
+     * A number of the elements of one container: how many meet a statement, how many different
+     * values they hold at a place, or how many different values the ones a statement keeps hold.
+     * What a row shows of one is how many elements it holds and what they differ at, so the three
+     * are looked for a witness together ({@code CountWitnesses}).
+     */
+    public sealed interface CountedOverAContainer extends ReadAlongAContainer
+            permits HowManyMeet, HowManyDifferent, HowManyDifferentMeet {
+
+        /** Where the elements counted stand: the container, or the one inside each of its
+         *  elements where the count is across them. */
+        DecisionSubject container();
+
+        /** What an element is asked: the statement a count of elements is of, what keeps an element
+         *  of a count of the values of those a statement keeps, and nothing of a count of every
+         *  element's value. */
+        default Proposition statement() {
+            return switch (this) {
+                case HowManyMeet meet -> meet.ofTheElement();
+                case HowManyDifferent _ -> new Proposition.Always(true);
+                case HowManyDifferentMeet different -> different.meeting().statement();
+            };
+        }
+    }
 
     /**
      * The element at {@code index} of {@code container}, which a name an arm opening a lookup at

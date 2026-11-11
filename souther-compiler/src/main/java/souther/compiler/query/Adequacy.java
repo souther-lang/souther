@@ -1176,7 +1176,8 @@ public final class Adequacy {
      * @param reaching the places a run going through the comparison the witness is of is recorded
      *                 at: one of them a run of the witness has to be recorded at
      */
-    public record WitnessOfACount(String name, String behavior, Quantity.HowManyMeet count,
+    public record WitnessOfACount(String name, String behavior,
+                                  Quantity.CountedOverAContainer count,
                                   Set<ConditionOutcomeSite> reaching)
             implements Key<CountWitnesses.Sought> {
 
@@ -2984,8 +2985,9 @@ public final class Adequacy {
                             .allowanceForBehaviorDistinctions(),
                     new Coverages.WitnessesAtSites() {
                         @Override
-                        public CountWitnesses.Sought ofACount(Quantity.HowManyMeet count,
-                                                              Set<ConditionOutcomeSite> reaching) {
+                        public CountWitnesses.Sought ofACount(
+                                Quantity.CountedOverAContainer count,
+                                Set<ConditionOutcomeSite> reaching) {
                             return db.ask(new WitnessOfACount(name, behavior, count, reaching))
                                     .value();
                         }

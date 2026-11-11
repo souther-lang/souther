@@ -848,12 +848,29 @@ public sealed interface BorderQuantity
          *  how many meet the statement weighed by one, and each number of the form as it is. */
         UndividedByARelation relationAt(ExactRatio level, Rel relation) {
             Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
-            coefs.put(new Quantity.HowManyMeet(new DecisionSubject.AnInput(container), meeting),
-                    ExactRatio.ONE);
+            coefs.put(quantityCounted(), ExactRatio.ONE);
             against.coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
                     by));
             return UndividedByARelation.ofAForm(new LinearForm<>(level.negated(), coefs),
                     relation);
+        }
+
+        /**
+         * What is counted, as a quantity: how many elements meet the statement, or where the count
+         * is of different values, how many different values the elements meeting it hold — which
+         * is not the number of those elements, and what a relation of it is read from is a count
+         * of its own ({@link Quantity.HowManyDifferentMeet}). Asked of each element, as the
+         * count's identity has it ({@link CountedElements#identityOf}).
+         */
+        private Quantity quantityCounted() {
+            if (counted.differentAt().isEmpty()) {
+                return new Quantity.HowManyMeet(new DecisionSubject.AnInput(container), meeting);
+            }
+            return Objects.requireNonNull(Quantity.HowManyDifferentMeet.of(
+                    new DecisionSubject.AnInput(counted.across().orElse(container)),
+                    counted.differentAt().get(),
+                    new Quantity.HowManyDifferentMeet.Selection.OfEachElement(meeting)),
+                    "a count of different values is of the statement it was read with");
         }
 
         /** What the rules leave the quantity ({@link HowManyCanMeet#runsOf}). */
