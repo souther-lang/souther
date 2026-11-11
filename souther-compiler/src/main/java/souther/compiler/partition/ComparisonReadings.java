@@ -1683,8 +1683,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         : state.presence(application, standing.reads(), standing.read());
                 boolean itsOwn = stated.turnsOn().stream().anyMatch(leaf ->
                         Core.withoutStanding(leaf.from().value()) == application);
-                if (!itsOwn || Proposition.leavesSomethingUnread(stated.proposition())) {
+                if (Proposition.leavesSomethingUnread(stated.proposition())) {
                     return Optional.empty();
+                }
+                if (!itsOwn) {
+                    return Optional.of(new Cutting.AppliedOn(null, stated.meaning().how(),
+                            stated.proposition()));
                 }
                 Cutting.Read read = Cutting.ofAnApplication(behavior, application,
                         stated.proposition(), standing.read(), standing.reads(),

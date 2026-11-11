@@ -108,6 +108,10 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             let mapped (l) = List.map(k -> List.contains(k, l.tags), ["K", "L"])
             behavior mappedAny : (l: Line) -> List<Bool>
             let mappedAny (l) = List.map(k -> List.any(t -> t == k, l.tags), ["K", "L"])
+            behavior mixed : (l: Line) -> List<Bool>
+            let mixed (l) = List.map(xs -> List.contains(l.s, xs), [[], ["K"]])
+            behavior mixedAny : (l: Line) -> List<Bool>
+            let mixedAny (l) = List.map(xs -> List.any(e -> e == l.s, xs), [[], ["K"]])
 
             behavior any : (l: Line) -> Bool
             let any (l) = List.any(t -> t == "K", l.tags)
@@ -264,18 +268,26 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         assertEquals(linesOf("mappedAny"), linesOf("mapped"));
     }
 
-    /** More values written than the readings of one condition allow draw no line for the
-     *  application, as they draw none for the comparison. */
+    /** An application that states nothing on some application of the closure — a member asked of
+     *  no element — leaves the lines of the others drawn, with the points the comparison has. */
     @Test
-    void applicationsCuttingOneQuantityAtMoreValuesThanTheFigureAllowsDrawNoLine() {
-        int past = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() + 1;
-        String written = IntStream.range(0, past).mapToObj(i -> "\"v" + i + "\"")
+    void anApplicationThatStatesNothingDoesNotStopTheOthers() {
+        assertEquals(Set.of("l.s K"), linesOf("mixedAny"));
+        assertEquals(pointsOf("mixedAny"), pointsOf("mixed"));
+    }
+
+    /** Applications within the figure that draw more lines on one quantity than the figure allows
+     *  between them draw none: one application draws two, and the figure counts lines. */
+    @Test
+    void applicationsDrawingMoreLinesThanTheFigureAllowsBetweenThemDrawNone() {
+        int applications = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        String written = IntStream.range(0, applications).mapToObj(i -> "\"v" + i + "\"")
                 .collect(Collectors.joining(", "));
         String source = """
                 module probe
-                data Line = { tags: List<String> }
+                data Line = { s: String }
                 behavior mapped : (l: Line) -> List<Bool>
-                let mapped (l) = List.map(k -> List.contains(k, l.tags), [%s])
+                let mapped (l) = List.map(k -> List.contains(l.s, [k, "Z"]), [%s])
                 """.formatted(written);
         assertEquals(List.of(), Adequacy.readingsOf(measured(source).db(), "probe")
                 .getOrDefault("mapped", List.of()));

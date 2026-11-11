@@ -914,10 +914,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     ? new Read.AnswersNowhere(answeringNowhere)
                     : new Read.CutsNothing(settled);
         }
-        Read tooMany = linesOnOneQuantityPastTheFigure(lines.keySet(), comparison, read, reads,
-                answering);
+        BlockReason.WhereALineDecidesNotWorkedOut tooMany =
+                linesOnOneQuantityPastTheFigure(lines.keySet());
         if (tooMany != null) {
-            return tooMany;
+            return new Read.Stopped(ComparisonAssessment.atEachOf(
+                    GuardThresholds.filedAt(comparison, read, reads, answering), tooMany),
+                    WhereAReadingStopped.ELSEWHERE);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
         // A relation of a statement that is no line, and relates no other value, is read in no
@@ -950,7 +952,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * What an application of an operation reads as on one application of the closure it stands in:
-     * the reading, how its statement was derived there, and the statement.
+     * the reading, how its statement was derived there, and the statement. The reading is null
+     * where the application states nothing of its own there: what it says is said by what is
+     * inside it, and it draws no line.
      */
     record AppliedOn(Read read, Derivation how, Proposition stated) {}
 
@@ -962,9 +966,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * application in the closure — the left of a conjunction it is the right of — is what each
      * application is reached under, and so is where the lines of the application decide.
      *
-     * <p>Null where some application states nothing of its own, as a single reading of it does.
+     * <p>An application that states nothing of its own adds nothing, and the others are read.
+     * Null where some application is not read to the end, as a single reading of it is, or where
+     * none draws a line, or where they draw more lines on one quantity than a comparison's
+     * applications may ({@link #linesOnOneQuantityPastTheFigure}).
      *
-     * @param readingOn what the application reads as on one of the applications
+     * @param readingOn what the application reads as on one of the applications, or null where it
+     *                  is not read to the end
      */
     static Read ofAnApplicationOnEach(List<ClosureApplications.Application> each,
                                       Function<ClosureApplications.Application, AppliedOn> readingOn) {
@@ -982,6 +990,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             AppliedOn applied = readingOn.apply(one);
             if (applied == null) {
                 return null;
+            }
+            if (applied.read() == null) {
+                continue;
             }
             derived.add(one.statedOn(applied.how()));
             switch (applied.read()) {
@@ -1027,7 +1038,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     ? derivedOnEach(new Read.Several(parts), derived)
                     : new Read.AgainstAnotherValue(against, relations);
         }
-        if (lines.isEmpty()) {
+        if (lines.isEmpty() || linesOnOneQuantityPastTheFigure(lines.keySet()) != null) {
             return null;
         }
         List<Read.Several.Part> parts = new ArrayList<>();
@@ -1072,19 +1083,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * decides grows faster than the lines on one quantity do. Past the figure it is not done,
      * which is what the readings were held to before they were shared.
      */
-    private static Read linesOnOneQuantityPastTheFigure(Set<ALineRead> lines,
-                                                        StatedComparison comparison,
-                                                        InputReading read, InputReads reads,
-                                                        Arrivals answering) {
+    private static BlockReason.WhereALineDecidesNotWorkedOut linesOnOneQuantityPastTheFigure(
+            Set<ALineRead> lines) {
         CompositionBudget figure = CompositionBudget.READINGS_OF_ONE_CONDITION;
         Map<BorderQuantity, Integer> onOne = new HashMap<>();
         for (ALineRead each : lines) {
             if (each.read() instanceof Read.Cuts cuts
                     && onOne.merge(cuts.cutting().of(), 1, Integer::sum) > figure.maximum()) {
-                return new Read.Stopped(ComparisonAssessment.atEachOf(
-                        GuardThresholds.filedAt(comparison, read, reads, answering),
-                        new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())),
-                        WhereAReadingStopped.ELSEWHERE);
+                return new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure());
             }
         }
         return null;
