@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.IntPredicate;
 
@@ -215,46 +216,56 @@ public final class RowSearch {
     private static void addHoldingOne(Type type, RuleReadingContext reading,
                                       List<FixtureTemplate> into) {
         RuleReadingSource source = reading.source();
-        switch (TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
-                source.sums())) {
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        Function<List<FixtureTemplate>, FixtureTemplate> holding =
+                elements -> WornNames.collectionHolding(view, elements, source);
+        switch (view.shape()) {
             case Shape.Sequence sequence -> addEachHoldingOne(
-                    Partitions.representativesOf(sequence.element(), reading).values(), into);
+                    Partitions.representativesOf(sequence.element(), reading).values(), holding,
+                    into);
             case Shape.Mapping mapping -> addEachHoldingOneEntry(
                     Partitions.representativesOf(mapping.key(), reading).values(),
-                    Partitions.representativesOf(mapping.value(), reading).values(), into);
+                    Partitions.representativesOf(mapping.value(), reading).values(), holding,
+                    into);
             default -> { }
         }
     }
 
-    /** Adds to {@code into} a collection of each of {@code elements}, each once, as far as there
-     *  is room ({@link #hasRoom}). */
-    static void addEachHoldingOne(List<FixtureTemplate> elements, List<FixtureTemplate> into) {
+    /** Adds to {@code into} what {@code holding} makes of each of {@code elements} alone — a
+     *  collection of the type, under the names it wears — each once, as far as there is room
+     *  ({@link #hasRoom}). */
+    static void addEachHoldingOne(List<FixtureTemplate> elements,
+                                  Function<List<FixtureTemplate>, FixtureTemplate> holding,
+                                  List<FixtureTemplate> into) {
         for (FixtureTemplate one : elements) {
             if (!hasRoom(into)) {
                 return;
             }
-            addOnce(FixtureTemplate.collection(List.of(one)), into);
+            addOnce(holding.apply(List.of(one)), into);
         }
     }
 
-    /** Adds to {@code into} a collection of the entry of each key and each value, each once, as
-     *  far as there is room ({@link #hasRoom}): the pairs are made one at a time, and none is made
-     *  past the room. */
+    /** Adds to {@code into} what {@code holding} makes of the entry of each key and each value,
+     *  each once, as far as there is room ({@link #hasRoom}): the pairs are made one at a time,
+     *  and none is made past the room. */
     static void addEachHoldingOneEntry(List<FixtureTemplate> keys, List<FixtureTemplate> values,
+                                       Function<List<FixtureTemplate>, FixtureTemplate> holding,
                                        List<FixtureTemplate> into) {
         for (FixtureTemplate key : keys) {
             for (FixtureTemplate value : values) {
                 if (!hasRoom(into)) {
                     return;
                 }
-                addOnce(FixtureTemplate.collection(List.of(FixtureTemplate.entry(key, value))),
-                        into);
+                addOnce(holding.apply(List.of(FixtureTemplate.entry(key, value))), into);
             }
         }
     }
 
+    /** {@code one} added where there is room for it and it is not there, and nothing where it
+     *  could not be written (null). */
     private static void addOnce(FixtureTemplate one, List<FixtureTemplate> into) {
-        if (hasRoom(into) && !into.contains(one)) {
+        if (one != null && hasRoom(into) && !into.contains(one)) {
             into.add(one);
         }
     }

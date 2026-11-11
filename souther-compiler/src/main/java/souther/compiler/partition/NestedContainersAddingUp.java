@@ -894,9 +894,8 @@ final class NestedContainersAddingUp {
         if (!Witnesses.holdApart(each, level.apart().runs())) {
             return Proposals.NONE.meeting(met);
         }
-        FixtureTemplate written = WornNames.under(level.view().wrappers(),
-                FixtureTemplate.collection(each), reading.source());
-        return Proposals.ofNullable(written).meeting(met);
+        return Proposals.ofNullable(WornNames.collectionHolding(level.view(), each,
+                reading.source())).meeting(met);
     }
 
     /**

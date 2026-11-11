@@ -48,7 +48,7 @@ class ACandidateIsBuiltOnlyWhereTheSearchHasRoomForItTest {
         };
         List<FixtureTemplate> into = new ArrayList<>();
 
-        RowSearch.addEachHoldingOneEntry(numbers(100), values, into);
+        RowSearch.addEachHoldingOneEntry(numbers(100), values, FixtureTemplate::collection, into);
 
         assertEquals(RowSearch.MOST_VALUES + 1, into.size());
         assertTrue(valuesRead.get() <= RowSearch.MOST_VALUES + 2,
@@ -66,7 +66,7 @@ class ACandidateIsBuiltOnlyWhereTheSearchHasRoomForItTest {
     void whatFitsInTheRoomIsMadeWhole() {
         List<FixtureTemplate> into = new ArrayList<>();
 
-        RowSearch.addEachHoldingOneEntry(numbers(2), numbers(2), into);
+        RowSearch.addEachHoldingOneEntry(numbers(2), numbers(2), FixtureTemplate::collection, into);
 
         assertEquals(4, into.size());
     }

@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.TypeView;
 import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.TypeSymbol;
@@ -74,6 +75,19 @@ sealed interface WornNames {
         }
         return of(worn, ruleSource) instanceof Spelled spelled
                 ? RepresentativeSource.under(spelled.names(), value) : null;
+    }
+
+    /**
+     * A collection holding {@code elements}, under the names {@code container} wears — or null
+     * where a name it wears cannot be written.
+     *
+     * <p>The one place a collection is put on the names of its type: a list a newtype wraps is
+     * written as that newtype and not as the bare list, which a boundary reading the position
+     * refuses, so every reader that makes a collection of a position's type makes it here.
+     */
+    static FixtureTemplate collectionHolding(TypeView container, List<FixtureTemplate> elements,
+                                             RuleReadingSource ruleSource) {
+        return under(container.wrappers(), FixtureTemplate.collection(elements), ruleSource);
     }
 
     /** Why nothing here can write a value of {@code name}: no spelling reaches it. */

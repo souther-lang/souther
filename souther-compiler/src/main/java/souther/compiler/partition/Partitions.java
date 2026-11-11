@@ -2657,9 +2657,7 @@ public final class Partitions {
             }
             elements.add(each);
         }
-        FixtureTemplate list = WornNames.under(view.wrappers(),
-                FixtureTemplate.collection(elements), source);
-        return Proposals.ofNullable(list);
+        return Proposals.ofNullable(WornNames.collectionHolding(view, elements, source));
     }
 
     /**

@@ -44,14 +44,15 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                           f8: Bool, f9: Bool }
             data Capped = { items: List<Line> }
                 invariant List.length(items) <= 3
+            data RateTable = Map<String, Int>
             """;
 
     private static final String BEHAVIOR = """
 
             behavior %1$s : (lines: List<Line>, rates: Map<Cur, Int>, k: Int, capped: Capped,
                              flags: List<Bool>, names: List<String>, target: String,
-                             wide: List<Wide>) -> Bool
-            let %1$s (lines, rates, k, capped, flags, names, target, wide) = %2$s
+                             wide: List<Wide>, table: RateTable) -> Bool
+            let %1$s (lines, rates, k, capped, flags, names, target, wide, table) = %2$s
             """;
 
     private static final String PRICED = "Map.get(l.currency, rates)";
@@ -96,6 +97,9 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                 // A statement about the element itself and not a field of it.
                 new Case("List.length(List.filter(x -> x, flags)) == k", "k", true),
                 new Case("List.length(List.filter(n -> n == target, names)) == k", "k", true),
+                // A collection a newtype wraps is held as that newtype where a statement reads it.
+                new Case("List.length(List.filter(x -> Map.containsKey(x, table.value), names))"
+                        + " == k", "k", true),
                 // What a way says of the size of the container is no more than the most the count
                 // is, and the count is none up to that.
                 new Case("if List.length(lines) == 2 then " + flagged + " == k else false", "k",

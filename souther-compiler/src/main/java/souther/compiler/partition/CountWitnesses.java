@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * A row of a behavior's inputs at which a counted statement holds of one element of the container
@@ -132,6 +133,11 @@ public final class CountWitnesses {
                 read.domain().machines(), read.domain().today());
         AStatementAtARow statement = AStatementAtARow.of(count.ofTheElement(), behavior,
                 read.quantities());
+        // The container as the parameter it is: a list a newtype wraps is written as the newtype.
+        RuleReadingSource source = reading.source();
+        TypeView parameter = inputs.viewOf(inputs.types().get(at));
+        Container holder = new Container(at, container,
+                elements -> WornNames.collectionHolding(parameter, elements, source));
         Set<Figure> stopped = new LinkedHashSet<>();
         Set<WhereARunStopped> runs = new LinkedHashSet<>();
         // What each parameter may hold, as far as the boundary builds it: the container as what
@@ -160,8 +166,8 @@ public final class CountWitnesses {
         // leave no element to hold the statement of and another to fail it is no row shown that
         // none does, so the next is tried.
         for (List<RowSearch.Built> row : RowSearch.rowsOf(each, stopped)) {
-            Optional<Witness> found = beside(row, at, element, container, count, inputs,
-                    statement, reading, building, running, written, stopped, runs);
+            Optional<Witness> found = beside(row, holder, element, count, inputs, statement,
+                    reading, building, running, written, stopped, runs);
             if (found.isPresent()) {
                 return new Sought(found, Set.of(), Set.of());
             }
@@ -193,8 +199,8 @@ public final class CountWitnesses {
     /** A witness whose other inputs are {@code beside}'s, or empty where none was found there —
      *  and, where the run of the row that met the statement both ways stopped, where it did,
      *  added to {@code runs}. */
-    private static Optional<Witness> beside(List<RowSearch.Built> beside, int at, Type element,
-                                            TermPath container, Quantity.HowManyMeet count,
+    private static Optional<Witness> beside(List<RowSearch.Built> beside, Container container,
+                                            Type element, Quantity.HowManyMeet count,
                                             BehaviorInputs inputs, AStatementAtARow statement,
                                             RuleReadingContext reading,
                                             RowSearch.Building building,
@@ -205,10 +211,9 @@ public final class CountWitnesses {
         List<ObservedValue> built = beside.stream().map(RowSearch.Built::value).toList();
         FixtureTemplate kept = null;
         FixtureTemplate dropped = null;
-        for (FixtureTemplate each : elementsTried(element, container, at, count.ofTheElement(),
+        for (FixtureTemplate each : elementsTried(element, container, count.ofTheElement(),
                 inputs, built, reading, building, written, stopped)) {
-            Integer meet = metIn(List.of(each), at, built, inputs, statement, container,
-                    building);
+            Integer meet = metIn(List.of(each), container, built, inputs, statement, building);
             if (meet == null) {
                 continue;
             }
@@ -225,10 +230,11 @@ public final class CountWitnesses {
             return Optional.empty();
         }
         List<FixtureTemplate> both = List.of(kept, dropped);
-        Integer meet = metIn(both, at, built, inputs, statement, container, building);
+        Integer meet = metIn(both, container, built, inputs, statement, building);
+        FixtureTemplate whole = container.holding().apply(both);
         List<FixtureTemplate> shown = new ArrayList<>(row);
-        shown.set(at, FixtureTemplate.collection(both));
-        if (meet == null || meet != 1) {
+        shown.set(container.at(), whole);
+        if (whole == null || meet == null || meet != 1) {
             return Optional.empty();
         }
         RowSearch.Run ran = running.run(shown);
@@ -236,7 +242,7 @@ public final class CountWitnesses {
             ran.stopped().ifPresent(runs::add);
             return Optional.empty();
         }
-        return Optional.of(new Witness(shown, at, kept, dropped));
+        return Optional.of(new Witness(shown, container.at(), kept, dropped));
     }
 
     /**
@@ -280,17 +286,18 @@ public final class CountWitnesses {
      * statement holds of — or null where the boundary refused the container, or the statement
      * could not tell of some element.
      */
-    private static Integer metIn(List<FixtureTemplate> elements, int at,
+    private static Integer metIn(List<FixtureTemplate> elements, Container container,
                                  List<ObservedValue> built, BehaviorInputs inputs,
-                                 AStatementAtARow statement, TermPath container,
-                                 RowSearch.Building building) {
-        Optional<ObservedValue> held = building.build(at, FixtureTemplate.collection(elements));
+                                 AStatementAtARow statement, RowSearch.Building building) {
+        FixtureTemplate whole = container.holding().apply(elements);
+        Optional<ObservedValue> held =
+                whole == null ? Optional.empty() : building.build(container.at(), whole);
         if (held.isEmpty()) {
             return null;
         }
         List<ObservedValue> values = new ArrayList<>(built);
-        values.set(at, held.get());
-        return counted(values, inputs, statement, container);
+        values.set(container.at(), held.get());
+        return counted(values, inputs, statement, container.place());
     }
 
     /**
@@ -298,13 +305,14 @@ public final class CountWitnesses {
      * for the element's type, and each of the latter made to hold, at a place the statement says
      * is the same value as a place outside the container, every value the row holds there.
      */
-    private static List<FixtureTemplate> elementsTried(Type element, TermPath container, int at,
+    private static List<FixtureTemplate> elementsTried(Type element, Container held,
                                                        Proposition stated, BehaviorInputs inputs,
                                                        List<ObservedValue> built,
                                                        RuleReadingContext reading,
                                                        RowSearch.Building building,
                                                        List<FixtureTemplate> inTheRows,
                                                        Set<Figure> stopped) {
+        TermPath container = held.place();
         // In the order they are tried, and held to the figure once, over all of them: where they
         // come from decides which are tried first and never whether the figure applies.
         List<FixtureTemplate> standing = Partitions.representativesOf(element, reading).values();
@@ -324,7 +332,7 @@ public final class CountWitnesses {
                         new Generator.Watched.NotRun(), new AnswerObservation.NotAnswered())));
         making:
         for (FixtureTemplate base : standing) {
-            ObservedValue each = builtAlone(base, at, building);
+            ObservedValue each = builtAlone(base, held, building);
             if (each == null) {
                 continue;
             }
@@ -545,11 +553,24 @@ public final class CountWitnesses {
 
     /** What the boundary builds of {@code element} as the one element of the container at
      *  parameter {@code at}, or null where it refuses it. */
-    private static ObservedValue builtAlone(FixtureTemplate element, int at,
+    private static ObservedValue builtAlone(FixtureTemplate element, Container container,
                                             RowSearch.Building building) {
-        return building.build(at, FixtureTemplate.collection(List.of(element)))
+        FixtureTemplate alone = container.holding().apply(List.of(element));
+        return alone == null ? null : building.build(container.at(), alone)
                 .map(held -> held instanceof ObservedValue.Sequence(List<ObservedValue> each)
                         && each.size() == 1 ? each.getFirst() : null)
                 .orElse(null);
     }
+
+    /**
+     * The container the elements are counted in, as a parameter of the behavior.
+     *
+     * @param at      which parameter it is
+     * @param place   where it stands
+     * @param holding the container holding the elements it is handed, as a value of the type of
+     *                the parameter — under the names that type wears — or null where one cannot be
+     *                written
+     */
+    private record Container(int at, TermPath place,
+                             Function<List<FixtureTemplate>, FixtureTemplate> holding) {}
 }

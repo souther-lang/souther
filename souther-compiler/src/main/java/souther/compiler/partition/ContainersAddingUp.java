@@ -2422,8 +2422,7 @@ final class ContainersAddingUp {
     /** The container at {@code container} holding {@code values}, under the names it wears. */
     private static Proposals holding(List<FixtureTemplate> values, TypeView container,
                                      RuleReadingSource source) {
-        return Proposals.ofNullable(WornNames.under(container.wrappers(),
-                FixtureTemplate.collection(values), source));
+        return Proposals.ofNullable(WornNames.collectionHolding(container, values, source));
     }
 
     /**
