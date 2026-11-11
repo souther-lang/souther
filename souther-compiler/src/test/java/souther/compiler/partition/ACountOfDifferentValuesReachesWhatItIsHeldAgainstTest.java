@@ -190,6 +190,96 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
                         == UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE));
     }
 
+    /** Whether {@code k} of {@code behavior} in {@code model} is read: no value of it is left
+     *  not shown to be reached. One model each, since the behaviors of a model share the budget. */
+    private static boolean kIsRead(String model, String behavior) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        PartitionEvidence evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value().get(behavior);
+        assertNotNull(evidence, behavior);
+        return evidence.notRead().stream().noneMatch(left -> left.at().equals("k")
+                && left.reason()
+                        == UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE);
+    }
+
+    /**
+     * A container that must hold two elements may hold two the statement fails of, so the values of
+     * the elements it keeps are none: the count is shown at none, one and two, and a number that
+     * takes those three is read.
+     */
+    @Test
+    void aFilterThatMayKeepNoElementLeavesNoneAValueTheCountIsShownAt() {
+        String model = """
+                module probe
+
+                data K = Int
+                    invariant value >= 0 && value <= 2
+                data Item = { id: String, qty: Int }
+                data Items = List<Item>
+                    invariant List.length(value) >= 2
+
+                behavior keptCount : (xs: Items, k: K) -> Bool
+                let keptCount (xs, k) = Set.size(Set.fromList(List.map(p -> p.id,
+                        List.filter(p -> p.qty > 3, xs.value)))) == k.value
+                """;
+        assertEquals(true, kIsRead(model, "keptCount"));
+    }
+
+    /**
+     * What a container is held to and what the place takes are two ends, and the count is read only
+     * where the first is no further than the second: a list of truths held to two holds at most the
+     * two values a truth has, and one held to three may hold a count no row shows. (How an end is
+     * written as a number is the unit test's: a bound at the greatest whole number is no model's,
+     * the rules not leaving a container so many.)
+     */
+    @Test
+    void aCountIsReadOnlyWhereTheContainerHoldsNoMoreThanThePlaceTakes() {
+        String model = """
+                module probe
+
+                data Held = List<Bool>
+                    invariant List.length(value) <= %s
+
+                behavior heldCount : (xs: Held, k: Int) -> Bool
+                let heldCount (xs, k) = Set.size(Set.fromList(xs.value)) == k
+                """;
+        assertEquals(true, kIsRead(model.formatted("2"), "heldCount"));
+        assertEquals(false, kIsRead(model.formatted("3"), "heldCount"));
+    }
+
+    /**
+     * Not shown and not reachable are two answers: where the search stopped at a figure before it
+     * had tried every element, the figure is said, whatever the ways it left would have shown.
+     */
+    @Test
+    void aSearchCutShortSaysTheFigureAndIsNoAnswerThatTheCountCannotBeReached() {
+        Compilation compilation = Compilation.ofSource("""
+                module probe
+
+                data Wide = { id: String, f1: Bool, f2: Bool, f3: Bool, f4: Bool, f5: Bool,
+                              f6: Bool, f7: Bool, f8: Bool, f9: Bool }
+
+                behavior wideCount : (xs: List<Wide>, k: Int) -> Bool
+                let wideCount (xs, k) = Set.size(Set.fromList(List.map(w -> w.id,
+                        List.filter(w -> Bool.not(w.f1) && Bool.not(w.f2) && Bool.not(w.f3)
+                                && Bool.not(w.f4) && Bool.not(w.f5) && Bool.not(w.f6)
+                                && Bool.not(w.f7) && Bool.not(w.f8) && Bool.not(w.f9), xs)))) == k
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        PartitionEvidence evidence =
+                compilation.db().ask(new Adequacy.Coverage("probe")).value().get("wideCount");
+        assertNotNull(evidence);
+        assertEquals(List.of(souther.compiler.partition.CompositionBudget
+                        .VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure()),
+                evidence.notRead().stream().filter(left -> left.at().equals("k"))
+                        .flatMap(left -> left.figures().stream()).distinct().toList());
+    }
+
     @Test
     void aCountOfDifferentValuesIsShownToReachWhatItIsHeldAgainstAsFarAsTheContainerReaches() {
         Map<String, Boolean> refused = new LinkedHashMap<>();

@@ -5743,7 +5743,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             NumericDomain.Bounds mayBeHeld = howManyMayBeHeld(container, read, along);
             CountTakes taken = counted instanceof Quantity.HowManyMeet
                     ? countTakes(mayBeHeld, held, shown.overAgain())
-                    : differentTakes(counted, container, mayBeHeld, held, shown.overAgain(), read);
+                    : differentTakes(counted, container, mayBeHeld, held, shown, read);
             if (taken == null) {
                 continue;
             }
@@ -5770,9 +5770,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * row shows it takes.
      *
      * @param lies  from none up to the most the rules and the way leave the container to hold
-     * @param takes from none up to the most a row holds, every value of it
+     * @param takes from none up to the most a row holds, every value of it — held to what the count
+     *              lies in, so that a count shown to take a value is never one it may not
      */
-    record CountTakes(NumericDomain.Bounds lies, NumericDomain.Bounds takes) {}
+    record CountTakes(NumericDomain.Bounds lies, NumericDomain.Bounds takes) {
+
+        CountTakes {
+            takes = takes.meet(lies);
+        }
+    }
 
     /**
      * What a count of the elements meeting a statement is, of a container that {@code mayBeHeld}
@@ -5822,14 +5828,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * What a count of the different values the elements of {@code container} hold at one place
      * is, of a container that {@code mayBeHeld} says how many it may hold and a row shows
-     * {@code areHeld} of. The count lies from none up to the most the container may hold. It takes
-     * every value up to the fewer of how many elements are held and how many values the place
-     * takes: j elements that differ there are a row of the count at j, and a list that must hold
-     * more elements holds one of them over again.
-     *
-     * <p>The relation stays unread past what the count takes: a type with few values, and a rule
-     * that holds a container to few elements, leave the count short of the numbers it is held
-     * against.
+     * {@code areHeld} of ({@link #differentTakes(Endpoint, NumericDomain.Bounds,
+     * NumericDomain.Bounds, boolean, boolean, boolean)} says what that comes to).
      *
      * <p>Only where each value the place takes is taken by some element beside whatever the
      * elements are kept by: no rule keeps the elements of the container apart, and none relates
@@ -5839,8 +5839,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static CountTakes differentTakes(Quantity.CountedOverAContainer counted,
                                              TermPath container, NumericDomain.Bounds mayBeHeld,
-                                             NumericDomain.Bounds areHeld, boolean overAgain,
-                                             InputReading read) {
+                                             NumericDomain.Bounds areHeld,
+                                             CountWitnesses.Witness shown, InputReading read) {
         CountWitnesses.Asked asked = CountWitnesses.Asked.of(counted);
         if (asked == null || !(asked.differentAt().orElse(null) instanceof
                 Quantity.TheValue.AtAPlace(DecisionSubject.AnInput(TermPath place, var _)))) {
@@ -5859,22 +5859,44 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
         }
-        long values = differingWithoutCutting(place, at, read, RowSearch.MOST_VALUES);
-        long sizes = CountDomain.mostFrom(areHeld.max());
-        long most = Math.min(values, sizes == Integer.MAX_VALUE ? WITHOUT_END : sizes);
+        return differentTakes(differingTop(place, at, read, RowSearch.MOST_VALUES), mayBeHeld,
+                areHeld, shown.overAgain(), counted instanceof Quantity.HowManyDifferent,
+                shown.failing() != null);
+    }
+
+    /**
+     * What a count of the different values the elements of a container hold at one place is.
+     *
+     * <p>It lies from none up to the most the container may hold. It takes every value from the
+     * fewest it can be up to the fewer of how many elements are held and how many values the place
+     * takes ({@code valuesMost}, no end where there is none): j elements that differ there are a
+     * row of the count at j, and a list that must hold more elements holds one of them over again.
+     * The fewest is none where the container may hold none, or where {@code someFailTheStatement}
+     * and the list is filled with an element the statement fails of; otherwise a container that
+     * must hold an element holds a value of it, and holds one value at least where the statement
+     * keeps every element ({@code everyElement}).
+     *
+     * <p>Ends are ends: nothing here stands for no end by a number. A container held to exactly
+     * as many elements as a count can be written as is held to that many, and not to none.
+     *
+     * <p>The relation stays unread past what the count takes: a type with few values, and a rule
+     * that holds a container to few elements, leave the count short of the numbers it is held
+     * against. Null where the count is shown at no value.
+     */
+    static CountTakes differentTakes(Endpoint valuesMost, NumericDomain.Bounds mayBeHeld,
+                                     NumericDomain.Bounds areHeld, boolean overAgain,
+                                     boolean everyElement, boolean someFailTheStatement) {
+        Endpoint most = Endpoint.upper(valuesMost, areHeld.max());
         int least = mayBeHeld == null ? 0 : CountDomain.leastFrom(mayBeHeld.min());
-        long lowest = least == 0 ? 0 : overAgain ? 1 : least;
-        if (most != WITHOUT_END && most < lowest) {
+        int lowest = least == 0 || (!everyElement && someFailTheStatement && overAgain) ? 0
+                : overAgain ? 1 : least;
+        if (most != null && CountDomain.mostFrom(most) < lowest) {
             return null;
         }
-        // A container that holds an element holds a value of it, where no statement keeps only
-        // some of the elements.
-        boolean everyElement = counted instanceof Quantity.HowManyDifferent;
         return new CountTakes(
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(everyElement && least > 0
                         ? 1 : 0)), mayBeHeld == null ? null : mayBeHeld.max()),
-                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(lowest)),
-                        most == WITHOUT_END ? null : Endpoint.inclusive(Count.of(most))));
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(lowest)), most));
     }
 
     /**
@@ -10180,54 +10202,62 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * several keys are counted only where no rule relates them ({@link #keysRelated}).
      */
     private static int differingAt(TermPath key, Position at, InputReading read, int wanted) {
-        return (int) Math.min(differingWithoutCutting(key, at, read, wanted), wanted);
+        Endpoint top = differingTop(key, at, read, wanted);
+        return top == null ? wanted : Math.min(CountDomain.mostFrom(top), wanted);
     }
 
-    /** What {@link #differingWithoutCutting} answers for values that have no end. */
-    private static final long WITHOUT_END = Long.MAX_VALUE;
+    /** One value, the fewest a place is shown to take. */
+    private static final Endpoint ONE_VALUE = Endpoint.inclusive(Count.of(1));
 
     /**
-     * How many values that differ the place {@code key}, standing at {@code at}, is shown to take,
-     * as {@link #differingAt} has it but not cut at {@code wanted}: {@link #WITHOUT_END} where the
-     * values the rules leave it have no end. {@code wanted} is how many strings a pattern's machine
-     * is asked for, which is as many as it is asked and no count of the strings it has.
+     * The most values that differ the place {@code key}, standing at {@code at}, is shown to take,
+     * as {@link #differingAt} has it but not cut at {@code wanted}: an end, and no end — null —
+     * where the values the rules leave it have none. {@code wanted} is how many strings a pattern's
+     * machine is asked for, which is as many as it is asked and no count of the strings it has.
      */
-    private static long differingWithoutCutting(TermPath key, Position at, InputReading read,
-                                        int wanted) {
+    private static Endpoint differingTop(TermPath key, Position at, InputReading read,
+                                         int wanted) {
         AdmissibleSet admitted = at.admitted();
         if (admitted.completeness() instanceof AdmissibleSet.Completeness.Complete) {
-            long counted = switch (admitted.approximation()) {
-                case ValueSet.Finite(Set<Value> values) -> values.size();
+            Optional<Endpoint> counted = switch (admitted.approximation()) {
+                case ValueSet.Finite(Set<Value> values) ->
+                        Optional.of(Endpoint.inclusive(Count.of(values.size())));
                 case ValueSet.Cofinite(Set<Value> excluded) -> {
                     long every = ValueUniverse.howManyDiffer(at.type(), read.ruleReading());
-                    yield every >= 0 ? Math.max(0, every - excluded.size())
+                    yield every >= 0
+                            ? Optional.of(Endpoint.inclusive(
+                                    Count.of(Math.max(0, every - excluded.size()))))
                             : withoutEnd(at.type(), read)
                             && endsOf(at.boundsFor(new NumericTerm.ValueOf(key)), false) == null
-                            ? WITHOUT_END : 0;
+                            ? Optional.empty()
+                            : Optional.of(Endpoint.inclusive(Count.of(0)));
                 }
                 case ValueSet.WholeRuns(WholeNumberRuns numbers) -> numbers.count() == null
-                        ? WITHOUT_END : numbers.count()
-                                .min(BigInteger.valueOf(WITHOUT_END - 1)).longValue();
-                case ValueSet.Matching(Language _) -> Partitions
-                        .admittedStrings(at.type(), read.ruleReading(), wanted).size();
+                        ? Optional.empty() : Optional.of(Endpoint.inclusive(
+                                Count.of(new BigDecimal(numbers.count()))));
+                case ValueSet.Matching(Language _) -> Optional.of(Endpoint.inclusive(Count.of(
+                        Partitions.admittedStrings(at.type(), read.ruleReading(), wanted)
+                                .size())));
             };
-            if (counted > 0) {
-                return counted;
+            // Shown to take none is not shown at all: what the run says below is asked instead.
+            if (counted.isEmpty() || (counted.get().at() instanceof Count count
+                    && count.signum() > 0)) {
+                return counted.orElse(null);
             }
         }
         NumericTerm.ValueOf number = new NumericTerm.ValueOf(key);
         NumericDomain.Bounds run = read.quantities().region().wholeRunOf(number);
         TermOrders orders = read.quantities().ordersOf(number);
         if (run == null || orders == null || orders.answered() == null) {
-            return 1;
+            return ONE_VALUE;
         }
         if (orders.answered().spacingBetweenValues() != Granularity.DISCRETE) {
-            return run.holdsAValue() && !onePoint(run) ? WITHOUT_END : 1;
+            return run.holdsAValue() && !onePoint(run) ? null : ONE_VALUE;
         }
         BigInteger many = WholeNumberRuns.between(run.min(), run.max()).count();
-        return many == null ? WITHOUT_END
-                : many.signum() <= 0 ? 1
-                : many.min(BigInteger.valueOf(WITHOUT_END - 1)).longValue();
+        return many == null ? null
+                : many.signum() <= 0 ? ONE_VALUE
+                : Endpoint.inclusive(Count.of(new BigDecimal(many)));
     }
 
     /** Whether {@code run} holds one value and no other: both ends at it, held. */

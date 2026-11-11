@@ -152,6 +152,9 @@ public final class CountWitnesses {
      * @param container which parameter is the container
      * @param one       the first of the two
      * @param other     the second
+     * @param failing   an element the statement fails of that the boundary builds a container of,
+     *                  or null where none was found — or where nothing is asked of an element, so
+     *                  that there is none to fail
      * @param overAgain whether the container is a list, which may hold an element over again, so
      *                  that a row holds the one the statement holds of as many times as it likes
      *                  and the count takes every value up to its size; a container that holds each
@@ -161,7 +164,7 @@ public final class CountWitnesses {
      *                  shown only as far as that
      */
     public record Witness(List<FixtureTemplate> inputs, int container, FixtureTemplate one,
-                          FixtureTemplate other, boolean overAgain) {
+                          FixtureTemplate other, FixtureTemplate failing, boolean overAgain) {
 
         public Witness {
             inputs = List.copyOf(inputs);
@@ -297,13 +300,20 @@ public final class CountWitnesses {
         List<FixtureTemplate> row = beside.stream().map(RowSearch.Built::fixture).toList();
         List<ObservedValue> built = beside.stream().map(RowSearch.Built::value).toList();
         List<FixtureTemplate> tried = elementsTried(element, container, asked, inputs, built,
-                reading, building, written, stopped);        List<FixtureTemplate> both = asked.differentAt().isPresent()
+                reading, building, written, stopped);
+        boolean ofValues = asked.differentAt().isPresent();
+        List<FixtureTemplate> both = ofValues
                 ? twoThatDiffer(tried, container, asked.differentAt().get(), built, inputs,
                         statement, building)
                 : oneKeptAndOneDropped(tried, container, built, inputs, statement, building);
         if (both == null) {
             return Optional.empty();
         }
+        // What fails the statement is the second of a count of elements; of a count of values it is
+        // one more element, which none is where every element meets the statement.
+        FixtureTemplate failing = ofValues
+                ? aFailingElement(tried, container, built, inputs, statement, building)
+                : both.getLast();
         List<FixtureTemplate> shown = new ArrayList<>(row);
         shown.set(container.at(), container.holding(both));
         RowSearch.Run ran = running.run(shown);
@@ -312,7 +322,25 @@ public final class CountWitnesses {
             return Optional.empty();
         }
         return Optional.of(new Witness(shown, container.at(), both.getFirst(), both.getLast(),
-                container.overAgain()));
+                failing, container.overAgain()));
+    }
+
+    /**
+     * An element of {@code tried} the statement fails of, in a container the boundary builds of it
+     * alone — or null where there is none.
+     */
+    private static FixtureTemplate aFailingElement(List<FixtureTemplate> tried,
+                                                   Container container, List<ObservedValue> built,
+                                                   BehaviorInputs inputs,
+                                                   AStatementAtARow statement,
+                                                   RowSearch.Building building) {
+        for (FixtureTemplate each : tried) {
+            Integer meet = metIn(List.of(each), container, built, inputs, statement, building);
+            if (meet != null && meet == 0) {
+                return each;
+            }
+        }
+        return null;
     }
 
     /**
