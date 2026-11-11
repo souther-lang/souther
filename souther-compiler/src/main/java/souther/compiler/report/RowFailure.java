@@ -61,7 +61,7 @@ public enum RowFailure {
             case INVOCATION -> INVOCATION;
             case COMPARISON -> COMPARISON;
             case NONE, ANSWERER_ESTABLISHMENT, IMPLEMENTATION_NOT_MADE, VALUE_CROSSING, STEP_LIMIT,
-                 DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED -> throw new IllegalArgumentException(
+                 DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED, OUT_OF_ROOM -> throw new IllegalArgumentException(
                     "a row can fail at none of these, and a failed row's outcome says so: "
                             + phase);
         };

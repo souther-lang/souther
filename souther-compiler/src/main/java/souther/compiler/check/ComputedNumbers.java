@@ -37,6 +37,15 @@ final class ComputedNumbers {
     }
 
     /**
+     * Whether {@code atom} stands for exact arithmetic over places ({@link ComputedNumber}): a
+     * number the interval algebra holds as one more atom, at the hull of what the arithmetic comes
+     * to and free of the places it is made of.
+     */
+    static boolean standsForArithmetic(FactSubject atom) {
+        return ComputedNumber.of(atom.identity(), ComputedNumbers::aPlace, _ -> null) != null;
+    }
+
+    /**
      * A place and the number it is defined as: {@code defined == number}, the number made of places
      * other than the one it defines.
      *

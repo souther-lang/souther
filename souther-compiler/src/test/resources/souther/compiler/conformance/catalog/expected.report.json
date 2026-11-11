@@ -12580,7 +12580,7 @@
         },
         "at" : {
           "sourceId" : "5",
-          "line" : 71,
+          "line" : 72,
           "column" : 7,
           "writtenAt" : {
             "kind" : "here"
@@ -12595,7 +12595,7 @@
         },
         "at" : {
           "sourceId" : "5",
-          "line" : 73,
+          "line" : 74,
           "column" : 7,
           "writtenAt" : {
             "kind" : "here"
@@ -12666,13 +12666,13 @@
         } ],
         "unanswered" : [ {
           "at" : "rates.rates[key]",
-          "rule" : "comparison@5:66:39",
+          "rule" : "comparison@5:67:39",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.counting",
             "definition" : "namedUnpriced",
             "behavior" : "namedUnpriced",
-            "ordinal" : 8,
+            "ordinal" : 9,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -12685,13 +12685,13 @@
           } ]
         }, {
           "at" : "deals[*].currency",
-          "rule" : "comparison@5:66:39",
+          "rule" : "comparison@5:67:39",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.counting",
             "definition" : "namedUnpriced",
             "behavior" : "namedUnpriced",
-            "ordinal" : 8,
+            "ordinal" : 9,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -12745,7 +12745,7 @@
                   "declaredIn" : "conformance.counting",
                   "definition" : "namedUnpriced",
                   "behavior" : "namedUnpriced",
-                  "ordinal" : 7,
+                  "ordinal" : 8,
                   "lowered" : 0
                 }
               },
@@ -12760,7 +12760,7 @@
             }
           },
           "axis" : "namedUnpriced/List.length(deals)",
-          "origin" : "comparison@5:64:32",
+          "origin" : "comparison@5:65:32",
           "kind" : "at_value",
           "value" : "0",
           "items" : [ {
@@ -12931,7 +12931,7 @@
                   "declaredIn" : "conformance.counting",
                   "definition" : "namedUnpriced",
                   "behavior" : "namedUnpriced",
-                  "ordinal" : 7,
+                  "ordinal" : 8,
                   "lowered" : 0
                 }
               },
@@ -12990,7 +12990,7 @@
             }
           },
           "axis" : "namedUnpriced/#deals [some rates.rates [rates.rates[key] == deals[*].currency]] - List.length(deals)",
-          "origin" : "comparison@5:64:32",
+          "origin" : "comparison@5:65:32",
           "kind" : "count_of_elements",
           "value" : "0",
           "items" : [ {
@@ -13072,7 +13072,7 @@
                   "declaredIn" : "conformance.counting",
                   "definition" : "namedUnpriced",
                   "behavior" : "namedUnpriced",
-                  "ordinal" : 7,
+                  "ordinal" : 8,
                   "lowered" : 0
                 }
               },
@@ -13087,13 +13087,13 @@
             }
           },
           "point" : "on",
-          "rule" : "comparison@5:64:32",
+          "rule" : "comparison@5:65:32",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.counting",
             "definition" : "namedUnpriced",
             "behavior" : "namedUnpriced",
-            "ordinal" : 7,
+            "ordinal" : 8,
             "lowered" : 0
           },
           "relation" : "=",
@@ -13120,7 +13120,7 @@
                   "declaredIn" : "conformance.counting",
                   "definition" : "namedUnpriced",
                   "behavior" : "namedUnpriced",
-                  "ordinal" : 7,
+                  "ordinal" : 8,
                   "lowered" : 0
                 }
               },
@@ -13136,13 +13136,13 @@
             }
           },
           "point" : "off",
-          "rule" : "comparison@5:64:32",
+          "rule" : "comparison@5:65:32",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.counting",
             "definition" : "namedUnpriced",
             "behavior" : "namedUnpriced",
-            "ordinal" : 7,
+            "ordinal" : 8,
             "lowered" : 0
           },
           "relation" : "=",
@@ -13169,7 +13169,7 @@
                   "declaredIn" : "conformance.counting",
                   "definition" : "namedUnpriced",
                   "behavior" : "namedUnpriced",
-                  "ordinal" : 7,
+                  "ordinal" : 8,
                   "lowered" : 0
                 }
               },
@@ -13185,13 +13185,13 @@
             }
           },
           "point" : "out",
-          "rule" : "comparison@5:64:32",
+          "rule" : "comparison@5:65:32",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.counting",
             "definition" : "namedUnpriced",
             "behavior" : "namedUnpriced",
-            "ordinal" : 7,
+            "ordinal" : 8,
             "lowered" : 0
           },
           "relation" : "in",
@@ -13250,26 +13250,26 @@
         }, {
           "position" : "rates.rates[key]",
           "reason" : "relation_not_shown_reached_at_every_value",
-          "rule" : "comparison@5:66:39",
+          "rule" : "comparison@5:67:39",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.counting",
             "definition" : "namedUnpriced",
             "behavior" : "namedUnpriced",
-            "ordinal" : 8,
+            "ordinal" : 9,
             "lowered" : 0
           }
         }, {
           "position" : "deals[*].currency",
           "reason" : "relation_not_shown_reached_at_every_value",
           "shownReachedAt" : [ "CurrencyCode(\"EUR\")" ],
-          "rule" : "comparison@5:66:39",
+          "rule" : "comparison@5:67:39",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.counting",
             "definition" : "namedUnpriced",
             "behavior" : "namedUnpriced",
-            "ordinal" : 8,
+            "ordinal" : 9,
             "lowered" : 0
           }
         } ],
@@ -13341,7 +13341,7 @@
           "obligationId" : {
             "module" : "conformance.counting",
             "definition" : "namedUnpriced",
-            "construct" : 4,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -13351,7 +13351,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "5",
-            "line" : 64,
+            "line" : 65,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -13362,7 +13362,7 @@
           "obligationId" : {
             "module" : "conformance.counting",
             "definition" : "namedUnpriced",
-            "construct" : 4,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -13372,7 +13372,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "5",
-            "line" : 64,
+            "line" : 65,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -13401,7 +13401,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "5",
-            "line" : 66,
+            "line" : 67,
             "column" : 13,
             "writtenAt" : {
               "kind" : "outOfSight",
@@ -13431,7 +13431,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "5",
-            "line" : 66,
+            "line" : 67,
             "column" : 13,
             "writtenAt" : {
               "kind" : "outOfSight",
@@ -13488,7 +13488,7 @@
             "rewrite" : "arm_as_sibling",
             "module" : "conformance.counting",
             "definition" : "namedUnpriced",
-            "construct" : 4,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 0,
             "with" : 1
@@ -13500,7 +13500,7 @@
             "rewrite" : "arm_as_sibling",
             "module" : "conformance.counting",
             "definition" : "namedUnpriced",
-            "construct" : 4,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 1,
             "with" : 0
@@ -13592,7 +13592,7 @@
       }, {
         "kind" : "domain_point_uncovered",
         "disposition" : "refused",
-        "subject" : "OUT point of comparison@5:64:32",
+        "subject" : "OUT point of comparison@5:65:32",
         "obligationId" : {
           "line" : {
             "which" : {
@@ -13602,7 +13602,7 @@
                 "declaredIn" : "conformance.counting",
                 "definition" : "namedUnpriced",
                 "behavior" : "namedUnpriced",
-                "ordinal" : 7,
+                "ordinal" : 8,
                 "lowered" : 0
               }
             },
@@ -13668,7 +13668,7 @@
           "declaredIn" : "conformance.counting",
           "definition" : "namedUnpriced",
           "behavior" : "namedUnpriced",
-          "ordinal" : 8,
+          "ordinal" : 9,
           "lowered" : 0
         },
         "reason" : "relation_not_shown_reached_at_every_value"
@@ -13681,32 +13681,32 @@
           "declaredIn" : "conformance.counting",
           "definition" : "namedUnpriced",
           "behavior" : "namedUnpriced",
-          "ordinal" : 8,
+          "ordinal" : 9,
           "lowered" : 0
         },
         "reason" : "relation_not_shown_reached_at_every_value"
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
-        "subject" : "comparison@5:66:39 — what this rule states about rates.rates[key]",
+        "subject" : "comparison@5:67:39 — what this rule states about rates.rates[key]",
         "ruleId" : {
           "kind" : "comparison",
           "declaredIn" : "conformance.counting",
           "definition" : "namedUnpriced",
           "behavior" : "namedUnpriced",
-          "ordinal" : 8,
+          "ordinal" : 9,
           "lowered" : 0
         }
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
-        "subject" : "comparison@5:66:39 — what this rule states about deals[*].currency",
+        "subject" : "comparison@5:67:39 — what this rule states about deals[*].currency",
         "ruleId" : {
           "kind" : "comparison",
           "declaredIn" : "conformance.counting",
           "definition" : "namedUnpriced",
           "behavior" : "namedUnpriced",
-          "ordinal" : 8,
+          "ordinal" : 9,
           "lowered" : 0
         }
       }, {
@@ -13732,7 +13732,7 @@
         "code" : "E1918",
         "at" : {
           "sourceId" : "5",
-          "line" : 66,
+          "line" : 67,
           "column" : 13,
           "writtenAt" : {
             "kind" : "outOfSight",

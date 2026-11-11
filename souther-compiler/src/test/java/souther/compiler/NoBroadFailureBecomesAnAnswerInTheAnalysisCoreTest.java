@@ -267,11 +267,6 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                     "java.lang.ArithmeticException",
                     "the same, of two written decimals, asked of the BigDecimal methods the run time"
                             + " calls — answered as a fold that does not settle it"),
-            new Permission("souther.compiler.check.ScaleRange", "receivedUnchanged",
-                    "(Ljava/math/BigDecimal;)Ljava/lang/Integer;",
-                    "java.lang.ArithmeticException",
-                    "whether a scale is a number the run time can be handed as the number it is,"
-                            + " asked of intValueExact — answered as no place count"),
             new Permission("souther.compiler.query.Adequacy$ARowBuiltAndRun", "attempt",
                     "(Ljava/lang/String;Ljava/util/Map;"
                             + "Lsouther/compiler/partition/NumbersAskedFor;"

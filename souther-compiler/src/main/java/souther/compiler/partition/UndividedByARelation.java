@@ -30,9 +30,6 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.DecimalAdditiveWalk;
-import souther.compiler.inputs.DecimalOperation;
-import souther.compiler.inputs.DecimalWork;
 import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
@@ -379,8 +376,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The operations of whole numbers and of decimals a comparison works out, and how much of what
-     * can stop a run in working it out they are.
+     * The operations of whole numbers a comparison works out, and how much of what can stop a run
+     * in working it out they are. An operation of decimals stops no run, and is not among them.
      *
      * @param told whether the reading of the comparison told of every operation that can stop a
      *             run, only some, or was not made
@@ -388,7 +385,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   and works out nothing that can stop it before them: not where they are
      *                   those of one arm of a choice, or those beside an expression another
      *                   analysis answers for
-     * @param decimals the operations of decimals, which a row is asked by working them out
      * @param partials the totals of a container a walk adds up whose running totals are all that
      *                 is left untold: a run stops at one only for the elements it was handed, and
      *                 not for the number the total comes to. Empty where anything else is left
@@ -397,8 +393,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                 is written by one element alone ({@link #operationsOverTheSides})
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                   boolean onEveryRun, List<DecimalWork> decimals,
-                   List<NumericTerm> partials) {
+                   boolean onEveryRun, List<NumericTerm> partials) {
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
             this(operations, told, true);
@@ -407,11 +402,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
                 boolean onEveryRun) {
             this(operations, told, onEveryRun, List.of());
-        }
-
-        Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                boolean onEveryRun, List<DecimalWork> decimals) {
-            this(operations, told, onEveryRun, decimals, List.of());
         }
 
         /** No reading of the comparison was made, and the program is taken to add the form up.
@@ -439,7 +429,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         Working {
             operations = List.copyOf(operations);
-            decimals = List.copyOf(decimals);
             partials = List.copyOf(partials);
             Objects.requireNonNull(told, "what the reading told, or that there was none");
             if (!partials.isEmpty() && told != WhatARelationLeavesUndivided.Told.SOME) {
@@ -470,10 +459,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 // What an operation is worked out of is told by where it stands among them.
                 both.add(each.shifted(earlier.operations.size()));
             }
-            List<DecimalWork> bothDecimals = new ArrayList<>(earlier.decimals);
-            for (DecimalWork each : decimals) {
-                bothDecimals.add(each.shifted(earlier.decimals.size()));
-            }
             List<NumericTerm> bothPartials = new ArrayList<>();
             if (earlier.exactButForTheRunningTotals() && exactButForTheRunningTotals()) {
                 bothPartials.addAll(earlier.partials);
@@ -483,12 +468,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return new Working(both, earlier.exact() && exact()
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    earlier.onEveryRun && onEveryRun, bothDecimals, bothPartials);
+                    earlier.onEveryRun && onEveryRun, bothPartials);
         }
 
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
-            return new Working(operations, told, false, decimals, partials);
+            return new Working(operations, told, false, partials);
         }
 
         /** Whether every operation that can stop a run is told. */
@@ -1522,7 +1507,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Function<Set<NumericTerm>, Map<NumericTerm, ExactRatio>> heldApart) {
         boolean runningTotalsAreNoneOfTheRows = !working.partials().isEmpty()
                 && writtenByOneElement.containsAll(working.partials());
-        if (working.operations().isEmpty() && working.decimals().isEmpty()) {
+        if (working.operations().isEmpty()) {
             return new WhatARelationLeavesUndivided.Operations(List.of(),
                     runningTotalsAreNoneOfTheRows ? WhatARelationLeavesUndivided.Told.EVERY
                             : working.told());
@@ -1551,13 +1536,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             sums.add(new WhatARelationLeavesUndivided.IntSum(weights, each.form().constant(),
                     each.least(), each.greatest()));
         }
-        // A decimal operation reads the results of those worked out before it by where they stand
-        // among them, so none is left out alone: one over a number that is no side of this
-        // relation, or is two sides, leaves them all out.
-        boolean decimalsOverTheSides = working.decimals().stream()
-                .allMatch(each -> overTheSides(each, named));
-        List<DecimalWork> decimals = decimalsOverTheSides ? working.decimals() : List.of();
-        leftOut |= !decimalsOverTheSides;
         // An operation left out is one a row is not asked to get past here: not every one told.
         WhatARelationLeavesUndivided.Told told =
                 leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
@@ -1573,16 +1551,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             });
         }
         if (held.isEmpty()) {
-            return new WhatARelationLeavesUndivided.Operations(sums, decimals, told);
+            return new WhatARelationLeavesUndivided.Operations(sums, told);
         }
         if (told == WhatARelationLeavesUndivided.Told.EVERY) {
-            return new WhatARelationLeavesUndivided.Operations(sums, decimals,
+            return new WhatARelationLeavesUndivided.Operations(sums,
                     WhatARelationLeavesUndivided.Told.EVERY_AT_HELD_VALUES, held);
         }
         // Not every operation is told, so no row is shown computed, and an operation over a number
         // held at a value is left out as one over a number no side names is.
         sums.removeIf(each -> each.coefs().keySet().stream().anyMatch(held::containsKey));
-        return new WhatARelationLeavesUndivided.Operations(sums, decimals, told);
+        return new WhatARelationLeavesUndivided.Operations(sums, told);
     }
 
     /**
@@ -1750,19 +1728,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return switch (operand) {
             case IntOperand.OfTheInput(NumericTerm term) -> term;
             case IntOperand.OfABinding(Quantity.OfABinding value, String _) -> value;
-        };
-    }
-
-    /** Whether every number {@code work} reads from a row as a place of it is a side of this
-     *  relation, once. A total, an operand's or what a walk adds up, is held by the list a row is
-     *  built with, which the relation may name as no term of its own. */
-    private static boolean overTheSides(DecimalWork work, Map<Object, Integer> named) {
-        return switch (work) {
-            case DecimalAdditiveWalk _ -> true;
-            case DecimalOperation operation -> operation.operands().stream()
-                    .allMatch(operand -> !(operand instanceof DecimalOperation.Formed formed)
-                            || formed.coefs().keySet().stream()
-                                    .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom))));
         };
     }
 
@@ -2082,7 +2047,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     static List<EveryRunStops> everyRunStopsIn(Working working, InputReading read,
                                                List<SearchRegion> regions,
                                                List<IntOperation> alsoWorkedOut) {
-        if (!working.exact() || !working.onEveryRun() || !working.decimals().isEmpty()) {
+        if (!working.exact() || !working.onEveryRun()) {
             return List.of();
         }
         List<Bounded> besides = new ArrayList<>();
@@ -5215,7 +5180,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean answers(Pullback.StopObligation owed) {
             return ContainerSizesUnderAWitness.answersOn(owed.within(), owed.operation(),
                     owed.completion(), node -> heldAt(owed, node, false),
-                    node -> heldAt(owed, node, true), node -> false);
+                    node -> heldAt(owed, node, true));
         }
 
         /** How many elements the collection of the input {@code node} reads holds here, or each
@@ -7557,8 +7522,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the proof that the form leaves every remainder is made at. An operation over numbers of the
      * form is asked there. One over none of them does not move with the witness, but a run that
      * stops at it reaches nothing, so it is asked too: of the rows of the sides it is over, or of
-     * what the declarations leave its places. Operations not all told, and decimals the sides do
-     * not carry, are not known to be every one, and the proof is given up.
+     * what the declarations leave its places. Operations not all told are not known to be every
+     * one, and the proof is given up.
      *
      * <p>An operation over a number of the form and one that is not — a number the form's own
      * arithmetic cancelled, such as the {@code y} of {@code x + M * y - M * y} — has that number
@@ -7576,9 +7541,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         Map<Object, Integer> named = namedSides();
-        if (!working.decimals().stream().allMatch(each -> overTheSides(each, named))) {
-            return false;
-        }
         return getsPastAtTheWitness(working.operations(), remainder.dividend().coefs().keySet(),
                 witness, top, each -> isOverTheSides(each, named) || stopsNoRow(each, read));
     }
@@ -9302,9 +9264,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * it is asked at whatever the other is.
      *
      * <p>A run of decimals is the values a row is written at, as every run of a dense term is:
-     * numbers written at few places, which is the room the operations of the comparison are shown
-     * for ({@code DecimalOperation#allowAClaimOver}). It claims no number that needs more places
-     * than a row is built with, so the product is no more claimed at one than the term alone.
+     * numbers written at few places. It claims no number that needs more places than a row is
+     * built with, so the product is no more claimed at one than the term alone.
      * Where the number alone stands over a scale, the scale is a whole number's inverse and adds
      * no place ({@link NumericTerm.ProductOf#standingWhereTheDeclarationsAdmit}).
      */

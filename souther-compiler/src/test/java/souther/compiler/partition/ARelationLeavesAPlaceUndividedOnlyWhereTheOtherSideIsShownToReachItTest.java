@@ -1211,9 +1211,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN,
                 "List.sum({2·the element itself + 0 | ys[*]})", NOT_SHOWN),
                 left(two, NAT, untold, atThe(">=", NAT, two, untold)));
+        // A third of a whole number added to the total is a rational sum, which stops no row: the
+        // walk is all that is told.
         String other = "limit: Int, xs: List<Int>, k: Int";
         String quotient = "limit >= List.fold((acc, x) -> acc + x, 0, xs) + k / 3";
-        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "k", NOT_SHOWN, "limit", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(xs)", RELATES, "k", RELATES, "limit", RELATES),
                 left(other, NAT, quotient, atThe(">=", NAT, other, quotient)));
         String pairs = "data Pair = List<Int> invariant List.length(value) >= 2";
         String held = "limit: Int, p: Pair";
@@ -3102,9 +3104,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * value of {@code x} is, so it is not taken as a run {@code x} fills — here, where the values
      * asked of it are all above a third, as anywhere.
      *
-     * <p>An end at a half is taken as a run, since nothing rounds it: a {@code Decimal} sum stops a
-     * run only where its scale has no room, which a row built at a scale a row is built at has, so
-     * every value of {@code y} is got to by the row that holds the same value of {@code x}.
+     * <p>An end at a half is taken as a run, since nothing rounds it: a {@code Decimal} sum stops no
+     * run, so every value of {@code y} is got to by the row that holds the same value of
+     * {@code x}.
      *
      * <p>The places named are the ones left unshown or related: {@code x} is neither, being parted
      * by lines at the ends of the run {@code y} takes.
@@ -3539,8 +3541,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * every one from it, and run out at 42: from there on no standard is above four times them.
      * A standard past nought has hours below a quarter of it, which a decimal from nought has, so
      * only the standard of nought settles the comparison. Weighed three to four, the hours run out
-     * at 126. A decimal product may have no room for its digits or scale, so a run is taken only
-     * where a row is built in it and the product is worked out on that row.
+     * at 126. A decimal product stops no run, so every run the ends settle is taken.
      */
     @Test
     void aWeightOnADecimalDrawsTheLineWhereTheOtherRunsOut() {
@@ -3979,26 +3980,21 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * An operation of decimals has room for its digits at the scale its operands are worked out
-     * at, so a run is taken only where the scale is known: a number written in the program, the
-     * answer of an operation told before, or a place of the input, which a row is built with.
-     * Chains of them are worked out from the scale each leaves, and a call's answer, whose scale
-     * nothing here knows, is not: the product is not told and no run is taken.
+     * An operation of decimals stops no row, whatever scale its operands are at: a number written
+     * in the program, the answer of an operation before it, a place of the input, and a call's
+     * answer, whose scale nothing here reads, alike. Each chain is the line it draws and no more.
      */
     @Test
-    void anOperandWhoseScaleIsNotKnownIsNotToldSoNoRunIsTaken() {
+    void anOperationOfDecimalsStopsNoRowWhateverItsOperandsAre() {
         String inputs = "h: Hours, s: Hours";
-        for (String known : List.of("h.value * (2.0m + 2.0m) >= s.value",
-                "(h.value * 4.0m) * 1.0m >= s.value", "h.value * 4.0m + 0.0m >= s.value")) {
-            assertEquals(Map.of(), left(inputs, HOURS, known, atThe(">=", HOURS, inputs, known)),
-                    known);
+        for (String each : List.of("h.value * (2.0m + 2.0m) >= s.value",
+                "(h.value * 4.0m) * 1.0m >= s.value", "h.value * 4.0m + 0.0m >= s.value",
+                "h.value * Decimal.round(1, HALF_UP, 4.00m) >= s.value")) {
+            assertEquals(Map.of(), left(inputs, HOURS, each, atThe(">=", HOURS, inputs, each)),
+                    each);
             assertEquals(List.of("h: 0 <= x < 42", "h: 42 <= x <= 168"),
-                    classesAt(inputs, HOURS, known, "h"), known);
+                    classesAt(inputs, HOURS, each, "h"), each);
         }
-        String unknown = "h.value * Decimal.round(1, HALF_UP, 4.00m) >= s.value";
-        assertEquals(Map.of("h", NOT_SHOWN, "s", NOT_SHOWN),
-                left(inputs, HOURS, unknown, atThe(">=", HOURS, inputs, unknown)));
-        assertEquals(List.of(), classesAt(inputs, HOURS, unknown, "h"));
     }
 
     /**
@@ -4138,11 +4134,16 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(List.of(ensures), ReportedReason.runsStopped(rowsStopped));
     }
 
+    /**
+     * A decimal sum stops no row, so a run of the amount with no end is asked as one with an end
+     * is: every amount has a row with the other at nought and one with it past the amount and
+     * five, and both amounts are left undivided.
+     */
     @Test
     void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
         String amount = "data Amount = Decimal invariant value >= 0.0m";
         String body = "a.value >= s.value + 5.0m";
-        assertEquals(Map.of("s", NOT_SHOWN), left("a: Amount, s: Amount", amount, body,
+        assertEquals(Map.of("s", RELATES), left("a: Amount, s: Amount", amount, body,
                 atThe(">=", amount, "a: Amount, s: Amount", body)));
         // The sum reads only the amount put beside the one asked of, so rows past five are
         // computed whichever amount they stand at, and the row built at the end the run has shows

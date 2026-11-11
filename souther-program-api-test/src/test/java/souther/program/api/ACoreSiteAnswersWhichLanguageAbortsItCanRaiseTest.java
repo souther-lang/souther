@@ -233,15 +233,13 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
     }
 
     /**
-     * {@code (a / b) / c}: the inner {@code Int / Int} is zero-only, exactly as above, but the
-     * outer division's left operand is already {@code Rational} — carrying whatever exponents the
-     * inner quotient left it with — so that site adds
-     * {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}. Two {@code Core.Binary(DIV, ...)} nodes in one
-     * body, told apart by which one, answering differently — the reason this classification reads
-     * operand types at all rather than the shared answer type alone.
+     * {@code (a / b) / c}: the inner {@code Int / Int} is zero-only, exactly as above, and so is the
+     * outer one, whose left operand is already {@code Rational}: whatever exponents the inner
+     * quotient left it with, the outer quotient is a rational number too. Two
+     * {@code Core.Binary(DIV, ...)} nodes in one body, each answering for its own divisor.
      */
     @Test
-    void aDivisionWithAnAlreadyRationalOperandAlsoRisksAnAnswerWithNoPlace() {
+    void aDivisionWithAnAlreadyRationalOperandAbortsOnlyOnAZeroDivisorToo() {
         CheckedProgram program = program();
         Core body = bodyOf(program, "dividesWithARationalOperand");
 
@@ -265,8 +263,7 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
 
         assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO), program.abortsAt(inner).kinds(),
                 "the inner Int / Int, same as intDividedByIntAbortsOnlyOnAZeroDivisor");
-        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
-                program.abortsAt(outer).kinds(),
+        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO), program.abortsAt(outer).kinds(),
                 "the outer division, whose left operand is already Rational");
     }
 

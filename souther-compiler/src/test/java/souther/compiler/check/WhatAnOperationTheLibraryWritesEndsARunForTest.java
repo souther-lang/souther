@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
+import souther.compiler.abort.AbortSites;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.WhatARunMayEndFor.Endings;
 import souther.compiler.core.KernelContracts;
@@ -12,6 +13,8 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.function.UnaryOperator;
@@ -59,14 +62,12 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
                 LibraryEndings.of(rewritten).of(IS_EMPTY));
     }
 
-    /** A quotient builds nothing, and ends a run for a divisor of nought only where its divisor
-     *  may be nought where it is worked out. */
+    /** A quotient builds nothing and is a rational number, and ends a run for a divisor of nought
+     *  only where its divisor may be nought where it is worked out. */
     @Test
     void aQuotientEndsARunForWhatItsSitesDo() {
-        assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
-                endingsOfIsEmptyAs("List.length(xs) / 1 >= 0"));
-        assertEquals(new Endings.Known(AbortSet.of(AbortKind.DIVISION_BY_ZERO,
-                        AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+        assertEquals(NONE, endingsOfIsEmptyAs("List.length(xs) / 1 >= 0"));
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.DIVISION_BY_ZERO)),
                 endingsOfIsEmptyAs("1 / List.length(xs) >= 0"));
     }
 
@@ -89,7 +90,7 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         for (String spared : new String[] {"List.length(xs) > 0 && 1 / List.length(xs) >= 0",
                 "List.length(xs) == 0 || 1 / List.length(xs) >= 0",
                 "if List.length(xs) == 0 then true else 1 / List.length(xs) >= 0"}) {
-            assertEquals(passing, endingsOfIsEmptyAs(spared), spared);
+            assertEquals(NONE, endingsOfIsEmptyAs(spared), spared);
         }
         for (String reached : new String[] {"List.length(xs) == 0 && 1 / List.length(xs) >= 0",
                 "List.length(xs) > 0 || 1 / List.length(xs) >= 0",
@@ -142,21 +143,35 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
     private static final ValueName.Stdlib.Operation ABS = ValueName.Stdlib.operation("Decimal", "abs");
 
     /**
-     * A body that works a decimal out asks the room of each operation it does, over what the call
-     * is handed and what is written: the shipped {@code abs} takes a number from a written nought
-     * and answers at the scale of it or its operand. One whose operand is no number the
-     * arguments and what is written decide is not known.
+     * A body that works decimals out answers wherever the operators it is written with do: a
+     * decimal sum, difference and product have an answer for every number, so the shipped
+     * {@code abs}, and the same body working a product and a sum out besides, answer always, as
+     * {@code -} over two decimals written at the call does.
      */
     @Test
-    void aBodyWorkingDecimalsOutAsksTheRoomOfEachOperation() {
-        GetsPast shipped = LibraryEndings.shipped().completionApartFromWhatItIsHanded(ABS);
-        assertTrue(shipped instanceof GetsPast.WhereTheScalesHaveRoom, shipped.toString());
-        assertEquals(1, ((GetsPast.WhereTheScalesHaveRoom) shipped).rooms().size());
-
-        assertEquals(new GetsPast.NotKnown(), LibraryEndings.of(rewritten(
+    void aBodyWorkingDecimalsOutAnswersAsItsOperatorsDo() {
+        assertEquals(new GetsPast.Always(),
+                LibraryEndings.shipped().completionApartFromWhatItIsHanded(ABS));
+        assertEquals(new GetsPast.Always(), LibraryEndings.of(rewritten(
                 "if d < 0.0m then 0.0m - d else d",
-                "if d < 0.0m then 0.0m - Decimal.round(2, HALF_UP, d) else d"))
+                "if d < 0.0m then (0.0m - d) * 1.0m else d + 0.0m"))
                 .completionApartFromWhatItIsHanded(ABS));
+        assertEquals(new GetsPast.Always(),
+                AbortSites.completionOfAnOperator(BinOp.SUB, Type.DECIMAL));
+    }
+
+    /**
+     * A unit data named as a value works nothing out, so a body rounding by {@code HALF_UP}
+     * answers wherever the rounding does, which is always: the name is read as the value it is,
+     * and not as a name the reading has no word for.
+     */
+    @Test
+    void aUnitDataNamedInABodyIsItsValueAndEndsNothing() {
+        LibraryEndings endings = LibraryEndings.of(rewritten("if d < 0.0m then 0.0m - d else d",
+                "if d < 0.0m then 0.0m - Decimal.round(2, HALF_UP, d) else d"));
+
+        assertEquals(NONE, endings.apartFromWhatItIsHanded(ABS));
+        assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(ABS));
     }
 
     /** A kernel's is what its contract says, and not read again here. */

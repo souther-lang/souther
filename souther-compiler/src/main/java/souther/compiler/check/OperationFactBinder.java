@@ -158,9 +158,11 @@ final class OperationFactBinder {
         return bindAll(stdlib, declared, LibraryProofs.PROVING);
     }
 
-    /** The same, over what the language declares. */
+    /** The same, over what the language declares: what the operations the library writes state
+     *  proved here where their proofs read anything other than the shipped library's, and read
+     *  off what proving them came to when this compiler was built where they do not. */
     static BoundOperationFacts bindAll(Stdlib stdlib) {
-        return bindAll(stdlib, LibraryProofs.PROVING);
+        return bindAll(stdlib, LibraryProofsAsBuilt.provingWhatDiffers());
     }
 
     /** The same, over what the language declares, with what is proved of the operations the

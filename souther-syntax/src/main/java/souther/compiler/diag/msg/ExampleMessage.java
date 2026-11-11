@@ -276,6 +276,13 @@ public sealed interface ExampleMessage extends Message {
     /** What to do about it. */
     record TheDepthLimitIsWhatShouldStopIt() implements ExampleMessage, Supporting {}
 
+    /** The evaluation had no room for an answer it worked out. */
+    @Code(DiagnosticCode.E1941)
+    record TheEvaluationHadNoRoomForAnAnswer(String what) implements ExampleMessage, Reported {}
+
+    /** What that says and what it does not. */
+    record RunningShortOfRoomIsNotAWrongAnswer() implements ExampleMessage, Supporting {}
+
     // --- what the rows do not cover ---
 
     /** No row expects a case the signature declares. */

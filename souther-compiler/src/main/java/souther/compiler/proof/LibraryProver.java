@@ -15,6 +15,7 @@ import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
@@ -435,6 +436,7 @@ public final class LibraryProver {
             case Value.Whole _ -> Type.INT;
             case Value.Decimal _ -> Type.DECIMAL;
             case Value.Truth _, Value.Statement _ -> Type.BOOL;
+            case Value.Unit(TypeSymbol type) -> new Type.Ref(type);
             case Value.Listed(List<Value> elements) -> new Type.ListOf(elements.isEmpty()
                     ? new Type.Nothing() : typeOf(elements.getFirst(), takes, startedAs));
             case Value.Tupled(List<Value> elements) -> {

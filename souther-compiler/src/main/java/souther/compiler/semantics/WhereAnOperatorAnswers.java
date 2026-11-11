@@ -5,7 +5,6 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 
 import java.math.BigInteger;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -23,10 +22,12 @@ import java.util.Objects;
  * after it was held would be inside what an {@code Int} holds whatever the operands were.
  *
  * <p><b>Not stated is not everywhere.</b> {@link NotStated} is an operator that stops a run on some
- * operands this compiler writes no region for — a {@code Decimal} sum whose digits or scale no
- * value has room for, a quotient of a {@code Rational} whose exponent leaves what one holds. A
- * reader holding it knows a run may stop there and does not know where, which is neither a run
- * that always gets past nor one that never does.
+ * operands this compiler writes no region for — a join whose text or list is longer than its type
+ * holds. A reader holding it knows a run may stop there and does not know where, which is neither a
+ * run that always gets past nor one that never does. A {@code Decimal} or a {@code Rational} is
+ * none: its sum, difference and product are numbers of its type wherever its operands are (spec
+ * §stdlib-decimal, §stdlib-rational), and a run with no room to write one is the platform failing,
+ * which is no region of the operands.
  *
  * <p><b>What a reader may take from an answer.</b> Where the operator answers is {@code C}, and an
  * answer says it exactly, or says nothing. An answer that says it is both a sufficient condition
@@ -77,9 +78,8 @@ public sealed interface WhereAnOperatorAnswers {
     }
 
     /**
-     * Where the divisor is not nought: a quotient of two whole numbers or two decimals is a
-     * {@code Rational} made fresh from them, which has room for it, so nought is the one divisor it
-     * has no answer for.
+     * Where the divisor is not nought: every quotient of two numbers is a {@code Rational}, so
+     * nought is the one divisor it has no answer for.
      */
     record WhereTheDivisorIsNotNought() implements WhereAnOperatorAnswers {}
 
@@ -95,23 +95,19 @@ public sealed interface WhereAnOperatorAnswers {
             BigInteger.valueOf(Long.MIN_VALUE), BigInteger.valueOf(Long.MAX_VALUE));
 
     /**
-     * Where {@code op} over operands of {@code operands} answering {@code answer} answers.
+     * Where {@code op} answering {@code answer} answers.
      *
-     * <p>Read off the types as {@link souther.compiler.abort.AbortSites} reads them: an
+     * <p>Read off the type of the answer as {@link souther.compiler.abort.AbortSites} reads it: an
      * {@code Int + Int} answers {@code Int}, and an answer of {@code Rational} is worked out as a
-     * {@code Rational} whatever the operands were. A quotient is the one place the operands decide
-     * it — every quotient answers {@code Rational}, and only one with a {@code Rational} operand
-     * carries an exponent it may have no room for.
+     * {@code Rational} whatever the operands were. Only an {@code Int} has a sum, a difference or a
+     * product its type does not hold, and every quotient answers {@code Rational}, so what the
+     * operands are decides nothing here.
      */
-    static WhereAnOperatorAnswers ofAnOperator(BinOp op, Type answer, List<Type> operands) {
+    static WhereAnOperatorAnswers ofAnOperator(BinOp op, Type answer) {
         return switch (op) {
             case EQ, NE, LT, LE, GT, GE, AND, OR -> new Everywhere();
-            case ADD, SUB, MUL -> answer == Type.INT ? WHAT_AN_INT_HOLDS
-                    : new NotStated("where a " + Type.show(answer)
-                            + " has room for a sum, a difference or a product");
-            case DIV -> operands.contains(Type.RATIONAL)
-                    ? new NotStated("where a quotient of a Rational has room for its exponent")
-                    : new WhereTheDivisorIsNotNought();
+            case ADD, SUB, MUL -> answer == Type.INT ? WHAT_AN_INT_HOLDS : new Everywhere();
+            case DIV -> new WhereTheDivisorIsNotNought();
             case CONCAT -> new NotStated("where what a join answers is no longer than its type"
                     + " holds");
         };
@@ -124,7 +120,7 @@ public sealed interface WhereAnOperatorAnswers {
      * it is one an {@code Int} holds.
      */
     static WhereAnOperatorAnswers ofATotal(Type answer) {
-        return ofAnOperator(BinOp.ADD, answer, List.of(answer, answer));
+        return ofAnOperator(BinOp.ADD, answer);
     }
 
     /**

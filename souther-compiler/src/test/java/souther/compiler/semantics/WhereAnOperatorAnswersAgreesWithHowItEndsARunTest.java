@@ -45,7 +45,7 @@ class WhereAnOperatorAnswersAgreesWithHowItEndsARunTest {
                     Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(),
                     each.answer(), NOWHERE);
             WhereAnOperatorAnswers where = WhereAnOperatorAnswers.ofAnOperator(each.op(),
-                    each.answer(), List.of(each.left(), each.right()));
+                    each.answer());
             if (!agree(where, AbortSites.ofAnOperator(binary))) {
                 disagree.add(each + ": " + where + " beside " + AbortSites.ofAnOperator(binary));
             }

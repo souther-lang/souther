@@ -22,34 +22,63 @@ import java.util.Optional;
  *
  * <p>The places are worked out from the width of the run and not searched for: a step of at most
  * half the width has a multiple strictly inside any run of that width. A run needing more places
- * than a row is built at ({@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}) has no row built in
- * it from its width, which is a row not built and not a row there is none of; the end of the run
- * far from the line is then the row, where it is a decimal.
+ * than a row is built at ({@link #PLACES_A_ROW_IS_BUILT_AT}) has no row built in it from its
+ * width, which is a row not built and not a row there is none of; the end of the run far from the
+ * line is then the row, where it is a decimal.
  */
 public final class DecimalPoints {
+
+    /**
+     * The most places before or after the point, as a scale, at which a row is built: the budget
+     * for building one, and no fact about a decimal. A run needing more places than this has no
+     * row built in it, which is a row not built and not a row there is none of.
+     */
+    public static final int PLACES_A_ROW_IS_BUILT_AT = 1 << 12;
+
+    /**
+     * The most digits a number a row is built from has: the budget for building one, and no fact
+     * about a decimal, as {@link #PLACES_A_ROW_IS_BUILT_AT} is for its scale. A number needing more
+     * is one no row is built at. It holds the point far out a run with no end is asked at, ten to
+     * the places a row is built at.
+     */
+    public static final long DIGITS_A_ROW_IS_BUILT_AT = 1L << 20;
 
     /** The digits one binary digit is worth, to start the count of places below the answer. */
     private static final double DIGITS_PER_BIT = 0.30102999566398;
 
     /**
-     * Where a side of a run with no end is asked: ten to the places a row is built at
-     * ({@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}) and its opposite. A number of that many
-     * digits before the point, as a row's numbers have that many places after it.
+     * Where a side of a run with no end is asked: ten to the places a row is built at and its
+     * opposite. A number of that many digits before the point, as a row's numbers have that many
+     * places after it.
      *
      * <p>A point to build the rows at and see that they stand, and no limit of the numbers a
      * decimal holds nor of the rows that can be built: a row at ten to the hundred thousand
-     * computes as well. What the run claims of the numbers past it is not that rows are built
-     * there but what claims it of the numbers between: the room of an operation turns on the
-     * scales of its operands, and the numbers a row stands the partner at are written at few
-     * places however far out the line is ({@link #besideTheLine}), so the scales stay as they
-     * are. The digits a host can hold of a number are its resource and no statement about the
-     * arithmetic, and {@code 1E+2147483647 + 5.0}, whose scales are the whole range apart, is a
-     * sum of a number written at the edge of the scale range, which no row is built at.
+     * computes as well.
      */
     private static final ExactRatio EDGE_OF_WHAT_IS_BUILT = ExactRatio.of(
-            BigInteger.TEN.pow(DecimalOperation.PLACES_A_ROW_IS_BUILT_AT));
+            BigInteger.TEN.pow(PLACES_A_ROW_IS_BUILT_AT));
 
     private DecimalPoints() {
+    }
+
+    /**
+     * The number {@code number} as a row is built with it: written at the fewest places, and
+     * empty where it is no decimal, is written at more places than a row is built at
+     * ({@link #PLACES_A_ROW_IS_BUILT_AT}) or has more digits than one is built with
+     * ({@link #DIGITS_A_ROW_IS_BUILT_AT}).
+     *
+     * <p>The one place that says what a decimal of a row is: whatever writes a decimal into a row
+     * (a place of the input, an element of a list a total is the sum of) writes it through here.
+     * Empty is a row not built, and says nothing of whether the number exists.
+     */
+    public static ExactAnswer<Optional<BigDecimal>> writtenForARow(ExactRatio number) {
+        return switch (number.writtenDecimal()) {
+            case ExactAnswer.Held<Optional<BigDecimal>> written -> ExactAnswer.held(written.value()
+                    .filter(each -> Math.abs((long) each.scale()) <= PLACES_A_ROW_IS_BUILT_AT
+                            && each.precision() <= DIGITS_A_ROW_IS_BUILT_AT));
+            case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->
+                    ExactAnswer.unheld(unheld.why());
+        };
     }
 
     /** The number a row is built at to ask the side of a run that has no end: the greatest
@@ -125,7 +154,7 @@ public final class DecimalPoints {
 
     /** Whether {@code at} is a decimal written at no more places than a row is built at. */
     static boolean isBuiltAt(ExactRatio at) {
-        return DecimalOperation.writtenForARow(at)
+        return writtenForARow(at)
                 instanceof ExactAnswer.Held<Optional<BigDecimal>> written
                 && written.value().isPresent();
     }
@@ -160,7 +189,7 @@ public final class DecimalPoints {
             return -1;
         }
         int places = Math.max(0, (int) (most.bitLength() * DIGITS_PER_BIT) - 1);
-        while (places <= DecimalOperation.PLACES_A_ROW_IS_BUILT_AT) {
+        while (places <= PLACES_A_ROW_IS_BUILT_AT) {
             if (BigInteger.TEN.pow(places).compareTo(most) >= 0) {
                 return places;
             }

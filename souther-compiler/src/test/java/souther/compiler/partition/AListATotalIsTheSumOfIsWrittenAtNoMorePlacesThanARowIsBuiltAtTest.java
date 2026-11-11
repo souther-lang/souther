@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.inputs.DecimalOperation;
+import souther.compiler.inputs.DecimalPoints;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -24,12 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The scale of the total of a list a row holds is no more than the places a row is built at,
- * because the builder writes every element through {@link DecimalOperation#writtenForARow}.
+ * because the builder writes every element through {@link DecimalPoints#writtenForARow}.
  *
- * <p>What the analysis shows of an operation worked out of a total is shown of the lists that are
- * built. It takes the total to be written at no more places than a row is built at, and that is
- * the builder's to keep: a start the rules name at more places than that is a list nothing builds,
- * and the sum of {@code [0E-2147483647]} is a total at the greatest scale that no row holds.
+ * <p>The places are the generation's budget and bound which lists are tried, not which decimals
+ * there are: a start the rules name at more places than that is a list nothing builds, which is a
+ * row not built and not a value that does not exist.
  */
 class AListATotalIsTheSumOfIsWrittenAtNoMorePlacesThanARowIsBuiltAtTest {
 
@@ -40,12 +39,12 @@ class AListATotalIsTheSumOfIsWrittenAtNoMorePlacesThanARowIsBuiltAtTest {
     @Test
     void aStartPastThePlacesARowIsBuiltAtBuildsNoList() {
         Count start = Count.of(new BigDecimal(BigInteger.ONE,
-                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1));
+                DecimalPoints.PLACES_A_ROW_IS_BUILT_AT + 1));
         Ends ends = Ends.of(new NumericDomain.Bounds(Endpoint.inclusive(start), null), DENSE);
         for (Spread how : Spread.values()) {
             assertFalse(ContainersAddingUp.splitting(new BigDecimal("1.1"), 3, ends, how, DENSE)
                             instanceof Split.Some,
-                    "no list is built at " + (DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1)
+                    "no list is built at " + (DecimalPoints.PLACES_A_ROW_IS_BUILT_AT + 1)
                             + " places (" + how + ")");
         }
     }
@@ -54,12 +53,12 @@ class AListATotalIsTheSumOfIsWrittenAtNoMorePlacesThanARowIsBuiltAtTest {
     @Test
     void aStartWithinThemBuildsElementsWithinThem() {
         Count start = Count.of(new BigDecimal(BigInteger.ONE,
-                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT));
+                DecimalPoints.PLACES_A_ROW_IS_BUILT_AT));
         Ends ends = Ends.of(new NumericDomain.Bounds(Endpoint.inclusive(start), null), DENSE);
         Split split = ContainersAddingUp.splitting(new BigDecimal("1.1"), 3, ends, Spread.LEVEL,
                 DENSE);
         for (BigDecimal each : assertInstanceOf(Split.Some.class, split).values()) {
-            assertTrue(each.scale() <= DecimalOperation.PLACES_A_ROW_IS_BUILT_AT, each.toString());
+            assertTrue(each.scale() <= DecimalPoints.PLACES_A_ROW_IS_BUILT_AT, each.toString());
         }
     }
 
@@ -77,13 +76,13 @@ class AListATotalIsTheSumOfIsWrittenAtNoMorePlacesThanARowIsBuiltAtTest {
     @Test
     void aNumberPastThePlacesARowIsBuiltAtIsNoRows() {
         assertEquals(Optional.empty(), written(new BigDecimal(BigInteger.ONE,
-                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1)));
+                DecimalPoints.PLACES_A_ROW_IS_BUILT_AT + 1)));
         assertTrue(written(new BigDecimal(BigInteger.ONE,
-                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT)).isPresent());
+                DecimalPoints.PLACES_A_ROW_IS_BUILT_AT)).isPresent());
     }
 
     private static Optional<BigDecimal> written(BigDecimal number) {
-        return switch (DecimalOperation.writtenForARow(ExactRatio.of(number))) {
+        return switch (DecimalPoints.writtenForARow(ExactRatio.of(number))) {
             case ExactAnswer.Held<Optional<BigDecimal>> held -> held.value();
             case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> Optional.empty();
         };

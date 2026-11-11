@@ -3,13 +3,10 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.abort.GetsPast;
-import souther.compiler.abort.ScaleBound;
 import souther.compiler.core.Core;
-import souther.compiler.core.Kernel;
-import souther.compiler.core.KernelContracts;
-import souther.compiler.types.ValueName;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -19,8 +16,6 @@ import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -56,7 +51,7 @@ class ContainerSizesUnderAWitnessTest {
         Core node = Core.withoutStanding(e);
         AnOperationApplied applied = AnOperationApplied.of(node);
         if (applied != null && applied.operation().equals(
-                souther.compiler.types.ValueName.Stdlib.operation("Set", "union"))) {
+                ValueName.Stdlib.operation("Set", "union"))) {
             out.add(node);
         }
         Core.forEachChild(node, child -> collect(child, out));
@@ -77,183 +72,7 @@ class ContainerSizesUnderAWitnessTest {
         GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(union);
         return completion instanceof GetsPast.WhereTheAnswerFits fits
                 && ContainerSizesUnderAWitness.answersOn(body, union, fits, witness,
-                        node -> Optional.empty(), node -> false);
-    }
-
-    /** The body of one behavior for each of {@code expressions}, compiled together: each answers a
-     *  decimal over {@code x} and {@code y}, decimals, {@code n} and {@code s}, whole numbers, and
-     *  {@code xs}, a list of decimals. */
-    private static List<Core> bodiesOf(String... expressions) {
-        StringBuilder source = new StringBuilder("module demo\n");
-        for (int at = 0; at < expressions.length; at++) {
-            source.append("""
-                    behavior run%1$d : (x: Decimal, y: Decimal, n: Int, s: Int, xs: List<Decimal>) -> Decimal
-                    let run%1$d (x, y, n, s, xs) = %2$s
-                    """.formatted(at, expressions[at]));
-        }
-        Compilation compilation = Compilation.ofSource(source.toString(), "Main");
-        List<Core> bodies = new ArrayList<>();
-        for (int at = 0; at < expressions.length; at++) {
-            bodies.add(compilation.db().ask(new Bodies.CheckedBehavior("demo", "run" + at))
-                    .value().body());
-        }
-        return bodies;
-    }
-
-    /** The first operation under {@code e} that answers where the scales have room. */
-    private static Core aDecimalOperation(Core e) {
-        Core node = Core.withoutStanding(e);
-        if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                instanceof GetsPast.WhereTheScalesHaveRoom) {
-            return node;
-        }
-        Core[] found = {null};
-        Core.forEachChild(node, child -> {
-            if (found[0] == null) {
-                found[0] = aDecimalOperation(child);
-            }
-        });
-        return found[0];
-    }
-
-    /** The first call of {@code operation} under {@code e}. */
-    private static Core callOf(Core e, ValueName operation) {
-        Core node = Core.withoutStanding(e);
-        AnOperationApplied applied = AnOperationApplied.of(node);
-        if (applied != null && applied.operation().equals(operation)) {
-            return node;
-        }
-        Core[] found = {null};
-        Core.forEachChild(node, child -> {
-            if (found[0] == null) {
-                found[0] = callOf(child, operation);
-            }
-        });
-        return found[0];
-    }
-
-    /** Whether the scales {@code operation}, an operation under {@code body}, is handed have
-     *  room, as a run of a row, whose decimals are {@code x}, {@code y} and what a walk is handed
-     *  as {@code e}, leaves them. */
-    private static boolean hasRoom(Core body, Core operation) {
-        return ContainerSizesUnderAWitness.answersOn(body, operation,
-                WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(operation),
-                node -> Optional.empty(), node -> Optional.empty(),
-                node -> node instanceof Core.Read read
-                        && List.of("x", "y", "e").contains(read.name()));
-    }
-
-    private static final ValueName ADD = ValueName.Stdlib.operation("Decimal", "add");
-
-    /** Whether the sum {@code expression} is the first operand of has room. */
-    private static List<Boolean> sumsHaveRoom(String... operands) {
-        String[] sums = new String[operands.length];
-        for (int at = 0; at < operands.length; at++) {
-            sums[at] = "Decimal.add(" + operands[at] + ", y)";
-        }
-        List<Boolean> out = new ArrayList<>();
-        for (Core body : bodiesOf(sums)) {
-            out.add(hasRoom(body, callOf(body, ADD)));
-        }
-        return out;
-    }
-
-    /**
-     * What the library declares of an operation says what scale its answer is at: a negation keeps
-     * its operand's, a whole number widened to a decimal has none, the greater of two is one of
-     * them, and a rounding is at the places it is asked for, a whole number the call writes out.
-     * So a sum of one has room wherever those scales do, and not where the places asked for are
-     * not written.
-     */
-    @Test
-    void theScaleOfAnOperandIsReadOffWhatTheLibraryDeclaresOfItsOperation() {
-        assertEquals(List.of(true, true, true, true, true, true, true, true, true, false),
-                sumsHaveRoom("-x", "Decimal.fromInt(3)", "Decimal.fromInt(n)",
-                        "Decimal.max(x, y)", "Decimal.clamp(x, y, x)",
-                        "Decimal.max(-x, Decimal.fromInt(n))", "Decimal.round(2, HALF_UP, x)",
-                        "Decimal.abs(x)", "Decimal.multiply(Decimal.add(x, 1.5m), y)",
-                        "Decimal.round(s, HALF_UP, x)"));
-    }
-
-    /**
-     * The number a quotient answers is at the scale it was asked for, which a name an arm gives it
-     * is at as well: so a sum of it has room where that scale is written and is one a run has room
-     * for, and not where it is handed in or is past what room is shown for. A zero divisor is a
-     * case of the answer and adds nothing to what is asked.
-     */
-    @Test
-    void theNumberAQuotientAnswersIsAtTheScaleItWasAskedFor() {
-        String divided = "match Decimal.divide(x, y, %s, HALF_UP) with"
-                + " | Decimal as q -> Decimal.add(q, x) | DivisionByZero -> 0.0m";
-        List<Boolean> out = new ArrayList<>();
-        for (Core body : bodiesOf(divided.formatted("2"), divided.formatted("s"),
-                divided.formatted("2147483647"))) {
-            out.add(hasRoom(body, callOf(body, ADD)));
-        }
-        assertEquals(List.of(true, false, false), out);
-    }
-
-    /**
-     * What a call answers is the shape of a number, and a scale asked for alone has no digits to
-     * say: a contract answering with one is refused when it is made, and the quotient's is the
-     * shape its law leaves.
-     */
-    @Test
-    void aContractAnswersWithTheShapeOfANumberNeverAScaleAskedForAlone() {
-        ScaleBound asked = new ScaleBound.WrittenAt(2);
-        assertThrows(IllegalArgumentException.class,
-                () -> new GetsPast.WhereTheScalesHaveRoom(List.of(), asked));
-        assertThrows(IllegalArgumentException.class,
-                () -> new GetsPast.WhereTheScalesHaveRoom(List.of(),
-                        new ScaleBound.Larger(asked, new ScaleBound.Argument(0))));
-        assertInstanceOf(ScaleBound.Left.class,
-                ((GetsPast.WhereTheScalesHaveRoom) KernelContracts.completionOf(
-                        Kernel.DECIMAL_DIVIDE)).answer());
-    }
-
-    private static List<Boolean> walksHaveRoom(String seed, String... steps) {
-        String[] walks = new String[steps.length];
-        for (int at = 0; at < steps.length; at++) {
-            walks[at] = "List.fold((acc, e) -> " + steps[at] + ", " + seed + ", xs)";
-        }
-        List<Boolean> out = new ArrayList<>();
-        for (Core body : bodiesOf(walks)) {
-            out.add(hasRoom(body, aDecimalOperation(body)));
-        }
-        return out;
-    }
-
-    /**
-     * What a walk carries is at the seed's scale or the step's, by induction. A sum of it and an
-     * element goes no further from nought than either; a product of them goes a scale further at
-     * every element, so no scale holds on every step.
-     */
-    @Test
-    void aWalkCarriesAScaleOnlyWhereItsStepKeepsIt() {
-        assertEquals(List.of(true, true, false), walksHaveRoom("1.0m", "Decimal.add(acc, e)",
-                "Decimal.subtract(acc, e)", "Decimal.multiply(acc, e)"));
-    }
-
-    /**
-     * A scale held is not room held: what a walk carries has room only where its step adds parts
-     * to it, which grow its digits by those of the number of elements and no more. What it
-     * carries added to itself, multiplied, squared or rounded can grow them at every element past
-     * what a representation holds whatever scale it keeps — a number of any size doubles, and a
-     * whole number squared or a rounding of a square has no room however the scale stays.
-     */
-    @Test
-    void aWalkHasRoomOnlyWhereItsStepAddsPartsToWhatItCarries() {
-        assertEquals(List.of(true, true, true, true, true, true, true), walksHaveRoom("2m",
-                "Decimal.add(acc, e)", "Decimal.add(e, acc)", "Decimal.subtract(acc, e)",
-                "Decimal.add(Decimal.subtract(acc, e), 2m)",
-                "Decimal.add(acc, Decimal.multiply(e, e))",
-                "-Decimal.add(acc, e)", "if e > 0m then Decimal.add(acc, e) else acc"));
-        assertEquals(List.of(false, false, false, false, false, false), walksHaveRoom("2m",
-                "Decimal.add(acc, acc)", "Decimal.multiply(acc, 2m)",
-                "Decimal.multiply(acc, Decimal.round(0, HALF_UP, e))",
-                "Decimal.multiply(acc, acc)",
-                "Decimal.round(0, HALF_UP, Decimal.multiply(acc, acc))",
-                "Decimal.multiply(Decimal.add(acc, 1m), Decimal.add(acc, 2m))"));
+                        node -> Optional.empty());
     }
 
     private static final String WALK =
