@@ -96,12 +96,8 @@ final class ValueClasses {
      * than reasons to stop building it — the class is still what a row is read against.
      */
     private static Place placeOf(Value value, Type type, DeclarationAccess declarations) {
-        return placeOf(switch (value) {
-            case Value.Text text -> new ObservedValue.Text(text.value());
-            case Value.Truth truth -> new ObservedValue.Bool(truth.value());
-            case Value.Number number -> new ObservedValue.Decimal(number.value());
-            case Value.Case one -> new ObservedValue.Unit(one.data());
-        }, type, declarations);
+        Carrier carrier = Carrier.ofValue(type, declarations);
+        return carrier == null ? null : carrier.placeOf(value);
     }
 
     /**

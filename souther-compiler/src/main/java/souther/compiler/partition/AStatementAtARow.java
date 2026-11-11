@@ -30,12 +30,11 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Recognizer;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
+import souther.compiler.values.WrittenValues;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1916,31 +1915,9 @@ final class AStatementAtARow {
         if (notRead != null) {
             return new Said.NotRead(Set.of(notRead));
         }
-        Boolean same = isWritten(written, seen);
+        Boolean same = WrittenValues.denotes(seen, written);
         return same == null ? new Said.NotRead(Set.of(ReadingGap.NO_VALUE))
                 : new Said.Is(same);
-    }
-
-    /** Whether {@code seen} is {@code written}, or null where the two are of kinds no row writes
-     *  alike. A scalar written is the value a position holds under whatever newtypes it wears,
-     *  so it is compared with what the row holds inside them. */
-    private static Boolean isWritten(Value written, ObservedValue seen) {
-        return switch (written) {
-            case Value.Text(String text) ->
-                    ObservedValue.scalarInside(seen) instanceof ObservedValue.Text(String got)
-                            ? got.equals(text) : null;
-            case Value.Truth(boolean truth) ->
-                    ObservedValue.scalarInside(seen) instanceof ObservedValue.Bool(boolean got)
-                            ? got == truth : null;
-            case Value.Number(BigDecimal number) -> switch (ObservedValue.scalarInside(seen)) {
-                case ObservedValue.Integer(long got) ->
-                        number.compareTo(BigDecimal.valueOf(got)) == 0;
-                case ObservedValue.Decimal(BigDecimal got) -> number.compareTo(got) == 0;
-                default -> null;
-            };
-            case Value.Case(TypeSymbol data) ->
-                    seen instanceof ObservedValue.Unit(TypeSymbol got) ? got.equals(data) : null;
-        };
     }
 
     /**
