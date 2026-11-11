@@ -13,37 +13,39 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * A module whose classes the JVM cannot hold — two of its identities spelled as one class — is
- * refused where the check says what is wrong with it, and not only where the classes are made. A
- * measure or a diagnosis asks for no classes, so what it is told of such a module is what the check
- * found: one refusal, said once, and no measurement of a module nothing could run.
+ * refused by the check of the module, and not only where the classes are made. So what is asked
+ * is the check's own answer, with nothing measured and no class made: one refusal, said once, and
+ * a module that is neither observable nor shippable.
  */
 class AJvmClassCollisionIsRefusedByTheCheckTest {
 
-    private static List<String> codesAfterMeasuring(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+    private static final String A_BEHAVIOR_ON_A_DATA = """
+            module probe
+
+            data Quote = { subtotal: Int }
+
+            behavior quote : (n: Int) -> Quote
+                constructs Quote
+            let quote (n) = Quote { subtotal = n }
+            """;
+
+    /** What the check of {@code source} says, by code. */
+    private static List<String> codesOfTheCheck(Compilation compilation) {
+        compilation.db().ask(new Bodies.ModuleCheck("probe"));
         return compilation.errors().stream().map(each -> String.valueOf(each.diagnostic().code()))
                 .toList();
     }
 
     @Test
-    void aBehaviorCapitalizedOntoADataIsSaidOnceByAMeasure() {
-        assertEquals(List.of("E2105"), codesAfterMeasuring("""
-                module probe
-
-                data Quote = { subtotal: Int }
-
-                behavior quote : (n: Int) -> Quote
-                    constructs Quote
-                let quote (n) = Quote { subtotal = n }
-                """));
+    void aBehaviorCapitalizedOntoADataIsSaidOnce() {
+        assertEquals(List.of("E2105"),
+                codesOfTheCheck(Compilation.ofSource(A_BEHAVIOR_ON_A_DATA, "Main")));
     }
 
     @Test
-    void twoBehaviorsCapitalizedOntoOneClassAreSaidOnceByAMeasure() {
+    void twoBehaviorsCapitalizedOntoOneClassAreSaidOnce() {
         // `Run` is a name a behavior does not take on its own account, which is said as well.
-        assertEquals(1, codesAfterMeasuring("""
+        assertEquals(1, codesOfTheCheck(Compilation.ofSource("""
                 module probe
 
                 data N = Int
@@ -54,12 +56,12 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
                 behavior Run : (n: N) -> N
                     constructs N
                 let Run (n) = n
-                """).stream().filter("E2105"::equals).count());
+                """, "Main")).stream().filter("E2105"::equals).count());
     }
 
     @Test
-    void aResultUnionCapitalizedOntoADataIsSaidOnceByAMeasure() {
-        assertEquals(List.of("E2105"), codesAfterMeasuring("""
+    void aResultUnionCapitalizedOntoADataIsSaidOnce() {
+        assertEquals(List.of("E2105"), codesOfTheCheck(Compilation.ofSource("""
                 module probe
 
                 data Req = { n: Int }
@@ -70,12 +72,12 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
                 behavior bill : (r: Req) -> Ok | NotFound
                     constructs Ok
                 let bill (r) = if r.n > 0 then Ok { v = r.n } else NotFound
-                """));
+                """, "Main")));
     }
 
     @Test
-    void aModelWhoseNamesDoNotCollideIsToldNothingOfTheKind() {
-        assertEquals(List.of(), codesAfterMeasuring("""
+    void namesThatDoNotCollideAreToldNothingOfTheKind() {
+        assertEquals(List.of(), codesOfTheCheck(Compilation.ofSource("""
                 module probe
 
                 data Quote = { subtotal: Int }
@@ -83,24 +85,24 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
                 behavior makeQuote : (n: Int) -> Quote
                     constructs Quote
                 let makeQuote (n) = Quote { subtotal = n }
-                """));
+                """, "Main")));
     }
 
     @Test
-    void theCollisionIsNoMeasurementOfTheModule() {
-        Compilation compilation = Compilation.ofSource("""
-                module probe
-
-                data Quote = { subtotal: Int }
-
-                behavior quote : (n: Int) -> Quote
-                    constructs Quote
-                let quote (n) = Quote { subtotal = n }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+    void aModuleTheCheckRefusesIsNeitherObservableNorShippable() {
+        Compilation compilation = Compilation.ofSource(A_BEHAVIOR_ON_A_DATA, "Main");
         assertFalse(compilation.db().ask(new Bodies.Observable("probe")).present(),
-                "a module the JVM cannot hold is no program to run rows against");
-        assertFalse(compilation.db().ask(new Bodies.Checked("probe")).present(),
-                "and none to ship");
+                "no program to run rows against");
+        assertFalse(compilation.db().ask(new Bodies.Checked("probe")).present(), "and none to ship");
+    }
+
+    /** A measure asks the check as it asks everything it rests on, and is told the same. */
+    @Test
+    void aMeasureIsToldWhatTheCheckSays() {
+        Compilation compilation = Compilation.ofSource(A_BEHAVIOR_ON_A_DATA, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.db().ask(new Adequacy.Coverage("probe"));
+        assertEquals(List.of("E2105"), compilation.errors().stream()
+                .map(each -> String.valueOf(each.diagnostic().code())).toList());
     }
 }

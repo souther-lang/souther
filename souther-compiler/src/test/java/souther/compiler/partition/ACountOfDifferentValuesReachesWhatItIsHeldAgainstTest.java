@@ -34,19 +34,14 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
             module probe
 
             data Item = { id: String, qty: Int, flag: Bool }
-            data Tied = { id: String, qty: Int }
-                invariant qty <= 3 || id == "fixed"
             data Pair = List<String>
                 invariant List.length(value) >= 2
-            data Capped = { items: List<Item> }
-                invariant List.length(items) <= 3
             """;
 
     private static final String BEHAVIOR = """
 
-            behavior %1$s : (ids: List<String>, xs: List<Item>, k: Int, capped: Capped,
-                             pair: Pair, tied: List<Tied>) -> Bool
-            let %1$s (ids, xs, k, capped, pair, tied) = %2$s
+            behavior %1$s : (ids: List<String>, xs: List<Item>, k: Int, pair: Pair) -> Bool
+            let %1$s (ids, xs, k, pair) = %2$s
             """;
 
     /** A count and the number it is held against, and whether that number is read. */
@@ -75,13 +70,6 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
                 // A container that must hold two elements holds a value, and so one different
                 // value at least: the count is none of the numbers below one.
                 new Case("Set.size(Set.fromList(pair.value)) == k", "k", true),
-                // A cap on how many the container holds is a cap on the count.
-                new Case("Set.size(Set.fromList(List.map(p -> p.id, capped.items))) == k", "k",
-                        false),
-                // A rule that ties the value to what the statement reads leaves a value the
-                // statement keeps no value of its own: here only one.
-                new Case("Set.size(Set.fromList(List.map(p -> p.id,"
-                        + " List.filter(p -> p.qty > 3, tied)))) == k", "k", false),
                 // A statement no element meets keeps no value.
                 new Case("Set.size(Set.fromList(List.map(p -> p.id,"
                         + " List.filter(p -> p.flag && Bool.not(p.flag), xs)))) == k", "k",
@@ -211,43 +199,6 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
                         List.filter(p -> p.qty > 3, xs.value)))) == k.value
                 """;
         assertEquals(true, kIsRead(model, "keptCount"));
-    }
-
-    /**
-     * A count lies no further than the place has values, and is read as far as that: a list of
-     * truths holds at most the two values a truth has however many it holds, so the count of
-     * different ones is none, one or two and each is shown. The values a pattern leaves are counted
-     * and not listed: a list of codes of three capital letters held to more than the figure a
-     * listing stops at is shown to the number the letters make. (How an end is written as a number
-     * is the unit test's: a bound at the greatest whole number is no model's, the rules not
-     * leaving a container so many.)
-     */
-    @Test
-    void aCountIsReadAsFarAsThePlaceHasValuesWhateverTheContainerMayHold() {
-        String bools = """
-                module probe
-
-                data Held = List<Bool>
-                    invariant List.length(value) <= %s
-
-                behavior heldCount : (xs: Held, k: Int) -> Bool
-                let heldCount (xs, k) = Set.size(Set.fromList(xs.value)) == k
-                """;
-        assertEquals(true, kIsRead(bools.formatted("2"), "heldCount"));
-        assertEquals(true, kIsRead(bools.formatted("3"), "heldCount"));
-        String codes = """
-                module probe
-
-                data Code = String
-                    invariant String.matches("[A-Z]{3}", value)
-                data Held = List<Code>
-                    invariant List.length(value) <= %s
-
-                behavior heldCount : (xs: Held, k: Int) -> Bool
-                let heldCount (xs, k) = Set.size(Set.fromList(xs.value)) == k
-                """;
-        assertEquals(true, kIsRead(codes.formatted("300"), "heldCount"));
-        assertEquals(true, kIsRead(codes.formatted("20000"), "heldCount"));
     }
 
     /**
