@@ -73,15 +73,15 @@ class AScopeOfAModelStillHoldsWhatItCouldNotAnswerTest {
 
     /** A value built that its own rule rejects, which leaves the scope undetermined. */
     private static final String REJECTS = """
-            module rejects exposing ( Hold, hold )
+            module rejects exposing ( Hold, placeHold )
 
             data Hold = Int
                 invariant value >= 1 && value <= 300
 
-            behavior hold : (party: Int) -> Hold
+            behavior placeHold : (party: Int) -> Hold
                 constructs Hold
 
-            let hold (party) = Hold(0)
+            let placeHold (party) = Hold(0)
             """;
 
     /**
