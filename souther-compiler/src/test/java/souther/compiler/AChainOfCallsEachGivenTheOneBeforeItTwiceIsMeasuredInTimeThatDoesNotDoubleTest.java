@@ -19,11 +19,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest {
 
     private static String reportOfChain(int depth, String comparison) {
+        return reportOfChainEndingIn(depth, "LAST " + comparison + " j");
+    }
+
+    private static String reportOfChainEndingIn(int depth, String ending) {
         StringBuilder body = new StringBuilder("{\n    let a0 = x\n");
         for (int i = 1; i <= depth; i++) {
             body.append("    let a%d = Int.floorMod(a%d, a%d)\n".formatted(i, i - 1, i - 1));
         }
-        body.append("    a%d %s j\n}".formatted(depth, comparison));
+        body.append("    " + ending.replace("LAST", "a" + depth) + "\n}");
         Compilation compilation = Compilation.ofSource("""
                 module m
 
@@ -53,6 +57,13 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    @Test
+    void aChainNamedInTheConditionOfAnIfAndInItsArmsIsMeasured() {
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
+                () -> reportOfChainEndingIn(60, "if LAST == j then LAST > 1 else LAST < j"));
+        assertTrue(!report.isEmpty());
     }
 
     @Test
