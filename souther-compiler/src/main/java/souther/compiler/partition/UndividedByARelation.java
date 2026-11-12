@@ -5128,8 +5128,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>A conversion of the string at a place a side reads ends a run for the strings whose answer
      * is longer than a {@code String} holds, and for no other ({@link GetsPast.WhereTheTextFits}).
-     * The strings the conversion is exactly a map on ({@link CodeMap}) are not among them, so a run
-     * gets to the relation at every one of those, and which of the others it stops on is not said.
+     * The strings the conversion is exactly a map on ({@link CodeMap}) are not among them, nor is
+     * any where the place holds none too long for any answer to be
+     * ({@link #getsPastAtEveryStringHeld}), so a run gets to the relation at every one of those,
+     * and which of the others it stops on is not said.
      * Said of a reader that parts the strings it reads by what it is shown over, which asks for
      * {@code exactlyOnConversions}: it answers the conversions here and shows nothing of the
      * strings they are not exact on. Any other reader takes a conversion of a string it reads as
@@ -5258,6 +5260,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     return true;
                 }
                 for (TermPath place : text.places()) {
+                    // A place holding no string too long for the conversion to answer within a
+                    // String gets the run past it at every string, whatever stands beside it and
+                    // whatever application converts it.
+                    if (getsPastAtEveryStringHeld(place, text.conversion(), read)) {
+                        continue;
+                    }
                     if (reads.contains(place)) {
                         // The string a side reads is exactly the string every application
                         // converts only where the place is one value of the row, or where the
@@ -5306,6 +5314,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param conversion what they make of it, outermost last
      */
     private record ConvertedOn(TermPath place, CaseMapping conversion) {}
+
+    /**
+     * Whether a run gets past {@code conversion} of the string at {@code place} at every string the
+     * place holds: none of them is longer than the conversion answers within a {@code String} at
+     * whatever code points it holds ({@link CaseMaps#longestGottenPastAtEveryString}). A place no
+     * position is declared for is ended by nothing.
+     */
+    private static boolean getsPastAtEveryStringHeld(TermPath place, CaseMapping conversion,
+                                                     InputReading read) {
+        Position at = read.domain().at(place);
+        BigInteger longest = at == null ? null : StringsHeld.longestAt(at);
+        return longest != null && longest.compareTo(
+                BigInteger.valueOf(CaseMaps.longestGottenPastAtEveryString(conversion))) <= 0;
+    }
 
     /**
      * What {@code owed}, a case conversion of the text at {@code operand}, is done to: the string

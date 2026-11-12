@@ -11,6 +11,7 @@ import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
 import souther.compiler.semantics.CaseMapping;
+import souther.compiler.values.TextExtents;
 
 /**
  * A case conversion as the map on code points it is exactly one for ({@link CodeMap}), worked out
@@ -120,6 +121,31 @@ final class CaseMaps {
                 : answeredAsTheyStand(mapping, Language.EVERY_STRING, meter);
         Language joined = standing == null ? null : exact.or(standing, meter);
         return joined == null ? exact : joined;
+    }
+
+    /**
+     * The most code points a string may hold for a run to get past {@code mapping} at it whatever
+     * code points they are: none of its conversions answers more than a {@code String} holds.
+     *
+     * <p>A conversion's answer, in every canonical form, holds no more code points than the text it
+     * is handed times what the run time's tables say one code point comes to at most
+     * ({@link CaseConversion.Growth}), as written or decomposed. So a text of no more than a
+     * {@code String} holds over that converts and is canonicalized within it, and of conversions
+     * done in turn the factors multiply: each is handed what the one before answered.
+     */
+    static long longestGottenPastAtEveryString(CaseMapping mapping) {
+        return switch (mapping) {
+            case CaseMapping.None _ -> TextExtents.LONGEST_STRING;
+            case CaseMapping.Lowercase(CaseMapping of) ->
+                    longestGottenPastAtEveryString(of) / most(CaseConversion.lowercaseGrowth());
+            case CaseMapping.Uppercase(CaseMapping of) ->
+                    longestGottenPastAtEveryString(of) / most(CaseConversion.uppercaseGrowth());
+        };
+    }
+
+    /** The most code points one code point comes to in a conversion's answer, in any form. */
+    private static long most(CaseConversion.Growth growth) {
+        return Math.max(growth.mapped(), growth.decomposed());
     }
 
     /**

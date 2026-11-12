@@ -12,6 +12,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import net.unit8.notation199x.pattern.Meter;
@@ -65,6 +66,57 @@ final class StringsHeld {
             language = Partitions.ofTheLengths(language, lengths, meter);
         }
         return language == null ? null : ValueSet.matching(language);
+    }
+
+    /**
+     * The most code points a string {@code at} holds can have, or null where nothing ends them: the
+     * least of the end the rules leave its length and the longest string of the set it admits.
+     *
+     * <p>A ceiling over every value, and no claim that a value is that long, so it asks for less
+     * than {@link #at} does. The end a rule leaves the length holds of every value whether or not
+     * the rules are read whole, and the set admitted is wider than the values in every reading
+     * ({@link AdmissibleSet#approximation}); neither asks that the length be the one number bound.
+     * The end is held as a number, so a length no language is written out to is still an end.
+     */
+    static BigInteger longestAt(Position at) {
+        BigInteger most = null;
+        for (PositionBounds each : at.bounds()) {
+            if (each.term() instanceof NumericTerm.TakenOf taken
+                    && RepresentationBounds.isALength(taken)
+                    && each.rangeLeft() != null && each.rangeLeft().max() != null) {
+                most = leastOf(most, mostUpTo(each.rangeLeft().max()));
+            }
+        }
+        return leastOf(most, longestOf(at.admitted().approximation()));
+    }
+
+    /** The longest string of {@code set}, or null where it has none or holds strings of every
+     *  length. */
+    private static BigInteger longestOf(ValueSet set) {
+        return switch (set) {
+            case ValueSet.Finite finite -> {
+                BigInteger longest = BigInteger.ZERO;
+                for (Value each : finite.values()) {
+                    if (!(each instanceof Value.Text(String text))) {
+                        yield null;
+                    }
+                    longest = longest.max(
+                            BigInteger.valueOf(text.codePointCount(0, text.length())));
+                }
+                yield longest;
+            }
+            case ValueSet.Matching(Language language) -> {
+                Language.Ends lengths = language.lengths();
+                yield lengths == null || lengths.most() == null ? null
+                        : BigInteger.valueOf(lengths.most());
+            }
+            case ValueSet.Cofinite _, ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> null;
+        };
+    }
+
+    /** The lesser of two ceilings, either of which may be none. */
+    private static BigInteger leastOf(BigInteger one, BigInteger other) {
+        return one == null ? other : other == null ? one : one.min(other);
     }
 
     /** The lengths {@code bounds} leave, or null where an end is not a whole count. */
