@@ -78,13 +78,20 @@ final class WhatAConversionAnswers {
         return may;
     }
 
-    /** The strings an equality is shown at, and those outside which it is shown not to be. */
+    /**
+     * The strings an equality is shown at, and those outside which it is shown not to be.
+     *
+     * <p>What may be already holds the strings left standing: one in the strings the conversion is
+     * exactly a map on is among the values, and one outside them is made of code points the
+     * conversion leaves, which {@link #of} adds to what may be wherever there is such a string.
+     * So only what is shown is joined.
+     *
+     * <p>Languages of sequences of code points, as every language is: whether a value is among
+     * them is asked of a value, and a language that holds none is not shown to hold one.
+     */
     Shown forEquality(Meter meter) {
         Language shown = standing == null ? null : values.or(standing, meter);
-        Language mayBe = standing == null ? null : may.or(standing, meter);
-        // What is shown is among what may be, so one of the two not worked out leaves both as
-        // they were.
-        return shown == null || mayBe == null ? new Shown(values, may) : new Shown(shown, mayBe);
+        return new Shown(shown == null ? values : shown, may);
     }
 
     /** The strings shown at, and the strings outside which an answer is not. */

@@ -142,6 +142,22 @@ class AStringACaseConversionLeavesAsItStandsIsItsOwnAnswerTest {
         assertFalse(pastBoth.has("́"));
     }
 
+    /**
+     * A witness holds a string chosen from the strings the conversion is exactly a map on, so each
+     * must be a value; the strings a run is shown to get past it at hold sequences that are no
+     * value, and are not chosen from.
+     */
+    @Test
+    void theStringsAWitnessIsChosenFromAreAllValuesAndTheOnesAGetPastIsShownAtAreNot() {
+        for (CaseMapping mapping : List.of(CaseMapping.LOWERCASE, CaseMapping.UPPERCASE)) {
+            Language chosenFrom = CaseMaps.of(mapping).strings(METER);
+            Language noValue = Language.EVERY_STRING.heldAsWritten().language(METER).not(METER);
+            assertTrue(chosenFrom.and(noValue, METER).isEmpty(), mapping.toString());
+            Language past = CaseMaps.gottenPastExactly(mapping, METER);
+            assertFalse(past.and(noValue, METER).isEmpty(), mapping.toString());
+        }
+    }
+
     /** Only the strings of the language asked of are answered as they stand. */
     @Test
     void onlyTheStringsOfTheLanguageAskedOfAreAnswered() {

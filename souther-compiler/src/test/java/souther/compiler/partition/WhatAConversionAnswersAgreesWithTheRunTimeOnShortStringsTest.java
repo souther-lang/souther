@@ -5,7 +5,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.function.Supplier;
 
 import net.unit8.notation199x.Normalization;
 import net.unit8.notation199x.pattern.Meter;
@@ -34,8 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest {
 
     /** A meter of its own for each ask, as a reading is given one. */
-    private static final Supplier<Meter> METER =
-            () -> PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+    private static Meter meter() {
+        return PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+    }
 
     private static final List<String> ALPHABET = List.of("a", "A", "z", "Σ", "σ", "ς", "İ", "i",
             "ß", "ẞ", "́", "̇", "̣", "ǅ", "K", "ᄀ", "ᅡ");
@@ -100,7 +100,7 @@ class WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest {
                         answers.add(answer);
                     }
                 }
-                Meter meter = METER.get();
+                Meter meter = meter();
                 Language partner = Language.ofWords(words, meter);
                 WhatAConversionAnswers.Shown asked = WhatAConversionAnswers
                         .of(partner, mapping, meter).forEquality(meter);
@@ -123,7 +123,7 @@ class WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest {
         List<String> values = valuesAmong(strings(2));
         for (CaseMapping mapping : MAPPINGS) {
             for (List<String> words : partners(strings(2))) {
-                Meter meter = METER.get();
+                Meter meter = meter();
                 Language answers = Language.ofWords(words, meter);
                 Language shown = CaseMaps.answeringInto(mapping, answers, meter);
                 for (String value : values) {
@@ -150,7 +150,7 @@ class WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest {
                         answers.add(answer);
                     }
                 }
-                Meter meter = METER.get();
+                Meter meter = meter();
                 Language partner = Language.ofWords(words, meter);
                 Language derived = WhatAConversionAnswers.of(partner, mapping, meter)
                         .forDerivation();
