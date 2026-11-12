@@ -31,8 +31,9 @@ class AStatementOfTheWayIsReadOnARowLeavingSomeContainersEmptyTest {
     private static final NumericTerm HOW_MANY = new NumericTerm.ValueOf(EMAILS);
 
     /** The row holding one email. */
-    private static final Function<NumericTerm, ExactRatio> ONE_HELD =
-            term -> term.equals(HOW_MANY) ? ExactRatio.ONE : null;
+    private static ExactRatio oneHeld(NumericTerm term) {
+        return term.equals(HOW_MANY) ? ExactRatio.ONE : null;
+    }
 
     /** {@code HOW_MANY - n rel 0}. */
     private static UndividedByARelation.OnAWay howManyAgainst(long n, Rel rel) {
@@ -49,17 +50,20 @@ class AStatementOfTheWayIsReadOnARowLeavingSomeContainersEmptyTest {
 
     @Test
     void holdingOneMeetsHoldingOneAtLeast() {
-        assertEquals(Truth.TRUE, onTheRow(howManyAgainst(1, Rel.GE), ONE_HELD));
+        assertEquals(Truth.TRUE, onTheRow(howManyAgainst(1, Rel.GE),
+                AStatementOfTheWayIsReadOnARowLeavingSomeContainersEmptyTest::oneHeld));
     }
 
     @Test
     void holdingOneFailsHoldingTwoAtLeast() {
-        assertEquals(Truth.FALSE, onTheRow(howManyAgainst(2, Rel.GE), ONE_HELD));
+        assertEquals(Truth.FALSE, onTheRow(howManyAgainst(2, Rel.GE),
+                AStatementOfTheWayIsReadOnARowLeavingSomeContainersEmptyTest::oneHeld));
     }
 
     @Test
     void holdingOneFailsHoldingNone() {
-        assertEquals(Truth.FALSE, onTheRow(howManyAgainst(0, Rel.EQ), ONE_HELD));
+        assertEquals(Truth.FALSE, onTheRow(howManyAgainst(0, Rel.EQ),
+                AStatementOfTheWayIsReadOnARowLeavingSomeContainersEmptyTest::oneHeld));
     }
 
     @Test
