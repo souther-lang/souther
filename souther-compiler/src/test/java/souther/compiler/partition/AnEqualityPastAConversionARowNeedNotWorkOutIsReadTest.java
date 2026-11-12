@@ -392,6 +392,39 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
         assertTrue(unansweredIn(fixed).contains("emails[*]"), unansweredIn(fixed).toString());
     }
 
+    /**
+     * A digit and a combining acute are outside the map and left alone by both conversions, so a
+     * string of them is its own answer through any of them done in turn: neither side is open,
+     * the other side holding every answer there is. A sharp s is left alone by lowercase and not
+     * by uppercase, so through the two it is not shown its own answer.
+     */
+    @Test
+    void aStringEveryConversionDoneInTurnLeavesAloneIsItsOwnAnswer() {
+        String model = """
+                module image
+
+                data A = String invariant String.matches("%s", value)
+
+                behavior same : (a: A, b: String) -> Bool
+                let same (A(a), b) = %s == b
+
+                example same
+                    | "equal"  : (A("%s"), "%s") -> true
+                    | "differ" : (A("%s"), "cd") -> false
+                """;
+        String digits = "1́";
+        for (String conversion : List.of("String.lowercase(a)",
+                "String.lowercase(String.lowercase(a))",
+                "String.uppercase(String.lowercase(a))")) {
+            List<String> open = leftOpenFor(model.formatted("[0-9]\\\\x{301}", conversion,
+                    digits, digits, digits));
+            assertTrue(open.isEmpty(), conversion + " " + open);
+        }
+        List<String> sharp = leftOpenFor(model.formatted("ß", "String.uppercase(String.lowercase(a))",
+                "ß", "SS", "ß"));
+        assertTrue(sharp.stream().anyMatch(each -> each.startsWith("a image [")), sharp.toString());
+    }
+
     /** And where it may be any length, the strings the map is not exact on may stop the run. */
     @Test
     void anEmailOfAnyLengthIsOpenForGettingPastTheConversion() {

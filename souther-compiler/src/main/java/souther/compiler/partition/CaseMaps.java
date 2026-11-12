@@ -5,6 +5,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntPredicate;
 
 import net.unit8.notation199x.CaseConversion;
+import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 
 import souther.compiler.evaluate.BoundUnderEvaluation;
@@ -39,11 +40,7 @@ final class CaseMaps {
         if (had == null) {
             had = CodeMap.of(text -> BoundUnderEvaluation.mapped(mapping, text),
                     leftAloneEverywhere(mapping));
-            CaseMapping outermost = switch (mapping) {
-                case CaseMapping.None it -> it;
-                case CaseMapping.Lowercase _ -> CaseMapping.LOWERCASE;
-                case CaseMapping.Uppercase _ -> CaseMapping.UPPERCASE;
-            };
+            CaseMapping outermost = lastDone(mapping);
             if (!outermost.equals(mapping) && !(mapping instanceof CaseMapping.None)) {
                 had = had.leavingBe(of(outermost).leftAlone());
             }
@@ -59,12 +56,14 @@ final class CaseMaps {
      * The strings of {@code over} that {@code mapping} answers as they stand, which are therefore
      * among its answers when it is asked of them: the strings whose code points it leaves alone.
      *
-     * <p>Stated of one conversion and not of two. A string of the code points a conversion leaves
-     * alone is changed by nothing it does, whatever stands beside them — the code points that
-     * depend on their neighbours are not among them — and the form it answers in is the string's
-     * own, so a string a {@code String} holds comes back as it is. Of two conversions done in turn
-     * that does not follow: {@code ß} is left alone by the outer lowercase and is what it answers
-     * of {@code ẞ}, and the two together answer {@code ss} of it. So none is answered for those.
+     * <p>Stated of each conversion a mapping is made of. A string of the code points a conversion
+     * leaves alone is changed by nothing it does, whatever stands beside them — the code points
+     * that depend on their neighbours are not among them — and the form it answers in is the
+     * string's own, so a string a {@code String} holds comes back as it is. Of conversions done in
+     * turn, a string of the code points every one of them leaves alone comes back from each, and
+     * so from all of them. What the outermost leaves alone is not enough: {@code ß} is left alone
+     * by an outer lowercase and is what it answers of {@code ẞ}, and the two together answer
+     * {@code ss} of it — and the uppercase done first does not leave {@code ß} alone.
      *
      * <p>A language of the code points before the form is applied, as {@code over} is, so it holds
      * sequences that are no value: {@code a} followed by a combining acute is among them where
@@ -73,15 +72,29 @@ final class CaseMaps {
      * sequence no value is and is not shown for that. Whoever derives strings from what is shown
      * leaves this out.
      *
-     * @return the strings, which are none where {@code mapping} is not one conversion, or null
-     *         past what {@code meter} allows
+     * @return the strings, which are every one of {@code over} where {@code mapping} converts
+     *         nothing, or null past what {@code meter} allows
      */
     static Language answeredAsTheyStand(CaseMapping mapping, Language over, Meter meter) {
-        if (mapping.doneSoFar().size() != 1) {
-            return Language.EVERY_STRING.not(meter);
+        CodePoints everyStep = null;
+        for (CaseMapping step : mapping.doneSoFar()) {
+            CodePoints alone = of(lastDone(step)).leftAlone();
+            everyStep = everyStep == null ? alone : everyStep.and(alone);
         }
-        Language alone = CodeMap.stringsOf(of(mapping).leftAlone(), meter);
+        if (everyStep == null) {
+            return over;
+        }
+        Language alone = CodeMap.stringsOf(everyStep, meter);
         return alone == null ? null : over.and(alone, meter);
+    }
+
+    /** The one conversion done last of what {@code mapping} makes of a string, done alone. */
+    private static CaseMapping lastDone(CaseMapping mapping) {
+        return switch (mapping) {
+            case CaseMapping.None it -> it;
+            case CaseMapping.Lowercase _ -> CaseMapping.LOWERCASE;
+            case CaseMapping.Uppercase _ -> CaseMapping.UPPERCASE;
+        };
     }
 
     /**
