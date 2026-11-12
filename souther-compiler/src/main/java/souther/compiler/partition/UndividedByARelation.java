@@ -4544,8 +4544,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * {@code past} without the operators owed that a row a run of which gets to the relation got
      * past, for every value of the places the relation reads: those worked out on every run that
-     * gets to the relation, whose places no place the relation reads bears on or a rule ties to
-     * ({@link #apart}). Such an operator stops the run on the places it reads and on nothing the
+     * gets to the relation and that a run to it works out whenever it works out the part it is
+     * read in ({@link Pullback.StopObligation#runsWheneverItsPartDoes}), whose places no place
+     * the relation reads bears on or a rule ties to ({@link #apart}). Such an operator stops the run on the places it reads and on nothing the
      * relation reads, so the values the row holds at the others are values of the row's run
      * whichever values the relation's places take. {@code past} itself where there is none.
      */
@@ -4557,6 +4558,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         DemandReading.Answered open = past.withoutOwedThat(owed ->
                 !owed.onWhatNoPlaceHolds() && owed.where().equals(Pullback.WorkedOutWhere.ALWAYS)
+                        && owed.runsWheneverItsPartDoes()
                         && owed.places().stream().allMatch(place -> readOff.stream()
                                 .allMatch(reads -> apart(place, reads, read))));
         return open.owed().size() == past.owed().size() ? past : open;

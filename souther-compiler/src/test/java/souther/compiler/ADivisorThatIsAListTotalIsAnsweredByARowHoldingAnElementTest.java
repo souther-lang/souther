@@ -31,6 +31,7 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
             data Row = { xs: List<Int>, m: Int, j: Int }
             data Outer = { inner: Row }
             data Pair = { xs: List<Int>, ys: List<Int>, m: Int, j: Int }
+            data Flat = { xs: List<Int>, m: Int, j: Int } invariant List.sum(xs) == 0
             """;
 
     private record Model(String name, String parameter, String before, String comparison) {}
@@ -44,7 +45,13 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
                     "let y = 1 / List.sum(p.xs)", "p.m + 1 >= p.j"),
             new Model("a remainder by a total of a list in a record in the row", "Outer",
                     "let y = Int.floorMod(7, List.sum(p.inner.xs))",
-                    "p.inner.m + 1 >= p.inner.j"));
+                    "p.inner.m + 1 >= p.inner.j"),
+            // Each total is to be off nought together, which a row making one of them so does not
+            // do: both lists are in the one record.
+            new Model("a remainder by each of two totals", "Pair",
+                    "let a = Int.floorMod(7, List.sum(p.xs))\n"
+                            + "    let b = Int.floorMod(7, List.sum(p.ys))",
+                    "p.m + 1 >= p.j"));
 
     private static String source(Model model) {
         return DECLARED + """
@@ -73,6 +80,43 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
             String report = report(each, Adequacy.Level.ALL);
             if (report.contains("not read:")) {
                 wrong.add(each.name() + " is not read:\n" + report);
+            }
+        }
+        assertEquals(List.of(), wrong);
+    }
+
+    /**
+     * A row that gets to the comparison shows some run gets past what a run to it works out
+     * whenever it works out the part it is read in. Where some runs take the other arm, or do not
+     * run the right operand, a row that gets to the comparison by one of them has not worked the
+     * operator out, and what the row shows of it is nothing.
+     *
+     * <p>The total of the list is nought in every row, so the remainder stops every run that works
+     * it out: the comparison is reached only where the run does not, which is where the arm or
+     * the operand that holds it is skipped — and that is decided by {@code p.m}, which the
+     * comparison reads. A value of {@code p.m} on the other side of the decision is a value no run
+     * gets to the comparison at.
+     */
+    @Test
+    void aStopOnlySomeRunsWorkOutIsNotAnsweredByARowThatDidNotWorkItOut() {
+        List<Model> skipped = List.of(
+                new Model("a remainder in the arm of a choice", "Flat",
+                        "let y = if p.m > 0 then Int.floorMod(7, List.sum(p.xs)) else 0",
+                        "p.m + 1 >= p.j"),
+                new Model("a remainder in the other arm of a choice", "Flat",
+                        "let y = if p.m > 0 then 0 else Int.floorMod(7, List.sum(p.xs))",
+                        "p.m + 1 >= p.j"),
+                new Model("a remainder on the right of a conjunction", "Flat",
+                        "let y = p.m > 0 && Int.floorMod(7, List.sum(p.xs)) > 0",
+                        "p.m + 1 >= p.j"),
+                new Model("a remainder on the right of a disjunction", "Flat",
+                        "let y = p.m > 0 || Int.floorMod(7, List.sum(p.xs)) > 0",
+                        "p.m + 1 >= p.j"));
+        List<String> wrong = new ArrayList<>();
+        for (Model each : skipped) {
+            String report = report(each, Adequacy.Level.ALL);
+            if (!report.contains("not read:")) {
+                wrong.add(each.name() + " is read:\n" + report);
             }
         }
         assertEquals(List.of(), wrong);

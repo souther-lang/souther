@@ -418,7 +418,7 @@ public final class ReachWitnesses {
                 i -> elementOfAList(inputs.parameters().get(i), read) != null,
                 i -> parametersTheBodyDoesNotRead.contains(inputs.parameters().get(i)),
                 i -> RowSearch.aimedAt(inputs.parameters().get(i), inputs.types().get(i), aims,
-                        reading),
+                        reading, stopped),
                 reading, building, stopped);
         if (each == null) {
             return new Sought(Optional.empty(), stopped, runs);
