@@ -462,18 +462,19 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
     }
 
     /**
-     * The longest string a conversion is gotten past at whatever it holds: a {@code String}'s
-     * longest over the most one code point comes to in the answer, four for either conversion as
-     * written or decomposed, and over that again for each conversion done in turn.
+     * The length up to which a conversion is shown gotten past at whatever a string holds: a
+     * {@code String}'s longest over the most one code point comes to in the answer, four for
+     * either conversion as written or decomposed, and over that again for each conversion done in
+     * turn.
      */
     @Test
-    void theLongestStringGottenPastIsAStringsLongestOverWhatEachConversionGrowsBy() {
+    void theLengthShownGottenPastIsAStringsLongestOverWhatEachConversionGrowsBy() {
         long once = Strings.LONGEST_TEXT / 4;
         assertEquals(Strings.LONGEST_TEXT,
-                CaseMaps.longestGottenPastAtEveryString(CaseMapping.NONE));
-        assertEquals(once, CaseMaps.longestGottenPastAtEveryString(CaseMapping.LOWERCASE));
-        assertEquals(once, CaseMaps.longestGottenPastAtEveryString(CaseMapping.UPPERCASE));
-        assertEquals(once / 4, CaseMaps.longestGottenPastAtEveryString(
+                CaseMaps.gottenPastAtEveryStringUpTo(CaseMapping.NONE));
+        assertEquals(once, CaseMaps.gottenPastAtEveryStringUpTo(CaseMapping.LOWERCASE));
+        assertEquals(once, CaseMaps.gottenPastAtEveryStringUpTo(CaseMapping.UPPERCASE));
+        assertEquals(once / 4, CaseMaps.gottenPastAtEveryStringUpTo(
                 new CaseMapping.Uppercase(CaseMapping.LOWERCASE)));
     }
 

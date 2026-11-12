@@ -3794,7 +3794,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         BigInteger fewest = BigInteger.valueOf(
                 ends == null || length instanceof NumericTerm.CodePointClassCount
                         ? 0 : ends.least());
-        BigInteger most = BigInteger.valueOf(longestOf(strings));
+        BigInteger most = BigInteger.valueOf(lengthBoundOf(strings));
         // Whether the place holds a string of one of these counts is not asked here. The counts
         // are a proof about numbers; the strings of the place at them are met with what it admits
         // where the classes are made, under the allowance of the place, and a side that holds
@@ -4347,8 +4347,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
-        long longest = longestOf(held);
-        if (shown.allUpTo(longest)) {
+        long bound = lengthBoundOf(held);
+        if (shown.allUpTo(bound)) {
             return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheStrings()),
                     called);
         }
@@ -4367,7 +4367,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
                 ValueSet.matching(alike ? shown.ofTheValues() : shown.ofTheStrings()),
-                longest <= shown.upTo() ? null : shown.upTo(), called);
+                bound <= shown.upTo() ? null : shown.upTo(), called);
     }
 
     /**
@@ -4401,9 +4401,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     called).withTheImagesNotShownOf(notShown);
         }
         Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
-        long longest = longestOf(held);
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
-                ValueSet.matching(mayBe), longest <= shown.upTo() ? null : shown.upTo(), called)
+                ValueSet.matching(mayBe), lengthBoundOf(held) <= shown.upTo() ? null : shown.upTo(),
+                called)
                 .withTheImagesNotShownOf(notShown);
     }
 
@@ -4429,10 +4429,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The most code points a string of {@code held} has: what the language bounds, and the most a
-     * {@code String} holds where that is no bound or the strings are not a language.
+     * A bound on the code points of every string of {@code held}: the longest string of the
+     * language where it has one, and the most a {@code String} holds where it has none or the
+     * strings are not a language. In the second, no string of {@code held} need be that long.
      */
-    private static long longestOf(Language held) {
+    private static long lengthBoundOf(Language held) {
         Language.Ends lengths = held == null ? null : held.lengths();
         return lengths != null && lengths.most() != null ? lengths.most()
                 : TextExtents.LONGEST_STRING;
@@ -5460,16 +5461,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Whether a run gets past {@code conversion} of the string at {@code place} at every string the
-     * place holds: none of them is longer than the conversion answers within a {@code String} at
-     * whatever code points it holds ({@link CaseMaps#longestGottenPastAtEveryString}). A place no
-     * position is declared for is ended by nothing.
+     * place holds: none of them is longer than a length up to which the conversion is shown to
+     * answer within a {@code String} at whatever code points it holds
+     * ({@link CaseMaps#gottenPastAtEveryStringUpTo}). Both are bounds, so a place past one is not
+     * shown to stop a run, only not shown to get past. A place no position is declared for is
+     * ended by nothing.
      */
     private static boolean getsPastAtEveryStringHeld(TermPath place, CaseMapping conversion,
                                                      InputReading read) {
         Position at = read.domain().at(place);
-        BigInteger longest = at == null ? null : StringsHeld.longestAt(at);
-        return longest != null && longest.compareTo(
-                BigInteger.valueOf(CaseMaps.longestGottenPastAtEveryString(conversion))) <= 0;
+        BigInteger bound = at == null ? null : StringsHeld.lengthBoundAt(at);
+        return bound != null && bound.compareTo(
+                BigInteger.valueOf(CaseMaps.gottenPastAtEveryStringUpTo(conversion))) <= 0;
     }
 
     /**

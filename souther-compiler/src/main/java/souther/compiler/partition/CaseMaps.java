@@ -137,22 +137,27 @@ final class CaseMaps {
     }
 
     /**
-     * The most code points a string may hold for a run to get past {@code mapping} at it whatever
-     * code points they are: none of its conversions answers more than a {@code String} holds.
+     * A length up to which a run is shown to get past {@code mapping} at every string, whatever
+     * code points it holds: at a string of no more code points than this, none of its conversions
+     * answers more than a {@code String} holds.
      *
-     * <p>A conversion's answer, in every canonical form, holds no more code points than the text it
-     * is handed times what the run time's tables say one code point comes to at most
-     * ({@link CaseConversion.Growth}), as written or decomposed. So a text of no more than a
-     * {@code String} holds over that converts and is canonicalized within it, and of conversions
-     * done in turn the factors multiply: each is handed what the one before answered.
+     * <p>A bound and not the longest such length: a longer string may be gotten past as well, and
+     * nothing here says one is not. A conversion's answer, in every canonical form, holds no more
+     * code points than the text it is handed times what the run time's tables say one code point
+     * comes to at most ({@link CaseConversion.Growth}), as written or decomposed. So a text of no
+     * more than a {@code String} holds over that converts and is canonicalized within it, and of
+     * conversions done in turn the factors multiply: each is handed what the one before answered.
+     * The code points that come to the most in one conversion need not be the ones that do in the
+     * next, so the product is a bound on what the conversions in turn make of a code point and may
+     * be more than any comes to.
      */
-    static long longestGottenPastAtEveryString(CaseMapping mapping) {
+    static long gottenPastAtEveryStringUpTo(CaseMapping mapping) {
         return switch (mapping) {
             case CaseMapping.None _ -> TextExtents.LONGEST_STRING;
             case CaseMapping.Lowercase(CaseMapping of) ->
-                    longestGottenPastAtEveryString(of) / most(CaseConversion.lowercaseGrowth());
+                    gottenPastAtEveryStringUpTo(of) / most(CaseConversion.lowercaseGrowth());
             case CaseMapping.Uppercase(CaseMapping of) ->
-                    longestGottenPastAtEveryString(of) / most(CaseConversion.uppercaseGrowth());
+                    gottenPastAtEveryStringUpTo(of) / most(CaseConversion.uppercaseGrowth());
         };
     }
 

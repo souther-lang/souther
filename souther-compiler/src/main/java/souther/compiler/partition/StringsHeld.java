@@ -140,16 +140,17 @@ final class StringsHeld {
     }
 
     /**
-     * The most code points a string {@code at} holds can have, or null where nothing ends them: the
-     * least of the end the rules leave its length and the longest string of the set it admits.
+     * A bound on the code points of every string {@code at} holds, or null where nothing ends
+     * them: the least of the end the rules leave its length and the longest string of the set it
+     * admits.
      *
-     * <p>A ceiling over every value, and no claim that a value is that long, so it asks for less
+     * <p>No string {@code at} holds is longer, and none need be this long, so it asks for less
      * than {@link #at} does. The end a rule leaves the length holds of every value whether or not
      * the rules are read whole, and the set admitted is wider than the values in every reading
      * ({@link AdmissibleSet#approximation}); neither asks that the length be the one number bound.
      * The end is held as a number, so a length no language is written out to is still an end.
      */
-    static BigInteger longestAt(Position at) {
+    static BigInteger lengthBoundAt(Position at) {
         BigInteger most = null;
         for (PositionBounds each : at.bounds()) {
             if (each.term() instanceof NumericTerm.TakenOf taken
