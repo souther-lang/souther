@@ -97,7 +97,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         WeakeningWord.BORDER_VALUE_ABSENT, Set.of("NoValue"),
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
                                 Set.of("CouldNotWalk", "CouldNotReadRow", "KeysNotTold",
-                                        "ReachNotRead", "CasesNotWorkedOut"),
+                                        "SamenessNotTold", "ReachNotRead", "CasesNotWorkedOut"),
                         WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT, Set.of("CouldNotWorkOut")),
                 under,
                 () -> "the words no longer stand over the reasons they were meant to: " + under);
@@ -126,6 +126,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                 case "CouldNotWalk" -> out.add(ReadingGap.COULD_NOT_WALK);
                 case "CouldNotReadRow" -> out.add(ReadingGap.COULD_NOT_READ_ROW);
                 case "KeysNotTold" -> out.add(ReadingGap.KEYS_NOT_TOLD);
+                case "SamenessNotTold" -> out.add(ReadingGap.SAMENESS_NOT_TOLD);
                 case "CouldNotWorkOut" -> {
                     for (UnheldNumber why : UnheldNumber.values()) {
                         out.add(ReadingGap.of(why));

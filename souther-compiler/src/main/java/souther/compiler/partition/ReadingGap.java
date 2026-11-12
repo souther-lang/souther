@@ -197,6 +197,30 @@ public sealed interface ReadingGap {
     }
 
     /**
+     * Both values came back in full, and whether they are the same value is not something this
+     * reading can say of the observations it was given.
+     *
+     * <p>Not {@link NoValue}: the row wrote a value at each position, and saying otherwise tells a
+     * reader the row is missing one it has. What is missing is the declaration that says what being
+     * the same means for the type — a decimal at two scales, a sequence that is a list or a set — and
+     * a row does not carry it. A wider run reads the same observations and comes to the same
+     * answer.
+     */
+    record SamenessNotTold() implements ReadingGap {
+
+        /** The observation is the same however much a run is allowed. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
+        }
+    }
+
+    /**
      * Every value the quantity reads came back, and the number they come to is one this compiler
      * could not hold.
      *
@@ -390,6 +414,8 @@ public sealed interface ReadingGap {
 
     ReadingGap KEYS_NOT_TOLD = new KeysNotTold();
 
+    ReadingGap SAMENESS_NOT_TOLD = new SamenessNotTold();
+
     /** The gap what an observation met is, for a reader holding it: the code, at the figure it
      *  stopped at where one did. */
     static ReadingGap of(Incompleteness.Cause cause) {
@@ -437,6 +463,19 @@ public sealed interface ReadingGap {
     static ReadingGap ofAComparisonOf(ObservedValue value) {
         Incompleteness.Cause stopped = Limits.UNBOUNDED.stoppedBy(value);
         return stopped == null ? null : of(stopped);
+    }
+
+    /**
+     * Why {@code value}, read in full, cannot be told the same as or different from another
+     * observation by comparing the two as records, or null where it can
+     * ({@link ObservedValue#isSameWhereEqual}).
+     *
+     * <p>For a reader that compares two observations with no declaration of their type. A reader
+     * that holds an observation against a value the source wrote asks the value
+     * ({@link souther.compiler.values.WrittenValues}) and not this.
+     */
+    static ReadingGap ofEqualityOf(ObservedValue value) {
+        return value.isSameWhereEqual() ? null : SAMENESS_NOT_TOLD;
     }
 
     /** The gap a number this could not hold is, for a reader that met one. */

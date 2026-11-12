@@ -1049,6 +1049,16 @@ public final class StandingAtAPoint {
         }
 
         /**
+         * Why {@code value} is no value to be equal or unequal to another: a part of it was not
+         * read, or equal as records is not the same value for it ({@link ReadingGap#ofEqualityOf}).
+         * Null where it is.
+         */
+        private static ReadingGap notComparable(ObservedValue value) {
+            ReadingGap stopped = ReadingGap.ofAComparisonOf(value);
+            return stopped != null ? stopped : ReadingGap.ofEqualityOf(value);
+        }
+
+        /**
          * Whether each element of the occurrence of {@code container} this reading is in is the
          * last to hold the value it holds at {@code position}, by the element; none for an element
          * that holds nothing there, or for every element where the walk could not be made.
@@ -1076,7 +1086,7 @@ public final class StandingAtAPoint {
                     : (walk.readsTheOtherWay(new OrderOfAKey(container, position)) ? byElement
                             : byElement.descendingMap()).entrySet()) {
                 ObservedValue held = element.getValue().getLast();
-                ReadingGap ownNotRead = ReadingGap.ofAComparisonOf(held);
+                ReadingGap ownNotRead = notComparable(held);
                 // One after it that was read and is equal settles it, whatever else was not.
                 out.put(element.getKey(), ownNotRead != null ? new Lastness.CouldNotTell(ownNotRead)
                         : readAfter.contains(held) ? new Lastness.NotLast()
@@ -1084,7 +1094,7 @@ public final class StandingAtAPoint {
                         : new Lastness.Last());
                 ReadingGap firstNotReadHere = null;
                 for (ObservedValue value : element.getValue()) {
-                    ReadingGap notRead = ReadingGap.ofAComparisonOf(value);
+                    ReadingGap notRead = notComparable(value);
                     if (notRead == null) {
                         readAfter.add(value);
                     } else if (firstNotReadHere == null) {

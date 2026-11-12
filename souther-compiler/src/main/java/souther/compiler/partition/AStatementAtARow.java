@@ -1252,6 +1252,15 @@ final class AStatementAtARow {
                     unreadValues++;
                     continue;
                 }
+                // Told apart from the others by equality as records, which is the language's
+                // sameness only for some values; for the rest the element may be one of the
+                // others or not, and is counted as one that could be another.
+                ReadingGap notTold = ReadingGap.ofEqualityOf(value);
+                if (notTold != null) {
+                    why.add(notTold);
+                    unreadValues++;
+                    continue;
+                }
                 (answer instanceof Answer.Holds ? meeting : maybe).add(value);
             }
             maybe.removeAll(meeting);
@@ -1896,6 +1905,15 @@ final class AStatementAtARow {
         }
         if (notRead != null) {
             return new Said.NotRead(Set.of(notRead));
+        }
+        // Equal as records is the language's sameness only for the values that say so; a decimal
+        // at two scales and a sequence that is a list or a set are not told by a row.
+        ReadingGap notTold = ReadingGap.ofEqualityOf(left);
+        if (notTold == null) {
+            notTold = ReadingGap.ofEqualityOf(right);
+        }
+        if (notTold != null) {
+            return new Said.NotRead(Set.of(notTold));
         }
         return new Said.Is(left.equals(right));
     }

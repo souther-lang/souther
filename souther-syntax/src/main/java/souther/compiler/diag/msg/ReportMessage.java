@@ -903,6 +903,8 @@ public sealed interface ReportMessage extends Message {
 
     record TheKeysCouldNotBeToldApart() implements ReportMessage, Prose {}
 
+    record WhetherTheTwoValuesAreTheSameIsNotToldByARow() implements ReportMessage, Prose {}
+
     record WhetherTheRunGotToTheRuleTurnsOn(Message on) implements ReportMessage, Prose {}
 
     record APartOfTheWayNotRead() implements ReportMessage, Prose {}
