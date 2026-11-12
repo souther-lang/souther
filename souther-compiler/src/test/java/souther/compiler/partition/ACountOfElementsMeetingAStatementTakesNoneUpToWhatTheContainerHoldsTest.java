@@ -72,4 +72,17 @@ class ACountOfElementsMeetingAStatementTakesNoneUpToWhatTheContainerHoldsTest {
         assertFalse(UndividedByARelation.countTakes(from(0), between(0, 0), false).takes()
                 .admits(Count.of(1)));
     }
+
+    /** A container that must hold two, each once, may hold only elements the statement holds of
+     *  or only ones it fails of, and a row of one of each shows neither: the count is shown at
+     *  one, and at none only where the container may be empty. */
+    @Test
+    void aContainerThatMustHoldElementsEachOnceIsNotShownTheCountAtNone() {
+        UndividedByARelation.CountTakes taken =
+                UndividedByARelation.countTakes(between(2, 2), between(2, 2), false);
+        assertFalse(taken.takes().admits(Count.of(0)));
+        assertTrue(taken.takes().admits(Count.of(1)));
+        assertFalse(taken.takes().admits(Count.of(2)));
+        assertTrue(taken.lies().admits(Count.of(0)));
+    }
 }

@@ -271,7 +271,7 @@ public final class ReachWitnesses {
             List<TermPath> inside = new ArrayList<>();
             if (place != null) {
                 for (TermPath container : place.containersHoldingIt()) {
-                    TermPath element = container.element();
+                    TermPath element = walkedAt(place, container);
                     if (!place.standsAtOrUnder(element)) {
                         return Optional.empty();
                     }
@@ -280,6 +280,14 @@ public final class ReachWitnesses {
             }
             return inside.equals(madeOnEvery) ? Optional.of(List.copyOf(there))
                     : Optional.empty();
+        }
+
+        /**
+         * Where the elements of {@code container} that {@code place} is in stand: the keys of a map
+         * where the place is a key or inside one, and the container's elements otherwise.
+         */
+        static TermPath walkedAt(TermPath place, TermPath container) {
+            return place.standsAtOrUnder(container.key()) ? container.key() : container.element();
         }
 
         /** Adds to {@code out} the number {@code orders} reads at each element of the

@@ -139,9 +139,21 @@ class ACountOfElementsThatMeetAStatementReachesWhatItIsHeldAgainstTest {
                 // And beside how many the set holds, where the count would be every size of it.
                 new Case("Set.size(Set.filter(x -> x > 5, members)) == Set.size(members)",
                         "Set.size(members)", false),
-                // A map's entries are a key and a value, built apart.
+                // A map's entries are a key and a value, built apart, and the entries that meet a
+                // statement of the value alone are put under as many keys as the map may hold.
                 new Case("Map.size(Map.filterEntries((key, v) -> v > 5, prices)) == k", "k",
+                        true),
+                new Case("Map.size(Map.filterEntries((key, v) -> v > 5, table.value)) == k", "k",
+                        true),
+                // A statement that reads the key says of another key what it has no reason to say
+                // of the first: the count is not shown at every value.
+                new Case("Map.size(Map.filterEntries((key, v) -> key == \"a\", prices)) == k", "k",
                         false),
+                new Case("Map.size(Map.filterEntries((key, v) -> Bool.not(key == \"x\") && v > 5, prices))"
+                        + " == k", "k", false),
+                // No entry meets the statement.
+                new Case("Map.size(Map.filterEntries((key, v) -> v > 5 && v < 5, prices)) == k",
+                        "k", false),
                 // What a way says of the size of the container is no more than the most the count
                 // is, and the count is none up to that.
                 new Case("if List.length(lines) == 2 then " + flagged + " == k else false", "k",
