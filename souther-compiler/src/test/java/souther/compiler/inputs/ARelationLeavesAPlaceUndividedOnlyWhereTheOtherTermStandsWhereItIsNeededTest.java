@@ -13,6 +13,7 @@ import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -289,6 +291,199 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     void theMiddleOfTheTypeHasToSeeBothOutcomes() {
         assertEquals(Set.of(), apart(pair(1, -1, A_DATE), -400_000_000_000L, Rel.GT));
         assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -300_000_000_000L, Rel.GT));
+    }
+
+    private static Set<String> apartBesidesHoles(List<BigInteger> holes, long constant,
+                                                  Rel relation,
+                                                  WhatARelationLeavesUndivided.Operations operations,
+                                                  WhatARelationLeavesUndivided.OnTheDifference...
+                                                          held) {
+        return apartBesidesHoleValues(holes.stream().map(ExactRatio::of).toList(), constant,
+                relation, operations, held);
+    }
+
+    private static Set<String> apartBesidesHoleValues(
+            List<ExactRatio> holes, long constant, Rel relation,
+            WhatARelationLeavesUndivided.Operations operations,
+            WhatARelationLeavesUndivided.OnTheDifference... held) {
+        return WhatARelationLeavesUndivided.ofTheirDifference(pair(1, -1, A_DATE),
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(constant)), relation,
+                List.of(held), DATES, String::equals, GREATEST_INT, operations, true, holes);
+    }
+
+    private static final long LEAST_DAY = LocalDate.MIN.toEpochDay();
+
+    /**
+     * A date kept away from a day takes every other day, and an order asks only for a partner on
+     * each side of the line: a hole farther from the ends than the program's own sums move them is
+     * the sole partner of no side, so what is left undivided is what it is with no hole. At an end,
+     * or within the constant of one, it may be the one value a side has, and nothing is shown.
+     */
+    @Test
+    void aHoleFarFromTheEndsOfTheValuesLeavesAnOrderAsItIsWithNone() {
+        Set<String> alone = apart(pair(1, -1, A_DATE), -14, Rel.GT);
+        assertEquals(Set.of("a", "b"), alone);
+        WhatARelationLeavesUndivided.Operations none = WhatARelationLeavesUndivided.Operations.NONE;
+        assertEquals(alone, apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT, none));
+        assertEquals(alone, apartBesidesHoles(
+                List.of(BigInteger.valueOf(LEAST_DAY + 15), BigInteger.ONE), -14, Rel.GT, none));
+        for (long near : List.of(LEAST_DAY, LEAST_DAY + 1, LEAST_DAY + 14)) {
+            assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.valueOf(near)), -14,
+                    Rel.GT, none), "a hole " + (near - LEAST_DAY) + " from the least day");
+        }
+        long greatest = LocalDate.MAX.toEpochDay();
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.valueOf(greatest - 14)), -14,
+                Rel.GT, none));
+        assertEquals(alone, apartBesidesHoles(List.of(BigInteger.valueOf(greatest - 15)), -14,
+                Rel.GT, none));
+    }
+
+    /**
+     * No value of the other term is the one a hole keeps out when the relation is an order, but an
+     * equation asks for exactly one: it is read only with no hole. Nor is a hole beside a
+     * statement about the difference, which may leave a side of one value anywhere.
+     */
+    @Test
+    void aHoleBesideAnEquationOrAStatementAboutTheDifferenceLeavesNothingShown() {
+        WhatARelationLeavesUndivided.Operations none = WhatARelationLeavesUndivided.Operations.NONE;
+        List<BigInteger> hole = List.of(BigInteger.ZERO);
+        for (Rel equation : List.of(Rel.EQ, Rel.NE)) {
+            assertEquals(Set.of(), apartBesidesHoles(hole, -14, equation, none), equation::name);
+        }
+        assertEquals(Set.of("a", "b"), apartBesidesHoles(List.of(), -14, Rel.GT, none,
+                held(1, 0, Rel.GE)), "the statement alone leaves the places undivided");
+        assertEquals(Set.of(), apartBesidesHoles(hole, -14, Rel.GT, none, held(1, 0, Rel.GE)));
+    }
+
+    /**
+     * A sum the program works out moves where a term's values stop: by its constant where it is
+     * over the one term weighed once, which a hole is kept that much farther from the ends than;
+     * and by an amount nothing here knows where it is over two terms or weighs one other than
+     * once, which no hole is passed beside.
+     */
+    @Test
+    void aHoleIsKeptFartherFromTheEndsThanTheSumsTheProgramWorksOutMoveThem() {
+        WhatARelationLeavesUndivided.Operations plusAThousand =
+                WhatARelationLeavesUndivided.Operations.read(List.of(sum(Map.of("a", 1L), 1000)),
+                        true);
+        WhatARelationLeavesUndivided.Operations overBoth =
+                WhatARelationLeavesUndivided.Operations.read(
+                        List.of(sum(Map.of("a", 1L, "b", 1L), 1)), true);
+        WhatARelationLeavesUndivided.Operations twice =
+                WhatARelationLeavesUndivided.Operations.read(List.of(sum(Map.of("a", 2L), 1)),
+                        true);
+        assertEquals(Set.of("a", "b"), apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT,
+                plusAThousand));
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.valueOf(LEAST_DAY + 1014)),
+                -14, Rel.GT, plusAThousand));
+        assertEquals(Set.of("a", "b"), apartBesidesHoles(
+                List.of(BigInteger.valueOf(LEAST_DAY + 1015)), -14, Rel.GT, plusAThousand));
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT, overBoth));
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT, twice));
+    }
+
+    private static ExactRatio aHalf() {
+        return ExactRatio.of(1).dividedBy(ExactRatio.of(2)).orNull();
+    }
+
+    /**
+     * A hole is at a value, and whether the terms take that value is theirs to say. Terms whose
+     * values step by one take no value that is no whole number, so a hole at a half is no hole of
+     * theirs and nothing is asked of it — an equation is read as it is with none. Terms whose
+     * values are dense take the half, and holding them away from it is not read: nothing is shown,
+     * and not what is shown with no hole.
+     */
+    @Test
+    void aHoleAtAValueTheTermsTakeNoneOfIsNoHoleAndOneAtAValueTheyTakeIsNotDropped() {
+        WhatARelationLeavesUndivided.Operations none = WhatARelationLeavesUndivided.Operations.NONE;
+        for (Rel relation : List.of(Rel.GT, Rel.EQ, Rel.NE)) {
+            assertEquals(apart(pair(1, -1, A_DATE), -14, relation),
+                    apartBesidesHoleValues(List.of(aHalf()), -14, relation, none), relation::name);
+        }
+        assertEquals(Set.of(), apartBesidesHoleValues(
+                List.of(aHalf(), ExactRatio.of(LEAST_DAY)), -14, Rel.GT, none),
+                "a hole at the least day is a hole of the dates, beside a hole that is none");
+        List<WhatARelationLeavesUndivided.Term<String>> decimals = List.of(
+                new WhatARelationLeavesUndivided.Term<>(List.of("a"), ExactRatio.of(1),
+                        NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, "Decimal", true,
+                        Granularity.DENSE, NumericDomain.Bounds.OPEN),
+                new WhatARelationLeavesUndivided.Term<>(List.of("b"), ExactRatio.of(-1),
+                        NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, "Decimal", true,
+                        Granularity.DENSE, NumericDomain.Bounds.OPEN));
+        WhatARelationLeavesUndivided.WhereTheRepresentationStops open =
+                new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
+                        NumericDomain.Bounds.OPEN);
+        Set<String> alone = WhatARelationLeavesUndivided.ofTheirDifference(decimals,
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(-14)), Rel.GT, List.of(),
+                open, String::equals, GREATEST_INT, none, true, List.of());
+        assertFalse(alone.isEmpty(), "the dense terms are read with no hole, or nothing here asks");
+        for (ExactRatio hole : List.of(aHalf(), ExactRatio.ZERO)) {
+            assertEquals(Set.of(), WhatARelationLeavesUndivided.ofTheirDifference(decimals,
+                    WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(-14)), Rel.GT,
+                    List.of(), open, String::equals, GREATEST_INT, none, true, List.of(hole)),
+                    "a hole at " + hole + " beside dense terms, which read " + alone + " with none");
+        }
+    }
+
+    /** An operation over {@code coefs}, each weighed, working out a number that adds
+     *  {@code constant}, between the ends of an {@code Int}. */
+    private static WhatARelationLeavesUndivided.IntSum sum(Map<String, Long> coefs,
+                                                           long constant) {
+        Map<Object, ExactRatio> weighed = new LinkedHashMap<>();
+        coefs.forEach((term, weight) -> weighed.put(term, ExactRatio.of(weight)));
+        return new WhatARelationLeavesUndivided.IntSum(weighed, ExactRatio.of(constant),
+                BigInteger.valueOf(Long.MIN_VALUE), GREATEST_INT);
+    }
+
+    private static WhatARelationLeavesUndivided.Leaves leavesBesidesHoles(
+            List<WhatARelationLeavesUndivided.Term<String>> terms, int at, long constant,
+            Rel relation, List<BigInteger> holes,
+            WhatARelationLeavesUndivided.OnTheDifference... held) {
+        return leavesBesidesHoleValues(terms, at, constant, relation,
+                holes.stream().map(ExactRatio::of).toList(), held);
+    }
+
+    private static WhatARelationLeavesUndivided.Leaves leavesBesidesHoleValues(
+            List<WhatARelationLeavesUndivided.Term<String>> terms, int at, long constant,
+            Rel relation, List<ExactRatio> holes,
+            WhatARelationLeavesUndivided.OnTheDifference... held) {
+        return WhatARelationLeavesUndivided.leavesByTheirDifference(terms, at,
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(constant)), relation,
+                List.of(held), String::equals, GREATEST_INT,
+                WhatARelationLeavesUndivided.Operations.NONE, Map.of(), true, holes);
+    }
+
+    /**
+     * What an order leaves a value of a term that takes a run of whole numbers is what it leaves
+     * with no hole when every hole is farther from each end of the runs than the line moves it,
+     * and one more: the runs the answer is made of start at those ends, and are asked at their
+     * first value, which a hole there would make a value the term never takes. Nearer than that,
+     * or beside an equation or a statement about the difference, nothing is shown.
+     */
+    @Test
+    void aHoleFarFromTheEndsOfTheRunsLeavesWhatAnOrderLeavesWithNone() {
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                term("a", 1, run(0, 100), run(0, 100), null, true),
+                term("b", -1, run(0, 100), run(0, 100), null, true));
+        for (int at : List.of(0, 1)) {
+            WhatARelationLeavesUndivided.Leaves alone =
+                    leavesBesidesHoles(terms, at, 5, Rel.GT, List.of());
+            assertNotNull(alone, "the order leaves the value something with no hole");
+            assertEquals(alone, leavesBesidesHoles(terms, at, 5, Rel.GT,
+                    List.of(BigInteger.valueOf(50), BigInteger.valueOf(51))));
+            // Five and the one more the answer's runs ask: a hole must be more than six from an end.
+            for (long near : List.of(0L, 1L, 6L, 94L, 100L)) {
+                assertNull(leavesBesidesHoles(terms, at, 5, Rel.GT,
+                        List.of(BigInteger.valueOf(near))), "a hole at " + near);
+            }
+            for (long far : List.of(7L, 93L)) {
+                assertEquals(alone, leavesBesidesHoles(terms, at, 5, Rel.GT,
+                        List.of(BigInteger.valueOf(far))), "a hole at " + far);
+            }
+            assertNull(leavesBesidesHoles(terms, at, 5, Rel.EQ, List.of(BigInteger.valueOf(50))));
+            assertNull(leavesBesidesHoles(terms, at, 5, Rel.GT, List.of(BigInteger.valueOf(50)),
+                    held(1, 0, Rel.GE)));
+        }
     }
 
     /**

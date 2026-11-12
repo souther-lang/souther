@@ -373,15 +373,28 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * Nor is one an operation the run works out reads where nothing says when it answers:
-     * {@code 1 / p} stops at nought, so past it {@code p} is one, and {@code a != p} takes
+     * {@code 1 / (p * p)} stops at nought, so past it {@code p} is one, and {@code a != p} takes
      * {@code a} away from one. {@code b} is not shown to reach its true side at every value,
      * where a free {@code p} would have left it related.
      */
     @Test
     void aNumberAnUnsaidOperationReadsIsNotFreeToMeetADisequality() {
-        String body = "{\n    let unused = 1 / p.value\n"
+        String body = "{\n    let unused = 1 / (p.value * p.value)\n"
                 + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
         assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN), left("p: Bit, a: Bit, b: Bit",
+                "data Bit = Int invariant value >= 0 && value <= 1", body, "8:18"));
+    }
+
+    /**
+     * Where the operation says when it answers, a quotient by {@code p} where {@code p} is not
+     * nought, a run that gets to the comparison has {@code p} at one and {@code a} at nought, so
+     * {@code b} is read: it is nought where the relation holds and one where it does not.
+     */
+    @Test
+    void aNumberAQuotientHoldsOffNoughtIsOneTheRunNarrowsTo() {
+        String body = "{\n    let unused = 1 / p.value\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", RELATES), left("p: Bit, a: Bit, b: Bit",
                 "data Bit = Int invariant value >= 0 && value <= 1", body, "8:18"));
     }
 
@@ -438,16 +451,27 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * A closure handed to an operation of the library is applied by it, so what its body may stop
-     * on is what the run may stop on: {@code Int.floorMod(x, p)} applied to each of two numbers
-     * stops at {@code p} nought, as it does written out.
+     * on is what the run may stop on: {@code Int.floorMod(x, p * p)} applied to each of two numbers
+     * stops at {@code p} nought, as it does written out, and the divisor is no form the arithmetic
+     * composes, so what it stops on is left where nothing says. Where the divisor is {@code p}
+     * the stop is told, and is the same told in the closure as written out.
      */
     @Test
     void whatTheBodyOfAClosureAppliedByTheLibraryMayStopOnIsWhatTheRunMayStopOn() {
         String bits = "data Bit = Int invariant value >= 0 && value <= 1";
-        String body = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value), [1, 2])\n"
-                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        String after = "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        String closure = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value * p.value),"
+                + " [1, 2])\n" + after;
+        String writtenOut = "{\n    let unused = Int.floorMod(1, p.value * p.value)\n" + after;
         assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
-                left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"));
+                left("p: Bit, a: Bit, b: Bit", bits, closure, "8:18"));
+        assertEquals(left("p: Bit, a: Bit, b: Bit", bits, writtenOut, "8:18"),
+                left("p: Bit, a: Bit, b: Bit", bits, closure, "8:18"));
+        String toldClosure = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value), [1, 2])\n"
+                + after;
+        String toldWrittenOut = "{\n    let unused = Int.floorMod(1, p.value)\n" + after;
+        assertEquals(left("p: Bit, a: Bit, b: Bit", bits, toldWrittenOut, "8:18"),
+                left("p: Bit, a: Bit, b: Bit", bits, toldClosure, "8:18"));
     }
 
     /**
@@ -462,13 +486,26 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String bits = "data Bit = Int invariant value >= 0 && value <= 1";
         Map<String, String> notShown = Map.of("a", RELATES, "b", NOT_SHOWN);
         for (String unused : List.of(
-                "Int.floorMod(1, p.value)",
+                "Int.floorMod(1, p.value * p.value)",
                 "p.value == 0 && p.value + 9223372036854775807 + 1 > 0",
                 "if p.value == 0 then p.value + 9223372036854775807 + 1 else 0")) {
             String body = "{\n    let unused = " + unused + "\n"
                     + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
             assertEquals(notShown, left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"), unused);
         }
+    }
+
+    /**
+     * A call of a kernel that ends a run on its divisor alone is told where the divisor is a
+     * form, as a quotient is: past {@code Int.floorMod(1, p)} {@code p} is one, and {@code b} is
+     * read, where the same call over a divisor no form says is not.
+     */
+    @Test
+    void aRemainderByAFormIsToldWhereItsDivisorIsNotNought() {
+        String bits = "data Bit = Int invariant value >= 0 && value <= 1";
+        String body = "{\n    let unused = Int.floorMod(1, p.value)\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", RELATES), left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"));
     }
 
     /**
@@ -541,9 +578,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "List.length(xs) >= 2 && " + walk.formatted("xs")), "4:56"));
         assertEquals(related, leftIn(model.formatted(walk.formatted("List.reverse(xs)")),
                 "4:32"));
-        assertEquals(Map.of("xs[*].p", NOT_REACHED, "xs[*].r", NOT_SHOWN), leftIn(model.formatted(
-                "List.any(i -> i.q / i.p >= 0 && i.p >= i.r, xs)"), "4:50"));
-    }
+        assertEquals(Map.of("xs[*].p", RELATES, "xs[*].r", NOT_SHOWN), leftIn(model.formatted(
+                "List.any(i -> i.q / i.p >= 0 && i.p >= i.r, xs)"), "4:50"));    }
 
     /**
      * A join of collections the relation does not read is asked of the witness as well: a run
@@ -1951,14 +1987,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * A way keeping {@code b} from nought where it already keeps it above nought, as a quotient's
      * way keeps its divisor, leaves {@code b} every value from one: the line on {@code a} it
      * draws is the one {@code b > 0} alone draws. Kept from five instead, {@code b} runs with a
-     * gap, and every value of {@code a} between the settling ones is not shown reached.
+     * gap, and the line is the same: an order asks only for a value of {@code b} on each side of
+     * what {@code a} asks, and the gap leaves one on each side of every value of {@code a}.
      */
     @Test
-    void aValueHeldApartOutsideTheRunTakesNothingFromIt() {
+    void aValueHeldApartFromANumberTakesNothingFromAnOrderOverIt() {
         Map<String, String> above = keptAbove("");
         assertFalse(above.containsKey("a"), () -> "a is parted at what settles it: " + above);
         assertEquals(above, keptAbove(" && b /= 0"));
-        assertEquals(NOT_SHOWN, keptAbove(" && b /= 5").get("a"));
+        assertEquals(above, keptAbove(" && b /= 5"));
     }
 
     /** What {@code a >= 100 * b} leaves its places along a way keeping {@code b} above nought and

@@ -115,16 +115,27 @@ class AClosureOverAContainerThatHoldsNothingIsEnteredByNoRunTest {
         }
     }
 
-    /** The division making the list is what a row gets past to the comparison after it: it ties
-     *  {@code k}, which a division by a number written down does not. */
+    /** The division making the list is what a row gets past to the comparison after it: it holds
+     *  {@code k} off nought, which a division by a number written down does not. */
     @Test
     void theDivisionAnEmptyContainerIsMadeOfIsGotPastOnTheWayOn() {
-        assertEquals(List.of(DemandReading.Tie.between(Set.of(TermPath.of("k")))),
-                gotPastAtTheLast("List.any(p -> p == d, List.take(0, [100 / k])) || d > 3")
-                        .tied());
-        assertEquals(List.of(),
-                gotPastAtTheLast("List.any(p -> p == d, List.take(0, [100 / 5])) || d > 3")
-                        .tied());
+        DemandReading.Answered byK = gotPastAtTheLast(
+                "List.any(p -> p == d, List.take(0, [100 / k])) || d > 3");
+        assertEquals(List.of(new TakenConstraint.Affine(LinearForm.<NumericTerm>atom(K), Rel.NE)),
+                byK.narrowing());
+        assertEquals(List.of(), byK.tied());
+        DemandReading.Answered by5 = gotPastAtTheLast(
+                "List.any(p -> p == d, List.take(0, [100 / 5])) || d > 3");
+        assertEquals(List.of(), by5.narrowing());
+        assertEquals(List.of(), by5.tied());
+    }
+
+    /** A division by a number the arithmetic does not compose into a form says nothing of where
+     *  it answers, and ties the numbers it reads. */
+    @Test
+    void theDivisionByWhatIsNoFormTiesWhatItReads() {
+        assertTrue(gotPastAtTheLast("List.any(p -> p == d, List.take(0, [100 / (k * k)])) || d > 3")
+                .tied().contains(DemandReading.Tie.between(Set.of(TermPath.of("k")))));
     }
 
     /** The end of an empty range is still worked out: a row past {@code k + 1} has {@code k}

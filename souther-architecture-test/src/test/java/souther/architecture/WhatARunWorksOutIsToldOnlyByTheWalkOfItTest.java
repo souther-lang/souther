@@ -37,6 +37,7 @@ class WhatARunWorksOutIsToldOnlyByTheWalkOfItTest {
     /** The walk's methods that tell what it reaches. */
     private static final Set<String> THE_WALK = Set.of(
             AMethod.of(PULLBACK, "anOperator", "(" + CORE + ";" + READS + ")V"),
+            AMethod.of(PULLBACK, "aDivision", "(" + CORE + ";" + READS + ")V"),
             AMethod.of(PULLBACK, "aConstruction", "(" + CORE + "$Construct;" + READS + ")V"),
             AMethod.of(PULLBACK, "madeOfARounding", "(" + CORE + "$Construct;"
                     + "Lsouther/compiler/semantics/WhereAnOperatorAnswers;" + READS + ")Z"),
