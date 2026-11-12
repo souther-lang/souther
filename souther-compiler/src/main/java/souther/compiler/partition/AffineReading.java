@@ -535,10 +535,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  step is read ({@link #walkOfWhatIsWrittenOut}). */
             private final Map<BindingId, LinearForm<NumericTerm>> carried = new HashMap<>();
 
-            /** The multiplications this reading made a number of their own of
-             *  ({@link #productOf}), which the walk then tells it of. */
-            private final Set<Core.Binary> productsMade = new HashSet<>();
-
             /** What a run works out to reach a value, asked once for each value this reading
              *  asks it of. */
             private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
@@ -558,10 +554,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void composed(Core operation, LinearForm<NumericTerm> form,
                                  List<LinearForm<NumericTerm>> operands) {
-                if (productsMade.contains(operation)) {
-                    tellProduct((Core.Binary) operation, form);
-                    return;
-                }
                 tell(operation, form, AffineForms.whereItAnswers(operation));
             }
 
@@ -572,7 +564,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * ends, whatever the form's range says of the atom. A product of decimals is a decimal
              * and stops no run.
              */
-            private void tellProduct(Core.Binary mul, LinearForm<NumericTerm> atom) {
+            @Override
+            public void composedAsAProduct(Core mul, LinearForm<NumericTerm> atom,
+                                           List<LinearForm<NumericTerm>> operands) {
                 if (mul.type() == Type.DECIMAL) {
                     return;
                 }
@@ -589,8 +583,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * What two numbers of the input come to multiplied, where the arithmetic stopped at the
              * product itself: one number of its own, whichever factor was written first, made of the
              * forms the walk read the factors as. The walk tells the multiplication as the operation
-             * it is ({@link #composed}), so a run stops at it where that number passes the ends of
-             * its type.
+             * it is ({@link #composedAsAProduct}), so a run stops at it where that number passes the
+             * ends of its type.
              */
             @Override
             public LinearForm<NumericTerm> productOf(Core.Binary operation,
@@ -614,7 +608,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 NumericTerm.ProductOf.Signed product =
                         ProductDeclarations.admitted(made, ofTheInput);
                 named.add(product.product());
-                productsMade.add(operation);
                 return product.asAForm();
             }
 
@@ -2183,7 +2176,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * is told at no node of its own and is missed the same way.
          */
         List<Integer> workedOutOf(Core node) {
-            return workedOutOf(switch (Core.withoutStanding(node)) {
+            // A call written as the operator it stands for works out what that operator works out,
+            // as the walk composes it (AffineForms.asOperator).
+            return workedOutOf(switch (AffineForms.asOperator(node)) {
                 case Core.Neg neg -> List.of(neg.operand());
                 case Core.Binary binary -> List.of(binary.left(), binary.right());
                 case Core.Construct construct when !construct.values().isEmpty() ->

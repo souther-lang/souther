@@ -94,6 +94,127 @@ class ANameReadTwiceIsFollowedOnceTest {
         }
     }
 
+    /**
+     * An environment whose atoms make a product of two of them one, counting each product it is
+     * asked to make and each it is told was made. {@code x} is the one atom: a name nothing was
+     * given.
+     */
+    private record Multiplying(Map<BindingId, Core> given, Map<BindingId, Integer> asked,
+                               Map<Core.Binary, Integer> made, Map<Core, Integer> toldAsAProduct,
+                               Map<Core, Integer> toldAsAnyOther)
+            implements AffineForms.Reading<String, Multiplying> {
+
+        @Override
+        public Symbols symbols() {
+            return Symbols.none(DefaultStdlib.get());
+        }
+
+        @Override
+        public DeclarationAccess declarations() {
+            return DeclarationAccess.NONE;
+        }
+
+        @Override
+        public LinearForm<String> leafOf(Core e, Multiplying at) {
+            return Core.withoutStanding(e) instanceof Core.Read read
+                    && !given.containsKey(read.binding()) ? LinearForm.atom("x") : null;
+        }
+
+        @Override
+        public Multiplying inside(Core.LetIn li, Multiplying at) {
+            return at;
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<Multiplying> readThrough(Core.Read read,
+                                                                  Multiplying at) {
+            Core value = given.get(read.binding());
+            if (value == null) {
+                return null;
+            }
+            asked.merge(read.binding(), 1, Integer::sum);
+            return new ValueStanding.ReadThrough<>(value, at);
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<Multiplying>> alternativesOf(Core.Read read,
+                                                                           Multiplying at) {
+            return null;
+        }
+
+        @Override
+        public boolean readsThrough(Core.FieldAccess fa, Multiplying at) {
+            return false;
+        }
+
+        @Override
+        public LinearForm<String> productOf(Core.Binary operation, LinearForm<String> left,
+                                            LinearForm<String> right) {
+            made.merge(operation, 1, Integer::sum);
+            return LinearForm.atom("product");
+        }
+
+        @Override
+        public void composedAsAProduct(Core operation, LinearForm<String> form,
+                                       List<LinearForm<String>> operands) {
+            toldAsAProduct.merge(operation, 1, Integer::sum);
+        }
+
+        @Override
+        public void composed(Core operation, LinearForm<String> form,
+                             List<LinearForm<String>> operands) {
+            toldAsAnyOther.merge(operation, 1, Integer::sum);
+        }
+    }
+
+    /** {@code a0} is the atom {@code x}, then each {@code a[i] = a[i-1] * a[i-1]}, and the last
+     *  one read; the products are returned in the order they are written. */
+    private static Core productChainOf(int links, Map<BindingId, Core> given,
+                                       List<Core.Binary> products) {
+        BindingId atom = new BindingId(OWNER, 0);
+        for (int i = 1; i <= links; i++) {
+            Core.Read before = read(i == 1 ? atom : new BindingId(OWNER, i - 1));
+            Core.Binary product = new Core.Binary(BinOp.MUL, before, before,
+                    Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.INT,
+                    POS);
+            products.add(product);
+            given.put(new BindingId(OWNER, i), product);
+        }
+        return read(new BindingId(OWNER, links));
+    }
+
+    /**
+     * A product the reading's atoms make is made from the forms the walk composed of the factors,
+     * and told once for each time it is made, in its own way and in no other. A walk that read the
+     * factors again to make it, or told it beside the others, would show here as a product made
+     * more often than there are questions to ask of it, or told twice.
+     */
+    @Test
+    void everyProductOfAChainIsMadeFromTheWalksFactorsAndToldAsAProduct() {
+        int links = 16;
+        Map<BindingId, Core> given = new HashMap<>();
+        List<Core.Binary> products = new java.util.ArrayList<>();
+        Core root = productChainOf(links, given, products);
+        Multiplying reading = new Multiplying(given, new HashMap<>(), new HashMap<>(),
+                new HashMap<>(), new HashMap<>());
+
+        AffineForms.outcome(root, reading, reading);
+
+        assertEquals(Map.of(), reading.toldAsAnyOther(),
+                "a product the reading made is told as one, and as no other operation");
+        assertEquals(reading.made(), reading.toldAsAProduct(),
+                "each product made is told, once for each time it was made");
+        Map<Core.Binary, Integer> beyond = new HashMap<>();
+        reading.made().forEach((product, times) -> {
+            if (times > QUESTIONS) {
+                beyond.put(product, times);
+            }
+        });
+        assertEquals(Map.of(), beyond, "a product was made more often than there are questions to"
+                + " ask of it, so what a chain costs is what its references multiply out to");
+        assertEquals(links, reading.made().size(), "every product of the chain was made");
+    }
+
     private static Core.Read read(BindingId binding) {
         return new Core.Read("a" + binding.ordinal(), binding, Type.INT, POS);
     }

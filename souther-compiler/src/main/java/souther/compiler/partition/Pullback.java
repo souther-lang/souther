@@ -9671,6 +9671,47 @@ final class Pullback {
      * what a dependency answered — leaves the call unread.
      */
     private Quantity.WhatAnOperationAnswers whatAnOperationAnswers(Denotation call) {
+        return whatAnOperationAnswers(call, new OperationsAnswered());
+    }
+
+    /**
+     * What each call one question about an operation's answer came to, by the call and the
+     * environment it was read in, as the objects they are. A call is read in one environment to one
+     * answer however many arguments of the calls above it name it, so a chain of calls each given
+     * the one before it, or the two before it, is read once for each call rather than once for each
+     * way down to it.
+     */
+    private static final class OperationsAnswered {
+
+        private final Map<Core, Map<InputReads, Optional<Quantity.WhatAnOperationAnswers>>> by =
+                new IdentityHashMap<>();
+
+        /** What {@code call} came to in {@code at}, where it was asked there: empty where it came
+         *  to none, and null where it was not asked. */
+        Optional<Quantity.WhatAnOperationAnswers> asked(Core call, InputReads at) {
+            Map<InputReads, Optional<Quantity.WhatAnOperationAnswers>> inAt = by.get(call);
+            return inAt == null ? null : inAt.get(at);
+        }
+
+        void answered(Core call, InputReads at, Quantity.WhatAnOperationAnswers answer) {
+            by.computeIfAbsent(call, _ -> new IdentityHashMap<>()).put(at, Optional.ofNullable(answer));
+        }
+    }
+
+    private Quantity.WhatAnOperationAnswers whatAnOperationAnswers(
+            Denotation call, OperationsAnswered answered) {
+        Core asked = Core.withoutStanding(call.value());
+        Optional<Quantity.WhatAnOperationAnswers> already = answered.asked(asked, call.at());
+        if (already != null) {
+            return already.orElse(null);
+        }
+        Quantity.WhatAnOperationAnswers answer = whatAnOperationAnswersAfresh(call, answered);
+        answered.answered(asked, call.at(), answer);
+        return answer;
+    }
+
+    private Quantity.WhatAnOperationAnswers whatAnOperationAnswersAfresh(
+            Denotation call, OperationsAnswered answered) {
         AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(call.value()));
         ValueName.Stdlib operation = (ValueName.Stdlib) applied.operation();
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
@@ -9683,8 +9724,8 @@ final class Pullback {
             // asked of the arithmetic, every link of a chain of joined texts follows the chain
             // under it again.
             Quantity one = Type.STRING.equals(argument.type())
-                    ? valueOfAString(argument, call.at())
-                    : valueOfTheInput(argument, call.at());
+                    ? valueOfAString(argument, call.at(), answered)
+                    : valueOfTheInput(argument, call.at(), answered);
             if (one == null) {
                 return null;
             }
@@ -9702,23 +9743,31 @@ final class Pullback {
      * texts is followed link by link for every link it is asked about.
      */
     private Quantity valueOfAString(Core argument, InputReads at) {
+        return valueOfAString(argument, at, new OperationsAnswered());
+    }
+
+    private Quantity valueOfAString(Core argument, InputReads at, OperationsAnswered answered) {
         if (at.pathOf(argument, read.rules().newtypes())
                 instanceof PathResolution.At(TermPath held)) {
             return new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(held));
         }
         return callOf(new Denotation(argument, at)) instanceof Denotation inner
-                ? whatAnOperationAnswers(inner) : null;
+                ? whatAnOperationAnswers(inner, answered) : null;
     }
 
     /** {@code argument}, read in {@code at}, as a number of the input or what an operation
      *  answers of one — or null where it is neither. */
     private Quantity valueOfTheInput(Core argument, InputReads at) {
+        return valueOfTheInput(argument, at, new OperationsAnswered());
+    }
+
+    private Quantity valueOfTheInput(Core argument, InputReads at, OperationsAnswered answered) {
         return AffineForms.outcome(argument, at, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                         LinearForm<Quantity> form)
                 && soleQuantity(form) instanceof DecisionAtom.OfTheInput input ? input
                 : callOf(new Denotation(argument, at)) instanceof Denotation inner
-                        ? whatAnOperationAnswers(inner) : null;
+                        ? whatAnOperationAnswers(inner, answered) : null;
     }
 
     /**
@@ -14620,7 +14669,7 @@ final class Pullback {
         }
         NumericTerm.FromOnePosition left = aFactor(written.left(), at);
         NumericTerm.FromOnePosition right = aFactor(written.right(), at);
-        if (written == sideAsWritten && left != null && right != null
+        if (isTheSideAsWritten(written) && left != null && right != null
                 && !left.position().equals(right.position()) && countsWhole(left)
                 && countsWhole(right)) {
             return LinearForm.atom(new Quantity.ProductOfTwo(left, right));
@@ -14628,6 +14677,19 @@ final class Pullback {
         // Otherwise one number of its own among the others of the comparison: the product of two
         // forms of the input's numbers, read as the arithmetic of the comparison reads them.
         return productOfTwoForms(written, at);
+    }
+
+    /**
+     * Whether {@code written}, an operator a walk stopped at, is the whole of the side being read
+     * ({@link #sideAsWritten}): the side itself, or the library's call the walk read as that
+     * operator ({@link AffineForms#asOperator}), which it makes anew for each walk and so is told
+     * by the operator and the operands it was made of.
+     */
+    private boolean isTheSideAsWritten(Core.Binary written) {
+        return sideAsWritten != null
+                && AffineForms.asOperator(sideAsWritten) instanceof Core.Binary side
+                && side.op() == written.op() && side.left() == written.left()
+                && side.right() == written.right();
     }
 
     /**

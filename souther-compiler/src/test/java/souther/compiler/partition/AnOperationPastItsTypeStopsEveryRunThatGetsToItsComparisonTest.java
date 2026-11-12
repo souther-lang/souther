@@ -222,6 +222,36 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     /**
+     * What a run stops at is the same whether an operator is written as the operator or as the
+     * library's call that stands for it: the walk reads the call as the operator, and what is told
+     * of it, and in what order, is the operator's. A product is the case that was told apart: it is
+     * a number of its own, told as the multiplication it is, and a run stops in it before it works
+     * out the sum beside it, however the multiplication was written.
+     */
+    @Test
+    void anOperatorWrittenAsTheLibrarysCallIsToldAsTheOperatorIs() {
+        String[][] pairs = {
+            {"x * z + (y + 1) == 0", "Int.multiply(x, z) + (y + 1) == 0"},
+            {"x * z == y", "Int.multiply(x, z) == y"},
+            {"x * z + y >= 0", "Int.multiply(x, z) + y >= 0"},
+            {"(x + 1) * z >= y", "Int.multiply(x + 1, z) >= y"},
+            {"(x + 1) * z >= y", "Int.multiply(Int.add(x, 1), z) >= y"},
+            {"x + 1 >= y", "Int.add(x, 1) >= y"},
+            {"(x + 1) + z >= y", "Int.add(Int.add(x, 1), z) >= y"},
+            {"(x + 1) - z >= y", "Int.subtract(Int.add(x, 1), z) >= y"},
+        };
+        for (String[] pair : pairs) {
+            assertEquals(everyRunStops("Int", "x", "", pair[0]),
+                    everyRunStops("Int", "x", "", pair[1]), pair[0] + " | " + pair[1]);
+            assertEquals(mayStop("Int", "x", "", pair[0]).size(),
+                    mayStop("Int", "x", "", pair[1]).size(), pair[0] + " | " + pair[1]);
+        }
+        assertEquals(List.of(), everyRunStops("Int", "x", "", "Int.multiply(x, z) + (y + 1) == 0"));
+        assertEquals(List.of("x + 1 where x " + GREATEST + ".."),
+                everyRunStops("Int", "x", "", "Int.multiply(x + 1, z) >= y"));
+    }
+
+    /**
      * An element of a list of every whole number between two is no number of the input, and the
      * sum over it is still one a run stops in: every run that gets to the comparison stops where
      * the sum is past the greatest at the first end. Past the least at the last end is only where
