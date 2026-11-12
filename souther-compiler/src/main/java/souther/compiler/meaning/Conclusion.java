@@ -73,6 +73,8 @@ public final class Conclusion {
         /** Whether what is concluded is read for the lines it draws and not for the rows it
          *  asks ({@link Derivation.LinesWithoutRows}). */
         private final boolean drawingLines;
+        /** Whether a step that says lines from rows was concluded. */
+        private boolean linesToldFromRows;
         private final Map<Derivation, List<Kept>> kept = new IdentityHashMap<>();
         private final Map<Derivation, Proposition> last = new IdentityHashMap<>();
         /** The carried values each step being concluded has read so far, innermost last. */
@@ -133,9 +135,23 @@ public final class Conclusion {
         return new Conclusion(new Shared(where, false, PARTS, true), Map.of());
     }
 
-    /** Whether this concluding is read for the lines drawn and not for the rows asked. */
-    boolean drawsLines() {
+    /**
+     * Whether this concluding is read for the lines drawn and not for the rows asked, which is
+     * asked where a derivation says the two apart. Having been asked is kept
+     * ({@link #toldLinesFromRows}).
+     */
+    boolean concludingLinesApart() {
+        shared.linesToldFromRows = true;
         return shared.drawingLines;
+    }
+
+    /**
+     * Whether some step this concluded says the lines it draws apart from the rows it asks
+     * ({@link Derivation.LinesWithoutRows}): where none did, what it concluded is what a reader of
+     * lines is told as well.
+     */
+    public boolean toldLinesFromRows() {
+        return shared.linesToldFromRows;
     }
 
     /**

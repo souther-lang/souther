@@ -35,14 +35,10 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.Operand;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -80,25 +76,6 @@ public sealed interface Derivation {
      * them, so the parts nothing read are numbered as they were met.
      */
     Proposition conclusion(Conclusion numbering);
-
-    /** Whether {@code how} holds a step that is read for the lines it draws apart from the rows it
-     *  asks ({@link LinesWithoutRows}), so that its conclusion differs by what is read. */
-    static boolean drawsLinesApart(Derivation how) {
-        Set<Derivation> met = Collections.newSetFromMap(new IdentityHashMap<>());
-        Deque<Derivation> pending = new ArrayDeque<>();
-        pending.push(how);
-        while (!pending.isEmpty()) {
-            Derivation step = pending.pop();
-            if (!met.add(step)) {
-                continue;
-            }
-            if (step instanceof LinesWithoutRows) {
-                return true;
-            }
-            WrittenLines.premisesOf(step).forEach(pending::push);
-        }
-        return false;
-    }
 
     /** What this concludes, read at {@code where}, as it is handed to a reader of positions
      *  ({@link Conclusion#atOneValueEach}). */
@@ -3922,8 +3899,9 @@ public sealed interface Derivation {
      *
      * <p>Which lines a statement draws needs the elements to be the source's and the value asked
      * of them to be one of them. A row asked for needs more: where the container was kept by a
-     * statement and the value is an element of its own, or where the container is a window of the
-     * source's elements by index, there is no one position a row is asked of. So the statement is
+     * statement and the value is an element of its own, or where the container holds some of the
+     * source's elements by where they stand or by what is left out, there is no one position a row
+     * is asked of. So the statement is
      * {@code asked}, a part nothing read, for a reader of rows and {@code drawn} for a reader of
      * lines ({@link Conclusion#drawingLines}).
      *
@@ -3939,7 +3917,7 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return numbering.drawsLines() ? numbering.of(drawn) : numbering.of(asked);
+            return numbering.concludingLinesApart() ? numbering.of(drawn) : numbering.of(asked);
         }
     }
 }
