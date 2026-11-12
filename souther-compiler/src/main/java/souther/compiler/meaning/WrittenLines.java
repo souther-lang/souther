@@ -94,7 +94,7 @@ public final class WrittenLines {
 
     private WrittenLines(ExpansionLineage comparison, Optional<ModelOccurrence> where) {
         this.comparison = comparison;
-        this.concluded = new Conclusion(where);
+        this.concluded = Conclusion.drawingLines(where);
     }
 
     /**
@@ -450,6 +450,7 @@ public final class WrittenLines {
                         }
                     }).toList();
             case Derivation.WhereAnOperationKeepsIt(var _, var _, var handed) -> List.of(handed);
+            case Derivation.LinesWithoutRows(var drawn, var _) -> List.of(drawn);
             case Derivation.ALawSettles _, Derivation.TheSameValue _,
                  Derivation.TheSameNumber _, Derivation.TheStringsInside _,
                  Derivation.ALawComparison _, Derivation.ASignItsBoundsSettle _,

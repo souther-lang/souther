@@ -1416,8 +1416,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Pullback.TheBound bound = Pullback.boundOf(comparison, read, reads,
                 writtenIn.orElse(null) instanceof ExpansionLineage.Expansion);
         return heldIn(writtenAgainst(
-                readOnceAsDrawn(behavior, comparison, read, reads, answering, onTheInput,
-                        onEveryElement, writtenIn),
+                readOnceAsDrawn(behavior, comparison, read, reads, answering,
+                        onTheInput.forTheLines(), onEveryElement, writtenIn),
                 bound.written()), bound.heldIn());
     }
 

@@ -1695,9 +1695,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // Whether an optional holds a value is what it states, as a truth is what it
                 // answers.
                 WhatConditionsState state = WhatConditionsState.of(standing.read());
-                Pullback.Pulled stated = Type.BOOL.equals(application.type())
+                Pullback.Pulled stated = (Type.BOOL.equals(application.type())
                         ? state.truth(application, standing.reads(), standing.read())
-                        : state.presence(application, standing.reads(), standing.read());
+                        : state.presence(application, standing.reads(), standing.read()))
+                        .forTheLines();
                 boolean itsOwn = stated.turnsOn().stream().anyMatch(leaf ->
                         Core.withoutStanding(leaf.from().value()) == application);
                 if (Proposition.leavesSomethingUnread(stated.proposition())) {

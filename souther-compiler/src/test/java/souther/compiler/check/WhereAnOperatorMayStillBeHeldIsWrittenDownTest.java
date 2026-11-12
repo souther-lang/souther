@@ -203,6 +203,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "which operand of a quotient it stops a run on, the one it divides by and not"
                             + " the one it divides, where the operator's account says its divisor"
                             + " alone"),
+            new Held("souther.compiler.partition.Pullback.StopObligation.worksOutWheneverItRuns",
+                    "whether a part of a body is worked out on every run that works out the part"
+                            + " an owed stop is in, which a short-circuit operator says of its"
+                            + " right operand: that it is skipped where the left decides"),
             new Held("souther.compiler.partition.Pullback.comparisonHolding",
                     "which comparison a read of a step stands in, whose arithmetic is the"
                             + " relation it states and not something the step works out beside it"),

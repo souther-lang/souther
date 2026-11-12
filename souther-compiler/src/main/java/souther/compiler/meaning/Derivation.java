@@ -1206,6 +1206,9 @@ public sealed interface Derivation {
                 Derivation read = readOff(step);
                 return switch (read) {
                     case Stopped _ -> true;
+                    // What a row is asked is what the law says; the lines drawn on the elements
+                    // are no part of it.
+                    case LinesWithoutRows(var _, Derivation asked) -> meets(some, asked);
                     // What the container holding something was read as is a reading of what made
                     // the container, held to that call where it was made.
                     case EveryElementMeetsIt(var part, Derivation ofTheElement, var _, var _) ->
@@ -3887,6 +3890,43 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return numbering.unread(this);
+        }
+    }
+
+    /**
+     * A statement of the elements of a container that a row cannot be asked for and that still
+     * draws the lines a comparison of those elements draws.
+     *
+     * <p>Which lines a statement draws needs the elements to be the source's and the value asked
+     * of them to be one of them. A row asked for needs more: where the container was kept by a
+     * statement and the value is an element of its own, or where the container holds some of the
+     * source's elements by where they stand or by what is left out, there is no one position a row
+     * is asked of. So the statement is
+     * {@code asked}, a part nothing read, for a reader of rows and {@code drawn} for a reader of
+     * lines ({@link Conclusion#drawingLines}).
+     *
+     * <p>{@code drawn} is not what the statement states. Some element of what holds some of the
+     * source's elements meeting a value is not some element of the source meeting it, and the
+     * statement that none does says nothing of the source. It says where a line may be, and a
+     * reader of lines may draw one nothing holds a row at ({@code List.take(0, xs)} holds no
+     * element, and is still a line on the elements of {@code xs}). It says of an element what is
+     * said of every element the source holds, so it draws the lines the statement does and may
+     * draw more. Nothing may be concluded from it of which rows there are or which way the
+     * statement comes out.
+     *
+     * @param drawn what the statement is read as where only the lines it draws are asked
+     * @param asked what a reader of rows is told, which is that no row is asked for it and why
+     */
+    record LinesWithoutRows(Derivation drawn, Derivation asked) implements Derivation {
+
+        public LinesWithoutRows {
+            Objects.requireNonNull(drawn, "lines are drawn of some reading");
+            Objects.requireNonNull(asked, "rows are not asked for some reason");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.concludingLinesApart() ? numbering.of(drawn) : numbering.of(asked);
         }
     }
 }

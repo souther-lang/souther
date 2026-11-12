@@ -165,8 +165,15 @@ public final class ElementsMet {
         return true;
     }
 
-    /** Leaves the elements as {@code footprint} left them, which {@link #agrees}. */
+    /**
+     * Leaves the elements as {@code footprint} left them, which {@link #agrees}, and counts the
+     * elements it asked of among those the reading being noted asks of, as reading it again would
+     * have: a reading that is taken from another is asked of the same elements by whoever notes it.
+     */
     public void takes(Footprint footprint) {
+        if (asked != null) {
+            asked.addAll(footprint.asked);
+        }
         standingFor.putAll(footprint.ended);
     }
 

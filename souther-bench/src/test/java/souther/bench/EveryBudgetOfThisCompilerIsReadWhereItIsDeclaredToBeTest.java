@@ -955,6 +955,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;ILjava/util/List;Ljava/util/Set;)Z",
                     "stops at the rows a witness is sought among, nearest the firsts first, and"
                             + " adds the figure to what the search came to"),
+            Map.entry("souther.compiler.partition.RowSearch#holdingAt("
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Lsouther/compiler/check/RuleReadingContext;Ljava/util/Set;)"
+                            + "Lsouther/compiler/partition/FixtureTemplate;",
+                    "adds the figure a value a collection was asked to hold a number in was"
+                            + " composed past to what the search came to, since a value not built"
+                            + " for one is not a value that cannot be built"),
             Map.entry("souther.compiler.partition.CountWitnesses#waysTheyCanBeTogether("
                             + "Ljava/util/Map;Ljava/util/Set;)Ljava/util/List;",
                     "stops at the ways the places a statement reads can be at the values it"
@@ -1013,7 +1020,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "omits no work a reader is owed: past either figure the count is held whole,"
                             + " every choice still what it states"),
             Map.entry("souther.compiler.meaning.Conclusion$Shared#<init>("
-                            + "Ljava/util/Optional;ZLsouther/compiler/partition/CompositionBudget;)V",
+                            + "Ljava/util/Optional;ZLsouther/compiler/partition/CompositionBudget;Z)V",
                     "how many parts a concluding counts a statement to and no further than one"
                             + " past, handed in by whoever asks"),
             Map.entry("souther.compiler.meaning.Proposition$SoManyHold#writtenOutForAReader()"

@@ -87,6 +87,35 @@ class AStopThroughALetOrInsideAnArmLeavesOnlyItsOwnPlacesUnreadTest {
         assertFalse(report.contains("not read:"), report);
     }
 
+    /**
+     * Each name holds a remainder of the one before it and reads it again beside, so the
+     * remainder of a dividend, the number the divisor is and why a stop is no form each read the
+     * chain below, and a remainder is read once for every way down to it unless a remainder read is
+     * taken again.
+     */
+    @Test
+    void aChainOfNamesEachHoldingARemainderOfTheOneBeforeIsWorkedOutOncePerName() {
+        Model shallow = remainders(3);
+        Model deep = remainders(24);
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(30),
+                () -> report(deep, UNRELATED, Adequacy.Level.ALL));
+        assertEquals(report(shallow, UNRELATED, Adequacy.Level.ALL).contains("not read:"),
+                report.contains("not read:"),
+                "what a chain says is what it says of its first links");
+    }
+
+    /** {@code depth} names, each a remainder of the one before and that one beside, the last the
+     *  divisor of a remainder. */
+    private static Model remainders(int depth) {
+        StringBuilder before = new StringBuilder("let a0 = p.x");
+        for (int i = 1; i <= depth; i++) {
+            before.append("\n    let a").append(i).append(" = Int.floorMod(a").append(i - 1)
+                    .append(", 7) + a").append(i - 1);
+        }
+        before.append("\n    let y = Int.floorMod(7, a").append(depth).append(")");
+        return new Model("a chain of remainders", before.toString());
+    }
+
     @Test
     void aComparisonOfPlacesNoStopReadsIsReadWhateverTheStopIsBoundOrGuardedBy() {
         List<String> wrong = new ArrayList<>();

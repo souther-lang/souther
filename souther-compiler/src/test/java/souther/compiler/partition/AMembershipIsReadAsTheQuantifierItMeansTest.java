@@ -84,7 +84,44 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             let filtered (lead, priority) =
                 Set.contains(priority, Set.filter(n -> n /= lead.picked, lead.campaigns))
 
+            behavior taken : (lead: Lead, priority: Name) -> Bool
+            let taken (lead, priority) = List.contains(priority, List.take(2, lead.names))
+
+            behavior takenAny : (lead: Lead, priority: Name) -> Bool
+            let takenAny (lead, priority) =
+                List.any(n -> n == priority, List.take(2, lead.names))
+
+            behavior dropped : (lead: Lead, priority: Name) -> Bool
+            let dropped (lead, priority) = List.contains(priority, List.drop(1, lead.names))
+
+            behavior distinctNames : (lead: Lead) -> Bool
+            let distinctNames (lead) = List.contains(lead.picked, List.distinct(lead.names))
+
+            behavior leftOut : (lead: Lead, priority: Name) -> Bool
+            let leftOut (lead, priority) =
+                Set.contains(priority, Set.remove(lead.picked, lead.campaigns))
+
             data Ledger = { totals: Map<String, Int> }
+
+            behavior keysOfKept : (ledger: Ledger, wanted: String) -> Bool
+            let keysOfKept (ledger, wanted) =
+                List.contains(wanted, Map.keys(Map.filterEntries((_, v) -> v > 3, ledger.totals)))
+
+            behavior valuesOfKept : (ledger: Ledger, wanted: Int) -> Bool
+            let valuesOfKept (ledger, wanted) =
+                List.contains(wanted, Map.values(Map.filterEntries((_, v) -> v > 3, ledger.totals)))
+
+            behavior keysOfTaken : (ledger: Ledger, wanted: String) -> Bool
+            let keysOfTaken (ledger, wanted) =
+                List.contains(wanted, Map.keys(Map.remove("Z", ledger.totals)))
+
+            behavior valuesOfTaken : (ledger: Ledger, wanted: Int) -> Bool
+            let valuesOfTaken (ledger, wanted) =
+                List.contains(wanted, Map.values(Map.remove("Z", ledger.totals)))
+
+            behavior keysOfRewritten : (ledger: Ledger, wanted: String) -> Bool
+            let keysOfRewritten (ledger, wanted) =
+                List.contains(wanted, Map.keys(Map.mapValues((_, v) -> v + 1, ledger.totals)))
 
             behavior keyed : (ledger: Ledger, wanted: String) -> Bool
             let keyed (ledger, wanted) = Map.containsKey(wanted, ledger.totals)
@@ -301,6 +338,40 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             assertEquals(List.of(new WhyNotTaken.MeaningUnread(
                     new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER))),
                     declined.whys());
+        }
+    }
+
+    /**
+     * The keys of a map made of another by keeping the entries meeting a statement are listed at
+     * the entries of the other, so the key asked for and what the entry was kept by are asked of
+     * one entry. The values are the value asked for and the one the entry was kept by in one, which
+     * the composer is not asked to write.
+     */
+    @Test
+    void theKeysOfAMapKeptByItsEntriesAreAskedOfOneEntryAndItsValuesAreLeftToTheRun() {
+        RowDemand.Exists keys = assertInstanceOf(RowDemand.Exists.class,
+                asked("keysOfKept", true));
+        assertEquals("ledger.totals", keys.container().toString());
+        assertEquals(2, keys.ofAnElement().theWay().size(), () -> "kept by, and keyed as: " + keys);
+        assertTrue(keys.ofAnElement().theWay().contains(new RowDemand.KeyedAs(
+                new Operand.At<>(TermPath.of("wanted")))), () -> "keyed as: " + keys);
+        assertInstanceOf(RowDemand.ForAll.class, asked("keysOfKept", false));
+        assertInstanceOf(RowDemand.ForTheRun.class, asked("valuesOfKept", true));
+    }
+
+    /** So does one holding some of the elements of another by where they stand or by what is left
+     *  out, since no statement says which, and so do the keys and the values of a map made so. */
+    @Test
+    void aContainerHoldingSomeOfAnothersElementsIsNoPosition() {
+        for (String behavior : List.of("taken", "takenAny", "dropped", "distinctNames", "leftOut",
+                "keysOfTaken", "valuesOfTaken", "keysOfRewritten")) {
+            for (boolean holding : List.of(true, false)) {
+                OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
+                        stated(behavior, holding), behavior);
+                assertEquals(List.of(new WhyNotTaken.MeaningUnread(
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER))),
+                        declined.whys(), behavior);
+            }
         }
     }
 
