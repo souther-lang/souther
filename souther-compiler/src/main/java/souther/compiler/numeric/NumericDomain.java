@@ -1657,7 +1657,7 @@ public final class NumericDomain<A> {
         if (run == null) {
             return null;
         }
-        RunBesidesItsHoles out = new RunBesidesItsHoles(run, WholeNumberRuns.of(holes).others());
+        RunBesidesItsHoles out = new RunBesidesItsHoles(run, holes);
         return out.takenWithin(Bounds.OPEN).isNone() ? null : out;
     }
 
@@ -1666,15 +1666,14 @@ public final class NumericDomain<A> {
      * away from ({@link #wholeRunBesidesItsHolesOf}): each number of the run that is none of the
      * holes is one the rules leave the atom.
      *
-     * @param run     the run, which the holes are in or outside of
-     * @param kept    the whole numbers that are no hole, so the run's numbers among them are the
-     *                ones taken
+     * @param run   the run, which the holes are in or outside of
+     * @param holes the whole numbers the rules hold the atom away from
      */
-    public record RunBesidesItsHoles(Bounds run, WholeNumberRuns kept) {
+    public record RunBesidesItsHoles(Bounds run, List<BigInteger> holes) {
 
         public RunBesidesItsHoles {
             Objects.requireNonNull(run, "a run besides its holes is of a run");
-            Objects.requireNonNull(kept, "a run besides its holes keeps some numbers");
+            holes = List.copyOf(holes);
         }
 
         /**
@@ -1683,7 +1682,8 @@ public final class NumericDomain<A> {
          */
         public WholeNumberRuns takenWithin(Bounds within) {
             Bounds ends = run.meet(within);
-            return WholeNumberRuns.between(ends.min(), ends.max()).and(kept);
+            return WholeNumberRuns.between(ends.min(), ends.max())
+                    .and(WholeNumberRuns.of(holes).others());
         }
     }
 

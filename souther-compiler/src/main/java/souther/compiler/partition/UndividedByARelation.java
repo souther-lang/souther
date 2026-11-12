@@ -8731,6 +8731,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Carrier on = carriers.get(pair.first());
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
+        List<ExactRatio> ofTheRules = new ArrayList<>();
         for (int i : List.of(pair.first(), pair.second())) {
             Side each = sides.get(i);
             Source source = sources.get(i);
@@ -8739,6 +8740,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             NumericDomain.Bounds realizes = asARelationReadsIt(
                     realized(value, source, along, Way.UNTOUCHED), on);
+            // A number the rules hold away from values is no run of every value; the run it takes
+            // but for those is, with the holes said beside it.
+            if (realizes == null && source != null && source.onlyItsEnds()
+                    && along.wholeRunBesidesItsHolesOf(value) instanceof
+                    NumericDomain.RunBesidesItsHoles besides) {
+                realizes = asARelationReadsIt(besides.run(), on);
+                besides.holes().forEach(hole -> ofTheRules.add(ExactRatio.of(hole)));
+            }
             NumericDomain.Bounds holds = asARelationReadsIt(along.projectionOf(value)
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
                     ? within : NumericDomain.Bounds.OPEN, on);
@@ -8750,10 +8759,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     each.number()));
         }
         HeldOfTheDifference held = heldOfTheDifference(pair, stating, way, sizesAreRowsComputed);
-        // The values this leaves a side are asked of rows with nothing held away from either.
-        if (held == null || !held.holes().isEmpty()) {
+        if (held == null) {
             return List.of();
         }
+        List<ExactRatio> holes = new ArrayList<>(held.holes());
+        holes.addAll(ofTheRules);
         // In the order of the sides, nothing for one held still beside the two.
         List<WhatARelationLeavesUndivided.Leaves> out = new ArrayList<>();
         for (int at = 0; at < sides.size(); at++) {
@@ -8761,10 +8771,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         out.set(pair.first(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
                 pair.beside(), relation, held.statements(), FilingCoordinate::sharesAPlaceWith,
-                greatestOf(on), operations, pair.standing(), sizesAreRowsComputed));
+                greatestOf(on), operations, pair.standing(), sizesAreRowsComputed, holes));
         out.set(pair.second(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 1,
                 pair.beside(), relation, held.statements(), FilingCoordinate::sharesAPlaceWith,
-                greatestOf(on), operations, pair.standing(), sizesAreRowsComputed));
+                greatestOf(on), operations, pair.standing(), sizesAreRowsComputed, holes));
         return out;
     }
 
@@ -8860,7 +8870,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(pair.first()));
         aboutEither.addAll(stating.get(pair.second()));
         List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
-        List<BigInteger> holes = new ArrayList<>();
+        List<ExactRatio> holes = new ArrayList<>();
         for (OnAWay each : aboutEither) {
             TakenConstraint.Affine affine = each.affine();
             WhatARelationLeavesUndivided.OnTheDifference statement = affine == null ? null
@@ -8900,34 +8910,33 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * What the rows that arrive hold of the two sides of a relation about how far apart they are.
      *
      * @param statements what is stated about the difference
-     * @param holes      the whole numbers a statement keeps one of the sides from, which is no
-     *                   statement about the difference
+     * @param holes      the values a statement keeps one of the sides from, each as it was stated,
+     *                   which is no statement about the difference. Whether a side takes the
+     *                   value is the side's to say, and the reading of the difference asks it
      */
     private record HeldOfTheDifference(
             List<WhatARelationLeavesUndivided.OnTheDifference> statements,
-            List<BigInteger> holes) {}
+            List<ExactRatio> holes) {}
 
     /**
      * Whether {@code form} held as {@code rel} against nought keeps one of {@code sides} away from
-     * a value, and nothing else; the value is added to {@code holes} where it is a whole number,
-     * and a value that is none is one a whole number is never at and holds nothing.
+     * a value, and nothing else — and where it does, the value is added to {@code holes}. A
+     * statement whose value is not worked out is not taken, since a statement taken is one the
+     * reading of the difference no longer asks about.
      */
     private static boolean holdsASideAwayFromAValue(LinearForm<NumericTerm> form, Rel rel,
                                                     Set<NumericTerm> sides,
-                                                    List<BigInteger> holes) {
+                                                    List<ExactRatio> holes) {
         if (rel != Rel.NE || form.coefs().size() != 1) {
             return false;
         }
         for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
-            if (!sides.contains(each.getKey())) {
+            if (!sides.contains(each.getKey())
+                    || !(form.constant().negated().dividedBy(each.getValue())
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
                 return false;
             }
-            if (form.constant().negated().dividedBy(each.getValue())
-                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at)
-                    && at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
-                    && ExactRatio.of(whole).compareTo(at) == 0) {
-                holes.add(whole);
-            }
+            holes.add(at);
         }
         return true;
     }

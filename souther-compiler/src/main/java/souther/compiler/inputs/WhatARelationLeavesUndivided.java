@@ -3486,7 +3486,7 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
-     * The same, where the rows that arrive also hold either term away from the whole numbers
+     * The same, where the rows that arrive also hold either term away from the values
      * {@code holes}: a value of it that is no row, whichever of the two it is the value of.
      *
      * <p>A hole is no statement about the difference, and what it takes from the sides is asked
@@ -3494,7 +3494,8 @@ public final class WhatARelationLeavesUndivided {
      * are the type's but for the holes, and an order asks only for a value on each side of the
      * line, which is what is shown.
      *
-     * @param holes the whole numbers a statement of the rows keeps one term of the two from
+     * @param holes the values a statement of the rows keeps one term of the two from, each as it
+     *              was stated, and whether or not the terms take it
      */
     public static <P> Set<P> ofTheirDifference(List<Term<P>> terms, Beside beside,
                                                Rel relation, List<OnTheDifference> held,
@@ -3502,14 +3503,14 @@ public final class WhatARelationLeavesUndivided {
                                                BiPredicate<P, P> overlap, BigInteger greatest,
                                                Operations operations,
                                                boolean sizesAreRowsComputed,
-                                               List<BigInteger> holes) {
+                                               List<ExactRatio> holes) {
         Combination combination = terms.size() == 2 ? combinationOf(terms) : null;
         ExactRatio constant = beside == null ? null : beside.constant();
         if (combination == null || constant == null || !sizesAreRowsComputed
                 || !apart(terms, 0, overlap)
                 || !bothTakeTheWholeType(terms.get(0), terms.get(1), extent.run())
-                || (!holes.isEmpty() && !aHoleEmptiesNoSideOfAnOrder(holes, held, relation,
-                        extent, operations, constant))) {
+                || (!holes.isEmpty() && !aHoleEmptiesNoSideOfAnOrder(holes, terms, held, relation,
+                        List.of(extent.run()), operations, constant, BigInteger.ZERO))) {
             return Set.of();
         }
         ExactRatio first = terms.get(0).weight();
@@ -3572,16 +3573,40 @@ public final class WhatARelationLeavesUndivided {
      *
      * <p>A sum over more than one term, or one weighing a term other than once, moves the end by
      * a distance this does not know, so no hole is passed over beside one.
+     *
+     * <p>Which holes are values of the terms is the terms' to say. A term whose values step by
+     * one takes no value that is no whole number, so a hole at one is no hole of it, and where
+     * every hole is of that kind there is nothing to ask. A term whose values are dense takes
+     * every value a hole is at, and what holding it away from one leaves each side is not read:
+     * nothing is shown beside one.
+     *
+     * @param within the runs whose ends a side may stand at, none of which a hole may be near
+     * @param slack  how much farther again a hole is kept from them, for a reader that asks a
+     *               value at the start of each run its ends and the line's move make
      */
-    private static boolean aHoleEmptiesNoSideOfAnOrder(List<BigInteger> holes,
-                                                       List<OnTheDifference> held, Rel relation,
-                                                       WhereTheRepresentationStops extent,
-                                                       Operations operations, ExactRatio constant) {
+    private static <P> boolean aHoleEmptiesNoSideOfAnOrder(List<ExactRatio> holes,
+                                                           List<Term<P>> terms,
+                                                           List<OnTheDifference> held, Rel relation,
+                                                           List<NumericDomain.Bounds> within,
+                                                           Operations operations,
+                                                           ExactRatio constant,
+                                                           BigInteger slack) {
+        if (terms.stream().anyMatch(term -> term.spacing() != Granularity.DISCRETE)) {
+            return false;
+        }
+        List<ExactRatio> ofTheTerms = holes.stream().filter(ExactRatio::isWhole).toList();
+        if (ofTheTerms.isEmpty()) {
+            return true;
+        }
         if (!held.isEmpty() || !(relation == Rel.LT || relation == Rel.LE || relation == Rel.GT
                 || relation == Rel.GE)) {
             return false;
         }
-        ExactRatio moved = constant.abs();
+        ExactRatio moved = constant.abs().plus(ExactRatio.of(slack))
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio first) ? first : null;
+        if (moved == null) {
+            return false;
+        }
         for (IntSum each : operations.sums()) {
             if (each.coefs().size() > 1 || each.coefs().values().stream()
                     .anyMatch(weight -> !weight.abs().equals(ExactRatio.ONE))
@@ -3591,11 +3616,12 @@ public final class WhatARelationLeavesUndivided {
             }
             moved = more;
         }
-        for (BigInteger hole : holes) {
-            ExactRatio at = ExactRatio.of(hole);
-            if (!fartherThan(moved, at, extent.run().min(), true)
-                    || !fartherThan(moved, at, extent.run().max(), false)) {
-                return false;
+        for (ExactRatio hole : ofTheTerms) {
+            for (NumericDomain.Bounds run : within) {
+                if (run != null && (!fartherThan(moved, hole, run.min(), true)
+                        || !fartherThan(moved, hole, run.max(), false))) {
+                    return false;
+                }
             }
         }
         return true;
@@ -3680,6 +3706,31 @@ public final class WhatARelationLeavesUndivided {
                                                      Operations operations,
                                                      Map<Object, ExactRatio> standing,
                                                      boolean sizesAreRowsComputed) {
+        return leavesByTheirDifference(terms, at, beside, relation, held, overlap, greatest,
+                operations, standing, sizesAreRowsComputed, List.of());
+    }
+
+    /**
+     * The same, where the rows that arrive also hold either term away from the values
+     * {@code holes}. A hole is no statement about the difference, and what it takes from the sides
+     * is asked apart ({@link #aHoleEmptiesNoSideOfAnOrder}), of every run a side may stand at and
+     * with one more kept between it and each end: this asks a value at the start of each run the
+     * ends and the line's move make, and a hole there would be asked as a value the term never
+     * takes. Where it is no hole that reaches a side's last value, the runs the relation settles
+     * are those it settles with none.
+     *
+     * @param holes the values a statement of the rows keeps one term of the two from, each as it
+     *              was stated, and whether or not the terms take it
+     */
+    public static <P> Leaves leavesByTheirDifference(List<Term<P>> terms, int at,
+                                                     Beside beside, Rel relation,
+                                                     List<OnTheDifference> held,
+                                                     BiPredicate<P, P> overlap,
+                                                     BigInteger greatest,
+                                                     Operations operations,
+                                                     Map<Object, ExactRatio> standing,
+                                                     boolean sizesAreRowsComputed,
+                                                     List<ExactRatio> holes) {
         Combination combination = terms.size() == 2 ? combinationOf(terms) : null;
         ExactRatio constant = beside == null ? null : beside.constant();
         if (combination == null || constant == null || !constant.isWhole()
@@ -3693,6 +3744,19 @@ public final class WhatARelationLeavesUndivided {
                 || other.realizes() == null || it.runsTo() == null
                 || !it.runsTo().equals(other.runsTo())) {
             return null;
+        }
+        if (!holes.isEmpty()) {
+            List<NumericDomain.Bounds> ends = new ArrayList<>();
+            for (NumericDomain.Bounds run : new NumericDomain.Bounds[] {it.runsTo(), it.holds(),
+                    it.realizes(), other.holds(), other.realizes()}) {
+                if (run != null) {
+                    ends.add(run);
+                }
+            }
+            if (!aHoleEmptiesNoSideOfAnOrder(holes, terms, held, relation, ends, operations,
+                    constant, BigInteger.ONE)) {
+                return null;
+            }
         }
         RowsOfTheTwo exact = RowsOfTheTwo.of(operations, it.key(), other.key(), standing);
         if (exact == null && !sizesAreRowsComputed) {
