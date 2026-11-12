@@ -14,6 +14,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The conditions one reading of a body met, and the name each of them goes by.
@@ -254,18 +255,29 @@ final class ConditionNumbering {
     }
 
     private void file(List<OnTheWay> entries, SaidOnTheWay by) {
+        file(entries, by, Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    /**
+     * Each entry is filed once however many alternatives hold it: a condition used on two sides
+     * of a connective puts the one entry in both, and what is filed of it is the same each time.
+     */
+    private void file(List<OnTheWay> entries, SaidOnTheWay by, Set<OnTheWay> filed) {
         for (OnTheWay each : entries) {
+            if (!filed.add(each)) {
+                continue;
+            }
             ModelOccurrences copies = by.entries().get(each);
             if (copies != null && !copies.isEmpty()) {
                 madeBy.putIfAbsent(each, copies);
             }
             if (each instanceof OnTheWay.OneOf several) {
-                several.alternatives().forEach(one -> file(one, by));
+                several.alternatives().forEach(one -> file(one, by, filed));
             }
             if (each instanceof OnTheWay.Counted counted) {
                 counted.statements().forEach(one -> {
-                    file(one.holding(), by);
-                    file(one.failing(), by);
+                    file(one.holding(), by, filed);
+                    file(one.failing(), by, filed);
                 });
             }
         }

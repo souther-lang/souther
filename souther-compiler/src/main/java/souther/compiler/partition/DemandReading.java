@@ -468,13 +468,25 @@ final class DemandReading {
 
         private static void joinedInto(Read kept, ReadOff mine, Read dropped, ReadOff theirs,
                                        Map<Read, ModelOccurrences> into) {
+            joinedInto(kept, mine, dropped, theirs, into, new IdentityHashMap<>());
+        }
+
+        /** Each pair of a read kept and the one it stands for is told once however many
+         *  alternatives hold it: told again it is told what it was told. */
+        private static void joinedInto(Read kept, ReadOff mine, Read dropped, ReadOff theirs,
+                                       Map<Read, ModelOccurrences> into,
+                                       Map<Read, Set<Read>> told) {
+            if (!told.computeIfAbsent(kept, _ -> Collections.newSetFromMap(
+                    new IdentityHashMap<>())).add(dropped)) {
+                return;
+            }
             into.put(kept, mine.of(kept).and(theirs.of(dropped)));
             if (kept instanceof Read.OneOf one && dropped instanceof Read.OneOf other) {
                 for (int alternative = 0; alternative < one.alternatives().size(); alternative++) {
                     List<Read> those = one.alternatives().get(alternative);
                     List<Read> these = other.alternatives().get(alternative);
                     for (int at = 0; at < those.size(); at++) {
-                        joinedInto(those.get(at), mine, these.get(at), theirs, into);
+                        joinedInto(those.get(at), mine, these.get(at), theirs, into, told);
                     }
                 }
             }
@@ -487,11 +499,11 @@ final class DemandReading {
                             && those.failing().size() == these.failing().size()) {
                         for (int at = 0; at < those.holding().size(); at++) {
                             joinedInto(those.holding().get(at), mine, these.holding().get(at),
-                                    theirs, into);
+                                    theirs, into, told);
                         }
                         for (int at = 0; at < those.failing().size(); at++) {
                             joinedInto(those.failing().get(at), mine, these.failing().get(at),
-                                    theirs, into);
+                                    theirs, into, told);
                         }
                     }
                 }
@@ -502,13 +514,23 @@ final class DemandReading {
          *  read off, into {@code into}: told by the half that read them. */
         private static void resolved(Read read, ReadOff off,
                                      Map<Read, ModelOccurrences> into) {
+            resolved(read, off, into, Collections.newSetFromMap(new IdentityHashMap<>()));
+        }
+
+        /** Each read once however many alternatives hold it: what it was read off is told by the
+         *  one half, and told again it is told alike. */
+        private static void resolved(Read read, ReadOff off, Map<Read, ModelOccurrences> into,
+                                     Set<Read> told) {
+            if (!told.add(read)) {
+                return;
+            }
             into.merge(read, off.of(read), ModelOccurrences::and);
             if (read instanceof Read.OneOf oneOf) {
                 oneOf.alternatives().forEach(alternative ->
-                        alternative.forEach(one -> resolved(one, off, into)));
+                        alternative.forEach(one -> resolved(one, off, into, told)));
             }
             if (read instanceof Read.Counted counted) {
-                counted.parts().forEach(one -> resolved(one, off, into));
+                counted.parts().forEach(one -> resolved(one, off, into, told));
             }
         }
     }
