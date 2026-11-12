@@ -335,6 +335,9 @@ public final class FieldDomains {
     /** What {@link #besideTheValues} answers, worked out the first time it is asked. */
     private volatile Besides beside;
 
+    /** What {@link #countsRelatedToAnotherNumber} answers, worked out the first time it is asked. */
+    private volatile Set<FactSubject> relatedCounts;
+
     /** What {@link #projectionAt} answers at each place, kept for the same reason as
      *  {@link #classes}. */
     private final Map<RuleKey, ProjectionEvidence> projectedAt = new ConcurrentHashMap<>();
@@ -3601,9 +3604,8 @@ public final class FieldDomains {
      * and the count the bounds leave was worked out without it.
      */
     public boolean valuesAndCountAreTheRulesAt(RuleKey place) {
-        Besides read = besideTheValues();
-        if (read.heldAt().isEmpty() || !read.evidence().isCertified()
-                || !read.heldAt().equals(Set.of(place)) || !notGathered.isEmpty()) {
+        Counted counted = countAt.get(place);
+        if (counted == null || !notGathered.isEmpty()) {
             return false;
         }
         // A set short because what the rules leave was not built is short of no rule, and a count
@@ -3612,25 +3614,44 @@ public final class FieldDomains {
                 .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))) {
             return false;
         }
-        Counted counted = countAt.get(place);
-        if (counted == null) {
+        // Setting parts aside only takes causes away, so what is not already short by parts alone
+        // is not made whole by it, and the second reading of the rules is not made.
+        if (!(projection() instanceof ProjectionEvidence.NotCertified(var causes))
+                || !causes.stream().allMatch(
+                        ProjectionEvidence.Cause.Unrepresented.class::isInstance)) {
             return false;
         }
-        for (InvariantChecker.Written reading : readings) {
-            for (Map<ClauseOccurrence, InvariantChecker.PartAsRead> byOccurrence
-                    : reading.constrained().values()) {
-                for (InvariantChecker.PartAsRead one : byOccurrence.values()) {
-                    for (NumericConstraint each : one.said().stated()) {
-                        Set<FactSubject> atoms = each.atoms();
-                        if (atoms.contains(counted.atom())
-                                && !atoms.equals(Set.of(counted.atom()))) {
-                            return false;
+        Besides read = besideTheValues();
+        return !read.heldAt().isEmpty() && read.evidence().isCertified()
+                && read.heldAt().equals(Set.of(place))
+                && !countsRelatedToAnotherNumber().contains(counted.atom());
+    }
+
+    /** The counts some stated constraint relates to another number, worked out the first time it
+     *  is asked. */
+    private Set<FactSubject> countsRelatedToAnotherNumber() {
+        Set<FactSubject> known = relatedCounts;
+        if (known == null) {
+            Set<FactSubject> counts = new HashSet<>();
+            countAt.values().forEach(counted -> counts.add(counted.atom()));
+            Set<FactSubject> related = new HashSet<>();
+            for (InvariantChecker.Written reading : readings) {
+                for (Map<ClauseOccurrence, InvariantChecker.PartAsRead> byOccurrence
+                        : reading.constrained().values()) {
+                    for (InvariantChecker.PartAsRead one : byOccurrence.values()) {
+                        for (NumericConstraint each : one.said().stated()) {
+                            Set<FactSubject> atoms = each.atoms();
+                            if (atoms.size() > 1) {
+                                atoms.stream().filter(counts::contains).forEach(related::add);
+                            }
                         }
                     }
                 }
             }
+            known = Set.copyOf(related);
+            relatedCounts = known;
         }
-        return true;
+        return known;
     }
 
     /**

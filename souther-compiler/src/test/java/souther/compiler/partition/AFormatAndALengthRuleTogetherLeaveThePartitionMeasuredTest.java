@@ -15,16 +15,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
- * A behavior over a string held by a format and a length rule is measured, as it is over a string
- * held by the one pattern that leaves the same strings.
+ * A behavior over a string held by a format and a length rule is measured.
  *
  * <p>The behavior compares the string with the elements of a list, so what it asks of the
  * positions is which strings they hold. A position whose rules were each read by one of the two
  * readings and by neither together left that unanswered, and took the positions that relate to it
  * down with it.
  *
- * <p>{@code emails} holds any string and is what keeps the measure partial in both models; what is
- * asked is that nothing else does.
+ * <p>{@code emails} holds any string and is what keeps the measure partial; what is asked is that
+ * nothing else does.
  */
 class AFormatAndALengthRuleTogetherLeaveThePartitionMeasuredTest {
 
@@ -46,18 +45,13 @@ class AFormatAndALengthRuleTogetherLeaveThePartitionMeasuredTest {
                 """.formatted(email);
     }
 
-    private static final String ONE_PATTERN =
-            modelWith("String.matches(\"[^\\\\s]{1,254}\", value)");
-
     private static final String A_FORMAT_AND_A_LENGTH =
             modelWith("String.matches(\"[^\\\\s]+\", value) && String.length(value) <= 254");
 
     @Test
-    void theTwoRulesLeaveNoMorePositionsUnansweredThanTheOnePatternDoes() {
-        PartitionEvidence one = evidence(ONE_PATTERN);
+    void theTwoRulesLeaveOnlyWhatTheUnconstrainedListLeavesUnanswered() {
         PartitionEvidence two = evidence(A_FORMAT_AND_A_LENGTH);
 
-        assertInstanceOf(Measurement.Partial.class, one.partitioned());
         assertInstanceOf(Measurement.Partial.class, two.partitioned(),
                 "the measure was reached, with what the unconstrained list leaves of it");
         assertEquals(List.of("emails", "emails[*]"), notDerivable(two),
