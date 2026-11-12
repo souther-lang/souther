@@ -86,6 +86,56 @@ class RestsMovedFromTheClosureBeforeAreEachWhatTheRestAskedAloneIsTest {
                 + carried);
     }
 
+    /**
+     * A question is moved from the first work that kept it, and not from the first work that can be
+     * moved over: a round with no room keeps none of what it was asked, and the work after it
+     * still has the question.
+     */
+    @Test
+    void aQuestionIsMovedFromTheWorkThatKeptItWhateverWorkIsBeforeIt() {
+        Random dice = new Random(31671);
+        long fromTheOneThatKeptIt = 0;
+        long fromBoth = 0;
+        for (int round = 0; round < CASES; round++) {
+            CanonicalOrder<String> order = RulesNamingNoPositionInCommonCloseApartTest.ORDERS
+                    .get(round % RulesNamingNoPositionInCommonCloseApartTest.ORDERS.size());
+            List<AffineConstraint<String>> before = read(someRules(dice, 2 + dice.nextInt(4)));
+            List<AffineConstraint<String>> after = new ArrayList<>(before);
+            after.addAll(read(someRules(dice, 1 + dice.nextInt(2))));
+            if (DifferenceBounds.over(before, order).holdsNothing()
+                    || DifferenceBounds.over(after, order).holdsNothing()) {
+                continue;
+            }
+            Box<String> start = someEnds(dice);
+            Box<String> later = movedEnds(dice, start);
+
+            RoundWork<String> kept = new RoundWork<>(before, start);
+            askEveryRest(FormReach.over(before, start, DifferenceBounds.over(before, order), order)
+                    .working(List.of(), kept), before, order);
+            RoundWork<String> keptNone = new RoundWork<>(before, start, _ -> false);
+            askEveryRest(FormReach.over(before, start, DifferenceBounds.over(before, order), order)
+                    .working(List.of(), keptNone), before, order);
+
+            fromTheOneThatKeptIt += carriedFrom(after, later, order, List.of(kept));
+            fromBoth += carriedFrom(after, later, order, List.of(keptNone, kept));
+        }
+        assertTrue(fromTheOneThatKeptIt > 1000,
+                "too few premises were moved for this to hold anything: " + fromTheOneThatKeptIt);
+        assertEquals(fromTheOneThatKeptIt, fromBoth,
+                "work that kept nothing stood before the work that kept the questions");
+    }
+
+    /** How many premises are moved when every rest and every form of {@code rules} is asked of a
+     *  reading starting from {@code parents}. */
+    private static long carriedFrom(List<AffineConstraint<String>> rules, Box<String> ends,
+                                    CanonicalOrder<String> order, List<RoundWork<String>> parents) {
+        FormReach<String> reading = FormReach.over(rules, ends,
+                DifferenceBounds.over(rules, order), order)
+                .working(parents, new RoundWork<>(rules, ends));
+        askEveryRest(reading, rules, order);
+        return reading.premisesCarried();
+    }
+
     /** Every rest of every half-space, asked of a reading that keeps what it comes to. */
     private static void askEveryRest(FormReach<String> reading,
                                      List<AffineConstraint<String>> rules,

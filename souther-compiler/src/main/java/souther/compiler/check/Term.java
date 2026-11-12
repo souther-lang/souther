@@ -565,11 +565,16 @@ final class Term {
 
         private final Map<Term, Map<Term, Integer>> compared = new IdentityHashMap<>();
 
+        /** How many terms one term is usually compared with: a sort puts it against the few beside
+         *  it, and a table sized for the default holds a hundred and twenty-eight places for them. */
+        private static final int AGAINST_FEW = 4;
+
         int compare(Term one, Term other) {
             if (one == other) {
                 return 0;
             }
-            Map<Term, Integer> against = compared.computeIfAbsent(one, _ -> new IdentityHashMap<>());
+            Map<Term, Integer> against = compared.computeIfAbsent(one,
+                    _ -> new IdentityHashMap<>(AGAINST_FEW));
             Integer known = against.get(other);
             if (known == null) {
                 known = comparedOnce(one, other);

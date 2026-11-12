@@ -90,10 +90,9 @@ final class FormReach<A> {
     /** The work this might start from, best first; see {@link #working}. */
     private List<RoundWork<A>> parentWorks = List.of();
 
-    /** The work this starts from, once chosen from {@link #parentWorks} ({@link #chosenKnown}), or
-     *  null where there is none of them it can be moved over. */
-    private RoundWork<A> parentWork;
-    private boolean chosenKnown;
+    /** The work of {@link #parentWorks} that can be moved over, in the same order, once asked for
+     *  ({@link #starts}). */
+    private List<Start<A>> starts;
 
     /** Where the answers of {@link Rests} are left, or null; see {@link #working}. */
     private RoundWork<A> workOut;
@@ -104,8 +103,22 @@ final class FormReach<A> {
      *  again, so the reading is worked out in full. */
     private static final int MOST_MOVED = 1;
 
-    /** The positions whose ends are not those {@link #parentWork} was done against. */
-    private List<A> moved;
+    /**
+     * A round's work that can be moved to the ends this reading starts in, and the positions whose
+     * ends are not the ones it was done against.
+     */
+    private record Start<P>(RoundWork<P> work, List<P> moved) {
+    }
+
+    /**
+     * What a start left of one question, which is what is moved to this reading's ends.
+     *
+     * <p>Chosen for the question and not for the reading: a start can be moved over whatever it
+     * holds, but it holds only the questions its round had room to keep, so which of the starts a
+     * question is moved from is the first that kept it.
+     */
+    private record Carry<P>(Start<P> from, RoundWork.Candidates before) {
+    }
 
     /**
      * How many premises this has merged into a form, and how many it has held against the ends, for
@@ -347,8 +360,8 @@ final class FormReach<A> {
     }
 
     /**
-     * This reading, working what it asks out from the first of {@code parents} it can be moved
-     * over and leaving what it works out in {@code out}.
+     * This reading, working what it asks out from the {@code parents} it can be moved over and
+     * leaving what it works out in {@code out}.
      *
      * <p>Said once, before anything is asked, and only of a reading made from the rules and the ends
      * of a round's start: a reading made from this one ({@link #alsoReading}) reads premises this
@@ -357,7 +370,7 @@ final class FormReach<A> {
      * <p>Work can be moved over where the rules it was done over are these rules without the ones
      * said after, and the ends it was done against are these ends but for at most
      * {@link #MOST_MOVED} positions. Which round of which closure that is does not matter to what
-     * comes back, so the work asked from is the first of them that qualifies.
+     * comes back, so a question is moved from the first of them that qualifies and kept it.
      *
      * @param parents the work of rounds over these rules or the rules before them, best first
      * @param out     where the answers to the questions of {@link Rests} are left, or null where
@@ -369,22 +382,39 @@ final class FormReach<A> {
         return this;
     }
 
-    /** The work this starts from, or null; chosen the first time it is asked for. */
-    private RoundWork<A> startedFrom() {
-        if (!chosenKnown) {
+    /** The work this might start from that can be moved over, best first; worked out the first
+     *  time it is asked for. */
+    private List<Start<A>> starts() {
+        if (starts == null) {
+            List<Start<A>> out = new ArrayList<>(parentWorks.size());
             for (RoundWork<A> each : parentWorks) {
                 if (each != null && each != workOut && each.precedes(rules)) {
                     List<A> apart = each.endsThatMoved(ends, MOST_MOVED);
                     if (apart != null) {
-                        parentWork = each;
-                        moved = apart;
-                        break;
+                        out.add(new Start<>(each, apart));
                     }
                 }
             }
-            chosenKnown = true;
+            starts = out;
         }
-        return parentWork;
+        return starts;
+    }
+
+    /**
+     * What the first start that kept a question left of it, or null where none did.
+     *
+     * @param kept     what a round kept of the question, or null where it kept none
+     * @param premises how many premises this reading holds, which the kept answer may not exceed
+     */
+    private Carry<A> carryOf(Function<RoundWork<A>, RoundWork.Candidates> kept, int premises) {
+        for (Start<A> each : starts()) {
+            RoundWork.Candidates held = kept.apply(each.work());
+            if (held != null && held.places() == each.work().premises()
+                    && held.places() <= premises) {
+                return new Carry<>(each, held);
+            }
+        }
+        return null;
     }
 
     /** The rests of the positions of one half-space; see {@link #rests}. */
@@ -450,10 +480,10 @@ final class FormReach<A> {
         private RoundWork.Candidates candidatesOf(A atom, Map<A, ExactRatio> coefs,
                                                     List<Premise<A>> all) {
             RoundWork.Candidates out = new RoundWork.Candidates(all.size());
-            RoundWork.Candidates before = null;
+            Carry<A> carry = null;
             if (workOut != null) {
                 workOut.premisesHeld(all.size());
-                before = before(atom, all.size());
+                carry = carryOf(work -> work.of(asking, half.form(), atom), all.size());
             }
             BitSet left = leftOut();
             // The rest of the atom names what the form names but for the atom, so a premise names
@@ -473,10 +503,10 @@ final class FormReach<A> {
                     continue;
                 }
                 Premise<A> premise = all.get(place);
-                if (before != null && place < before.places()
-                        && before.kinds[place] != RoundWork.ABSENT
-                        && before.kinds[place] != RoundWork.UNNAMED) {
-                    carried(before, place, premise.half(), coefs, out);
+                if (carry != null && place < carry.before().places()
+                        && carry.before().kinds[place] != RoundWork.ABSENT
+                        && carry.before().kinds[place] != RoundWork.UNNAMED) {
+                    carried(carry, place, premise.half(), coefs, out);
                     continue;
                 }
                 aggregates.computeIfAbsent(place,
@@ -513,22 +543,6 @@ final class FormReach<A> {
             return negatedForm;
         }
 
-        /**
-         * What the closure before left of this question, where it left it against ends this reading
-         * can move it from: the rules this reads are those rules with others after them, and no
-         * more than {@link #MOST_MOVED} positions have other ends. Null otherwise, and the question
-         * is worked out from the premises.
-         */
-        private RoundWork.Candidates before(A atom, int premises) {
-            RoundWork<A> parent = startedFrom();
-            if (parent == null) {
-                return null;
-            }
-            RoundWork.Candidates held = parent.of(asking, half.form(), atom);
-            return held == null || held.places() != parent.premises()
-                    || held.places() > premises ? null : held;
-        }
-
         private BitSet leftOut() {
             if (leftOut == null) {
                 leftOut = new BitSet();
@@ -551,9 +565,10 @@ final class FormReach<A> {
      *
      * @param coefs the question the premise is taken off
      */
-    private void carried(RoundWork.Candidates before, int place,
+    private void carried(Carry<A> carry, int place,
                          AffineConstraint.HalfSpace<A> premise, Map<A, ExactRatio> coefs,
                          RoundWork.Candidates into) {
+        RoundWork.Candidates before = carry.before();
         into.kinds[place] = before.kinds[place];
         if (before.kinds[place] != RoundWork.SUMMED) {
             return;
@@ -561,7 +576,7 @@ final class FormReach<A> {
         ExactRatio sum = before.sums[place];
         int missing = before.withoutEnd[place];
         int strict = before.notReached[place];
-        for (A position : moved) {
+        for (A position : carry.from().moved()) {
             ExactRatio coef = coefs.getOrDefault(position, ExactRatio.ZERO);
             ExactRatio off = premise.form().coefs().get(position);
             if (off != null) {
@@ -574,7 +589,8 @@ final class FormReach<A> {
             if (coef.isZero()) {
                 continue;
             }
-            ExactCut was = parentWork.ends().endWeighedBy(position, coef.signum(), true);
+            ExactCut was = carry.from().work().ends()
+                    .endWeighedBy(position, coef.signum(), true);
             ExactCut now = ends.endWeighedBy(position, coef.signum(), true);
             if (was == null) {
                 missing--;
@@ -688,12 +704,7 @@ final class FormReach<A> {
         List<Premise<A>> all = premises().each();
         workOut.premisesHeld(all.size());
         RoundWork.Candidates held = new RoundWork.Candidates(all.size());
-        RoundWork<A> parent = startedFrom();
-        RoundWork.Candidates before = parent == null ? null : parent.whole(asking, direction);
-        if (before != null && (before.places() != parent.premises()
-                || before.places() > all.size())) {
-            before = null;
-        }
+        Carry<A> carry = carryOf(work -> work.whole(asking, direction), all.size());
         BitSet naming = namingAnyOf(coefs);
         for (int place = 0; place < all.size(); place++) {
             if (!naming.get(place)) {
@@ -701,10 +712,10 @@ final class FormReach<A> {
                 continue;
             }
             AffineConstraint.HalfSpace<A> premise = all.get(place).half();
-            if (before != null && place < before.places()
-                    && before.kinds[place] != RoundWork.ABSENT
-                    && before.kinds[place] != RoundWork.UNNAMED) {
-                carried(before, place, premise, coefs, held);
+            if (carry != null && place < carry.before().places()
+                    && carry.before().kinds[place] != RoundWork.ABSENT
+                    && carry.before().kinds[place] != RoundWork.UNNAMED) {
+                carried(carry, place, premise, coefs, held);
             } else {
                 new Aggregate(coefs, premise).fillWhole(held, place);
             }
