@@ -232,6 +232,100 @@ class ANameReadTwiceIsFollowedOnceTest {
         return read(new BindingId(OWNER, links));
     }
 
+    /**
+     * An environment that is, where {@code afresh}, a new object each time a value is read in it,
+     * and a name that stands for the one thing in all of them
+     * ({@link AffineForms.Reading#standingOf}). Which is what an environment is that enters the
+     * binding of a call's parameter at each visit of the call.
+     */
+    private record Afresh(Map<BindingId, Core> given, Map<BindingId, Integer> asked,
+                          boolean afresh) implements AffineForms.Reading<String, Afresh.Where> {
+
+        /** One environment, told from another by being another object. */
+        private static final class Where {}
+
+        private Where read(Where at) {
+            return afresh ? new Where() : at;
+        }
+
+        @Override
+        public Symbols symbols() {
+            return Symbols.none(DefaultStdlib.get());
+        }
+
+        @Override
+        public DeclarationAccess declarations() {
+            return DeclarationAccess.NONE;
+        }
+
+        /** A name nothing was given is the one atom, so that no part of the chain is a constant
+         *  the fold settles before the names are read. */
+        @Override
+        public LinearForm<String> leafOf(Core e, Where at) {
+            return Core.withoutStanding(e) instanceof Core.Read read
+                    && !given.containsKey(read.binding()) ? LinearForm.atom("x") : null;
+        }
+
+        @Override
+        public Where inside(Core.LetIn li, Where at) {
+            return read(at);
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<Where> readThrough(Core.Read read, Where at) {
+            Core value = given.get(read.binding());
+            if (value == null) {
+                return null;
+            }
+            asked.merge(read.binding(), 1, Integer::sum);
+            return new ValueStanding.ReadThrough<>(value, read(at));
+        }
+
+        @Override
+        public Object standingOf(Core.Read read, Where at) {
+            return given.get(read.binding());
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<Where>> alternativesOf(Core.Read read, Where at) {
+            return null;
+        }
+
+        @Override
+        public boolean readsThrough(Core.FieldAccess fa, Where at) {
+            return false;
+        }
+    }
+
+    /** How often each name of a chain headed by an atom is asked about, where each value is read
+     *  in {@code afresh} an environment or in the one it was reached in. */
+    private static Map<BindingId, Integer> askedOverAChain(int links, boolean afresh) {
+        Map<BindingId, Core> given = new HashMap<>();
+        Core root = chainOf(links, given);
+        // The head is the atom and not the number one, which the fold would settle unread.
+        given.remove(new BindingId(OWNER, 0));
+        Map<BindingId, Integer> asked = new HashMap<>();
+        Afresh reading = new Afresh(given, asked, afresh);
+
+        AffineForms.outcome(root, new Afresh.Where(), reading);
+        return asked;
+    }
+
+    /**
+     * A name is the same question wherever the reading says it stands for the same thing, so an
+     * environment that is a new object at every step costs a name no more than one that is not.
+     * Keyed on the environment, a chain of names each reached by two ways would read the bottom
+     * of it once for every way down.
+     */
+    @Test
+    void aNameIsFollowedAsOftenInAnEnvironmentMadeAfreshAsInOneThatIsNot() {
+        int links = 16;
+
+        assertEquals(askedOverAChain(links, false), askedOverAChain(links, true),
+                "a name was followed again because it was reached in an environment made afresh,"
+                        + " which tells the reading nothing about the name");
+    }
+
     @Test
     void everyLinkOfAChainEachNamedTwiceIsFollowedOnce() {
         int links = 16;
