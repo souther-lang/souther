@@ -70,6 +70,9 @@ public final class Conclusion {
     private static final class Shared {
         private final Optional<ModelOccurrence> where;
         private final boolean reusing;
+        /** Whether what is concluded is read for the lines it draws and not for the rows it
+         *  asks ({@link Derivation.LinesWithoutRows}). */
+        private final boolean drawingLines;
         private final Map<Derivation, List<Kept>> kept = new IdentityHashMap<>();
         private final Map<Derivation, Proposition> last = new IdentityHashMap<>();
         /** The carried values each step being concluded has read so far, innermost last. */
@@ -86,14 +89,20 @@ public final class Conclusion {
         private int unread;
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing) {
-            this(where, reusing, PARTS);
+            this(where, reusing, PARTS, false);
         }
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing,
                        CompositionBudget countedTo) {
+            this(where, reusing, countedTo, false);
+        }
+
+        private Shared(Optional<ModelOccurrence> where, boolean reusing,
+                       CompositionBudget countedTo, boolean drawingLines) {
             this.where = where;
             this.reusing = reusing;
             this.mostParts = countedTo.maximum();
+            this.drawingLines = drawingLines;
         }
     }
 
@@ -112,6 +121,21 @@ public final class Conclusion {
     private Conclusion(Shared shared, Map<ACarriedValue, Boolean> supposed) {
         this.shared = shared;
         this.supposed = supposed;
+    }
+
+    /**
+     * A concluding of a condition at {@code where} for the lines it draws. It differs from
+     * {@link #Conclusion(Optional)} in the one place a derivation says what a row is asked and what
+     * a line is drawn on apart ({@link Derivation.LinesWithoutRows}), and there it concludes the
+     * second.
+     */
+    public static Conclusion drawingLines(Optional<ModelOccurrence> where) {
+        return new Conclusion(new Shared(where, false, PARTS, true), Map.of());
+    }
+
+    /** Whether this concluding is read for the lines drawn and not for the rows asked. */
+    boolean drawsLines() {
+        return shared.drawingLines;
     }
 
     /**

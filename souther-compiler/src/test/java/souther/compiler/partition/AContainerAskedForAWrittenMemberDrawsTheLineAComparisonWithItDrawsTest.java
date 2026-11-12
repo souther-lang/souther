@@ -148,6 +148,47 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             behavior timedKey : (l: Line) -> Bool
             let timedKey (l) = Map.containsKey(Time("09:00"), l.byTime)
 
+            behavior filteredNums : (l: Line) -> Bool
+            let filteredNums (l) = List.contains(5, List.filter(x -> x > 3, l.nums))
+            behavior filteredNumsAny : (l: Line) -> Bool
+            let filteredNumsAny (l) = List.any(e -> e == 5, List.filter(x -> x > 3, l.nums))
+            behavior filteredKeys : (l: Line) -> Bool
+            let filteredKeys (l) =
+                Map.containsKey("USD", Map.filterEntries((_, v) -> v > 3, l.rates))
+            behavior filteredKeysAny : (l: Line) -> Bool
+            let filteredKeysAny (l) =
+                List.any(k -> k == "USD", Map.keys(Map.filterEntries((_, v) -> v > 3, l.rates)))
+            behavior taken : (l: Line) -> Bool
+            let taken (l) = List.contains("K", List.take(2, l.tags))
+            behavior takenAny : (l: Line) -> Bool
+            let takenAny (l) = List.any(t -> t == "K", List.take(2, l.tags))
+            behavior dropped : (l: Line) -> Bool
+            let dropped (l) = List.contains("K", List.drop(1, l.tags))
+            behavior droppedAny : (l: Line) -> Bool
+            let droppedAny (l) = List.any(t -> t == "K", List.drop(1, l.tags))
+            behavior distinctTags : (l: Line) -> Bool
+            let distinctTags (l) = List.contains("K", List.distinct(l.tags))
+            behavior distinctTagsAny : (l: Line) -> Bool
+            let distinctTagsAny (l) = List.any(t -> t == "K", List.distinct(l.tags))
+            behavior removedKeys : (l: Line) -> Bool
+            let removedKeys (l) = Map.containsKey("USD", Map.remove("EUR", l.rates))
+            behavior removedKeysAny : (l: Line) -> Bool
+            let removedKeysAny (l) =
+                List.any(k -> k == "USD", Map.keys(Map.remove("EUR", l.rates)))
+            behavior chained : (l: Line) -> Bool
+            let chained (l) = List.contains("K", List.take(3, List.distinct(l.tags)))
+            behavior chainedAny : (l: Line) -> Bool
+            let chainedAny (l) = List.any(t -> t == "K", List.take(3, List.distinct(l.tags)))
+            behavior mappedMember : (l: Line) -> Bool
+            let mappedMember (l) = List.contains("K", List.map(t -> String.trim(t), l.tags))
+            behavior mappedMemberAny : (l: Line) -> Bool
+            let mappedMemberAny (l) =
+                List.any(t -> t == "K", List.map(t -> String.trim(t), l.tags))
+            behavior anotherFiltered : (l: Line) -> Bool
+            let anotherFiltered (l) = List.contains(l.s, List.distinct(l.other))
+            behavior anotherTaken : (l: Line) -> Bool
+            let anotherTaken (l) = List.contains(l.s, List.take(2, l.other))
+
             behavior guarded : (l: Line) -> Int
             let guarded (l) = if Map.containsKey("USD", l.rates) then 1 else 0
             behavior alongside : (l: Line) -> Int
@@ -349,6 +390,25 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
     void aMemberThatIsAnotherPlaceDrawsNoLine() {
         assertEquals(Set.of(), linesOf("another"));
         assertEquals(Set.of(), linesOf("anotherListed"));
+        assertEquals(Set.of(), linesOf("anotherFiltered"));
+        assertEquals(Set.of(), linesOf("anotherTaken"));
+    }
+
+    /** A container built out of another by an operation holds elements of the other, so the value
+     *  asked of it is a line on them, as the comparison of those elements with it is. */
+    @Test
+    void aContainerBuiltOutOfAnotherDrawsTheLinesOfTheComparisonOfItsElements() {
+        for (String[] pair : new String[][] {
+            { "filteredNums", "filteredNumsAny" }, { "filteredKeys", "filteredKeysAny" },
+            { "taken", "takenAny" }, { "dropped", "droppedAny" },
+            { "distinctTags", "distinctTagsAny" }, { "removedKeys", "removedKeysAny" },
+            { "chained", "chainedAny" }, { "mappedMember", "mappedMemberAny" } }) {
+            assertEquals(linesOf(pair[1]), linesOf(pair[0]), pair[0]);
+        }
+        assertEquals(Set.of("l.nums[*] 3", "l.nums[*] 5"), linesOf("filteredNums"));
+        assertEquals(Set.of("l.rates[*] 3", "l.rates[key] USD"), linesOf("filteredKeys"));
+        assertEquals(Set.of("l.tags[*] K"), linesOf("taken"));
+        assertEquals(Set.of("l.rates[key] USD"), linesOf("removedKeys"));
     }
 
     private enum Kind { TEXT, KEY, NUMBER, DAY }

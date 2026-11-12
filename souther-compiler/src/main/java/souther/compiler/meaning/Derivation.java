@@ -35,10 +35,14 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.Operand;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -76,6 +80,25 @@ public sealed interface Derivation {
      * them, so the parts nothing read are numbered as they were met.
      */
     Proposition conclusion(Conclusion numbering);
+
+    /** Whether {@code how} holds a step that is read for the lines it draws apart from the rows it
+     *  asks ({@link LinesWithoutRows}), so that its conclusion differs by what is read. */
+    static boolean drawsLinesApart(Derivation how) {
+        Set<Derivation> met = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<Derivation> pending = new ArrayDeque<>();
+        pending.push(how);
+        while (!pending.isEmpty()) {
+            Derivation step = pending.pop();
+            if (!met.add(step)) {
+                continue;
+            }
+            if (step instanceof LinesWithoutRows) {
+                return true;
+            }
+            WrittenLines.premisesOf(step).forEach(pending::push);
+        }
+        return false;
+    }
 
     /** What this concludes, read at {@code where}, as it is handed to a reader of positions
      *  ({@link Conclusion#atOneValueEach}). */
@@ -1206,6 +1229,9 @@ public sealed interface Derivation {
                 Derivation read = readOff(step);
                 return switch (read) {
                     case Stopped _ -> true;
+                    // What a row is asked is what the law says; the lines drawn on the elements
+                    // are no part of it.
+                    case LinesWithoutRows(var _, Derivation asked) -> meets(some, asked);
                     // What the container holding something was read as is a reading of what made
                     // the container, held to that call where it was made.
                     case EveryElementMeetsIt(var part, Derivation ofTheElement, var _, var _) ->
@@ -3887,6 +3913,33 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return numbering.unread(this);
+        }
+    }
+
+    /**
+     * A statement of the elements of a container that a row cannot be asked for and that still
+     * draws the lines a comparison of those elements draws.
+     *
+     * <p>Which lines a statement draws needs the elements to be the source's and the value asked
+     * of them to be one of them. A row asked for needs more: where the container was kept by a
+     * statement and the value is an element of its own, or where the container is a window of the
+     * source's elements by index, there is no one position a row is asked of. So the statement is
+     * {@code asked}, a part nothing read, for a reader of rows and {@code drawn} for a reader of
+     * lines ({@link Conclusion#drawingLines}).
+     *
+     * @param drawn what the statement is read as where only the lines it draws are asked
+     * @param asked what a reader of rows is told, which is that no row is asked for it and why
+     */
+    record LinesWithoutRows(Derivation drawn, Derivation asked) implements Derivation {
+
+        public LinesWithoutRows {
+            Objects.requireNonNull(drawn, "lines are drawn of some reading");
+            Objects.requireNonNull(asked, "rows are not asked for some reason");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.drawsLines() ? numbering.of(drawn) : numbering.of(asked);
         }
     }
 }

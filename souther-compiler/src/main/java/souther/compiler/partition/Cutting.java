@@ -1538,7 +1538,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // in the statement ({@link Proposition#withTheValuesItHoldsCompared}), so that a container
         // asked for it draws the line the same comparison draws and is not told to relate it to
         // another value.
-        Proposition asLinesAre = stated.proposition().withTheValuesItHoldsCompared();
+        Proposition asLinesAre = stated.forTheLines().proposition().withTheValuesItHoldsCompared();
         // A remainder of a form over a value read off a binding is no number a row's numbers put
         // anywhere: no line on it and no relation of it to another value. Over the element of a
         // list of every whole number between two, the comparison is read on the elements the
