@@ -8,7 +8,12 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.time.Duration;
+import java.util.function.IntFunction;
+import java.util.function.IntUnaryOperator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -85,50 +90,85 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
             String shallow = reportOfTruthsEachMadeOfTheOneBefore(2, step);
             String deep = assertTimeoutPreemptively(Duration.ofSeconds(60),
                     () -> reportOfTruthsEachMadeOfTheOneBefore(100, step));
-            org.junit.jupiter.api.Assertions.assertEquals(shallow, deep, step);
+            assertEquals(shallow, deep, step);
         }
     }
 
-    /** The report with the names of the chain and where the comparison is written taken out:
-     *  what it says does not turn on them, and a deeper chain is written further down. */
-    private static String normalised(String report) {
-        return report.replaceAll("\\ba\\d+\\b", "a").replaceAll("\\b\\d+(:\\d+)+\\b", "L:C");
+    /** A place in the report, as {@code line:column} or with the file before: {@code 9:8},
+     *  {@code 0:9:8}. */
+    private static final Pattern PLACE = Pattern.compile("(?<![\\d:])(?:\\d+:)?(\\d+):(\\d+)(?!\\d)");
+
+    /**
+     * The report with the places on the line the comparison is written on taken out: that line is
+     * further down in a deeper chain, and is all that differs between two depths. Every other place
+     * in the report is compared as it stands, and there must be one on that line to take out.
+     */
+    private static String withTheComparisonsPlaceTakenOut(String report, int line) {
+        Matcher places = PLACE.matcher(report);
+        boolean found = false;
+        while (places.find()) {
+            found |= Integer.parseInt(places.group(1)) == line;
+        }
+        assertTrue(found, "the report says where the comparison is, on line " + line);
+        return PLACE.matcher(report).replaceAll(each ->
+                Integer.parseInt(each.group(1)) == line ? "L:C" : Matcher.quoteReplacement(
+                        each.group()));
     }
 
     private static void assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
-            java.util.function.IntFunction<String> reportAt, int shallow, int... deep) {
-        String expected = normalised(reportAt.apply(shallow));
-        assertTrue(!expected.isEmpty());
+            IntFunction<String> reportAt, IntUnaryOperator lineOfTheComparison, int shallow,
+            int... deep) {
+        String expected = withTheComparisonsPlaceTakenOut(reportAt.apply(shallow),
+                lineOfTheComparison.applyAsInt(shallow));
         for (int depth : deep) {
             String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
                     () -> reportAt.apply(depth));
-            org.junit.jupiter.api.Assertions.assertEquals(expected, normalised(report),
-                    "depth " + depth);
+            assertEquals(expected, withTheComparisonsPlaceTakenOut(report,
+                    lineOfTheComparison.applyAsInt(depth)), "depth " + depth);
         }
+    }
+
+    /** The source puts the module, the behavior and the first name on five lines, then a line for
+     *  each call, and the comparison on the next. */
+    private static int afterOneLetEachCall(int depth) {
+        return depth + 6;
+    }
+
+    /** The same, with two names to begin with and two lines for each call. */
+    private static int afterTwoLetsEachCall(int depth) {
+        return 2 * depth + 7;
     }
 
     @Test
     void aChainNamedInTheConditionOfAnIfAndInItsArmsSaysAtAnyDepthWhatItSaysAtAShallowOne() {
         assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
                 depth -> reportOfChainEndingIn(depth,
-                        "if LAST == j then LAST > 1 else LAST < j"), 3, 24, 60);
+                        "if LAST == j then LAST > 1 else LAST < j"),
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
+                        ::afterOneLetEachCall, 3, 24, 60);
     }
 
     @Test
     void namesThatReachEachOtherSayAtAnyDepthWhatTheySayAtAShallowOne() {
         assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
-                depth -> reportOfNamesThatReachEachOther(depth), 3, 40);
+                depth -> reportOfNamesThatReachEachOther(depth),
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
+                        ::afterTwoLetsEachCall, 3, 40);
     }
 
     @Test
     void anEqualityOverAChainSaysAtAnyDepthWhatItSaysAtAShallowOne() {
         assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
-                depth -> reportOfChain(depth, "=="), 3, 24, 40, 100);
+                depth -> reportOfChain(depth, "=="),
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
+                        ::afterOneLetEachCall, 3, 24, 40, 100);
     }
 
     @Test
     void anOrderOverAChainSaysAtAnyDepthWhatItSaysAtAShallowOne() {
         assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
-                depth -> reportOfChain(depth, ">="), 3, 24, 100);
+                depth -> reportOfChain(depth, ">="),
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
+                        ::afterOneLetEachCall, 3, 24, 100);
     }
 }
