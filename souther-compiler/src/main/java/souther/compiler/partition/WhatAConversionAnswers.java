@@ -30,7 +30,8 @@ import souther.compiler.semantics.CaseMapping;
 final class WhatAConversionAnswers {
 
     private final Language values;
-    /** The strings the conversion leaves as they stand, or null where there are none. */
+    /** The strings the conversion leaves as they stand, or null where there is no conversion or
+     *  they are not worked out within the allowance. */
     private final Language standing;
     private final Language may;
 

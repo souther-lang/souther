@@ -84,10 +84,33 @@ final class CaseMaps {
     }
 
     /**
+     * The strings of a side whose conversion by {@code mapping} is among {@code answers}, as far
+     * as it is shown: the strings it is exactly a map on whose answer is among them, and the
+     * strings it leaves as they stand ({@link #answeredAsTheyStand}) that are among them.
+     *
+     * <p>The second holds sequences that are no value, so what this says is of a value: that its
+     * answer is among {@code answers}. Asked where a string is asked about as it stands, which is
+     * an equality; where strings are made from the result, the first alone is values
+     * ({@link CodeMap#stringsConvertedInto}).
+     *
+     * @return the strings, or null past what {@code meter} allows
+     */
+    static Language answeringInto(CaseMapping mapping, Language answers, Meter meter) {
+        Language converted = of(mapping).stringsConvertedInto(answers, meter);
+        Language standing = converted == null ? null : answeredAsTheyStand(mapping, answers, meter);
+        Language joined = standing == null ? null : converted.or(standing, meter);
+        return joined == null ? converted : joined;
+    }
+
+    /**
      * The strings a run is shown to get past {@code mapping} at: the strings it is exactly a map
      * on, and the strings it leaves as they stand ({@link #answeredAsTheyStand}), whose answer is
      * the string itself and so is no longer than it. Every other string may stop the run there,
      * by the answer being longer than a {@code String} holds.
+     *
+     * <p>Asked whether the run gets past at a string, which is a question of a value: the second
+     * kind holds sequences that are no value. A string a witness holds is chosen from
+     * {@link CodeMap#strings}, which is values alone.
      *
      * @return the strings, or null past what {@code meter} allows
      */

@@ -3833,15 +3833,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * holds one exactly when it has one of the strings the other side comes to inside it
      * ({@link StringsInsideStrings}). What a side comes to is the conversion done to it, which is
      * exactly a map on the strings it is exactly one for ({@link CodeMap}); the strings it is not
-     * exact on come to strings of the code points the conversion leaves, and of those only the
-     * strings a single conversion leaves as they stand are shown, each being its own answer
-     * ({@link CaseMaps#answeredAsTheyStand}).
+     * exact on come to strings of the code points the conversion leaves, and nothing narrower is
+     * said of them for a string made from them.
      *
      * <p>Where this relation is no string inside another, it is read only as the equality or
      * denial of two strings of positions the caller has shown independent
      * ({@link #stringsAPartnerCanHold}): the strings of this side are those whose conversion is
      * one the other side comes to, which is the same machine with nothing standing round the
-     * other side's strings.
+     * other side's strings. Each string is then asked about as it stands, so the strings a single
+     * conversion leaves as they stand are shown as well, each being its own answer
+     * ({@link WhatAConversionAnswers#forEquality}).
      */
     private StringsAPartnerCanHold stringsThroughConversions(
             boolean hereIsFirst, ConvertedText mine, ConvertedText theirs, ValueSet theirStrings,
@@ -3854,7 +3855,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         StringsInsideStrings.Where where = kind.inside();
         boolean standsInside = where != null;
         // The strings the other side comes to, as far as it is shown and as far as it may come to.
-        WhatAConversionAnswers answers = WhatAConversionAnswers.of(partner, theirs.through(), meter);
+        WhatAConversionAnswers answers =
+                WhatAConversionAnswers.of(partner, theirs.through(), meter);
         if (answers == null) {
             return null;
         }
@@ -3878,16 +3880,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         CodeMap mineMap = mine.through().equals(CaseMapping.NONE) ? null
                 : CaseMaps.of(mine.through());
+        // A string of this side that the conversion leaves as it stands is its own answer, so it is
+        // shown wherever the answers shown hold it: asked of an equality, where each string is
+        // asked about as it stands. The strings shown for a string inside another are values the
+        // conversion is exact on already.
         Language canBe = shownHere;
         if (mineMap != null) {
-            canBe = mineMap.stringsConvertedInto(shownHere, meter);
-            // A string of this side the conversion leaves as it stands is its own answer, so it is
-            // shown wherever the answers shown hold it. Asked only of an equality: the strings
-            // shown for a string inside another are values the conversion is exact on already.
-            Language standing = standsInside ? null
-                    : CaseMaps.answeredAsTheyStand(mine.through(), shownHere, meter);
-            Language joined = canBe == null || standing == null ? null : canBe.or(standing, meter);
-            canBe = joined == null ? canBe : joined;
+            canBe = standsInside ? mineMap.stringsConvertedInto(shownHere, meter)
+                    : CaseMaps.answeringInto(mine.through(), shownHere, meter);
         }
         Language mayBe = mayHere;
         if (mineMap != null) {
@@ -5584,9 +5584,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ValueSet held = stringsShownAt(place, read);
                 had = held == null ? null : languageOf(held);
             }
-            Language gottenPast = had == null ? null
-                    : CaseMaps.gottenPastExactly(conversion, meter);
-            Language exactly = gottenPast == null ? null : had.and(gottenPast, meter);
+            // The string a witness holds is chosen from these, so each is a value: the strings the
+            // conversion is exactly a map on, and not those it leaves as they stand.
+            Language exactly = had == null ? null
+                    : had.and(CaseMaps.of(conversion).strings(meter), meter);
             if (exactly == null || exactly.isEmpty()) {
                 return false;
             }

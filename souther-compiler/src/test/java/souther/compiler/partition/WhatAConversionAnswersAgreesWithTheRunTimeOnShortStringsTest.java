@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import net.unit8.notation199x.Normalization;
 import net.unit8.notation199x.pattern.Meter;
@@ -33,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest {
 
     /** A meter of its own for each ask, as a reading is given one. */
-    private static final java.util.function.Supplier<Meter> METER =
+    private static final Supplier<Meter> METER =
             () -> PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
 
     private static final List<String> ALPHABET = List.of("a", "A", "z", "Σ", "σ", "ς", "İ", "i",
@@ -43,6 +44,12 @@ class WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest {
 
     private static boolean isAValue(String text) {
         return Normalization.nfc(text).equals(text);
+    }
+
+    private static List<String> valuesAmong(List<String> every) {
+        return every.stream()
+                .filter(WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest::isAValue)
+                .toList();
     }
 
     private static List<String> strings(int upTo) {
@@ -82,7 +89,7 @@ class WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest {
     @Test
     void whatIsShownIsAnAnswerAndEveryAnswerIsAmongWhatMayBe() {
         List<String> every = strings(2);
-        List<String> values = every.stream().filter(WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest::isAValue).toList();
+        List<String> values = valuesAmong(every);
         for (CaseMapping mapping : MAPPINGS) {
             for (List<String> words : partners(every)) {
                 Set<String> answers = new LinkedHashSet<>();
@@ -109,10 +116,30 @@ class WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest {
         }
     }
 
+    /** A value of the side that is converted, asked as it stands: shown only where its answer is
+     *  among the strings the other side holds. */
+    @Test
+    void aValueShownForTheConvertedSideHasItsAnswerAmongTheOthers() {
+        List<String> values = valuesAmong(strings(2));
+        for (CaseMapping mapping : MAPPINGS) {
+            for (List<String> words : partners(strings(2))) {
+                Meter meter = METER.get();
+                Language answers = Language.ofWords(words, meter);
+                Language shown = CaseMaps.answeringInto(mapping, answers, meter);
+                for (String value : values) {
+                    String answer = BoundUnderEvaluation.mapped(mapping, value);
+                    assertTrue(!shown.has(value) || (answer != null && words.contains(answer)),
+                            () -> mapping + " " + words + " shows " + value + " answered "
+                                    + answer);
+                }
+            }
+        }
+    }
+
     @Test
     void everyStringMadeFromTheValuesToDeriveFromIsMadeFromAnAnswer() {
         List<String> every = strings(3);
-        List<String> values = every.stream().filter(WhatAConversionAnswersAgreesWithTheRunTimeOnShortStringsTest::isAValue).toList();
+        List<String> values = valuesAmong(every);
         for (CaseMapping mapping : MAPPINGS) {
             for (List<String> words : partners(every).subList(0, 30)) {
                 List<String> answers = new ArrayList<>();
