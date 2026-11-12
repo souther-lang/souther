@@ -33,9 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>{@code d == String.lowercase(s)} is read to the end however the answer reaches the comparison
  * — written there, under a name, or handed to a helper. It leaves {@code s} undivided: whatever
  * {@code s} holds, some {@code d} meets the answer and some does not. It is shown to leave
- * {@code d} so only over a region: no lowercased string holds a capital, so a {@code d} holding
- * one settles the comparison whatever {@code s} is, and the classes of {@code d} hold the strings
- * the answer is worked out for.
+ * {@code d} so over every value: no lowercased string holds a capital, so a {@code d} holding
+ * one settles the comparison whatever {@code s} is, and every other {@code d} is the answer of
+ * the {@code s} that is itself.
  *
  * <p>What the answer is is the operation and what it was handed, and not where it was made from:
  * {@code String.lowercase(s)} and {@code String.uppercase(s)} are made of one position and are two
@@ -93,20 +93,19 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
                 """);
         // Each at the call that handed the helper its values, which is where the comparison inside
         // it was read.
-        assertEquals(Set.of(overARegion("5:27", "a.domain@Some") + " in hasDomain@8:16",
-                        relates("5:27", "s") + " in hasDomain@8:16"),
+        assertEquals(Set.of(relates("5:27", "s") + " in hasDomain@8:16"),
                 Set.copyOf(said(report)), report);
     }
 
     @Test
     void theAnswerWrittenThereOrUnderANameIsTheSameRelation() {
-        assertEquals(Set.of(overARegion("3:18", "d"), relates("3:18", "s")),
+        assertEquals(Set.of(relates("3:18", "s")),
                 Set.copyOf(said(measured("""
                 module w1
                 behavior m : (s: String, d: String) -> Bool
                 let m (s, d) = d == String.lowercase(s)
                 """))));
-        assertEquals(Set.of(overARegion("4:4", "d"), relates("4:4", "s")),
+        assertEquals(Set.of(relates("4:4", "s")),
                 Set.copyOf(said(measured("""
                 module w1
                 behavior m : (s: String, d: String) -> Bool
@@ -119,7 +118,7 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
      *  is. */
     @Test
     void aDenialLeavesTheSameTwo() {
-        assertEquals(Set.of(overARegion("3:18", "d"), relates("3:18", "s")),
+        assertEquals(Set.of(relates("3:18", "s")),
                 Set.copyOf(said(measured("""
                         module w1
                         behavior m : (s: String, d: String) -> Bool
