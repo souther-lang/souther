@@ -571,8 +571,9 @@ public final class AffineForms {
     /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */
     private static final class Walk<A, E> extends BindingWalk<Outcome<A, E>> {
 
-        /** What each name the folds met came to, kept by the caller beside what each name the walk
-         *  read came to — or null where nobody keeps it, and each fold is its own. */
+        /** What each name the folds met came to, kept for as long as the walk reads, beside what
+         *  each name the walk read came to: a fold at each part of the expression is one fold of
+         *  the names under it, not one for each part. */
         private final FoldedValue.Kept folds;
 
         /** Who is told where the reading ended in a value, or null where nobody asked. */
@@ -583,12 +584,12 @@ public final class AffineForms {
         private final Map<BindingId, Integer> namesRead = new HashMap<>();
 
         Walk() {
-            this.folds = null;
+            this.folds = new FoldedValue.Kept();
             this.told = null;
         }
 
         Walk(Consumed<E> told) {
-            this.folds = null;
+            this.folds = new FoldedValue.Kept();
             this.told = told;
         }
 
@@ -1696,12 +1697,11 @@ public final class AffineForms {
 
     /** The number {@code e} folds to read in {@code at} with the reading's own names
      *  ({@link FoldedValue}), or null where it folds to none — with what each name came to kept
-     *  where the walk's caller keeps it. */
+     *  by the walk. */
     private static <A, E> BigDecimal foldedNumber(Core e, E at, Reading<A, E> reading,
                                                   Walk<A, E> following) {
-        BigDecimal folded = FoldedValue.number(following.folds == null
-                ? FoldedValue.of(e, at, reading, reading.symbols())
-                : FoldedValue.of(e, at, reading, reading.symbols(), following.folds));
+        BigDecimal folded = FoldedValue.number(
+                FoldedValue.of(e, at, reading, reading.symbols(), following.folds));
         if (folded != null) {
             reading.folded(e, at);
         }

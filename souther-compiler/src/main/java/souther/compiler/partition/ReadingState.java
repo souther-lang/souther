@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  * The state of an object that a reading depends on and the state it must leave alone, taken from
@@ -175,9 +176,17 @@ final class ReadingState {
 
     /** Whether the state a reading must leave alone is as {@code then} found it. */
     boolean sameGuards(List<Object[]> then, List<Object[]> now) {
+        return sameGuardsBut(then, now, _ -> false);
+    }
+
+    /** The same, but for the guards that are one of {@code aside}, which the caller answers for. */
+    boolean sameGuardsBut(List<Object[]> then, List<Object[]> now, Predicate<Object> aside) {
         for (int at = 0; at < then.size(); at++) {
             Object[] before = then.get(at);
             Object[] after = now.get(at);
+            if (aside.test(before[0]) && aside.test(after[0])) {
+                continue;
+            }
             if (before[0] != after[0] || !Objects.equals(before[1], after[1])) {
                 return false;
             }
@@ -258,9 +267,16 @@ final class ReadingState {
      * ({@link Marked}) says it by this, so that a field added to it is part of what it says.
      */
     static Object snapshotOfFields(Object owner) {
+        return snapshotOfFieldsBut(owner, Set.of());
+    }
+
+    /** What {@code owner} is and holds in every field but those named {@code aside}. */
+    static Object snapshotOfFieldsBut(Object owner, Set<String> aside) {
         List<Object> held = new ArrayList<>();
         for (Field each : fieldsOf(owner.getClass())) {
-            held.add(snapshotOf(read(each, owner)));
+            if (!aside.contains(each.getName())) {
+                held.add(snapshotOf(read(each, owner)));
+            }
         }
         return held;
     }
