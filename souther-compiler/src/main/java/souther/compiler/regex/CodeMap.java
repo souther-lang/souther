@@ -53,8 +53,10 @@ public final class CodeMap {
     private final int[] imageReach;
     private final CodePoints domain;
     private final CodePoints leftAlone;
+    private final CodePoints answeredOutsideTheDomain;
 
-    private CodeMap(List<Run> runs, CodePoints leftAlone) {
+    private CodeMap(List<Run> runs, CodePoints leftAlone, CodePoints answeredOutsideTheDomain) {
+        this.answeredOutsideTheDomain = answeredOutsideTheDomain;
         this.runs = List.copyOf(runs);
         this.byImage = runs.stream().sorted(Comparator.comparingInt(Run::imageFrom)).toList();
         this.imageReach = new int[byImage.size()];
@@ -88,6 +90,8 @@ public final class CodeMap {
         int[] candidates = new int[CodePoints.LAST + 1];
         int[] targets = new int[CodePoints.LAST + 1];
         int found = 0;
+        // What the code points outside the domain are answered with, alone and beside a letter.
+        BitSet outside = new BitSet();
         for (int codePoint = 0; codePoint <= CodePoints.LAST; codePoint++) {
             if (CodePoints.isSurrogate(codePoint)) {
                 if (aloneFrom >= 0) {
@@ -112,6 +116,8 @@ public final class CodeMap {
                 candidates[found] = codePoint;
                 targets[found] = target;
                 found++;
+            } else if (answer != null) {
+                answer.codePoints().forEach(outside::set);
             }
         }
         if (aloneFrom >= 0) {
@@ -119,6 +125,10 @@ public final class CodeMap {
         }
         BitSet dependsOnWhatStandsBeside = dependingOnWhatStandsBeside(conversion, candidates,
                 targets, found);
+        for (int at = dependsOnWhatStandsBeside.nextSetBit(0); at >= 0;
+                at = dependsOnWhatStandsBeside.nextSetBit(at + 1)) {
+            answeredBesideALetter(conversion, candidates[at], targets[at], outside);
+        }
         // A run is made once it ends, and not again for each code point it is stretched over.
         List<Run> runs = new ArrayList<>();
         int runFrom = -1;
@@ -144,7 +154,45 @@ public final class CodeMap {
         if (runFrom >= 0) {
             runs.add(new Run(runFrom, runTo, runShift));
         }
-        return new CodeMap(runs, new CodePoints(alone));
+        return new CodeMap(runs, new CodePoints(alone), codePointsOf(outside));
+    }
+
+    /**
+     * What {@code conversion} answers of {@code own}, a code point it sends to {@code alone} by
+     * itself and to something else beside a letter, put into {@code into}: alone, and beside a
+     * letter before, after and on both sides. Where the letter's own answer is not where it is
+     * looked for at either end, the whole answer is put in, letters and all, which says more
+     * code points may be answered than are.
+     */
+    private static void answeredBesideALetter(UnaryOperator<String> conversion, int own,
+                                              int alone, BitSet into) {
+        into.set(alone);
+        String letter = conversion.apply("a");
+        String one = Character.toString(own);
+        for (String[] around : new String[][] {{"a", ""}, {"", "a"}, {"a", "a"}}) {
+            String answer = conversion.apply(around[0] + one + around[1]);
+            if (answer == null || letter == null) {
+                continue;
+            }
+            String before = around[0].isEmpty() ? "" : letter;
+            String after = around[1].isEmpty() ? "" : letter;
+            String between = answer.startsWith(before) && answer.endsWith(after)
+                    && answer.length() >= before.length() + after.length()
+                    ? answer.substring(before.length(), answer.length() - after.length())
+                    : answer;
+            between.codePoints().forEach(into::set);
+        }
+    }
+
+    /** The code points {@code set} holds, as ranges. */
+    private static CodePoints codePointsOf(BitSet set) {
+        List<CodePoints.Range> ranges = new ArrayList<>();
+        for (int from = set.nextSetBit(0); from >= 0; ) {
+            int past = set.nextClearBit(from);
+            ranges.add(new CodePoints.Range(from, past - 1));
+            from = set.nextSetBit(past);
+        }
+        return new CodePoints(ranges);
     }
 
     /**
@@ -152,7 +200,19 @@ public final class CodeMap {
      * of two, the code points of what the outer one answers, which are its own.
      */
     public CodeMap leavingBe(CodePoints alone) {
-        return new CodeMap(runs, alone);
+        return new CodeMap(runs, alone, answeredOutsideTheDomain);
+    }
+
+    /**
+     * The code points the conversion answers some code point outside the {@link #domain} with,
+     * alone or beside a letter: those a converted string may hold although no code point of the
+     * domain is sent to them. A code point of the domain that is none of these, that no other
+     * code point of the domain is sent to, and that no composition makes — it decomposes to
+     * nothing else — is in a converted string no more times than what it is sent from is in the
+     * string converted.
+     */
+    public CodePoints answeredOutsideTheDomain() {
+        return answeredOutsideTheDomain;
     }
 
     /**

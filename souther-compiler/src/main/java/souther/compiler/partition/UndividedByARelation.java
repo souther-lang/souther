@@ -106,6 +106,7 @@ import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
+import net.unit8.notation199x.Normalization;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -4446,13 +4447,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether separators counted in a string that {@code counted} was done to are the ones the
-     * pieces of a string that {@code parted} was done to are parted at: the same conversion, or
-     * none where the conversion sends no other code point to the separator and leaves it.
+     * Whether separators counted in a string that {@code counted} was done to are at least as many
+     * as the pieces of a string that {@code parted} was done to are parted at: the same
+     * conversion, or none where the conversion makes no separator the string did not hold. It
+     * makes none where it leaves the separator, sends no other code point of its map to it,
+     * answers no code point outside its map with it alone or beside a letter
+     * ({@link CodeMap#answeredOutsideTheDomain}) — {@code ŉ} is answered {@code ʼN} in uppercase —
+     * and the separator is no composite a normalization could make of two code points answered
+     * apart.
      */
-    private static boolean countsTheSeparatorsTheWayThePiecesAreParted(CaseMapping counted,
-                                                                      CaseMapping parted,
-                                                                      int separator) {
+    static boolean countsTheSeparatorsTheWayThePiecesAreParted(CaseMapping counted,
+                                                              CaseMapping parted,
+                                                              int separator) {
         if (counted.equals(parted)) {
             return true;
         }
@@ -4461,8 +4467,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         CodeMap map = CaseMaps.of(parted);
         CodePoints only = CodePoints.of(separator);
+        String alone = Character.toString(separator);
         return map.domain().has(separator) && map.preimage(only).equals(only)
-                && map.image(only).equals(only);
+                && map.image(only).equals(only)
+                && !map.answeredOutsideTheDomain().has(separator)
+                && Normalization.normalize(Normalization.Form.NFD, alone).equals(alone);
     }
 
     /**
