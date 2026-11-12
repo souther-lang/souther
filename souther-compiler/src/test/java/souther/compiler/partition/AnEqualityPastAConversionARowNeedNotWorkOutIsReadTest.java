@@ -171,6 +171,31 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
         assertTrue(!open.contains("email") && !open.contains("pair.emails[*]"), open.toString());
     }
 
+    /**
+     * A way asking the list the equality is read in for two entries is met on a row holding it
+     * with as few as the way leaves it, two, and the other list empty: the row holds each
+     * container at a count some row takes, and is read as where nothing is asked of the count.
+     */
+    @Test
+    void theWayIsMetWithTheListReadInHoldingAsFewAsItAsksFor() {
+        List<String> open = leftOpenIn("""
+                module several
+
+                behavior f : (email: String, domains: List<String>, emails: List<String>) -> Bool
+                let f (email, domains, emails) =
+                    List.length(emails) >= 2
+                        && (List.any(own -> own == String.lowercase(email), domains)
+                            || List.any(own -> own == email, emails))
+
+                example f
+                    | "domain" : ("a.com", [ "a.com" ], [ "p", "q" ]) -> true
+                    | "email"  : ("x@b.com", [], [ "x@b.com", "q" ]) -> true
+                    | "none"   : ("x@b.com", [ "a.com" ], [ "y@b.com", "q" ]) -> false
+                    | "short"  : ("x@b.com", [], [ "x@b.com" ]) -> false
+                """);
+        assertTrue(!open.contains("email") && !open.contains("emails[*]"), open.toString());
+    }
+
     /** As long as each other: an entry for the equality is an entry to work the conversion over. */
     @Test
     void theStringsStayOpenWhereARuleHoldsTheListsToOneLength() {

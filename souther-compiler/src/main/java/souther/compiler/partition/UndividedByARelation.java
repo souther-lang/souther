@@ -4763,8 +4763,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * The containers a row holds no entry in, beside any value at {@code place}, such that the
      * way is still met: the ones {@link RowLeavingSomeEmpty} lets that row empty, where the way
-     * declined nothing that may name them and the count the region holds them at reaches nought
-     * ({@link #howManyAreHeld}). The way is met only where every statement of it is shown true
+     * declined nothing that may name them. The way is met only where every statement of it is shown true
      * on the row ({@link #truthOnTheRow(OnAWay, Function, List)}): one shown false, or not worked
      * out, is no statement known to hold with a container emptied, and nothing is emptied.
      *
@@ -4789,9 +4788,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         RowLeavingSomeEmpty row = made.get();
         for (TermPath container : past.containersAnOperatorIsWorkedOutInside()) {
-            if (!declined.get().contains(container.head())
-                    && fewestHeld(howManyAreHeld(container, read, region))
-                            .equals(Optional.of(BigInteger.ZERO))) {
+            if (!declined.get().contains(container.head())) {
                 row.empty(container);
             }
         }
@@ -4807,18 +4804,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * A row the relation is reached on beside any value at {@code place}: what it fixes, and the
      * one way to fix more of it.
      *
-     * <p>A witness and not every such row. It holds one element in each container {@code place}
-     * is at and in each the relation stands inside, since a run gets to the relation only where
-     * those hold an entry, and none in each container it empties. A way that asks more of those
-     * containers, two elements in one say, is not met on it although another row may meet it:
-     * that is something this does not show, and never something it shows false.
+     * <p>A witness and not every such row. Each container {@code place} is at, and each the
+     * relation stands inside, holds an entry, since a run gets to the relation only where those
+     * do: as few as some row in the region holds it with, one or more ({@link #fewestTakenFrom}).
+     * Each container it empties holds none, which some row holds it with as well. A way that asks
+     * more of those containers is not met on it although another row may meet it: that is
+     * something this does not show, and never something it shows false.
      *
-     * <p>It is a row only where nothing the declarations say ties two of what it fixes: the value
-     * at the place, each container held to one, each container emptied. Two of them one of which
-     * lies within the other are fixed together. So a container is emptied only where it is apart
-     * from every one of them ({@link #apart}) — a rule holding it to a container the relation
-     * stands inside keeps it as it is — and no row is made where a rule ties the place to such a
-     * container.
+     * <p>Each of those counts is one some row takes, asked of the run {@link #howManyAreHeld}
+     * answers, every value of which some row takes; where a container takes none of what the row
+     * asks of it there is no such row, and none is made. It is one row only where nothing the
+     * declarations say ties two of what it fixes: the value at the place, each container held to
+     * its entries, each container emptied. Two of them one of which lies within the other are
+     * fixed together. So a container is emptied only where it is apart from every one of them
+     * ({@link #apart}) — a rule holding it to a container the relation stands inside keeps it as
+     * it is — and no row is made where a rule ties the place to such a container.
      */
     private static final class RowLeavingSomeEmpty {
 
@@ -4826,24 +4826,30 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** The containers the relation stands inside, held as the set they are: what is asked of
          *  them is whether every one, or some one, is so, which no order of them changes. */
         private final Set<TermPath> standsInside;
+        /** How many each container {@code place} is at and each of {@link #standsInside} holds on
+         *  the row. */
+        private final Map<TermPath, BigInteger> holding;
         private final List<TermPath> emptied = new ArrayList<>();
         private final InputReading read;
         private final SearchRegion region;
 
-        private RowLeavingSomeEmpty(TermPath place, Set<TermPath> standsInside, InputReading read,
+        private RowLeavingSomeEmpty(TermPath place, Set<TermPath> standsInside,
+                                    Map<TermPath, BigInteger> holding, InputReading read,
                                     SearchRegion region) {
             this.place = place;
             this.standsInside = standsInside;
+            this.holding = holding;
             this.read = read;
             this.region = region;
         }
 
         /**
-         * The row beside any value at {@code place}, holding one element in each container it is
-         * at and in each of {@code standsInside}, and nothing emptied yet; nothing where a rule
-         * ties two of those. The place and the containers it is at lie within one another, so
-         * what is asked is each container of {@code standsInside} against the place, against the
-         * containers the place is at, and against the others.
+         * The row beside any value at {@code place}, holding the fewest entries some row holds
+         * them with in each container it is at and in each of {@code standsInside}, and nothing
+         * emptied yet; nothing where one of those takes no entry, or a rule ties two of them. The
+         * place and the containers it is at lie within one another, so what is asked is each
+         * container of {@code standsInside} against the place, against the containers the place
+         * is at, and against the others.
          */
         static Optional<RowLeavingSomeEmpty> beside(TermPath place, Set<TermPath> standsInside,
                                                     InputReading read, SearchRegion region) {
@@ -4852,8 +4858,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             || place.containersHoldingIt().stream()
                                     .anyMatch(holder -> tiedApart(one, holder, read))
                             || standsInside.stream().anyMatch(other -> tiedApart(one, other, read)));
-            return tied ? Optional.empty()
-                    : Optional.of(new RowLeavingSomeEmpty(place, standsInside, read, region));
+            if (tied) {
+                return Optional.empty();
+            }
+            Map<TermPath, BigInteger> holding = new HashMap<>();
+            for (TermPath container : place.containersHoldingIt()) {
+                if (!holdsSomeEntry(container, read, region, holding)) {
+                    return Optional.empty();
+                }
+            }
+            if (!standsInside.stream().allMatch(container ->
+                    holdsSomeEntry(container, read, region, holding))) {
+                return Optional.empty();
+            }
+            return Optional.of(new RowLeavingSomeEmpty(place, standsInside, Map.copyOf(holding),
+                    read, region));
+        }
+
+        /** Puts into {@code holding} the fewest entries, one or more, some row holds
+         *  {@code container} with; false where none does. */
+        private static boolean holdsSomeEntry(TermPath container, InputReading read,
+                                              SearchRegion region,
+                                              Map<TermPath, BigInteger> holding) {
+            Optional<BigInteger> fewest = fewestTakenFrom(howManyAreHeld(container, read, region),
+                    BigInteger.ONE);
+            fewest.ifPresent(count -> holding.put(container, count));
+            return fewest.isPresent();
         }
 
         /** Whether a rule ties {@code one} to {@code other} where neither lies within the other:
@@ -4862,10 +4892,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return !one.bearsOn(other) && tiedByARule(one, other, read);
         }
 
-        /** Empties {@code container} where it is apart from everything the row fixes ({@link
-         *  #apart}), and leaves the row as it is otherwise. */
+        /** Empties {@code container} where some row holds it with none and it is apart from
+         *  everything the row fixes ({@link #apart}), and leaves the row as it is otherwise. */
         void empty(TermPath container) {
-            if (apart(container, place, read)
+            if (fewestTakenFrom(howManyAreHeld(container, read, region), BigInteger.ZERO)
+                    .equals(Optional.of(BigInteger.ZERO))
+                    && apart(container, place, read)
                     && place.containersHoldingIt().stream()
                             .allMatch(holder -> apart(container, holder, read))
                     && standsInside.stream().allMatch(each -> apart(container, each, read))
@@ -4889,9 +4921,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (emptied.contains(taken.position())) {
                 return ExactRatio.ZERO;
             }
-            return (place.containersHoldingIt().contains(taken.position())
-                    || standsInside.contains(taken.position()))
-                    && oneIsHeld(taken.position(), read, region) ? ExactRatio.ONE : null;
+            BigInteger count = holding.get(taken.position());
+            return count == null ? null : ExactRatio.of(count);
         }
     }
 
@@ -4993,12 +5024,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         };
     }
 
-    /** Whether the region leaves the container at {@code container} holding exactly one. */
+    /** Whether some row in the region holds the container at {@code container} with exactly one. */
     private static boolean oneIsHeld(TermPath container, InputReading read, SearchRegion region) {
-        NumericDomain.Bounds held = howManyAreHeld(container, read, region);
-        return fewestHeld(held).filter(least -> least.compareTo(BigInteger.ONE) <= 0).isPresent()
-                && (held.max() == null || (held.max().at() instanceof Count most
-                        && most.exactly().compareTo(ExactRatio.ONE) >= 0));
+        return fewestTakenFrom(howManyAreHeld(container, read, region), BigInteger.ONE)
+                .equals(Optional.of(BigInteger.ONE));
+    }
+
+    /**
+     * The fewest elements, {@code from} or more, some row holds a container with, where
+     * {@code held} is the run {@link #howManyAreHeld} answers of it — every value of which some
+     * row takes; nothing where it takes none of them, or is not worked out.
+     *
+     * <p>The count is held to both ends by {@link NumericDomain.Bounds#admits}, which reads
+     * whether each end is one of the counts it stops at; the fewest is only where to look.
+     */
+    static Optional<BigInteger> fewestTakenFrom(NumericDomain.Bounds held, BigInteger from) {
+        if (held == null) {
+            return Optional.empty();
+        }
+        return fewestHeld(held.meet(new NumericDomain.Bounds(
+                        Endpoint.inclusive(Count.of(new BigDecimal(from))), null)))
+                .filter(count -> held.admits(Count.of(new BigDecimal(count))));
     }
 
     /** The place holding the value looked for, where {@code at} is the place a search for an
@@ -5737,30 +5783,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             inside = inside.max(heldAgainstEachOther(collection));
             NumericDomain.Bounds held = howManyAreHeld(collection, read, region);
-            if (held == null || !held.holdsAValue()) {
+            Optional<BigInteger> taken = fewestTakenFrom(held, asked.max(inside));
+            if (taken.isEmpty()) {
                 return Optional.empty();
             }
-            BigInteger fewest = BigInteger.ZERO;
-            if (held.min() != null) {
-                if (!(held.min().at() instanceof Count least)
-                        || !(least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
-                                BigInteger up))) {
-                    return Optional.empty();
-                }
-                fewest = held.min().inclusive() || !least.exactly().isWhole() ? up
-                        : up.add(BigInteger.ONE);
-            }
-            BigInteger witness = fewest.max(asked).max(inside);
+            BigInteger witness = taken.get();
             // A statement holding the collection to at most some number is one the witness
             // meets only holding no more.
             if (atMost != null && witness.compareTo(atMost) > 0) {
                 return Optional.empty();
-            }
-            if (held.max() != null) {
-                if (!(held.max().at() instanceof Count most)
-                        || most.exactly().compareTo(ExactRatio.of(witness)) < 0) {
-                    return Optional.empty();
-                }
             }
             if ((aTotal || ofOne) && !witness.equals(BigInteger.ONE)) {
                 return Optional.empty();
