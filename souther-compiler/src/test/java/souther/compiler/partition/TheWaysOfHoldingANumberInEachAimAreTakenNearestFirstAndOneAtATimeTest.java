@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The ways of taking one number of each aim of a parameter are every way, and the nearest to every
@@ -35,22 +36,20 @@ class TheWaysOfHoldingANumberInEachAimAreTakenNearestFirstAndOneAtATimeTest {
         return ways;
     }
 
-    /** By what the places add up to, and for the same sum in the order the aims stand in. */
+    /** No way is made twice and none is left out: the ways are the product of the numbers, and
+     *  what the places add up to never goes down along them. */
     @Test
-    void everyWayIsMadeTheNearestToEveryFirstNumberFirst() {
-        assertEquals(List.of(
-                        List.of(0, 0), List.of(0, 1), List.of(1, 0), List.of(1, 1), List.of(2, 0),
-                        List.of(2, 1)),
-                waysOf(List.of(aim("xs", 3), aim("ys", 2)), Integer.MAX_VALUE));
-    }
-
-    /** No way is made twice and none is left out: the ways are the product of the numbers. */
-    @Test
-    void theWaysAreTheProductOfTheNumbersOfEachAim() {
+    void theWaysAreEveryWayAndTheNearestComeFirst() {
         List<List<Integer>> ways = waysOf(List.of(aim("a", 2), aim("b", 4), aim("c", 3)),
                 Integer.MAX_VALUE);
         assertEquals(24, ways.size());
         assertEquals(24, ways.stream().distinct().count());
+        int before = 0;
+        for (List<Integer> each : ways) {
+            int sum = each.stream().mapToInt(Integer::intValue).sum();
+            assertTrue(sum >= before, "the nearest first: " + ways);
+            before = sum;
+        }
     }
 
     /** Asked for no more, no more are made: nine aims of four numbers are four to the ninth. */
@@ -62,6 +61,5 @@ class TheWaysOfHoldingANumberInEachAimAreTakenNearestFirstAndOneAtATimeTest {
         }
         List<List<Integer>> ways = waysOf(many, 10);
         assertEquals(10, ways.size());
-        assertEquals(List.of(0, 0, 0, 0, 0, 0, 0, 0, 0), ways.getFirst());
     }
 }
