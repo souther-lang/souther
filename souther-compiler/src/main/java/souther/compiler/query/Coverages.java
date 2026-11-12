@@ -66,6 +66,7 @@ import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.ThresholdOfADerivedValue;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.LevelRealizer;
@@ -152,8 +153,10 @@ final class Coverages {
         CountWitnesses.Sought ofACount(Quantity.CountedOverAContainer count,
                                        Set<ConditionOutcomeSite> reaching);
 
-        /** A row a run of which is recorded at one of {@code reaching}. */
-        ReachWitnesses.Sought reaching(Set<ConditionOutcomeSite> reaching);
+        /** A row a run of which is recorded at one of {@code reaching}, looked for among the rows
+         *  that meet {@code conditions}, which a run to the comparison gets past. */
+        ReachWitnesses.Sought reaching(Set<ConditionOutcomeSite> reaching,
+                                       List<TakenConstraint> conditions);
 
         /** Whether two values of a type are the same value, as the language says. */
         BehaviorInputs.SameValue sameValue();
@@ -191,8 +194,8 @@ final class Coverages {
                         }
 
                         @Override
-                        public ReachWitnesses.Sought reached() {
-                            return found.reaching(reaching);
+                        public ReachWitnesses.Sought reached(List<TakenConstraint> conditions) {
+                            return found.reaching(reaching, conditions);
                         }
 
                         @Override

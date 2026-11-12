@@ -1,0 +1,81 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * A stop an operation ends a run with, told through a name it is bound to or inside a part of the
+ * body some runs skip, leaves unread the places it reads and no others: a comparison of places
+ * the stop does not read is read as it is beside a stop written at once and in every run.
+ */
+class AStopThroughALetOrInsideAnArmLeavesOnlyItsOwnPlacesUnreadTest {
+
+    private static final String DECLARED = """
+            module probe.arm
+
+            data Ok
+            data No
+            data Skipped
+
+            data Row = { x: Int, k: Int, m: Int, j: Int }
+            """;
+
+    private record Model(String name, String before) {}
+
+    private static final String UNRELATED = "p.m + 1 >= p.j";
+
+    private static final List<Model> MODELS = List.of(
+            new Model("a quotient written out", "let y = Rational.toInt(DOWN, 1 / p.x)"),
+            new Model("a quotient bound to a name",
+                    "let q = 1 / p.x\n    let y = Rational.toInt(DOWN, q)"),
+            new Model("a quotient bound to a name, kept as it is",
+                    "let q = 1 / p.x\n    let y = q"),
+            new Model("a quotient in an arm",
+                    "let y = if p.k > 0 then Rational.toInt(DOWN, 1 / p.x) else 0"),
+            new Model("a quotient in the other arm",
+                    "let y = if p.k > 0 then 0 else Rational.toInt(DOWN, 1 / p.x)"),
+            new Model("a quotient after a conjunction",
+                    "let y = p.k > 0 && Rational.toInt(DOWN, 1 / p.x) > 0"),
+            new Model("a quotient after a disjunction",
+                    "let y = p.k > 0 || Rational.toInt(DOWN, 1 / p.x) > 0"),
+            new Model("a sum in an arm", "let y = if p.k > 0 then p.x + 1 else 0"));
+
+    private static String report(Model model, String comparison, Adequacy.Level level) {
+        String source = DECLARED + """
+
+                behavior m : (p: Row) -> Bool
+                let m (p) = {
+                    %s
+                    let c = %s
+                    c
+                }
+                """.formatted(model.before(), comparison);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(level));
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    @Test
+    void aComparisonOfPlacesNoStopReadsIsReadWhateverTheStopIsBoundOrGuardedBy() {
+        List<String> wrong = new ArrayList<>();
+        for (Adequacy.Level level : List.of(Adequacy.Level.ALL, Adequacy.Level.WITNESS)) {
+            for (Model each : MODELS) {
+                String report = report(each, UNRELATED, level);
+                if (report.contains("not read:")) {
+                    wrong.add(level + " " + each.name() + ":\n" + report);
+                }
+            }
+        }
+        assertEquals(List.of(), wrong);
+    }
+}

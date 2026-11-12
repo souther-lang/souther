@@ -187,6 +187,7 @@ import souther.compiler.partition.RewriteSearch;
 import souther.compiler.partition.InteractionCells;
 import souther.compiler.partition.RowRegion;
 import souther.compiler.partition.StatementsOfAnInput;
+import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.reading.CoverageRead;
@@ -1204,14 +1205,23 @@ public final class Adequacy {
      * exists. Asked as a count's witness is ({@link WitnessOfACount}), of a comparison a reading
      * did not show every value of what it relates to get to.
      *
-     * @param reaching the places a run going through the comparison is recorded at
+     * @param reaching   the places a run going through the comparison is recorded at
+     * @param conditions what a run to the comparison gets past: the rows are looked for among
+     *                   those that meet them as well ({@link ReachWitnesses#of})
      */
     public record WitnessOfAReach(String name, String behavior,
-                                  Set<ConditionOutcomeSite> reaching)
+                                  Set<ConditionOutcomeSite> reaching,
+                                  List<TakenConstraint> conditions)
             implements Key<ReachWitnesses.Sought> {
 
         public WitnessOfAReach {
             reaching = Set.copyOf(reaching);
+            conditions = List.copyOf(conditions);
+        }
+
+        /** A search that is told of no condition. */
+        public WitnessOfAReach(String name, String behavior, Set<ConditionOutcomeSite> reaching) {
+            this(name, behavior, reaching, List.of());
         }
 
         @Override
@@ -1224,7 +1234,7 @@ public final class Adequacy {
             ASearchForARow search = ASearchForARow.of(db, name, behavior, reaching);
             return Answer.of(search == null ? ReachWitnesses.Sought.NOTHING
                     : ReachWitnesses.of(search.read(), search.named(), search.taken(),
-                            search.building(), search.running(), search.unread()));
+                            search.building(), search.running(), search.unread(), conditions));
         }
     }
 
@@ -2983,8 +2993,10 @@ public final class Adequacy {
 
                         @Override
                         public ReachWitnesses.Sought reaching(
-                                Set<ConditionOutcomeSite> reaching) {
-                            return db.ask(new WitnessOfAReach(name, behavior, reaching)).value();
+                                Set<ConditionOutcomeSite> reaching,
+                                List<TakenConstraint> conditions) {
+                            return db.ask(new WitnessOfAReach(name, behavior, reaching,
+                                    conditions)).value();
                         }
 
                         @Override

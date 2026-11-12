@@ -308,6 +308,12 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "RowSearch", "addHoldingOne",
                     "(" + TYPE + CONTEXT + "Ljava/util/List;)V", THE_POSITION),
+            row(PARTITION + "RowSearch", "addHoldingOneInAField",
+                    "(" + TYPE + CONTEXT + "Ljava/util/Set;Ljava/util/List;)V", THE_POSITION),
+            row(PARTITION + "RowSearch", "holdingAt",
+                    "(" + TYPE + "Ljava/util/List;ILjava/math/BigInteger;" + CONTEXT + ")L"
+                            + PARTITION + "FixtureTemplate;",
+                    THE_POSITION),
             row(PARTITION + "TermRealizations", "aLineToTheValue",
                     "(Lsouther/compiler/inputs/NumericTerm$TakenOver;" + TYPE + "L" + PARTITION
                             + "AskedAt;Lsouther/compiler/inputs/Quantities;"

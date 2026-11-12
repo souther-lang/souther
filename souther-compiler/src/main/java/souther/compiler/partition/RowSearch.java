@@ -4,13 +4,18 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -97,6 +102,23 @@ public final class RowSearch {
                                    IntPredicate holdingOne, IntPredicate atItsFirst,
                                    RuleReadingContext reading, Building building,
                                    Set<Figure> stopped) {
+        return tried(types, named, taken, standing, holdingOne, atItsFirst, _ -> List.of(), reading,
+                building, stopped);
+    }
+
+    /**
+     * The same, with {@code aimed} the values a parameter is tried with besides, the collections
+     * in them holding what the conditions on the way to the comparison ask of them
+     * ({@link #aimedAt}): after what stands for the parameter and before what holds one of what
+     * stands for what a field holds, so that a value made for what is asked is tried before the
+     * values that were made for nothing in particular.
+     */
+    static List<List<Built>> tried(List<Type> types, List<List<FixtureTemplate>> named,
+                                   List<List<ObservedValue>> taken, IntFunction<Type> standing,
+                                   IntPredicate holdingOne, IntPredicate atItsFirst,
+                                   IntFunction<List<FixtureTemplate>> aimed,
+                                   RuleReadingContext reading, Building building,
+                                   Set<Figure> stopped) {
         List<List<Built>> each = new ArrayList<>();
         for (int i = 0; i < types.size(); i++) {
             if (atItsFirst.test(i)) {
@@ -113,9 +135,13 @@ public final class RowSearch {
             List<FixtureTemplate> tried = new ArrayList<>(named.get(i));
             takenAt(i, types.get(i), taken, reading, tried, stopped);
             tried.addAll(Partitions.representativesOf(standing.apply(i), reading).values());
+            for (FixtureTemplate one : aimed.apply(i)) {
+                addOnce(one, tried);
+            }
             if (holdingOne.test(i)) {
                 addHoldingOne(types.get(i), reading, tried);
             }
+            addHoldingOneInAField(types.get(i), reading, tried);
             List<Built> made = new ArrayList<>();
             for (FixtureTemplate one : upTo(tried, stopped)) {
                 building.build(i, one).ifPresent(value -> made.add(new Built(one, value)));
@@ -163,6 +189,7 @@ public final class RowSearch {
             if (holdingOne.test(parameter)) {
                 addHoldingOne(types.get(parameter), reading, stage);
             }
+            addHoldingOneInAField(types.get(parameter), reading, stage);
             built = firstOf(parameter, stage, building, left, stopped);
         }
         if (built == null) {
@@ -234,6 +261,106 @@ public final class RowSearch {
                     into);
             default -> { }
         }
+    }
+
+    /**
+     * What a value of {@code type}, the type of the parameter {@code parameter}, is where the
+     * collections {@code aims} name in it hold the numbers they are asked to: one value for each
+     * number of each aim that is in the parameter, the rest of the value composed under the rules
+     * relating the fields. None for an aim whose collection is not reached through fields alone
+     * or whose elements cannot be written at the number.
+     */
+    static List<FixtureTemplate> aimedAt(String parameter, Type type, List<RowAims.Aim> aims,
+                                         RuleReadingContext reading) {
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (RowAims.Aim aim : aims) {
+            if (!aim.container().head().equals(parameter)) {
+                continue;
+            }
+            for (BigInteger number : aim.elements()) {
+                if (!hasRoom(out)) {
+                    return out;
+                }
+                FixtureTemplate value = holdingAt(type, aim.container().steps(), 0, number,
+                        reading);
+                if (value != null) {
+                    addOnce(value, out);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** A value of {@code type} whose collection down {@code fields} from {@code at} holds
+     *  {@code number} alone, or null. */
+    private static FixtureTemplate holdingAt(Type type, List<TermPath.Step> fields, int at,
+                                             BigInteger number, RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (at == fields.size()) {
+            if (!(view.shape() instanceof Shape.Sequence sequence)
+                    || !(WornNames.of(view.wrappers(), source) instanceof WornNames.Spelled spelled)) {
+                return null;
+            }
+            FixtureTemplate element = Partitions.writtenNumberAt(sequence.element(),
+                    new BigDecimal(number), reading);
+            return element == null ? null : spelled.holding(List.of(element));
+        }
+        if (!(fields.get(at) instanceof TermPath.Step.Field(String name))
+                || !(view.shape() instanceof Shape.Product(TypeSymbol.AtModule record, var of))
+                || !(of.get(name) instanceof Type fieldType)) {
+            return null;
+        }
+        FixtureTemplate inner = holdingAt(fieldType, fields, at + 1, number, reading);
+        if (inner == null) {
+            return null;
+        }
+        Proposals made = Partitions.composed(record,
+                Partitions.rulesOver(view.wrappers(), record, source), reading, Set.of(),
+                Map.of(name, inner), Partitions.RulesAround.NONE);
+        return made.isEmpty() ? null
+                : WornNames.under(view.wrappers(), made.values().getFirst(), source);
+    }
+
+    /**
+     * Adds to {@code into} what is a record of {@code type} with one of its fields holding one of
+     * what stands for what it holds ({@link #addHoldingOne}), the rest composed under the rules
+     * relating them, each once. A field that is itself a record is entered, so a collection at
+     * any depth of fields is reached; a record met while it is being entered is not entered again.
+     */
+    static void addHoldingOneInAField(Type type, RuleReadingContext reading,
+                                      List<FixtureTemplate> into) {
+        addHoldingOneInAField(type, reading, new HashSet<>(), into);
+    }
+
+    private static void addHoldingOneInAField(Type type, RuleReadingContext reading,
+                                              Set<TypeSymbol> inside, List<FixtureTemplate> into) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Product(TypeSymbol.AtModule record, var fields))
+                || !inside.add(record)) {
+            return;
+        }
+        TypeSymbol.AtModule rulesOn = Partitions.rulesOver(view.wrappers(), record, source);
+        for (Map.Entry<String, Type> field : fields.entrySet()) {
+            List<FixtureTemplate> there = new ArrayList<>();
+            addHoldingOne(field.getValue(), reading, there);
+            addHoldingOneInAField(field.getValue(), reading, inside, there);
+            for (FixtureTemplate one : there) {
+                if (!hasRoom(into)) {
+                    break;
+                }
+                Proposals made = Partitions.composed(record, rulesOn, reading, Set.of(),
+                        Map.of(field.getKey(), one), Partitions.RulesAround.NONE);
+                if (!made.isEmpty()) {
+                    addOnce(WornNames.under(view.wrappers(), made.values().getFirst(), source),
+                            into);
+                }
+            }
+        }
+        inside.remove(record);
     }
 
     /** Adds to {@code into} what {@code holding} makes of each of {@code elements} alone — a

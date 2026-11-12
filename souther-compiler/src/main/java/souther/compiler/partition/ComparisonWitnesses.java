@@ -24,14 +24,18 @@ public final class ComparisonWitnesses {
          *  to. */
         CountWitnesses.Sought of(Quantity.CountedOverAContainer count);
 
-        /** What the search for a row that gets to the comparison came to. */
-        default ReachWitnesses.Sought reached() {
+        /**
+         * What the search for a row that gets to the comparison came to, the row looked for
+         * among those that meet {@code conditions}, which a run to the comparison gets past
+         * ({@link RowAims}).
+         */
+        default ReachWitnesses.Sought reached(List<TakenConstraint> conditions) {
             return ReachWitnesses.Sought.NOTHING;
         }
 
         /**
          * Whether two values of a type are the same value, as the language says: what a row found
-         * by {@link #reached} is compared with, which a row does not carry because it holds no
+         * by {@link #reached(List)} is compared with, which a row does not carry because it holds no
          * function. Never the same where nothing was found to compare.
          */
         default BehaviorInputs.SameValue sameValue() {
@@ -55,8 +59,8 @@ public final class ComparisonWitnesses {
                 }
 
                 @Override
-                public ReachWitnesses.Sought reached() {
-                    return found.reached().madeOnEveryElementOf(elements);
+                public ReachWitnesses.Sought reached(List<TakenConstraint> conditions) {
+                    return found.reached(conditions).madeOnEveryElementOf(elements);
                 }
 
                 @Override

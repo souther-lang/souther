@@ -4507,12 +4507,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!mayStopOnWhatItReads(past, read, region, conditions, declined, accountedFor)) {
             return shown;
         }
-        ReachWitnesses.Sought sought = witnesses.reached();
+        ReachWitnesses.Sought sought = witnesses.reached(past.narrowing());
+        // A row a run of which gets to the relation is a run past every operator on the way to
+        // it, which is what each operator owed was owed.
+        DemandReading.Answered open = sought.found().isPresent()
+                ? withoutOwedThatARowGotPast(past, read) : past;
+        if (open != past
+                && !mayStopOnWhatItReads(open, read, region, conditions, declined, accountedFor)) {
+            return shown;
+        }
         Map<FilingCoordinate, GettingThere> reached = new LinkedHashMap<>();
         Set<FilingCoordinate> notShown = new LinkedHashSet<>();
         for (FilingCoordinate at : places()) {
             TermPath place = theValueAt(at);
-            if (place != null && !mayStopOnValueAt(place, past, read, region, conditions,
+            if (place != null && !mayStopOnValueAt(place, open, read, region, conditions,
                     declined, accountedFor, sought.found().isPresent())) {
                 continue;
             }
@@ -4531,6 +4539,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return notShown.isEmpty() ? shown : shown.mayStopBefore(notShown, reached);
+    }
+
+    /**
+     * {@code past} without the operators owed that a row a run of which gets to the relation got
+     * past, for every value of the places the relation reads: those worked out on every run that
+     * gets to the relation, whose places no place the relation reads bears on or a rule ties to
+     * ({@link #apart}). Such an operator stops the run on the places it reads and on nothing the
+     * relation reads, so the values the row holds at the others are values of the row's run
+     * whichever values the relation's places take. {@code past} itself where there is none.
+     */
+    private DemandReading.Answered withoutOwedThatARowGotPast(DemandReading.Answered past,
+                                                              InputReading read) {
+        Set<TermPath> readOff = positionsRead();
+        if (readOff == null) {
+            return past;
+        }
+        DemandReading.Answered open = past.withoutOwedThat(owed ->
+                !owed.onWhatNoPlaceHolds() && owed.where().equals(Pullback.WorkedOutWhere.ALWAYS)
+                        && owed.places().stream().allMatch(place -> readOff.stream()
+                                .allMatch(reads -> apart(place, reads, read))));
+        return open.owed().size() == past.owed().size() ? past : open;
     }
 
     /**

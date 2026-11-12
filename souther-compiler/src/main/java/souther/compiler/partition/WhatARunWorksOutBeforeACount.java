@@ -91,8 +91,8 @@ final class WhatARunWorksOutBeforeACount {
             /** A row a run of which goes through the comparison asks nothing of what the run
              *  works out before it: the run is what is watched. */
             @Override
-            public ReachWitnesses.Sought reached() {
-                return witnesses.reached();
+            public ReachWitnesses.Sought reached(List<TakenConstraint> conditions) {
+                return witnesses.reached(conditions);
             }
 
             @Override

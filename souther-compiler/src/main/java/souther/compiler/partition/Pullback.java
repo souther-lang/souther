@@ -1601,6 +1601,12 @@ final class Pullback {
             }
             return;
         }
+        // Where the numbers it is handed lie within what its answer is held to, it answers on
+        // every run and there is nothing to tell: what is said of where it answers is a statement
+        // over the form of what it is handed, which a name given a value no form says has none of.
+        if (comesToWhereItAnswers(call, reads)) {
+            return;
+        }
         Rounding rounding = roundingOf(call, reads);
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld ends = rounding == null ? null
                 : RoundedToAWholeNumber.whereTheRoundedNumberIsHeld(call.type(),
@@ -2085,7 +2091,8 @@ final class Pullback {
                 : FormRange.ofWhatTheRulesLeave(leftByTheRules);
         if (AffineForms.outcome(e, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
-            FormRange composed = FormRange.ofNumbers(form, read, operated.stepsNames::of);
+            FormRange composed = FormRange.ofNumbers(form, read,
+                    name -> exactRangeOfAName(name, reads));
             if (composed != null) {
                 return ofTheNewtype == null ? composed : composed.meet(ofTheNewtype);
             }
@@ -2103,7 +2110,7 @@ final class Pullback {
                     ? FormRange.ofTheWholeNumbersIn(whatTheLibraryBounds(call, reads)) : null;
         }
         if (here instanceof Core.Read name) {
-            return operated.stepsNames.of(name.binding());
+            return exactRangeOfAName(name.binding(), reads);
         }
         if (here instanceof Core.LetIn li) {
             return exactRangeOf(li.body(), quantities().inside(li, reads));
@@ -2131,6 +2138,22 @@ final class Pullback {
                     exactRangeOf(binary.left(), reads), exactRangeOf(binary.right(), reads));
             default -> null;
         };
+    }
+
+    /**
+     * The numbers a name bound to a value comes to, which are those of the value it is given where
+     * the reading of the input says the two are one value ({@link ReadMeaning.Through}) — or null
+     * where it says anything else, or the value's numbers are not known. Asked of the value and
+     * not of what the arithmetic composes the name as: a value that composes as no form has no
+     * form to read, and the numbers it lies between are no less known for that.
+     */
+    private FormRange exactRangeOfAName(BindingId name, InputReads reads) {
+        FormRange ofAStep = operated.stepsNames.of(name);
+        if (ofAStep != null) {
+            return ofAStep;
+        }
+        Denotation bound = reads.boundValue(name);
+        return bound == null ? null : exactRangeOf(bound.value(), bound.at());
     }
 
     /**

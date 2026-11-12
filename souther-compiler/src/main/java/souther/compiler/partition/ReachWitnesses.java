@@ -398,20 +398,28 @@ public final class ReachWitnesses {
      * @param taken what each row written for the behavior took, one value per parameter
      * @param parametersTheBodyDoesNotRead the parameters a run does not turn on, each tried with
      *              its first value alone
+     * @param conditions what the run to the comparison is taken to get past: a row is also tried
+     *              with the collections it holds made to what these ask of them
+     *              ({@link RowAims}), and what is tried is run, so a condition read wrongly costs
+     *              a row and never a claim
      */
     public static Sought of(InputReading read, List<List<FixtureTemplate>> named,
                             List<List<ObservedValue>> taken, RowSearch.Building building,
-                            RowSearch.Running running, Set<String> parametersTheBodyDoesNotRead) {
+                            RowSearch.Running running, Set<String> parametersTheBodyDoesNotRead,
+                            List<TakenConstraint> conditions) {
         BehaviorInputs inputs = BehaviorInputs.of(read);
         RuleReadingContext reading = RuleReadingContext.of(read.rules(), read.domain().policy(),
                 read.domain().machines(), read.domain().today());
+        List<RowAims.Aim> aims = RowAims.of(conditions);
         Set<Figure> stopped = new LinkedHashSet<>();
         Set<WhereARunStopped> runs = new LinkedHashSet<>();
         List<List<RowSearch.Built>> each = RowSearch.tried(inputs.types(), named, taken,
                 i -> inputs.types().get(i),
                 i -> elementOfAList(inputs.parameters().get(i), read) != null,
-                i -> parametersTheBodyDoesNotRead.contains(inputs.parameters().get(i)), reading,
-                building, stopped);
+                i -> parametersTheBodyDoesNotRead.contains(inputs.parameters().get(i)),
+                i -> RowSearch.aimedAt(inputs.parameters().get(i), inputs.types().get(i), aims,
+                        reading),
+                reading, building, stopped);
         if (each == null) {
             return new Sought(Optional.empty(), stopped, runs);
         }
