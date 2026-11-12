@@ -3825,8 +3825,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * holds one exactly when it has one of the strings the other side comes to inside it
      * ({@link StringsInsideStrings}). What a side comes to is the conversion done to it, which is
      * exactly a map on the strings it is exactly one for ({@link CodeMap}); the strings it is not
-     * exact on come to strings of the code points the conversion leaves, and nothing narrower is
-     * said of them.
+     * exact on come to strings of the code points the conversion leaves, and of those only the
+     * strings a single conversion leaves as they stand are shown, each being its own answer
+     * ({@link CaseMaps#answeredAsTheyStand}).
      *
      * <p>Where this relation is no string inside another, it is read only as the equality or
      * denial of two strings of positions the caller has shown independent
@@ -3858,7 +3859,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Language exact = theirMap.strings(meter);
             Language within = exact == null ? null : partner.and(exact, meter);
             Language outside = exact == null ? null : partner.and(exact.not(meter), meter);
-            shownOther = within == null ? null : theirMap.answersTo(within, meter);
+            Language mapped = within == null ? null : theirMap.answersTo(within, meter);
+            // A string the conversion leaves as it stands is its own answer, so it is shown
+            // wherever the other side holds it, exact or not.
+            Language asTheyStand = CaseMaps.answeredAsTheyStand(theirs.through(), partner, meter);
+            shownOther = mapped == null || asTheyStand == null ? null
+                    : mapped.or(asTheyStand, meter);
             Language left = outside == null || outside.isEmpty() ? null
                     : CodeMap.stringsOf(theirMap.leftAlone(), meter);
             mayOther = shownOther == null || outside == null ? null
@@ -3878,8 +3884,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         CodeMap mineMap = mine.through().equals(CaseMapping.NONE) ? null
                 : CaseMaps.of(mine.through());
-        Language canBe = mineMap == null ? shownHere
-                : mineMap.stringsConvertedInto(shownHere, meter);
+        Language canBe = shownHere;
+        if (mineMap != null) {
+            Language converted = mineMap.stringsConvertedInto(shownHere, meter);
+            Language asTheyStand = CaseMaps.answeredAsTheyStand(mine.through(), shownHere, meter);
+            canBe = converted == null || asTheyStand == null ? null
+                    : converted.or(asTheyStand, meter);
+        }
         Language mayBe = mayHere;
         if (mineMap != null) {
             Language exact = mineMap.strings(meter);
