@@ -1617,7 +1617,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 read.rules().inners(), read.rules().symbols());
         ComparisonWitnesses.AtAComparison everyCount = _ -> new CountWitnesses.Sought(Optional.of(
                 new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
-                        FixtureTemplate.integer(1), FixtureTemplate.integer(1), true)),
+                        FixtureTemplate.integer(1), FixtureTemplate.integer(1),
+                        CountWitnesses.Expansion.REPEATED_ELEMENT)),
                 Set.of(), Set.of());
         DecisionSubject.AnInput currency =
                 new DecisionSubject.AnInput(deals.element().then("currency"));
@@ -1734,7 +1735,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aCountIsLetThroughOnlyForTheCallTheReadingSaysItWasReadOff() {
         CountWitnesses.Sought found = new CountWitnesses.Sought(Optional.of(
                 new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
-                        FixtureTemplate.integer(1), FixtureTemplate.integer(1), true)),
+                        FixtureTemplate.integer(1), FixtureTemplate.integer(1),
+                        CountWitnesses.Expansion.REPEATED_ELEMENT)),
                 Set.of(), Set.of());
         ComparisonWitnesses.AtComparisons always = _ -> _ -> found;
         String filtered = countedInline("x.value > 2");

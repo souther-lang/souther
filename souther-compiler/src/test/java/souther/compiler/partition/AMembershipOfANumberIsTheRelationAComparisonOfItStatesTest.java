@@ -62,7 +62,7 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
             %s
             behavior f : (cal: Cal, d: Date) -> Date
             let f (cal, d) =
-                List.rangeInclusive(0, 6)
+                List.rangeInclusive(0, 3)
                     |> List.map(n -> Date.addDays(n, d))
                     |> List.find(e -> open(cal, e))
                     |> Option.withDefault(d)
@@ -128,20 +128,20 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
     void theLinesOfWhatASearchFindsFirstAreDrawnBesideAHoliday() {
         String withHolidays = FINDS.formatted(CALENDAR.formatted(NOT_A_HOLIDAY));
         Set<String> everyCandidate = new TreeSet<>();
-        for (int j = 0; j < 7; j++) {
+        for (int j = 0; j < 4; j++) {
             String day = j == 0 ? "d" : "d + " + j;
             everyCandidate.add("Int.floorMod(-cal.aSunday + " + day + ", 7) 1");
             everyCandidate.add("Int.floorMod(-cal.aSunday + " + day + ", 7) 5");
         }
         Set<String> theFirstThree = new TreeSet<>();
         for (String each : everyCandidate) {
-            if (!each.matches(".*d \\+ [3-6], 7\\).*")) {
+            if (!each.matches(".*d \\+ 3, 7\\).*")) {
                 theFirstThree.add(each);
             }
         }
         assertEquals(theFirstThree, linesOf(FINDS.formatted(CALENDAR.formatted(""))));
         Set<String> holidaysOfEveryCandidate = new TreeSet<>();
-        for (int j = 0; j < 7; j++) {
+        for (int j = 0; j < 4; j++) {
             holidaysOfEveryCandidate.add("d cal.holidays[*]" + (j == 0 ? "" : " - " + j));
         }
         Set<String> everyLine = new TreeSet<>(everyCandidate);

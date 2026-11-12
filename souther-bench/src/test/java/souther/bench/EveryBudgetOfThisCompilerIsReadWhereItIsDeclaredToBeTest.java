@@ -960,6 +960,22 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at the ways the places a statement reads can be at the values it"
                             + " names, made one at a time, and adds the figure to what the search"
                             + " came to"),
+            Map.entry("souther.compiler.partition.CountWitnesses#valuesMeeting("
+                            + "Lsouther/compiler/partition/Proposals;Ljava/util/Set;)"
+                            + "Ljava/util/List;",
+                    "hands on every stop the values were made past, which the values alone do not"
+                            + " say, by adding the figures to what the search came to"),
+            Map.entry("souther.compiler.partition.CountWitnesses#keysToFillWith("
+                            + "Lsouther/compiler/types/Type;ILsouther/compiler/check/"
+                            + "RuleReadingContext;Ljava/util/Set;)Ljava/util/List;",
+                    "stops at the keys a map is filled to the fewest it is held with under, and"
+                            + " adds the figure to what the search came to"),
+            Map.entry("souther.compiler.partition.CountWitnesses#entriesTried("
+                            + "Ljava/util/List;Ljava/util/List;"
+                            + "Lsouther/compiler/partition/CountWitnesses$Container;"
+                            + "Ljava/util/Set;)Ljava/util/List;",
+                    "stops at the entries of a map tried, each key with each value, nearest the"
+                            + " firsts first, and adds the figure to what the search came to"),
             Map.entry("souther.compiler.partition.CountWitnesses#firstPairThat("
                             + "Ljava/util/List;Ljava/util/List;ZLjava/util/function/Predicate;"
                             + "Ljava/util/Set;)Ljava/util/List;",
