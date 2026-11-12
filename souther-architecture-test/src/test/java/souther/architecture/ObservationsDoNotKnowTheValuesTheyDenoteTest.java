@@ -3,8 +3,6 @@ package souther.architecture;
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassModel;
-import java.lang.classfile.constantpool.ClassEntry;
-import java.lang.classfile.constantpool.PoolEntry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -22,7 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * {@code values}, and an observation that answered it would be the second place that is answered.
  *
  * <p>Read off the compiled classes rather than the source, so that a type reached through a
- * descriptor or a method reference is a row here whatever it is spelled as.
+ * descriptor, a signature or a method reference is a row here whatever it is spelled as
+ * ({@link CompiledOutputs#classesNamedBy}).
  */
 class ObservationsDoNotKnowTheValuesTheyDenoteTest {
 
@@ -53,10 +52,9 @@ class ObservationsDoNotKnowTheValuesTheyDenoteTest {
             if (!each.thisClass().asInternalName().startsWith(from)) {
                 continue;
             }
-            for (PoolEntry entry : each.constantPool()) {
-                if (entry instanceof ClassEntry named
-                        && named.asInternalName().startsWith(to)) {
-                    out.add(each.thisClass().asInternalName() + " -> " + named.asInternalName());
+            for (String named : CompiledOutputs.classesNamedBy(each)) {
+                if (named.startsWith(to)) {
+                    out.add(each.thisClass().asInternalName() + " -> " + named);
                 }
             }
         }
