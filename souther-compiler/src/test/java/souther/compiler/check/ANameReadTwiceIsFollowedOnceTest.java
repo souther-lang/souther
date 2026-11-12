@@ -326,6 +326,97 @@ class ANameReadTwiceIsFollowedOnceTest {
                         + " which tells the reading nothing about the name");
     }
 
+    /**
+     * An environment that is a name for the meaning it gives {@code TARGET}: what is read is the
+     * value that meaning is, and what the name stands for is that value as an object. An
+     * environment of another name that gives the same value is another environment that gives
+     * the same meaning.
+     */
+    private record Meaning(Map<String, Core> given, Map<Integer, Integer> readAs)
+            implements AffineForms.Reading<String, String> {
+
+        static final BindingId TARGET = new BindingId(OWNER, 1);
+
+        @Override
+        public Symbols symbols() {
+            return Symbols.none(DefaultStdlib.get());
+        }
+
+        @Override
+        public DeclarationAccess declarations() {
+            return DeclarationAccess.NONE;
+        }
+
+        /** A name nothing was given is the atom of its own, so that what two meanings read as is
+         *  told apart by the form. */
+        @Override
+        public LinearForm<String> leafOf(Core e, String at) {
+            if (!(Core.withoutStanding(e) instanceof Core.Read read)
+                    || read.binding().equals(TARGET)) {
+                return null;
+            }
+            readAs.merge(read.binding().ordinal(), 1, Integer::sum);
+            return LinearForm.atom("a" + read.binding().ordinal());
+        }
+
+        @Override
+        public String inside(Core.LetIn li, String at) {
+            return at;
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<String> readThrough(Core.Read read, String at) {
+            if (!read.binding().equals(TARGET)) {
+                return null;
+            }
+            return new ValueStanding.ReadThrough<>(given.get(at), at);
+        }
+
+        @Override
+        public Object standingOf(Core.Read read, String at) {
+            return given.get(at);
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<String>> alternativesOf(Core.Read read, String at) {
+            return null;
+        }
+
+        @Override
+        public boolean readsThrough(Core.FieldAccess fa, String at) {
+            return false;
+        }
+    }
+
+    /**
+     * What a name came to is shared between the environments that give it one meaning and between
+     * no others: the same value in two environments is read once, and two values the one name
+     * stands for in two environments are each read as what they are.
+     */
+    @Test
+    void aNameCameToIsSharedOnlyBetweenEnvironmentsThatGiveItOneMeaning() {
+        Core one = read(new BindingId(OWNER, 10));
+        Core other = read(new BindingId(OWNER, 11));
+        Map<String, Core> given = Map.of("first", one, "same", one, "different", other);
+        Map<Integer, Integer> readAs = new HashMap<>();
+        Meaning reading = new Meaning(given, readAs);
+        BindingWalk.Answers<AffineForms.Outcome<String, String>> answers = new BindingWalk.Answers<>();
+        FoldedValue.Kept folds = new FoldedValue.Kept();
+        Core name = read(Meaning.TARGET);
+
+        LinearForm<String> first = AffineForms.of(name, "first", reading, answers, folds);
+        LinearForm<String> same = AffineForms.of(name, "same", reading, answers, folds);
+        LinearForm<String> different = AffineForms.of(name, "different", reading, answers, folds);
+
+        assertEquals(LinearForm.atom("a10"), first);
+        assertEquals(first, same);
+        assertEquals(LinearForm.atom("a11"), different,
+                "a name that stands for another value in another environment is read as that value");
+        // Each value is read as what it is once, however many environments give it: the first
+        // two environments give one value, and the third another.
+        assertEquals(Map.of(10, 1, 11, 1), readAs);
+    }
+
     @Test
     void everyLinkOfAChainEachNamedTwiceIsFollowedOnce() {
         int links = 16;
