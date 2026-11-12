@@ -262,7 +262,7 @@ public final class ClosedState<A> {
         Set<AffineConstraint.HalfSpace<A>> sided = Set.of();
         Set<AffineConstraint.HalfSpace<A>> folded = Set.of();
         ClosureWork<A> work = null;
-        RoundWork<A> before = null;
+        RoundWork<A> previous = null;
         if (sink != null) {
             work = new ClosureWork<>();
             sink.accept(work);
@@ -281,13 +281,13 @@ public final class ClosedState<A> {
             if (work != null && sided.isEmpty()) {
                 RoundWork<A> here = work.next(constraints, box);
                 List<RoundWork<A>> from = new ArrayList<>(3);
-                from.add(before);
+                from.add(previous);
                 if (parent != null) {
                     from.add(parent.round(round));
                     from.add(parent.last());
                 }
                 reading.working(from, here);
-                before = here;
+                previous = here;
             }
             if (theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);

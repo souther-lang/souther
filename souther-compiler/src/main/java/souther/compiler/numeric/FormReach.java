@@ -99,7 +99,9 @@ final class FormReach<A> {
     private RoundWork<A> workOut;
 
     /** How many positions may have other ends than the work was done against for its answers to be
-     *  moved to this reading's: the one position a rule added after the rest typically bounds. */
+     *  moved to this reading's. A cost and not a condition on what comes back: moving an answer is
+     *  one step for each position that moved, and past this many it is no cheaper than summing it
+     *  again, so the reading is worked out in full. */
     private static final int MOST_MOVED = 1;
 
     /** The positions whose ends are not those {@link #parentWork} was done against. */
@@ -314,7 +316,7 @@ final class FormReach<A> {
      */
     private ExactCut least(Map<A, ExactRatio> coefs, ExactRatio constant,
                            AffineConstraint<A> without, BitSet naming) {
-        ExactCut flipped = highest(negated(coefs), constant.negated(), without, naming, null);
+        ExactCut flipped = highest(negated(coefs), constant.negated(), without, naming);
         return flipped == null ? null : new ExactCut(flipped.at().negated(), flipped.inclusive());
     }
 
@@ -373,13 +375,6 @@ final class FormReach<A> {
         return parentWork;
     }
 
-    /** What a premise leaves of a half-space's rest, read off {@link Rests}' sum for the premise. */
-    @FunctionalInterface
-    private interface Residuals<A> {
-
-        ExactCut of(Premise<A> premise, Map<A, ExactRatio> coefs, ExactRatio constant);
-    }
-
     /** The rests of the positions of one half-space; see {@link #rests}. */
     final class Rests {
 
@@ -393,6 +388,8 @@ final class FormReach<A> {
 
         /** The form's positions in the order they are walked in, once asked for. */
         private Map<A, ExactRatio> inOrderForm;
+
+        private Map<A, ExactRatio> negatedForm;
 
         private Rests(AffineConstraint<A> asking, AffineConstraint.HalfSpace<A> half) {
             this.asking = asking;
@@ -411,59 +408,39 @@ final class FormReach<A> {
             }
             Map<A, ExactRatio> ordered = new LinkedHashMap<>(inOrderForm);
             ordered.remove(atom);
-            ExactRatio weighed = form.get(atom);
-            if (workOut != null && ordered.size() > 1) {
-                return leastWorked(atom, ordered, weighed);
-            }
-            Residuals<A> residuals = (premise, coefs, constant) -> {
-                ExactCut found = constant.isZero()
-                        ? aggregates.computeIfAbsent(premise.place(),
-                                place -> new Aggregate(form, premise.half()))
-                                .without(atom, weighed)
-                        : NOT_SUMMED;
-                return found == NOT_SUMMED
-                        ? fromTheEndsWithout(premise.half(), coefs, constant) : found;
-            };
-            ExactCut flipped = highest(negated(ordered), ExactRatio.ZERO.negated(), asking,
-                    namingAnyOf(ordered), residuals);
-            return flipped == null ? null
-                    : new ExactCut(flipped.at().negated(), flipped.inclusive());
-        }
-
-        /**
-         * The same answer, worked out from what every premise leaves of the question and not from
-         * the premises that are not passed over.
-         *
-         * <p>A premise passed over is one whose candidate cannot bound the form lower than what is
-         * held already ({@link #highest}), so the lowest of all the candidates is the lowest of those
-         * that were not passed over. Taking all of them is what leaves each one's sum to be kept for
-         * the closure that comes after, which has other ends to read them against and so cannot say
-         * which premises it would have passed over.
-         */
-        private ExactCut leastWorked(A atom, Map<A, ExactRatio> ordered, ExactRatio weighed) {
             Map<A, ExactRatio> coefs = negated(ordered);
             ExactRatio constant = ExactRatio.ZERO.negated();
-            ExactCut best = withTheDifference(difference(coefs), constant,
-                    fromTheRanges(coefs, constant));
-            List<Premise<A>> all = premises().each();
-            best = tightenedBy(best, candidatesOf(atom, weighed, all), all, coefs, constant);
+            ExactCut best;
+            if (coefs.size() <= 1) {
+                // A rest of one position or none is answered by the ends and by nothing else, as
+                // any form of one position is: see highest.
+                best = fromTheEnds(coefs, constant);
+            } else {
+                best = withTheDifference(difference(coefs), constant,
+                        fromTheRanges(coefs, constant));
+                List<Premise<A>> all = premises().each();
+                best = tightenedBy(best, candidatesOf(atom, coefs, all), all, coefs, constant);
+            }
             return best == null ? null : new ExactCut(best.at().negated(), best.inclusive());
         }
 
         /**
-         * What each premise leaves of the rest of {@code atom}, left for the closure after.
+         * What each premise leaves of the rest of {@code atom}, whose negation is {@code coefs}; kept
+         * for the closure after where this reading leaves work.
          *
          * <p>Where the closure before these rules left what its premises left of this question, a
          * premise it held is carried over to the ends this reading starts in
          * ({@link #carried}) and only the premises the added rules gave are summed.
          */
-        private RoundWork.Candidates candidatesOf(A atom, ExactRatio weighed,
+        private RoundWork.Candidates candidatesOf(A atom, Map<A, ExactRatio> coefs,
                                                     List<Premise<A>> all) {
-            workOut.premisesHeld(all.size());
             RoundWork.Candidates out = new RoundWork.Candidates(all.size());
-            RoundWork.Candidates before = before(atom, all.size());
+            RoundWork.Candidates before = null;
+            if (workOut != null) {
+                workOut.premisesHeld(all.size());
+                before = before(atom, all.size());
+            }
             BitSet left = leftOut();
-            Map<A, ExactRatio> coefs = before == null ? null : negatedRest(atom);
             for (int place = 0; place < all.size(); place++) {
                 if (left.get(place)) {
                     out.kinds[place] = RoundWork.ABSENT;
@@ -475,18 +452,23 @@ final class FormReach<A> {
                     carried(before, place, premise.half(), coefs, out);
                     continue;
                 }
-                aggregates.computeIfAbsent(place, _ -> new Aggregate(form, premise.half()))
-                        .fill(atom, weighed, out, place);
+                aggregates.computeIfAbsent(place,
+                        _ -> new Aggregate(negatedForm(), premise.half()))
+                        .fill(atom, out, place);
             }
-            workOut.put(asking, half.form(), atom, out);
+            if (workOut != null) {
+                workOut.put(asking, half.form(), atom, out);
+            }
             return out;
         }
 
-        /** The negated rest of {@code atom}, which is the form each premise is taken off. */
-        private Map<A, ExactRatio> negatedRest(A atom) {
-            Map<A, ExactRatio> rest = new LinkedHashMap<>(form);
-            rest.remove(atom);
-            return negated(rest);
+        /** The half-space's form negated: the question each premise is taken off, before the term of
+         *  the position left out is replaced. */
+        private Map<A, ExactRatio> negatedForm() {
+            if (negatedForm == null) {
+                negatedForm = negated(form);
+            }
+            return negatedForm;
         }
 
         /**
@@ -624,10 +606,10 @@ final class FormReach<A> {
      * ask, so each keeps its own questions in the work.
      */
     Reach ofKept(AffineConstraint<A> asking, Map<A, ExactRatio> coefs) {
-        Map<A, ExactRatio> ordered = inOrder(coefs);
-        if (workOut == null || ordered.size() <= 1) {
+        if (workOut == null || coefs.size() <= 1) {
             return of(coefs, ExactRatio.ZERO);
         }
+        Map<A, ExactRatio> ordered = inOrder(coefs);
         ExactCut most = highestKept(asking, 0, ordered);
         ExactCut flipped = highestKept(asking, 1, negated(ordered));
         return new Reach(flipped == null ? null
@@ -649,55 +631,51 @@ final class FormReach<A> {
                 || before.places() > all.size())) {
             before = null;
         }
-        Map<A, ExactRatio> query = negated(coefs);
         for (int place = 0; place < all.size(); place++) {
             AffineConstraint.HalfSpace<A> premise = all.get(place).half();
             if (before != null && place < before.places()
                     && before.kinds[place] != RoundWork.ABSENT) {
                 carried(before, place, premise, coefs, held);
             } else {
-                new Aggregate(query, premise).fillWhole(held, place);
+                new Aggregate(coefs, premise).fillWhole(held, place);
             }
         }
         workOut.putWhole(asking, direction, held);
         return tightenedBy(best, held, all, coefs, constant);
     }
 
-    /** What {@link Aggregate#without} answers where the sum it keeps does not decide the answer. */
-    private static final ExactCut NOT_SUMMED = new ExactCut(ExactRatio.ZERO, true);
-
     /**
-     * What the ends leave the half-space's form negated, with a premise's form taken off it and its
-     * bound added, as a sum over every position either names — the residual of
-     * {@link #fromTheEndsWithout} for the rest of a position, with that position's term still to be
-     * replaced.
+     * What the ends leave the question with a premise's form taken off it and its bound added, as a
+     * sum over every position either names — the residual of {@link #fromTheEndsWithout}, kept as
+     * the sum, how many of its ends are missing and how many are not reached so that one position's
+     * term can be replaced.
      *
-     * <p>Not kept where the exact arithmetic could not hold a term or a partial sum, and not asked
-     * where the residual weighs two positions, which the closed differences may bound lower than the
-     * ends do: both are answered by {@link #fromTheEndsWithout} itself, so what comes back is what
-     * it would have said.
+     * <p>Not kept where the exact arithmetic could not hold a term or a partial sum, and not
+     * decided where the residual weighs two positions, which the closed differences may bound lower
+     * than the ends do: both are answered by {@link #fromTheEndsWithout} itself, so what comes back
+     * is what it would have said.
      */
     private final class Aggregate {
 
         private final AffineConstraint.HalfSpace<A> premise;
-        private final Map<A, ExactRatio> form;
+        private final Map<A, ExactRatio> question;
         private boolean held = true;
         private ExactRatio sum;
         private int withoutEnd;
         private int notReached;
         private int weighed;
 
-        Aggregate(Map<A, ExactRatio> form, AffineConstraint.HalfSpace<A> premise) {
+        Aggregate(Map<A, ExactRatio> question, AffineConstraint.HalfSpace<A> premise) {
             this.premise = premise;
-            this.form = form;
+            this.question = question;
             sum = ExactRatio.ZERO.plus(premise.bound().at()).orNull();
             if (sum == null) {
                 held = false;
                 return;
             }
-            for (Map.Entry<A, ExactRatio> each : form.entrySet()) {
+            for (Map.Entry<A, ExactRatio> each : question.entrySet()) {
                 ExactRatio off = premise.form().coefs().get(each.getKey());
-                ExactRatio weight = each.getValue().negated();
+                ExactRatio weight = each.getValue();
                 if (off != null) {
                     weight = weight.plus(off.negated()).orNull();
                     if (weight == null) {
@@ -708,7 +686,7 @@ final class FormReach<A> {
                 add(each.getKey(), weight);
             }
             for (Map.Entry<A, ExactRatio> each : premise.form().coefs().entrySet()) {
-                if (!form.containsKey(each.getKey())) {
+                if (!question.containsKey(each.getKey())) {
                     add(each.getKey(), each.getValue().negated());
                 }
             }
@@ -735,19 +713,6 @@ final class FormReach<A> {
         }
 
         /**
-         * What the ends leave the residual of the rest of {@code atom}, where {@code weighed} is
-         * the half-space's weight of it, or {@link #NOT_SUMMED}.
-         */
-        ExactCut without(A atom, ExactRatio weighed) {
-            RoundWork.Candidates one = new RoundWork.Candidates(1);
-            fill(atom, weighed, one, 0);
-            if (one.kinds[0] != RoundWork.SUMMED) {
-                return NOT_SUMMED;
-            }
-            return one.withoutEnd[0] > 0 ? null : new ExactCut(one.sums[0], one.notReached[0] == 0);
-        }
-
-        /**
          * Writes what the residual of the whole question comes to into {@code into} at
          * {@code place}, with no position's term replaced, or {@link RoundWork#ASKED} where the sum is
          * not one this decides.
@@ -764,17 +729,18 @@ final class FormReach<A> {
         }
 
         /**
-         * Writes what the residual of the rest of {@code atom} comes to into {@code into} at
-         * {@code place}: the sum, how many of its ends are missing and how many are not reached, or
-         * {@link RoundWork#ASKED} where the sum is not one this decides.
+         * Writes what the residual comes to into {@code into} at {@code place} with the term of
+         * {@code atom} replaced by what the premise alone leaves of it — the residual of the
+         * question without that position: the sum, how many of its ends are missing and how many are
+         * not reached, or {@link RoundWork#ASKED} where the sum is not one this decides.
          */
-        void fill(A atom, ExactRatio weighed, RoundWork.Candidates into, int place) {
+        void fill(A atom, RoundWork.Candidates into, int place) {
             into.kinds[place] = RoundWork.ASKED;
             if (!held) {
                 return;
             }
             ExactRatio off = premise.form().coefs().get(atom);
-            ExactRatio was = weighed.negated();
+            ExactRatio was = question.getOrDefault(atom, ExactRatio.ZERO);
             if (off != null) {
                 was = was.plus(off.negated()).orNull();
                 if (was == null) {
@@ -834,17 +800,7 @@ final class FormReach<A> {
      *               position or none, which asks no premise
      */
     private ExactCut highest(Map<A, ExactRatio> coefs, ExactRatio constant,
-                             AffineConstraint<A> without, BitSet naming) {
-        return highest(coefs, constant, without, naming, null);
-    }
-
-    /**
-     * @param residuals what a premise leaves of {@code coefs}, where a reader has it worked out
-     *                  for several forms together; null for {@link #fromTheEndsWithout}
-     */
-    private ExactCut highest(Map<A, ExactRatio> coefs, ExactRatio constant,
-                             AffineConstraint<A> without, BitSet naming,
-                             Residuals<A> residuals) {
+                                AffineConstraint<A> without, BitSet naming) {
         if (coefs.size() <= 1) {
             // A form naming one position is answered by the ends and by nothing else, because the
             // ends *are* this step at one position, run until they stop moving or until the rounds
@@ -886,8 +842,7 @@ final class FormReach<A> {
             // exact arithmetic cannot hold the sum. Where that happens this premise composes no
             // route this round — the same as a premise this form does not name — which costs a
             // tighter bound this route might have found and claims nothing this route did not.
-            ExactCut residual = residuals == null ? fromTheEndsWithout(premise, coefs, constant)
-                    : residuals.of(each, coefs, constant);
+            ExactCut residual = fromTheEndsWithout(premise, coefs, constant);
             if (residual != null) {
                 // The form reaches the sum only where the residual reaches its own end and the
                 // premise reaches its bound.
