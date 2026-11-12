@@ -65,11 +65,13 @@ import java.util.Objects;
 public record RuleReadingSource(Symbols symbols, ExpandedClauseLookup invariants,
                                 DeclarationAccess declarations, DeclarationNewtypes newtypes,
                                 FieldBindings bindings, ClauseLocations written, Origin origin,
-                                @DecidedByTheRest TypeViews views) {
+                                @DecidedByTheRest TypeViews views,
+                                @DecidedByTheRest FoldedValue.Kept folds) {
 
     public RuleReadingSource {
         if (symbols == null || invariants == null || declarations == null || newtypes == null
-                || bindings == null || written == null || origin == null || views == null) {
+                || bindings == null || written == null || origin == null || views == null
+                || folds == null) {
             throw new IllegalArgumentException(
                     "reading a declaration's rules takes a scope, somewhere to read clauses from,"
                             + " somewhere to ask what a declaration says, somewhere to read where"
@@ -97,7 +99,7 @@ public record RuleReadingSource(Symbols symbols, ExpandedClauseLookup invariants
                              DeclarationAccess declarations, DeclarationNewtypes newtypes,
                              FieldBindings bindings, ClauseLocations written, Origin origin) {
         this(symbols, invariants, declarations, newtypes, bindings, written, origin,
-                new TypeViews());
+                new TypeViews(), new FoldedValue.Kept());
     }
 
     /**

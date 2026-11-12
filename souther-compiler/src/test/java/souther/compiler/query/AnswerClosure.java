@@ -1185,6 +1185,7 @@ final class AnswerClosure {
                 "souther.compiler.check.HelperTable#heldAs",
                 // What each type is under the declarations a source reads, worked out once for each
                 // type asked of it, which the declarations decide ({@code TypeViews}).
+                "souther.compiler.check.RuleReadingSource#folds",
                 "souther.compiler.check.RuleReadingSource#views",
                 // The denial a proposition keeps, which is what denying its parts makes and is
                 // equal to what any other making makes ({@code Proposition.Denial}).

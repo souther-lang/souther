@@ -114,7 +114,7 @@ public final class InputNumber {
                                                      RuleReadingSource source) {
         Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
-                each -> reads.folded(each, symbols, source.newtypes()));
+                each -> reads.folded(each, symbols, source.newtypes(), source.folds()));
         if (measured != null) {
             // A taking is of a location, or of what a location's value was moved into, so an
             // argument that is neither is one there is no location to take it of.
@@ -369,7 +369,7 @@ public final class InputNumber {
                                                              RuleReadingSource source) {
         Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
-                each -> reads.folded(each, symbols, source.newtypes()));
+                each -> reads.folded(each, symbols, source.newtypes(), source.folds()));
         if (measured == null || !measured.arguments().none()
                 || !(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
