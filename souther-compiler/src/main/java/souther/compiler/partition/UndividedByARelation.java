@@ -118,6 +118,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -3126,9 +3127,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Set<TermPath> accounted = Set.of();
             if (heldWhole && standApart(0, 1, independent)) {
                 Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
-                        written, (place, lengths) -> getsPastExactlyOn(
-                                besideAnyValueAt(place, past, read, along, written, declined),
-                                read, along, written, declined, true, lengths));
+                        written, reachExactlyOn(past, read, along, written, declined));
                 shown = shown.partnered(partnering.strings());
                 accounted = partnering.accountedFor();
             }
@@ -3239,9 +3238,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<TermPath> accountedFor = Set.of();
         if (sides.size() == 2 && heldWhole && standApart(0, 1, independent)) {
             Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
-                    written, (place, lengths) -> getsPastExactlyOn(
-                            besideAnyValueAt(place, past, read, along, written, declined),
-                            read, along, written, declined, true, lengths));
+                    written, reachExactlyOn(past, read, along, written, declined));
             shown = shown.partnered(partnering.strings());
             accountedFor = partnering.accountedFor();
         }
@@ -4594,6 +4591,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return Optional.of(past.withoutWhatIsWorkedOutWhere(where ->
                 where.oneHolds().stream().anyMatch(empty::containsAll)));
+    }
+
+    /**
+     * The case conversions a run working out {@code past} gets to this relation past only exactly,
+     * beside any value of the place handed and given the places whose lengths are accounted for
+     * ({@link #getsPastExactlyOn}), asked of the run {@link #besideAnyValueAt} says.
+     *
+     * <p>Asked of each side of the relation, and where neither side's place lets a container be
+     * left empty both ask it of {@code past} itself. That is one question, answered once: the
+     * answers are kept by the run asked of, which is {@code past} itself where nothing was let go
+     * of, and by the lengths.
+     */
+    private BiFunction<TermPath, Set<TermPath>, Optional<List<ConvertedOn>>> reachExactlyOn(
+            DemandReading.Answered past, InputReading read, SearchRegion along,
+            List<OnAWay> written, Optional<Set<String>> declined) {
+        Map<DemandReading.Answered, Map<Set<TermPath>, Optional<List<ConvertedOn>>>> asked =
+                new IdentityHashMap<>();
+        return (place, lengths) -> {
+            DemandReading.Answered run = besideAnyValueAt(place, past, read, along, written,
+                    declined);
+            return asked.computeIfAbsent(run, any -> new HashMap<>()).computeIfAbsent(lengths,
+                    any -> getsPastExactlyOn(run, read, along, written, declined, true, lengths));
+        };
     }
 
     /**
