@@ -6,8 +6,8 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.values.Value;
+import souther.compiler.values.WrittenValues;
 
-import java.math.BigDecimal;
 import java.util.Objects;
 
 /**
@@ -179,17 +179,8 @@ public final class Recognitions {
      * case is a class of every row that built one.
      */
     private static Value writtenValueOf(ObservedValue seen) {
-        return switch (seen) {
-            case ObservedValue.Text it -> Value.text(it.value());
-            case ObservedValue.Bool it -> Value.truth(it.value());
-            // Held as the number and not as the writing of it. `1.0m` and `1.00m` are one value
-            // where they are written, and `Value.Number` is what holds them as one — so an
-            // observation that reads as either comes back as that one value.
-            case ObservedValue.Integer it -> Value.number(BigDecimal.valueOf(it.value()));
-            case ObservedValue.Decimal it -> Value.number(it.value());
-            case ObservedValue.Unit it -> Value.of(it.type());
-            case ObservedValue.Constructed it -> Value.of(it.type());
-            default -> null;
-        };
+        return seen instanceof ObservedValue.Constructed it
+                ? Value.of(it.type())
+                : WrittenValues.denotedBy(seen);
     }
 }

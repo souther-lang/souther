@@ -271,6 +271,7 @@ public final class PublicationOrders {
         out.add(ReadingGap.COULD_NOT_WALK);
         out.add(ReadingGap.COULD_NOT_READ_ROW);
         out.add(ReadingGap.KEYS_NOT_TOLD);
+        out.add(ReadingGap.SAMENESS_NOT_TOLD);
         for (ReadingGap.ReachNotRead.Why why : ReadingGap.ReachNotRead.Why.values()) {
             out.add(new ReadingGap.ReachNotRead(why));
         }

@@ -31,6 +31,30 @@ import java.util.Map;
  */
 public sealed interface ObservedValue {
 
+    /**
+     * Whether two observations of this kind are the same value exactly where they are equal as
+     * records, so that a reader holding no declaration may compare them with {@code equals}.
+     *
+     * <p>Equality of the record is what the form of an observation says, and the form is the
+     * language's identity only where nothing outside the observation decides it. A decimal is the
+     * amount it stands for at whatever scale it was observed, which {@code BigDecimal.equals}
+     * does not say. A sequence is a list or a set by the position it stands at, and an observation
+     * does not carry that. A moment is kept as the text it was written as. None of these is
+     * answered here, and a construction is answered only where each field it holds is.
+     *
+     * <p>Exhaustive without a default, so a kind of observation added later is decided here
+     * before it is compared anywhere.
+     */
+    default boolean isSameWhereEqual() {
+        return switch (this) {
+            case Bool _, Integer _, Text _, Unit _ -> true;
+            case Constructed constructed -> constructed.fields().values().stream()
+                    .allMatch(ObservedValue::isSameWhereEqual);
+            case Decimal _, Temporal _, Sequence _, Mapping _, Absent _, Unknown _,
+                 Truncated _ -> false;
+        };
+    }
+
     record Bool(boolean value) implements ObservedValue {}
 
     /** A whole number: Souther's {@code Int}, and the inner value of a newtype over one. */
