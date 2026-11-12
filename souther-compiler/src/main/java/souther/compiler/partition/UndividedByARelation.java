@@ -8689,8 +8689,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             || each.number() instanceof NumericTerm.GatheredUnderItsKey,
                     on.spacingBetweenValues(), on.whereItStops(), each.number()));
         }
-        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
-                stating, way, sizesAreRowsComputed);
+        HeldOfTheDifference held = heldOfTheDifference(pair, stating, way, sizesAreRowsComputed);
         if (held == null) {
             return Set.of();
         }
@@ -8699,10 +8698,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds run = sides.get(pair.first()).number() instanceof NumericTerm.TakenOf
                 ? terms.get(0).realizes()
                 : on.whereItStops();
-        return WhatARelationLeavesUndivided.ofTheirDifference(terms, pair.beside(), relation, held,
+        return WhatARelationLeavesUndivided.ofTheirDifference(terms, pair.beside(), relation,
+                held.statements(),
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
                 FilingCoordinate::sharesAPlaceWith, greatestOf(on), operations,
-                sizesAreRowsComputed);
+                sizesAreRowsComputed, held.holes());
     }
 
     /**
@@ -8749,9 +8749,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     realizes, null, true, on.spacingBetweenValues(), on.whereItStops(),
                     each.number()));
         }
-        List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
-                stating, way, sizesAreRowsComputed);
-        if (held == null) {
+        HeldOfTheDifference held = heldOfTheDifference(pair, stating, way, sizesAreRowsComputed);
+        // The values this leaves a side are asked of rows with nothing held away from either.
+        if (held == null || !held.holes().isEmpty()) {
             return List.of();
         }
         // In the order of the sides, nothing for one held still beside the two.
@@ -8760,10 +8760,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out.add(null);
         }
         out.set(pair.first(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
-                pair.beside(), relation, held, FilingCoordinate::sharesAPlaceWith,
+                pair.beside(), relation, held.statements(), FilingCoordinate::sharesAPlaceWith,
                 greatestOf(on), operations, pair.standing(), sizesAreRowsComputed));
         out.set(pair.second(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 1,
-                pair.beside(), relation, held, FilingCoordinate::sharesAPlaceWith,
+                pair.beside(), relation, held.statements(), FilingCoordinate::sharesAPlaceWith,
                 greatestOf(on), operations, pair.standing(), sizesAreRowsComputed));
         return out;
     }
@@ -8849,24 +8849,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  {@code a + K} of {@code a + K - K == b} stops at an {@code a} the form has a row at — and
      *  is held as an end on one side is. What else that working narrows is asked through the
      *  operations it carries. */
-    private List<WhatARelationLeavesUndivided.OnTheDifference> heldOfTheDifference(
+    private HeldOfTheDifference heldOfTheDifference(
             TwoSides pair, List<List<OnAWay>> stating, WayRead way, boolean sizesAreRowsComputed) {
         List<TakenConstraint> onTheWay = way.onTheWay();
-        Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(pair.first()));
-        aboutEither.addAll(stating.get(pair.second()));
-        List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
-        for (OnAWay each : aboutEither) {
-            WhatARelationLeavesUndivided.OnTheDifference statement = each.affine() == null ? null
-                    : onTheDifference(each.affine().form(), each.affine().rel(), pair);
-            if (statement == null) {
-                return null;
-            }
-            held.add(statement);
-        }
         Set<NumericTerm> ofTheSides = new HashSet<>();
         for (int at : List.of(pair.first(), pair.second())) {
             ofTheSides.add(sides.get(at).statedTerm());
             ofTheSides.add(sides.get(at).number());
+        }
+        Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(pair.first()));
+        aboutEither.addAll(stating.get(pair.second()));
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
+        List<BigInteger> holes = new ArrayList<>();
+        for (OnAWay each : aboutEither) {
+            TakenConstraint.Affine affine = each.affine();
+            WhatARelationLeavesUndivided.OnTheDifference statement = affine == null ? null
+                    : onTheDifference(affine.form(), affine.rel(), pair);
+            if (statement != null) {
+                held.add(statement);
+            } else if (affine == null
+                    || !holdsASideAwayFromAValue(affine.form(), affine.rel(), ofTheSides, holes)) {
+                return null;
+            }
         }
         for (TakenConstraint each : onTheWay) {
             if (each.terms().stream().noneMatch(ofTheSides::contains)) {
@@ -8875,10 +8879,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             WhatARelationLeavesUndivided.OnTheDifference statement =
                     each instanceof TakenConstraint.Affine(var form, var rel, var _)
                     ? onTheDifference(form, rel, pair) : null;
-            if (statement == null) {
+            if (statement != null) {
+                held.add(statement);
+            } else if (!(each instanceof TakenConstraint.Affine(var form, var rel, var _))
+                    || !holdsASideAwayFromAValue(form, rel, ofTheSides, holes)) {
                 return null;
             }
-            held.add(statement);
         }
         if (!sizesAreRowsComputed) {
             for (TakenConstraint each : way.ofTheRelation()) {
@@ -8887,7 +8893,43 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
         }
-        return held;
+        return new HeldOfTheDifference(held, holes);
+    }
+
+    /**
+     * What the rows that arrive hold of the two sides of a relation about how far apart they are.
+     *
+     * @param statements what is stated about the difference
+     * @param holes      the whole numbers a statement keeps one of the sides from, which is no
+     *                   statement about the difference
+     */
+    private record HeldOfTheDifference(
+            List<WhatARelationLeavesUndivided.OnTheDifference> statements,
+            List<BigInteger> holes) {}
+
+    /**
+     * Whether {@code form} held as {@code rel} against nought keeps one of {@code sides} away from
+     * a value, and nothing else; the value is added to {@code holes} where it is a whole number,
+     * and a value that is none is one a whole number is never at and holds nothing.
+     */
+    private static boolean holdsASideAwayFromAValue(LinearForm<NumericTerm> form, Rel rel,
+                                                    Set<NumericTerm> sides,
+                                                    List<BigInteger> holes) {
+        if (rel != Rel.NE || form.coefs().size() != 1) {
+            return false;
+        }
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            if (!sides.contains(each.getKey())) {
+                return false;
+            }
+            if (form.constant().negated().dividedBy(each.getValue())
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at)
+                    && at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                    && ExactRatio.of(whole).compareTo(at) == 0) {
+                holes.add(whole);
+            }
+        }
+        return true;
     }
 
     /**
@@ -9470,26 +9512,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (shown == null) {
             return null;
         }
-        NumericDomain.Bounds run = withinTheEnds(asARelationReadsIt(shown.run(), carrier), runsTo);
-        if (run == null) {
-            return null;
-        }
-        List<ExactRatio> held = new ArrayList<>(shown.holes());
+        NumericDomain.Bounds within =
+                withinTheEnds(asARelationReadsIt(shown.run(), carrier), runsTo);
+        // What a search held it away from besides is a hole too.
+        List<BigInteger> searched = new ArrayList<>();
         for (Place hole : region.apartAt(value).places()) {
             if (!(hole instanceof Count count)) {
                 return null;
             }
-            held.add(count.exactly());
-        }
-        List<BigInteger> holes = new ArrayList<>();
-        for (ExactRatio hole : held) {
-            if (hole.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger at)
-                    && ExactRatio.of(at).compareTo(hole) == 0) {
-                holes.add(at);
+            if (count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger at)
+                    && ExactRatio.of(at).compareTo(count.exactly()) == 0) {
+                searched.add(at);
             }
         }
-        WholeNumberSet taken = WholeNumberSet.ofRuns(WholeNumberRuns.between(run.min(), run.max())
-                .and(WholeNumberRuns.of(holes).others()));
+        WholeNumberSet taken = WholeNumberSet.ofRuns(shown.takenWithin(within)
+                .and(WholeNumberRuns.of(searched).others()));
         return taken.isNone() ? null
                 : new WhatARelationLeavesUndivided.Term.Stepped(taken, taken);
     }

@@ -13,6 +13,7 @@ import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -289,6 +290,97 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     void theMiddleOfTheTypeHasToSeeBothOutcomes() {
         assertEquals(Set.of(), apart(pair(1, -1, A_DATE), -400_000_000_000L, Rel.GT));
         assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -300_000_000_000L, Rel.GT));
+    }
+
+    private static Set<String> apartBesidesHoles(List<BigInteger> holes, long constant,
+                                                  Rel relation,
+                                                  WhatARelationLeavesUndivided.Operations operations,
+                                                  WhatARelationLeavesUndivided.OnTheDifference...
+                                                          held) {
+        return WhatARelationLeavesUndivided.ofTheirDifference(pair(1, -1, A_DATE),
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(constant)), relation,
+                List.of(held), DATES, String::equals, GREATEST_INT, operations, true, holes);
+    }
+
+    private static final long LEAST_DAY = LocalDate.MIN.toEpochDay();
+
+    /**
+     * A date kept away from a day takes every other day, and an order asks only for a partner on
+     * each side of the line: a hole farther from the ends than the program's own sums move them is
+     * the sole partner of no side, so what is left undivided is what it is with no hole. At an end,
+     * or within the constant of one, it may be the one value a side has, and nothing is shown.
+     */
+    @Test
+    void aHoleFarFromTheEndsOfTheValuesLeavesAnOrderAsItIsWithNone() {
+        Set<String> alone = apart(pair(1, -1, A_DATE), -14, Rel.GT);
+        assertEquals(Set.of("a", "b"), alone);
+        WhatARelationLeavesUndivided.Operations none = WhatARelationLeavesUndivided.Operations.NONE;
+        assertEquals(alone, apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT, none));
+        assertEquals(alone, apartBesidesHoles(
+                List.of(BigInteger.valueOf(LEAST_DAY + 15), BigInteger.ONE), -14, Rel.GT, none));
+        for (long near : List.of(LEAST_DAY, LEAST_DAY + 1, LEAST_DAY + 14)) {
+            assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.valueOf(near)), -14,
+                    Rel.GT, none), "a hole " + (near - LEAST_DAY) + " from the least day");
+        }
+        long greatest = LocalDate.MAX.toEpochDay();
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.valueOf(greatest - 14)), -14,
+                Rel.GT, none));
+        assertEquals(alone, apartBesidesHoles(List.of(BigInteger.valueOf(greatest - 15)), -14,
+                Rel.GT, none));
+    }
+
+    /**
+     * No value of the other term is the one a hole keeps out when the relation is an order, but an
+     * equation asks for exactly one: it is read only with no hole. Nor is a hole beside a
+     * statement about the difference, which may leave a side of one value anywhere.
+     */
+    @Test
+    void aHoleBesideAnEquationOrAStatementAboutTheDifferenceLeavesNothingShown() {
+        WhatARelationLeavesUndivided.Operations none = WhatARelationLeavesUndivided.Operations.NONE;
+        List<BigInteger> hole = List.of(BigInteger.ZERO);
+        for (Rel equation : List.of(Rel.EQ, Rel.NE)) {
+            assertEquals(Set.of(), apartBesidesHoles(hole, -14, equation, none), equation::name);
+        }
+        assertEquals(Set.of("a", "b"), apartBesidesHoles(List.of(), -14, Rel.GT, none,
+                held(1, 0, Rel.GE)), "the statement alone leaves the places undivided");
+        assertEquals(Set.of(), apartBesidesHoles(hole, -14, Rel.GT, none, held(1, 0, Rel.GE)));
+    }
+
+    /**
+     * A sum the program works out moves where a term's values stop: by its constant where it is
+     * over the one term weighed once, which a hole is kept that much farther from the ends than;
+     * and by an amount nothing here knows where it is over two terms or weighs one other than
+     * once, which no hole is passed beside.
+     */
+    @Test
+    void aHoleIsKeptFartherFromTheEndsThanTheSumsTheProgramWorksOutMoveThem() {
+        WhatARelationLeavesUndivided.Operations plusAThousand =
+                WhatARelationLeavesUndivided.Operations.read(List.of(sum(Map.of("a", 1L), 1000)),
+                        true);
+        WhatARelationLeavesUndivided.Operations overBoth =
+                WhatARelationLeavesUndivided.Operations.read(
+                        List.of(sum(Map.of("a", 1L, "b", 1L), 1)), true);
+        WhatARelationLeavesUndivided.Operations twice =
+                WhatARelationLeavesUndivided.Operations.read(List.of(sum(Map.of("a", 2L), 1)),
+                        true);
+        assertEquals(Set.of("a", "b"), apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT,
+                plusAThousand));
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.valueOf(LEAST_DAY + 1014)),
+                -14, Rel.GT, plusAThousand));
+        assertEquals(Set.of("a", "b"), apartBesidesHoles(
+                List.of(BigInteger.valueOf(LEAST_DAY + 1015)), -14, Rel.GT, plusAThousand));
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT, overBoth));
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT, twice));
+    }
+
+    /** An operation over {@code coefs}, each weighed, working out a number that adds
+     *  {@code constant}, between the ends of an {@code Int}. */
+    private static WhatARelationLeavesUndivided.IntSum sum(Map<String, Long> coefs,
+                                                           long constant) {
+        Map<Object, ExactRatio> weighed = new LinkedHashMap<>();
+        coefs.forEach((term, weight) -> weighed.put(term, ExactRatio.of(weight)));
+        return new WhatARelationLeavesUndivided.IntSum(weighed, ExactRatio.of(constant),
+                BigInteger.valueOf(Long.MIN_VALUE), GREATEST_INT);
     }
 
     /**

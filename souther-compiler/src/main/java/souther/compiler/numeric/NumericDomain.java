@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
@@ -1601,19 +1602,26 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * A run of {@code atom} and the values the rules hold it away from, such that every value of
-     * the run but those is one the rules leave it — or null where that is not shown.
+     * The whole numbers {@code atom} is left where the rules hold it away from some value, such
+     * that each of them is one some row takes — or null where that is not shown, where the atom
+     * has no hole to read apart ({@link #wholeRunOf} is then the question), and where the numbers
+     * left are none.
      *
      * <p>What {@link #wholeRunOf} answers of the rules without the disequalities over the atom
      * alone, which are the values taken out of the run: a hole is no bound, and it does not tie
      * the atom to any other. So it is only an atom no rule relates to another that has holes read
      * apart, since a row that holds the others at the value a disequality of one of them refuses
-     * is no row.
+     * is no row. A hole that is no whole number is none of the atom's values and is no hole here.
      *
-     * <p>Null where the atom has no hole, which is {@link #wholeRunOf}'s to say.
+     * <p>Of an atom whose values step by one: a dense atom taken out of a value still takes every
+     * value near it, and its run is the question {@link #wholeRunOf} answers.
      */
     public RunBesidesItsHoles wholeRunBesidesItsHolesOf(A atom) {
-        List<ExactRatio> holes = new ArrayList<>();
+        if (spacingOf(atom) != Granularity.DISCRETE) {
+            return null;
+        }
+        List<BigInteger> holes = new ArrayList<>();
+        boolean held = false;
         StatedRules<A> without = StatedRules.none();
         for (AffineConstraint<A> rule : stated.distinct()) {
             List<A> over = rule.form().atomsIn(order);
@@ -1632,30 +1640,50 @@ public final class NumericDomain<A> {
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
                     return null;
                 }
-                holes.add(at);
+                held = true;
+                if (at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                        && ExactRatio.of(whole).compareTo(at) == 0) {
+                    holes.add(whole);
+                }
             } else {
                 without = without.and(StatedRules.of(rule));
             }
         }
-        if (holes.isEmpty()) {
+        if (!held) {
             return null;
         }
         Bounds run = new NumericDomain<>(without, spaces, readARuleNothingSatisfies, order,
                 closedStates, null, null).wholeRunOf(atom);
-        return run == null ? null : new RunBesidesItsHoles(run, holes);
+        if (run == null) {
+            return null;
+        }
+        RunBesidesItsHoles out = new RunBesidesItsHoles(run, WholeNumberRuns.of(holes).others());
+        return out.takenWithin(Bounds.OPEN).isNone() ? null : out;
     }
 
     /**
-     * A run of an atom and the values the rules hold it away from: every value of the run but
-     * those is one the rules leave the atom ({@link #wholeRunBesidesItsHolesOf}).
+     * A run of a whole number and the numbers the rules leave it outside the holes they hold it
+     * away from ({@link #wholeRunBesidesItsHolesOf}): each number of the run that is none of the
+     * holes is one the rules leave the atom.
      *
-     * @param run   the run, which the holes are in or outside of
-     * @param holes the values the atom is held away from
+     * @param run     the run, which the holes are in or outside of
+     * @param kept    the whole numbers that are no hole, so the run's numbers among them are the
+     *                ones taken
      */
-    public record RunBesidesItsHoles(Bounds run, List<ExactRatio> holes) {
+    public record RunBesidesItsHoles(Bounds run, WholeNumberRuns kept) {
 
         public RunBesidesItsHoles {
-            holes = List.copyOf(holes);
+            Objects.requireNonNull(run, "a run besides its holes is of a run");
+            Objects.requireNonNull(kept, "a run besides its holes keeps some numbers");
+        }
+
+        /**
+         * The whole numbers taken that lie within {@code within}, a run the order the atom is
+         * counted on is let reach: the run's, and no hole.
+         */
+        public WholeNumberRuns takenWithin(Bounds within) {
+            Bounds ends = run.meet(within);
+            return WholeNumberRuns.between(ends.min(), ends.max()).and(kept);
         }
     }
 

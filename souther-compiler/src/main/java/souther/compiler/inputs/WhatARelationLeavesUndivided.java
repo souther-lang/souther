@@ -3481,11 +3481,35 @@ public final class WhatARelationLeavesUndivided {
                                                BiPredicate<P, P> overlap, BigInteger greatest,
                                                Operations operations,
                                                boolean sizesAreRowsComputed) {
+        return ofTheirDifference(terms, beside, relation, held, extent, overlap, greatest,
+                operations, sizesAreRowsComputed, List.of());
+    }
+
+    /**
+     * The same, where the rows that arrive also hold either term away from the whole numbers
+     * {@code holes}: a value of it that is no row, whichever of the two it is the value of.
+     *
+     * <p>A hole is no statement about the difference, and what it takes from the sides is asked
+     * apart ({@link #aHoleEmptiesNoSideOfAnOrder}). Where it does not, the values each term takes
+     * are the type's but for the holes, and an order asks only for a value on each side of the
+     * line, which is what is shown.
+     *
+     * @param holes the whole numbers a statement of the rows keeps one term of the two from
+     */
+    public static <P> Set<P> ofTheirDifference(List<Term<P>> terms, Beside beside,
+                                               Rel relation, List<OnTheDifference> held,
+                                               WhereTheRepresentationStops extent,
+                                               BiPredicate<P, P> overlap, BigInteger greatest,
+                                               Operations operations,
+                                               boolean sizesAreRowsComputed,
+                                               List<BigInteger> holes) {
         Combination combination = terms.size() == 2 ? combinationOf(terms) : null;
         ExactRatio constant = beside == null ? null : beside.constant();
         if (combination == null || constant == null || !sizesAreRowsComputed
                 || !apart(terms, 0, overlap)
-                || !bothTakeTheWholeType(terms.get(0), terms.get(1), extent.run())) {
+                || !bothTakeTheWholeType(terms.get(0), terms.get(1), extent.run())
+                || (!holes.isEmpty() && !aHoleEmptiesNoSideOfAnOrder(holes, held, relation,
+                        extent, operations, constant))) {
             return Set.of();
         }
         ExactRatio first = terms.get(0).weight();
@@ -3531,6 +3555,66 @@ public final class WhatARelationLeavesUndivided {
         Set<P> out = new LinkedHashSet<>(terms.get(0).madeOf());
         out.addAll(terms.get(1).madeOf());
         return out;
+    }
+
+    /**
+     * Whether holding a term away from {@code holes} keeps each side of the line a value, at every
+     * value the other term is asked at: the relation is an order, the rows state nothing about the
+     * difference ({@code held} is empty), and every hole is farther from where the values stop
+     * than the program's own sums move that end.
+     *
+     * <p>Each side of the line is a run of the values a term takes. A run of more than one value
+     * has a value that is no hole, and a run of one is at an end of what the term takes: where its
+     * values stop, or where a sum the program works out moves that to. So a hole farther from both
+     * ends than any such move is the sole value of no side. A statement about the difference
+     * narrows a side to anywhere in the run, and an equation asks for the one value the hole keeps
+     * out: neither is read here.
+     *
+     * <p>A sum over more than one term, or one weighing a term other than once, moves the end by
+     * a distance this does not know, so no hole is passed over beside one.
+     */
+    private static boolean aHoleEmptiesNoSideOfAnOrder(List<BigInteger> holes,
+                                                       List<OnTheDifference> held, Rel relation,
+                                                       WhereTheRepresentationStops extent,
+                                                       Operations operations, ExactRatio constant) {
+        if (!held.isEmpty() || !(relation == Rel.LT || relation == Rel.LE || relation == Rel.GT
+                || relation == Rel.GE)) {
+            return false;
+        }
+        ExactRatio moved = constant.abs();
+        for (IntSum each : operations.sums()) {
+            if (each.coefs().size() > 1 || each.coefs().values().stream()
+                    .anyMatch(weight -> !weight.abs().equals(ExactRatio.ONE))
+                    || !(moved.plus(each.constant().abs())
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio more))) {
+                return false;
+            }
+            moved = more;
+        }
+        for (BigInteger hole : holes) {
+            ExactRatio at = ExactRatio.of(hole);
+            if (!fartherThan(moved, at, extent.run().min(), true)
+                    || !fartherThan(moved, at, extent.run().max(), false)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code hole} is more than {@code moved} from {@code end}, the least end of a run
+     *  where {@code fromBelow} and its greatest otherwise; a run with no such end is far from it. */
+    private static boolean fartherThan(ExactRatio moved, ExactRatio hole, Endpoint end,
+                                       boolean fromBelow) {
+        if (end == null) {
+            return true;
+        }
+        if (!(end.at() instanceof Count count)) {
+            return false;
+        }
+        ExactAnswer<ExactRatio> distance = fromBelow ? hole.minus(count.exactly())
+                : count.exactly().minus(hole);
+        return distance instanceof ExactAnswer.Held<ExactRatio>(ExactRatio far)
+                && far.compareTo(moved) > 0;
     }
 
     /**

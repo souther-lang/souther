@@ -2578,29 +2578,40 @@ final class ReadQuantities implements Quantities {
     }
 
     private NumericDomain.RunBesidesItsHoles runShownWholeBesidesItsHoles(NumericTerm term) {
-        if (!(asking(List.of(term))
-                instanceof StructuralContext.Merge.Together(StructuralContext under))) {
+        List<StructuralContext> ways = waysAsked(term);
+        if (ways == null || ways.size() != 1) {
             return null;
         }
-        List<StructuralContext> ways = eitherWay(under, List.of(term));
-        if (ways.size() != 1) {
-            return null;
-        }
-        StructuralContext only = ways.getFirst();
-        ConstraintState<InputAtom> rules = insideItsOrder(
-                holding(effectiveConstraints(only), term, only),
-                NumericTerms.ordered(List.of(term)), only);
-        return rules.numbers().wholeRunBesidesItsHolesOf(called(term, only));
+        return rulesAlong(term, ways.getFirst()).numbers()
+                .wholeRunBesidesItsHolesOf(called(term, ways.getFirst()));
+    }
+
+    /**
+     * Every way the containers {@code term} is read through hold something or none
+     * ({@link #eitherWay}), or null where the question is not answered together.
+     */
+    private List<StructuralContext> waysAsked(NumericTerm term) {
+        return asking(List.of(term))
+                instanceof StructuralContext.Merge.Together(StructuralContext under)
+                ? eitherWay(under, List.of(term)) : null;
+    }
+
+    /**
+     * The rules of {@code way} that a run of {@code term} is read of: those it holds, inside where
+     * the order of every number they speak of stops ({@link #insideItsOrder}).
+     */
+    private ConstraintState<InputAtom> rulesAlong(NumericTerm term, StructuralContext way) {
+        return insideItsOrder(holding(effectiveConstraints(way), term, way),
+                NumericTerms.ordered(List.of(term)), way);
     }
 
     private NumericDomain.Bounds runShownWhole(NumericTerm term) {
-        if (!(asking(List.of(term))
-                instanceof StructuralContext.Merge.Together(StructuralContext under))) {
-            return null;
-        }
         // Across every way the containers it walks hold something or none ({@link #eitherWay}):
         // a run shown whole in each that leaves the term a value, where those are one run.
-        List<StructuralContext> ways = eitherWay(under, List.of(term));
+        List<StructuralContext> ways = waysAsked(term);
+        if (ways == null) {
+            return null;
+        }
         TermOrders orders = ways.size() == 1 ? null : ordersOf(term);
         Granularity spacing = orders == null || orders.answered() == null ? null
                 : orders.answered().spacing();
@@ -2613,10 +2624,8 @@ final class ReadQuantities implements Quantities {
                     instanceof NumericDomain.FormProjection.NothingIsLeft) {
                 continue;
             }
-            ConstraintState<InputAtom> rules = insideItsOrder(
-                    holding(effectiveConstraints(each), term, each),
-                    NumericTerms.ordered(List.of(term)), each);
-            NumericDomain.Bounds run = rules.numbers().wholeRunOf(called(term, each));
+            NumericDomain.Bounds run = rulesAlong(term, each).numbers()
+                    .wholeRunOf(called(term, each));
             if (run == null) {
                 return null;
             }
