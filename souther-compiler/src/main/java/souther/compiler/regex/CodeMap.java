@@ -119,19 +119,30 @@ public final class CodeMap {
         }
         BitSet dependsOnWhatStandsBeside = dependingOnWhatStandsBeside(conversion, candidates,
                 targets, found);
+        // A run is made once it ends, and not again for each code point it is stretched over.
         List<Run> runs = new ArrayList<>();
+        int runFrom = -1;
+        int runTo = -1;
+        int runShift = 0;
         for (int at = 0; at < found; at++) {
             if (dependsOnWhatStandsBeside.get(at)) {
                 continue;
             }
             int codePoint = candidates[at];
-            Run last = runs.isEmpty() ? null : runs.getLast();
             int shift = targets[at] - codePoint;
-            if (last != null && last.to() + 1 == codePoint && last.shift() == shift) {
-                runs.set(runs.size() - 1, new Run(last.from(), codePoint, shift));
-            } else {
-                runs.add(new Run(codePoint, codePoint, shift));
+            if (runFrom >= 0 && runTo + 1 == codePoint && runShift == shift) {
+                runTo = codePoint;
+                continue;
             }
+            if (runFrom >= 0) {
+                runs.add(new Run(runFrom, runTo, runShift));
+            }
+            runFrom = codePoint;
+            runTo = codePoint;
+            runShift = shift;
+        }
+        if (runFrom >= 0) {
+            runs.add(new Run(runFrom, runTo, runShift));
         }
         return new CodeMap(runs, new CodePoints(alone));
     }
