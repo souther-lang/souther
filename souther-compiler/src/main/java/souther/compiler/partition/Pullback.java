@@ -1805,7 +1805,9 @@ final class Pullback {
      *
      * <p>One whose owner says where it answers — where the collection it answers fits — is owed
      * as that ({@link StopObligation}) and ties nothing: a reader shows some run gets past it, or
-     * holds the places it reads as ones it may stop on.
+     * holds the places it reads as ones it may stop on. One that answers where the numbers it is
+     * handed say, which no such proof is about, ties the places it reads as an operation nothing
+     * says the answers of does ({@link #owedAProof}).
      *
      * <p>Nothing in a closure no run applies ({@link Operators#neverApplied}): it ends no run. Nor
      * does a construction that no clause of its type refuses a run of, an operation that comes
@@ -1845,12 +1847,12 @@ final class Pullback {
             // What stops no run is said by its owner, and a place that is not named is not that: an
             // operation nothing says completes, reading no place, may still stop a run on a
             // number no place holds — a divisor that is nought however it is written.
-            if (completion instanceof GetsPast.NotKnown && operated.unsaidAt.isEmpty()
+            if (!owedAProof(completion) && operated.unsaidAt.isEmpty()
                     && operated.unsaidElsewhere == elsewhereBefore
                     && !isProvenToComplete(e, divisor, reads)) {
                 operated.leaveUnsaidOverUnreadOperands();
             }
-            if (operated.within != null && !(completion instanceof GetsPast.NotKnown)) {
+            if (operated.within != null && owedAProof(completion)) {
                 operated.obligations.add(new StopObligation(e, operated.unsaidAt,
                         operated.unsaidElsewhere != elsewhereBefore, completion, operated.within,
                         operated.readsAt, where));
@@ -2011,6 +2013,24 @@ final class Pullback {
     }
 
     /**
+     * Whether an operation answering where {@code completion} says, not shown to answer on every
+     * run, is owed a proof that some run gets past it ({@link StopObligation}): where it answers
+     * turns on how many the collections it builds hold, or on the text it converts, and a reader
+     * shows that of a witness ({@link ContainerSizesUnderAWitness}). A product of a list's numbers
+     * and a span between two numbers turn on the numbers the places they read hold, which that
+     * reader does not read, so they tie the places they read as an operation nothing says the
+     * answers of does.
+     */
+    private static boolean owedAProof(GetsPast completion) {
+        return switch (completion) {
+            case GetsPast.WhereTheAnswerFits _, GetsPast.WhereTheTotalFits _,
+                 GetsPast.WhereTheTextFits _ -> true;
+            case GetsPast.WhereTheProductFits _, GetsPast.WhereTheSpanFits _, GetsPast.Always _,
+                 GetsPast.NotKnown _ -> false;
+        };
+    }
+
+    /**
      * The operand {@code e} stops a run on alone, or null where it has none, as the owner's own
      * account says: the divisor of a quotient that stops where it is nought, and not of one that
      * may stop on its operands' sizes ({@link WhereAnOperatorAnswers}), and of a remainder
@@ -2058,19 +2078,61 @@ final class Pullback {
      * whose whole number its type holds ({@link RoundedToAWholeNumber#whereTheRoundedNumberIsHeld}),
      * an operation that ends a run only where the form it is handed has no place
      * ({@link AffineForms#whereAFormItIsHandedAnswers}), a total held to its type once it is added
-     * up exactly ({@link GetsPast.WhereTheTotalFits}) — and the number it comes to, before it is
-     * held to anything, lies there whatever its operands are ({@link #exactRangeOf}). A total of
-     * what an element meets is a count, which comes to no more than a list holds: it is an
-     * {@code Int} on every run.
+     * up exactly ({@link GetsPast.WhereTheTotalFits}), a product held to its type once it is
+     * multiplied out exactly ({@link GetsPast.WhereTheProductFits}) — and the number it comes to,
+     * before it is held to anything, lies there whatever its operands are ({@link #exactRangeOf}).
+     * A total of what an element meets is a count, which comes to no more than a list holds: it
+     * is an {@code Int} on every run. And a span between two numbers that answers where it is no
+     * longer than a collection holds ({@link GetsPast.WhereTheSpanFits}), where the greatest its
+     * last number comes to less the least its first comes to leaves it no longer
+     * ({@link #theSpanFits}).
      *
      * <p>Of {@code e} alone. What its operands work out stops a run or not as each of them says,
      * and is asked of each: {@code Int.floorMod(m - k, 12) + 1} adds within an {@code Int}
      * whatever {@code m - k} is, and {@code m - k} may still pass one.
      */
     private boolean comesToWhereItAnswers(Core e, InputReads reads) {
+        if (Core.withoutStanding(e) instanceof Core.PreservedCall call
+                && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
+                        instanceof GetsPast.WhereTheSpanFits(int from, int to)) {
+            return theSpanFits(call, from, to, reads);
+        }
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld held = whereItsNumberIsHeld(e, reads);
         FormRange range = held == null ? null : exactRangeOf(e, reads);
         return range != null && range.liesWithin(held.least(), held.greatest());
+    }
+
+    /**
+     * Whether the whole numbers from the operand of {@code call} at {@code from} to the one at
+     * {@code to}, both included, are no more than a collection holds ({@link GetsPast#MOST_ELEMENTS})
+     * on every run that works it out: the greatest the last less the first comes to is less than
+     * that. A first number above the last is a span of none, which is no longer either.
+     *
+     * <p>Of the two numbers as one difference where the arithmetic composes both, so that ends
+     * written of the same number take each other in ({@code List.rangeInclusive(v, v + 3)} is four
+     * whatever {@code v} is); and of the greatest the last comes to less the least the first comes
+     * to ({@link #exactRangeOf}), which holds whatever either is written as. The two are met.
+     */
+    private boolean theSpanFits(Core.PreservedCall call, int from, int to, InputReads reads) {
+        if (from >= call.args().size() || to >= call.args().size()) {
+            return false;
+        }
+        Core first = call.args().get(from);
+        Core last = call.args().get(to);
+        FormRange apart = FormRange.combined(BinOp.SUB, exactRangeOf(last, reads),
+                exactRangeOf(first, reads));
+        FormRange together = null;
+        if (AffineForms.outcome(last, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var ofTheLast)
+                && AffineForms.outcome(first, reads, quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var ofTheFirst)
+                && ofTheLast.minus(ofTheFirst)
+                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(var difference)) {
+            together = rangeOfAComposedForm(difference, reads, new HashMap<>());
+        }
+        FormRange span = apart == null ? together : together == null ? apart : apart.meet(together);
+        return span != null && span.greatest().compareTo(
+                ExactRatio.of(GetsPast.MOST_ELEMENTS.subtract(BigInteger.ONE))) <= 0;
     }
 
     /** Where {@code e} answers as the number it comes to is held, or null where its account is
@@ -2085,9 +2147,13 @@ final class Pullback {
         if (!(here instanceof Core.PreservedCall call)) {
             return null;
         }
-        if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
-                instanceof GetsPast.WhereTheTotalFits) {
+        GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call);
+        if (completion instanceof GetsPast.WhereTheTotalFits) {
             return WhereAnOperatorAnswers.ofATotal(call.type())
+                    instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held ? held : null;
+        }
+        if (completion instanceof GetsPast.WhereTheProductFits) {
+            return WhereAnOperatorAnswers.ofAProduct(call.type())
                     instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held ? held : null;
         }
         return writtenRounding(call, reads) != null
@@ -2115,9 +2181,13 @@ final class Pullback {
     /**
      * The numbers {@code e} comes to on every run that works it out, as a number and before it is
      * held to its type — or null where they are not known: what the arithmetic composes it as,
-     * over the numbers each says it lies between ({@link FormRange#ofNumbers}); a number rounded
+     * over the numbers each says it lies between ({@link FormRange#ofNumbers}), held to what the
+     * declarations say of it where it is a form of numbers of the input
+     * ({@link FormRange#heldWhereItIsOfTheInput}); a number rounded
      * to a whole one, the numbers the ends of what it rounds round to, since rounding keeps their
-     * order; a whole number an operation of the library answers, where the library bounds it
+     * order; the product of a list written out, what its elements come to multiplied
+     * ({@link #productOfWrittenOut}); a whole number another operation of the library answers,
+     * where the library bounds it
      * ({@link #whatTheLibraryBounds}) — a remainder by a divisor below nought as by one above; a
      * name the step of a walk around binds to the value found under a key, what the walk's law
      * says it holds there ({@link WhatTheStepsNamesHold}), where nothing else says; the body of a
@@ -2146,8 +2216,7 @@ final class Pullback {
                 : FormRange.ofWhatTheRulesLeave(leftByTheRules);
         if (AffineForms.outcome(e, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
-            FormRange composed = FormRange.ofNumbers(form, read,
-                    name -> exactRangeOfAName(name, reads, known));
+            FormRange composed = rangeOfAComposedForm(form, reads, known);
             if (composed != null) {
                 return ofTheNewtype == null ? composed : composed.meet(ofTheNewtype);
             }
@@ -2161,6 +2230,11 @@ final class Pullback {
         }
         Core here = Core.withoutStanding(e);
         if (here instanceof Core.PreservedCall call) {
+            if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
+                    instanceof GetsPast.WhereTheProductFits(int operand)) {
+                return operand < call.args().size()
+                        ? productOfWrittenOut(call.args().get(operand), reads, known) : null;
+            }
             return call.type() == Type.INT
                     ? FormRange.ofTheWholeNumbersIn(whatTheLibraryBounds(call, reads)) : null;
         }
@@ -2196,6 +2270,19 @@ final class Pullback {
                     exactRangeOf(binary.right(), reads, known));
             default -> null;
         };
+    }
+
+    /**
+     * The numbers {@code form}, what the arithmetic composed a number as, comes to: over the
+     * numbers each of its atoms says it lies between ({@link FormRange#ofNumbers}), held to what
+     * the declarations say of it where it is a form of numbers of the input
+     * ({@link FormRange#heldWhereItIsOfTheInput}). Null where some atom's numbers are not known.
+     */
+    private FormRange rangeOfAComposedForm(LinearForm<Quantity> form, InputReads reads,
+                                           Map<BindingId, RangeOfAName> known) {
+        FormRange composed = FormRange.ofNumbers(form, read,
+                name -> exactRangeOfAName(name, reads, known));
+        return composed == null ? null : composed.heldWhereItIsOfTheInput(form, read);
     }
 
     /** What a name comes to, worked out in {@code at}, which is the reading it holds in. */
@@ -2246,6 +2333,37 @@ final class Pullback {
             joined = joined == null ? of : joined.hull(of);
         }
         return joined;
+    }
+
+    /**
+     * The numbers the exact product of what {@code list} holds comes to on every run that works it
+     * out, where it is a list written out: one, multiplied by what each element comes to in turn
+     * ({@link FormRange#combined}), which takes a factor below nought and a nought as the product
+     * of the ends does. An element there on some rows and not on others multiplies by one where it
+     * is not. Null where the list is not written out, or some element's numbers are not known.
+     */
+    private FormRange productOfWrittenOut(Core list, InputReads reads,
+                                          Map<BindingId, RangeOfAName> known) {
+        Denotation container = reads.standing(list, read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each each)) {
+            return null;
+        }
+        FormRange one = new FormRange(ExactRatio.ONE, ExactRatio.ONE);
+        FormRange product = one;
+        for (ReadMeaning.Occurrence element : each.asWritten()) {
+            FormRange factor = exactRangeOf(element.value().value(), element.value().at(), known);
+            if (factor == null) {
+                return null;
+            }
+            product = FormRange.combined(BinOp.MUL, product,
+                    element.keptWhere().isEmpty() ? factor : factor.hull(one));
+            if (product == null) {
+                return null;
+            }
+        }
+        return product;
     }
 
     /**
@@ -9073,10 +9191,9 @@ final class Pullback {
         private StopObligation(Core operation, Set<TermPath> places, boolean onWhatNoPlaceHolds,
                                GetsPast completion, Core within, Core startedIn,
                                Map<Core, InputReads> readsAt, WorkedOutWhere where) {
-            if (completion instanceof GetsPast.Always
-                    || completion instanceof GetsPast.NotKnown) {
+            if (!owedAProof(completion)) {
                 throw new IllegalArgumentException("an operator is owed where it answers somewhere"
-                        + " and only somewhere");
+                        + " a witness shows, and only somewhere: " + completion);
             }
             this.operation = Objects.requireNonNull(operation, "some operator is owed");
             this.places = Set.copyOf(places);
@@ -9381,13 +9498,14 @@ final class Pullback {
      * numbers where it answers, over what each of its numbers says it lies between: it then
      * answers on every run, as an operation is said to that comes to where it answers whatever
      * its operands are ({@link #comesToWhereItAnswers}). Twice how many elements meet something
-     * is an {@code Int} however many do.
+     * is an {@code Int} however many do. A number of the input lies where the declarations leave
+     * it ({@link FormRange#heldWhereItIsOfTheInput}).
      */
     private boolean comesOnlyToWhereItAnswers(Answers.ByTheFormOfANumber over) {
         return over instanceof Answers.AsAnOperator(var form,
                 WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))
                 && FormRange.ofNumbers(form, read, _ -> null) instanceof FormRange range
-                && range.liesWithin(least, greatest);
+                && range.heldWhereItIsOfTheInput(form, read).liesWithin(least, greatest);
     }
 
     /** {@code on} read as the statement it makes of the numbers of the input, or null where a

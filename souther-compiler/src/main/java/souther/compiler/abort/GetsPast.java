@@ -59,6 +59,28 @@ public sealed interface GetsPast {
     record WhereTheTotalFits(int operand) implements GetsPast {}
 
     /**
+     * It answers wherever the exact product of the {@code Int}s the list at {@code operand} holds
+     * is an {@code Int}, and ends a run for nothing else: it multiplies them exactly however far a
+     * product on the way strays, and holds only the last to the type ({@code Lists.productInt}).
+     * A nought among them makes the product nought. Not what a product of two answers, which is
+     * held to the type where it is worked out.
+     *
+     * @param operand which of the site's operands is the list, counted from nought
+     */
+    record WhereTheProductFits(int operand) implements GetsPast {}
+
+    /**
+     * It answers wherever the whole numbers from the one at {@code from} to the one at {@code to},
+     * both included, are no more than a collection holds ({@link #MOST_ELEMENTS}), and ends a run
+     * for nothing else: it counts the span before it builds anything ({@code Capacity.span}), and
+     * {@code from} above {@code to} answers the empty list.
+     *
+     * @param from which of the site's operands is the first number, counted from nought
+     * @param to   which is the last
+     */
+    record WhereTheSpanFits(int from, int to) implements GetsPast {}
+
+    /**
      * It answers wherever the text it makes is no longer than a {@code String} holds, and ends a
      * run for nothing else: a case conversion of the text at {@code operand}, whose answer may
      * hold more code points than the text it was handed.

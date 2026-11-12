@@ -20,6 +20,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 
 import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -70,6 +71,23 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
             case Quantity.HowManyMeet _ -> OF_A_COUNT;
             default -> ofARemainder(quantity);
         });
+    }
+
+    /**
+     * This, the range of {@code form} {@link #ofNumbers} answered, held to what the declarations
+     * say of the form as a whole ({@link #within}) where every number it is over is a number of
+     * the input: a value of the input exists only where its rules held, so the numbers a run works
+     * out of it lie where they leave them. This as it is where some number is anything else.
+     */
+    FormRange heldWhereItIsOfTheInput(LinearForm<Quantity> form, InputReading read) {
+        Map<NumericTerm, ExactRatio> terms = new LinkedHashMap<>();
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(var term, var _))
+                    || terms.put(term, each.getValue()) != null) {
+                return this;
+            }
+        }
+        return within(new LinearForm<>(form.constant(), terms), read, Map.of());
     }
 
     /** How many elements of a container meet something: none at the fewest, and no more than a

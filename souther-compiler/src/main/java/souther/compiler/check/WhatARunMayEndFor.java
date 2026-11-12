@@ -182,9 +182,9 @@ public final class WhatARunMayEndFor {
         if (itselfApartFromTheClosuresWrittenAtIt(e).endsNone()) {
             return new GetsPast.Always();
         }
-        GetsPast total = whereTheTotalFits(e);
-        if (total != null) {
-            return total;
+        GetsPast accumulated = whereWhatItAccumulatesFits(e);
+        if (accumulated != null) {
+            return accumulated;
         }
         return switch (Core.withoutStanding(e)) {
             case Core.Binary binary -> AbortSites.completionOfAnOperator(binary.op(), binary.type());
@@ -226,17 +226,24 @@ public final class WhatARunMayEndFor {
     }
 
     /**
-     * Where a call adding up the {@code Int}s of a list answers, or null where {@code e} is no
-     * such call: what it accumulates is the operation's own account ({@link Accumulations}), from
-     * nought by adding, and the total it answers is an {@code Int}.
+     * Where a call adding up or multiplying together the {@code Int}s of a list answers, or null
+     * where {@code e} is no such call: what it accumulates is the operation's own account
+     * ({@link Accumulations}), from nought by adding or from one by multiplying, and the number it
+     * answers is an {@code Int}.
      */
-    private static GetsPast whereTheTotalFits(Core e) {
+    private static GetsPast whereWhatItAccumulatesFits(Core e) {
         if (!(Core.withoutStanding(e) instanceof Core.PreservedCall kept)
                 || kept.type() != Type.INT) {
             return null;
         }
-        OptionalInt at = theListItAddsUp(kept);
-        return at.isPresent() ? new GetsPast.WhereTheTotalFits(at.getAsInt()) : null;
+        OptionalInt added = theListItAddsUp(kept);
+        if (added.isPresent()) {
+            return new GetsPast.WhereTheTotalFits(added.getAsInt());
+        }
+        OptionalInt multiplied = theListItAccumulates(kept, new Accumulation(
+                Accumulation.Identity.ONE, Accumulation.Combine.MULTIPLY));
+        return multiplied.isPresent()
+                ? new GetsPast.WhereTheProductFits(multiplied.getAsInt()) : null;
     }
 
     /**
@@ -245,12 +252,18 @@ public final class WhatARunMayEndFor {
      * no such call. Whatever the numbers are: what a run stops at in adding them is the type's.
      */
     public static OptionalInt theListItAddsUp(Core e) {
+        return theListItAccumulates(e, new Accumulation(Accumulation.Identity.ZERO,
+                Accumulation.Combine.ADD));
+    }
+
+    /** Which operand of {@code e} is the list it accumulates over as {@code what} says, by the
+     *  operation's own account ({@link Accumulations}); empty where it accumulates nothing so. */
+    private static OptionalInt theListItAccumulates(Core e, Accumulation what) {
         if (!(Core.withoutStanding(e) instanceof Core.PreservedCall kept)) {
             return OptionalInt.empty();
         }
         Accumulations.Accumulating accumulating = Accumulations.accumulating(kept);
-        if (accumulating == null || !accumulating.what().equals(new Accumulation(
-                Accumulation.Identity.ZERO, Accumulation.Combine.ADD))) {
+        if (accumulating == null || !accumulating.what().equals(what)) {
             return OptionalInt.empty();
         }
         for (int at = 0; at < kept.args().size(); at++) {

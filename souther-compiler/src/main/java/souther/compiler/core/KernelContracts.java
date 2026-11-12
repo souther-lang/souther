@@ -182,6 +182,9 @@ public final class KernelContracts {
      * <p>A case conversion answers the text it makes of its operand, which holds more code points
      * than the operand where a code point becomes several, and ends a run only where that text is
      * longer than a {@code String} holds.
+     *
+     * <p>{@code List.rangeInclusive} ends a run only where the span between its two numbers is
+     * longer than a {@code List} holds, which it counts before it builds the list.
      */
     public static GetsPast completionOf(Kernel kernel) {
         return switch (kernel) {
@@ -189,6 +192,7 @@ public final class KernelContracts {
             case SET_INSERT -> fits(GetsPast.together(1, 1));
             case MAP_INSERT -> fits(GetsPast.together(1, 2));
             case STRING_LOWERCASE, STRING_UPPERCASE -> new GetsPast.WhereTheTextFits(0);
+            case LIST_RANGE_INCLUSIVE -> new GetsPast.WhereTheSpanFits(0, 1);
             default -> abortsOf(kernel).isEmpty() ? new GetsPast.Always()
                     : new GetsPast.NotKnown();
         };
