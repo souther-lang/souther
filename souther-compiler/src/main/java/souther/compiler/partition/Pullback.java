@@ -256,7 +256,9 @@ final class Pullback {
         }
 
         /** What the condition states as a reader of the lines it draws is told: the same pull
-         *  where the lines drawn and the rows asked are one reading. */
+         *  where the lines drawn and the rows asked are one reading. Where they are two, the
+         *  statement is where lines may be and no more ({@link Derivation.LinesWithoutRows}):
+         *  only a reader of lines asks it. */
         Pulled forTheLines() {
             return forTheLines == null ? this : forTheLines;
         }
@@ -3737,26 +3739,33 @@ final class Pullback {
     private record Beneath(Denotation at, List<Kept> kept) {}
 
     /**
-     * An operation that kept the elements meeting a statement, how that is read, and what an
-     * element is at the level of the container its closure is handed: what stands at a position,
-     * or the answer a walk gave, which a closure is handed where nothing else stands for it.
+     * What an operation kept the elements of what it was handed by.
+     *
+     * <p>Said is a statement, and what holds of an element it kept holds of the one it was kept
+     * from. The statement is read through the closure the operation was handed, whose names say
+     * where each value came from, so it is a statement about the source's elements however the
+     * operations between rewrote their values: a key of a map made by {@code Map.mapValues} is a
+     * key of the map it was made of, and what is said of the values it holds is said through what
+     * the closure made of them. A statement is never a place standing for an element, which is
+     * why it may be carried beneath an operation that kept only some of an element's parts.
+     *
+     * <p>Unsaid is what no statement says. An element of such an operation's answer is one of
+     * what it was handed, and nothing more is known of it.
      */
-    private record Kept(ALawRead read, LawNumber.HowManyMeet<DeclaredArgument> meeting,
-                        ElementAt each, Denotation handed) {
+    private sealed interface Kept {
 
         /**
-         * What an operation holding some of the elements of what it was handed kept them by, where
-         * no statement says which: by where they stand, as {@code List.take} does, or by what is
-         * left out, as {@code Map.remove} does. An element of its answer is one of what it was
-         * handed, and nothing more is known of it.
+         * An operation that kept the elements meeting a statement, how that is read, and what an
+         * element is at the level of the container its closure is handed: what stands at a
+         * position, or the answer a walk gave, which a closure is handed where nothing else stands
+         * for it.
          */
-        static Kept unsaid() {
-            return new Kept(null, null, null, null);
-        }
+        record Said(ALawRead read, LawNumber.HowManyMeet<DeclaredArgument> meeting, ElementAt each,
+                    Denotation handed) implements Kept {}
 
-        boolean isUnsaid() {
-            return read == null;
-        }
+        /** An operation that held some of the elements by where they stand, as {@code List.take}
+         *  does, or by what is left out, as {@code Map.remove} does. */
+        record Unsaid() implements Kept {}
     }
 
     /** Where a container's elements stand, what each is there for the statement quantified over
@@ -4104,7 +4113,7 @@ final class Pullback {
                                 ? DefaultBoundOperationFacts.get().keepsTheKeysOf(operation)
                                 : null;
                 if (from != null) {
-                    kept.add(Kept.unsaid());
+                    kept.add(new Kept.Unsaid());
                 }
             }
             // Whether some element meets a statement is the same of a container holding the
@@ -4129,7 +4138,7 @@ final class Pullback {
      * reads it — or null where it is no operation answering exactly the elements of a list that
      * meet a statement.
      */
-    private Kept keptByALaw(Denotation at) {
+    private Kept.Said keptByALaw(Denotation at) {
         if (!(Core.withoutStanding(at.value()) instanceof Core.PreservedCall call)) {
             return null;
         }
@@ -4139,7 +4148,7 @@ final class Pullback {
         DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
         LawNumber.HowManyMeet<DeclaredArgument> keeping =
                 holds == null ? null : keepsWhatMeets(operation, holds);
-        return keeping == null ? null : new Kept(new ALawRead(
+        return keeping == null ? null : new Kept.Said(new ALawRead(
                 new AnOperationApplied(operation, call.args()), call, at.at()), keeping, null,
                 null);
     }
@@ -6018,7 +6027,7 @@ final class Pullback {
                             && reads.orderLeftToTheRows());
             Derivation meeting = new Derivation.SomeElementMeeting(heldAt, answered, true,
                     holdsSomething, asked);
-            return located.kept().stream().anyMatch(Kept::isUnsaid)
+            return located.kept().stream().anyMatch(Kept.Unsaid.class::isInstance)
                     || (!kept.isEmpty() && statesTheValueOfTheElement(some.ofTheElement()))
                     ? rowsDeclined(meeting, over, in) : meeting;
         }
@@ -6448,23 +6457,23 @@ final class Pullback {
         private List<Derivation> whatKept(List<Kept> kept) {
             List<Derivation> by = new ArrayList<>();
             for (Kept one : kept) {
-                // No row is asked for what no statement says; the lines drawn on the elements are
-                // those of what is stated of them.
-                if (one.isUnsaid()) {
-                    by.add(withoutRows(new Derivation.WrittenOut(true), unread(e, reads,
-                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER))));
-                    continue;
-                }
-                if (one.handed() != null) {
-                    by.add(one.read().ofTheValue(one.meeting().container(),
-                            one.meeting().ofTheElement(), one.handed()));
-                    continue;
-                }
-                one.read().elements.put(one.meeting().container(), one.each());
-                try {
-                    by.add(one.read().of(one.meeting().ofTheElement()));
-                } finally {
-                    one.read().elements.remove(one.meeting().container());
+                switch (one) {
+                    // No row is asked for what no statement says; the lines drawn on the elements
+                    // are those of what is stated of them.
+                    case Kept.Unsaid _ -> by.add(withoutRows(new Derivation.WrittenOut(true),
+                            unread(e, reads, new WhyUnread.AtNoPosition(
+                                    WhyUnread.AtNoPosition.Place.CONTAINER))));
+                    case Kept.Said said when said.handed() != null -> by.add(said.read()
+                            .ofTheValue(said.meeting().container(), said.meeting().ofTheElement(),
+                                    said.handed()));
+                    case Kept.Said said -> {
+                        said.read().elements.put(said.meeting().container(), said.each());
+                        try {
+                            by.add(said.read().of(said.meeting().ofTheElement()));
+                        } finally {
+                            said.read().elements.remove(said.meeting().container());
+                        }
+                    }
                 }
             }
             return by;
@@ -6974,7 +6983,10 @@ final class Pullback {
         /** What was kept at one level of a container, as the elements of that level are read. */
         private static void settle(List<Kept> pending, ElementAt each, Denotation handed,
                                    List<Kept> into) {
-            pending.forEach(one -> into.add(new Kept(one.read(), one.meeting(), each, handed)));
+            pending.forEach(one -> into.add(switch (one) {
+                case Kept.Said said -> new Kept.Said(said.read(), said.meeting(), each, handed);
+                case Kept.Unsaid unsaid -> unsaid;
+            }));
             pending.clear();
         }
 

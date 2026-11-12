@@ -261,6 +261,38 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             behavior valuesOfRewrittenAny : (l: Line) -> Bool
             let valuesOfRewrittenAny (l) =
                 List.any(v -> v == 5, Map.values(Map.mapValues((_, v) -> v + 1, l.rates)))
+            behavior containsKeyOfKept : (l: Line) -> Bool
+            let containsKeyOfKept (l) =
+                Map.containsKey("K", Map.filterEntries((_, v) -> v > 3, l.rates))
+            behavior keptAfterRewriting : (l: Line) -> Bool
+            let keptAfterRewriting (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3, Map.mapValues((_, v) -> 10, l.rates))))
+            behavior keptByKeyAfterRewriting : (l: Line) -> Bool
+            let keptByKeyAfterRewriting (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((k, _) -> k /= "Z", Map.mapValues((_, v) -> 10, l.rates))))
+            behavior keptAfterShifting : (l: Line) -> Bool
+            let keptAfterShifting (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3, Map.mapValues((_, v) -> v + 1, l.rates))))
+            behavior keptAfterSquaring : (l: Line) -> Bool
+            let keptAfterSquaring (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3, Map.mapValues((_, v) -> v * v, l.rates))))
+            behavior keptAfterClamping : (l: Line) -> Bool
+            let keptAfterClamping (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3,
+                        Map.mapValues((_, v) -> Int.max(v, 5), l.rates))))
+            behavior keptAfterKeying : (l: Line) -> Bool
+            let keptAfterKeying (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3,
+                        Map.mapValues((k, _) -> String.length(k), l.rates))))
+            behavior keysOfUpdated : (l: Line) -> Bool
+            let keysOfUpdated (l) =
+                List.contains("K", Map.keys(Map.updateIfPresent("Z", v -> v + 1, l.rates)))
             behavior distinctOfKept : (l: Line) -> Bool
             let distinctOfKept (l) =
                 List.contains(5, List.distinct(List.filter(x -> x > 3, l.nums)))
@@ -528,6 +560,9 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         // hold some of its keys is listed at the keys of the other; a value of one that rewrote
         // the values is no value of the other.
         assertEquals(Set.of("l.rates[*] 3", "l.rates[key] K"), linesOf("keysOfKept"));
+        // The keys of a map are asked of it as a key held is: what its entries were kept by is
+        // held beside the key either way, down to the rows found at the points.
+        assertEquals(pointsOf("containsKeyOfKept"), pointsOf("keysOfKept"));
         assertEquals(Set.of("l.rates[*] 3", "l.rates[*] 5"), linesOf("valuesOfKept"));
         assertEquals(Set.of("l.rates[key] K"), linesOf("keysOfTaken"));
         assertEquals(Set.of("l.rates[*] 5"), linesOf("valuesOfTaken"));
@@ -550,6 +585,31 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         assertEquals(Set.of("l.rates[*] 3", "l.rates[key] USD"), linesOf("filteredKeys"));
         assertEquals(Set.of("l.tags[*] K"), linesOf("taken"));
         assertEquals(Set.of("l.rates[key] USD"), linesOf("removedKeys"));
+    }
+
+    /**
+     * What a map's entries were kept by is read through the closure that made the values of the
+     * map below, so the keys of the map made by keeping some of them are listed at the keys of the
+     * map it began as, and what is said of a value is said of what the closure made of it: of the
+     * value plus one, a value above three is a value above two; of a constant, no value of the
+     * input; of a key, a value of the key.
+     *
+     * <p>Each is held to the lines the statement draws on the input, written out here, and not to
+     * what a comparison draws: both could be told the same thing wrongly.
+     */
+    @Test
+    void whatEntriesWereKeptByIsSaidOfWhatTheClosureMadeOfTheValues() {
+        assertEquals(Set.of("l.rates[*] 2", "l.rates[key] K"), linesOf("keptAfterShifting"));
+        assertEquals(Set.of("l.rates[key] K"), linesOf("keptAfterRewriting"));
+        assertEquals(Set.of("l.rates[key] K"), linesOf("keptAfterClamping"));
+        assertEquals(Set.of("l.rates[key] K", "l.rates[key] Z"),
+                linesOf("keptByKeyAfterRewriting"));
+        assertEquals(Set.of("String.length(l.rates[key]) 3", "l.rates[key] K"),
+                linesOf("keptAfterKeying"));
+        // A square is no number the lines are read of, and what is not read draws no line of the
+        // value it was made of.
+        assertFalse(linesOf("keptAfterSquaring").contains("l.rates[*] 3"));
+        assertEquals(Set.of("l.rates[key] K"), linesOf("keysOfUpdated"));
     }
 
     private enum Kind { TEXT, KEY, NUMBER, DAY }

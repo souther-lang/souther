@@ -3905,6 +3905,15 @@ public sealed interface Derivation {
      * {@code asked}, a part nothing read, for a reader of rows and {@code drawn} for a reader of
      * lines ({@link Conclusion#drawingLines}).
      *
+     * <p>{@code drawn} is not what the statement states. Some element of what holds some of the
+     * source's elements meeting a value is not some element of the source meeting it, and the
+     * statement that none does says nothing of the source. It says where a line may be, and a
+     * reader of lines may draw one nothing holds a row at ({@code List.take(0, xs)} holds no
+     * element, and is still a line on the elements of {@code xs}). It says of an element what is
+     * said of every element the source holds, so it draws the lines the statement does and may
+     * draw more. Nothing may be concluded from it of which rows there are or which way the
+     * statement comes out.
+     *
      * @param drawn what the statement is read as where only the lines it draws are asked
      * @param asked what a reader of rows is told, which is that no row is asked for it and why
      */
