@@ -346,6 +346,7 @@ public sealed interface BlockReason {
                 case RelationShownOverARegion(boolean atAnyLength, Long longerThan,
                                               Long shorterThan,
                                               List<String> imagesNotShown,
+                                              List<String> notShownGottenPast,
                                               List<CodePointsLeftOpen> byCodePoints) -> {
                     RelationShownOverARegion them = (RelationShownOverARegion) other;
                     int byLength = Boolean.compare(atAnyLength, them.atAnyLength());
@@ -371,6 +372,17 @@ public sealed interface BlockReason {
                     }
                     if (imagesNotShown.size() != theirs.size()) {
                         yield Integer.compare(imagesNotShown.size(), theirs.size());
+                    }
+                    List<String> theirPast = them.notShownGottenPast();
+                    for (int i = 0; i < Math.min(notShownGottenPast.size(), theirPast.size());
+                            i++) {
+                        int byName = notShownGottenPast.get(i).compareTo(theirPast.get(i));
+                        if (byName != 0) {
+                            yield byName;
+                        }
+                    }
+                    if (notShownGottenPast.size() != theirPast.size()) {
+                        yield Integer.compare(notShownGottenPast.size(), theirPast.size());
                     }
                     List<CodePointsLeftOpen> theirCounts = them.byCodePoints();
                     for (int i = 0; i < Math.min(byCodePoints.size(), theirCounts.size()); i++) {
@@ -1521,9 +1533,14 @@ public sealed interface BlockReason {
      *                    is shown only where it is exact, each as the library names it: the
      *                    strings they are not exact on are the ones left open whatever their
      *                    length. None where the values left open are left for another reason
+     * @param notShownGottenPast the operations of the library a run gets to the relation past only
+     *                    where it is shown to: a case conversion ends a run where its answer is
+     *                    longer than a {@code String} holds, and the strings it is not shown to
+     *                    end none for are left open whatever their length. None where the values
+     *                    left open are left for another reason
      */
     record RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
-                                    List<String> imagesNotShown,
+                                    List<String> imagesNotShown, List<String> notShownGottenPast,
                                     List<CodePointsLeftOpen> byCodePoints)
             implements RuleReadingStopped {
 
@@ -1534,7 +1551,16 @@ public sealed interface BlockReason {
                         + " values open");
             }
             imagesNotShown = imagesNotShown.stream().distinct().sorted().toList();
+            notShownGottenPast = notShownGottenPast.stream().distinct().sorted().toList();
             byCodePoints = byCodePoints.stream().distinct().sorted().toList();
+        }
+
+        /** The same, where no value is left open for an operation the run is not shown to get
+         *  past. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
+                                        List<String> imagesNotShown,
+                                        List<CodePointsLeftOpen> byCodePoints) {
+            this(atAnyLength, longerThan, shorterThan, imagesNotShown, List.of(), byCodePoints);
         }
 
         /** The same, with no values left open for how many code points of a class they hold. */
@@ -1582,6 +1608,14 @@ public sealed interface BlockReason {
         public static RelationShownOverARegion of(List<ValuesWithin> open,
                                                   List<String> imagesNotShown,
                                                   List<CodePointsLeftOpen> byCodePoints) {
+            return of(open, OperationsNotShown.ofImages(imagesNotShown), byCodePoints);
+        }
+
+        /** The same, with the operations the values open whatever their length are open for, by
+         *  why ({@code operations}). */
+        public static RelationShownOverARegion of(List<ValuesWithin> open,
+                                                  OperationsNotShown operations,
+                                                  List<CodePointsLeftOpen> byCodePoints) {
             boolean atAnyLength = open.stream()
                     .anyMatch(each -> each.shortest() == 0 && each.longest() == null);
             Long longerThan = open.stream().filter(each -> each.shortest() > 0)
@@ -1590,7 +1624,54 @@ public sealed interface BlockReason {
                     .filter(each -> each.shortest() == 0 && each.longest() != null)
                     .map(each -> each.longest() + 1).max(Long::compare).orElse(null);
             return new RelationShownOverARegion(atAnyLength, longerThan, shorterThan,
-                    atAnyLength ? imagesNotShown : List.of(), byCodePoints);
+                    atAnyLength ? operations.images() : List.of(),
+                    atAnyLength ? operations.gottenPast() : List.of(), byCodePoints);
+        }
+    }
+
+    /**
+     * The operations of the library values of a place were left open for, each as the library
+     * names it, by why: one whose image over the strings of a side is shown only where it is
+     * exact, and one a run gets to the relation past only where it is shown to. Two answers and
+     * not one list, because what a reader can do about each differs — an image is a question of
+     * what the library states of the operation, and getting past one is a question of the strings
+     * it is handed — and a reason named for the one is no reason for the other.
+     *
+     * @param images     the operations whose image is not shown
+     * @param gottenPast the operations a run is not shown to get past
+     */
+    public record OperationsNotShown(List<String> images, List<String> gottenPast) {
+
+        /** None of either. */
+        public static final OperationsNotShown NONE = new OperationsNotShown(List.of(), List.of());
+
+        public OperationsNotShown {
+            images = images.stream().distinct().sorted().toList();
+            gottenPast = gottenPast.stream().distinct().sorted().toList();
+        }
+
+        /** The operations {@code images} as ones whose image is not shown, and none other. */
+        public static OperationsNotShown ofImages(List<String> images) {
+            return new OperationsNotShown(images, List.of());
+        }
+
+        /** These and {@code other}'s, each by its own why. */
+        public OperationsNotShown and(OperationsNotShown other) {
+            List<String> allImages = new ArrayList<>(images);
+            allImages.addAll(other.images);
+            List<String> allPast = new ArrayList<>(gottenPast);
+            allPast.addAll(other.gottenPast);
+            return new OperationsNotShown(allImages, allPast);
+        }
+
+        /** These, and {@code operations} as ones whose image is not shown. */
+        public OperationsNotShown andImagesOf(List<String> operations) {
+            return and(ofImages(operations));
+        }
+
+        /** These, and {@code operations} as ones a run is not shown to get past. */
+        public OperationsNotShown andNotGottenPast(List<String> operations) {
+            return and(new OperationsNotShown(List.of(), operations));
         }
     }
 

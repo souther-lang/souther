@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
@@ -210,7 +211,8 @@ class CodePointsPastTheWayTest {
         CodePointsPastTheWay held = counted(NOT_WHITESPACE, 2, null);
         UndividedByARelation.StringsAPartnerCanHold shown =
                 new UndividedByARelation.StringsAPartnerCanHold(ValueSet.ANY, ValueSet.ANY, null,
-                        reached, held, "b", List.of("String.uppercase"));
+                        reached, held, "b",
+                        BlockReason.OperationsNotShown.ofImages(List.of("String.uppercase")));
 
         UndividedByARelation.StringsAPartnerCanHold other =
                 shown.showing(ValueSet.NONE, ValueSet.ANY, 3L);
@@ -220,7 +222,7 @@ class CodePointsPastTheWayTest {
         assertEquals(reached, other.reached());
         assertEquals(held, other.partnerHeldTo());
         assertEquals("b", other.partner());
-        assertEquals(List.of("String.uppercase"), other.imagesNotShown());
+        assertEquals(List.of("String.uppercase"), other.operations().images());
     }
 
     /** A count the allowance does not pay to build is not built, and no string is called of it
