@@ -81,6 +81,36 @@ public sealed interface GetsPast {
     record WhereTheSpanFits(int from, int to) implements GetsPast {}
 
     /**
+     * It answers wherever the {@code Int} at {@code dividend} is not the least an {@code Int} holds
+     * or the one at {@code divisor} is not minus one, and ends a run for nothing else: a quotient
+     * truncated toward nought lies no farther from nought than what it divides, but the least
+     * {@code Int} divided by minus one is one past the greatest ({@code IntMath.divideExact}). A
+     * divisor of nought answers a case.
+     *
+     * @param dividend which of the site's operands is the number divided, counted from nought
+     * @param divisor  which is the number it is divided by
+     */
+    record WhereTheQuotientFits(int dividend, int divisor) implements GetsPast {}
+
+    /**
+     * It answers wherever the whole number it rounds the number at {@code operand} to is an
+     * {@code Int}, and ends a run for nothing else ({@code IntNarrowing.rounded}). Whatever way it
+     * is handed, that is the greatest whole number at most the number or the least at least it.
+     *
+     * @param operand which of the site's operands is the number rounded, counted from nought
+     */
+    record WhereTheRoundedNumberFits(int operand) implements GetsPast {}
+
+    /**
+     * It answers wherever the number at {@code operand}, where it is a whole number, is one an
+     * {@code Int} holds, and ends a run for nothing else: a number that is not whole answers a
+     * case before it is held to anything ({@code RationalMath.toWholeNumber}).
+     *
+     * @param operand which of the site's operands is the number, counted from nought
+     */
+    record WhereTheWholeNumberFits(int operand) implements GetsPast {}
+
+    /**
      * It answers wherever the text it makes is no longer than a {@code String} holds, and ends a
      * run for nothing else: a case conversion of the text at {@code operand}, whose answer may
      * hold more code points than the text it was handed.

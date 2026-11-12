@@ -139,9 +139,12 @@ public final class ContainerSizesUnderAWitness {
             // How long a text a conversion makes turns on the text, and what a run holds of
             // collections says nothing of it.
             case GetsPast.WhereTheTextFits _ -> false;
-            // A product and a span turn on the numbers they are handed, which a reader holding the
-            // places those are read off asks; what a run holds of collections says nothing of them.
-            case GetsPast.WhereTheProductFits _, GetsPast.WhereTheSpanFits _ -> false;
+            // A product, a span, a quotient and a whole number made of a number turn on the
+            // numbers they are handed, which a reader holding the places those are read off asks;
+            // what a run holds of collections says nothing of them.
+            case GetsPast.WhereTheProductFits _, GetsPast.WhereTheSpanFits _,
+                 GetsPast.WhereTheQuotientFits _, GetsPast.WhereTheRoundedNumberFits _,
+                 GetsPast.WhereTheWholeNumberFits _ -> false;
             case GetsPast.NotKnown _ -> false;
         };
     }

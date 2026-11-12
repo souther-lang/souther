@@ -314,6 +314,24 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         return new FormRange(farthest.negated(), farthest);
     }
 
+    /**
+     * The whole numbers a number {@code range} holds is rounded to, whichever way it is rounded:
+     * from the greatest whole number at most its least to the least at least its greatest. Every
+     * way rounds a number to one of the two whole numbers either side of it. Null where
+     * {@code range} is, or the exact arithmetic cannot hold an end.
+     */
+    static FormRange roundedEitherWay(FormRange range) {
+        BigInteger from = range == null ? null : range.least.floor().orNull();
+        BigInteger to = range == null ? null : range.greatest.ceiling().orNull();
+        return from == null || to == null ? null
+                : new FormRange(ExactRatio.of(from), ExactRatio.of(to));
+    }
+
+    /** Whether {@code number} lies from the least this holds to the greatest. */
+    boolean holds(ExactRatio number) {
+        return least.compareTo(number) <= 0 && greatest.compareTo(number) >= 0;
+    }
+
     /** Whether every number this holds lies from {@code least} to {@code greatest}. */
     boolean liesWithin(BigInteger leastAllowed, BigInteger greatestAllowed) {
         return least.compareTo(ExactRatio.of(leastAllowed)) >= 0

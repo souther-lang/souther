@@ -2016,16 +2016,18 @@ final class Pullback {
      * Whether an operation answering where {@code completion} says, not shown to answer on every
      * run, is owed a proof that some run gets past it ({@link StopObligation}): where it answers
      * turns on how many the collections it builds hold, or on the text it converts, and a reader
-     * shows that of a witness ({@link ContainerSizesUnderAWitness}). A product of a list's numbers
-     * and a span between two numbers turn on the numbers the places they read hold, which that
-     * reader does not read, so they tie the places they read as an operation nothing says the
-     * answers of does.
+     * shows that of a witness ({@link ContainerSizesUnderAWitness}). A product of a list's numbers,
+     * a span between two numbers, a whole-number quotient and a whole number made of a number turn
+     * on the numbers the places they read hold, which that reader does not read, so they tie the
+     * places they read as an operation nothing says the answers of does.
      */
     private static boolean owedAProof(GetsPast completion) {
         return switch (completion) {
             case GetsPast.WhereTheAnswerFits _, GetsPast.WhereTheTotalFits _,
                  GetsPast.WhereTheTextFits _ -> true;
-            case GetsPast.WhereTheProductFits _, GetsPast.WhereTheSpanFits _, GetsPast.Always _,
+            case GetsPast.WhereTheProductFits _, GetsPast.WhereTheSpanFits _,
+                 GetsPast.WhereTheQuotientFits _, GetsPast.WhereTheRoundedNumberFits _,
+                 GetsPast.WhereTheWholeNumberFits _, GetsPast.Always _,
                  GetsPast.NotKnown _ -> false;
         };
     }
@@ -2085,19 +2087,31 @@ final class Pullback {
      * is an {@code Int} on every run. And a span between two numbers that answers where it is no
      * longer than a collection holds ({@link GetsPast.WhereTheSpanFits}), where the greatest its
      * last number comes to less the least its first comes to leaves it no longer
-     * ({@link #theSpanFits}).
+     * ({@link #theSpanFits}). A whole-number quotient that stops only on the least {@code Int}
+     * divided by minus one ({@link GetsPast.WhereTheQuotientFits}), where what it divides never
+     * comes to the least or what it divides by never to minus one ({@link #theQuotientFits}). A
+     * whole number made of a number only where it is whole
+     * ({@link GetsPast.WhereTheWholeNumberFits}), where every whole number the number comes to is
+     * an {@code Int} ({@link #theWholeNumberFits}).
      *
      * <p>Of {@code e} alone. What its operands work out stops a run or not as each of them says,
      * and is asked of each: {@code Int.floorMod(m - k, 12) + 1} adds within an {@code Int}
      * whatever {@code m - k} is, and {@code m - k} may still pass one.
      */
     private boolean comesToWhereItAnswers(Core e, InputReads reads) {
-        if (Core.withoutStanding(e) instanceof Core.PreservedCall call
-                && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
-                        instanceof GetsPast.WhereTheSpanFits(int from, int to)) {
-            return theSpanFits(call, from, to, reads);
+        if (Core.withoutStanding(e) instanceof Core.PreservedCall call) {
+            GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call);
+            if (completion instanceof GetsPast.WhereTheSpanFits(int from, int to)) {
+                return theSpanFits(call, from, to, reads);
+            }
+            if (completion instanceof GetsPast.WhereTheQuotientFits(int dividend, int divisor)) {
+                return theQuotientFits(call, dividend, divisor, reads);
+            }
+            if (completion instanceof GetsPast.WhereTheWholeNumberFits(int operand)) {
+                return theWholeNumberFits(call, operand, reads);
+            }
         }
-        WhereAnOperatorAnswers.WhereItsExactValueIsHeld held = whereItsNumberIsHeld(e, reads);
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld held = whereItsNumberIsHeld(e);
         FormRange range = held == null ? null : exactRangeOf(e, reads);
         return range != null && range.liesWithin(held.least(), held.greatest());
     }
@@ -2135,10 +2149,56 @@ final class Pullback {
                 ExactRatio.of(GetsPast.MOST_ELEMENTS.subtract(BigInteger.ONE))) <= 0;
     }
 
+    /**
+     * Whether the quotient of the operand of {@code call} at {@code dividend} by the one at
+     * {@code divisor} is an {@code Int} on every run that works it out: what it divides comes to
+     * no less than one above the least {@code Int} ({@link #exactRangeOf}), or what it divides by
+     * never comes to minus one. Either keeps the run off the one pair whose quotient no
+     * {@code Int} holds.
+     */
+    private boolean theQuotientFits(Core.PreservedCall call, int dividend, int divisor,
+                                    InputReads reads) {
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld ofAnInt = whereAnIntIsHeld();
+        if (ofAnInt == null || dividend >= call.args().size() || divisor >= call.args().size()) {
+            return false;
+        }
+        FormRange divided = exactRangeOf(call.args().get(dividend), reads);
+        FormRange by = exactRangeOf(call.args().get(divisor), reads);
+        return (divided != null && divided.least().compareTo(ExactRatio.of(ofAnInt.least())) > 0)
+                || (by != null && !by.holds(ExactRatio.of(-1)));
+    }
+
+    /**
+     * Whether every whole number the operand of {@code call} at {@code operand} comes to on a run
+     * that works it out is an {@code Int}: from the least whole number at least the least it
+     * comes to, to the greatest at most the greatest ({@link #exactRangeOf}). A number that comes
+     * to no whole number is a case on every run.
+     */
+    private boolean theWholeNumberFits(Core.PreservedCall call, int operand, InputReads reads) {
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld ofAnInt = whereAnIntIsHeld();
+        FormRange range = ofAnInt == null || operand >= call.args().size() ? null
+                : exactRangeOf(call.args().get(operand), reads);
+        BigInteger least = range == null ? null : range.least().ceiling().orNull();
+        BigInteger greatest = range == null ? null : range.greatest().floor().orNull();
+        if (least == null || greatest == null) {
+            return false;
+        }
+        return least.compareTo(greatest) > 0
+                || (least.compareTo(ofAnInt.least()) >= 0
+                        && greatest.compareTo(ofAnInt.greatest()) <= 0);
+    }
+
+    /** The least and the greatest an {@code Int} holds, which a whole number made of a number
+     *  is held to as a rounded one is ({@link RoundedToAWholeNumber#whereTheRoundedNumberIsHeld}),
+     *  or null where the declarations name no ends of it. */
+    private WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereAnIntIsHeld() {
+        return RoundedToAWholeNumber.whereTheRoundedNumberIsHeld(Type.INT,
+                read.rules().declarations());
+    }
+
     /** Where {@code e} answers as the number it comes to is held, or null where its account is
      *  anything else, or it is none of the operations {@link #comesToWhereItAnswers} reads. */
-    private WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereItsNumberIsHeld(Core e,
-                                                                               InputReads reads) {
+    private WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereItsNumberIsHeld(Core e) {
         Core here = Core.withoutStanding(e);
         if (isAnOperator(here)) {
             return AffineForms.whereItAnswers(here)
@@ -2156,7 +2216,7 @@ final class Pullback {
             return WhereAnOperatorAnswers.ofAProduct(call.type())
                     instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held ? held : null;
         }
-        return writtenRounding(call, reads) != null
+        return completion instanceof GetsPast.WhereTheRoundedNumberFits
                 ? RoundedToAWholeNumber.whereTheRoundedNumberIsHeld(call.type(),
                         read.rules().declarations())
                 : AffineForms.whereAFormItIsHandedAnswers(call, read.rules().declarations());
@@ -2185,10 +2245,11 @@ final class Pullback {
      * declarations say of it where it is a form of numbers of the input
      * ({@link FormRange#heldWhereItIsOfTheInput}); a number rounded
      * to a whole one, the numbers the ends of what it rounds round to, since rounding keeps their
-     * order; the product of a list written out, what its elements come to multiplied
-     * ({@link #productOfWrittenOut}); a whole number another operation of the library answers,
-     * where the library bounds it
-     * ({@link #whatTheLibraryBounds}) — a remainder by a divisor below nought as by one above; a
+     * order, and where the way it rounds is not written, from the greatest whole number at most
+     * the least end to the least at least the greatest ({@link FormRange#roundedEitherWay}),
+     * which every way lands within; the product of a list written out, what its elements come to
+     * multiplied ({@link #productOfWrittenOut}); a whole number another operation of the library
+     * answers, where the library bounds it ({@link #whatTheLibraryBounds}) — a remainder by a divisor below nought as by one above; a
      * name the step of a walk around binds to the value found under a key, what the walk's law
      * says it holds there ({@link WhatTheStepsNamesHold}), where nothing else says; the body of a
      * {@code let}; a choice, what its arms hold together ({@link #exactRangeOfTheArms}); the value
@@ -2230,10 +2291,14 @@ final class Pullback {
         }
         Core here = Core.withoutStanding(e);
         if (here instanceof Core.PreservedCall call) {
-            if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
-                    instanceof GetsPast.WhereTheProductFits(int operand)) {
+            GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call);
+            if (completion instanceof GetsPast.WhereTheProductFits(int operand)) {
                 return operand < call.args().size()
                         ? productOfWrittenOut(call.args().get(operand), reads, known) : null;
+            }
+            if (completion instanceof GetsPast.WhereTheRoundedNumberFits(int operand)) {
+                return operand < call.args().size() ? FormRange.roundedEitherWay(
+                        exactRangeOf(call.args().get(operand), reads, known)) : null;
             }
             return call.type() == Type.INT
                     ? FormRange.ofTheWholeNumbersIn(whatTheLibraryBounds(call, reads)) : null;
