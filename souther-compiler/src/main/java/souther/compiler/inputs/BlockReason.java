@@ -1530,14 +1530,16 @@ public sealed interface BlockReason {
      *                    shorter may be in no class, and none longer is for that; null where no
      *                    value is left open for being short
      * @param imagesNotShown the operations of the library whose image over the strings of a side
-     *                    is shown only where it is exact, each as the library names it: the
-     *                    strings they are not exact on are the ones left open whatever their
-     *                    length. None where the values left open are left for another reason
+     *                    is shown only where it is exact, each as the library names it: some of the
+     *                    values left open, at the lengths the region says, are open for them —
+     *                    the strings they are not exact on, and the strings of a length the
+     *                    partner is not held to, which they may lengthen or shorten into one. None
+     *                    where the values left open are left for another reason
      * @param notShownGottenPast the operations of the library a run gets to the relation past only
      *                    where it is shown to: a case conversion ends a run where its answer is
      *                    longer than a {@code String} holds, and the strings it is not shown to
-     *                    end none for are left open whatever their length. None where the values
-     *                    left open are left for another reason
+     *                    end none for are left open, at the lengths the region says. None where
+     *                    the values left open are left for another reason
      */
     record RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
                                     List<String> imagesNotShown, List<String> notShownGottenPast,
@@ -1611,8 +1613,13 @@ public sealed interface BlockReason {
             return of(open, OperationsNotShown.ofImages(imagesNotShown), byCodePoints);
         }
 
-        /** The same, with the operations the values open whatever their length are open for, by
-         *  why ({@code operations}). */
+        /**
+         * The same, with the operations some of the values open are open for, by why
+         * ({@code operations}): the caller's to say, since it is the one holding which values are
+         * open for what. Said beside the region whatever lengths it is bounded by — a string a
+         * conversion may lengthen past the partner's most code points, or shorten below its
+         * fewest, is open at those lengths for the conversion's image.
+         */
         public static RelationShownOverARegion of(List<ValuesWithin> open,
                                                   OperationsNotShown operations,
                                                   List<CodePointsLeftOpen> byCodePoints) {
@@ -1624,8 +1631,7 @@ public sealed interface BlockReason {
                     .filter(each -> each.shortest() == 0 && each.longest() != null)
                     .map(each -> each.longest() + 1).max(Long::compare).orElse(null);
             return new RelationShownOverARegion(atAnyLength, longerThan, shorterThan,
-                    atAnyLength ? operations.images() : List.of(),
-                    atAnyLength ? operations.gottenPast() : List.of(), byCodePoints);
+                    operations.images(), operations.gottenPast(), byCodePoints);
         }
     }
 

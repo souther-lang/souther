@@ -192,8 +192,9 @@ public final class TextExtents {
     /**
      * Whether {@code language} holds a value of {@code least} to {@code most} code points, the two
      * already within what a {@code String} can be: shown to where a string it holds as written is
-     * of such a length ({@link Language#heldAsWritten}, the fewest code points of those), and shown
-     * not to where none of its strings is.
+     * of such a length ({@link Language#heldAsWritten}, the fewest code points of those, or one of
+     * {@code least} code points, or one of every length from {@code least} on where
+     * {@code most} is the longest string there is), and shown not to where none of its strings is.
      */
     private static Emptiness heldWithin(Language language, long least, long most) {
         if (language.isEmpty()) {
@@ -201,6 +202,11 @@ public final class TextExtents {
         }
         long written = language.shortestHeldAsWritten();
         if (written >= least && written <= most) {
+            return Emptiness.NONEMPTY;
+        }
+        if (written >= 0 && written < least && (most >= LONGEST_STRING
+                ? language.reachesEveryLength(length -> length >= least, true)
+                : language.reachesEveryLength(length -> length == least, false))) {
             return Emptiness.NONEMPTY;
         }
         Language.Ends lengths = language.lengths();

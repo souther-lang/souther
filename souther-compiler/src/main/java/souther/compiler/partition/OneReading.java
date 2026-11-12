@@ -17,8 +17,9 @@ import java.util.function.Supplier;
  * again while the reading lasts: the walk of a way ({@link WayToTheBorder#along}), what a run's
  * answers narrow a region by ({@link Reachability.Reaching#narrowedPast}), what a statement
  * says of its remainder ({@link ARemainderMoved#saidBy}), which operations of a case conversion
- * are not exact over the strings it is done to ({@link #notExactOver}), and which pieces of what
- * it answers are pieces of its values ({@link #piecesAConversionAnswers}).
+ * are not exact over the strings it is done to ({@link #notExactOver}), which pieces of what
+ * it answers are pieces of its values ({@link #piecesAConversionAnswers}), and whether the strings
+ * a position admits are every string of the lengths its rules leave it ({@link #everyStringOf}).
  *
  * <p>A reading reads one way over many regions and for many relations, each building the way afresh
  * from the same conditions; and it takes the way to each case, and each way that is split into,
@@ -56,6 +57,8 @@ final class OneReading {
     private final Map<ConvertedOver, List<String>> notExact = new HashMap<>();
     /** By value, for the same reason. */
     private final Map<PiecesAsked, Optional<PiecesAnswered>> piecesAnswered = new HashMap<>();
+    /** By value, for the same reason: a set of strings and some lengths. */
+    private final Map<LengthsOver, Boolean> everyStringOfTheLengths = new HashMap<>();
 
     private OneReading() {
     }
@@ -110,6 +113,16 @@ final class OneReading {
         return READING.isBound()
                 ? kept(READING.get().piecesAnswered,
                         new PiecesAsked(separator, window, conversion, whole), working)
+                : working.get();
+    }
+
+    /** Whether {@code strings} is every string of {@code lengths}: as this reading worked it out
+     *  already, or {@code working}'s, now. */
+    static boolean everyStringOf(Language strings, LengthsPastTheWay.Lengths lengths,
+                                 Supplier<Boolean> working) {
+        return READING.isBound()
+                ? kept(READING.get().everyStringOfTheLengths,
+                        new LengthsOver(strings, lengths), working)
                 : working.get();
     }
 
@@ -189,6 +202,9 @@ final class OneReading {
 
     /** A conversion and the strings it is done to. */
     private record ConvertedOver(CaseMapping conversion, Language over) {}
+
+    /** Some strings and the lengths they are asked to be every string of. */
+    private record LengthsOver(Language strings, LengthsPastTheWay.Lengths lengths) {}
 
     /** Which pieces of what a conversion answers of some strings are asked for. */
     private record PiecesAsked(int separator, PieceWindow window, CaseMapping conversion,

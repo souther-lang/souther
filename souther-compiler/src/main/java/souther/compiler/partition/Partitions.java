@@ -964,7 +964,7 @@ public final class Partitions {
             PredicateOrigin origin = each.statement().origin();
             found.regionUndetermined(origin.cited(), origin.readAt(),
                     new FilingCoordinate.AtPosition(term.position()), each.open(),
-                    each.statement().operations(), each.byCodePoints());
+                    each.operations(), each.byCodePoints());
         }
         // What a reader is told about the rules the classes were not composed out of. The account
         // for them is above, with every other rule's — this is the sentence, and only where the

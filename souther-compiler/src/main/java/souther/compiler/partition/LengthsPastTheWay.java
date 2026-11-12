@@ -70,10 +70,43 @@ final class LengthsPastTheWay {
             }
         }
 
+        /** Every length a string has. */
+        static final Lengths EVERY = new Lengths(null, null);
+
+        /** The lengths a string of {@code values} is held to: every length where they are held to
+         *  none. */
+        static Lengths of(ValuesWithin values) {
+            return new Lengths(BigInteger.valueOf(values.shortest()),
+                    values.longest() == null ? null : BigInteger.valueOf(values.longest()));
+        }
+
         /** Whether no string has a length of these. */
         @Override
         public boolean isEmpty() {
             return least.compareTo(most) > 0;
+        }
+
+        /** Whether every length a string has is one of these. */
+        boolean isEvery() {
+            return least.signum() == 0 && most.compareTo(LONGEST) >= 0;
+        }
+
+        /** The lengths that are both these and {@code other}. */
+        Lengths and(Lengths other) {
+            return new Lengths(least.max(other.least), most.min(other.most));
+        }
+
+        /**
+         * The values of {@code values} of these lengths: an end only where these have one, so
+         * that the longest string there is bounds nothing a string is not already held to. None
+         * where no string has a length of these.
+         */
+        ValuesWithin over(ValueSet values) {
+            if (isEmpty()) {
+                return ValuesWithin.all(ValueSet.NONE);
+            }
+            return new ValuesWithin(values, least.longValueExact(),
+                    most.compareTo(LONGEST) >= 0 ? null : most.longValueExact());
         }
 
         /** Whether every whole number from {@code from} to {@code to} is among these. */

@@ -13,7 +13,9 @@ import souther.compiler.semantics.CaseMapping;
 import souther.runtime.Strings;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -289,18 +291,31 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
      * length rule is held as a number whatever length it names, where the strings it leaves are
      * no language the reading writes out, and a format is held by the strings it admits, alone or
      * beside a length rule.
+     *
+     * <p>And each held by one rule is read: the places left unanswered are the ones the email
+     * held to 254 leaves, so that a relation not read at all, which leaves nothing open for
+     * anything, is not taken for one that leaves nothing open for getting past. A format beside a
+     * length rule is no set of strings the relation is read over, and leaves both lists unread.
      */
     @Test
     void nothingIsOpenForGettingPastTheConversionWhereTheEmailIsHeldShort() {
-        for (String rule : List.of("String.length(value) <= 254",
-                "String.length(value) <= 100000",
-                "String.matches(\"[^\\\\s]{1,64}\", value)",
-                "String.matches(\"[^\\\\s]+\", value) && String.length(value) <= 254",
-                "value == \"a.com\" || value == \"x@b.com\" || value == \"İ\"")) {
-            List<String> open = leftOpenFor(heldBy(rule, "String.lowercase(%s)", "a.com"));
+        List<String> read = unansweredIn(heldBy("String.length(value) <= 254",
+                "String.lowercase(%s)", "a.com"));
+        Map<String, Boolean> rules = new LinkedHashMap<>();
+        rules.put("String.length(value) <= 254", true);
+        rules.put("String.length(value) <= 100000", true);
+        rules.put("String.matches(\"[^\\\\s]{1,64}\", value)", true);
+        rules.put("String.matches(\"[^\\\\s]+\", value) && String.length(value) <= 254", false);
+        rules.put("value == \"a.com\" || value == \"x@b.com\" || value == \"İ\"", true);
+        rules.forEach((rule, isRead) -> {
+            String model = heldBy(rule, "String.lowercase(%s)", "a.com");
+            List<String> open = leftOpenFor(model);
             assertTrue(open.stream().allMatch(each -> each.endsWith(" past ")),
                     rule + " " + open);
-        }
+            if (isRead) {
+                assertEquals(read, unansweredIn(model), rule);
+            }
+        });
     }
 
     /**
