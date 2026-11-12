@@ -36,14 +36,50 @@ class AClosureWorkedFromTheClosureBeforeIsTheClosureInOneRunTest {
 
     @Test
     void everyStepOfRulesSaidOneAtATimeIsTheClosureInOneRun() {
+        long[] heldAndMoved = saidOneAtATime(ClosureWork.PLACES_KEPT, SEQUENCES);
+        assertTrue(heldAndMoved[0] > 500,
+                "too few steps for this to hold anything: " + heldAndMoved[0]);
+        assertTrue(heldAndMoved[1] > 500,
+                "too few premises were moved for this to hold anything: " + heldAndMoved[1]);
+    }
+
+    /** A closure that keeps few places of its work, or none, is the closure it is with room. */
+    @Test
+    void aClosureKeepingLittleOfItsWorkIsTheClosureInOneRun() {
+        for (long placesKept : new long[] {0, 12, 60}) {
+            saidOneAtATime(placesKept, 40);
+        }
+        assertEquals(0, saidOneAtATime(0, 40)[1],
+                "premises were moved from work that was not kept");
+    }
+
+    @Test
+    void aClosureKeepsNoMoreOfItsWorkThanItIsGivenRoomFor() {
+        Random dice = new Random(316701);
+        CanonicalOrder<String> order = CanonicalOrder.asTheyAreSpelled();
+        long kept = 0;
+        for (int sequence = 0; sequence < 40; sequence++) {
+            List<AffineConstraint<String>> rules = read(someRules(dice, 6));
+            ClosureWork<String> work = new ClosureWork<>(30);
+            ClosedState.closedTogether(rules, RulesNamingNoPositionInCommonCloseApartTest::spacing,
+                    order, null, work);
+            assertTrue(work.placesKept() <= 30, "a closure kept " + work.placesKept()
+                    + " places of work where it was given room for 30");
+            kept += work.placesKept();
+        }
+        assertTrue(kept > 0, "nothing was kept, so a bound on what is kept is not asked");
+    }
+
+    /** Every step over {@code sequences} sequences, as {@code {steps, premises moved}}. */
+    private static long[] saidOneAtATime(long placesKept, int sequences) {
         Random dice = new Random(316700);
         long moved = 0;
         int steps = 0;
-        for (int sequence = 0; sequence < SEQUENCES; sequence++) {
+        for (int sequence = 0; sequence < sequences; sequence++) {
             CanonicalOrder<String> order = RulesNamingNoPositionInCommonCloseApartTest.ORDERS
                     .get(sequence % RulesNamingNoPositionInCommonCloseApartTest.ORDERS.size());
             List<AffineConstraint<String>> said = read(someRules(dice, 4 + dice.nextInt(6)));
-            ClosedStates kept = ClosedStates.kept();
+            ClosedStates kept = ClosedStates.keptWithWorkOf(placesKept);
             ClosedStates.Parted<String> before = null;
             for (int at = 1; at <= said.size(); at++) {
                 List<AffineConstraint<String>> sofar = said.subList(0, at);
@@ -59,8 +95,7 @@ class AClosureWorkedFromTheClosureBeforeIsTheClosureInOneRunTest {
             }
             moved += kept.premisesMoved();
         }
-        assertTrue(steps > 500, "too few steps for this to hold anything: " + steps);
-        assertTrue(moved > 500, "too few premises were moved for this to hold anything: " + moved);
+        return new long[] {steps, moved};
     }
 
     private static List<AffineConstraint<String>> read(List<Written> written) {

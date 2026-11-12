@@ -16,13 +16,48 @@ import java.util.List;
  */
 final class ClosureWork<A> {
 
+    /**
+     * How many places of candidates a closure keeps over all its rounds. A place is what one premise
+     * left of one question, so what is kept grows with the premises times the questions a round
+     * asked; this is where that stops. A round that would go past it keeps none of the question it
+     * was asked then, and the closure after works that question out from the premises, which is the
+     * same answer.
+     */
+    static final long PLACES_KEPT = 250_000;
+
     private final List<RoundWork<A>> rounds = new ArrayList<>();
+    private long placesLeft;
+    private long kept;
+
+    ClosureWork() {
+        this(PLACES_KEPT);
+    }
+
+    /** @param placesKept how many places of candidates the rounds may keep between them */
+    ClosureWork(long placesKept) {
+        this.placesLeft = placesKept;
+    }
 
     /** The work of the next round, which started in {@code ends} over {@code rules}. */
     RoundWork<A> next(List<AffineConstraint<A>> rules, Box<A> ends) {
-        RoundWork<A> round = new RoundWork<>(rules, ends);
+        RoundWork<A> round = new RoundWork<>(rules, ends, this::room);
         rounds.add(round);
         return round;
+    }
+
+    /** Whether {@code places} more may be kept, which they are counted against if so. */
+    private boolean room(int places) {
+        if (places > placesLeft) {
+            return false;
+        }
+        placesLeft -= places;
+        kept += places;
+        return true;
+    }
+
+    /** How many places of candidates the rounds kept. */
+    long placesKept() {
+        return kept;
     }
 
     /** The work of round {@code at}, or null where the closure ran no such round or kept none of it. */

@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.IntPredicate;
 
 /**
  * What one round of a closure worked out of the premises it held, kept so that the same round of the
@@ -79,13 +80,22 @@ final class RoundWork<A> {
 
     private final Map<AffineConstraint<A>, Candidates[]> wholes = new IdentityHashMap<>();
 
+    private final IntPredicate room;
+
+    /** A round that keeps whatever it is asked. */
+    RoundWork(List<AffineConstraint<A>> rules, Box<A> ends) {
+        this(rules, ends, _ -> true);
+    }
+
     /**
      * @param rules the rules the round read, in the order it read them
      * @param ends  the ends the round started in
+     * @param room  whether this many more places may be kept, which it counts them against if so
      */
-    RoundWork(List<AffineConstraint<A>> rules, Box<A> ends) {
+    RoundWork(List<AffineConstraint<A>> rules, Box<A> ends, IntPredicate room) {
         this.rules = rules;
         this.ends = ends;
+        this.room = room;
     }
 
     /** How many premises the round held, set once it has built them. */
@@ -136,11 +146,19 @@ final class RoundWork<A> {
         return held == null ? null : held[direction];
     }
 
+    /** Keeps what the round left of the whole form, unless the closure has no room for it. */
     void putWhole(AffineConstraint<A> rule, int direction, Candidates candidates) {
+        if (!room.test(candidates.places())) {
+            return;
+        }
         wholes.computeIfAbsent(rule, _ -> new Candidates[2])[direction] = candidates;
     }
 
+    /** Keeps what the round left of one question, unless the closure has no room for it. */
     void put(AffineConstraint<A> rule, CanonicalForm<A> half, A atom, Candidates candidates) {
+        if (!room.test(candidates.places())) {
+            return;
+        }
         asked.computeIfAbsent(rule, _ -> new HashMap<>())
                 .computeIfAbsent(half, _ -> new HashMap<>())
                 .put(atom, candidates);

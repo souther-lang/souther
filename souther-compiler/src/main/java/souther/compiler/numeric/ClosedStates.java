@@ -47,7 +47,7 @@ import java.util.function.Function;
 public final class ClosedStates {
 
     /** Nothing kept: every domain works out what its rules leave for itself. */
-    public static final ClosedStates NONE = new ClosedStates(null, null, null, false);
+    public static final ClosedStates NONE = new ClosedStates(null, null, null, false, 0);
 
     /**
      * Nothing kept, and every set of rules closed in one run rather than a part at a time
@@ -58,15 +58,20 @@ public final class ClosedStates {
      * the closure, about forms over positions of two parts. Nothing else asks for this: the two are
      * one closure, and this one costs what the rules cost together.
      */
-    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, null, true);
+    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, null, true, 0);
 
     /**
      * One closure per question, kept while it is among the {@link #CLOSURES_KEPT} asked last and
      * for as long as whatever holds this is held.
      */
     public static ClosedStates kept() {
+        return keptWithWorkOf(ClosureWork.PLACES_KEPT);
+    }
+
+    /** The same, with each closure keeping no more than {@code placesKept} places of its work. */
+    static ClosedStates keptWithWorkOf(long placesKept) {
         return new ClosedStates(new LatelyAsked<>(CLOSURES_KEPT), new ConcurrentHashMap<>(),
-                new ConcurrentHashMap<>(), false);
+                new ConcurrentHashMap<>(), false, placesKept);
     }
 
     /**
@@ -116,10 +121,15 @@ public final class ClosedStates {
     /** Whether the rules are closed in one run, which is {@link #IN_ONE_RUN} and nothing else. */
     private final boolean inOneRun;
 
+    /** How many places of candidates the work of one closure keeps; see
+     *  {@link ClosureWork#PLACES_KEPT}. */
+    private final long placesKept;
+
     private ClosedStates(LatelyAsked<ClosureQuestion<?>, ClosedState<?>> answers,
                          Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places,
                          Map<CanonicalOrder<?>, Map<CanonicalForm<?>, List<?>>> walks,
-                         boolean inOneRun) {
+                         boolean inOneRun, long placesKept) {
+        this.placesKept = placesKept;
         this.answers = answers;
         this.places = places;
         this.walks = walks;
@@ -499,12 +509,10 @@ public final class ClosedStates {
         workedOut.incrementAndGet();
         ClosureQuestion<A> asking = (ClosureQuestion<A>) question;
         ClosureWork<A> parent = before == null ? null : works.of(before);
-        List<ClosureWork<A>> made = new ArrayList<>(1);
-        ClosedState<A> state = ClosedState.of(asking, parent, made::add);
-        if (!made.isEmpty()) {
-            works.keep(state, made.getFirst());
-            premisesMoved.addAndGet(made.getFirst().moved());
-        }
+        ClosureWork<A> mine = new ClosureWork<>(placesKept);
+        ClosedState<A> state = ClosedState.of(asking, parent, mine);
+        works.keep(state, mine);
+        premisesMoved.addAndGet(mine.moved());
         return state;
     }
 
