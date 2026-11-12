@@ -4091,7 +4091,7 @@ final class Pullback {
      * {@link #beneath(Denotation, boolean)}, looking {@code through} as far as it says. An
      * element of what an operation holding some of the elements of what it was handed answered is
      * an element of what it was handed, and the other way round it is not: that no statement says
-     * which is a statement kept by ({@link Kept#unsaid}).
+     * which is a statement kept by ({@link Kept.Unsaid}).
      */
     private Beneath beneath(Denotation container, boolean counting, Through through) {
         List<Kept> kept = new ArrayList<>();
