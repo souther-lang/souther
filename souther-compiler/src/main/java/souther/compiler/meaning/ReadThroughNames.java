@@ -12,6 +12,7 @@ import souther.compiler.values.Operand;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -613,11 +614,8 @@ public final class ReadThroughNames {
             case DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
                  DecisionAtom.OfAnAnswer _, Quantity.HowManyCarried _, Quantity.TheKeptTotal _,
                  Quantity.CodePointsOfAPiece _ -> quantity;
-            case Quantity.WhatAnOperationAnswers(var operation, List<Quantity> of) -> {
-                List<Quantity> told = told(of, telling);
-                yield told == null ? null : told == of ? quantity
-                        : new Quantity.WhatAnOperationAnswers(operation, told);
-            }
+            case Quantity.WhatAnOperationAnswers answers ->
+                    toldAnswer(answers, telling, new IdentityHashMap<>());
             case Quantity.APieceOf(var operation, var separator, Quantity string, var within,
                                    int from, int among) -> {
                 Quantity told = told(string, telling);
@@ -738,6 +736,40 @@ public final class ReadThroughNames {
                     binding.handed().map(ReadThroughNames::positionsHandedFrom).orElse(List.of()),
                     telling);
         };
+    }
+
+    /**
+     * {@code answers} told, itself where nothing in it is told anything, or null where some number
+     * in it is no one.
+     *
+     * <p>What each distinct answer comes to is worked out once and handed to every answer that
+     * holds it, so what is told is as large as the answer's calls and not as its paths, and an
+     * answer held twice is told as one the answer made of it holds twice. {@code told} is of this
+     * telling alone, which is why it is kept here and not with the answer.
+     */
+    private static Quantity toldAnswer(Quantity.WhatAnOperationAnswers answers, Telling telling,
+            Map<Quantity.WhatAnOperationAnswers, Optional<Quantity>> told) {
+        Optional<Quantity> held = told.get(answers);
+        if (held != null) {
+            return held.orElse(null);
+        }
+        List<Quantity> out = new ArrayList<>(answers.of().size());
+        boolean changed = false;
+        boolean noOne = false;
+        for (Quantity one : answers.of()) {
+            Quantity each = one instanceof Quantity.WhatAnOperationAnswers inner
+                    ? toldAnswer(inner, telling, told) : told(one, telling);
+            if (each == null) {
+                noOne = true;
+                break;
+            }
+            changed |= each != one;
+            out.add(each);
+        }
+        Quantity result = noOne ? null : !changed ? answers
+                : new Quantity.WhatAnOperationAnswers(answers.operation(), out);
+        told.put(answers, Optional.ofNullable(result));
+        return result;
     }
 
     /**

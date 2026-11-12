@@ -451,13 +451,9 @@ public final class Conclusion {
                     partsIn(different.meeting().statement());
             case Quantity.HowManyHold(List<Proposition> each) -> partsIn(each);
             case Quantity.SumOver(DecisionSubject _, Quantity each) -> partsIn(each);
-            case Quantity.WhatAnOperationAnswers answers -> {
-                long out = 0;
-                for (Quantity each : answers.of()) {
-                    out += partsIn(each);
-                }
-                yield out;
-            }
+            // Its arguments are numbers of the input and other such answers, which hold no
+            // statement, so there is nothing to count however many paths lead to them.
+            case Quantity.WhatAnOperationAnswers _ -> 0;
             case Quantity.APieceOf piece -> partsIn(piece.string());
             case Quantity.ThePieceAt piece -> partsIn(piece.string());
             case Quantity.IsAmongThePieces among ->

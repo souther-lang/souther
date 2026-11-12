@@ -1,0 +1,109 @@
+package souther.compiler.meaning;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.types.ValueName;
+
+import java.time.Duration;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * What an operation answers of the answer before it twice is a graph of as many values as there
+ * are calls, and what is asked of it follows each of them once: its hash, its equality, the
+ * positions it is made of and what it spells are of the calls and not of the paths through them.
+ */
+class AnAnswerHandedTheSameAnswerTwiceIsOneValueAtEveryDepthTest {
+
+    private static final ValueName.Stdlib FLOOR_MOD = ValueName.Stdlib.operation("Int", "floorMod");
+
+    private static final ValueName.Stdlib NEGATE = ValueName.Stdlib.operation("Int", "negate");
+
+    private static DecisionAtom.OfTheInput input(String field) {
+        return new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("i").then(field)));
+    }
+
+    private static Quantity.WhatAnOperationAnswers twice(Quantity previous) {
+        return new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(previous, previous));
+    }
+
+    private static Quantity chain(int depth, String field) {
+        Quantity answer = input(field);
+        for (int i = 0; i < depth; i++) {
+            answer = twice(answer);
+        }
+        return answer;
+    }
+
+    /** The same shape made again by sharing nothing between the two arguments of a call. */
+    private static Quantity unshared(int depth, String field) {
+        Quantity answer = input(field);
+        for (int i = 0; i < depth; i++) {
+            Quantity left = answer;
+            Quantity right = depth(i, field);
+            answer = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(left, right));
+        }
+        return answer;
+    }
+
+    private static Quantity depth(int depth, String field) {
+        return chain(depth, field);
+    }
+
+    @Test
+    void twoChainsMadeSeparatelyAreOneValueWhateverIsSharedInThem() {
+        Quantity shared = chain(64, "x");
+        Quantity unsharedAtEveryCall = unshared(12, "x");
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
+            assertEquals(shared, chain(64, "x"));
+            assertEquals(shared.hashCode(), chain(64, "x").hashCode());
+            assertEquals(chain(12, "x"), unsharedAtEveryCall);
+            assertEquals(chain(12, "x").spelling(), unsharedAtEveryCall.spelling());
+            assertEquals(chain(12, "x").hashCode(), unsharedAtEveryCall.hashCode());
+        });
+    }
+
+    @Test
+    void whatTheyAreMadeOfTellsTwoApart() {
+        assertNotEquals(chain(40, "x"), chain(40, "y"));
+        assertNotEquals(chain(40, "x"), chain(41, "x"));
+        assertNotEquals(chain(40, "x").spelling(), chain(40, "y").spelling());
+        assertNotEquals(chain(40, "x").spelling(), chain(41, "x").spelling());
+        Quantity a = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(chain(30, "x"), input("y")));
+        Quantity b = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(input("y"), chain(30, "x")));
+        assertNotEquals(a, b);
+        Quantity negated = new Quantity.WhatAnOperationAnswers(NEGATE, List.of(chain(30, "x")));
+        Quantity floored = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(chain(30, "x")));
+        assertNotEquals(negated, floored);
+        assertNotEquals(negated.spelling(), floored.spelling());
+    }
+
+    @Test
+    void theInputsAnAnswerIsMadeOfAreEachOnceInTheOrderTheyAreHandedIn() {
+        Quantity.WhatAnOperationAnswers deep = (Quantity.WhatAnOperationAnswers) chain(64, "x");
+        assertEquals(1, deep.positionsItIsMadeOf().size());
+        Quantity.WhatAnOperationAnswers mixed = new Quantity.WhatAnOperationAnswers(FLOOR_MOD,
+                List.of(chain(50, "y"), input("x"), chain(50, "z"), chain(50, "y"), input("x")));
+        assertEquals(List.of(input("y").term(), input("x").term(), input("z").term()),
+                mixed.positionsItIsMadeOf());
+    }
+
+    @Test
+    void aDeepAnswerSpellsInWhatGrowsWithItsCallsAndNotWithTheWaysThroughThem() {
+        Spelling spelling = chain(200, "x").spelling();
+        assertTrue(spelling.length() < 20_000, "spelled in " + spelling.length());
+    }
+
+    @Test
+    void aSmallAnswerIsSpelledAsTheCallsWrittenOneInsideAnother() {
+        String x = input("x").spelling().toString();
+        String inner = "Int.floorMod(" + x + ", " + x + ")";
+        assertEquals("Int.floorMod(" + inner + ", " + inner + ")", chain(2, "x").spelled());
+    }
+}

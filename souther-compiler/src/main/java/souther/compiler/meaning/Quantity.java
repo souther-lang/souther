@@ -4,6 +4,8 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
 import souther.compiler.core.EnteredArm;
+import souther.compiler.hash.ValueHash;
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
@@ -25,9 +27,16 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -178,11 +187,29 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * the input — what a dependency answered, a value the body bound — is no argument of one, and
      * a call handed it is not read as one.
      *
-     * @param operation the operation applied
-     * @param of        what it was handed, in the order it was handed them
+     * <p>An argument may be handed to an operation more than once, and an answer may be an
+     * argument of several others, so what these hold is a graph and not a tree: in {@code a1 =
+     * floorMod(a0, a0)}, {@code a2 = floorMod(a1, a1)}, ... the answer of the n-th call is
+     * reached by 2^n paths and is n values. What is asked of one is therefore asked of each
+     * distinct answer once: the hash, the positions and the spelling are kept in the cell
+     * ({@link Derivation}) and worked out from the arguments' own, and two of these are compared
+     * a pair at a time.
+     *
+     * @param operation  the operation applied
+     * @param of         what it was handed, in the order it was handed them
+     * @param derivation what is worked out from the two above, made when this is made whatever is
+     *                   handed in
      */
-    record WhatAnOperationAnswers(ValueName.Stdlib operation, List<Quantity> of)
-            implements Quantity {
+    record WhatAnOperationAnswers(ValueName.Stdlib operation, List<Quantity> of,
+                                  @DecidedByTheRest Derivation derivation) implements Quantity {
+
+        /** How large an answer written out as the tree of its calls may be before it is written as
+         *  the list of the distinct ones instead. */
+        private static final int WRITTEN_NESTED_UP_TO = 64;
+
+        /** What the distinct answers are numbered by in a spelling that lists them: no spelling of
+         *  a number of the input starts with it. */
+        private static final String NUMBERED = "%";
 
         /** Not shown: what an operation answers is its own. */
         @Override
@@ -190,33 +217,135 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             return false;
         }
 
+        public WhatAnOperationAnswers(ValueName.Stdlib operation, List<Quantity> of) {
+            this(operation, of, null);
+        }
+
         public WhatAnOperationAnswers {
             if (operation == null || of == null || of.isEmpty()) {
                 throw new IllegalArgumentException("an answer is some operation's, of something");
             }
             of = List.copyOf(of);
+            int hashed = 1;
+            long calls = 1;
             for (Quantity each : of) {
-                if (!(each instanceof DecisionAtom.OfTheInput)
-                        && !(each instanceof WhatAnOperationAnswers)) {
-                    throw new IllegalArgumentException("an operation's answer read here is of"
-                            + " values of the input: " + each);
+                switch (each) {
+                    case DecisionAtom.OfTheInput _ -> calls++;
+                    case WhatAnOperationAnswers inner -> calls += inner.derivation.calls;
+                    default -> throw new IllegalArgumentException("an operation's answer read here"
+                            + " is of values of the input: " + each);
+                }
+                hashed = 31 * hashed + each.hashCode();
+            }
+            derivation = new Derivation(ValueHash.ofItsParts(WhatAnOperationAnswers.class,
+                    operation.hashCode(), hashed), (int) Math.min(calls, Integer.MAX_VALUE));
+        }
+
+        /**
+         * What is worked out from the operation and its arguments, and kept while this is held.
+         *
+         * <p>Nothing this is: every cell is equal to every other and hashes alike. The hash and the
+         * number of calls are settled when this is made, from the arguments' own; the positions and
+         * the spelling the first time they are asked.
+         */
+        static final class Derivation {
+
+            private final int hash;
+            /** How many calls and numbers the answer is when written as the tree of its calls,
+             *  held at what an {@code int} holds. */
+            private final int calls;
+            private volatile List<NumericTerm> positions;
+            private volatile Spelling spelling;
+
+            Derivation(int hash, int calls) {
+                this.hash = hash;
+                this.calls = calls;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Derivation;
+            }
+
+            @Override
+            public int hashCode() {
+                return 0;
+            }
+
+            @Override
+            public String toString() {
+                return "Derivation";
+            }
+        }
+
+        @Override
+        public int hashCode() {
+            return derivation.hash;
+        }
+
+        /**
+         * The same operation of arguments that are the same, each pair of answers compared once
+         * however many paths reach it, and none where the hashes already differ.
+         */
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof WhatAnOperationAnswers that)
+                    || derivation.hash != that.derivation.hash) {
+                return false;
+            }
+            Map<WhatAnOperationAnswers, Set<WhatAnOperationAnswers>> compared =
+                    new IdentityHashMap<>();
+            Deque<WhatAnOperationAnswers[]> pending = new ArrayDeque<>();
+            pending.push(new WhatAnOperationAnswers[] {this, that});
+            while (!pending.isEmpty()) {
+                WhatAnOperationAnswers[] pair = pending.pop();
+                WhatAnOperationAnswers left = pair[0];
+                WhatAnOperationAnswers right = pair[1];
+                if (left == right
+                        || !compared.computeIfAbsent(left,
+                                _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
+                                .add(right)) {
+                    continue;
+                }
+                if (!left.operation.equals(right.operation) || left.of.size() != right.of.size()
+                        || left.derivation.hash != right.derivation.hash) {
+                    return false;
+                }
+                for (int i = 0; i < left.of.size(); i++) {
+                    Quantity one = left.of.get(i);
+                    Quantity another = right.of.get(i);
+                    if (one instanceof WhatAnOperationAnswers inner
+                            && another instanceof WhatAnOperationAnswers otherInner) {
+                        pending.push(new WhatAnOperationAnswers[] {inner, otherInner});
+                    } else if (!one.equals(another)) {
+                        return false;
+                    }
                 }
             }
+            return true;
         }
 
         /** The numbers of the input this answer is made of, each once, in the order they are
          *  handed in. */
         public List<NumericTerm> positionsItIsMadeOf() {
-            List<NumericTerm> out = new ArrayList<>();
-            for (Quantity each : of) {
-                List<NumericTerm> these = switch (each) {
-                    case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
-                    case WhatAnOperationAnswers inner -> inner.positionsItIsMadeOf();
-                    default -> throw new IllegalStateException("held out by the constructor");
-                };
-                these.stream().filter(term -> !out.contains(term)).forEach(out::add);
+            List<NumericTerm> held = derivation.positions;
+            if (held != null) {
+                return held;
             }
-            return List.copyOf(out);
+            Set<NumericTerm> out = new LinkedHashSet<>();
+            for (Quantity each : of) {
+                switch (each) {
+                    case DecisionAtom.OfTheInput(NumericTerm term, var _) -> out.add(term);
+                    case WhatAnOperationAnswers inner -> out.addAll(inner.positionsItIsMadeOf());
+                    default -> throw new IllegalStateException("held out by the constructor");
+                }
+            }
+            held = List.copyOf(out);
+            derivation.positions = held;
+            return held;
         }
 
         @Override
@@ -224,8 +353,25 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             return spelling().toString();
         }
 
+        /**
+         * The calls written one inside another, {@code f(g(x), g(x))}, while the answer is small.
+         * Past that the distinct answers are listed, each once and numbered in the order they are
+         * first reached, and the last is the answer: {@code %0 = g(x); %1 = f(%0, %0); in %1}. Both
+         * are of the structure and of nothing else, so two answers spell alike exactly where they
+         * are equal, and what is written grows with the distinct answers and not with the paths
+         * through them.
+         */
         @Override
         public Spelling spelling() {
+            Spelling held = derivation.spelling;
+            if (held == null) {
+                held = derivation.calls <= WRITTEN_NESTED_UP_TO ? nested() : listed();
+                derivation.spelling = held;
+            }
+            return held;
+        }
+
+        private Spelling nested() {
             List<Spelling> pieces = new ArrayList<>(2 * of.size() + 1);
             pieces.add(Spelling.of(operation.qualified() + "("));
             for (int i = 0; i < of.size(); i++) {
@@ -236,6 +382,40 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             }
             pieces.add(Spelling.of(")"));
             return Spelling.joined(pieces);
+        }
+
+        private Spelling listed() {
+            Map<WhatAnOperationAnswers, Integer> numbered = new HashMap<>();
+            List<Spelling> pieces = new ArrayList<>();
+            numberWithin(numbered, pieces);
+            pieces.add(Spelling.of("in " + NUMBERED + (numbered.size() - 1)));
+            return Spelling.joined(pieces);
+        }
+
+        /** Numbers every answer this is made of, the arguments before the answer, and writes each
+         *  one's line as it is numbered. */
+        private void numberWithin(Map<WhatAnOperationAnswers, Integer> numbered,
+                                  List<Spelling> lines) {
+            if (numbered.containsKey(this)) {
+                return;
+            }
+            List<Spelling> line = new ArrayList<>();
+            line.add(Spelling.of(operation.qualified() + "("));
+            for (int i = 0; i < of.size(); i++) {
+                if (i > 0) {
+                    line.add(Spelling.SEPARATOR);
+                }
+                if (of.get(i) instanceof WhatAnOperationAnswers inner) {
+                    inner.numberWithin(numbered, lines);
+                    line.add(Spelling.of(NUMBERED + numbered.get(inner)));
+                } else {
+                    line.add(of.get(i).spelling());
+                }
+            }
+            line.add(Spelling.of(")"));
+            int number = numbered.size();
+            numbered.put(this, number);
+            lines.add(Spelling.of(NUMBERED + number + " = ", Spelling.joined(line), "; "));
         }
 
         @Override
