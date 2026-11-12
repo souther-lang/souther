@@ -13,8 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * The map a case conversion is on code points does not ask the run time of the code points the
  * conversion's tables say it leaves as they are everywhere. It is the map worked out by asking the
- * run time of every code point: for each conversion, and for one made of the two, where what it
- * leaves alone is what each of its conversions does.
+ * run time of every code point: for each conversion, and for those made of them in either order
+ * and three deep, where what it leaves alone is what each of its conversions does.
  */
 class ACaseMapReadFromTheTablesIsTheMapAskedOfTheRunTimeTest {
 
@@ -37,5 +37,16 @@ class ACaseMapReadFromTheTablesIsTheMapAskedOfTheRunTimeTest {
     @Test
     void lowercaseOfUppercase() {
         same(new CaseMapping.Lowercase(CaseMapping.UPPERCASE));
+    }
+
+    @Test
+    void uppercaseOfLowercase() {
+        same(new CaseMapping.Uppercase(CaseMapping.LOWERCASE));
+    }
+
+    /** Three in turn, where what is left alone is what each of the three leaves alone. */
+    @Test
+    void lowercaseOfUppercaseOfLowercase() {
+        same(new CaseMapping.Lowercase(new CaseMapping.Uppercase(CaseMapping.LOWERCASE)));
     }
 }
