@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * of each priced item before it. A label that stops no run, or stops one only on places apart
  * from the code, leaves the relation reached at every value of both ({@code rule_relating_two_values},
  * as with no label). One that may stop a run on the code ties it, and the relation is not shown
- * reached at every value of either.
+ * reached at every key of the prices. It is still reached at every code: a row holding the prices
+ * empty beside any code works out no label, and gets to the relation.
  *
  * <p>A remainder by a written divisor lies from nought to below it whatever its dividend is,
  * and its third rounded down from nought to three; one more than either is far inside an
@@ -59,7 +60,17 @@ class AnOperatorOverANumberWithARangeIsAskedOverThatRangeTest {
     /** Each label, by name, and whether it leaves the relation read. */
     private static final Map<String, Case> CASES = cases();
 
-    private record Case(String label, boolean read) {}
+    /**
+     * @param read          whether the label leaves the relation read at both places
+     * @param readPastNoKey where it does not, whether the code is read all the same, past a row
+     *                      holding the prices empty
+     */
+    private record Case(String label, boolean read, boolean readPastNoKey) {
+
+        Case(String label, boolean read) {
+            this(label, read, !read);
+        }
+    }
 
     private static Map<String, Case> cases() {
         Map<String, Case> out = new LinkedHashMap<>();
@@ -87,8 +98,10 @@ class AnOperatorOverANumberWithARangeIsAskedOverThatRangeTest {
         out.put("aRemainderOfTwoAndAFreeInt", new Case(OF_TWO + " + m", false));
         out.put("aRemainderPastAnInt", new Case(OF_THE_CODE + " * 1000000000000000000", false));
         out.put("aRemainderOfTwoPastAnInt", new Case(OF_TWO + " * 1000000000000000000", false));
+        // A remainder by nought is said to stop a run wherever the label is worked out, and is not
+        // a stop the reading lets go of past a row holding the prices empty.
         out.put("aRemainderByNought",
-                new Case("Int.floorMod(String.length(i.code), 0) + 1", false));
+                new Case("Int.floorMod(String.length(i.code), 0) + 1", false, false));
         out.put("aLengthAndAFreeInt", new Case("String.length(i.code) + m", false));
         // May stop a run, on the places its dividend is read off and on the free Int, none of
         // which the relation reads.
@@ -130,6 +143,8 @@ class AnOperatorOverANumberWithARangeIsAskedOverThatRangeTest {
         Map<String, List<List<String>>> actual = new LinkedHashMap<>();
         CASES.forEach((name, each) -> {
             expected.put(name, each.read() ? List.of(relation, List.of())
+                    : each.readPastNoKey()
+                    ? List.of(List.of("items[*].code"), List.of("prices.known[key]"))
                     : List.of(List.of(), relation));
             actual.put(name, List.of(
                     readAs(name, UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),

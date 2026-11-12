@@ -322,9 +322,18 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
                 correlated == null ? null : correlated.reason(),
                 currencyOf(evidence, "correlated").toString());
 
-        // An operator reading the currency outside the lookup stops a run at some currency.
-        for (String behavior : List.of("spreading", "tabled", "uncounted", "amountless",
-                "spreadFirst")) {
+        // How many deals there are is a statement of the way a row holding one deal and the table
+        // empty is read against: the guard fails on it, and the run gets to the relation at any
+        // currency having worked out no rate.
+        PartitionEvidence.NotRead counted =
+                currencyOf(evidence, "amountless").get("deals[*].currency");
+        assertTrue(counted == null || counted.reason()
+                != UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                currencyOf(evidence, "amountless").toString());
+
+        // An operator reading the currency outside the lookup stops a run at some currency, and
+        // how many deals meet a statement of their amounts is no number the row fixes.
+        for (String behavior : List.of("spreading", "tabled", "uncounted", "spreadFirst")) {
             PartitionEvidence.NotRead stopped =
                     currencyOf(evidence, behavior).get("deals[*].currency");
             assertNotEquals(null, stopped, behavior + " " + currencyOf(evidence, behavior));

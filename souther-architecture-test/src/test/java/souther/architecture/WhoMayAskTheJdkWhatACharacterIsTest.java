@@ -69,7 +69,7 @@ class WhoMayAskTheJdkWhatACharacterIsTest {
      * {@code RetiredDiagnosticCode}, {@code JsonRenderer}, {@code MessageKeys},
      * {@code MessageTemplate}). About how the compiler's own documentation and reports are searched
      * and laid out, which is what a reader is shown and not what a program means: the {@code doc}
-     * package, {@code AdequacyReport}, {@code ArmWord}, {@code WrittenEnsures}. A precondition
+     * package, {@code AdequacyReport}, {@code ArmWord}. A precondition
      * on a value the compiler or its caller supplied, refusing nothing a source can write:
      * {@code SoutherProcessor}'s option, {@code Messages}' language tag, {@code SourceId},
      * {@code FixtureTemplate}.
@@ -129,7 +129,6 @@ class WhoMayAskTheJdkWhatACharacterIsTest {
             "souther/compiler/doc/TakenAsItStands#lines java/lang/String.strip",
             "souther/compiler/partition/FixtureTemplate#<init> java/lang/String.isBlank",
             "souther/compiler/report/AdequacyReport#word java/lang/String.toLowerCase",
-            "souther/compiler/report/WrittenEnsures#indentOf java/lang/Character.isWhitespace",
             "souther/compiler/source/SourceId#<init> java/lang/String.isBlank");
 
     @Test

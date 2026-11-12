@@ -45,6 +45,9 @@ class AComparisonWithWhatACaseConversionAnswersIsReadOverItsImageTest {
                 "String.uppercase(a) == b"}) {
             String json = report(comparing(body));
             assertFalse(json.contains("\"imagesNotShown\""), () -> body + " " + json);
+            // Nothing is left unanswered for either place: the classes cover every value.
+            assertFalse(json.contains("regionNotDetermined"), () -> body + " " + json);
+            assertFalse(json.contains("relation_shown_over_a_region"), () -> body + " " + json);
         }
     }
 }

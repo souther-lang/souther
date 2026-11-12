@@ -50,9 +50,9 @@ import java.util.List;
  *                  as it is left open at: shown on neither side, because the relation is not
  *                  worked out for a string of that length; none where a run gets to it at every
  *                  length
- * @param imagesNotShown the operations of the library whose image over the strings of a side is
- *                  shown only where it is exact, which are why {@code notShown} holds the strings
- *                  it holds
+ * @param operations the operations of the library that are why {@code notShown} holds the
+ *                  strings it holds, by why: whose image over the strings of a side is shown only
+ *                  where it is exact, and which a run is not shown to get past
  * @param notCounted the values holding so few or so many code points of a class that no run gets
  *                  to the relation with them, which are shown on neither side as the values of
  *                  {@code notReached} are; kept apart because a length bounds none of them
@@ -60,7 +60,7 @@ import java.util.List;
 public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
                           ValueSet whenFalse, PredicateStatement statement,
                           PredicateOrigin origin, ValueSet notShown,
-                          List<ValuesWithin> notReached, List<String> imagesNotShown,
+                          List<ValuesWithin> notReached, BlockReason.OperationsNotShown operations,
                           List<NotCounted> notCounted) {
 
     /**
@@ -82,12 +82,11 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
     public SetStatement {
         if (term == null || whenTrue == null || whenFalse == null
                 || statement == null || origin == null || notShown == null
-                || notReached == null || imagesNotShown == null || notCounted == null) {
+                || notReached == null || operations == null || notCounted == null) {
             throw new IllegalArgumentException(
                     "a statement about a position names some values, and some rule made it");
         }
         notReached = List.copyOf(notReached);
-        imagesNotShown = List.copyOf(imagesNotShown);
         notCounted = List.copyOf(notCounted);
         // Whether the two sides hold anything is not asked here, and cannot be. What a rule leaves
         // is a set of every string there is; what the position holds is what its declarations left
@@ -101,8 +100,8 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
                         ValueSet whenFalse, PredicateStatement statement,
                         PredicateOrigin origin, ValueSet notShown,
                         List<ValuesWithin> notReached, List<String> imagesNotShown) {
-        this(term, whenTrue, whenFalse, statement, origin, notShown, notReached, imagesNotShown,
-                List.of());
+        this(term, whenTrue, whenFalse, statement, origin, notShown, notReached,
+                BlockReason.OperationsNotShown.ofImages(imagesNotShown), List.of());
     }
 
     /** A rule that shows its values at every length a run gets to it at, and whose open values are
@@ -125,7 +124,7 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
     /** The same statement of the same values, about the position {@code at}. */
     public SetStatement measuredAt(NumericTerm.FromOnePosition at) {
         return new SetStatement(at, whenTrue, whenFalse, statement, origin, notShown, notReached,
-                imagesNotShown, notCounted);
+                operations, notCounted);
     }
 
     /** Whether every value is shown on one side or the other. */

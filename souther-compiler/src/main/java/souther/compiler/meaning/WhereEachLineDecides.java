@@ -1464,9 +1464,11 @@ public final class WhereEachLineDecides {
         return partsHeldBy(stated).keySet();
     }
 
-    /** The same parts, each as it stands held, by the spelling of it held. */
+    /** The same parts, each as it stands held, by the spelling of it held, in the order
+     *  {@code stated} names them: a reader that writes them out writes them in the model's
+     *  order. */
     static Map<Spelling, Proposition> partsHeldBy(Proposition stated) {
-        Map<Spelling, Proposition> parts = new HashMap<>();
+        Map<Spelling, Proposition> parts = new LinkedHashMap<>();
         gather(stated, parts, new HashMap<>());
         return parts;
     }

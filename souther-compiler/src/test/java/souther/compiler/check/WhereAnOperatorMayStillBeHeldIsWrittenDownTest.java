@@ -441,10 +441,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.productAt",
                     "asks whether the expression the arithmetic stopped at is the product it"
                             + " stopped for, so the two numbers multiplied are read as one"),
-            new Held("souther.compiler.partition.AffineReading.1.productFormOf",
-                    "asks whether the expression is the product of two whole numbers, and tells"
-                            + " the multiplication the run works out as it was written, so that a"
-                            + " row where it stops is not taken as computed"),
+            new Held("souther.compiler.partition.Pullback.isTheSideAsWritten",
+                    "asks whether the operator the arithmetic stopped at is the whole of the side,"
+                            + " as the side or as the library's call it was read as, so a product"
+                            + " is one line however it was written"),
+            new Held("souther.compiler.partition.AffineReading.1.composedAsAProduct",
+                    "tells the multiplication of two whole numbers the run works out as it was"
+                            + " written, so that a row where it stops is not taken as computed"),
             new Held("souther.compiler.check.QuotientByAValue.operated",
                     "writes the number times the divisor as the source would, through the rule"
                             + " for the operator, so that the comparison is read where any"

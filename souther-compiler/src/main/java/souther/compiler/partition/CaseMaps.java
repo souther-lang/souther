@@ -2,10 +2,12 @@ package souther.compiler.partition;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntPredicate;
 
-import souther.compiler.evaluate.BoundUnderEvaluation;
+import net.unit8.notation199x.CaseConversion;
 import net.unit8.notation199x.pattern.Meter;
 
+import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
 import souther.compiler.semantics.CaseMapping;
@@ -34,7 +36,8 @@ final class CaseMaps {
     static CodeMap of(CaseMapping mapping) {
         CodeMap had = MADE.get(mapping);
         if (had == null) {
-            had = CodeMap.of(text -> BoundUnderEvaluation.mapped(mapping, text));
+            had = CodeMap.of(text -> BoundUnderEvaluation.mapped(mapping, text),
+                    leftAloneEverywhere(mapping));
             CaseMapping outermost = switch (mapping) {
                 case CaseMapping.None it -> it;
                 case CaseMapping.Lowercase _ -> CaseMapping.LOWERCASE;
@@ -62,9 +65,12 @@ final class CaseMaps {
      * that does not follow: {@code ß} is left alone by the outer lowercase and is what it answers
      * of {@code ẞ}, and the two together answer {@code ss} of it. So none is answered for those.
      *
-     * <p>A language of the code points before the form is applied, as {@code over} is: the strings
-     * of it that are no value are among these as they are among its own, and what is asked of the
-     * values of a language is asked of those held as written.
+     * <p>A language of the code points before the form is applied, as {@code over} is, so it holds
+     * sequences that are no value: {@code a} followed by a combining acute is among them where
+     * {@code over} holds it. It says of a value that it is an answer, and of nothing made from a
+     * string of it: a string inside one of these, or one that converts to one, is made from a
+     * sequence no value is and is not shown for that. Whoever derives strings from what is shown
+     * leaves this out.
      *
      * @return the strings, which are none where {@code mapping} is not one conversion, or null
      *         past what {@code meter} allows
@@ -75,5 +81,41 @@ final class CaseMaps {
         }
         Language alone = CodeMap.stringsOf(of(mapping).leftAlone(), meter);
         return alone == null ? null : over.and(alone, meter);
+    }
+
+    /**
+     * The strings a run is shown to get past {@code mapping} at: the strings it is exactly a map
+     * on, and the strings it leaves as they stand ({@link #answeredAsTheyStand}), whose answer is
+     * the string itself and so is no longer than it. Every other string may stop the run there,
+     * by the answer being longer than a {@code String} holds.
+     *
+     * @return the strings, or null past what {@code meter} allows
+     */
+    static Language gottenPastExactly(CaseMapping mapping, Meter meter) {
+        Language exact = of(mapping).strings(meter);
+        Language standing = exact == null ? null
+                : answeredAsTheyStand(mapping, Language.EVERY_STRING, meter);
+        Language joined = standing == null ? null : exact.or(standing, meter);
+        return joined == null ? exact : joined;
+    }
+
+    /**
+     * Whether {@code mapping} answers a code point as it is in every text, as the tables of the
+     * case conversion the run time does it with say: where each conversion it is made of does.
+     */
+    static IntPredicate leftAloneEverywhere(CaseMapping mapping) {
+        return switch (mapping) {
+            case CaseMapping.None _ -> codePoint -> true;
+            case CaseMapping.Lowercase(CaseMapping of) -> {
+                IntPredicate inner = leftAloneEverywhere(of);
+                yield codePoint -> CaseConversion.lowercaseLeavesAlone(codePoint)
+                        && inner.test(codePoint);
+            }
+            case CaseMapping.Uppercase(CaseMapping of) -> {
+                IntPredicate inner = leftAloneEverywhere(of);
+                yield codePoint -> CaseConversion.uppercaseLeavesAlone(codePoint)
+                        && inner.test(codePoint);
+            }
+        };
     }
 }

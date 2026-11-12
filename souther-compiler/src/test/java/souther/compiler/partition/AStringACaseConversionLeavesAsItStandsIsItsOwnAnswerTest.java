@@ -78,6 +78,37 @@ class AStringACaseConversionLeavesAsItStandsIsItsOwnAnswerTest {
         }
     }
 
+    /**
+     * Every code point of the set, asked beside a letter before, a mark after, and the other
+     * cased letter the conversion turns on before it: the set is closed over the code points, so
+     * it is asked of each and not of a draw from it.
+     */
+    @Test
+    void everyCodePointAConversionLeavesAloneIsLeftAloneBesideALetterAndAMark() {
+        for (CaseMapping mapping : List.of(CaseMapping.LOWERCASE, CaseMapping.UPPERCASE)) {
+            String letter = mapping.equals(CaseMapping.LOWERCASE) ? "a" : "A";
+            String other = mapping.equals(CaseMapping.LOWERCASE) ? "ς" : "Σ";
+            String[][] around = {{letter, ""}, {"", "́"}, {other, ""}};
+            List<String> broken = new ArrayList<>();
+            for (CodePoints.Range range : CaseMaps.of(mapping).leftAlone().ranges()) {
+                for (int cp = range.from(); cp <= range.to() && broken.size() < 10; cp++) {
+                    if (CodePoints.isSurrogate(cp)) {
+                        continue;
+                    }
+                    for (String[] beside : around) {
+                        String text = beside[0] + Character.toString(cp) + beside[1];
+                        if (Normalization.nfc(text).equals(text)
+                                && !text.equals(BoundUnderEvaluation.mapped(mapping, text))) {
+                            broken.add(Integer.toHexString(cp) + " beside " + beside[0]
+                                    + beside[1]);
+                        }
+                    }
+                }
+            }
+            assertEquals(List.of(), broken, mapping.toString());
+        }
+    }
+
     @Test
     void aCodePointANeighbourChangesIsNotOneTheConversionLeavesAlone() {
         CodePoints alone = CaseMaps.of(CaseMapping.LOWERCASE).leftAlone();
@@ -94,6 +125,21 @@ class AStringACaseConversionLeavesAsItStandsIsItsOwnAnswerTest {
         CaseMapping both = new CaseMapping.Lowercase(CaseMapping.UPPERCASE);
         assertEquals("ss", BoundUnderEvaluation.mapped(both, "ß"));
         assertTrue(CaseMaps.answeredAsTheyStand(both, Language.EVERY_STRING, METER).isEmpty());
+    }
+
+    /** A run gets past a conversion at the strings it is exactly a map on and at the strings it
+     *  leaves as they stand, whose answer is the string and is no longer; not at one whose answer
+     *  is longer than it. */
+    @Test
+    void aRunGetsPastAConversionAtTheStringsItLeavesAsTheyStand() {
+        Language past = CaseMaps.gottenPastExactly(CaseMapping.LOWERCASE, METER);
+        assertTrue(past.has("abc"));
+        assertTrue(past.has("́"));
+        assertFalse(past.has("İ"));
+        CaseMapping both = new CaseMapping.Lowercase(CaseMapping.UPPERCASE);
+        Language pastBoth = CaseMaps.gottenPastExactly(both, METER);
+        assertTrue(pastBoth.has("abc"));
+        assertFalse(pastBoth.has("́"));
     }
 
     /** Only the strings of the language asked of are answered as they stand. */

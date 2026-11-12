@@ -2250,7 +2250,8 @@ public sealed interface ElementValue {
                  *  a choice of numbers times a form, which weighs it
                  *  ({@link ElementValue#weighedBy}). And nothing else. */
                 @Override
-                public LinearForm<Atom> productOf(LinearForm<Atom> left, LinearForm<Atom> right) {
+                public LinearForm<Atom> productOf(Core.Binary operation, LinearForm<Atom> left,
+                                                  LinearForm<Atom> right) {
                     LinearForm<Atom> moved = movedByThePosition(left, right);
                     if (moved == null) {
                         moved = movedByThePosition(right, left);
@@ -2465,12 +2466,13 @@ public sealed interface ElementValue {
                 /** A product of what is of the element alone is the element's own ({@link
                  *  #atoms}); one with the answer so far or a count is not a step this reads. */
                 @Override
-                public LinearForm<TheStep> productOf(LinearForm<TheStep> left,
+                public LinearForm<TheStep> productOf(Core.Binary operation,
+                                                     LinearForm<TheStep> left,
                                                      LinearForm<TheStep> right) {
                     LinearForm<Atom> one = ofTheElementAlone(left);
                     LinearForm<Atom> other = one == null ? null : ofTheElementAlone(right);
                     LinearForm<Atom> product = other == null ? null
-                            : atoms().productOf(one, other);
+                            : atoms().productOf(operation, one, other);
                     if (product == null) {
                         return null;
                     }
@@ -2564,7 +2566,8 @@ public sealed interface ElementValue {
                 }
 
                 @Override
-                public LinearForm<SoFar> productOf(LinearForm<SoFar> left,
+                public LinearForm<SoFar> productOf(Core.Binary operation,
+                                                   LinearForm<SoFar> left,
                                                    LinearForm<SoFar> right) {
                     return left.coefs().containsKey(SoFar.THE_ANSWER)
                             || right.coefs().containsKey(SoFar.THE_ANSWER) ? null
