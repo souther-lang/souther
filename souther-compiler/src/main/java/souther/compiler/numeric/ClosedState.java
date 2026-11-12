@@ -119,6 +119,15 @@ public final class ClosedState<A> {
         return PRODUCTS_MADE.get();
     }
 
+    /** How many rules the closures worked out have held between them, for a test holding how much a
+     *  program is closed over to how many rules it says and not how many pairs of them: that is a
+     *  shape and not a speed. */
+    private static final AtomicLong RULES_CLOSED = new AtomicLong();
+
+    public static long rulesClosed() {
+        return RULES_CLOSED.get();
+    }
+
     /** Whether the rounds ran out before the box stopped moving. */
     public enum Status {
 
@@ -248,6 +257,7 @@ public final class ClosedState<A> {
                                              Function<A, Granularity> spacing,
                                              CanonicalOrder<A> order, ClosureWork<A> parent,
                                              ClosureWork<A> into) {
+        RULES_CLOSED.addAndGet(constraints.size());
         DifferenceBounds<A> differences = DifferenceBounds.over(constraints, order);
         if (differences.holdsNothing()) {
             return empty(differences);
