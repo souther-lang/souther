@@ -34,19 +34,20 @@ final class RowAims {
     private RowAims() {}
 
     /**
-     * A collection and the numbers it is asked to hold, one at a time.
+     * A place for a number and the numbers it is asked to hold, one at a time.
      *
-     * @param container the collection, by the parameter it is in and the fields down to it
-     * @param elements  the numbers, each of which a collection holding it alone totals to
+     * @param value   the place, by the parameter it is under and the steps down to it, through the
+     *                one element of the list a total is of and on to the number the total adds
+     * @param numbers the numbers, each of which a list holding it alone totals to
      */
-    record Aim(TermPath container, List<BigInteger> elements) {
+    record Aim(TermPath value, List<BigInteger> numbers) {
 
         Aim {
-            elements = List.copyOf(elements);
+            numbers = List.copyOf(numbers);
         }
     }
 
-    /** The collections {@code conditions} ask something of, in the order first asked. */
+    /** The places of a number {@code conditions} ask something of, in the order first asked. */
     static List<Aim> of(List<TakenConstraint> conditions) {
         Map<TermPath, List<BigInteger>> asked = new LinkedHashMap<>();
         for (TakenConstraint each : conditions) {
@@ -55,11 +56,11 @@ final class RowAims {
                 continue;
             }
             Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
-            TermPath container = totalOfAList(only.getKey());
-            if (container == null) {
+            TermPath value = numberOfOneElement(only.getKey());
+            if (value == null) {
                 continue;
             }
-            List<BigInteger> numbers = asked.computeIfAbsent(container, _ -> new ArrayList<>());
+            List<BigInteger> numbers = asked.computeIfAbsent(value, _ -> new ArrayList<>());
             for (BigInteger number : near(form.constant(), only.getValue(), rel)) {
                 if (!numbers.contains(number)) {
                     numbers.add(number);
@@ -67,35 +68,31 @@ final class RowAims {
             }
         }
         List<Aim> out = new ArrayList<>();
-        asked.forEach((container, numbers) -> {
+        asked.forEach((value, numbers) -> {
             if (!numbers.isEmpty()) {
-                out.add(new Aim(container, numbers));
+                out.add(new Aim(value, numbers));
             }
         });
         return out;
     }
 
-    /** The list {@code term} is the total of, or null where it is no such total. */
-    private static TermPath totalOfAList(NumericTerm term) {
-        TermPath subject = switch (term) {
+    /**
+     * The place of the number a one-element list holds to total as {@code term} asks, or null where
+     * {@code term} is no total of a list. A total of a list is at the element; a projected total
+     * already names the number it adds, through the element.
+     */
+    private static TermPath numberOfOneElement(NumericTerm term) {
+        return switch (term) {
             case NumericTerm.TakenOf of
                     when of.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
                             && ValueTransformation.NONE.equals(of.transformation()) ->
-                    of.position();
+                    of.position().element();
             case NumericTerm.TakenOver over
                     when over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
                             && over.source() instanceof RunSource.ProjectedOccurrences ->
                     over.subjectPath();
             default -> null;
         };
-        if (subject == null) {
-            return null;
-        }
-        List<TermPath.Step> steps = subject.steps();
-        if (steps.isEmpty() || !(steps.getLast() instanceof TermPath.Step.Element)) {
-            return subject;
-        }
-        return TermPath.of(subject.head(), steps.subList(0, steps.size() - 1));
     }
 
     /**
