@@ -70,7 +70,23 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
                     + "Lsouther/compiler/numeric/Reach$Ends;Z)Lsouther/compiler/numeric/ExactCut;",
             "the terms go into a list that is summed as one sum, which meets them by scale and"
                     + " holds no partial sum, so the order they came in reaches nothing the sum"
-                    + " answers");
+                    + " answers",
+            "souther/compiler/numeric/FormReach#highestKept"
+                    + "(Lsouther/compiler/numeric/AffineConstraint;ILjava/util/Map;)"
+                    + "Lsouther/compiler/numeric/ExactCut;",
+            "the coefficients arrive in the one order the positions decide, which FormReach#ofKept"
+                    + " takes them in, and what comes back is the lowest of what every premise"
+                    + " leaves: a premise's sum is exact, so the order its terms were added in"
+                    + " reaches it only where a partial sum could not be held, and there it is"
+                    + " answered by FormReach#fromTheEndsWithout in the order the positions decide",
+            "souther/compiler/numeric/FormReach#tightenedBy"
+                    + "(Lsouther/compiler/numeric/ExactCut;Lsouther/compiler/numeric/ExactCut;"
+                    + "Lsouther/compiler/numeric/RoundWork$Candidates;"
+                    + "Ljava/util/List;Ljava/util/Map;Lsouther/compiler/numeric/ExactRatio;)"
+                    + "Lsouther/compiler/numeric/ExactCut;",
+            "every caller hands the coefficients over in the one order the positions decide, and"
+                    + " they go no further than FormReach#fromTheEndsWithout, which takes them in"
+                    + " that order; what comes back is the lowest of what every premise leaves");
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 

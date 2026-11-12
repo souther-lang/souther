@@ -58,6 +58,14 @@ public final class ValueHash {
 
     private static final int SPREAD = 0xc2b2ae35;
 
+    /** The same three for sixty four bits: an odd multiplier for the places, and the two the
+     *  finishing is built from. */
+    private static final long WIDE_GATHER = 0x9E3779B97F4A7C15L;
+
+    private static final long WIDE_SCATTER = 0xBF58476D1CE4E5B9L;
+
+    private static final long WIDE_SPREAD = 0x94D049BB133111EBL;
+
     private ValueHash() {
     }
 
@@ -124,6 +132,36 @@ public final class ValueHash {
      */
     public static int ofWhatItHolds(Class<?> kind, int summed, int size) {
         return finished(GATHER * (GATHER * seed(kind) + summed) + size);
+    }
+
+    /**
+     * A value of {@code kind} holding {@code parts}, each in its own place, with a state of sixty
+     * four bits: for a value hashed from the same kind of value it holds, over and over.
+     *
+     * <p>A number handed up as an {@code int} and made again from itself is a function of thirty
+     * two bits applied to its own answer, and such a chain comes round to a number it had before
+     * after some tens of thousands of steps, from where every value deeper is one of those it
+     * already passed. A chain of calls each handed the one before it is that, so what a value of it
+     * is told apart by is the state, and the {@code int} a reader asks for is {@link #narrowed}
+     * from it.
+     */
+    public static long ofItsPartsWide(Class<?> kind, long... parts) {
+        long state = seed(kind);
+        for (long part : parts) {
+            state = scattered(state * WIDE_GATHER + part);
+        }
+        return state;
+    }
+
+    /** The {@code int} a state of sixty four bits stands for. */
+    public static int narrowed(long wide) {
+        return (int) (wide ^ (wide >>> 32));
+    }
+
+    private static long scattered(long gathered) {
+        long out = (gathered ^ (gathered >>> 30)) * WIDE_SCATTER;
+        out = (out ^ (out >>> 27)) * WIDE_SPREAD;
+        return out ^ (out >>> 31);
     }
 
     /** Which kind of value it is, which is a fact about the program and the same on every run —

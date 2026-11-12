@@ -32,6 +32,11 @@ public final class HandedAnswers {
         this.toldApart = toldApart;
     }
 
+    /** What was answered, by name. */
+    Map<BindingId, Core> answers() {
+        return answers;
+    }
+
     /** Whether a reading that asked these is told from another by them. */
     public boolean toldApart() {
         return toldApart;

@@ -1,12 +1,14 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+import souther.compiler.numeric.ClosedState;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
+import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A condition that a set does or does not hold a value is read by how many of its elements are the
@@ -281,12 +283,8 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
                 """));
     }
 
-    /** Values added on both sides are read one side at a time, so the counts named grow with how
-     *  many were added and not with how many pairs of them there are. */
-    @Test
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void manyInsertsOnBothSidesAreReadOneSideAtATime() {
-        int depth = 24;
+    /** {@code depth} values added on each side of the two sets. */
+    static String insertsOnBothSides(int depth) {
         StringBuilder parameters = new StringBuilder();
         StringBuilder names = new StringBuilder();
         String seated = "o.seated";
@@ -297,20 +295,15 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
             seated = "Set.insert(a" + i + ", " + seated + ")";
             refused = "Set.insert(b" + i + ", " + refused + ")";
         }
-        assertEquals(List.of("E2011"), warnings(OUTCOMES + """
+        return OUTCOMES + """
                 behavior both : (o: Outcomes%s) -> Outcomes
                     constructs Outcomes
                 let both (o%s) = Outcomes { seated = %s, refused = %s }
-                """.formatted(parameters, names, seated, refused)));
+                """.formatted(parameters, names, seated, refused);
     }
 
-    /** How many a set holds once a value is put in is one form of the count of that value, and
-     *  no case of it: inserts written one into another are each read once, and together are as
-     *  many more as there were inserts at most. */
-    @Test
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void aChainOfInsertsHoldsAtMostOneMoreForEach() {
-        int depth = 16;
+    /** {@code depth} values inserted one into another, under a cap {@code depth} higher. */
+    static String aChainOfInserts(int depth) {
         StringBuilder parameters = new StringBuilder();
         StringBuilder names = new StringBuilder();
         String taken = "s.taken";
@@ -319,7 +312,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
             names.append(", a").append(i);
             taken = "Set.insert(a" + i + ", " + taken + ")";
         }
-        assertEquals(List.of(), warnings("""
+        return """
                 module seats
 
                 data Capped = { taken: Set<Int>, cap: Int }
@@ -328,33 +321,80 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
                 behavior grow : (s: Capped%s) -> Capped
                     constructs Capped
                 let grow (s%s) = Capped { taken = %s, cap = s.cap + %d }
-                """.formatted(parameters, names, taken, depth)));
+                """.formatted(parameters, names, taken, depth);
+    }
+
+    /** A set united with itself {@code depth} times over. */
+    static String aSetUnitedWithItself(int depth) {
+        StringBuilder lets = new StringBuilder();
+        for (int i = 1; i <= depth; i++) {
+            lets.append("    let s").append(i).append(" = Set.union(s").append(i - 1)
+                    .append(", s").append(i - 1).append(")\n");
+        }
+        return OUTCOMES + """
+                behavior refuseAll : (o: Outcomes) -> Outcomes
+                    constructs Outcomes
+                let refuseAll (o) = {
+                    let s0 = o.refused
+                %s    Outcomes { ...o, refused = s%d }
+                }
+                """.formatted(lets, depth);
+    }
+
+    /** How many times a premise was looked at for a question while {@code source} was read. */
+    private static long premisesWorkedReading(String source) {
+        long before = ClosedState.premisesWorked();
+        warnings(source);
+        return ClosedState.premisesWorked() - before;
+    }
+
+    /**
+     * What a program costs grows with how many it says of a kind and not with how many pairs of
+     * them there are.
+     *
+     * <p>A closure is made for each place a path has got to, holds the rules said so far, and asks
+     * every premise for each position of each of them, so the premises looked at between them grow
+     * as the cube of the depth: twice the depth is eight times as many. Reading the pairs of what is
+     * said as well takes them to the fourth power, which is sixteen times as many, and the bound
+     * sits between the two. Counted rather than timed: that is a shape, and how long it takes is
+     * the machine's.
+     */
+    private static void assertGrowsNoFasterThanTheCube(IntFunction<String> program) {
+        long shallow = premisesWorkedReading(program.apply(4));
+        long twiceAsDeep = premisesWorkedReading(program.apply(8));
+        assertTrue(twiceAsDeep < 12 * shallow, "twice the depth looked at " + twiceAsDeep
+                + " premises where the shallower looked at " + shallow
+                + ", which is more than the cube of the depth allows");
+    }
+
+    /** Values added on both sides are read one side at a time, so the counts named grow with how
+     *  many were added and not with how many pairs of them there are. */
+    @Test
+    void manyInsertsOnBothSidesAreReadOneSideAtATime() {
+        assertEquals(List.of("E2011"), warnings(insertsOnBothSides(4)));
+        assertGrowsNoFasterThanTheCube(AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest
+                ::insertsOnBothSides);
+    }
+
+    /** How many a set holds once a value is put in is one form of the count of that value, and
+     *  no case of it: inserts written one into another are each read once, and together are as
+     *  many more as there were inserts at most. */
+    @Test
+    void aChainOfInsertsHoldsAtMostOneMoreForEach() {
+        assertEquals(List.of(), warnings(aChainOfInserts(4)));
+        assertGrowsNoFasterThanTheCube(
+                AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest::aChainOfInserts);
     }
 
     /** What a count of two containers carries is filed once for the values it is read off, so a
      *  set united with itself again and again is read once for each union and not once for each
      *  way down to it. */
     @Test
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void aSetUnitedWithItselfIsReadOnceForEachUnion() {
-        for (int depth : new int[] {8, 24}) {
-            StringBuilder lets = new StringBuilder();
-            for (int i = 1; i <= depth; i++) {
-                lets.append("    let s").append(i).append(" = Set.union(s").append(i - 1)
-                        .append(", s").append(i - 1).append(")\n");
-            }
-            List<String> said = warnings(OUTCOMES + """
-                    behavior refuseAll : (o: Outcomes) -> Outcomes
-                        constructs Outcomes
-                    let refuseAll (o) = {
-                        let s0 = o.refused
-                    %s    Outcomes { ...o, refused = s%d }
-                    }
-                    """.formatted(lets, depth));
-            if (depth == 8) {
-                assertEquals(List.of(), said);
-            }
-        }
+        assertEquals(List.of(), warnings(aSetUnitedWithItself(4)));
+        assertGrowsNoFasterThanTheCube(
+                AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest
+                        ::aSetUnitedWithItself);
     }
 
     @Test
@@ -408,7 +448,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
                 """));
     }
 
-    private static List<String> warnings(String source) {
+    static List<String> warnings(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()

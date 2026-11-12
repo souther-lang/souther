@@ -372,6 +372,13 @@ public final class InputReads {
         return BindingEnvironment.Watch.over(names, reading);
     }
 
+    /** A reading that asked {@code asked} of what was handed, taken again here instead of read:
+     *  what it asked is asked of the reading being watched, if there is one, as reading it again
+     *  would have. */
+    public void takingAgain(HandedAnswers asked) {
+        BindingEnvironment.Watch.replay(names, asked);
+    }
+
     /** Whether a reading is being watched on this thread, which a reading that skips part of
      *  itself would leave without what that part asked. */
     public static boolean watching() {

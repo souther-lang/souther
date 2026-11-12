@@ -1185,6 +1185,7 @@ final class AnswerClosure {
                 "souther.compiler.check.HelperTable#heldAs",
                 // What each type is under the declarations a source reads, worked out once for each
                 // type asked of it, which the declarations decide ({@code TypeViews}).
+                "souther.compiler.check.RuleReadingSource#folds",
                 "souther.compiler.check.RuleReadingSource#views",
                 // The denial a proposition keeps, which is what denying its parts makes and is
                 // equal to what any other making makes ({@code Proposition.Denial}).
@@ -1193,6 +1194,7 @@ final class AnswerClosure {
                 "souther.compiler.meaning.Proposition$Compared#denial",
                 "souther.compiler.meaning.Proposition$OnAnApplication#denial",
                 "souther.compiler.meaning.Proposition$SoManyHold#denial",
+                "souther.compiler.meaning.Quantity$WhatAnOperationAnswers#derivation",
                 // What an entry on a way hashes as, folded from its other components where it is
                 // made, since it is looked up in every set a way is compared by.
                 "souther.compiler.partition.OnTheWay$TakenIn#hash",

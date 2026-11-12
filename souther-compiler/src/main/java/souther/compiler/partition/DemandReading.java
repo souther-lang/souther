@@ -468,13 +468,25 @@ final class DemandReading {
 
         private static void joinedInto(Read kept, ReadOff mine, Read dropped, ReadOff theirs,
                                        Map<Read, ModelOccurrences> into) {
+            joinedInto(kept, mine, dropped, theirs, into, new IdentityHashMap<>());
+        }
+
+        /** Each pair of a read kept and the one it stands for is told once however many
+         *  alternatives hold it: told again it is told what it was told. */
+        private static void joinedInto(Read kept, ReadOff mine, Read dropped, ReadOff theirs,
+                                       Map<Read, ModelOccurrences> into,
+                                       Map<Read, Set<Read>> told) {
+            if (!told.computeIfAbsent(kept, _ -> Collections.newSetFromMap(
+                    new IdentityHashMap<>())).add(dropped)) {
+                return;
+            }
             into.put(kept, mine.of(kept).and(theirs.of(dropped)));
             if (kept instanceof Read.OneOf one && dropped instanceof Read.OneOf other) {
                 for (int alternative = 0; alternative < one.alternatives().size(); alternative++) {
                     List<Read> those = one.alternatives().get(alternative);
                     List<Read> these = other.alternatives().get(alternative);
                     for (int at = 0; at < those.size(); at++) {
-                        joinedInto(those.get(at), mine, these.get(at), theirs, into);
+                        joinedInto(those.get(at), mine, these.get(at), theirs, into, told);
                     }
                 }
             }
@@ -487,11 +499,11 @@ final class DemandReading {
                             && those.failing().size() == these.failing().size()) {
                         for (int at = 0; at < those.holding().size(); at++) {
                             joinedInto(those.holding().get(at), mine, these.holding().get(at),
-                                    theirs, into);
+                                    theirs, into, told);
                         }
                         for (int at = 0; at < those.failing().size(); at++) {
                             joinedInto(those.failing().get(at), mine, these.failing().get(at),
-                                    theirs, into);
+                                    theirs, into, told);
                         }
                     }
                 }
@@ -502,13 +514,23 @@ final class DemandReading {
          *  read off, into {@code into}: told by the half that read them. */
         private static void resolved(Read read, ReadOff off,
                                      Map<Read, ModelOccurrences> into) {
+            resolved(read, off, into, Collections.newSetFromMap(new IdentityHashMap<>()));
+        }
+
+        /** Each read once however many alternatives hold it: what it was read off is told by the
+         *  one half, and told again it is told alike. */
+        private static void resolved(Read read, ReadOff off, Map<Read, ModelOccurrences> into,
+                                     Set<Read> told) {
+            if (!told.add(read)) {
+                return;
+            }
             into.merge(read, off.of(read), ModelOccurrences::and);
             if (read instanceof Read.OneOf oneOf) {
                 oneOf.alternatives().forEach(alternative ->
-                        alternative.forEach(one -> resolved(one, off, into)));
+                        alternative.forEach(one -> resolved(one, off, into, told)));
             }
             if (read instanceof Read.Counted counted) {
-                counted.parts().forEach(one -> resolved(one, off, into));
+                counted.parts().forEach(one -> resolved(one, off, into, told));
             }
         }
     }
@@ -758,10 +780,33 @@ final class DemandReading {
      */
     static List<Stated> stated(Condition condition, InputReading read, boolean holding,
                                WhatConditionsState conditions) {
+        return stated(condition, read, holding, conditions, new IdentityHashMap<>());
+    }
+
+    /**
+     * The same, with what each condition asked kept in {@code done}: a condition is one however
+     * often it is read ({@link Condition#of}), so a name used on both sides of a connective is the
+     * one condition held twice, and it asks what it asks once.
+     */
+    private static List<Stated> stated(Condition condition, InputReading read, boolean holding,
+                                       WhatConditionsState conditions,
+                                       Map<Condition, List<Stated>> done) {
+        List<Stated> already = done.get(condition);
+        if (already != null) {
+            return already;
+        }
+        List<Stated> made = statedAfresh(condition, read, holding, conditions, done);
+        done.put(condition, made);
+        return made;
+    }
+
+    private static List<Stated> statedAfresh(Condition condition, InputReading read,
+                                             boolean holding, WhatConditionsState conditions,
+                                             Map<Condition, List<Stated>> done) {
         return switch (condition) {
             case Condition.Joined joined -> {
-                List<Stated> left = stated(joined.left(), read, holding, conditions);
-                List<Stated> right = stated(joined.right(), read, holding, conditions);
+                List<Stated> left = stated(joined.left(), read, holding, conditions, done);
+                List<Stated> right = stated(joined.right(), read, holding, conditions, done);
                 if (joined.how().under(holding) == ConditionJoin.BOTH) {
                     yield List.copyOf(both(left, right));
                 }
@@ -1437,9 +1482,20 @@ final class DemandReading {
     }
 
 
+    /**
+     * What two halves ask that both are asked: each thing once, in the order it is first asked.
+     * A thing is one however many halves hold it, and a condition used on both sides of a
+     * connective is held by both, so what it asks is not asked twice.
+     */
     private static List<Stated> both(List<Stated> left, List<Stated> right) {
         List<Stated> out = new ArrayList<>(left);
-        out.addAll(right);
+        Set<Stated> asked = Collections.newSetFromMap(new IdentityHashMap<>());
+        asked.addAll(left);
+        for (Stated each : right) {
+            if (asked.add(each)) {
+                out.add(each);
+            }
+        }
         return out;
     }
 

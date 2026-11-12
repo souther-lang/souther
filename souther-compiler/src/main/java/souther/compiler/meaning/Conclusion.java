@@ -76,7 +76,7 @@ public final class Conclusion {
         /** Whether a step that says lines from rows was concluded. */
         private boolean linesToldFromRows;
         private final Map<Derivation, List<Kept>> kept = new IdentityHashMap<>();
-        private final Map<Derivation, Proposition> last = new IdentityHashMap<>();
+        private final Map<Derivation, Kept> last = new IdentityHashMap<>();
         /** The carried values each step being concluded has read so far, innermost last. */
         private final Deque<Set<ACarriedValue>> reading = new ArrayDeque<>();
         /** How many parts each statement concluded here comes to written out, past the figure
@@ -115,9 +115,16 @@ public final class Conclusion {
     private final Shared shared;
     private final Map<ACarriedValue, Boolean> supposed;
 
-    /** A concluding of a condition at {@code where}, where the reader knows it. */
+    /**
+     * A concluding of a condition at {@code where}, where the reader knows it.
+     *
+     * <p>Each step is concluded once however many derivations hold it: a derivation is a value,
+     * so what a step concludes under one supposition does not change, and a name used twice stands
+     * for one step held twice. A part nothing read is then the one part wherever the step is held,
+     * and is numbered where it is first met.
+     */
     public Conclusion(Optional<ModelOccurrence> where) {
-        this(new Shared(where, false), Map.of());
+        this(new Shared(where, true), Map.of());
     }
 
     private Conclusion(Shared shared, Map<ACarriedValue, Boolean> supposed) {
@@ -207,6 +214,7 @@ public final class Conclusion {
             for (Kept each : shared.kept.getOrDefault(step, List.of())) {
                 if (agrees(each.read())) {
                     readAll(each.read().keySet());
+                    shared.last.put(step, each);
                     return each.concluded();
                 }
             }
@@ -220,14 +228,14 @@ public final class Conclusion {
             read = shared.reading.pop();
         }
         out = withinTheParts(out);
+        Map<ACarriedValue, Optional<Boolean>> how = new HashMap<>();
+        read.forEach(each -> how.put(each, Optional.ofNullable(supposed.get(each))));
+        Kept concluded = new Kept(Map.copyOf(how), out);
         if (shared.reusing) {
-            Map<ACarriedValue, Optional<Boolean>> how = new HashMap<>();
-            read.forEach(each -> how.put(each, Optional.ofNullable(supposed.get(each))));
-            shared.kept.computeIfAbsent(step, _ -> new ArrayList<>())
-                    .add(new Kept(Map.copyOf(how), out));
+            shared.kept.computeIfAbsent(step, _ -> new ArrayList<>()).add(concluded);
         }
         readAll(read);
-        shared.last.put(step, out);
+        shared.last.put(step, concluded);
         return out;
     }
 
@@ -451,13 +459,9 @@ public final class Conclusion {
                     partsIn(different.meeting().statement());
             case Quantity.HowManyHold(List<Proposition> each) -> partsIn(each);
             case Quantity.SumOver(DecisionSubject _, Quantity each) -> partsIn(each);
-            case Quantity.WhatAnOperationAnswers answers -> {
-                long out = 0;
-                for (Quantity each : answers.of()) {
-                    out += partsIn(each);
-                }
-                yield out;
-            }
+            // Its arguments are numbers of the input and other such answers, which hold no
+            // statement, so there is nothing to count however many paths lead to them.
+            case Quantity.WhatAnOperationAnswers _ -> 0;
             case Quantity.APieceOf piece -> partsIn(piece.string());
             case Quantity.ThePieceAt piece -> partsIn(piece.string());
             case Quantity.IsAmongThePieces among ->
@@ -486,9 +490,23 @@ public final class Conclusion {
         return ReadThroughNames.oneValueAtEachElement(stated, this::twoElementsAsOne);
     }
 
-    /** What {@code step} concluded the last time it was concluded here, or null where it was not. */
+    /**
+     * What {@code step} concluded the last time it was concluded here under what this supposes of
+     * the values it read, or null where it was not: what another supposition concluded for it is
+     * another conclusion, and is not told.
+     */
     public Proposition concludedAt(Derivation step) {
-        return shared.last.get(step);
+        Kept last = shared.last.get(step);
+        if (last != null && agrees(last.read())) {
+            return last.concluded();
+        }
+        List<Kept> kept = shared.kept.getOrDefault(step, List.of());
+        for (int at = kept.size() - 1; at >= 0; at--) {
+            if (agrees(kept.get(at).read())) {
+                return kept.get(at).concluded();
+            }
+        }
+        return null;
     }
 
     /**
