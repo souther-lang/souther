@@ -22,16 +22,16 @@ final class ClosureWork<A> {
      * asked; this is where that stops. A round that would go past it keeps none of the question it
      * was asked then, and the closure after works that question out from the premises, which is the
      * same answer.
+     *
+     * <p>Where it is set is a trade between the two: the largest closures of a long chain are the
+     * ones that hold more than this, and keeping more of them saves the next closure a little time
+     * for the memory of keeping it.
      */
     static final long PLACES_KEPT = 250_000;
 
     private final List<RoundWork<A>> rounds = new ArrayList<>();
     private long placesLeft;
     private long kept;
-
-    ClosureWork() {
-        this(PLACES_KEPT);
-    }
 
     /** @param placesKept how many places of candidates the rounds may keep between them */
     ClosureWork(long placesKept) {

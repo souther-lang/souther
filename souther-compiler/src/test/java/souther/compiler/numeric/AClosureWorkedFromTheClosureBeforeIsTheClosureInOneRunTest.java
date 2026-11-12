@@ -46,7 +46,7 @@ class AClosureWorkedFromTheClosureBeforeIsTheClosureInOneRunTest {
     /** A closure that keeps few places of its work, or none, is the closure it is with room. */
     @Test
     void aClosureKeepingLittleOfItsWorkIsTheClosureInOneRun() {
-        for (long placesKept : new long[] {0, 12, 60}) {
+        for (long placesKept : new long[] {12, 60}) {
             saidOneAtATime(placesKept, 40);
         }
         assertEquals(0, saidOneAtATime(0, 40)[1],
