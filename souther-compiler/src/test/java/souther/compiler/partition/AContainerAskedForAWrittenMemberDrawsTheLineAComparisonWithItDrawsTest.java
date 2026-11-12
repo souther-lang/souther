@@ -40,7 +40,8 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
     private static final String MODEL = """
             module probe
             data Group = { tags: List<String>, n: Int, nums: List<Int> }
-            data Line = { code: String, rates: Map<String, Int>, tags: List<String>,
+            data Line = { code: String, rates: Map<String, Int>, rates2: Map<String, Int>,
+                          tags: List<String>,
                           ids: Set<String>, nums: List<Int>, days: List<Date>, n: Int,
                           other: List<String>, groups: List<Group>, s: String, i: Int,
                           times: List<Time>, instants: List<Instant>, ats: List<DateTime>,
@@ -147,6 +148,196 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             let datedKey (l) = Map.containsKey(Date("2026-01-05"), l.dated)
             behavior timedKey : (l: Line) -> Bool
             let timedKey (l) = Map.containsKey(Time("09:00"), l.byTime)
+
+            behavior filteredNums : (l: Line) -> Bool
+            let filteredNums (l) = List.contains(5, List.filter(x -> x > 3, l.nums))
+            behavior filteredNumsAny : (l: Line) -> Bool
+            let filteredNumsAny (l) = List.any(e -> e == 5, List.filter(x -> x > 3, l.nums))
+            behavior filteredKeys : (l: Line) -> Bool
+            let filteredKeys (l) =
+                Map.containsKey("USD", Map.filterEntries((_, v) -> v > 3, l.rates))
+            behavior filteredKeysAny : (l: Line) -> Bool
+            let filteredKeysAny (l) =
+                List.any(k -> k == "USD", Map.keys(Map.filterEntries((_, v) -> v > 3, l.rates)))
+            behavior taken : (l: Line) -> Bool
+            let taken (l) = List.contains("K", List.take(2, l.tags))
+            behavior takenAny : (l: Line) -> Bool
+            let takenAny (l) = List.any(t -> t == "K", List.take(2, l.tags))
+            behavior dropped : (l: Line) -> Bool
+            let dropped (l) = List.contains("K", List.drop(1, l.tags))
+            behavior droppedAny : (l: Line) -> Bool
+            let droppedAny (l) = List.any(t -> t == "K", List.drop(1, l.tags))
+            behavior distinctTags : (l: Line) -> Bool
+            let distinctTags (l) = List.contains("K", List.distinct(l.tags))
+            behavior distinctTagsAny : (l: Line) -> Bool
+            let distinctTagsAny (l) = List.any(t -> t == "K", List.distinct(l.tags))
+            behavior removedKeys : (l: Line) -> Bool
+            let removedKeys (l) = Map.containsKey("USD", Map.remove("EUR", l.rates))
+            behavior removedKeysAny : (l: Line) -> Bool
+            let removedKeysAny (l) =
+                List.any(k -> k == "USD", Map.keys(Map.remove("EUR", l.rates)))
+            behavior alongsideTaken : (l: Line) -> Int
+            let alongsideTaken (l) =
+                if List.contains("K", List.take(2, l.tags)) && l.n > 3 then 1 else 0
+            behavior alongsideTakenAny : (l: Line) -> Int
+            let alongsideTakenAny (l) =
+                if List.any(t -> t == "K", List.take(2, l.tags)) && l.n > 3 then 1 else 0
+            behavior eitherTaken : (l: Line) -> Int
+            let eitherTaken (l) =
+                if List.contains("K", List.take(2, l.tags))
+                        || List.contains("M", List.drop(1, l.other)) then 1 else 0
+            behavior eitherTakenAny : (l: Line) -> Int
+            let eitherTakenAny (l) =
+                if List.any(t -> t == "K", List.take(2, l.tags))
+                        || List.any(t -> t == "M", List.drop(1, l.other)) then 1 else 0
+            behavior mappedTaken : (l: Line) -> List<Bool>
+            let mappedTaken (l) = List.map(k -> List.contains(k, List.take(2, l.tags)), ["K", "L"])
+            behavior mappedTakenAny : (l: Line) -> List<Bool>
+            let mappedTakenAny (l) =
+                List.map(k -> List.any(t -> t == k, List.take(2, l.tags)), ["K", "L"])
+            behavior removedItself : (l: Line) -> Bool
+            let removedItself (l) = Map.containsKey("USD", Map.remove("USD", l.rates))
+            behavior removedItselfAny : (l: Line) -> Bool
+            let removedItselfAny (l) =
+                List.any(k -> k == "USD", Map.keys(Map.remove("USD", l.rates)))
+            behavior removedFromSet : (l: Line) -> Bool
+            let removedFromSet (l) = Set.contains("K", Set.remove("Z", l.ids))
+            behavior keptOfDistinct : (l: Line) -> Bool
+            let keptOfDistinct (l) =
+                List.contains(5, List.filter(x -> x > 3, List.distinct(l.nums)))
+            behavior keptOfDistinctAny : (l: Line) -> Bool
+            let keptOfDistinctAny (l) =
+                List.any(e -> e == 5, List.filter(x -> x > 3, List.distinct(l.nums)))
+            behavior keptAgainstTheValue : (l: Line) -> Bool
+            let keptAgainstTheValue (l) =
+                List.contains(2, List.filter(x -> x > 3, List.distinct(l.nums)))
+            behavior keptAgainstTheValueWithoutIt : (l: Line) -> Bool
+            let keptAgainstTheValueWithoutIt (l) =
+                List.contains(2, List.filter(x -> x > 3, l.nums))
+            behavior emptiedSet : (l: Line) -> Bool
+            let emptiedSet (l) = Set.isEmpty(Set.remove("K", l.ids))
+            behavior emptiedSetAny : (l: Line) -> Bool
+            let emptiedSetAny (l) = Set.isEmpty(Set.filter(e -> e /= "K", l.ids))
+            behavior emptiedMap : (l: Line) -> Bool
+            let emptiedMap (l) = Map.isEmpty(Map.remove("USD", l.rates))
+            behavior emptiedMapAny : (l: Line) -> Bool
+            let emptiedMapAny (l) =
+                Map.isEmpty(Map.filterEntries((k, _) -> k /= "USD", l.rates))
+            behavior keysOfKept : (l: Line) -> Bool
+            let keysOfKept (l) =
+                List.contains("K", Map.keys(Map.filterEntries((_, v) -> v > 3, l.rates)))
+            behavior keysOfKeptAny : (l: Line) -> Bool
+            let keysOfKeptAny (l) =
+                List.any(k -> k == "K", Map.keys(Map.filterEntries((_, v) -> v > 3, l.rates)))
+            behavior valuesOfKept : (l: Line) -> Bool
+            let valuesOfKept (l) =
+                List.contains(5, Map.values(Map.filterEntries((_, v) -> v > 3, l.rates)))
+            behavior valuesOfKeptAny : (l: Line) -> Bool
+            let valuesOfKeptAny (l) =
+                List.any(v -> v == 5, Map.values(Map.filterEntries((_, v) -> v > 3, l.rates)))
+            behavior keysOfTaken : (l: Line) -> Bool
+            let keysOfTaken (l) = List.contains("K", Map.keys(Map.remove("Z", l.rates)))
+            behavior keysOfTakenAny : (l: Line) -> Bool
+            let keysOfTakenAny (l) = List.any(k -> k == "K", Map.keys(Map.remove("Z", l.rates)))
+            behavior valuesOfTaken : (l: Line) -> Bool
+            let valuesOfTaken (l) = List.contains(5, Map.values(Map.remove("Z", l.rates)))
+            behavior valuesOfTakenAny : (l: Line) -> Bool
+            let valuesOfTakenAny (l) = List.any(v -> v == 5, Map.values(Map.remove("Z", l.rates)))
+            behavior valuesOfIntersected : (l: Line) -> Bool
+            let valuesOfIntersected (l) =
+                List.contains(5, Map.values(Map.intersection(l.rates, l.rates2)))
+            behavior valuesOfIntersectedAny : (l: Line) -> Bool
+            let valuesOfIntersectedAny (l) =
+                List.any(v -> v == 5, Map.values(Map.intersection(l.rates, l.rates2)))
+            behavior keysOfRewritten : (l: Line) -> Bool
+            let keysOfRewritten (l) =
+                List.contains("K", Map.keys(Map.mapValues((_, v) -> v + 1, l.rates)))
+            behavior keysOfRewrittenAny : (l: Line) -> Bool
+            let keysOfRewrittenAny (l) =
+                List.any(k -> k == "K", Map.keys(Map.mapValues((_, v) -> v + 1, l.rates)))
+            behavior valuesOfRewritten : (l: Line) -> Bool
+            let valuesOfRewritten (l) =
+                List.contains(5, Map.values(Map.mapValues((_, v) -> v + 1, l.rates)))
+            behavior valuesOfRewrittenAny : (l: Line) -> Bool
+            let valuesOfRewrittenAny (l) =
+                List.any(v -> v == 5, Map.values(Map.mapValues((_, v) -> v + 1, l.rates)))
+            behavior takenNothing : (l: Line) -> Bool
+            let takenNothing (l) = List.contains("K", List.take(0, l.tags))
+            behavior takenBelowNothing : (l: Line) -> Bool
+            let takenBelowNothing (l) = List.contains("K", List.take(-1, l.tags))
+            behavior takenSome : (l: Line) -> Bool
+            let takenSome (l) = List.contains("K", List.take(l.n, l.tags))
+            behavior sortedNothing : (l: Line) -> Bool
+            let sortedNothing (l) = List.contains("K", List.sort(List.take(0, l.tags)))
+            behavior takenOfNothing : (l: Line) -> Bool
+            let takenOfNothing (l) = List.contains("K", List.take(l.n, List.take(0, l.tags)))
+            behavior takenNothingOfSome : (l: Line) -> Bool
+            let takenNothingOfSome (l) = List.contains("K", List.take(0, List.take(l.n, l.tags)))
+            behavior containsKeyOfKept : (l: Line) -> Bool
+            let containsKeyOfKept (l) =
+                Map.containsKey("K", Map.filterEntries((_, v) -> v > 3, l.rates))
+            behavior keptAfterRewriting : (l: Line) -> Bool
+            let keptAfterRewriting (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3, Map.mapValues((_, v) -> 10, l.rates))))
+            behavior keptByKeyAfterRewriting : (l: Line) -> Bool
+            let keptByKeyAfterRewriting (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((k, _) -> k /= "Z", Map.mapValues((_, v) -> 10, l.rates))))
+            behavior keptAfterShifting : (l: Line) -> Bool
+            let keptAfterShifting (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3, Map.mapValues((_, v) -> v + 1, l.rates))))
+            behavior keptAfterSquaring : (l: Line) -> Bool
+            let keptAfterSquaring (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3, Map.mapValues((_, v) -> v * v, l.rates))))
+            behavior keptAfterClamping : (l: Line) -> Bool
+            let keptAfterClamping (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3,
+                        Map.mapValues((_, v) -> Int.max(v, 5), l.rates))))
+            behavior keptAfterKeying : (l: Line) -> Bool
+            let keptAfterKeying (l) =
+                List.contains("K", Map.keys(
+                    Map.filterEntries((_, v) -> v > 3,
+                        Map.mapValues((k, _) -> String.length(k), l.rates))))
+            behavior keysOfUpdated : (l: Line) -> Bool
+            let keysOfUpdated (l) =
+                List.contains("K", Map.keys(Map.updateIfPresent("Z", v -> v + 1, l.rates)))
+            behavior distinctOfKept : (l: Line) -> Bool
+            let distinctOfKept (l) =
+                List.contains(5, List.distinct(List.filter(x -> x > 3, l.nums)))
+            behavior distinctOfKeptAny : (l: Line) -> Bool
+            let distinctOfKeptAny (l) =
+                List.any(e -> e == 5, List.distinct(List.filter(x -> x > 3, l.nums)))
+            behavior sortOfTaken : (l: Line) -> Bool
+            let sortOfTaken (l) = List.contains("K", List.sort(List.take(2, l.tags)))
+            behavior sortOfTakenAny : (l: Line) -> Bool
+            let sortOfTakenAny (l) = List.any(t -> t == "K", List.sort(List.take(2, l.tags)))
+            behavior takenOfSorted : (l: Line) -> Bool
+            let takenOfSorted (l) = List.contains("K", List.take(2, List.sort(l.tags)))
+            behavior takenOfSortedAny : (l: Line) -> Bool
+            let takenOfSortedAny (l) = List.any(t -> t == "K", List.take(2, List.sort(l.tags)))
+            behavior keptByRemainder : (l: Line) -> Bool
+            let keptByRemainder (l) =
+                List.contains(5, List.filter(x -> Int.floorMod(x, 2) == 1, l.nums))
+            behavior keptByRemainderAny : (l: Line) -> Bool
+            let keptByRemainderAny (l) =
+                List.any(e -> e == 5, List.filter(x -> Int.floorMod(x, 2) == 1, l.nums))
+            behavior chained : (l: Line) -> Bool
+            let chained (l) = List.contains("K", List.take(3, List.distinct(l.tags)))
+            behavior chainedAny : (l: Line) -> Bool
+            let chainedAny (l) = List.any(t -> t == "K", List.take(3, List.distinct(l.tags)))
+            behavior mappedMember : (l: Line) -> Bool
+            let mappedMember (l) = List.contains("K", List.map(t -> String.trim(t), l.tags))
+            behavior mappedMemberAny : (l: Line) -> Bool
+            let mappedMemberAny (l) =
+                List.any(t -> t == "K", List.map(t -> String.trim(t), l.tags))
+            behavior anotherFiltered : (l: Line) -> Bool
+            let anotherFiltered (l) = List.contains(l.s, List.distinct(l.other))
+            behavior anotherTaken : (l: Line) -> Bool
+            let anotherTaken (l) = List.contains(l.s, List.take(2, l.other))
 
             behavior guarded : (l: Line) -> Int
             let guarded (l) = if Map.containsKey("USD", l.rates) then 1 else 0
@@ -349,6 +540,105 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
     void aMemberThatIsAnotherPlaceDrawsNoLine() {
         assertEquals(Set.of(), linesOf("another"));
         assertEquals(Set.of(), linesOf("anotherListed"));
+        assertEquals(Set.of(), linesOf("anotherFiltered"));
+        assertEquals(Set.of(), linesOf("anotherTaken"));
+    }
+
+    /** A container built out of another by an operation holds elements of the other, so the value
+     *  asked of it is a line on them, as the comparison of those elements with it is. */
+    @Test
+    void aContainerBuiltOutOfAnotherDrawsTheLinesOfTheComparisonOfItsElements() {
+        for (String[] pair : new String[][] {
+            { "filteredNums", "filteredNumsAny" }, { "filteredKeys", "filteredKeysAny" },
+            { "taken", "takenAny" }, { "dropped", "droppedAny" },
+            { "distinctTags", "distinctTagsAny" }, { "removedKeys", "removedKeysAny" },
+            { "chained", "chainedAny" }, { "mappedMember", "mappedMemberAny" },
+            { "keysOfKept", "keysOfKeptAny" }, { "valuesOfKept", "valuesOfKeptAny" },
+            { "keysOfTaken", "keysOfTakenAny" }, { "valuesOfTaken", "valuesOfTakenAny" },
+            { "valuesOfIntersected", "valuesOfIntersectedAny" },
+            { "keysOfRewritten", "keysOfRewrittenAny" },
+            { "valuesOfRewritten", "valuesOfRewrittenAny" },
+            { "removedItself", "removedItselfAny" }, { "emptiedSet", "emptiedSetAny" },
+            { "emptiedMap", "emptiedMapAny" },
+            { "keptOfDistinct", "keptOfDistinctAny" }, { "distinctOfKept", "distinctOfKeptAny" },
+            { "sortOfTaken", "sortOfTakenAny" }, { "takenOfSorted", "takenOfSortedAny" },
+            { "keptByRemainder", "keptByRemainderAny" },
+            { "alongsideTaken", "alongsideTakenAny" }, { "eitherTaken", "eitherTakenAny" },
+            { "mappedTaken", "mappedTakenAny" } }) {
+            assertEquals(linesOf(pair[1]), linesOf(pair[0]), pair[0]);
+        }
+        assertEquals(Set.of("l.ids[*] K"), linesOf("removedFromSet"));
+        // A key an answer holds is one its map held, so a map made of another by operations that
+        // hold some of its keys is listed at the keys of the other; a value of one that rewrote
+        // the values is no value of the other.
+        assertEquals(Set.of("l.rates[*] 3", "l.rates[key] K"), linesOf("keysOfKept"));
+        // The keys of a map are asked of it as a key held is: what its entries were kept by is
+        // held beside the key either way, down to the rows found at the points.
+        assertEquals(pointsOf("containsKeyOfKept"), pointsOf("keysOfKept"));
+        assertEquals(Set.of("l.rates[*] 3", "l.rates[*] 5"), linesOf("valuesOfKept"));
+        assertEquals(Set.of("l.rates[key] K"), linesOf("keysOfTaken"));
+        assertEquals(Set.of("l.rates[*] 5"), linesOf("valuesOfTaken"));
+        assertEquals(Set.of("l.rates[key] K"), linesOf("keysOfRewritten"));
+        assertEquals(Set.of(), linesOf("valuesOfRewritten"));
+        // The line the filter draws is kept beside the one the value draws, whichever of the two
+        // operations is outside.
+        assertEquals(Set.of("l.nums[*] 3", "l.nums[*] 5"), linesOf("keptOfDistinct"));
+        assertEquals(Set.of("l.nums[*] 3", "l.nums[*] 5"), linesOf("distinctOfKept"));
+        // What the operations above a window kept is held beside what is asked of the element: the
+        // window leaves which elements meet a statement as it was, so the points of the lines, and
+        // which of them anyone is owed, are those of the same membership without it. Where the
+        // value is one the kept statement refuses, the points say so too.
+        assertEquals(owedPointsOf("filteredNums"), owedPointsOf("keptOfDistinct"));
+        assertEquals(owedPointsOf("filteredNums"), owedPointsOf("distinctOfKept"));
+        assertEquals(owedPointsOf("keptAgainstTheValueWithoutIt"),
+                owedPointsOf("keptAgainstTheValue"));
+        assertEquals(linesOf("keptAgainstTheValueWithoutIt"), linesOf("keptAgainstTheValue"));
+        assertEquals(Set.of("l.nums[*] 3", "l.nums[*] 5"), linesOf("filteredNums"));
+        assertEquals(Set.of("l.rates[*] 3", "l.rates[key] USD"), linesOf("filteredKeys"));
+        assertEquals(Set.of("l.tags[*] K"), linesOf("taken"));
+        assertEquals(Set.of("l.rates[key] USD"), linesOf("removedKeys"));
+    }
+
+    /**
+     * What holds none of the elements it was handed holds none, so a value asked of it is no line
+     * on what it was handed, and no obligation of a row there. Only where that is shown: a count
+     * the input gives may be any.
+     */
+    @Test
+    void aWindowShownToHoldNothingDrawsNoLine() {
+        assertEquals(Set.of(), linesOf("takenNothing"));
+        assertEquals(Set.of(), linesOf("takenBelowNothing"));
+        assertEquals(Set.of(), linesOf("sortedNothing"));
+        // Whichever window is outside, what is inside holds none.
+        assertEquals(Set.of(), linesOf("takenOfNothing"));
+        assertEquals(Set.of(), linesOf("takenNothingOfSome"));
+        assertTrue(linesOf("takenSome").contains("l.tags[*] K"),
+                () -> linesOf("takenSome").toString());
+    }
+
+    /**
+     * What a map's entries were kept by is read through the closure that made the values of the
+     * map below, so the keys of the map made by keeping some of them are listed at the keys of the
+     * map it began as, and what is said of a value is said of what the closure made of it: of the
+     * value plus one, a value above three is a value above two; of a constant, no value of the
+     * input; of a key, a value of the key.
+     *
+     * <p>Each is held to the lines the statement draws on the input, written out here, and not to
+     * what a comparison draws: both could be told the same thing wrongly.
+     */
+    @Test
+    void whatEntriesWereKeptByIsSaidOfWhatTheClosureMadeOfTheValues() {
+        assertEquals(Set.of("l.rates[*] 2", "l.rates[key] K"), linesOf("keptAfterShifting"));
+        assertEquals(Set.of("l.rates[key] K"), linesOf("keptAfterRewriting"));
+        assertEquals(Set.of("l.rates[key] K"), linesOf("keptAfterClamping"));
+        assertEquals(Set.of("l.rates[key] K", "l.rates[key] Z"),
+                linesOf("keptByKeyAfterRewriting"));
+        assertEquals(Set.of("String.length(l.rates[key]) 3", "l.rates[key] K"),
+                linesOf("keptAfterKeying"));
+        // A square is no number the lines are read of, and what is not read draws no line of the
+        // value it was made of.
+        assertFalse(linesOf("keptAfterSquaring").contains("l.rates[*] 3"));
+        assertEquals(Set.of("l.rates[key] K"), linesOf("keysOfUpdated"));
     }
 
     private enum Kind { TEXT, KEY, NUMBER, DAY }
@@ -435,6 +725,13 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         return out;
     }
 
+    /** {@link #pointsOf}, without whether a row was found: a reading that asks no row of a
+     *  container may still have one certified by what the search tried. */
+    private static Set<String> owedPointsOf(String behavior) {
+        return pointsOf(behavior).stream().map(each -> each.replaceAll(" \\| row=\\w+$", ""))
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
     /** How many points of {@code behavior}'s lines a row was found for. */
     private static long rowsFound(String behavior) {
         return pointsOf(behavior).stream().filter(each -> each.endsWith("row=true")).count();
@@ -484,7 +781,9 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors(), source);
+            assertEquals(List.of(), compilation.errors().stream()
+                    .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                    .toList(), source);
             return compilation;
         });
     }

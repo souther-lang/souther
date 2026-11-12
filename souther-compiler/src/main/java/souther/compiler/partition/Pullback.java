@@ -238,15 +238,33 @@ final class Pullback {
 
         private final Meaning meaning;
         private final List<Leaf> leaves;
+        private final Pulled forTheLines;
         private volatile List<Leaf> turnsOn;
 
         /**
-         * @param meaning what holds where the condition does, and how it was read a rule at a time
-         * @param leaves  every part met, in the order met — a part met twice is here twice
+         * @param meaning     what holds where the condition does, and how it was read a rule at a
+         *                    time
+         * @param leaves      every part met, in the order met — a part met twice is here twice
+         * @param forTheLines what the condition states for a reader of the lines it draws, where
+         *                    that differs from what a reader of rows is told
+         *                    ({@link Derivation.LinesWithoutRows}), and null where it does not
          */
-        Pulled(Meaning meaning, List<Leaf> leaves) {
+        Pulled(Meaning meaning, List<Leaf> leaves, Pulled forTheLines) {
             this.meaning = meaning;
             this.leaves = leaves;
+            this.forTheLines = forTheLines;
+        }
+
+        /** What the condition states as a reader of the lines it draws is told: the same pull
+         *  where the lines drawn and the rows asked are one reading. Where they are two, the
+         *  statement is where lines may be and no more ({@link Derivation.LinesWithoutRows}):
+         *  only a reader of lines asks it. */
+        Pulled forTheLines() {
+            return forTheLines == null ? this : forTheLines;
+        }
+
+        private Pulled withTheLines(Pulled lines) {
+            return new Pulled(meaning, leaves, lines);
         }
 
         Meaning meaning() {
@@ -260,12 +278,13 @@ final class Pullback {
         @Override
         public boolean equals(Object other) {
             return other instanceof Pulled pulled && meaning.equals(pulled.meaning)
-                    && leaves.equals(pulled.leaves);
+                    && leaves.equals(pulled.leaves)
+                    && Objects.equals(forTheLines, pulled.forTheLines);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(meaning, leaves);
+            return Objects.hash(meaning, leaves, forTheLines);
         }
 
         @Override
@@ -796,6 +815,15 @@ final class Pullback {
     }
 
     /**
+     * {@code asked}, which says no row is asked for what the statement is of, and the lines
+     * {@code drawn} draws where it reads something of the elements.
+     */
+    private static Derivation withoutRows(Derivation drawn, Derivation asked) {
+        return Derivation.readOff(drawn) instanceof Derivation.Stopped ? asked
+                : new Derivation.LinesWithoutRows(drawn, asked);
+    }
+
+    /**
      * What a comparison states, and what the arithmetic over the input made of it on the way.
      *
      * @param arithmetic read where a rule asked for it and not again, so a reader that needs to know
@@ -821,6 +849,13 @@ final class Pullback {
             readOff = Map.copyOf(readOff);
             Objects.requireNonNull(stops, "what a run works out, or that it is not known");
             Objects.requireNonNull(onTheArms, "what runs taking each arm work out, if none");
+        }
+
+        /** This, with what it states as a reader of the lines it draws is told of it
+         *  ({@link Pulled#forTheLines}). */
+        OnTheInput forTheLines() {
+            return new OnTheInput(stated.forTheLines(), arithmetic, working, workingOfRelation,
+                    readOff, stops, onTheArms);
         }
     }
 
@@ -966,8 +1001,16 @@ final class Pullback {
         // what no part was read off is read off the whole, through the names free in it. By
         // here what a call binds stands inside the quantifier or the count it made, which is
         // told nothing of names from outside it, so only what the whole was read off is told.
-        Conclusion conclusion = new Conclusion(where);
-        Meaning meaning = conclusion.meaningOf(Derivation.ReadThrough.of(stated, freeInTheRoot));
+        Derivation whole = Derivation.ReadThrough.of(stated, freeInTheRoot);
+        Conclusion asked = new Conclusion(where);
+        Pulled pulled = pulledAs(asked, whole);
+        return asked.toldLinesFromRows()
+                ? pulled.withTheLines(pulledAs(Conclusion.drawingLines(where), whole)) : pulled;
+    }
+
+    /** {@code whole} concluded by {@code conclusion}, with every part met as it came to there. */
+    private Pulled pulledAs(Conclusion conclusion, Derivation whole) {
+        Meaning meaning = conclusion.meaningOf(whole);
         List<Leaf> leaves = new ArrayList<>();
         Set<Met> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Met each : met) {
@@ -983,7 +1026,7 @@ final class Pullback {
                 leaves.add(new Leaf(concluded, each.from(), each.step()));
             }
         }
-        return new Pulled(meaning, List.copyOf(leaves));
+        return new Pulled(meaning, List.copyOf(leaves), null);
     }
 
     /**
@@ -3696,12 +3739,38 @@ final class Pullback {
     private record Beneath(Denotation at, List<Kept> kept) {}
 
     /**
-     * An operation that kept the elements meeting a statement, how that is read, and what an
-     * element is at the level of the container its closure is handed: what stands at a position,
-     * or the answer a walk gave, which a closure is handed where nothing else stands for it.
+     * What an operation kept the elements of what it was handed by.
+     *
+     * <p>Said is a statement, and what holds of an element it kept holds of the one it was kept
+     * from. The statement is read through the closure the operation was handed, whose names say
+     * where each value came from, so it is a statement about the source's elements however the
+     * operations between rewrote their values: a key of a map made by {@code Map.mapValues} is a
+     * key of the map it was made of, and what is said of the values it holds is said through what
+     * the closure made of them. A statement is never a place standing for an element, which is
+     * why it may be carried beneath an operation that kept only some of an element's parts.
+     *
+     * <p>Unsaid is what no statement says. An element of such an operation's answer is one of
+     * what it was handed, and nothing more is known of it.
      */
-    private record Kept(ALawRead read, LawNumber.HowManyMeet<DeclaredArgument> meeting,
-                        ElementAt each, Denotation handed) {}
+    private sealed interface Kept {
+
+        /**
+         * An operation that kept the elements meeting a statement, how that is read, and what an
+         * element is at the level of the container its closure is handed: what stands at a
+         * position, or the answer a walk gave, which a closure is handed where nothing else stands
+         * for it.
+         */
+        record Said(ALawRead read, LawNumber.HowManyMeet<DeclaredArgument> meeting, ElementAt each,
+                    Denotation handed) implements Kept {}
+
+        /**
+         * An operation that held some of the elements by where they stand, as {@code List.take}
+         * does, or by what is left out, as {@code Map.remove} does.
+         *
+         * @param window the call of the operation, whose answer may hold nothing
+         */
+        record Unsaid(Denotation window) implements Kept {}
+    }
 
     /** Where a container's elements stand, what each is there for the statement quantified over
      *  them, and what was kept of them on the way — or, where they are the pieces of a string
@@ -4007,6 +4076,28 @@ final class Pullback {
      * where it is not the answer of one.
      */
     private Beneath beneath(Denotation container, boolean counting) {
+        return beneath(container, counting, Through.EXACTLY);
+    }
+
+    /** How much of what the operations beneath a container did to its elements is looked through,
+     *  for a question that stands to be asked of some of the elements of what they were handed. */
+    private enum Through {
+        /** Only what leaves the elements as they are, or keeps those meeting a statement. */
+        EXACTLY,
+        /** And what holds some of them, by where they stand or by what is left out. */
+        SOME_OF_THEM,
+        /** And what holds some of a map's keys, for a question about the keys and nothing else of
+         *  the map: a key an answer holds is one its map held, and a value is not. */
+        SOME_OF_THEM_OR_OF_THEIR_KEYS
+    }
+
+    /**
+     * {@link #beneath(Denotation, boolean)}, looking {@code through} as far as it says. An
+     * element of what an operation holding some of the elements of what it was handed answered is
+     * an element of what it was handed, and the other way round it is not: that no statement says
+     * which is a statement kept by ({@link Kept.Unsaid}).
+     */
+    private Beneath beneath(Denotation container, boolean counting, Through through) {
         List<Kept> kept = new ArrayList<>();
         Denotation at = container;
         boolean peeled = false;
@@ -4020,6 +4111,14 @@ final class Pullback {
             if (law != null) {
                 from = holds;
                 kept.add(law);
+            } else if (through != Through.EXACTLY && from == null) {
+                from = holds != null ? holds
+                        : through == Through.SOME_OF_THEM_OR_OF_THEIR_KEYS
+                                ? DefaultBoundOperationFacts.get().keepsTheKeysOf(operation)
+                                : null;
+                if (from != null) {
+                    kept.add(new Kept.Unsaid(at));
+                }
             }
             // Whether some element meets a statement is the same of a container holding the
             // same values, however many times it holds each.
@@ -4043,7 +4142,7 @@ final class Pullback {
      * reads it — or null where it is no operation answering exactly the elements of a list that
      * meet a statement.
      */
-    private Kept keptByALaw(Denotation at) {
+    private Kept.Said keptByALaw(Denotation at) {
         if (!(Core.withoutStanding(at.value()) instanceof Core.PreservedCall call)) {
             return null;
         }
@@ -4053,7 +4152,7 @@ final class Pullback {
         DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
         LawNumber.HowManyMeet<DeclaredArgument> keeping =
                 holds == null ? null : keepsWhatMeets(operation, holds);
-        return keeping == null ? null : new Kept(new ALawRead(
+        return keeping == null ? null : new Kept.Said(new ALawRead(
                 new AnOperationApplied(operation, call.args()), call, at.at()), keeping, null,
                 null);
     }
@@ -5846,15 +5945,37 @@ final class Pullback {
             if (values instanceof WrittenOutElements.Walked.PastTheFigure) {
                 return unread(e, reads, new WhyUnread.MoreElementsThanAreWrittenOut());
             }
-            // An element that is a given value and also met what it was kept by is one a row cannot
-            // be asked for: the value is written into the container as an element of its own.
-            if (!kept.isEmpty() && (values instanceof WrittenOutElements.Walked.Each
-                    || statesTheValueOfTheElement(some.ofTheElement()))) {
-                return unread(over, in,
-                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
-            }
+            return ofTheElementsAt(some, container, over, in, kept, values, beneath == null);
+        }
+
+        /**
+         * {@code drawn}, which says what is stated of an element, for a reader of the lines; and
+         * for a reader of rows that none is asked for it. A row cannot be asked for an element that
+         * is a given value and also met what it was kept by, since the value is written into the
+         * container as an element of its own, nor for one of what holds some of the elements it
+         * was handed, since no statement says which: a row holding the value anywhere in the
+         * source is no row for it. The elements are still the source's and the value is still
+         * one of them, which is what the lines are drawn on.
+         */
+        private Derivation rowsDeclined(Derivation drawn, Core over, InputReads in) {
+            return withoutRows(drawn, unread(over, in,
+                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER)));
+        }
+
+        /**
+         * Some element of {@code container} meeting {@code some}, where {@code container} is what
+         * {@code over} stands for once the operations that kept or reordered its elements are
+         * taken off, {@code kept} being what they kept them by.
+         *
+         * @param beneathNothing whether nothing was taken off
+         */
+        private Derivation ofTheElementsAt(LawProposition.SomeElement<DeclaredArgument> some,
+                                           Denotation container, Core over, InputReads in,
+                                           List<Kept> kept, WrittenOutElements.Walked values,
+                                           boolean beneathNothing) {
             if (values instanceof WrittenOutElements.Walked.Each each) {
-                return someOf(some, there(each));
+                Derivation written = someOf(some, there(each));
+                return kept.isEmpty() ? written : rowsDeclined(written, over, in);
             }
             // A container at a position has the element standing there; a walk's answer over one
             // has, for each element there, the step's answer on it.
@@ -5902,13 +6023,17 @@ final class Pullback {
             Optional<Derivation> holdsSomething = holdsSomething(heldAt, located, element, over, in);
             HowTheElementsAreAsked asked = !Proposition.mayAnswerNothing(element)
                     ? HowTheElementsAreAsked.NOT_SAID
-                    : howItAsks(some.ofTheElement(), !located.kept().isEmpty(), beneath == null
+                    : howItAsks(some.ofTheElement(), !located.kept().isEmpty(), beneathNothing
                             && located.held() instanceof DecisionSubject.AnInput(TermPath list,
                                     var _)
                             && read.domain().holdsItsElementsInTheOrderWritten(list, read.rules())
                             && located.each() instanceof ElementAt.AtASubject
                             && reads.orderLeftToTheRows());
-            return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething, asked);
+            Derivation meeting = new Derivation.SomeElementMeeting(heldAt, answered, true,
+                    holdsSomething, asked);
+            return located.kept().stream().anyMatch(Kept.Unsaid.class::isInstance)
+                    || (!kept.isEmpty() && statesTheValueOfTheElement(some.ofTheElement()))
+                    ? rowsDeclined(meeting, over, in) : meeting;
         }
 
         /**
@@ -6332,20 +6457,37 @@ final class Pullback {
                     : new Derivation.OfWhatWasKept(answered, whatKept(kept));
         }
 
+        /** Whether what {@code window} answers is shown to hold nothing, whatever the input is:
+         *  {@code List.take(0, xs)} holds none. Where that is not shown, it may hold some. */
+        private boolean holdsNothing(Denotation window) {
+            return holdingSomething(window.value(), window.at()).concludes(Optional.empty())
+                    instanceof Proposition.Always(boolean holds) && !holds;
+        }
+
         /** How what each of {@code kept} kept its elements by was read, in their order. */
         private List<Derivation> whatKept(List<Kept> kept) {
             List<Derivation> by = new ArrayList<>();
             for (Kept one : kept) {
-                if (one.handed() != null) {
-                    by.add(one.read().ofTheValue(one.meeting().container(),
-                            one.meeting().ofTheElement(), one.handed()));
-                    continue;
-                }
-                one.read().elements.put(one.meeting().container(), one.each());
-                try {
-                    by.add(one.read().of(one.meeting().ofTheElement()));
-                } finally {
-                    one.read().elements.remove(one.meeting().container());
+                switch (one) {
+                    // What holds none of the elements it was handed holds none, so nothing is some
+                    // element of it. Otherwise no row is asked for what no statement says, and the
+                    // lines drawn on the elements are those of what is stated of them.
+                    case Kept.Unsaid(Denotation window) -> by.add(holdsNothing(window)
+                            ? new Derivation.WrittenOut(false)
+                            : withoutRows(new Derivation.WrittenOut(true), unread(e, reads,
+                                    new WhyUnread.AtNoPosition(
+                                            WhyUnread.AtNoPosition.Place.CONTAINER))));
+                    case Kept.Said said when said.handed() != null -> by.add(said.read()
+                            .ofTheValue(said.meeting().container(), said.meeting().ofTheElement(),
+                                    said.handed()));
+                    case Kept.Said said -> {
+                        said.read().elements.put(said.meeting().container(), said.each());
+                        try {
+                            by.add(said.read().of(said.meeting().ofTheElement()));
+                        } finally {
+                            said.read().elements.remove(said.meeting().container());
+                        }
+                    }
                 }
             }
             return by;
@@ -6459,8 +6601,22 @@ final class Pullback {
                     if (emitting != null) {
                         return emitting;
                     }
-                    return inTheListsOfAFlattening && outerEach == null
+                    Located inTheLists = inTheListsOfAFlattening && outerEach == null
                             ? inTheListsOf(at, pending, located) : null;
+                    if (inTheLists != null) {
+                        return inTheLists;
+                    }
+                    // What stands at no position may hold some of the elements of what does: they
+                    // are those elements, and no more is known of them.
+                    Beneath window = counting ? null : beneath(at, false, Through.SOME_OF_THEM);
+                    if (window == null) {
+                        return null;
+                    }
+                    pending.addAll(window.kept());
+                    at = window.at();
+                    value = at.value();
+                    where = at.at();
+                    continue;
                 }
                 Denotation step = walk.answer();
                 ElementAt each = new ElementAt.AValue(step.value(), step.at());
@@ -6718,14 +6874,24 @@ final class Pullback {
             if (listed == null || listed.part() == MapPart.ENTRIES) {
                 return null;
             }
-            DecisionSubject map = subjectOf(new Denotation(listing.argument(listed.map()),
-                    standing.at()));
+            Denotation mapAt = new Denotation(listing.argument(listed.map()), standing.at());
+            // A map made of another by operations that kept or reordered its entries, or held
+            // some of them — or some of their keys, where the keys are what is listed.
+            Beneath below = beneath(mapAt, false, listed.part() == MapPart.KEYS
+                    ? Through.SOME_OF_THEM_OR_OF_THEIR_KEYS : Through.SOME_OF_THEM);
+            DecisionSubject map = subjectOf(below == null ? mapAt : below.at());
             if (!(map instanceof DecisionSubject.AnInput)) {
                 return null;
             }
             ElementAt each = listed.part() == MapPart.KEYS ? new ElementAt.AKey(map.key())
                     : new ElementAt.AtASubject(map);
             settle(pending, each, null, located);
+            // What those operations kept the entries by is said of the entries of the map, whatever
+            // part of it is listed.
+            if (below != null) {
+                settle(new ArrayList<>(below.kept()), new ElementAt.AtASubject(map), null,
+                        located);
+            }
             return outerEach == null ? new Located(map, null, each, null, located, null)
                     : new Located(map, null, outerEach, outerHanded, located, null);
         }
@@ -6831,7 +6997,10 @@ final class Pullback {
         /** What was kept at one level of a container, as the elements of that level are read. */
         private static void settle(List<Kept> pending, ElementAt each, Denotation handed,
                                    List<Kept> into) {
-            pending.forEach(one -> into.add(new Kept(one.read(), one.meeting(), each, handed)));
+            pending.forEach(one -> into.add(switch (one) {
+                case Kept.Said said -> new Kept.Said(said.read(), said.meeting(), each, handed);
+                case Kept.Unsaid unsaid -> unsaid;
+            }));
             pending.clear();
         }
 
