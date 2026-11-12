@@ -93,6 +93,25 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
         assertFalse(promptly(() -> carried.isIn(chain(DEEP))));
     }
 
+    /**
+     * Each call handed a number of its own as well as the call before it, so the n-th answer is
+     * made of n numbers. What is held for the answer asked is its numbers, and not the numbers of
+     * every answer it is made of, which for a chain this deep is more than memory holds.
+     */
+    @Test
+    void theNumbersOfAChainThatTakesOneMoreEachCallAreHeldForTheAnswerAskedOnly() {
+        int depth = 40_000;
+        Quantity answer = input("x0");
+        for (int i = 1; i < depth; i++) {
+            answer = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(answer, input("x" + i)));
+        }
+        Quantity.WhatAnOperationAnswers top = (Quantity.WhatAnOperationAnswers) answer;
+        List<NumericTerm> numbers = promptly(top::positionsItIsMadeOf);
+        assertEquals(depth, numbers.size());
+        assertEquals(input("x0").term(), numbers.getFirst());
+        assertEquals(input("x" + (depth - 1)).term(), numbers.getLast());
+    }
+
     @Test
     void anAnswerAHundredThousandCallsDeepIsReadWithoutOverflowingTheStack() {
         Quantity.WhatAnOperationAnswers deep = (Quantity.WhatAnOperationAnswers) chain(100_000);

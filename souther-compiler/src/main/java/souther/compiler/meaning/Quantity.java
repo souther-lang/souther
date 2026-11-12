@@ -347,38 +347,67 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
          * <p>What a reader asks of an answer that is a fact of the input it is made of is asked
          * here and not by going down {@link #of}: the answers it holds are shared, and a walk down
          * them is as long as the paths to a number and not as the answers there are.
+         *
+         * <p>Kept for the answer asked and for no answer it is made of: each of those holds as
+         * many numbers as the answers below it, so a chain that takes one more number at each
+         * call would hold the square of its length. An answer below that was itself asked is
+         * taken as it was kept.
          */
         public List<NumericTerm> positionsItIsMadeOf() {
             List<NumericTerm> held = derivation.positions;
             if (held != null) {
                 return held;
             }
-            for (WhatAnOperationAnswers each : argumentsFirst(
-                    Collections.newSetFromMap(new IdentityHashMap<>()),
-                    answer -> answer.derivation.positions != null)) {
-                Set<NumericTerm> out = new LinkedHashSet<>();
-                for (Quantity argument : each.of) {
-                    switch (argument) {
+            Set<NumericTerm> out = new LinkedHashSet<>();
+            Set<WhatAnOperationAnswers> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+            Deque<WhatAnOperationAnswers> nodes = new ArrayDeque<>();
+            Deque<Integer> next = new ArrayDeque<>();
+            seen.add(this);
+            nodes.push(this);
+            next.push(0);
+            while (!nodes.isEmpty()) {
+                WhatAnOperationAnswers node = nodes.peek();
+                int at = next.pop();
+                WhatAnOperationAnswers below = null;
+                while (at < node.of.size() && below == null) {
+                    switch (node.of.get(at++)) {
                         case DecisionAtom.OfTheInput(NumericTerm term, var _) -> out.add(term);
-                        case WhatAnOperationAnswers inner ->
+                        case WhatAnOperationAnswers inner -> {
+                            if (inner.derivation.positions != null) {
                                 out.addAll(inner.derivation.positions);
+                            } else if (seen.add(inner)) {
+                                below = inner;
+                            }
+                        }
                         default -> throw new IllegalStateException("held out by the constructor");
                     }
                 }
-                each.derivation.positions = List.copyOf(out);
+                next.push(at);
+                if (below != null) {
+                    nodes.push(below);
+                    next.push(0);
+                } else {
+                    nodes.pop();
+                    next.pop();
+                }
             }
+            derivation.positions = List.copyOf(out);
             return derivation.positions;
         }
 
         /**
          * This with each number of the input in it replaced by {@code told} of it, or null where
-         * {@code told} says of one that it is no one. What an answer holds in two places is
-         * rebuilt once and held in both, as it was.
+         * {@code told} says of one that it is no one.
+         *
+         * <p>Each answer that is a different value is rebuilt once, and an answer equal to one
+         * rebuilt is that one, held wherever it is held. So how many times {@code told} is asked
+         * is how many distinct answers there are to ask it of, whether an answer held in two
+         * places is one object or two that are equal: a reader that counts what it was asked
+         * says the same of both.
          */
         public Quantity rebuilt(Function<DecisionAtom.OfTheInput, Quantity> told) {
-            Map<WhatAnOperationAnswers, Quantity> rebuilt = new IdentityHashMap<>();
-            for (WhatAnOperationAnswers each : argumentsFirst(
-                    Collections.newSetFromMap(new IdentityHashMap<>()), _ -> false)) {
+            Map<WhatAnOperationAnswers, Quantity> rebuilt = new HashMap<>();
+            for (WhatAnOperationAnswers each : argumentsFirst()) {
                 List<Quantity> arguments = new ArrayList<>(each.of.size());
                 boolean changed = false;
                 for (Quantity argument : each.of) {
@@ -399,26 +428,25 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         /**
          * The answers this is made of and this, each after every answer it holds, and each once
-         * as {@code seen} counts them — by what object they are, or by what they are equal to —
-         * without {@code held} ones and what they hold. Worked through a stack of its own: how
-         * deep a chain of calls goes is the model's and no limit of the thread reading it.
+         * however many times it is held: an answer equal to one met is that one. Worked through a
+         * stack of its own: how deep a chain of calls goes is the model's and no limit of the
+         * thread reading it.
          */
-        private List<WhatAnOperationAnswers> argumentsFirst(
-                Set<WhatAnOperationAnswers> seen, Predicate<WhatAnOperationAnswers> held) {
+        private List<WhatAnOperationAnswers> argumentsFirst() {
+            Set<WhatAnOperationAnswers> seen = new HashSet<>();
             List<WhatAnOperationAnswers> out = new ArrayList<>();
             Deque<WhatAnOperationAnswers> nodes = new ArrayDeque<>();
             Deque<Integer> next = new ArrayDeque<>();
-            if (!held.test(this) && seen.add(this)) {
-                nodes.push(this);
-                next.push(0);
-            }
+            seen.add(this);
+            nodes.push(this);
+            next.push(0);
             while (!nodes.isEmpty()) {
                 WhatAnOperationAnswers node = nodes.peek();
                 int at = next.pop();
                 WhatAnOperationAnswers below = null;
                 while (at < node.of.size() && below == null) {
                     if (node.of.get(at++) instanceof WhatAnOperationAnswers inner
-                            && !held.test(inner) && seen.add(inner)) {
+                            && seen.add(inner)) {
                         below = inner;
                     }
                 }
@@ -473,7 +501,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         private Spelling listed() {
             Map<WhatAnOperationAnswers, Integer> numbered = new HashMap<>();
             List<Spelling> lines = new ArrayList<>();
-            for (WhatAnOperationAnswers each : argumentsFirst(new HashSet<>(), _ -> false)) {
+            for (WhatAnOperationAnswers each : argumentsFirst()) {
                 List<Spelling> line = new ArrayList<>();
                 line.add(Spelling.of(each.operation.qualified() + "("));
                 for (int i = 0; i < each.of.size(); i++) {
@@ -687,14 +715,13 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         /** The numbers of the input the value and the string are made of, each once. */
         public List<NumericTerm> positionsItIsMadeOf() {
-            List<NumericTerm> out = new ArrayList<>();
+            Set<NumericTerm> out = new LinkedHashSet<>();
             for (Quantity each : List.of(value, string)) {
-                List<NumericTerm> these = switch (each) {
-                    case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
-                    case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                switch (each) {
+                    case DecisionAtom.OfTheInput(NumericTerm term, var _) -> out.add(term);
+                    case WhatAnOperationAnswers answers -> out.addAll(answers.positionsItIsMadeOf());
                     default -> throw new IllegalStateException("held out by the constructor");
-                };
-                these.stream().filter(term -> !out.contains(term)).forEach(out::add);
+                }
             }
             return List.copyOf(out);
         }

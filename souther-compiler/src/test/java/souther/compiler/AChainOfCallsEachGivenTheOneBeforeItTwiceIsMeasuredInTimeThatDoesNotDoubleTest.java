@@ -89,33 +89,46 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
         }
     }
 
-    @Test
-    void aChainNamedInTheConditionOfAnIfAndInItsArmsIsMeasured() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                () -> reportOfChainEndingIn(60, "if LAST == j then LAST > 1 else LAST < j"));
-        assertTrue(!report.isEmpty());
+    /** The report with the names of the chain and where the comparison is written taken out:
+     *  what it says does not turn on them, and a deeper chain is written further down. */
+    private static String normalised(String report) {
+        return report.replaceAll("\\ba\\d+\\b", "a").replaceAll("\\b\\d+(:\\d+)+\\b", "L:C");
     }
 
-    @Test
-    void namesThatReachEachOtherAtADepthDoublingWouldNotFinishAreMeasured() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                () -> reportOfNamesThatReachEachOther(40));
-        assertTrue(!report.isEmpty());
-    }
-
-    @Test
-    void anEqualityAtADepthThatDoublingWouldNotFinishIsMeasured() {
-        for (int depth : new int[] {24, 40, 100}) {
+    private static void assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
+            java.util.function.IntFunction<String> reportAt, int shallow, int... deep) {
+        String expected = normalised(reportAt.apply(shallow));
+        assertTrue(!expected.isEmpty());
+        for (int depth : deep) {
             String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                    () -> reportOfChain(depth, "=="));
-            assertTrue(!report.isEmpty(), "depth " + depth);
+                    () -> reportAt.apply(depth));
+            org.junit.jupiter.api.Assertions.assertEquals(expected, normalised(report),
+                    "depth " + depth);
         }
     }
 
     @Test
-    void anEqualityIsNotMeasuredInMoreTimeThanTheOrderOverTheSameChain() {
-        String ordered = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                () -> reportOfChain(24, ">="));
-        assertTrue(!ordered.isEmpty());
+    void aChainNamedInTheConditionOfAnIfAndInItsArmsSaysAtAnyDepthWhatItSaysAtAShallowOne() {
+        assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
+                depth -> reportOfChainEndingIn(depth,
+                        "if LAST == j then LAST > 1 else LAST < j"), 3, 24, 60);
+    }
+
+    @Test
+    void namesThatReachEachOtherSayAtAnyDepthWhatTheySayAtAShallowOne() {
+        assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
+                depth -> reportOfNamesThatReachEachOther(depth), 3, 40);
+    }
+
+    @Test
+    void anEqualityOverAChainSaysAtAnyDepthWhatItSaysAtAShallowOne() {
+        assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
+                depth -> reportOfChain(depth, "=="), 3, 24, 40, 100);
+    }
+
+    @Test
+    void anOrderOverAChainSaysAtAnyDepthWhatItSaysAtAShallowOne() {
+        assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
+                depth -> reportOfChain(depth, ">="), 3, 24, 100);
     }
 }
