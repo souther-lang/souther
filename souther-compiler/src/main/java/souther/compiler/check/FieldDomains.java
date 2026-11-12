@@ -332,6 +332,9 @@ public final class FieldDomains {
     /** What {@link #projection} answers, worked out the first time it is asked. */
     private volatile ProjectionEvidence projected;
 
+    /** What {@link #besideTheValues} answers, worked out the first time it is asked. */
+    private volatile Besides beside;
+
     /** What {@link #projectionAt} answers at each place, kept for the same reason as
      *  {@link #classes}. */
     private final Map<RuleKey, ProjectionEvidence> projectedAt = new ConcurrentHashMap<>();
@@ -3552,15 +3555,94 @@ public final class FieldDomains {
     public ProjectionEvidence projection() {
         ProjectionEvidence known = projected;
         if (known == null) {
-            known = projectionReadOff();
+            known = projectionReadOff(false).evidence();
             projected = known;
         }
         return known;
     }
 
-    /** {@link #projection}, read off the readings. */
-    private ProjectionEvidence projectionReadOff() {
+    /**
+     * What {@link #projection} says with each part the bounds hold nothing of set aside where the
+     * reading of values held it whole, and where those parts were.
+     *
+     * <p>Not a certificate for the bounds: they state nothing of a part set aside, and
+     * {@link #projection} says so. What it answers is whether anything else stood in the way, which
+     * is what a reader that takes those parts from the set of values needs to know.
+     */
+    private Besides besideTheValues() {
+        Besides known = beside;
+        if (known == null) {
+            known = projectionReadOff(true);
+            beside = known;
+        }
+        return known;
+    }
+
+    /**
+     * A projection, and the names of the parts it set aside.
+     *
+     * @param evidence the projection
+     * @param heldAt   the names the parts set aside are about; empty for {@link #projection}
+     */
+    private record Besides(ProjectionEvidence evidence, Set<RuleKey> heldAt) {}
+
+    /**
+     * Whether the set of values at {@code place}, met with what the bounds say of its count, is
+     * what the rules leave it.
+     *
+     * <p>Where some part the bounds hold nothing of was held whole by the reading of values, and
+     * every other part is stated by the bounds exactly. The set holds the first and the count the
+     * second, and each holds the whole of its parts: a string that is in the set and has a count the
+     * bounds leave is a string no part refuses.
+     *
+     * <p>Only of a place the parts set aside are about and nothing else, and where no number
+     * of the place is related to a number of any other. A part about another place, or a relation
+     * from the place's count to one, lets what that place holds change which counts are left here,
+     * and the count the bounds leave was worked out without it.
+     */
+    public boolean valuesAndCountAreTheRulesAt(RuleKey place) {
+        Besides read = besideTheValues();
+        if (read.heldAt().isEmpty() || !read.evidence().isCertified()
+                || !read.heldAt().equals(Set.of(place)) || !notGathered.isEmpty()) {
+            return false;
+        }
+        // A set short because what the rules leave was not built is short of no rule, and a count
+        // met with it is no more than the set was.
+        if (unreadByName.getOrDefault(place, List.of()).stream()
+                .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))) {
+            return false;
+        }
+        Counted counted = countAt.get(place);
+        if (counted == null) {
+            return false;
+        }
+        for (InvariantChecker.Written reading : readings) {
+            for (Map<ClauseOccurrence, InvariantChecker.PartAsRead> byOccurrence
+                    : reading.constrained().values()) {
+                for (InvariantChecker.PartAsRead one : byOccurrence.values()) {
+                    for (NumericConstraint each : one.said().stated()) {
+                        Set<FactSubject> atoms = each.atoms();
+                        if (atoms.contains(counted.atom())
+                                && !atoms.equals(Set.of(counted.atom()))) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * {@link #projection}, read off the readings.
+     *
+     * @param valuesHoldTheRest whether a part the bounds hold nothing of is set aside where the
+     *                          reading of values was stopped by no statement of it, rather than
+     *                          counted among what stands in the way
+     */
+    private Besides projectionReadOff(boolean valuesHoldTheRest) {
         List<ProjectionEvidence.Cause> causes = new ArrayList<>();
+        Set<RuleKey> heldAt = new LinkedHashSet<>();
         // A rule that never arrived first. Which rule it was is not known here and there is nothing
         // to say: what a stop leaves is a name and every name under it.
         // Spelled, since what a cause carries is read by an author rather than looked up.
@@ -3594,8 +3676,12 @@ public final class FieldDomains {
             // and a set unioned over the whole clause answers for the failing half with the other
             // one — which is the same shape as reading a clause's evidence for one of its parts.
             Set<RuleKey> said = unrepresented.computeIfAbsent(rule, _ -> new LinkedHashSet<>());
-            reading.constrained().values().forEach(byOccurrence ->
+            reading.constrained().forEach((part, byOccurrence) ->
                     byOccurrence.values().forEach(one -> {
+                // Where a part the bounds hold nothing of is told: to what stands in the way, or,
+                // where the set of values holds it whole, to what is set aside.
+                Set<RuleKey> told = valuesHoldTheRest && !took.valuesWereStoppedIn(part)
+                        ? heldAt : said;
                 ClauseExpr shape = one.of();
                 InvariantChecker.PartRead read = one.said();
                 // A conjunction says what its conjuncts say, and they are here beside it. Asked of
@@ -3639,15 +3725,15 @@ public final class FieldDomains {
                 if (required != null) {
                     required.obligations().forEach(owed -> {
                         switch (owed) {
-                            case Owed.AdmittedValues it -> said.add(it.path());
-                            case Owed.Boundary it -> said.add(it.on().position());
+                            case Owed.AdmittedValues it -> told.add(it.path());
+                            case Owed.Boundary it -> told.add(it.on().position());
                         }
                     });
                 }
                 // A part that raised no question is about the value it is written on, which is the
                 // name of no steps.
                 if (required == null || required.obligations().isEmpty()) {
-                    said.add(RuleKey.THE_VALUE);
+                    told.add(RuleKey.THE_VALUE);
                 }
             }));
         });
@@ -3760,9 +3846,9 @@ public final class FieldDomains {
         causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
         if (certification instanceof souther.compiler.numeric.ProjectionCertification.Certified(
                 var by) && causes.isEmpty()) {
-            return new ProjectionEvidence.CertifiedExact(by, List.of());
+            return new Besides(new ProjectionEvidence.CertifiedExact(by, List.of()), heldAt);
         }
-        return new ProjectionEvidence.NotCertified(causes);
+        return new Besides(new ProjectionEvidence.NotCertified(causes), heldAt);
     }
 
 }

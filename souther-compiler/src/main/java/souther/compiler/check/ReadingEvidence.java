@@ -269,6 +269,19 @@ final class ReadingEvidence {
         return out;
     }
 
+    /**
+     * Whether the reading of values was stopped by some statement of {@code part}, at any position.
+     *
+     * <p>Whatever else took the statement in. A part this answers {@code false} for was held whole
+     * by the reading of values, and that is a fact about that reading alone: the arithmetic having
+     * taken in the statement beside it says nothing of whether the set of values holds it.
+     */
+    boolean valuesWereStoppedIn(PartId<RuleRef.Invariant> part) {
+        Map<RuleShortfall, Set<InvariantStatementId>> here = stopped.get(part.rule());
+        return here != null && here.values().stream()
+                .anyMatch(in -> in.stream().anyMatch(statement -> statement.part().equals(part)));
+    }
+
     /** The arithmetic stopped on {@code statement} of {@code rule}, which nothing took in. */
     void stoppedOnTheForm(RuleRef.Invariant rule, FormShortfall stoppedOn,
                           InvariantStatementId statement) {
