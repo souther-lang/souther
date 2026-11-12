@@ -93,8 +93,8 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
         }
 
         /** Where the whole behavior completes. */
-        BiPredicate<Long, Long> completes() {
-            return (x, k) -> evaluates.test(x, k) && afterAnswers.test(x, k);
+        boolean completes(Long x, Long k) {
+            return evaluates.test(x, k) && afterAnswers.test(x, k);
         }
     }
 
@@ -125,6 +125,13 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
             new Case("a quotient by x, then x below k by a thousand",
                     QUOTIENT.formatted("p.x"), "p.k + 1000 > p.x", "",
                     (x, k) -> x != 0, (x, k) -> x != 0 && !(k > GREATEST - 1000), false, true),
+            // A remainder ends a run on its divisor alone, as a quotient does.
+            new Case("a remainder by x, then x and k related",
+                    "let y = Int.floorMod(7, p.x)", "p.x + 1 >= p.k", "",
+                    (x, k) -> x != 0, (x, k) -> x != 0 && !overflows(x), false, true),
+            new Case("a remainder of x by k, then x and k related",
+                    "let y = Int.floorMod(p.x, p.k)", "p.x + 1 >= p.k", "",
+                    (x, k) -> k != 0, (x, k) -> k != 0 && !overflows(x), false, true),
             new Case("a quotient by x, then k alone",
                     QUOTIENT.formatted("p.x"), "p.k >= 5", "",
                     (x, k) -> x != 0, (x, k) -> x != 0, false, true),
@@ -232,6 +239,14 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
         }
     }
 
+    /** The rows only one of the two sets has. */
+    private static List<List<Long>> differences(List<List<Long>> run, List<List<Long>> said) {
+        List<List<Long>> out = new ArrayList<>();
+        run.stream().filter(row -> !said.contains(row)).forEach(out::add);
+        said.stream().filter(row -> !run.contains(row)).forEach(out::add);
+        return out;
+    }
+
     private static List<List<Long>> rowsWhere(BiPredicate<Long, Long> holds) {
         List<List<Long>> rows = new ArrayList<>();
         for (long x : VALUES) {
@@ -286,9 +301,13 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
             if (!gets.equals(rowsWhere(each.gets()))
                     || !evaluates.equals(rowsWhere((x, k) -> each.gets().test(x, k)
                             && each.evaluates().test(x, k)))
-                    || !completes.equals(rowsWhere(each.completes()))) {
-                wrong.add(each.name() + ": the oracle is not the rows the program stops at: gets "
-                        + gets + ", evaluates " + evaluates + ", completes " + completes);
+                    || !completes.equals(rowsWhere(each::completes))) {
+                wrong.add(each.name() + ": the oracle is not the rows the program stops at:"
+                        + " gets differ at " + differences(gets, rowsWhere(each.gets()))
+                        + ", evaluates differ at " + differences(evaluates, rowsWhere(
+                                (x, k) -> each.gets().test(x, k) && each.evaluates().test(x, k)))
+                        + ", completes differ at "
+                        + differences(completes, rowsWhere(each::completes)));
                 continue;
             }
             Compilation read = measured(source(Map.of("m", whole)), Adequacy.Level.WITNESS);
@@ -478,6 +497,95 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
             }
         }
         return rows;
+    }
+
+    /**
+     * How long a string is, held away from a length the string takes, is a hole of a number whose
+     * values step by one, as a hole of an {@code Int} is: an order beside it asks only for a length
+     * on each side of what the other place asks, so the place is left undivided and nothing is
+     * unread. Held to the strings themselves, of every length from nought to ten.
+     */
+    @Test
+    void aLengthHeldAwayFromALengthTheStringTakesIsReadBesideAnOrder() throws Exception {
+        String declared = """
+                module probe.stop
+
+                data Ok
+                data No
+                data Skipped
+
+                data Row = { s: String, k: Int }
+                """;
+        List<String> wrong = new ArrayList<>();
+        for (String relation : List.of("String.length(p.s) >= p.k", "String.length(p.s) < p.k")) {
+            for (int hole : List.of(1, 2)) {
+                String source = declared + """
+
+                        behavior m : (p: Row) -> Ok | No | Skipped
+                        let m (p) = {
+                            guard String.length(p.s) /= %d else Skipped
+                            guard %s else No
+                            Ok
+                        }
+                        """.formatted(hole, relation);
+                BytesClassLoader loader = new BytesClassLoader(Compiler.compile(source),
+                        getClass().getClassLoader());
+                Object behavior = Emitted.behavior(loader, MODULE, "m").getConstructor()
+                        .newInstance();
+                Set<String> settled = new TreeSet<>();
+                for (int fixed = 0; fixed <= 5; fixed++) {
+                    Set<String> byK = new TreeSet<>();
+                    for (int length = 0; length <= 10; length++) {
+                        Object row = Codecs.decoded(loader, MODULE + ".Row",
+                                Map.of("s", "a".repeat(length), "k", (long) fixed));
+                        byK.add(Codecs.apply(behavior, row).getClass().getSimpleName());
+                    }
+                    byK.remove("Skipped");
+                    if (byK.size() == 1) {
+                        settled.add("k=" + fixed);
+                    }
+                }
+                String report = report(measured(source, Adequacy.Level.WITNESS));
+                if (somethingIsNotRead(report)) {
+                    wrong.add(relation + " /= " + hole + " is not read\n" + report);
+                }
+                Set<String> claimed = undivided(report);
+                if (claimed.contains("p.k") && !settled.isEmpty()) {
+                    wrong.add(relation + " /= " + hole + ": p.k is left undivided and the runs"
+                            + " settle " + settled);
+                }
+                if (!claimed.contains("String.length(p.s)")) {
+                    wrong.add(relation + " /= " + hole + ": the length is not left undivided: "
+                            + claimed);
+                }
+            }
+        }
+        assertEquals(List.of(), wrong);
+    }
+
+    /** The parts of a date are numbers whose values step by one, and a hole beside them is read
+     *  as one beside a length is. */
+    @Test
+    void aPartOfADateHeldAwayFromAValueIsReadBesideAnOrder() {
+        String declared = """
+                module probe.stop
+
+                data Row = { dt: Date, k: Int }
+                """;
+        for (String part : List.of("Date.day(p.dt) /= 15", "Date.month(p.dt) /= 6",
+                "Date.year(p.dt) /= 2000")) {
+            String measured = part.substring(0, part.indexOf(" /="));
+            String source = declared + """
+
+                    behavior m : (p: Row) -> Bool
+                    let m (p) = {
+                        guard %s else false
+                        %s >= p.k
+                    }
+                    """.formatted(part, measured);
+            String report = report(measured(source, Adequacy.Level.WITNESS));
+            assertFalse(somethingIsNotRead(report), part + "\n" + report);
+        }
     }
 
     private static String guarded(String hole, String relation) {

@@ -7556,8 +7556,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? steppedTotalOver(over, read, region, conditions, heldWhole,
                             carriers.get(i), working.partials())
                     : realizes == null && source != null && way != Way.UNTOUCHED
-                    && each.number() instanceof NumericTerm.ValueOf value
-                    ? aRunBesidesItsHoles(value, source, answering, carriers.get(i), runsTo)
+                    && each.number() instanceof NumericTerm.FromOnePosition position
+                    ? aRunBesidesItsHoles(position, source, answering, carriers.get(i), runsTo)
                     : null;
             // Where every total lies no lower than the least the term takes, it lies there.
             BigInteger leastTotal = stepped == null ? null : stepped.possible().least();
@@ -9511,6 +9511,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * Whether {@code term} is one whose run the region shows whole where nothing is held away from
+     * it, as {@link #realized} reads it: the value at a position, a number taken of one whose every
+     * answer has a source value (how many a container holds, how long a string is), and the whole
+     * units of one.
+     */
+    private static boolean shownWholeBesideNoHole(NumericTerm.FromOnePosition term) {
+        return switch (term) {
+            case NumericTerm.ValueOf _, NumericTerm.WholeUnitsOf _ -> true;
+            case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
+                    .everyAnswerItCanGiveHasASourceValue(taken.operation());
+            case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
+                 NumericTerm.CodePointAt _ -> false;
+        };
+    }
+
+    /**
      * The whole numbers {@code value} is shown to take where the region holds it away from some
      * ({@link SearchRegion#apartAt}) and shows the run it would otherwise take whole — or null
      * where none is shown. The numbers are that run but for the holes, which are no values it
@@ -9520,9 +9536,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * one. A hole that is no whole number is none of its values.
      */
     private static WhatARelationLeavesUndivided.Term.Stepped aRunBesidesItsHoles(
-            NumericTerm.ValueOf value, Source source, SearchRegion region, Carrier carrier,
-            NumericDomain.Bounds runsTo) {
-        if (!source.takes().every() || spacingOf(carrier) != Granularity.DISCRETE) {
+            NumericTerm.FromOnePosition value, Source source, SearchRegion region,
+            Carrier carrier, NumericDomain.Bounds runsTo) {
+        if (!source.takes().every() || spacingOf(carrier) != Granularity.DISCRETE
+                || !shownWholeBesideNoHole(value)) {
             return null;
         }
         NumericDomain.RunBesidesItsHoles shown = region.wholeRunBesidesItsHolesOf(value);

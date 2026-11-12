@@ -451,16 +451,27 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * A closure handed to an operation of the library is applied by it, so what its body may stop
-     * on is what the run may stop on: {@code Int.floorMod(x, p)} applied to each of two numbers
-     * stops at {@code p} nought, as it does written out.
+     * on is what the run may stop on: {@code Int.floorMod(x, p * p)} applied to each of two numbers
+     * stops at {@code p} nought, as it does written out, and the divisor is no form the arithmetic
+     * composes, so what it stops on is left where nothing says. Where the divisor is {@code p}
+     * the stop is told, and is the same told in the closure as written out.
      */
     @Test
     void whatTheBodyOfAClosureAppliedByTheLibraryMayStopOnIsWhatTheRunMayStopOn() {
         String bits = "data Bit = Int invariant value >= 0 && value <= 1";
-        String body = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value), [1, 2])\n"
-                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        String after = "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        String closure = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value * p.value),"
+                + " [1, 2])\n" + after;
+        String writtenOut = "{\n    let unused = Int.floorMod(1, p.value * p.value)\n" + after;
         assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
-                left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"));
+                left("p: Bit, a: Bit, b: Bit", bits, closure, "8:18"));
+        assertEquals(left("p: Bit, a: Bit, b: Bit", bits, writtenOut, "8:18"),
+                left("p: Bit, a: Bit, b: Bit", bits, closure, "8:18"));
+        String toldClosure = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value), [1, 2])\n"
+                + after;
+        String toldWrittenOut = "{\n    let unused = Int.floorMod(1, p.value)\n" + after;
+        assertEquals(left("p: Bit, a: Bit, b: Bit", bits, toldWrittenOut, "8:18"),
+                left("p: Bit, a: Bit, b: Bit", bits, toldClosure, "8:18"));
     }
 
     /**
@@ -475,13 +486,26 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String bits = "data Bit = Int invariant value >= 0 && value <= 1";
         Map<String, String> notShown = Map.of("a", RELATES, "b", NOT_SHOWN);
         for (String unused : List.of(
-                "Int.floorMod(1, p.value)",
+                "Int.floorMod(1, p.value * p.value)",
                 "p.value == 0 && p.value + 9223372036854775807 + 1 > 0",
                 "if p.value == 0 then p.value + 9223372036854775807 + 1 else 0")) {
             String body = "{\n    let unused = " + unused + "\n"
                     + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
             assertEquals(notShown, left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"), unused);
         }
+    }
+
+    /**
+     * A call of a kernel that ends a run on its divisor alone is told where the divisor is a
+     * form, as a quotient is: past {@code Int.floorMod(1, p)} {@code p} is one, and {@code b} is
+     * read, where the same call over a divisor no form says is not.
+     */
+    @Test
+    void aRemainderByAFormIsToldWhereItsDivisorIsNotNought() {
+        String bits = "data Bit = Int invariant value >= 0 && value <= 1";
+        String body = "{\n    let unused = Int.floorMod(1, p.value)\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", RELATES), left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"));
     }
 
     /**

@@ -456,6 +456,11 @@ final class Pullback {
      */
     private Operators operated;
     /**
+     * Whether what is walked is what the relation being read itself works out, whose divisions the
+     * reader of the relation reads: a division is told only where it is not.
+     */
+    private final boolean theRelationReadsItsOwnDivisions;
+    /**
      * The elements of the containers the comparison being read is read of, which name stands for
      * each — held to one name for each container ({@link ElementsMet}). Nothing where what is read
      * is no comparison of two numbers.
@@ -593,6 +598,16 @@ final class Pullback {
      */
     private Pullback(InputReading read, Optional<ModelOccurrence> where,
                      ElementsNamed freeInTheRoot) {
+        this(read, where, freeInTheRoot, false);
+    }
+
+    /**
+     * The same, of what the relation being read itself works out where
+     * {@code theRelationReadsItsOwnDivisions}, whose divisions the reader of the relation reads.
+     */
+    private Pullback(InputReading read, Optional<ModelOccurrence> where,
+                     ElementsNamed freeInTheRoot, boolean theRelationReadsItsOwnDivisions) {
+        this.theRelationReadsItsOwnDivisions = theRelationReadsItsOwnDivisions;
         this.read = read;
         this.where = where;
         this.freeInTheRoot = freeInTheRoot;
@@ -1280,6 +1295,16 @@ final class Pullback {
     }
 
     /**
+     * The same, of what the relation being read itself works out: its own operators, which the
+     * reader of the relation reads, among them the divisions it divides by.
+     */
+    static OperatorsAnswer whereTheRelationsOwnOperatorsAnswer(Core body, InputReads reads,
+                                                               InputReading read) {
+        return new Pullback(read, Optional.empty(), ElementsNamed.NONE, true)
+                .whereItsOperatorsAnswerApartFrom(body, reads, null, null);
+    }
+
+    /**
      * The same, leaving out what may stop a run under {@code leftOut}, a node of {@code body}: a
      * comparison a closure the body applies holds, which is the relation's own working out and
      * is read as the relation reads it, at the application it is reached in as at every one
@@ -1355,7 +1380,7 @@ final class Pullback {
                 operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
             }
             case Core.Binary quotient when quotient.op() == BinOp.DIV -> {
-                aQuotient(quotient, reads);
+                aDivision(quotient, reads);
                 operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
             }
             case Core.Construct construct -> {
@@ -1363,6 +1388,7 @@ final class Pullback {
                 operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
             }
             case Core.PreservedCall call -> {
+                aDivision(call, reads);
                 oneOperationOfTheLibrary(call, reads);
                 operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
             }
@@ -1433,19 +1459,26 @@ final class Pullback {
     }
 
     /**
-     * {@code quotient}, told where its divisor is a number the arithmetic composes into a form, as
-     * its own account says it answers ({@link WhereAnOperatorAnswers}): where that divisor is not
-     * nought. What it answers is no form of the input and is not told; what it is asked of is the
-     * divisor, so the form told is the divisor's. A divisor the arithmetic does not compose is
-     * left to what may end a run ({@link #leaveUnsaidWhatMayEndARunUnder}).
+     * {@code operation}, a quotient or a call of the library, told where it ends a run on its
+     * divisor alone ({@link #theDivisorItAloneStopsOn}) and that divisor is a number the arithmetic
+     * composes into a form, as its own account says it answers
+     * ({@link WhereAnOperatorAnswers}): where the divisor is not nought. What it answers is no
+     * form of the input and is not told; what it is asked of is the divisor, so the form told is
+     * the divisor's. An operation that ends a run on more than its divisor, and a divisor the
+     * arithmetic does not compose, are left to what may end a run
+     * ({@link #leaveUnsaidWhatMayEndARunUnder}). So is a division of the relation itself, whose
+     * divisor the reader of the relation reads as it reads the rest of what the relation states:
+     * told here too, the divisor would be held off nought twice.
      */
-    private void aQuotient(Core.Binary quotient, InputReads reads) {
-        if (!(AffineForms.outcome(quotient.right(), reads, quantities())
-                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var divisor))) {
+    private void aDivision(Core operation, InputReads reads) {
+        Core divisor = theDivisorItAloneStopsOn(operation);
+        if (theRelationReadsItsOwnDivisions || divisor == null
+                || !(AffineForms.outcome(divisor, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form))) {
             return;
         }
-        operated.tell(quotient, new Answers.AsAnOperator(divisor,
-                WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type())));
+        operated.tell(operation, new Answers.AsAnOperator(form,
+                new WhereAnOperatorAnswers.WhereTheDivisorIsNotNought()));
     }
 
     /** The number {@code e} comes to where no number of the input is in it, written out as the
