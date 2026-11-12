@@ -9093,33 +9093,16 @@ final class Pullback {
         }
 
         /**
-         * Whether a run that works out the part this was met in works the operator out as well: no
-         * arm of a choice and no right operand of a short-circuit operator stands between the two.
+         * Whether a run that works out the part this was met in works the operator out as well,
+         * which is {@link Evaluated#runsWhenever}'s to say: no arm of a choice, no right operand of
+         * a short-circuit operator and no body of a function value stands between the two.
          *
          * <p>Of the tree and not of {@link #where}, which says where a closure is applied and
          * nothing of the arms a closure's body is written in: a run that reaches the part and
          * takes the other arm never works the operator out.
          */
         boolean runsWheneverItsPartDoes() {
-            return worksOutWheneverItRuns(within, Core.withoutStanding(operation));
-        }
-
-        private static boolean worksOutWheneverItRuns(Core part, Core target) {
-            Core here = Core.withoutStanding(part);
-            if (here == target) {
-                return true;
-            }
-            Core rightOfAShortCircuit = here instanceof Core.Binary binary
-                    && binary.op().stopsWhenItsAnswerIsSettled() ? binary.right() : null;
-            boolean[] found = {false};
-            ScopeStep.forEachChild(here, (child, step) -> {
-                boolean skippedByOthers = step instanceof ScopeStep.Chosen
-                        || child == rightOfAShortCircuit;
-                if (!found[0] && !skippedByOthers) {
-                    found[0] = worksOutWheneverItRuns(child, target);
-                }
-            });
-            return found[0];
+            return Evaluated.runsWhenever(within, Core.withoutStanding(operation));
         }
 
         Core operation() {

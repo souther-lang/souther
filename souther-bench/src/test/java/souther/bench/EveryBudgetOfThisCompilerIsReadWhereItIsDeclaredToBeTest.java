@@ -955,6 +955,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;ILjava/util/List;Ljava/util/Set;)Z",
                     "stops at the rows a witness is sought among, nearest the firsts first, and"
                             + " adds the figure to what the search came to"),
+            Map.entry("souther.compiler.partition.RowSearch#aimedAt("
+                            + "Ljava/lang/String;Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Lsouther/compiler/check/RuleReadingContext;Ljava/util/Set;)"
+                            + "Ljava/util/List;",
+                    "stops at the values composed for a parameter's collections to hold the numbers"
+                            + " a run to the comparison asks of them, each a try whether it comes"
+                            + " to a value or not, and adds the figure to what the search came to"),
             Map.entry("souther.compiler.partition.RowSearch#holdingAt("
                             + "Lsouther/compiler/types/Type;Ljava/util/List;"
                             + "Lsouther/compiler/check/RuleReadingContext;Ljava/util/Set;)"

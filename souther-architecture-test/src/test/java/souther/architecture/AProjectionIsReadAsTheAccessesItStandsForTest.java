@@ -686,10 +686,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, of the owner of that: a name read off a"
                         + " value ends none, so what a projection may end one for is what its"
                         + " base may");
-        row(out, c + "partition/Pullback$StopObligation", "worksOutWheneverItRuns",
-                "(" + core + core + ")Z", Reading.STRUCTURE,
-                "asks whether a node is the one looked for along the children that run whenever"
-                        + " their parent does, so a projection holds what its base does");
         row(out, c + "partition/Pullback", "boundInside",
                 "(" + core + "L" + c + "core/Core$Block;" + reads + "L" + c
                         + "partition/Pullback$Bound;)L" + c + "partition/Pullback$Bound;",

@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.IntPredicate;
+import java.util.function.Predicate;
 
 /**
  * The rows of a behavior's inputs a search for a witness tries, nearest first, each value built
@@ -268,42 +269,109 @@ public final class RowSearch {
      * value composed under the rules relating the fields. The stops met in composing go to
      * {@code stopped}, as a value not built for one is not a value that cannot be built.
      *
-     * <p>First the value that meets every aim of the parameter at once, at the first number of
-     * each and then at the second of each, and so on — a parameter whose two collections are each
-     * asked to total off nought is not answered by a value that makes one of them so — and then
-     * each aim alone, which is what is left where the others cannot be met together.
+     * <p>First the values that meet every aim of the parameter at once, each taking a number of
+     * each aim's, the nearest to where its condition turns first: a parameter whose two collections
+     * are each asked to total off nought is not answered by a value that makes one of them so, and
+     * which number each takes is no fixed pairing, since the rules relating the fields may allow
+     * only some — two totals held to add up to nought are met at one and its opposite. Then each
+     * aim alone, which is what is left where the others cannot be met together.
+     *
+     * <p>Every value composed is a try against {@link #MOST_VALUES}, whether it comes to a value
+     * or not, and the figure is added to {@code stopped} where it runs out with ways left: a
+     * record of many collections has more ways to hold a number in each than are tried.
      */
     static List<FixtureTemplate> aimedAt(String parameter, Type type, List<RowAims.Aim> aims,
                                          RuleReadingContext reading, Set<Figure> stopped) {
         List<RowAims.Aim> ofIt = aims.stream()
                 .filter(aim -> aim.container().head().equals(parameter)).toList();
         List<FixtureTemplate> out = new ArrayList<>();
-        int rounds = ofIt.stream().mapToInt(aim -> aim.elements().size()).max().orElse(0);
-        for (int round = 0; round < rounds && ofIt.size() > 1; round++) {
-            List<Held> together = new ArrayList<>();
-            for (RowAims.Aim aim : ofIt) {
-                together.add(new Held(aim.container().steps(), aim.elements()
-                        .get(Math.min(round, aim.elements().size() - 1))));
-            }
-            addAimed(type, together, reading, stopped, out);
+        int[] left = {MOST_VALUES};
+        Tried[] ended = {Tried.GO_ON};
+        if (ofIt.size() > 1) {
+            nearestFirst(ofIt, picks -> {
+                List<Held> together = new ArrayList<>();
+                for (int at = 0; at < ofIt.size(); at++) {
+                    RowAims.Aim aim = ofIt.get(at);
+                    together.add(new Held(aim.container().steps(),
+                            aim.elements().get(picks[at])));
+                }
+                ended[0] = tried(left, type, together, reading, stopped, out);
+                return ended[0] == Tried.GO_ON;
+            });
         }
         for (RowAims.Aim aim : ofIt) {
             for (BigInteger number : aim.elements()) {
-                addAimed(type, List.of(new Held(aim.container().steps(), number)), reading,
-                        stopped, out);
+                if (ended[0] != Tried.GO_ON) {
+                    break;
+                }
+                ended[0] = tried(left, type, List.of(new Held(aim.container().steps(), number)),
+                        reading, stopped, out);
             }
+        }
+        if (ended[0] == Tried.CUT) {
+            stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
         }
         return out;
     }
 
-    private static void addAimed(Type type, List<Held> held, RuleReadingContext reading,
-                                 Set<Figure> stopped, List<FixtureTemplate> into) {
-        if (hasRoom(into)) {
-            FixtureTemplate value = holdingAt(type, held, reading, stopped);
-            if (value != null) {
-                addOnce(value, into);
+    /** Whether the search of the values an aim asks for goes on. */
+    private enum Tried { GO_ON, ENOUGH, CUT }
+
+    /** One value composed with the collections {@code held} holding their numbers, if one is, as a
+     *  try against {@code left}. */
+    private static Tried tried(int[] left, Type type, List<Held> held, RuleReadingContext reading,
+                               Set<Figure> stopped, List<FixtureTemplate> into) {
+        if (!hasRoom(into)) {
+            return Tried.ENOUGH;
+        }
+        if (left[0] == 0) {
+            return Tried.CUT;
+        }
+        left[0]--;
+        FixtureTemplate value = holdingAt(type, held, reading, stopped);
+        if (value != null) {
+            addOnce(value, into);
+        }
+        return Tried.GO_ON;
+    }
+
+    /**
+     * Each way of taking one number of each of {@code aims}, as the places of the numbers taken, the
+     * ways nearest to every first number first: by what the places add up to, and then in the order
+     * the aims stand in. Made one at a time and no further than {@code each} goes on, since the ways
+     * are as many as the numbers of each multiplied.
+     */
+    static void nearestFirst(List<RowAims.Aim> aims, Predicate<int[]> each) {
+        int[] farthest = new int[aims.size() + 1];
+        for (int at = aims.size() - 1; at >= 0; at--) {
+            farthest[at] = farthest[at + 1] + aims.get(at).elements().size() - 1;
+        }
+        int[] picks = new int[aims.size()];
+        for (int sum = 0; sum <= farthest[0]; sum++) {
+            if (!takingNumbers(aims, 0, sum, picks, farthest, each)) {
+                return;
             }
         }
+    }
+
+    /** The ways of taking a number of each aim from {@code at} on whose places add up to
+     *  {@code rest}; whether {@code each} went on through all of them. */
+    private static boolean takingNumbers(List<RowAims.Aim> aims, int at, int rest, int[] picks,
+                                         int[] farthest, Predicate<int[]> each) {
+        if (at == aims.size()) {
+            return each.test(picks);
+        }
+        int most = Math.min(rest, aims.get(at).elements().size() - 1);
+        for (int place = 0; place <= most; place++) {
+            if (rest - place > farthest[at + 1]) {
+                continue;
+            }
+            picks[at] = place;
+            if (!takingNumbers(aims, at + 1, rest - place, picks, farthest, each)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** A collection reached by fields {@code steps} down from a position, and the number it is to

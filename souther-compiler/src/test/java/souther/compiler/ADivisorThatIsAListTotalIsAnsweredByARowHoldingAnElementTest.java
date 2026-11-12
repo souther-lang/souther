@@ -32,7 +32,16 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
             data Outer = { inner: Row }
             data Pair = { xs: List<Int>, ys: List<Int>, m: Int, j: Int }
             data Flat = { xs: List<Int>, m: Int, j: Int } invariant List.sum(xs) == 0
+            data Ordered = { xs: List<Int>, ys: List<Int>, m: Int, j: Int }
+                invariant List.sum(xs) < List.sum(ys)
+            data Opposed = { xs: List<Int>, ys: List<Int>, m: Int, j: Int }
+                invariant List.sum(xs) + List.sum(ys) == 0
             """;
+
+    /** What the report says of a comparison none of whose places is shown to be read. A record's
+     *  invariant over a total is unread whatever the comparison, so the report holds this line
+     *  and not the bare words. */
+    private static final String UNREAD = "not read: comparison";
 
     private record Model(String name, String parameter, String before, String comparison) {}
 
@@ -49,6 +58,13 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
             // Each total is to be off nought together, which a row making one of them so does not
             // do: both lists are in the one record.
             new Model("a remainder by each of two totals", "Pair",
+                    "let a = Int.floorMod(7, List.sum(p.xs))\n"
+                            + "    let b = Int.floorMod(7, List.sum(p.ys))",
+                    "p.m + 1 >= p.j"),
+            // Both totals are off nought and the record holds the first below the second: the
+            // numbers the two lists are asked to hold are of opposite signs, which is no pair that
+            // takes the same place in each list's numbers.
+            new Model("a remainder by each of two totals held in order", "Ordered",
                     "let a = Int.floorMod(7, List.sum(p.xs))\n"
                             + "    let b = Int.floorMod(7, List.sum(p.ys))",
                     "p.m + 1 >= p.j"));
@@ -78,7 +94,7 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
         List<String> wrong = new ArrayList<>();
         for (Model each : READ) {
             String report = report(each, Adequacy.Level.ALL);
-            if (report.contains("not read:")) {
+            if (report.contains(UNREAD)) {
                 wrong.add(each.name() + " is not read:\n" + report);
             }
         }
@@ -115,11 +131,67 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
         List<String> wrong = new ArrayList<>();
         for (Model each : skipped) {
             String report = report(each, Adequacy.Level.ALL);
-            if (!report.contains("not read:")) {
+            if (!report.contains(UNREAD)) {
                 wrong.add(each.name() + " is read:\n" + report);
             }
         }
         assertEquals(List.of(), wrong);
+    }
+
+    /**
+     * The arm an attempt takes where the value is built is no part of a run that does not build
+     * it, as the arm of a choice is not. The total of the list is nought in every value, so the
+     * remainder in that arm stops every run that takes it; the comparison is reached only by a run
+     * that does not, and which runs those are is decided by {@code p.s}, which the comparison
+     * does not read.
+     */
+    @Test
+    void aStopInTheArmAnAttemptTakesWhenTheValueIsBuiltIsNotAnsweredByARowThatDidNotBuildIt() {
+        String source = """
+                module probe.attempt
+
+                data Ok
+                data No
+                data Skipped
+                data Tag = String
+                    invariant String.matches("[a-z]+", value)
+                data Held = { s: String, xs: List<Int>, m: Int, j: Int }
+                    invariant List.sum(xs) == 0
+
+                behavior m : (p: Held) -> Bool
+                    constructs Tag
+
+                let m (p) = {
+                    let y = if Tag(p.s) as t then Int.floorMod(7, List.sum(p.xs)) else 0
+                    let c = p.m + 1 >= p.j
+                    c
+                }
+                """;
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        String report = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains(UNREAD), report);
+    }
+
+    /**
+     * A record that holds two totals to add up to nought leaves one condition: the second total is
+     * off nought wherever the first is, so only the first is asked of a list, and a value made
+     * holding that alone is not a value of the record. What is not found is not said to be read,
+     * and a row the record refuses is no row the run was got to.
+     */
+    @Test
+    void aTotalTheRecordTiesToAnotherIsNotAnsweredByARowTheRecordRefuses() {
+        Model tied = new Model("a remainder by each of two totals that add up to nought", "Opposed",
+                "let a = Int.floorMod(7, List.sum(p.xs))\n"
+                        + "    let b = Int.floorMod(7, List.sum(p.ys))",
+                "p.m + 1 >= p.j");
+        String report = report(tied, Adequacy.Level.ALL);
+        assertTrue(report.contains(UNREAD), report);
+        assertFalse(report.contains("a row was run to it"), report);
     }
 
     /**
@@ -131,7 +203,7 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
         Model pinned = new Model("a remainder by two totals", "Pair",
                 "let y = Int.floorMod(7, List.sum(p.xs) + List.sum(p.ys))", "p.m + 1 >= p.j");
         String report = report(pinned, Adequacy.Level.ALL);
-        assertTrue(report.contains("not read:"), report);
+        assertTrue(report.contains(UNREAD), report);
         assertFalse(report.contains("a row was run to it"), report);
     }
 }
