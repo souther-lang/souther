@@ -6,6 +6,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Place;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * How many different values the elements meeting a statement hold is told by equality of their
@@ -45,6 +48,24 @@ class ValuesCountedAsDifferentAreOnlyThoseWhoseFormIsTheirSamenessTest {
                 differentIn(new ObservedValue.Text("A"),
                         new ObservedValue.Decimal(new BigDecimal("1.0")),
                         new ObservedValue.Decimal(new BigDecimal("1.00"))));
+    }
+
+    /** What stopped a value is said, and not that its sameness is not told: a wider run reads it
+     *  whole, and nothing wider tells the sameness of a decimal. */
+    @Test
+    void aValueThatWasNotReadInFullIsSaidAsThatAndNotAsNotBeingToldTheSameness() {
+        for (ObservedValue stopped : List.of(
+                new ObservedValue.Unknown("nothing read it"),
+                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))) {
+            AStatementAtARow.HowManyAtARow counted =
+                    differentIn(new ObservedValue.Text("A"), stopped);
+
+            assertEquals(1, counted.meet());
+            assertTrue(counted.why().contains(ReadingGap.ofAComparisonOf(stopped)),
+                    () -> "what stopped it is said: " + counted);
+            assertFalse(counted.why().contains(ReadingGap.SAMENESS_NOT_TOLD),
+                    () -> "and not that its sameness is not told: " + counted);
+        }
     }
 
     private static AStatementAtARow.HowManyAtARow differentIn(ObservedValue... held) {

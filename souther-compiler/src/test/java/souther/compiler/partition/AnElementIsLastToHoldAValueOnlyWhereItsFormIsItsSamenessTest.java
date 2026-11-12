@@ -76,6 +76,17 @@ class AnElementIsLastToHoldAValueOnlyWhereItsFormIsItsSamenessTest {
                 told);
     }
 
+    /** What stopped a key is said, and not that its sameness is not told. */
+    @Test
+    void aKeyThatWasNotReadInFullIsSaidAsThat() {
+        ObservedValue stopped = new ObservedValue.Unknown("nothing read it");
+
+        assertEquals(List.of(
+                        new BorderQuantity.Lastness.CouldNotTell(ReadingGap.ofAComparisonOf(stopped)),
+                        new BorderQuantity.Lastness.CouldNotTell(ReadingGap.ofAComparisonOf(stopped))),
+                lastnessOf("Decimal", stopped, stopped));
+    }
+
     /** The lastness of each element, each reading of a row holding one element per key asked. */
     private static List<BorderQuantity.Lastness> lastnessOf(String keyType, ObservedValue... keys) {
         Carrier whole = Carrier.ofValue(Type.Prim.INT, DeclarationAccess.NONE);

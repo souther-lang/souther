@@ -466,15 +466,44 @@ public sealed interface ReadingGap {
     }
 
     /**
-     * Why {@code value}, read in full, cannot be told the same as or different from another
-     * observation by comparing the two as records, or null where it can
-     * ({@link ObservedValue#isSameWhereEqual}).
+     * Why {@code value} cannot be told the same as or different from another observation by
+     * comparing the two as records, or null where it can.
      *
-     * <p>For a reader that compares two observations with no declaration of their type. A reader
-     * that holds an observation against a value the source wrote asks the value
+     * <p>For a reader that compares two observations with no declaration of their type. A value
+     * that was not read in full is said as what stopped it ({@link #ofAComparisonOf}), which a wider
+     * run may settle; one read in full whose form is not its sameness is said as that
+     * ({@link ObservedValue#isSameWhereEqual}), which no run settles. The second is asked of a value
+     * the first has passed, so the two answers are never one for the other.
+     *
+     * <p>A reader that holds an observation against a value the source wrote asks the value
      * ({@link souther.compiler.values.WrittenValues}) and not this.
      */
-    static ReadingGap ofEqualityOf(ObservedValue value) {
+    static ReadingGap ofComparingAsRecords(ObservedValue value) {
+        ReadingGap stopped = ofAComparisonOf(value);
+        return stopped != null ? stopped : ofItsForm(value);
+    }
+
+    /**
+     * Why {@code one} and {@code other} cannot be told the same or different by comparing them as
+     * records, or null where they can.
+     *
+     * <p>What stopped either of them is said before the form of either: it is what a wider run
+     * settles, and a reason that no run settles must not stand where it is hidden.
+     */
+    static ReadingGap ofComparingAsRecords(ObservedValue one, ObservedValue other) {
+        ReadingGap stopped = ofAComparisonOf(one);
+        if (stopped == null) {
+            stopped = ofAComparisonOf(other);
+        }
+        if (stopped != null) {
+            return stopped;
+        }
+        ReadingGap form = ofItsForm(one);
+        return form != null ? form : ofItsForm(other);
+    }
+
+    /** The reason a value read in full is not told by equality of its record, or null. */
+    private static ReadingGap ofItsForm(ObservedValue value) {
         return value.isSameWhereEqual() ? null : SAMENESS_NOT_TOLD;
     }
 

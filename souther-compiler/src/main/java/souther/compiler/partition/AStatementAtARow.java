@@ -1255,7 +1255,7 @@ final class AStatementAtARow {
                 // Told apart from the others by equality as records, which is the language's
                 // sameness only for some values; for the rest the element may be one of the
                 // others or not, and is counted as one that could be another.
-                ReadingGap notTold = ReadingGap.ofEqualityOf(value);
+                ReadingGap notTold = ReadingGap.ofComparingAsRecords(value);
                 if (notTold != null) {
                     why.add(notTold);
                     unreadValues++;
@@ -1898,20 +1898,10 @@ final class AStatementAtARow {
             return Said.NOTHING_THERE;
         }
         // A value any part of which could not be read is no value to be equal or unequal to
-        // another.
-        ReadingGap notRead = ReadingGap.ofAComparisonOf(left);
-        if (notRead == null) {
-            notRead = ReadingGap.ofAComparisonOf(right);
-        }
-        if (notRead != null) {
-            return new Said.NotRead(Set.of(notRead));
-        }
-        // Equal as records is the language's sameness only for the values that say so; a decimal
-        // at two scales and a sequence that is a list or a set are not told by a row.
-        ReadingGap notTold = ReadingGap.ofEqualityOf(left);
-        if (notTold == null) {
-            notTold = ReadingGap.ofEqualityOf(right);
-        }
+        // another, and equal as records is the language's sameness only for the values that say
+        // so: a decimal at two scales and a sequence that is a list or a set are not told by a
+        // row.
+        ReadingGap notTold = ReadingGap.ofComparingAsRecords(left, right);
         if (notTold != null) {
             return new Said.NotRead(Set.of(notTold));
         }
