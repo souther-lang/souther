@@ -1644,6 +1644,12 @@ final class Pullback {
             }
             return;
         }
+        // Where the numbers it is handed lie within what its answer is held to, it answers on
+        // every run and there is nothing to tell: what is said of where it answers is a statement
+        // over the form of what it is handed, which a name given a value no form says has none of.
+        if (comesToWhereItAnswers(call, reads)) {
+            return;
+        }
         Rounding rounding = roundingOf(call, reads);
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld ends = rounding == null ? null
                 : RoundedToAWholeNumber.whereTheRoundedNumberIsHeld(call.type(),
@@ -1850,6 +1856,7 @@ final class Pullback {
                         operated.readsAt, where));
                 operated.unsaidAt.clear();
                 operated.unsaidElsewhere = elsewhereBefore;
+                operated.startAgain();
             }
         }
         WhatTheStepsNamesHold around = operated.stepsNames;
@@ -2122,20 +2129,32 @@ final class Pullback {
      * than what it divides ({@link FormRange#quotientByAWholeNumber}).
      */
     private FormRange exactRangeOf(Core e, InputReads reads) {
+        return exactRangeOf(e, reads, new HashMap<>());
+    }
+
+    /**
+     * The same, with {@code known} the numbers the names met on the way to {@code e} come to, each
+     * with the reading it was worked out in. A name bound to a value of names bound to values is
+     * read once for each way it is reached, which doubles at each binding that reads the one
+     * before it twice; the answer is of the name and the reading, so it is worked out once.
+     */
+    private FormRange exactRangeOf(Core e, InputReads reads,
+                                   Map<BindingId, RangeOfAName> known) {
         DeclaredBounds.Range leftByTheRules = DeclaredBounds.ofTheValueReadOff(e, read.rules(),
                 read.rules().newtypes(), read.ruleReading());
         FormRange ofTheNewtype = leftByTheRules == null ? null
                 : FormRange.ofWhatTheRulesLeave(leftByTheRules);
         if (AffineForms.outcome(e, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
-            FormRange composed = FormRange.ofNumbers(form, read, operated.stepsNames::of);
+            FormRange composed = FormRange.ofNumbers(form, read,
+                    name -> exactRangeOfAName(name, reads, known));
             if (composed != null) {
                 return ofTheNewtype == null ? composed : composed.meet(ofTheNewtype);
             }
         }
         RoundedToAWholeNumber.Written rounding = writtenRounding(e, reads);
         if (rounding != null) {
-            FormRange before = exactRangeOf(rounding.value(), reads);
+            FormRange before = exactRangeOf(rounding.value(), reads, known);
             ExactRatio least = before == null ? null : rounding.roundedFrom(before.least());
             ExactRatio greatest = before == null ? null : rounding.roundedFrom(before.greatest());
             return least == null || greatest == null ? null : new FormRange(least, greatest);
@@ -2146,10 +2165,10 @@ final class Pullback {
                     ? FormRange.ofTheWholeNumbersIn(whatTheLibraryBounds(call, reads)) : null;
         }
         if (here instanceof Core.Read name) {
-            return operated.stepsNames.of(name.binding());
+            return exactRangeOfAName(name.binding(), reads, known);
         }
         if (here instanceof Core.LetIn li) {
-            return exactRangeOf(li.body(), quantities().inside(li, reads));
+            return exactRangeOf(li.body(), quantities().inside(li, reads), known);
         }
         if (here instanceof Core.FieldAccess || here instanceof Core.FieldProjection) {
             return ofTheNewtype;
@@ -2159,21 +2178,55 @@ final class Pullback {
         // has; whether the attempt itself stops a run is asked of the stops, not of this.
         if (here instanceof Core.If || here instanceof Core.Match
                 || here instanceof Core.IfConstructed) {
-            return exactRangeOfTheArms(Choice.of(here), reads);
+            return exactRangeOfTheArms(Choice.of(here), reads, known);
         }
         if (here instanceof Core.Binary quotient && quotient.op() == BinOp.DIV
                 && quotient.right().type() == Type.INT) {
-            return FormRange.quotientByAWholeNumber(exactRangeOf(quotient.left(), reads));
+            return FormRange.quotientByAWholeNumber(
+                    exactRangeOf(quotient.left(), reads, known));
         }
         if (!isAnOperator(here)) {
             return null;
         }
         return switch (here) {
-            case Core.Neg negated -> FormRange.negated(exactRangeOf(negated.operand(), reads));
+            case Core.Neg negated -> FormRange.negated(
+                    exactRangeOf(negated.operand(), reads, known));
             case Core.Binary binary -> FormRange.combined(binary.op(),
-                    exactRangeOf(binary.left(), reads), exactRangeOf(binary.right(), reads));
+                    exactRangeOf(binary.left(), reads, known),
+                    exactRangeOf(binary.right(), reads, known));
             default -> null;
         };
+    }
+
+    /** What a name comes to, worked out in {@code at}, which is the reading it holds in. */
+    private record RangeOfAName(InputReads at, FormRange range) {}
+
+    /**
+     * The numbers a name bound to a value comes to, which are those of the value it is given where
+     * the reading of the input says the two are one value ({@link ReadMeaning.Through}) — or null
+     * where it says anything else, or the value's numbers are not known. Asked of the value and
+     * not of what the arithmetic composes the name as: a value that composes as no form has no
+     * form to read, and the numbers it lies between are no less known for that.
+     */
+    private FormRange exactRangeOfAName(BindingId name, InputReads reads,
+                                        Map<BindingId, RangeOfAName> known) {
+        FormRange ofAStep = operated.stepsNames.of(name);
+        if (ofAStep != null) {
+            return ofAStep;
+        }
+        Denotation bound = reads.boundValue(name);
+        if (bound == null) {
+            return null;
+        }
+        // Held to the reading and not to the name alone: a reading that chose an arm may leave the
+        // name a narrower run than the one that did not.
+        RangeOfAName already = known.get(name);
+        if (already != null && already.at() == bound.at()) {
+            return already.range();
+        }
+        FormRange range = exactRangeOf(bound.value(), bound.at(), known);
+        known.put(name, new RangeOfAName(bound.at(), range));
+        return range;
     }
 
     /**
@@ -2181,11 +2234,12 @@ final class Pullback {
      * what each of its arms comes to, an arm read where the choice of it binds its names. Null
      * where any arm's numbers are not known, since the arm may be the one a run takes.
      */
-    private FormRange exactRangeOfTheArms(Choice choice, InputReads reads) {
+    private FormRange exactRangeOfTheArms(Choice choice, InputReads reads,
+                                          Map<BindingId, RangeOfAName> known) {
         FormRange joined = null;
         for (Choice.Arm arm : choice.arms()) {
             FormRange of = exactRangeOf(arm.answers(), reads.choosing(arm.decidedBy(),
-                    read.rules().symbols(), read.rules().newtypes()));
+                    read.rules().symbols(), read.rules().newtypes()), known);
             if (of == null) {
                 return null;
             }
@@ -2432,6 +2486,9 @@ final class Pullback {
             // of the body, under the names it binds ({@link #boundInside}).
             return;
         }
+        if (!operated.firstOverWhereItStands(operand, reads, bound)) {
+            return;
+        }
         switch (reads.pathOf(operand, read.rules().newtypes())) {
             case PathResolution.At(TermPath path) -> operated.unsaidAt.add(path);
             case PathResolution.MayStandAt(List<TermPath> among) -> operated.unsaidAt.addAll(among);
@@ -2666,6 +2723,25 @@ final class Pullback {
 
         Core readByTheFormOf(Core held) {
             return readByTheFormOf == null ? null : readByTheFormOf.get(held);
+        }
+
+        /**
+         * What the candidate has said but for the remainders it read, which a remainder taken again
+         * says again ({@link Pullback#remainderAt}): a reading that said anything else is not one
+         * to take from another.
+         */
+        Object markBesidesTheRemainders() {
+            return ReadingState.snapshotOfFieldsBut(this,
+                    Set.of("readByTheFormOf", "dividendBesideTheRows"));
+        }
+
+        /** The remainders read so far, as two tables apart from the candidate's own. */
+        List<Map<Core, Core>> remaindersRead() {
+            return List.of(
+                    readByTheFormOf == null ? new IdentityHashMap<>()
+                            : new IdentityHashMap<>(readByTheFormOf),
+                    dividendBesideTheRows == null ? new IdentityHashMap<>()
+                            : new IdentityHashMap<>(dividendBesideTheRows));
         }
 
         void dividendBesideTheRows(Core call, Core dividend) {
@@ -8807,6 +8883,40 @@ final class Pullback {
             unsaidAt = new LinkedHashSet<>();
             unsaidGroups.add(unsaidAt);
             unsaidGroupsWhere.add(where);
+            visited.clear();
+        }
+
+        /** What a run may stop on, told over a value read at one reading and under one closure's
+         *  names, since the group began: telling it again says nothing more. */
+        private final Set<Visit> visited = new HashSet<>();
+
+        private record Visit(Core node, InputReads reads, Bound bound) {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Visit that && node == that.node && bound == that.bound
+                        && reads.equals(that.reads);
+            }
+
+            @Override
+            public int hashCode() {
+                return (System.identityHashCode(node) * 31 + reads.hashCode()) * 31
+                        + System.identityHashCode(bound);
+            }
+        }
+
+        /**
+         * Whether what a run may stop on over {@code operand} has not been told yet in this group.
+         * A value several names stand for, or several operands of an operator are made of, is
+         * told once and not once for every way down to it.
+         */
+        boolean firstOverWhereItStands(Core operand, InputReads reads, Bound bound) {
+            return visited.add(new Visit(Core.withoutStanding(operand), reads, bound));
+        }
+
+        /** What was told is taken back out of the group it was told in. */
+        void startAgain() {
+            visited.clear();
         }
 
         /** Every place any operator not said of may stop a run on. */
@@ -8980,6 +9090,19 @@ final class Pullback {
 
         WorkedOutWhere where() {
             return where;
+        }
+
+        /**
+         * Whether a run that works out the part this was met in works the operator out as well,
+         * which is {@link Evaluated#runsWhenever}'s to say: no arm of a choice, no right operand of
+         * a short-circuit operator and no body of a function value stands between the two.
+         *
+         * <p>Of the tree and not of {@link #where}, which says where a closure is applied and
+         * nothing of the arms a closure's body is written in: a run that reaches the part and
+         * takes the other arm never works the operator out.
+         */
+        boolean runsWheneverItsPartDoes() {
+            return Evaluated.runsWhenever(within, Core.withoutStanding(operation));
         }
 
         Core operation() {
@@ -11105,6 +11228,18 @@ final class Pullback {
     private final SharedReads<ReadingState.Inputs, Guards, Met, WrittenOutRead>
             sharedApplications = new SharedReads<>(new TheScene());
 
+    /** The remainders read, at each node and the reading it was read at ({@link #remainderKept}). */
+    private final Map<Core, List<ReadingTaken<Quantity.RemainderOfADividend>>> keptRemainders =
+            new IdentityHashMap<>();
+
+    /** Why a node is no number of the input, at each reading it was asked at
+     *  ({@link #noRuleFor}). */
+    private final Map<Core, List<ReadingTaken<WhyUnread>>> keptReasons = new IdentityHashMap<>();
+
+    /** What the remainders read so far in the reading of one remainder told the candidate, where
+     *  one is being read ({@link #remainderKept}). */
+    private Set<Notice> telling;
+
     /** What the truths that keep an aggregate's elements state, kept ({@link #keptOnceFor}). */
     private final SharedReads<ReadingState.Inputs, Guards, Met, Derivation[]> sharedConditions =
             new SharedReads<>(new TheScene());
@@ -13003,6 +13138,17 @@ final class Pullback {
      * @param met the bindings already read through on the way here
      */
     private Inside aWayInto(Denotation value, Set<BindingId> met) {
+        return aWayInto(value, met, new IdentityHashMap<>());
+    }
+
+    /**
+     * The same, where {@code explored} holds the values already gone into, each at the reading it
+     * stood at. The way in is the first found, so a search that reaches a value again has been in
+     * it and found none: a value several names stand for, or one that several of the operands of
+     * an operator are made of, is gone into once and not once for every way down to it.
+     */
+    private Inside aWayInto(Denotation value, Set<BindingId> met,
+                            Map<Core, List<InputReads>> explored) {
         Denotation chosen = chosenAt(value);
         if (chosen != null) {
             return new Inside.AChoice(chosen);
@@ -13018,6 +13164,9 @@ final class Pullback {
         Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
         Core e = Core.withoutStanding(stands.value());
+        if (!firstVisit(explored, stands.value(), stands.at())) {
+            return null;
+        }
         // Every value it may be handed on some row: what is read on each is a statement of an
         // application it may be handed ({@link Proposition.OnAnApplication}), and one dropped on
         // every row is handed on none. Where none is left there is no value to go into.
@@ -13034,7 +13183,7 @@ final class Pullback {
         Inside[] found = {null};
         Core.forEachChild(e, child -> {
             if (found[0] == null) {
-                found[0] = aWayInto(new Denotation(child, stands.at()), met);
+                found[0] = aWayInto(new Denotation(child, stands.at()), met, explored);
             }
         });
         // A call defined by cases is gone into once what it was handed reads as one number on
@@ -13048,6 +13197,20 @@ final class Pullback {
         }
         Inside.ATotalByKeeping total = totalByKeeping(e, stands.at());
         return total != null ? total : countByKeeping(e, stands.at());
+    }
+
+    /** Whether {@code node}, read at {@code at}, has not been gone into: it is marked as it is
+     *  asked, the readings told apart by what they are. */
+    private static boolean firstVisit(Map<Core, List<InputReads>> explored, Core node,
+                                      InputReads at) {
+        List<InputReads> readings = explored.computeIfAbsent(node, _ -> new ArrayList<>());
+        for (InputReads each : readings) {
+            if (each == at) {
+                return false;
+            }
+        }
+        readings.add(at);
+        return true;
     }
 
     /**
@@ -14157,6 +14320,133 @@ final class Pullback {
                         .isEmpty()) {
             return null;
         }
+        return remainderKept(node, at);
+    }
+
+    /**
+     * What a remainder was read as, and what reading it left: what the candidate was told and the
+     * elements it asked of. The dividend of a remainder is read through the names it is made of,
+     * and the value of each is read through its own, so a chain of names each holding a remainder
+     * is read once for every way down it unless a remainder already read is taken again.
+     *
+     * <p>Taken again where the reading would come to the same and leave the same: the reading is
+     * the one at the same place ({@code at} is the object it was made at), what it asks after
+     * stands as it did, nothing but what is told again was told to the candidate, and nothing it
+     * leaves is a thing a reading taken could not leave. What it told the candidate is told again,
+     * and to whoever is noting what the reading it is part of tells.
+     */
+    private Quantity.RemainderOfADividend remainderKept(Core node, InputReads at) {
+        return kept(keptRemainders, node, at, () -> remainderAtAfresh(node, at));
+    }
+
+    /**
+     * What {@code fresh} comes to, a reading of {@code node} at {@code at} that is read through
+     * the names it is made of and so reads the readings of the nodes under it, taken from the
+     * reading made before where there is one ({@code table} holds them).
+     */
+    private <R> R kept(Map<Core, List<ReadingTaken<R>>> table, Core node, InputReads at,
+                       Supplier<R> fresh) {
+        if (InputReads.watching() || elementsMet.crowded()
+                || !READING_STATE.holdsNothing(this)) {
+            return fresh.get();
+        }
+        Trial told = underTrial.peek();
+        Object said = told == null ? null : told.markBesidesTheRemainders();
+        ReadingState.Inputs inputs = READING_STATE.inputsOf(this);
+        List<ReadingTaken<R>> before = table.computeIfAbsent(node, _ -> new ArrayList<>());
+        for (ReadingTaken<R> each : before) {
+            if (each.at() == at && READING_STATE.sameInputs(each.inputs(), inputs, false)
+                    && elementsMet.agrees(each.footprint())
+                    && Objects.equals(each.said(), said)) {
+                elementsMet.takes(each.footprint());
+                met.addAll(each.met());
+                each.told().forEach(this::tell);
+                return each.result();
+            }
+        }
+        List<Object[]> guards = READING_STATE.guardsOf(this);
+        List<Map<Core, Core>> remainders = told == null ? null : told.remaindersRead();
+        int metFrom = met.size();
+        long spent = readingsLeft;
+        int kept = aggregatesKept;
+        int asked = aggregatesAsked;
+        int keptReadingsBefore = keptReadings;
+        ElementsMet.Noting noting = elementsMet.noting();
+        Set<Notice> outer = telling;
+        Set<Notice> mine = new LinkedHashSet<>();
+        telling = mine;
+        R result;
+        ElementsMet.Footprint footprint;
+        try {
+            result = fresh.get();
+        } finally {
+            telling = outer;
+            footprint = noting.ended(elementsMet);
+        }
+        if (outer != null) {
+            outer.addAll(mine);
+        }
+        if (footprint != null && met.size() >= metFrom && readingsLeft == spent
+                && kept == aggregatesKept && asked == aggregatesAsked
+                && keptReadingsBefore == keptReadings
+                && READING_STATE.sameGuardsBut(guards, READING_STATE.guardsOf(this),
+                        guard -> guard instanceof Trial)
+                && (told == null || (Objects.equals(said, told.markBesidesTheRemainders())
+                        && told.remaindersRead().equals(withTold(remainders, mine))))) {
+            before.add(new ReadingTaken<>(result, at, List.copyOf(mine), footprint, inputs, said,
+                    List.copyOf(met.subList(metFrom, met.size()))));
+        }
+        return result;
+    }
+
+    /** What the candidate was told of a remainder: that its rows are made where the form of its
+     *  dividend is worked out, or beside where its dividend is. */
+    private record Notice(boolean besideTheRows, Core call, Core dividend) {
+
+        /** The same notice where it is of the very call and dividend: what the candidate holds is
+         *  held by identity, and a remainder read again tells it the same again. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Notice that && besideTheRows == that.besideTheRows
+                    && call == that.call && dividend == that.dividend;
+        }
+
+        @Override
+        public int hashCode() {
+            return (System.identityHashCode(call) * 31 + System.identityHashCode(dividend)) * 2
+                    + (besideTheRows ? 1 : 0);
+        }
+    }
+
+    /** A reading made, with what it told the candidate and left behind. */
+    private record ReadingTaken<R>(R result, InputReads at, List<Notice> told,
+                                   ElementsMet.Footprint footprint, ReadingState.Inputs inputs,
+                                   Object said, List<Met> met) {}
+
+    /** {@code remainders}, the two tables the candidate holds, with {@code notices} told. */
+    private static List<Map<Core, Core>> withTold(List<Map<Core, Core>> remainders,
+                                                  Collection<Notice> notices) {
+        List<Map<Core, Core>> out = List.of(new IdentityHashMap<>(remainders.get(0)),
+                new IdentityHashMap<>(remainders.get(1)));
+        for (Notice each : notices) {
+            out.get(each.besideTheRows() ? 1 : 0).put(each.call(), each.dividend());
+        }
+        return out;
+    }
+
+    /** Tells the candidate {@code notice}, and whoever is noting what it is told. */
+    private void tell(Notice notice) {
+        if (notice.besideTheRows()) {
+            trial().dividendBesideTheRows(notice.call(), notice.dividend());
+        } else {
+            trial().readByTheFormOf(notice.call(), notice.dividend());
+        }
+        if (telling != null) {
+            telling.add(notice);
+        }
+    }
+
+    private Quantity.RemainderOfADividend remainderAtAfresh(Core node, InputReads at) {
         RemainderOfAShiftedValue.OfADivision<InputReads> division =
                 RemainderOfAShiftedValue.ofADivision(node, at, sides());
         if (division == null) {
@@ -14176,7 +14466,7 @@ final class Pullback {
         }
         // Its rows are made where the form is worked out, each sum on the way a part of it
         // ({@link UndividedByARelation}), and the divisor is a number above nought.
-        trial().readByTheFormOf(Core.withoutStanding(division.call()), division.dividend());
+        tell(new Notice(false, Core.withoutStanding(division.call()), division.dividend()));
         return Quantity.RemainderOfADividend.ofTheInput(division.call().operation(),
                 new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
                         form.coefs()), division.divisor());
@@ -14291,8 +14581,7 @@ final class Pullback {
                 return null;
             }
         }
-        trial().dividendBesideTheRows(Core.withoutStanding(division.call()),
-                division.dividend());
+        tell(new Notice(true, Core.withoutStanding(division.call()), division.dividend()));
         return new Quantity.RemainderOfADividend(division.call().operation(),
                 new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
                         form.coefs()), division.divisor());
@@ -15503,6 +15792,10 @@ final class Pullback {
      * input: what stands at the end of the accesses it is made of.
      */
     private WhyUnread noRuleFor(Core stopped, InputReads reads) {
+        return kept(keptReasons, stopped, reads, () -> noRuleForAfresh(stopped, reads));
+    }
+
+    private WhyUnread noRuleForAfresh(Core stopped, InputReads reads) {
         Denotation end = underItsAccesses(new Denotation(stopped, reads));
         Core e = Core.withoutStanding(end.value());
         InputReads in = end.at();

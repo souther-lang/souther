@@ -135,7 +135,7 @@ public final class Evaluated {
      * others. Asked by identity, so one node written twice is asked about where it stands.
      */
     public static boolean runsWhenever(Core root, Core part) {
-        if (root == part) {
+        if (Core.withoutStanding(root) == Core.withoutStanding(part)) {
             return true;
         }
         if (Core.withoutStanding(root) instanceof Core.LetIn let && runsWhenever(let.body(), part)) {

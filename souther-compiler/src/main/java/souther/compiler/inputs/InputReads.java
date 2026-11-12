@@ -4168,6 +4168,23 @@ public final class InputReads {
     }
 
     /**
+     * The value {@code binding} is bound to, read where it was bound, or null where it is bound to
+     * no value this knows: a parameter a call handed, a name that stands for one of several
+     * values, an element of a container, an input.
+     *
+     * <p>For a reader that has the name as a number of a form and not as the node that reads it.
+     * What a read of the name means is {@link #meaningOf}'s, and this answers the one case of it
+     * that is a value the name was given, in the order it does.
+     */
+    public Denotation boundValue(BindingId binding) {
+        if (applied.given().containsKey(binding) || alternatives.containsKey(binding)) {
+            return null;
+        }
+        return names.roleOf(binding) instanceof BindingRole.Alias(Core value)
+                ? denoting(value, this) : null;
+    }
+
+    /**
      * The name {@code binding} is another name for, through the calls that handed it over and the
      * names given to it ({@link #handedOver}): itself where it is neither, or where what it was
      * handed is no name.

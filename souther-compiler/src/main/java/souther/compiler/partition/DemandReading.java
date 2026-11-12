@@ -1281,6 +1281,14 @@ final class DemandReading {
                     relationStands);
         }
 
+        /** The same, without the operators owed that {@code metBy} says a run got past: a proof
+         *  that some run gets past one is what each of those was owed. */
+        Answered withoutOwedThat(Predicate<Pullback.StopObligation> metBy) {
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid,
+                    owed.stream().filter(each -> !metBy.test(each)).toList(), before,
+                    relationStands);
+        }
+
         private static List<TakenConstraint> notAmong(List<TakenConstraint> narrowing,
                                                       Collection<TakenConstraint.Affine> met) {
             return narrowing.stream().filter(each ->
