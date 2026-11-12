@@ -59,6 +59,36 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    private static String reportOfTruthsEachMadeOfTheOneBefore(int depth, String step) {
+        StringBuilder body = new StringBuilder("{\n    let a0 = x >= 0\n");
+        for (int i = 1; i <= depth; i++) {
+            body.append("    let a%d = %s\n".formatted(i, step.replace("PREV", "a" + (i - 1))));
+        }
+        body.append("    a%d\n}".formatted(depth));
+        Compilation compilation = Compilation.ofSource("""
+                module m
+
+                behavior f : (x: Int, j: Int) -> Bool
+                let f (x, j) = %s
+                """.formatted(body), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /** What is said of a truth does not depend on how many names it is made through. */
+    @Test
+    void aTruthMadeOfTheOneBeforeItTwiceIsReadOnceForEachNameAndSaysWhatItSaysAtAnyDepth() {
+        for (String step : new String[] {"PREV && PREV", "PREV || PREV",
+                "if PREV then PREV else PREV"}) {
+            String shallow = reportOfTruthsEachMadeOfTheOneBefore(2, step);
+            String deep = assertTimeoutPreemptively(Duration.ofSeconds(60),
+                    () -> reportOfTruthsEachMadeOfTheOneBefore(100, step));
+            org.junit.jupiter.api.Assertions.assertEquals(shallow, deep, step);
+        }
+    }
+
     @Test
     void aChainNamedInTheConditionOfAnIfAndInItsArmsIsMeasured() {
         String report = assertTimeoutPreemptively(Duration.ofSeconds(60),

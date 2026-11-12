@@ -8,7 +8,6 @@ import souther.compiler.semantics.ConditionJoin;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
@@ -18,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
  * concluded when the parts were chosen. Concluded again for every expression they stand under, a
  * condition as deep as the source allows is concluded as many times over as it is deep; so what the
  * candidates are asked comes from a concluding that keeps what each step came to
- * ({@link Conclusion#reusing}). The concluding of the derivation kept is a fresh one, since the
- * parts nothing read are numbered there.
+ * ({@link Conclusion#reusing}). The concluding of a condition concludes each step once too, so a
+ * name used twice, which is one step held twice, is concluded once.
  */
 class AStepIsConcludedOnceWhileItsCandidatesAreTriedTest {
 
@@ -47,11 +46,11 @@ class AStepIsConcludedOnceWhileItsCandidatesAreTriedTest {
         assertEquals(new Conclusion(Optional.empty()).of(WHOLE), trying.of(WHOLE));
     }
 
-    /** A concluding of a condition is not one of these: each step is concluded where it is met. */
+    /** And so does a concluding of a condition: a name used twice is one step held twice. */
     @Test
-    void theConcludingOfAConditionConcludesWhatItIsAskedOf() {
+    void theConcludingOfAConditionConcludesEachStepOnceToo() {
         Conclusion numbering = new Conclusion(Optional.empty());
         Proposition part = numbering.of(PART);
-        assertNotSame(part, numbering.of(PART));
+        assertSame(part, numbering.of(PART));
     }
 }

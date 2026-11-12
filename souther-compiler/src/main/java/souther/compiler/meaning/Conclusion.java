@@ -115,9 +115,16 @@ public final class Conclusion {
     private final Shared shared;
     private final Map<ACarriedValue, Boolean> supposed;
 
-    /** A concluding of a condition at {@code where}, where the reader knows it. */
+    /**
+     * A concluding of a condition at {@code where}, where the reader knows it.
+     *
+     * <p>Each step is concluded once however many derivations hold it: a derivation is a value,
+     * so what a step concludes under one supposition does not change, and a name used twice stands
+     * for one step held twice. A part nothing read is then the one part wherever the step is held,
+     * and is numbered where it is first met.
+     */
     public Conclusion(Optional<ModelOccurrence> where) {
-        this(new Shared(where, false), Map.of());
+        this(new Shared(where, true), Map.of());
     }
 
     private Conclusion(Shared shared, Map<ACarriedValue, Boolean> supposed) {

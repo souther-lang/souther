@@ -758,10 +758,33 @@ final class DemandReading {
      */
     static List<Stated> stated(Condition condition, InputReading read, boolean holding,
                                WhatConditionsState conditions) {
+        return stated(condition, read, holding, conditions, new IdentityHashMap<>());
+    }
+
+    /**
+     * The same, with what each condition asked kept in {@code done}: a condition is one however
+     * often it is read ({@link Condition#of}), so a name used on both sides of a connective is the
+     * one condition held twice, and it asks what it asks once.
+     */
+    private static List<Stated> stated(Condition condition, InputReading read, boolean holding,
+                                       WhatConditionsState conditions,
+                                       Map<Condition, List<Stated>> done) {
+        List<Stated> already = done.get(condition);
+        if (already != null) {
+            return already;
+        }
+        List<Stated> made = statedAfresh(condition, read, holding, conditions, done);
+        done.put(condition, made);
+        return made;
+    }
+
+    private static List<Stated> statedAfresh(Condition condition, InputReading read,
+                                             boolean holding, WhatConditionsState conditions,
+                                             Map<Condition, List<Stated>> done) {
         return switch (condition) {
             case Condition.Joined joined -> {
-                List<Stated> left = stated(joined.left(), read, holding, conditions);
-                List<Stated> right = stated(joined.right(), read, holding, conditions);
+                List<Stated> left = stated(joined.left(), read, holding, conditions, done);
+                List<Stated> right = stated(joined.right(), read, holding, conditions, done);
                 if (joined.how().under(holding) == ConditionJoin.BOTH) {
                     yield List.copyOf(both(left, right));
                 }
@@ -1437,9 +1460,20 @@ final class DemandReading {
     }
 
 
+    /**
+     * What two halves ask that both are asked: each thing once, in the order it is first asked.
+     * A thing is one however many halves hold it, and a condition used on both sides of a
+     * connective is held by both, so what it asks is not asked twice.
+     */
     private static List<Stated> both(List<Stated> left, List<Stated> right) {
         List<Stated> out = new ArrayList<>(left);
-        out.addAll(right);
+        Set<Stated> asked = Collections.newSetFromMap(new IdentityHashMap<>());
+        asked.addAll(left);
+        for (Stated each : right) {
+            if (asked.add(each)) {
+                out.add(each);
+            }
+        }
         return out;
     }
 
