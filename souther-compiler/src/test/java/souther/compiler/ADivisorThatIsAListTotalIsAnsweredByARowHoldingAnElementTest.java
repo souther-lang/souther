@@ -38,12 +38,41 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
                 invariant List.sum(xs) + List.sum(ys) == 0
             """;
 
+    private static final String ITEMS = """
+            data Item = { n: Int }
+            data Items = { xs: List<Item>, m: Int, j: Int }
+            """;
+    private static final String LAYERED = """
+            data Item = { n: Int }
+            data Boxed = { item: Item }
+            data Layered = { xs: List<Boxed>, m: Int, j: Int }
+            """;
+    private static final String INSIDE = ITEMS + """
+            data Inside = { items: Items }
+            """;
+    private static final String TIEDS = """
+            data Tied = { n: Int, k: Int } invariant n + k == 0
+            data Tieds = { xs: List<Tied>, m: Int, j: Int }
+            """;
+    private static final String NOUGHTS = """
+            data Nought = { n: Int } invariant n == 0
+            data Noughts = { xs: List<Nought>, m: Int, j: Int }
+            """;
+
     /** What the report says of a comparison none of whose places is shown to be read. A record's
      *  invariant over a total is unread whatever the comparison, so the report holds this line
      *  and not the bare words. */
     private static final String UNREAD = "not read: comparison";
 
-    private record Model(String name, String parameter, String before, String comparison) {}
+    /** {@code declared} is what the model declares beyond {@link #DECLARED}: every type declared is
+     *  measured, so a model carries only the types it reads. */
+    private record Model(String name, String parameter, String before, String comparison,
+                         String declared) {
+
+        Model(String name, String parameter, String before, String comparison) {
+            this(name, parameter, before, comparison, "");
+        }
+    }
 
     private static final List<Model> READ = List.of(
             new Model("a remainder by a total", "Row",
@@ -67,10 +96,29 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
             new Model("a remainder by each of two totals held in order", "Ordered",
                     "let a = Int.floorMod(7, List.sum(p.xs))\n"
                             + "    let b = Int.floorMod(7, List.sum(p.ys))",
-                    "p.m + 1 >= p.j"));
+                    "p.m + 1 >= p.j"),
+            // The total is of a field of the records in the list, so the number is held in the one
+            // element the list is made of.
+            new Model("a remainder by a total of a field of the records in a list", "Items",
+                    "let y = Int.floorMod(7, List.sum(List.map(x -> x.n, p.xs)))",
+                    "p.m + 1 >= p.j", ITEMS),
+            new Model("a remainder by a total of a field of a record in the records of a list",
+                    "Layered",
+                    "let y = Int.floorMod(7, List.sum(List.map(x -> x.item.n, p.xs)))",
+                    "p.m + 1 >= p.j", LAYERED),
+            new Model("a remainder by a total of a field of the records in a list in a record",
+                    "Inside",
+                    "let y = Int.floorMod(7, List.sum(List.map(x -> x.n, p.items.xs)))",
+                    "p.items.m + 1 >= p.items.j", INSIDE),
+            // Both numbers are held by the one element, the record that ties them giving each
+            // the value its rule allows.
+            new Model("a remainder by each of two fields of the records in a list", "Tieds",
+                    "let a = Int.floorMod(7, List.sum(List.map(x -> x.n, p.xs)))\n"
+                            + "    let b = Int.floorMod(7, List.sum(List.map(x -> x.k, p.xs)))",
+                    "p.m + 1 >= p.j", TIEDS));
 
     private static String source(Model model) {
-        return DECLARED + """
+        return DECLARED + model.declared() + """
 
                 behavior m : (p: %s) -> Bool
                 let m (p) = {
@@ -190,6 +238,20 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
                         + "    let b = Int.floorMod(7, List.sum(p.ys))",
                 "p.m + 1 >= p.j");
         String report = report(tied, Adequacy.Level.ALL);
+        assertTrue(report.contains(UNREAD), report);
+        assertFalse(report.contains("a row was run to it"), report);
+    }
+
+    /**
+     * A record that holds its number at nought is no record a row can give another number, so what
+     * the row search builds for it is refused and nothing is said to be read.
+     */
+    @Test
+    void aNumberTheRecordsInAListAreHeldToNoughtIsNotAnsweredByARowTheRecordRefuses() {
+        Model held = new Model("a remainder by a total of records held at nought", "Noughts",
+                "let y = Int.floorMod(7, List.sum(List.map(x -> x.n, p.xs)))", "p.m + 1 >= p.j",
+                NOUGHTS);
+        String report = report(held, Adequacy.Level.ALL);
         assertTrue(report.contains(UNREAD), report);
         assertFalse(report.contains("a row was run to it"), report);
     }

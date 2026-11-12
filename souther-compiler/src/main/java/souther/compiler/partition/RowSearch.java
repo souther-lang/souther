@@ -283,7 +283,7 @@ public final class RowSearch {
     static List<FixtureTemplate> aimedAt(String parameter, Type type, List<RowAims.Aim> aims,
                                          RuleReadingContext reading, Set<Figure> stopped) {
         List<RowAims.Aim> ofIt = aims.stream()
-                .filter(aim -> aim.container().head().equals(parameter)).toList();
+                .filter(aim -> aim.value().head().equals(parameter)).toList();
         List<FixtureTemplate> out = new ArrayList<>();
         int[] left = {MOST_VALUES};
         Tried[] ended = {Tried.GO_ON};
@@ -292,19 +292,18 @@ public final class RowSearch {
                 List<Held> together = new ArrayList<>();
                 for (int at = 0; at < ofIt.size(); at++) {
                     RowAims.Aim aim = ofIt.get(at);
-                    together.add(new Held(aim.container().steps(),
-                            aim.elements().get(picks[at])));
+                    together.add(new Held(aim.value().steps(), aim.numbers().get(picks[at])));
                 }
                 ended[0] = tried(left, type, together, reading, stopped, out);
                 return ended[0] == Tried.GO_ON;
             });
         }
         for (RowAims.Aim aim : ofIt) {
-            for (BigInteger number : aim.elements()) {
+            for (BigInteger number : aim.numbers()) {
                 if (ended[0] != Tried.GO_ON) {
                     break;
                 }
-                ended[0] = tried(left, type, List.of(new Held(aim.container().steps(), number)),
+                ended[0] = tried(left, type, List.of(new Held(aim.value().steps(), number)),
                         reading, stopped, out);
             }
         }
@@ -344,7 +343,7 @@ public final class RowSearch {
     static void nearestFirst(List<RowAims.Aim> aims, Predicate<int[]> each) {
         int[] farthest = new int[aims.size() + 1];
         for (int at = aims.size() - 1; at >= 0; at--) {
-            farthest[at] = farthest[at + 1] + aims.get(at).elements().size() - 1;
+            farthest[at] = farthest[at + 1] + aims.get(at).numbers().size() - 1;
         }
         int[] picks = new int[aims.size()];
         for (int sum = 0; sum <= farthest[0]; sum++) {
@@ -361,7 +360,7 @@ public final class RowSearch {
         if (at == aims.size()) {
             return each.test(picks);
         }
-        int most = Math.min(rest, aims.get(at).elements().size() - 1);
+        int most = Math.min(rest, aims.get(at).numbers().size() - 1);
         for (int place = 0; place <= most; place++) {
             if (rest - place > farthest[at + 1]) {
                 continue;
@@ -374,25 +373,34 @@ public final class RowSearch {
         return true;
     }
 
-    /** A collection reached by fields {@code steps} down from a position, and the number it is to
-     *  hold alone. */
+    /** A number to be held at the place {@code steps} reach down from a position, by fields and by
+     *  the one element of a list. */
     private record Held(List<TermPath.Step> steps, BigInteger number) {}
 
-    /** A value of {@code type} whose collections {@code held} each hold their number alone, or
-     *  null where none is built. */
+    /** A value of {@code type} that holds each of {@code held} at its place, a list holding its
+     *  number in its one element, or null where none is built. */
     private static FixtureTemplate holdingAt(Type type, List<Held> held, RuleReadingContext reading,
                                              Set<Figure> stopped) {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         if (held.size() == 1 && held.getFirst().steps().isEmpty()) {
-            if (!(view.shape() instanceof Shape.Sequence sequence)
-                    || !(WornNames.of(view.wrappers(), source) instanceof WornNames.Spelled spelled)) {
-                return null;
+            return Partitions.writtenNumberAt(type, new BigDecimal(held.getFirst().number()),
+                    reading);
+        }
+        if (view.shape() instanceof Shape.Sequence sequence) {
+            List<Held> inside = new ArrayList<>();
+            for (Held each : held) {
+                if (each.steps().isEmpty()
+                        || !(each.steps().getFirst() instanceof TermPath.Step.Element)) {
+                    return null;
+                }
+                inside.add(new Held(each.steps().subList(1, each.steps().size()), each.number()));
             }
-            FixtureTemplate element = Partitions.writtenNumberAt(sequence.element(),
-                    new BigDecimal(held.getFirst().number()), reading);
-            return element == null ? null : spelled.holding(List.of(element));
+            FixtureTemplate element = holdingAt(sequence.element(), inside, reading, stopped);
+            return element != null
+                    && WornNames.of(view.wrappers(), source) instanceof WornNames.Spelled spelled
+                    ? spelled.holding(List.of(element)) : null;
         }
         if (!(view.shape() instanceof Shape.Product(TypeSymbol.AtModule record, var fields))) {
             return null;
