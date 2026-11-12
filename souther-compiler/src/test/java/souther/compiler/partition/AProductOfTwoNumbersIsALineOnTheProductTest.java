@@ -113,6 +113,10 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         spellings.put(List.of("guard 1000 <= price * quantity else No", "Ok"), "faced the other way");
         spellings.put(List.of("let amount = price * quantity", "guard amount >= 1000 else No", "Ok"),
                 "named");
+        spellings.put(List.of("guard Int.multiply(price, quantity) >= 1000 else No", "Ok"),
+                "written as the library's operation");
+        spellings.put(List.of("let amount = Int.multiply(quantity, price)",
+                "guard amount >= 1000 else No", "Ok"), "named, as the library's operation");
         List<String> borders = null;
         Map<String, List<String>> classes = null;
         for (Map.Entry<List<String>, String> each : spellings.entrySet()) {
@@ -125,6 +129,40 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
             }
             assertEquals(borders, theseBorders, each.getValue());
             assertEquals(classes, theseClasses, each.getValue());
+        }
+    }
+
+    /**
+     * The same lines and classes whether an operator is written as the operator or as the
+     * library's call that stands for it, a product among them: a multiplication that is the whole
+     * of a side is a line on the product however it is written.
+     */
+    @Test
+    void anOperatorWrittenAsTheLibrarysCallDrawsTheSameLines() {
+        String[][] pairs = {
+            {"a + b >= 10", "Int.add(a, b) >= 10"},
+            {"a - b >= 10", "Int.subtract(a, b) >= 10"},
+            {"a * b >= 10", "Int.multiply(a, b) >= 10"},
+            {"a * 2 + b >= 10", "Int.add(Int.multiply(a, 2), b) >= 10"},
+            {"(a + 1) * b >= 10", "Int.multiply(Int.add(a, 1), b) >= 10"},
+            {"a * b + c >= 10", "Int.add(Int.multiply(a, b), c) >= 10"},
+            {"a * b - c * 2 >= 10",
+                "Int.subtract(Int.multiply(a, b), Int.multiply(c, 2)) >= 10"},
+            {"a * b == c", "Int.multiply(a, b) == c"},
+            {"a * a >= 10", "Int.multiply(a, a) >= 10"},
+            {"a * b >= c * 2", "Int.multiply(a, b) >= Int.multiply(c, 2)"},
+            {"a * b + 1 >= c", "Int.add(Int.multiply(a, b), 1) >= c"},
+        };
+        for (String[] pair : pairs) {
+            List<String> seen = new ArrayList<>();
+            for (String spelling : pair) {
+                Compilation compilation = compiled("", "a: Int, b: Int, c: Int",
+                        List.of("guard " + spelling + " else No", "Ok"), "");
+                List<String> lines = linesOf(compilation).stream()
+                        .map(each -> each.axis() + "@" + each.value()).sorted().toList();
+                seen.add(lines + " " + classesOf(measured(compilation)));
+            }
+            assertEquals(seen.get(0), seen.get(1), pair[0] + " | " + pair[1]);
         }
     }
 

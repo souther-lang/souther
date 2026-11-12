@@ -149,9 +149,11 @@ public final class AffineForms {
          *
          * <p>Asked only after the arithmetic's own rule has refused, of the two forms it read: a
          * product with a constant on either side is the arithmetic's, and a caller never says it
-         * again.
+         * again. {@code operation} is the multiplication the forms are the factors of; where this
+         * answers a form the walk tells it {@link #composed} like any other operation.
          */
-        default LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
+        default LinearForm<A> productOf(Core.Binary operation, LinearForm<A> left,
+                                        LinearForm<A> right) {
             return null;
         }
 
@@ -174,6 +176,17 @@ public final class AffineForms {
          */
         default void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands) {
             composed(operation, form);
+        }
+
+        /**
+         * That the walk composed {@code operation}, a product, into {@code form}, which this
+         * reading made of it ({@link #productOf}) from the forms of the operands. Told in place of
+         * {@link #composed} and not beside it, for the one operation the arithmetic composed none
+         * of. A reader with nothing to say of that one apart from the others leaves it as it is.
+         */
+        default void composedAsAProduct(Core operation, LinearForm<A> form,
+                                        List<LinearForm<A>> operands) {
+            composed(operation, form, operands);
         }
 
         /**
@@ -486,8 +499,9 @@ public final class AffineForms {
         }
 
         @Override
-        public LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
-            return of.productOf(left, right);
+        public LinearForm<A> productOf(Core.Binary operation, LinearForm<A> left,
+                                       LinearForm<A> right) {
+            return of.productOf(operation, left, right);
         }
 
         @Override
@@ -498,6 +512,12 @@ public final class AffineForms {
         @Override
         public void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands) {
             of.composed(operation, form, operands);
+        }
+
+        @Override
+        public void composedAsAProduct(Core operation, LinearForm<A> form,
+                                       List<LinearForm<A>> operands) {
+            of.composedAsAProduct(operation, form, operands);
         }
 
         @Override
@@ -1125,8 +1145,9 @@ public final class AffineForms {
         }
 
         @Override
-        public LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
-            return of.productOf(left, right);
+        public LinearForm<A> productOf(Core.Binary operation, LinearForm<A> left,
+                                       LinearForm<A> right) {
+            return of.productOf(operation, left, right);
         }
 
         @Override
@@ -1190,16 +1211,34 @@ public final class AffineForms {
         };
     }
 
-    /** The product of two forms by the arithmetic's rule, and where that rule finds no form, by
-     *  what the caller's atoms say of it. */
-    private static <A, E> Terms.Operated<A> productAsRead(LinearForm<A> left, LinearForm<A> right,
-                                                          Reading<A, E> reading) {
-        Terms.Operated<A> product = Terms.product(left, right);
-        if (!(product instanceof Terms.Operated.NotLinear<A>)) {
-            return product;
+    /**
+     * The product {@code b} writes, composed by the arithmetic's rule and, where that rule finds no
+     * form, by what the caller's atoms say of it ({@link Reading#productOf}), and told of
+     * {@code named} as the walk composed it ({@link #binaryTold}).
+     *
+     * <p>A product the caller's atoms made is told in its own way
+     * ({@link Reading#composedAsAProduct}), here, where it is made: what a reading says of the
+     * operation is then what it made of it, whichever way the operation was written.
+     */
+    private static <A, E> LinearForm<A> productTold(
+            Core.Binary b, Core named, E at, Reading<A, E> reading, Walk<A, E> following,
+            Stop<A, E> stopped) {
+        LinearForm<A> left = formOf(b.left(), at, reading, following, stopped);
+        LinearForm<A> right = formOf(b.right(), at, reading, following, stopped);
+        if (left == null || right == null) {
+            return null;
         }
-        LinearForm<A> asked = reading.productOf(left, right);
-        return asked == null ? product : new Terms.Operated.Form<>(asked);
+        List<LinearForm<A>> operands = List.of(left, right);
+        Terms.Operated<A> product = Terms.product(left, right);
+        if (product instanceof Terms.Operated.NotLinear<A>) {
+            LinearForm<A> made = reading.productOf(b, left, right);
+            if (made != null) {
+                reading.composedAsAProduct(named, made, operands);
+                return made;
+            }
+        }
+        return told(named, operated(b, at, left, right, (_, _) -> product, stopped), reading,
+                operands);
     }
 
     /** Whether {@code call} is a floor remainder whose divisor is a form with a number of the
@@ -1470,8 +1509,8 @@ public final class AffineForms {
             // A scalar multiply by a constant (`Amount * 2`) is linear and a variable factor is
             // not, so a product of two atoms comes back here as one value rather than as arithmetic
             // over two — unless the caller's atoms make it one (`Reading.productOf`).
-            case Core.Binary b when b.op() == BinOp.MUL -> binaryTold(b, named, at, reading, following,
-                    stopped, (left, right) -> productAsRead(left, right, reading));
+            case Core.Binary b when b.op() == BinOp.MUL ->
+                    productTold(b, named, at, reading, following, stopped);
             // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
             // is exact, so a third is what `x / 3` weighs its position by and not the nearest number
             // either operand's type writes — which is why this is arithmetic over a position at all
