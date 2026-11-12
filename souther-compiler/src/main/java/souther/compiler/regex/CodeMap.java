@@ -6,6 +6,8 @@ import java.util.BitSet;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.IntPredicate;
 import java.util.function.UnaryOperator;
 
 import net.unit8.notation199x.pattern.Automaton;
@@ -83,12 +85,29 @@ public final class CodeMap {
      * @param conversion what the run time answers of a text; it answers a text for a text
      */
     public static CodeMap of(UnaryOperator<String> conversion) {
+        return of(conversion, codePoint -> false);
+    }
+
+    /**
+     * The same map, where {@code leftAloneEverywhere} says of a code point that {@code conversion}
+     * answers it as it is wherever it stands, as the tables the conversion is read from say it.
+     *
+     * <p>Such a code point that is a stable starter is sent to itself, alone and beside any letter:
+     * nothing changes it, and a stable starter composes with nothing beside a letter and is put in
+     * no other order. So it is not asked of the conversion. Every other code point is, as
+     * {@link #of(UnaryOperator)} asks it, which is what this is held to.
+     *
+     * @param leftAloneEverywhere whether the conversion answers a code point as it is in every text
+     */
+    public static CodeMap of(UnaryOperator<String> conversion, IntPredicate leftAloneEverywhere) {
         CodePoints stable = StableStarters.all();
         List<CodePoints.Range> alone = new ArrayList<>();
         int aloneFrom = -1;
         // The code points that are sent alone to one stable starter, and where.
         int[] candidates = new int[CodePoints.LAST + 1];
         int[] targets = new int[CodePoints.LAST + 1];
+        // Those of them that are sent to themselves beside any letter as well, by the tables.
+        BitSet settled = new BitSet();
         int found = 0;
         // What the code points outside the domain are answered with, alone and beside a letter.
         BitSet outside = new BitSet();
@@ -98,6 +117,16 @@ public final class CodeMap {
                     alone.add(new CodePoints.Range(aloneFrom, codePoint - 1));
                     aloneFrom = -1;
                 }
+                continue;
+            }
+            if (leftAloneEverywhere.test(codePoint) && stable.has(codePoint)) {
+                if (aloneFrom < 0) {
+                    aloneFrom = codePoint;
+                }
+                settled.set(found);
+                candidates[found] = codePoint;
+                targets[found] = codePoint;
+                found++;
                 continue;
             }
             String one = Character.toString(codePoint);
@@ -123,8 +152,22 @@ public final class CodeMap {
         if (aloneFrom >= 0) {
             alone.add(new CodePoints.Range(aloneFrom, CodePoints.LAST));
         }
-        BitSet dependsOnWhatStandsBeside = dependingOnWhatStandsBeside(conversion, candidates,
-                targets, found);
+        // Only the rest are asked beside a letter; a settled one depends on nothing beside it.
+        int[] asked = new int[found - settled.cardinality()];
+        int[] askedTargets = new int[asked.length];
+        int[] askedAt = new int[asked.length];
+        int toAsk = 0;
+        for (int at = 0; at < found; at++) {
+            if (!settled.get(at)) {
+                asked[toAsk] = candidates[at];
+                askedTargets[toAsk] = targets[at];
+                askedAt[toAsk] = at;
+                toAsk++;
+            }
+        }
+        BitSet dependsOnWhatStandsBeside = new BitSet(found);
+        dependingOnWhatStandsBeside(conversion, asked, askedTargets, toAsk).stream()
+                .forEach(each -> dependsOnWhatStandsBeside.set(askedAt[each]));
         for (int at = dependsOnWhatStandsBeside.nextSetBit(0); at >= 0;
                 at = dependsOnWhatStandsBeside.nextSetBit(at + 1)) {
             answeredBesideALetter(conversion, candidates[at], targets[at], outside);
@@ -193,6 +236,20 @@ public final class CodeMap {
             from = set.nextSetBit(past);
         }
         return new CodePoints(ranges);
+    }
+
+    /** The same map: the same code points sent to the same ones, the same left be, and the same
+     *  answered outside the domain. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof CodeMap that && runs.equals(that.runs)
+                && leftAlone.equals(that.leftAlone)
+                && answeredOutsideTheDomain.equals(that.answeredOutsideTheDomain);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(runs, leftAlone, answeredOutsideTheDomain);
     }
 
     /**
