@@ -132,6 +132,7 @@ import souther.compiler.semantics.LawArguments;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.ResultRange;
@@ -3595,6 +3596,14 @@ final class Pullback {
         record AnEntry(DecisionSubject key) implements ElementAt {}
 
         /**
+         * A key of a map held at a position: an element of the list of the map's keys, standing
+         * at the place the keys stand at.
+         *
+         * @param key where the keys of the map stand
+         */
+        record AKey(DecisionSubject key) implements ElementAt {}
+
+        /**
          * Any element of what {@code operation} answered, of which nothing is known but the side
          * every element of that answer comes out on ({@link Derivation.EveryElementMeetsIt}). It
          * stands at no position, and is no value written out.
@@ -5395,8 +5404,17 @@ final class Pullback {
                                     LinearForm.atom(new DecisionAtom.OfTheInput(
                                             new NumericTerm.ValueOf(container.element())));
                             case ElementAt.AValue(Core value, InputReads in) -> formOf(value, in);
+                            case ElementAt.AKey(DecisionSubject.AnInput(TermPath key, var _)) ->
+                                    LinearForm.atom(new DecisionAtom.OfTheInput(
+                                            new NumericTerm.ValueOf(key)));
                             case null, default -> null;
                         };
+                case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) ->
+                        elements.get(at) instanceof ElementAt.AtASubject(
+                                DecisionSubject.AnInput(TermPath map, var _))
+                                ? LinearForm.atom(new DecisionAtom.OfTheInput(
+                                        new NumericTerm.ValueOf(map.key())))
+                                : null;
                 default -> null;
             };
             return form != null
@@ -5579,6 +5597,7 @@ final class Pullback {
                             case ElementAt.AFiledElement(DecisionSubject list, Core.Block _,
                                                          boolean _) ->
                                     observedAt(list.element(), aspect);
+                            case ElementAt.AKey(DecisionSubject key) -> observedAt(key, aspect);
                             // Of an element known only by the side every element of an answer
                             // comes out on, that side is known and no other.
                             case ElementAt.OfAnAnswerEveryElementOfWhichIs(var operation,
@@ -5648,7 +5667,7 @@ final class Pullback {
                 case ElementAt.AFiledElement(DecisionSubject list, Core.Block key, boolean _) ->
                         keyOfTheFiledElement(list, key);
                 case ElementAt.AnEntry(DecisionSubject key) -> key;
-                case ElementAt.AValue _, ElementAt.APiece _,
+                case ElementAt.AValue _, ElementAt.APiece _, ElementAt.AKey _,
                      ElementAt.OfAnAnswerEveryElementOfWhichIs _ -> null;
                 case null -> null;
             };
@@ -5701,6 +5720,7 @@ final class Pullback {
                                             instanceof PathResolution.At(TermPath held)
                                             ? new DecisionSubject.AnInput(held)
                                             : answerAt(value, in);
+                            case ElementAt.AKey(DecisionSubject key) -> key;
                             case ElementAt.APiece _, ElementAt.AnEntry _,
                                  ElementAt.OfAnAnswerEveryElementOfWhichIs _ -> null;
                         };
@@ -6370,6 +6390,10 @@ final class Pullback {
                     if (filed != null) {
                         return filed;
                     }
+                    Located part = partOfAMap(at, pending, located, outerEach, outerHanded);
+                    if (part != null) {
+                        return part;
+                    }
                 }
                 if (walk == null) {
                     Located emitting = counting || outerEach != null ? null
@@ -6619,6 +6643,33 @@ final class Pullback {
             return StringPredicates.statedBy(e, read.rules().symbols(),
                     text -> folded(text, reads).orElse(null) instanceof String written
                             ? written : null);
+        }
+
+        /**
+         * Where the elements of {@code container} stand, where it lists the keys or the values of a
+         * map standing at a position of the input: the container being the map, and each element
+         * the place its keys or its values stand at. Null where it lists neither of a map there.
+         */
+        private Located partOfAMap(Denotation container, List<Kept> pending, List<Kept> located,
+                                   ElementAt outerEach, Denotation outerHanded) {
+            Denotation standing = container.at().standing(container.value(),
+                    read.rules().symbols(), read.rules().newtypes());
+            AnOperationApplied listing = AnOperationApplied.of(standing.value());
+            BoundOperationFacts.Listed listed = listing == null ? null
+                    : DefaultBoundOperationFacts.get().listsAPartOf(listing.operation());
+            if (listed == null || listed.part() == MapPart.ENTRIES) {
+                return null;
+            }
+            DecisionSubject map = subjectOf(new Denotation(listing.argument(listed.map()),
+                    standing.at()));
+            if (!(map instanceof DecisionSubject.AnInput)) {
+                return null;
+            }
+            ElementAt each = listed.part() == MapPart.KEYS ? new ElementAt.AKey(map.key())
+                    : new ElementAt.AtASubject(map);
+            settle(pending, each, null, located);
+            return outerEach == null ? new Located(map, null, each, null, located, null)
+                    : new Located(map, null, outerEach, outerHanded, located, null);
         }
 
         /**
@@ -7218,6 +7269,7 @@ final class Pullback {
                                         case ElementAt.AFiledElement(DecisionSubject list,
                                                                      Core.Block _, boolean _) ->
                                                 sizedAt(list.element());
+                                        case ElementAt.AKey(DecisionSubject key) -> sizedAt(key);
                                         case ElementAt.APiece _, ElementAt.AnEntry _,
                                              ElementAt.OfAnAnswerEveryElementOfWhichIs _ ->
                                                 new Sized.NotSized(new WhyUnread.AtNoPosition(
@@ -7453,6 +7505,8 @@ final class Pullback {
                             in.pathOf(value, read.rules().newtypes())
                                     instanceof PathResolution.At(TermPath inside)
                                     && inside.isAtOrUnder(held.element()) ? inside : null;
+                    case ElementAt.AKey(DecisionSubject.AnInput(TermPath key, var _)) -> key;
+                    case ElementAt.AKey(DecisionSubject.AnAnswer _) -> null;
                     case ElementAt.APiece _, ElementAt.AnEntry _,
                          ElementAt.OfAnAnswerEveryElementOfWhichIs _ -> null;
                 };

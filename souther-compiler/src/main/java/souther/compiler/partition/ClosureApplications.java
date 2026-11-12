@@ -98,14 +98,15 @@ sealed interface ClosureApplications {
             elements = elements.map(List::copyOf);
         }
 
-        /** The same, inside one more closure made on every element of {@code position}, or not
-         *  shown where that is empty. */
-        MadeOnEvery inside(Optional<TermPath> position) {
-            if (elements.isEmpty() || position.isEmpty()) {
+        /** The same, inside one more closure made on every element standing at
+         *  {@code walked} — the elements of a position, or the keys of a map — or not shown where
+         *  that is empty. */
+        MadeOnEvery inside(Optional<TermPath> walked) {
+            if (elements.isEmpty() || walked.isEmpty()) {
                 return NOT_SHOWN;
             }
             List<TermPath> deeper = new ArrayList<>(elements.get());
-            deeper.add(position.get().element());
+            deeper.add(walked.get());
             return new MadeOnEvery(Optional.of(deeper));
         }
 
@@ -480,7 +481,7 @@ sealed interface ClosureApplications {
         return ElementsHeldFrom.of(containers.getFirst(), read)
                 .filter(held -> held.where() instanceof Proposition.Always(boolean always)
                         && always)
-                .map(ElementsHeldFrom::position);
+                .map(ElementsHeldFrom::elements);
     }
 
     /**
