@@ -284,7 +284,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
     }
 
     /** {@code depth} values added on each side of the two sets. */
-    private static String insertsOnBothSides(int depth) {
+    static String insertsOnBothSides(int depth) {
         StringBuilder parameters = new StringBuilder();
         StringBuilder names = new StringBuilder();
         String seated = "o.seated";
@@ -303,7 +303,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
     }
 
     /** {@code depth} values inserted one into another, under a cap {@code depth} higher. */
-    private static String aChainOfInserts(int depth) {
+    static String aChainOfInserts(int depth) {
         StringBuilder parameters = new StringBuilder();
         StringBuilder names = new StringBuilder();
         String taken = "s.taken";
@@ -325,7 +325,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
     }
 
     /** A set united with itself {@code depth} times over. */
-    private static String aSetUnitedWithItself(int depth) {
+    static String aSetUnitedWithItself(int depth) {
         StringBuilder lets = new StringBuilder();
         for (int i = 1; i <= depth; i++) {
             lets.append("    let s").append(i).append(" = Set.union(s").append(i - 1)
@@ -341,28 +341,30 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
                 """.formatted(lets, depth);
     }
 
-    /** How many rules the closures worked out held between them while {@code source} was read. */
-    private static long rulesClosedReading(String source) {
-        long before = ClosedState.rulesClosed();
+    /** How many times a premise was looked at for a question while {@code source} was read. */
+    private static long premisesWorkedReading(String source) {
+        long before = ClosedState.premisesWorked();
         warnings(source);
-        return ClosedState.rulesClosed() - before;
+        return ClosedState.premisesWorked() - before;
     }
 
     /**
-     * What a program is closed over grows with how many it says of a kind and not with how many
-     * pairs of them there are.
+     * What a program costs grows with how many it says of a kind and not with how many pairs of
+     * them there are.
      *
-     * <p>A closure is made for each place a path has got to and holds the rules said so far, so the
-     * rules closed between them grow as the square of the depth. Reading the pairs of what is said
-     * as well would take them to the cube, which is more than four times as many for twice the
-     * depth. Counted rather than timed: that is a shape, and how long it takes is the machine's.
+     * <p>A closure is made for each place a path has got to, holds the rules said so far, and asks
+     * every premise for each position of each of them, so the premises looked at between them grow
+     * as the cube of the depth: twice the depth is eight times as many. Reading the pairs of what is
+     * said as well takes them to the fourth power, which is sixteen times as many, and the bound
+     * sits between the two. Counted rather than timed: that is a shape, and how long it takes is
+     * the machine's.
      */
-    private static void assertGrowsNoFasterThanTheSquare(IntFunction<String> program) {
-        long shallow = rulesClosedReading(program.apply(4));
-        long twiceAsDeep = rulesClosedReading(program.apply(8));
-        assertTrue(twiceAsDeep < 5 * shallow, "twice the depth closed " + twiceAsDeep
-                + " rules where the shallower closed " + shallow
-                + ", which is more than the square of the depth allows");
+    private static void assertGrowsNoFasterThanTheCube(IntFunction<String> program) {
+        long shallow = premisesWorkedReading(program.apply(4));
+        long twiceAsDeep = premisesWorkedReading(program.apply(8));
+        assertTrue(twiceAsDeep < 12 * shallow, "twice the depth looked at " + twiceAsDeep
+                + " premises where the shallower looked at " + shallow
+                + ", which is more than the cube of the depth allows");
     }
 
     /** Values added on both sides are read one side at a time, so the counts named grow with how
@@ -370,7 +372,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
     @Test
     void manyInsertsOnBothSidesAreReadOneSideAtATime() {
         assertEquals(List.of("E2011"), warnings(insertsOnBothSides(4)));
-        assertGrowsNoFasterThanTheSquare(AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest
+        assertGrowsNoFasterThanTheCube(AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest
                 ::insertsOnBothSides);
     }
 
@@ -380,7 +382,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
     @Test
     void aChainOfInsertsHoldsAtMostOneMoreForEach() {
         assertEquals(List.of(), warnings(aChainOfInserts(4)));
-        assertGrowsNoFasterThanTheSquare(
+        assertGrowsNoFasterThanTheCube(
                 AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest::aChainOfInserts);
     }
 
@@ -390,7 +392,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
     @Test
     void aSetUnitedWithItselfIsReadOnceForEachUnion() {
         assertEquals(List.of(), warnings(aSetUnitedWithItself(4)));
-        assertGrowsNoFasterThanTheSquare(
+        assertGrowsNoFasterThanTheCube(
                 AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest
                         ::aSetUnitedWithItself);
     }
@@ -446,7 +448,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
                 """));
     }
 
-    private static List<String> warnings(String source) {
+    static List<String> warnings(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()

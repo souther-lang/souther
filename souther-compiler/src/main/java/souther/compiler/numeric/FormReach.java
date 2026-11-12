@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 
 /**
@@ -127,6 +128,20 @@ final class FormReach<A> {
      */
     private long merged;
     private long heldAgainstTheEnds;
+
+    /**
+     * How many times, over every reading, a premise has been looked at for a question: once for each
+     * premise a question runs over, and once more for each sum taken of one, each answer moved from
+     * the work before and each premise merged into a form. What a question costs is the premises it
+     * visits and what is done to each, so this is what a test holds to growing with the rules and
+     * not with the rules and the questions together. Counted rather than timed: that is a shape and
+     * not a speed.
+     */
+    private static final LongAdder PREMISES_WORKED = new LongAdder();
+
+    static long premisesWorked() {
+        return PREMISES_WORKED.sum();
+    }
 
     private FormReach(List<AffineConstraint<A>> rules,
                       Collection<AffineConstraint.HalfSpace<A>> derived, Box<A> ends,
@@ -619,6 +634,7 @@ final class FormReach<A> {
         into.withoutEnd[place] = missing;
         into.notReached[place] = strict;
         carriedOver++;
+        PREMISES_WORKED.increment();
         workOut.moved++;
     }
 
@@ -644,6 +660,7 @@ final class FormReach<A> {
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
+        PREMISES_WORKED.add(all.size());
         for (int place = 0; place < all.size(); place++) {
             ExactCut residual;
             switch (held.kinds[place]) {
@@ -659,6 +676,7 @@ final class FormReach<A> {
                         continue;
                     }
                     merged++;
+                    PREMISES_WORKED.increment();
                     residual = fromTheEndsWithout(each.half(), coefs, constant);
                 }
                 case RoundWork.ASKED -> residual =
@@ -799,6 +817,7 @@ final class FormReach<A> {
          */
         void fillWhole(RoundWork.Candidates into, int place) {
             sumsTaken++;
+            PREMISES_WORKED.increment();
             if (!held || weighed == 2) {
                 into.kinds[place] = RoundWork.ASKED;
                 return;
@@ -817,6 +836,7 @@ final class FormReach<A> {
          */
         void fill(A atom, RoundWork.Candidates into, int place) {
             sumsTaken++;
+            PREMISES_WORKED.increment();
             into.kinds[place] = RoundWork.ASKED;
             if (!held) {
                 return;
@@ -903,6 +923,7 @@ final class FormReach<A> {
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
         int[] left = without == null ? NO_PLACES : placesLeftOutWith(without);
+        PREMISES_WORKED.add(premises().each().size());
         for (Premise<A> each : premises().each()) {
             if (isAmong(left, each.place())) {
                 continue;
@@ -919,6 +940,7 @@ final class FormReach<A> {
                 continue;
             }
             merged++;
+            PREMISES_WORKED.increment();
             // A model's own decimals can put this premise's bound, or one of its own
             // coefficients, far enough apart in scale from what it is being merged with that the
             // exact arithmetic cannot hold the sum. Where that happens this premise composes no

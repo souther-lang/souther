@@ -119,13 +119,11 @@ public final class ClosedState<A> {
         return PRODUCTS_MADE.get();
     }
 
-    /** How many rules the closures worked out have held between them, for a test holding how much a
-     *  program is closed over to how many rules it says and not how many pairs of them: that is a
-     *  shape and not a speed. */
-    private static final AtomicLong RULES_CLOSED = new AtomicLong();
-
-    public static long rulesClosed() {
-        return RULES_CLOSED.get();
+    /** How many times a premise has been looked at for a question over every closure, for a test
+     *  holding what a program costs to how many rules it says and not how many pairs of them: that
+     *  is a shape and not a speed. See {@link FormReach#premisesWorked}. */
+    public static long premisesWorked() {
+        return FormReach.premisesWorked();
     }
 
     /** Whether the rounds ran out before the box stopped moving. */
@@ -257,7 +255,6 @@ public final class ClosedState<A> {
                                              Function<A, Granularity> spacing,
                                              CanonicalOrder<A> order, ClosureWork<A> parent,
                                              ClosureWork<A> into) {
-        RULES_CLOSED.addAndGet(constraints.size());
         DifferenceBounds<A> differences = DifferenceBounds.over(constraints, order);
         if (differences.holdsNothing()) {
             return empty(differences);
