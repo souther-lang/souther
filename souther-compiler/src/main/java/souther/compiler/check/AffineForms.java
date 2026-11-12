@@ -149,9 +149,11 @@ public final class AffineForms {
          *
          * <p>Asked only after the arithmetic's own rule has refused, of the two forms it read: a
          * product with a constant on either side is the arithmetic's, and a caller never says it
-         * again.
+         * again. {@code operation} is the multiplication the forms are the factors of; where this
+         * answers a form the walk tells it {@link #composed} like any other operation.
          */
-        default LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
+        default LinearForm<A> productOf(Core.Binary operation, LinearForm<A> left,
+                                        LinearForm<A> right) {
             return null;
         }
 
@@ -486,8 +488,9 @@ public final class AffineForms {
         }
 
         @Override
-        public LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
-            return of.productOf(left, right);
+        public LinearForm<A> productOf(Core.Binary operation, LinearForm<A> left,
+                                       LinearForm<A> right) {
+            return of.productOf(operation, left, right);
         }
 
         @Override
@@ -1124,8 +1127,9 @@ public final class AffineForms {
         }
 
         @Override
-        public LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
-            return of.productOf(left, right);
+        public LinearForm<A> productOf(Core.Binary operation, LinearForm<A> left,
+                                       LinearForm<A> right) {
+            return of.productOf(operation, left, right);
         }
 
         @Override
@@ -1191,13 +1195,14 @@ public final class AffineForms {
 
     /** The product of two forms by the arithmetic's rule, and where that rule finds no form, by
      *  what the caller's atoms say of it. */
-    private static <A, E> Terms.Operated<A> productAsRead(LinearForm<A> left, LinearForm<A> right,
+    private static <A, E> Terms.Operated<A> productAsRead(Core.Binary operation,
+                                                          LinearForm<A> left, LinearForm<A> right,
                                                           Reading<A, E> reading) {
         Terms.Operated<A> product = Terms.product(left, right);
         if (!(product instanceof Terms.Operated.NotLinear<A>)) {
             return product;
         }
-        LinearForm<A> asked = reading.productOf(left, right);
+        LinearForm<A> asked = reading.productOf(operation, left, right);
         return asked == null ? product : new Terms.Operated.Form<>(asked);
     }
 
@@ -1470,7 +1475,7 @@ public final class AffineForms {
             // not, so a product of two atoms comes back here as one value rather than as arithmetic
             // over two — unless the caller's atoms make it one (`Reading.productOf`).
             case Core.Binary b when b.op() == BinOp.MUL -> binaryTold(b, named, at, reading, following,
-                    stopped, (left, right) -> productAsRead(left, right, reading));
+                    stopped, (left, right) -> productAsRead(b, left, right, reading));
             // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
             // is exact, so a third is what `x / 3` weighs its position by and not the nearest number
             // either operand's type writes — which is why this is arithmetic over a position at all

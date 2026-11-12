@@ -11767,7 +11767,8 @@ final class Pullback {
                 // What a division by a written number leaves of a form of the input's numbers,
                 // which is the same number however the comparison it is met in is written: in it,
                 // behind a name, or with arithmetic round it.
-                Quantity.RemainderOfADividend remainder = remainderAt(node, at);
+                Quantity.RemainderOfADividend remainder =
+                        stoppedForANonConstantDivisor(node, inside) ? null : remainderAt(node, at);
                 if (remainder != null) {
                     return LinearForm.atom(remainder);
                 }
@@ -14403,6 +14404,19 @@ final class Pullback {
         }
         return LinearForm.atom(
                 new Quantity.RemainderByAnInput(written.operation(), dividend, divisor));
+    }
+
+    /**
+     * Whether the arithmetic stopped at {@code node} for being a floor remainder by a value that
+     * is not a constant. The walk composed the divisor to find that out, so {@link #remainderAt},
+     * which reads a remainder by a constant, has nothing to ask of it again.
+     */
+    private static boolean stoppedForANonConstantDivisor(
+            Core node, AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
+        return inside != null && inside.node() == Core.withoutStanding(node)
+                && inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
+                        NonAffineOperation operation, var _)
+                && operation == NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE;
     }
 
     /** Whether the reading counts {@code term} in whole numbers. */

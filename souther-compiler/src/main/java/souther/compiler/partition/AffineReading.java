@@ -468,9 +468,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** What a total over what an operation makes of a list written out at it comes to,
          *  application by application. */
         Attempt totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at);
-
-        /** What a product of two forms of numbers comes to as a number of its own. */
-        Attempt productOfTwoForms(Core node, InputReads at);
     }
 
     /**
@@ -538,6 +535,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  step is read ({@link #walkOfWhatIsWrittenOut}). */
             private final Map<BindingId, LinearForm<NumericTerm>> carried = new HashMap<>();
 
+            /** The multiplications this reading made a number of their own of
+             *  ({@link #productOf}), which the walk then tells it of. */
+            private final Set<Core.Binary> productsMade = new HashSet<>();
+
             /** What a run works out to reach a value, asked once for each value this reading
              *  asks it of. */
             private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
@@ -557,7 +558,64 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void composed(Core operation, LinearForm<NumericTerm> form,
                                  List<LinearForm<NumericTerm>> operands) {
+                if (productsMade.contains(operation)) {
+                    tellProduct((Core.Binary) operation, form);
+                    return;
+                }
                 tell(operation, form, AffineForms.whereItAnswers(operation));
+            }
+
+            /**
+             * A multiplication {@link #productOf} made a number of its own of, told as the
+             * operation it is. The product is the number the factors come to, which is not held to
+             * an {@code Int} by being typed as one, so a run stops where that number passes the
+             * ends, whatever the form's range says of the atom. A product of decimals is a decimal
+             * and stops no run.
+             */
+            private void tellProduct(Core.Binary mul, LinearForm<NumericTerm> atom) {
+                if (mul.type() == Type.DECIMAL) {
+                    return;
+                }
+                if (WhereAnOperatorAnswers.ofAnOperator(BinOp.MUL, Type.INT)
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
+                    told.add(mul, UndividedByARelation.IntOperation.overTheInput(atom,
+                            held.least(), held.greatest(), told.workedOutOf(mul)));
+                } else {
+                    told.exact = false;
+                }
+            }
+
+            /**
+             * What two numbers of the input come to multiplied, where the arithmetic stopped at the
+             * product itself: one number of its own, whichever factor was written first, made of the
+             * forms the walk read the factors as. The walk tells the multiplication as the operation
+             * it is ({@link #composed}), so a run stops at it where that number passes the ends of
+             * its type.
+             */
+            @Override
+            public LinearForm<NumericTerm> productOf(Core.Binary operation,
+                                                     LinearForm<NumericTerm> left,
+                                                     LinearForm<NumericTerm> right) {
+                if (told.productsStop
+                        || (operation.type() != Type.INT && operation.type() != Type.DECIMAL)) {
+                    return null;
+                }
+                // A factor over an expression held aside has no product of its own: nothing here
+                // can say what the product's order is, so the product as a whole is held aside.
+                if (stoppedAt != null
+                        && (!stoppedAt.heldIn(left).isEmpty()
+                        || !stoppedAt.heldIn(right).isEmpty())) {
+                    return null;
+                }
+                NumericTerm.ProductOf.Signed made = NumericTerm.ProductOf.signed(left, right);
+                if (made == null) {
+                    return null;
+                }
+                NumericTerm.ProductOf.Signed product =
+                        ProductDeclarations.admitted(made, ofTheInput);
+                named.add(product.product());
+                productsMade.add(operation);
+                return product.asAForm();
             }
 
             /**
@@ -1055,13 +1113,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     told.readByATerm(node);
                     return new AffineForms.Leaf.Form<>(ofAField);
                 }
-                // What two numbers of the input come to multiplied, where the arithmetic stopped at
-                // the product itself: one number, whichever factor was written first.
-                if (Core.withoutStanding(node) instanceof Core.Binary
-                        && tried(apart -> apart.productOfTwoForms(node, at))
-                        instanceof Attempt.Form(var product)) {
-                    return new AffineForms.Leaf.Form<>(product);
-                }
                 AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> keptAtAFigure = null;
                 // Each reading below is of a call the library's operations keep, and asked of
                 // nothing else, since what it puts back where it reads nothing is copied first.
@@ -1163,55 +1214,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                     new AffineForms.Halt.AnArgumentStopped<>(inside));
                     case Attempt.PartStopped _, Attempt.NotApplicable _, Attempt.Form _ -> null;
                 };
-            }
-
-            /**
-             * The product of two forms of whole numbers {@code node} is, as a number of its own, or
-             * null where it is no such product: a form of the first and a form of the second, each
-             * read as any is, the numbers of the two apart.
-             *
-             * <p>The multiplication is told as the operation it is: the product is a number of its
-             * own, so a run stops at it where that number passes the ends of an {@code Int}.
-             */
-            @Override
-            public Attempt productOfTwoForms(Core node, InputReads at) {
-                LinearForm<NumericTerm> product = productFormOf(node, at);
-                return product == null ? new Attempt.NotApplicable() : new Attempt.Form(product);
-            }
-
-            private LinearForm<NumericTerm> productFormOf(Core node, InputReads at) {
-                if (told.productsStop || !(Core.withoutStanding(node) instanceof Core.Binary mul)
-                        || mul.op() != BinOp.MUL
-                        || (mul.type() != Type.INT && mul.type() != Type.DECIMAL)) {
-                    return null;
-                }
-                LinearForm<NumericTerm> left = composedBy(mul.left(), at, this);
-                LinearForm<NumericTerm> right =
-                        left == null ? null : composedBy(mul.right(), at, this);
-                NumericTerm.ProductOf.Signed made =
-                        right == null ? null : NumericTerm.ProductOf.signed(left, right);
-                if (made == null) {
-                    return null;
-                }
-                NumericTerm.ProductOf.Signed product =
-                        ProductDeclarations.admitted(made, ofTheInput);
-                named.add(product.product());
-                LinearForm<NumericTerm> atom = product.asAForm();
-                if (mul.type() == Type.DECIMAL) {
-                    // A product of decimals is a decimal, and stops no run.
-                    return atom;
-                }
-                // Told whatever the type of the number says of it: the product is the number the
-                // factors come to, which is not held to an Int by being typed as one, and a run
-                // stops where it passes the ends.
-                if (WhereAnOperatorAnswers.ofAnOperator(BinOp.MUL, Type.INT)
-                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
-                    told.add(mul, UndividedByARelation.IntOperation.overTheInput(atom,
-                            held.least(), held.greatest(), told.workedOutOf(mul)));
-                } else {
-                    told.exact = false;
-                }
-                return atom;
             }
 
             /**
