@@ -6,10 +6,13 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * A stop an operation ends a run with, told through a name it is bound to or inside a part of the
@@ -63,6 +66,25 @@ class AStopThroughALetOrInsideAnArmLeavesOnlyItsOwnPlacesUnreadTest {
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /**
+     * Each name reads the one before it twice, so a number worked out once for each way a name is
+     * reached takes twice as long at every binding added; at this depth that is no time at all.
+     */
+    @Test
+    void aChainOfNamesEachReadingTheOneBeforeTwiceIsWorkedOutOncePerName() {
+        StringBuilder before = new StringBuilder("let a0 = 1 / p.x");
+        int depth = 30;
+        for (int i = 1; i <= depth; i++) {
+            before.append("\n    let a").append(i).append(" = a").append(i - 1).append(" * a")
+                    .append(i - 1);
+        }
+        before.append("\n    let y = Rational.toInt(DOWN, a").append(depth).append(")");
+        Model chain = new Model("a chain of names", before.toString());
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
+                () -> report(chain, UNRELATED, Adequacy.Level.ALL));
+        assertFalse(report.contains("not read:"), report);
     }
 
     @Test

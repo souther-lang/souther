@@ -2085,6 +2085,17 @@ final class Pullback {
      * than what it divides ({@link FormRange#quotientByAWholeNumber}).
      */
     private FormRange exactRangeOf(Core e, InputReads reads) {
+        return exactRangeOf(e, reads, new HashMap<>());
+    }
+
+    /**
+     * The same, with {@code known} the numbers the names met on the way to {@code e} come to, each
+     * with the reading it was worked out in. A name bound to a value of names bound to values is
+     * read once for each way it is reached, which doubles at each binding that reads the one
+     * before it twice; the answer is of the name and the reading, so it is worked out once.
+     */
+    private FormRange exactRangeOf(Core e, InputReads reads,
+                                   Map<BindingId, RangeOfAName> known) {
         DeclaredBounds.Range leftByTheRules = DeclaredBounds.ofTheValueReadOff(e, read.rules(),
                 read.rules().newtypes(), read.ruleReading());
         FormRange ofTheNewtype = leftByTheRules == null ? null
@@ -2092,14 +2103,14 @@ final class Pullback {
         if (AffineForms.outcome(e, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
             FormRange composed = FormRange.ofNumbers(form, read,
-                    name -> exactRangeOfAName(name, reads));
+                    name -> exactRangeOfAName(name, reads, known));
             if (composed != null) {
                 return ofTheNewtype == null ? composed : composed.meet(ofTheNewtype);
             }
         }
         RoundedToAWholeNumber.Written rounding = writtenRounding(e, reads);
         if (rounding != null) {
-            FormRange before = exactRangeOf(rounding.value(), reads);
+            FormRange before = exactRangeOf(rounding.value(), reads, known);
             ExactRatio least = before == null ? null : rounding.roundedFrom(before.least());
             ExactRatio greatest = before == null ? null : rounding.roundedFrom(before.greatest());
             return least == null || greatest == null ? null : new FormRange(least, greatest);
@@ -2110,10 +2121,10 @@ final class Pullback {
                     ? FormRange.ofTheWholeNumbersIn(whatTheLibraryBounds(call, reads)) : null;
         }
         if (here instanceof Core.Read name) {
-            return exactRangeOfAName(name.binding(), reads);
+            return exactRangeOfAName(name.binding(), reads, known);
         }
         if (here instanceof Core.LetIn li) {
-            return exactRangeOf(li.body(), quantities().inside(li, reads));
+            return exactRangeOf(li.body(), quantities().inside(li, reads), known);
         }
         if (here instanceof Core.FieldAccess || here instanceof Core.FieldProjection) {
             return ofTheNewtype;
@@ -2123,22 +2134,28 @@ final class Pullback {
         // has; whether the attempt itself stops a run is asked of the stops, not of this.
         if (here instanceof Core.If || here instanceof Core.Match
                 || here instanceof Core.IfConstructed) {
-            return exactRangeOfTheArms(Choice.of(here), reads);
+            return exactRangeOfTheArms(Choice.of(here), reads, known);
         }
         if (here instanceof Core.Binary quotient && quotient.op() == BinOp.DIV
                 && quotient.right().type() == Type.INT) {
-            return FormRange.quotientByAWholeNumber(exactRangeOf(quotient.left(), reads));
+            return FormRange.quotientByAWholeNumber(
+                    exactRangeOf(quotient.left(), reads, known));
         }
         if (!isAnOperator(here)) {
             return null;
         }
         return switch (here) {
-            case Core.Neg negated -> FormRange.negated(exactRangeOf(negated.operand(), reads));
+            case Core.Neg negated -> FormRange.negated(
+                    exactRangeOf(negated.operand(), reads, known));
             case Core.Binary binary -> FormRange.combined(binary.op(),
-                    exactRangeOf(binary.left(), reads), exactRangeOf(binary.right(), reads));
+                    exactRangeOf(binary.left(), reads, known),
+                    exactRangeOf(binary.right(), reads, known));
             default -> null;
         };
     }
+
+    /** What a name comes to, worked out in {@code at}, which is the reading it holds in. */
+    private record RangeOfAName(InputReads at, FormRange range) {}
 
     /**
      * The numbers a name bound to a value comes to, which are those of the value it is given where
@@ -2147,13 +2164,25 @@ final class Pullback {
      * not of what the arithmetic composes the name as: a value that composes as no form has no
      * form to read, and the numbers it lies between are no less known for that.
      */
-    private FormRange exactRangeOfAName(BindingId name, InputReads reads) {
+    private FormRange exactRangeOfAName(BindingId name, InputReads reads,
+                                        Map<BindingId, RangeOfAName> known) {
         FormRange ofAStep = operated.stepsNames.of(name);
         if (ofAStep != null) {
             return ofAStep;
         }
         Denotation bound = reads.boundValue(name);
-        return bound == null ? null : exactRangeOf(bound.value(), bound.at());
+        if (bound == null) {
+            return null;
+        }
+        // Held to the reading and not to the name alone: a reading that chose an arm may leave the
+        // name a narrower run than the one that did not.
+        RangeOfAName already = known.get(name);
+        if (already != null && already.at() == bound.at()) {
+            return already.range();
+        }
+        FormRange range = exactRangeOf(bound.value(), bound.at(), known);
+        known.put(name, new RangeOfAName(bound.at(), range));
+        return range;
     }
 
     /**
@@ -2161,11 +2190,12 @@ final class Pullback {
      * what each of its arms comes to, an arm read where the choice of it binds its names. Null
      * where any arm's numbers are not known, since the arm may be the one a run takes.
      */
-    private FormRange exactRangeOfTheArms(Choice choice, InputReads reads) {
+    private FormRange exactRangeOfTheArms(Choice choice, InputReads reads,
+                                          Map<BindingId, RangeOfAName> known) {
         FormRange joined = null;
         for (Choice.Arm arm : choice.arms()) {
             FormRange of = exactRangeOf(arm.answers(), reads.choosing(arm.decidedBy(),
-                    read.rules().symbols(), read.rules().newtypes()));
+                    read.rules().symbols(), read.rules().newtypes()), known);
             if (of == null) {
                 return null;
             }
