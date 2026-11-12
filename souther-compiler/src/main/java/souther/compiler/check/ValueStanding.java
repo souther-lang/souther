@@ -121,6 +121,11 @@ public final class ValueStanding {
          * unless the environment can say less: two environments in which the name stands for the
          * one thing, read the one way, give it one answer, and a reader keyed on each environment
          * would work that answer out again in every one of them.
+         *
+         * <p>What is answered under one key is shared by every read that gives it: the value the name
+         * stands for, and whatever else the reader needs of the environment to read that value, are
+         * the same under it. A key that only tells bindings apart is too wide where an environment
+         * can give one binding two meanings.
          */
         default Object standingOf(Core.Read read, E at) {
             return at;

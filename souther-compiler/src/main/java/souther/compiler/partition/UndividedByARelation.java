@@ -3834,13 +3834,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link StringsInsideStrings}). What a side comes to is the conversion done to it, which is
      * exactly a map on the strings it is exactly one for ({@link CodeMap}); the strings it is not
      * exact on come to strings of the code points the conversion leaves, and nothing narrower is
-     * said of them.
+     * said of them for a string made from them.
      *
      * <p>Where this relation is no string inside another, it is read only as the equality or
      * denial of two strings of positions the caller has shown independent
      * ({@link #stringsAPartnerCanHold}): the strings of this side are those whose conversion is
      * one the other side comes to, which is the same machine with nothing standing round the
-     * other side's strings.
+     * other side's strings. Each string is then asked about as it stands, so the strings a single
+     * conversion leaves as they stand are shown as well, each being its own answer
+     * ({@link WhatAConversionAnswers#forEquality}).
      */
     private StringsAPartnerCanHold stringsThroughConversions(
             boolean hereIsFirst, ConvertedText mine, ConvertedText theirs, ValueSet theirStrings,
@@ -3852,42 +3854,41 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
         StringsInsideStrings.Where where = kind.inside();
         boolean standsInside = where != null;
-        CodeMap theirMap = theirs.through().equals(CaseMapping.NONE) ? null
-                : CaseMaps.of(theirs.through());
-        // The strings the other side comes to, as far as it is shown: the values it is exactly a
-        // map on, converted. And as far as it may come to: those, and the code points a
-        // conversion leaves for the strings it is not exact on.
-        Language shownOther;
-        Language mayOther;
-        if (theirMap == null) {
-            shownOther = partner.heldAsWritten().language(meter);
-            mayOther = partner;
-        } else {
-            Language exact = theirMap.strings(meter);
-            Language within = exact == null ? null : partner.and(exact, meter);
-            Language outside = exact == null ? null : partner.and(exact.not(meter), meter);
-            shownOther = within == null ? null : theirMap.answersTo(within, meter);
-            Language left = outside == null || outside.isEmpty() ? null
-                    : CodeMap.stringsOf(theirMap.leftAlone(), meter);
-            mayOther = shownOther == null || outside == null ? null
-                    : left == null ? shownOther : shownOther.or(left, meter);
-        }
-        if (shownOther == null || mayOther == null) {
+        // The strings the other side comes to, as far as it is shown and as far as it may come to.
+        WhatAConversionAnswers answers =
+                WhatAConversionAnswers.of(partner, theirs.through(), meter);
+        if (answers == null) {
             return null;
         }
-        Language shownHere = !standsInside ? shownOther
-                : hereIsFirst ? StringsInsideStrings.standingIn(shownOther, where, meter)
-                : StringsInsideStrings.havingInside(shownOther, where, meter);
-        Language mayHere = !standsInside ? mayOther
-                : hereIsFirst ? StringsInsideStrings.standingIn(mayOther, where, meter)
-                : StringsInsideStrings.havingInside(mayOther, where, meter);
+        // A string inside another is made from the answers shown, so it is made from values alone;
+        // an equality is asked of each string as it stands.
+        Language shownOther = answers.forDerivation();
+        Language shownHere;
+        Language mayHere;
+        if (standsInside) {
+            shownHere = hereIsFirst ? StringsInsideStrings.standingIn(shownOther, where, meter)
+                    : StringsInsideStrings.havingInside(shownOther, where, meter);
+            mayHere = hereIsFirst ? StringsInsideStrings.standingIn(answers.may(), where, meter)
+                    : StringsInsideStrings.havingInside(answers.may(), where, meter);
+        } else {
+            WhatAConversionAnswers.Shown asked = answers.forEquality(meter);
+            shownHere = asked.canBe();
+            mayHere = asked.mayBe();
+        }
         if (shownHere == null || mayHere == null) {
             return null;
         }
         CodeMap mineMap = mine.through().equals(CaseMapping.NONE) ? null
                 : CaseMaps.of(mine.through());
-        Language canBe = mineMap == null ? shownHere
-                : mineMap.stringsConvertedInto(shownHere, meter);
+        // A string of this side that the conversion leaves as it stands is its own answer, so it is
+        // shown wherever the answers shown hold it: asked of an equality, where each string is
+        // asked about as it stands. The strings shown for a string inside another are values the
+        // conversion is exact on already.
+        Language canBe = shownHere;
+        if (mineMap != null) {
+            canBe = standsInside ? mineMap.stringsConvertedInto(shownHere, meter)
+                    : CaseMaps.answeringInto(mine.through(), shownHere, meter);
+        }
         Language mayBe = mayHere;
         if (mineMap != null) {
             Language exact = mineMap.strings(meter);
@@ -3945,10 +3946,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * {@code strings} for the strings a run gets to the relation at, where it gets there only past
      * {@code conversions} exactly: a string of the other side is the partner's only if the run
-     * gets to the relation at it, so those the conversion is not exactly a map on are shown
-     * neither way; and a string of this side is shown either way only where the run gets to the
-     * relation at it, so the strings the conversion is not exactly a map on are left open. Or null
-     * where a conversion is of a place neither side is, or the strings are not a language.
+     * gets to the relation at it, so those the run is not shown to get past the conversion at
+     * ({@link CaseMaps#gottenPastExactly}) are shown neither way; and a string of this side is
+     * shown either way only where the run gets to the relation at it, so those strings are left
+     * open. Or null where a conversion is of a place neither side is, or the strings are not a
+     * language.
      */
     private StringsAPartnerCanHold onlyWhereTheRunGetsPast(
             StringsAPartnerCanHold strings, List<ConvertedOn> conversions, boolean hereIsFirst,
@@ -3961,7 +3963,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Language onMine = null;
         Language onTheirs = null;
         for (ConvertedOn each : conversions) {
-            Language exact = CaseMaps.of(each.conversion()).strings(meter);
+            Language exact = CaseMaps.gottenPastExactly(each.conversion(), meter);
             boolean ofMine = each.place().equals(mine);
             if (exact == null || (!ofMine && !each.place().equals(theirs))) {
                 return null;
@@ -5582,6 +5584,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ValueSet held = stringsShownAt(place, read);
                 had = held == null ? null : languageOf(held);
             }
+            // The string a witness holds is chosen from these, so each is a value: the strings the
+            // conversion is exactly a map on, and not those it leaves as they stand.
             Language exactly = had == null ? null
                     : had.and(CaseMaps.of(conversion).strings(meter), meter);
             if (exactly == null || exactly.isEmpty()) {
