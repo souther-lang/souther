@@ -54,8 +54,10 @@ class APremiseNamingNoPositionOfAQuestionIsNotSummedForItTest {
                 "a sum was taken for a premise that names none of the question's positions");
     }
 
+    /** The rests of {@code a} and of {@code cc} hold {@code b}, which the premise names; the rest of
+     *  {@code b} holds neither {@code a} nor {@code cc}, and the premise names only {@code b}. */
     @Test
-    void thePremiseNamingAPositionOfTheQuestionIsSummedForOnce() {
-        assertEquals(1, sumsTakenAskingEveryRest(0));
+    void thePremiseIsSummedForTheRestsItNamesAPositionOfAndNoOther() {
+        assertEquals(2, sumsTakenAskingEveryRest(0));
     }
 }

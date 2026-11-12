@@ -231,9 +231,10 @@ final class FormReach<A> {
     private long carriedOver;
 
     /**
-     * How many sums of a premise taken off a question this has made, for a test holding a premise
-     * that names no position of the question to being passed over or merged as it always was and
-     * not summed for it. Counts and nothing else: what any question comes to is the same either way.
+     * How many times the sum of a premise taken off a question has been read for it, for a test
+     * holding a premise that names no position of the question to being passed over or merged as it
+     * always was and not summed for it. Counts and nothing else: what any question comes to is the
+     * same either way.
      */
     long sumsTaken() {
         return sumsTaken;
@@ -402,6 +403,8 @@ final class FormReach<A> {
 
         private Map<A, ExactRatio> negatedForm;
 
+        private int[] namedBy;
+
         private Rests(AffineConstraint<A> asking, AffineConstraint.HalfSpace<A> half) {
             this.asking = asking;
             this.half = half;
@@ -453,13 +456,19 @@ final class FormReach<A> {
                 before = before(atom, all.size());
             }
             BitSet left = leftOut();
-            BitSet naming = namingAnyOf(coefs);
+            // The rest of the atom names what the form names but for the atom, so a premise names
+            // a position of it where it names more of the form's positions than the atom is.
+            int[] named = positionsNamedBy(all.size()).clone();
+            List<Integer> ofAtom = premises().naming().getOrDefault(atom, List.of());
+            for (int place : ofAtom) {
+                named[place]--;
+            }
             for (int place = 0; place < all.size(); place++) {
                 if (left.get(place)) {
                     out.kinds[place] = RoundWork.ABSENT;
                     continue;
                 }
-                if (!naming.get(place)) {
+                if (named[place] == 0) {
                     out.kinds[place] = RoundWork.UNNAMED;
                     continue;
                 }
@@ -478,6 +487,21 @@ final class FormReach<A> {
                 workOut.put(asking, half.form(), atom, out);
             }
             return out;
+        }
+
+        /** For each premise, by place, how many of the form's positions it names: once for the
+         *  half-space, whichever position is left out of it. */
+        private int[] positionsNamedBy(int premises) {
+            if (namedBy == null) {
+                namedBy = new int[premises];
+                Map<A, List<Integer>> naming = premises().naming();
+                for (A position : form.keySet()) {
+                    for (int place : naming.getOrDefault(position, List.of())) {
+                        namedBy[place]++;
+                    }
+                }
+            }
+            return namedBy;
         }
 
         /** The half-space's form negated: the question each premise is taken off, before the term of
@@ -711,7 +735,6 @@ final class FormReach<A> {
         private int weighed;
 
         Aggregate(Map<A, ExactRatio> question, AffineConstraint.HalfSpace<A> premise) {
-            sumsTaken++;
             this.premise = premise;
             this.question = question;
             sum = ExactRatio.ZERO.plus(premise.bound().at()).orNull();
@@ -764,6 +787,7 @@ final class FormReach<A> {
          * not one this decides.
          */
         void fillWhole(RoundWork.Candidates into, int place) {
+            sumsTaken++;
             if (!held || weighed == 2) {
                 into.kinds[place] = RoundWork.ASKED;
                 return;
@@ -781,6 +805,7 @@ final class FormReach<A> {
          * not reached, or {@link RoundWork#ASKED} where the sum is not one this decides.
          */
         void fill(A atom, RoundWork.Candidates into, int place) {
+            sumsTaken++;
             into.kinds[place] = RoundWork.ASKED;
             if (!held) {
                 return;
