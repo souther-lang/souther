@@ -5859,9 +5859,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             CountWitnesses.Witness shown = rowShowingTheCount(counted, container, conditions,
                     witnesses, stopped, runsStopped);
-            // Every size is a row of a container that may hold the element over again: how many
-            // distinct elements one that holds each once holds of is not what a row shows.
-            if (shown == null || !shown.overAgain()) {
+            // Every size is a row of a container that may hold the element over again, or whose
+            // entries are put under as many keys as it holds: how many distinct elements one that
+            // holds each once holds of is not what a row shows.
+            if (shown == null || !shown.takesEverySize()) {
                 return null;
             }
             countsRead.addAll(placesTheStatementReads(part));
@@ -5903,7 +5904,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             NumericDomain.Bounds mayBeHeld = howManyMayBeHeld(container, read, along);
             CountTakes taken = counted instanceof Quantity.HowManyMeet
-                    ? countTakes(mayBeHeld, held, shown.overAgain())
+                    ? countTakes(mayBeHeld, held, shown.takesEverySize())
                     : differentTakesOf(counted, container, mayBeHeld, held, shown, read);
             if (taken == null) {
                 continue;
@@ -5948,20 +5949,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * is none up to its size, and what the size is left is the most it is and never the least.
      * Where nothing says how many the container may hold, the count lies from none on.
      *
-     * <p>That is of a container that may hold an element over again ({@code overAgain}): a row
-     * holds the one the statement holds of as many times as it likes. A container that holds each
-     * element once shows the statement holding of one element and failing of another and no
-     * more — how many distinct elements it holds of is the statement's and the element type's, and
-     * a row that holds of two shows nothing of three — so the count is shown at none and one.
+     * <p>That is of a container whose row takes every size ({@code everySize}): one that may hold
+     * an element over again holds the one the statement holds of as many times as it likes, and a
+     * map's entries a statement holds of regardless of their keys are put under as many keys as it
+     * may hold. A container that holds each element once shows the statement holding of one
+     * element and failing of another and no more — how many distinct elements it holds of is the
+     * statement's and the element type's, and a row that holds of two shows nothing of three — so
+     * the count is shown at none and one.
      */
     static CountTakes countTakes(NumericDomain.Bounds mayBeHeld, NumericDomain.Bounds areHeld,
-                                 boolean overAgain) {
+                                 boolean everySize) {
         Endpoint none = Endpoint.inclusive(Count.of(0));
-        Endpoint mostShown = overAgain ? areHeld.max()
+        Endpoint mostShown = everySize ? areHeld.max()
                 : Endpoint.upper(areHeld.max(), Endpoint.inclusive(Count.of(1)));
+        // The row holds one element it fails of beside one it holds of, so a container that must
+        // hold elements is shown at none only where it holds the ones it fails of over again.
+        boolean mustHold = mayBeHeld != null && CountDomain.leastFrom(mayBeHeld.min()) > 0;
+        Endpoint leastShown = everySize || !mustHold ? none : Endpoint.inclusive(Count.of(1));
         return new CountTakes(
                 new NumericDomain.Bounds(none, mayBeHeld == null ? null : mayBeHeld.max()),
-                new NumericDomain.Bounds(none, mostShown));
+                new NumericDomain.Bounds(leastShown, mostShown));
     }
 
     /** The container of the input {@code counted} counts the elements of, or null where it counts
@@ -6021,7 +6028,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         DifferentValues values = differingTop(place, at, read);
         return differentTakes(values.most(), values.exact(), mayBeHeld, areHeld,
-                shown.overAgain(), counted instanceof Quantity.HowManyDifferent,
+                shown.expansion() == CountWitnesses.Expansion.REPEATED_ELEMENT,
+                counted instanceof Quantity.HowManyDifferent,
                 shown.failing() != null);
     }
 
@@ -6069,7 +6077,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * The row that shows the number of elements of {@code container} that meet a statement: one
      * element it holds of and one it fails of, beside one value of everything else, at a row that
      * gets to this relation ({@link CountWitnesses}), or null where there is none. What counts the
-     * row shows is the witness's to say ({@link CountWitnesses.Witness#overAgain}).
+     * row shows is the witness's to say ({@link CountWitnesses.Witness#expansion}).
      *
      * <p>Where the search stopped short of everything it would have tried, the figures it stopped
      * at go into {@code stopped}, and where the runs of the rows it tried stopped into
