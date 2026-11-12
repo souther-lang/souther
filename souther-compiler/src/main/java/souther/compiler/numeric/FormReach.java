@@ -132,10 +132,11 @@ final class FormReach<A> {
     /**
      * How many times, over every reading, a premise has been looked at for a question: once for each
      * premise a question runs over, and once more for each sum taken of one, each answer moved from
-     * the work before and each premise merged into a form. What a question costs is the premises it
+     * the work before and each premise merged into a form — and once for each term of the question
+     * and of the premise that a sum is first built over. What a question costs is the premises it
      * visits and what is done to each, so this is what a test holds to growing with the rules and
-     * not with the rules and the questions together. Counted rather than timed: that is a shape and
-     * not a speed.
+     * their width and not with the rules and the questions together. Counted rather than timed: that
+     * is a shape and not a speed.
      */
     private static final LongAdder PREMISES_WORKED = new LongAdder();
 
@@ -764,6 +765,7 @@ final class FormReach<A> {
         private int weighed;
 
         Aggregate(Map<A, ExactRatio> question, AffineConstraint.HalfSpace<A> premise) {
+            PREMISES_WORKED.add(question.size() + premise.form().coefs().size());
             this.premise = premise;
             this.question = question;
             sum = ExactRatio.ZERO.plus(premise.bound().at()).orNull();

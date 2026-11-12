@@ -6,6 +6,7 @@ import souther.test.Nightly;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static souther.compiler.AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest.aChainOfInserts;
 import static souther.compiler.AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest.aSetUnitedWithItself;
 import static souther.compiler.AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest.insertsOnBothSides;
@@ -35,8 +36,13 @@ class InsertsAndUnionsAreReadAtTheDepthsThatOnceTookMinutesTest {
         assertEquals(List.of(), warnings(aChainOfInserts(16)));
     }
 
+    /** Held at the depth where it says nothing, and read to the end at the depth where it says what
+     *  the rounds could not settle, which is what it said before as well. */
     @Test
     void aSetUnitedWithItselfIsReadAtTheDepthOfALongChain() {
         assertEquals(List.of(), warnings(aSetUnitedWithItself(16)));
+        List<String> deeper = warnings(aSetUnitedWithItself(24));
+        assertTrue(List.of(List.<String>of(), List.of("E2011")).contains(deeper),
+                "a set united with itself 24 times said " + deeper);
     }
 }
