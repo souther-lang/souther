@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -230,6 +231,24 @@ public final class ClosedState<A> {
     static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
                                              Function<A, Granularity> spacing,
                                              CanonicalOrder<A> order) {
+        return closedTogether(constraints, spacing, order, null, null);
+    }
+
+    /**
+     * The same closure, with each round worked out from the same round of {@code parent} where that
+     * is the work of the closure of the rules before these, and the work of this closure's rounds
+     * handed to {@code sink} as they are run.
+     *
+     * <p>Work is how the closure is reached and not what it is: with none, or with work it cannot
+     * use, this is the closure {@link #closedTogether(List, Function, CanonicalOrder)} is.
+     *
+     * @param parent the work of the closure of the rules these follow, or null
+     * @param sink   where the work of this closure's rounds goes, or null where none is kept
+     */
+    static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
+                                             Function<A, Granularity> spacing,
+                                             CanonicalOrder<A> order, ClosureWork<A> parent,
+                                             Consumer<ClosureWork<A>> sink) {
         DifferenceBounds<A> differences = DifferenceBounds.over(constraints, order);
         if (differences.holdsNothing()) {
             return empty(differences);
@@ -242,6 +261,12 @@ public final class ClosedState<A> {
         boolean everyBoundWasComposed = differences.everyHopWasComposed();
         Set<AffineConstraint.HalfSpace<A>> sided = Set.of();
         Set<AffineConstraint.HalfSpace<A>> folded = Set.of();
+        ClosureWork<A> work = null;
+        RoundWork<A> before = null;
+        if (sink != null) {
+            work = new ClosureWork<>();
+            sink.accept(work);
+        }
         for (int round = 0; round < ROUNDS; round++) {
             // The reading is made afresh from the box this round starts in, and every rule is read
             // against that one. A reading that carried the box along as the rules narrowed it would
@@ -250,6 +275,20 @@ public final class ClosedState<A> {
             // the last round sided are read with the rules for the same reason the box is: they are
             // that round's finding, taken whole at the start of this one.
             FormReach<A> reading = FormReach.over(constraints, sided, box, differences, order);
+            // A round whose reading holds premises beside the rules (the holes the round before
+            // sided) has its premises in another place than the rules before it gave them, so it
+            // neither starts from the work of the round before nor leaves any.
+            if (work != null && sided.isEmpty()) {
+                RoundWork<A> here = work.next(constraints, box);
+                List<RoundWork<A>> from = new ArrayList<>(3);
+                from.add(before);
+                if (parent != null) {
+                    from.add(parent.round(round));
+                    from.add(parent.last());
+                }
+                reading.working(from, here);
+                before = here;
+            }
             if (theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);
             }
@@ -327,6 +366,14 @@ public final class ClosedState<A> {
         return closedTogether(question.rules(), question::spacingOf, question.order());
     }
 
+    /** The same, worked from {@code parent} and leaving its own work with {@code sink}; see
+     *  {@link #closedTogether(List, Function, CanonicalOrder, ClosureWork, Consumer)}. */
+    static <A> ClosedState<A> of(ClosureQuestion<A> question, ClosureWork<A> parent,
+                                 Consumer<ClosureWork<A>> sink) {
+        return closedTogether(question.rules(), question::spacingOf, question.order(), parent,
+                sink);
+    }
+
     /**
      * Whether the rules leave one of the forms they are about no value at all.
      *
@@ -358,7 +405,7 @@ public final class ClosedState<A> {
         for (AffineConstraint<A> each : constraints) {
             Map<A, ExactRatio> form = each.form().coefs();
             if (form.size() > 1 && asked.add(form)
-                    && reading.of(form, ExactRatio.ZERO).isEmpty()) {
+                    && reading.ofKept(each, form).isEmpty()) {
                 return true;
             }
         }

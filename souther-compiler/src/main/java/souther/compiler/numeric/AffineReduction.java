@@ -130,11 +130,12 @@ public final class AffineReduction {
                     AffineConstraint.Disequality<A> hole
                     ? settled.sidedOf().getOrDefault(hole, List.of()) : each.halfSpaces();
             for (AffineConstraint.HalfSpace<A> half : halves) {
+                FormReach<A>.Rests rests = reading.rests(each, half);
                 // Walked in the one order the positions decide. A bound worked out at each of them
                 // is written into a reading the next of them is read against, so what this takes
                 // first reaches the answer.
                 for (A atom : half.form().atomsIn(order)) {
-                    if (!record(half, atom, from, reading, each, spacing, atLeast, atMost)) {
+                    if (!record(half, atom, from, rests, spacing, atLeast, atMost)) {
                         return new Reduction.NothingIsLeft<>();
                     }
                 }
@@ -395,11 +396,11 @@ public final class AffineReduction {
      * @return false where the rule leaves that position no value at all
      */
     private static <A> boolean record(AffineConstraint.HalfSpace<A> half, A atom, Box<A> from,
-                                      FormReach<A> reading, AffineConstraint<A> itsOwnRule,
+                                      FormReach<A>.Rests rests,
                                       Function<A, Granularity> spacing,
                                       Map<A, ExactCut> atLeast, Map<A, ExactCut> atMost) {
         ExactRatio weight = half.form().coefs().get(atom);
-        Least rest = leastOfTheRest(half, atom, reading, itsOwnRule);
+        Least rest = leastOfTheRest(rests, atom);
         if (rest == null) {
             return true;   // some other position runs the wrong way without end, so nothing follows
         }
@@ -490,11 +491,8 @@ public final class AffineReduction {
      * @return null where nothing bounds the rest below, which is where the rest can be made as small
      *         as you like and the rule bounds nothing
      */
-    private static <A> Least leastOfTheRest(AffineConstraint.HalfSpace<A> half, A atom,
-                                            FormReach<A> reading, AffineConstraint<A> itsOwnRule) {
-        Map<A, ExactRatio> rest = new LinkedHashMap<>(half.form().coefs());
-        rest.remove(atom);
-        ExactCut least = reading.leastOfTheRestOf(itsOwnRule, rest, ExactRatio.ZERO);
+    private static <A> Least leastOfTheRest(FormReach<A>.Rests rests, A atom) {
+        ExactCut least = rests.leastOfTheRest(atom);
         return least == null ? null : new Least(least.at(), least.inclusive());
     }
 
