@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import souther.compiler.collect.LatelyAsked;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
@@ -46,7 +47,7 @@ import java.util.function.Function;
 public final class ClosedStates {
 
     /** Nothing kept: every domain works out what its rules leave for itself. */
-    public static final ClosedStates NONE = new ClosedStates(null, null, null, false);
+    public static final ClosedStates NONE = new ClosedStates(null, null, null, false, 0);
 
     /**
      * Nothing kept, and every set of rules closed in one run rather than a part at a time
@@ -57,15 +58,20 @@ public final class ClosedStates {
      * the closure, about forms over positions of two parts. Nothing else asks for this: the two are
      * one closure, and this one costs what the rules cost together.
      */
-    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, null, true);
+    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, null, true, 0);
 
     /**
      * One closure per question, kept while it is among the {@link #CLOSURES_KEPT} asked last and
      * for as long as whatever holds this is held.
      */
     public static ClosedStates kept() {
+        return keptWithWorkOf(ClosureWork.PLACES_KEPT);
+    }
+
+    /** The same, with each closure keeping no more than {@code placesKept} places of its work. */
+    static ClosedStates keptWithWorkOf(long placesKept) {
         return new ClosedStates(new LatelyAsked<>(CLOSURES_KEPT), new ConcurrentHashMap<>(),
-                new ConcurrentHashMap<>(), false);
+                new ConcurrentHashMap<>(), false, placesKept);
     }
 
     /**
@@ -115,10 +121,15 @@ public final class ClosedStates {
     /** Whether the rules are closed in one run, which is {@link #IN_ONE_RUN} and nothing else. */
     private final boolean inOneRun;
 
+    /** How many places of candidates the work of one closure keeps; see
+     *  {@link ClosureWork#PLACES_KEPT}. */
+    private final long placesKept;
+
     private ClosedStates(LatelyAsked<ClosureQuestion<?>, ClosedState<?>> answers,
                          Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places,
                          Map<CanonicalOrder<?>, Map<CanonicalForm<?>, List<?>>> walks,
-                         boolean inOneRun) {
+                         boolean inOneRun, long placesKept) {
+        this.placesKept = placesKept;
         this.answers = answers;
         this.places = places;
         this.walks = walks;
@@ -216,7 +227,7 @@ public final class ClosedStates {
             ClosureQuestion<A> asked =
                     ClosureQuestion.of(lent.parts.get(at), spacing, order, placing);
             questions.add(asked);
-            closed.add(of(asked));
+            closed.add(of(asked, lent.closed.get(at)));
         }
         if (everyPartLent && lent.complete) {
             return lent;
@@ -473,20 +484,84 @@ public final class ClosedStates {
         }
     }
 
-    /** What {@code question} leaves, lent where it has been worked out before. */
-    private <A> ClosedState<A> of(ClosureQuestion<A> question) {
+    /**
+     * What {@code question} leaves, lent where it has been worked out before, and where it is not
+     * worked out from the work of {@code before}: the closure of the rules these follow.
+     *
+     * @param before the closure the question's rules were said after, or null
+     */
+    private <A> ClosedState<A> of(ClosureQuestion<A> question, ClosedState<A> before) {
         // The cast holds because an entry is only ever put under the question it answers, and a
         // question over positions of type A is answered by a closure over the same positions.
         asked.incrementAndGet();
         @SuppressWarnings("unchecked")
-        ClosedState<A> answer = (ClosedState<A>) answers.answer(question, this::workedOutFor);
+        ClosedState<A> answer = (ClosedState<A>) answers.answer(question,
+                asking -> workedOutFor(asking, before));
         return answer;
     }
 
-    /** What {@code question} leaves, worked out here and counted as worked out. */
-    private ClosedState<?> workedOutFor(ClosureQuestion<?> question) {
+    /**
+     * What {@code question} leaves, worked out here and counted as worked out. The work of the
+     * closure it follows is lent to it, and its own is kept for the closure that follows it.
+     */
+    @SuppressWarnings("unchecked")
+    private <A> ClosedState<?> workedOutFor(ClosureQuestion<?> question, ClosedState<A> before) {
         workedOut.incrementAndGet();
-        return ClosedState.of(question);
+        ClosureQuestion<A> asking = (ClosureQuestion<A>) question;
+        ClosureWork<A> parent = before == null ? null : works.of(before);
+        ClosureWork<A> mine = new ClosureWork<>(placesKept);
+        ClosedState<A> state = ClosedState.of(asking, parent, mine);
+        works.keep(state, mine);
+        premisesMoved.addAndGet(mine.moved());
+        return state;
+    }
+
+    /**
+     * The work of the closures worked out last, each by the closure it is the work of.
+     *
+     * <p>Bounded and short: only the closure a part was last worked out as is followed by the next
+     * one, and what is kept is a few times the size of the closures it is kept beside. A closure
+     * whose work has been let go is followed by a closure worked out in full, which is the same
+     * closure.
+     */
+    private static final class Works {
+
+        /** How many works are kept; one is wanted by the closure that follows, and a few more by
+         *  the parts asked in between. */
+        private static final int KEPT = 4;
+
+        private final ArrayDeque<Map.Entry<ClosedState<?>, ClosureWork<?>>> recent =
+                new ArrayDeque<>();
+
+        @SuppressWarnings("unchecked")
+        synchronized <A> ClosureWork<A> of(ClosedState<A> state) {
+            for (Map.Entry<ClosedState<?>, ClosureWork<?>> each : recent) {
+                if (each.getKey() == state) {
+                    return (ClosureWork<A>) each.getValue();
+                }
+            }
+            return null;
+        }
+
+        synchronized void keep(ClosedState<?> state, ClosureWork<?> work) {
+            recent.addFirst(Map.entry(state, work));
+            while (recent.size() > KEPT) {
+                recent.removeLast();
+            }
+        }
+    }
+
+    private final Works works = new Works();
+
+    private final AtomicLong premisesMoved = new AtomicLong();
+
+    /**
+     * How many premises of the closures this has worked out were moved from the work of the closure
+     * before rather than summed, for a test holding a closure lent the work of another to having been
+     * worked from it. Counted and not timed: what a closure comes to is the same either way.
+     */
+    long premisesMoved() {
+        return premisesMoved.get();
     }
 
     /** {@link ClosureQuestion#placesIn}, kept for the order and the positions it was asked of. */
