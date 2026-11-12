@@ -303,6 +303,95 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
         }
     }
 
+    /**
+     * {@code c == a} is reached only where {@code String.lowercase(a) == b} is false, and
+     * {@code b} holds {@code "1"} alone: {@code c = "1"} equals {@code a} only at {@code a = "1"},
+     * where the left is true and the right is never asked. What the left turns on is {@code a}
+     * and {@code b}, though no row is composed toward it, so {@code c} is not parted by every
+     * string {@code a} holds.
+     */
+    @Test
+    void aComparisonNoRowIsComposedTowardStillTurnsOnThePlacesItReads() {
+        String held = """
+                module fixed
+
+                data A = String invariant String.length(value) <= 254
+                data B = String invariant value == "1"
+
+                behavior f : (a: A, b: B, c: String) -> Bool
+                let f (A(a), B(b), c) = %s == b || c == a
+
+                example f
+                    | "left"  : (A("1"), B("1"), "q") -> true
+                    | "right" : (A("y"), B("1"), "y") -> true
+                    | "none"  : (A("y"), B("1"), "z") -> false
+                """;
+        for (String left : List.of("String.lowercase(a)", "String.uppercase(a)", "a")) {
+            List<String> open = unansweredIn(held.formatted(left));
+            assertTrue(open.contains("c"), left + " " + open);
+        }
+    }
+
+    /**
+     * The same way with {@code b} free to be any string: whatever {@code a} is, a row holds
+     * {@code b} apart from what the left compares it with, so the right is reached at every
+     * {@code a} and {@code c} is parted by every string {@code a} holds — with a conversion on the
+     * left and without one.
+     */
+    @Test
+    void aComparisonAFreeStringMeetsLeavesThePlacesItReadsToThePartner() {
+        String free = """
+                module free
+
+                data A = String invariant String.length(value) <= 254
+
+                behavior f : (a: A, b: String, c: String) -> Bool
+                let f (A(a), b, c) = %s == b || c == a
+
+                example f
+                    | "left"  : (A("1"), "1", "q") -> true
+                    | "right" : (A("y"), "1", "y") -> true
+                    | "none"  : (A("y"), "1", "z") -> false
+                """;
+        for (String left : List.of("String.lowercase(a)", "a")) {
+            List<String> open = unansweredIn(free.formatted(left));
+            assertTrue(!open.contains("c"), left + " " + open);
+        }
+    }
+
+    /**
+     * No domain equal to what the left compares it with, the domains free to be any strings:
+     * every element is held apart from it, so the list read on the right is read whole — with a
+     * conversion and without one. Where every domain is one string, nothing is free to be held
+     * apart.
+     */
+    @Test
+    void noElementMeetingAComparisonIsMetByElementsFreeToBeAnyString() {
+        for (String left : List.of("String.lowercase(email)", "email")) {
+            List<String> open = unansweredIn(heldBy("String.length(value) <= 254",
+                    left.replace("email", "%s"), "a.com"));
+            assertTrue(!open.contains("emails[*]"), left + " " + open);
+        }
+        String fixed = """
+                module fixed
+
+                data A = String invariant String.length(value) <= 254
+                data Domains = List<String>
+                    invariant List.length(value) >= 1 && List.all(d -> d == "1", value)
+
+                behavior f : (email: A, domains: Domains, emails: List<String>) -> Bool
+                let f (A(email), Domains(domains), emails) =
+                    List.any(own -> own == String.lowercase(email), domains)
+                        || List.any(own -> own == email, emails)
+
+                example f
+                    | "domain" : (A("1"), Domains([ "1" ]), []) -> true
+                    | "email"  : (A("y"), Domains([ "1" ]), [ "y" ]) -> true
+                    | "none"   : (A("y"), Domains([ "1" ]), [ "z" ]) -> false
+                """;
+        assertTrue(unansweredIn(fixed).contains("emails[*]"), unansweredIn(fixed).toString());
+    }
+
     /** And where it may be any length, the strings the map is not exact on may stop the run. */
     @Test
     void anEmailOfAnyLengthIsOpenForGettingPastTheConversion() {

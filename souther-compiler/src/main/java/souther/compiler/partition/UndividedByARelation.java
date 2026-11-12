@@ -2822,7 +2822,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     taken.demand() instanceof RowDemand.ForTheRun run
                             && run.partedStrings().isPresent() ? run : null,
                     taken.demand() instanceof RowDemand.OnARemainder on ? on : null,
-                    taken.demand() instanceof RowDemand.ForTheRun run ? run.statement() : null));
+                    taken.demand() instanceof RowDemand.ForTheRun run ? run.statement() : null,
+                    taken.demand() instanceof RowDemand.ForAll every
+                            ? every.ofEachElement() : null));
         });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
@@ -2884,11 +2886,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param onARemainder the remainder it holds a form of the input's numbers to, where it is
      *                   that, so that what it leaves of the form's numbers can be asked of the
      *                   remainder itself and not of the places it names
+     * @param statedOfTheRun what it states, where it is a statement the run says whether it held,
+     *                   which places no row — or null
+     * @param byEvery    what it asks every element of {@code elementsOf} to meet, where it asks
+     *                   that of every element — or null
      */
     record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                   TermPath elementsOf, RowDemand.AnElementMeets bySome,
                   PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces,
-                  RowDemand.OnARemainder onARemainder, Proposition statedOfTheRun) {
+                  RowDemand.OnARemainder onARemainder, Proposition statedOfTheRun,
+                  RowDemand.AnElementMeets byEvery) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
@@ -2897,7 +2904,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone,
                RowDemand.ForTheRun ofThePieces, RowDemand.OnARemainder onARemainder) {
             this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, ofThePieces,
-                    onARemainder, null);
+                    onARemainder, null, null);
         }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
@@ -2913,7 +2920,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
             return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts,
-                    ofThePieces, onARemainder, statedOfTheRun);
+                    ofThePieces, onARemainder, statedOfTheRun, byEvery);
         }
         /** Whether this says nothing of {@code term} because it is a part of a date this leaves
          *  alone. */
@@ -2925,6 +2932,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         case YEARS -> part == TakenAs.DatePart.YEAR;
                         case MONTHS_AND_DAYS -> part != TakenAs.DatePart.YEAR;
                     };
+        }
+
+        /**
+         * Every place this turns on, or empty where that is not said. Its {@link #positions} are
+         * where it places a row, which a statement the run says whether it held does not do: it
+         * places none, and turns on the places what it states reads ({@link
+         * PositionsAStatementReads#everyPlaceItTurnsOn}) — any place at all where that reads
+         * something other than places. A reader that asks of the places alone, and not of the
+         * rows that meet the statement, asks here.
+         */
+        Optional<Set<TermPath>> turnsOn() {
+            if (statedOfTheRun == null) {
+                return Optional.of(positions);
+            }
+            return PositionsAStatementReads.everyPlaceItTurnsOn(statedOfTheRun).map(places -> {
+                Set<TermPath> out = new LinkedHashSet<>(positions);
+                out.addAll(places);
+                return out;
+            });
         }
 
         /** What it states as a form of the input's numbers held against nought, or null where it
@@ -3030,8 +3056,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // for everything below that reads it. Where a value of the numbers it ties a length to is
         // shown for every length the string has, what it states of the length leaves its strings
         // as they were.
-        RoomOnTheWay lengthsRoom = heldWhole
-                ? roomAmongTheSides(carriers, written, past, declined, read) : null;
+        RoomOnTheWay lengthsRoom = heldWhole ? roomAmongTheSides(carriers,
+                withoutWhatAFreeValueMeets(unfree, declined, past, read), past, declined, read)
+                : null;
         if (!offItsLine && lengthsRoom != null && lengthsRoom.counts() == null) {
             unfree = unfree.stream()
                     .filter(each -> !lengthsRoom.statements().contains(each)).toList();
@@ -4428,8 +4455,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * stands at the place or under it is theirs ({@link TermPath#standsAtOrUnder}).
      */
     private static boolean reaches(OnAWay statement, TermPath place) {
-        return statement.positions().stream().anyMatch(at -> statement.whatStands()
-                ? at.standsAtOrUnder(place) : at.bearsOn(place));
+        Optional<Set<TermPath>> turnsOn = statement.turnsOn();
+        return turnsOn.isEmpty() || turnsOn.get().stream().anyMatch(at ->
+                statement.whatStands() ? at.standsAtOrUnder(place) : at.bearsOn(place));
     }
 
     /**
@@ -6534,58 +6562,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private boolean freeToMeet(NumericTerm term, OnAWay statement, List<OnAWay> conditions,
                                Optional<Set<String>> declined, DemandReading.Answered past,
                                InputReading read) {
-        if (!(term instanceof NumericTerm.FromOnePosition number)
-                || past.unsaidOrOwedOnWhatNoPlaceHolds()) {
+        if (!(term instanceof NumericTerm.FromOnePosition number)) {
             return false;
         }
-        for (Side side : sides) {
-            Optional<List<TermPath>> reads = placesItIsReadOff(side);
-            if (reads.isEmpty() || reads.get().stream().anyMatch(place ->
-                    number.placesReadOff().stream().anyMatch(place::bearsOn))) {
-                return false;
-            }
-        }
-        for (OnAWay other : conditions) {
-            if (!other.equals(statement) && !sameRemainder(statement, other)
-                    && touches(number, other.positions())) {
-                return false;
-            }
-            // A statement the run says whether it held names no place, though what it states is
-            // about numbers of the input ({@link RowDemand.ForTheRun}), so nothing here says which
-            // it turns on: a remainder is taken away only where none such stands beside it.
-            if (statement.onARemainder() != null && !other.equals(statement)
-                    && !sameRemainder(statement, other) && other.positions().isEmpty()
-                    && !other.whatStands()) {
-                return false;
-            }
-        }
-        for (Set<TermPath> ties : past.tiedOrOwed()) {
-            if (touches(number, ties)) {
-                return false;
-            }
-        }
-        if (declined.isEmpty() || number.placesReadOff().stream()
-                .anyMatch(at -> declined.get().contains(at.head()))) {
+        NumericDomain.Bounds takes = valuesFreeToChoose(number, statement, conditions, declined,
+                past, read);
+        if (takes == null) {
             return false;
         }
-        Source source = sourceOf(number, read);
-        if (source == null || source.named()) {
-            return false;
-        }
-        // The values it takes are those the run leaves it: a number the run narrows is taken at
-        // the values the run lets a row hold, whatever the declarations leave it.
-        // Each narrowing is of one number alone, so only those naming this one move its values.
-        List<TakenConstraint> ofIt = past.narrowing().stream()
-                .filter(each -> each.terms().contains(number)).toList();
-        SearchRegion left = read.quantities().region();
-        if (!ofIt.isEmpty()) {
-            left = TakenConstraint.narrowedBy(ofIt, left);
-            if (left.emptiness().isPresent()) {
-                return false;
-            }
-        }
-        NumericDomain.Bounds takes = realized(number, source, left,
-                ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
         if (statement.onARemainder() != null) {
             List<RowDemand.OnARemainder> together = new ArrayList<>();
             together.add(statement.onARemainder());
@@ -6597,6 +6581,163 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return choosesEveryRemainder(number, together, takes, read);
         }
         return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
+    }
+
+    /**
+     * {@code conditions} without the statements a value free in them meets whatever the rest of
+     * the row holds, on the terms a number is free to meet a form ({@link #freeToMeet}): a
+     * statement the run says whether it held ({@link #metByAFreeValue}), and one every element of
+     * a container is free to meet ({@link #everyElementFreeToMeet}).
+     *
+     * <p>For what the way leaves of the strings alone ({@link #roomOnTheWay}). Such a statement
+     * takes no string of the sides away, since a row meets it at every one; but what it asks of an
+     * element was taken into the region, which keeps it ({@link Rebuilding}), and one the run says
+     * whether it held is asked of every row the way is read on.
+     */
+    private List<OnAWay> withoutWhatAFreeValueMeets(List<OnAWay> conditions,
+                                                    Optional<Set<String>> declined,
+                                                    DemandReading.Answered past,
+                                                    InputReading read) {
+        List<OnAWay> out = new ArrayList<>(conditions);
+        for (OnAWay each : conditions) {
+            if ((each.statedOfTheRun() != null
+                    && metByAFreeValue(each.statedOfTheRun(), each, out, declined, past, read))
+                    || (each.byEvery() != null
+                            && everyElementFreeToMeet(each, out, declined, past, read))) {
+                out.remove(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether a value free in {@code stated} meets it whatever the rest of the row holds, so that
+     * a row of the way stands at every value of everything else: a statement the run says whether
+     * it held, which places no row.
+     *
+     * <p>Two quantities held unequal are met by either of them that is the value at a place free to
+     * take two values or more ({@link #valuesFreeToChoose}): one of them is not what the other
+     * comes to. No element of a container meeting a statement is met where every element is free
+     * to fail it, each chosen apart from the rest of the row, whatever the container holds; and a
+     * choice of statements by any one of them. Nothing else is said to be met.
+     */
+    private boolean metByAFreeValue(Proposition stated, OnAWay statement,
+                                    List<OnAWay> conditions, Optional<Set<String>> declined,
+                                    DemandReading.Answered past, InputReading read) {
+        return switch (stated) {
+            case Proposition.Compared compared
+                    when compared.relation() instanceof Relation.Affine(var form, Rel rel)
+                    && rel == Rel.EQ && !compared.holds() && form.constant().signum() == 0
+                    && form.coefs().size() == 2
+                    && form.coefs().values().stream().mapToInt(ExactRatio::signum).sum() == 0
+                    && form.coefs().values().stream()
+                            .allMatch(weight -> weight.abs().compareTo(ExactRatio.ONE) == 0) ->
+                    form.coefs().keySet().stream().anyMatch(quantity ->
+                            quantity instanceof DecisionAtom.OfTheInput(
+                                    NumericTerm.ValueOf value, var _)
+                                    && takesTwoValues(valuesFreeToChoose(value, statement,
+                                            conditions, declined, past, read)));
+            case Proposition.Some some when !some.holds() ->
+                    metByAFreeValue(some.ofTheElement().denied(), statement, conditions,
+                            declined, past, read);
+            case Proposition.Any any -> any.parts().stream().anyMatch(part ->
+                    metByAFreeValue(part, statement, conditions, declined, past, read));
+            default -> false;
+        };
+    }
+
+    /**
+     * Whether every element of the container {@code statement} asks of is free to meet what it
+     * asks, whatever the rest of the row holds: one way it may be met asks the element only to be
+     * unequal to one value — that value, or a form of the element held unequal to nought that the
+     * element is free to meet as a number is ({@link #freeToMeet}) — and the element is free to
+     * take two values or more ({@link #valuesFreeToChoose}). Every element is then written as one
+     * value apart from that one, whatever the container holds.
+     */
+    private boolean everyElementFreeToMeet(OnAWay statement, List<OnAWay> conditions,
+                                           Optional<Set<String>> declined,
+                                           DemandReading.Answered past, InputReading read) {
+        NumericTerm.ValueOf element = new NumericTerm.ValueOf(statement.elementsOf().element());
+        NumericDomain.Bounds takes = valuesFreeToChoose(element, statement, conditions, declined,
+                past, read);
+        if (!takesTwoValues(takes)) {
+            return false;
+        }
+        return statement.byEvery().ways().stream().anyMatch(way -> way.size() == 1
+                && (way.get(0) instanceof RowDemand.DifferentFrom
+                        || (way.get(0) instanceof RowDemand.Relational(
+                                TakenConstraint.Affine affine)
+                                && affine.rel() == Rel.NE
+                                && affine.form().coefs().containsKey(element)
+                                && workedOutBeside(affine, element, takes, read))));
+    }
+
+    /**
+     * The values {@code number} is free to be chosen at beside {@code statement}, or null where it
+     * is not free ({@link #freeToMeet}): what the declarations and the run leave it, where nothing
+     * the way says of the input but {@code statement} may name it.
+     *
+     * <p>What another statement of the way turns on is asked of the statement
+     * ({@link OnAWay#turnsOn}): one the run says whether it held places no row, and still reads
+     * the places what it states reads, or may read any where that is not said.
+     */
+    private NumericDomain.Bounds valuesFreeToChoose(NumericTerm.FromOnePosition number,
+                                                    OnAWay statement, List<OnAWay> conditions,
+                                                    Optional<Set<String>> declined,
+                                                    DemandReading.Answered past,
+                                                    InputReading read) {
+        if (past.unsaidOrOwedOnWhatNoPlaceHolds()) {
+            return null;
+        }
+        for (Side side : sides) {
+            Optional<List<TermPath>> reads = placesItIsReadOff(side);
+            if (reads.isEmpty() || reads.get().stream().anyMatch(place ->
+                    number.placesReadOff().stream().anyMatch(place::bearsOn))) {
+                return null;
+            }
+        }
+        for (OnAWay other : conditions) {
+            if (other.equals(statement) || sameRemainder(statement, other)) {
+                continue;
+            }
+            Optional<Set<TermPath>> otherTurnsOn = other.turnsOn();
+            if (otherTurnsOn.isEmpty() || touches(number, otherTurnsOn.get())) {
+                return null;
+            }
+            // A statement that places no row and says nothing of what stands is one whose places
+            // are not told by its positions: a remainder is taken away only where none such
+            // stands beside it.
+            if (statement.onARemainder() != null && other.positions().isEmpty()
+                    && !other.whatStands()) {
+                return null;
+            }
+        }
+        for (Set<TermPath> ties : past.tiedOrOwed()) {
+            if (touches(number, ties)) {
+                return null;
+            }
+        }
+        if (declined.isEmpty() || number.placesReadOff().stream()
+                .anyMatch(at -> declined.get().contains(at.head()))) {
+            return null;
+        }
+        Source source = sourceOf(number, read);
+        if (source == null || source.named()) {
+            return null;
+        }
+        // The values it takes are those the run leaves it: a number the run narrows is taken at
+        // the values the run lets a row hold, whatever the declarations leave it.
+        // Each narrowing is of one number alone, so only those naming this one move its values.
+        List<TakenConstraint> ofIt = past.narrowing().stream()
+                .filter(each -> each.terms().contains(number)).toList();
+        SearchRegion left = read.quantities().region();
+        if (!ofIt.isEmpty()) {
+            left = TakenConstraint.narrowedBy(ofIt, left);
+            if (left.emptiness().isPresent()) {
+                return null;
+            }
+        }
+        return realized(number, source, left, ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
     }
 
     /** Whether {@code other} holds the remainder {@code statement} does: the same division of the
