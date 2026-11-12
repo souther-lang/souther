@@ -55,6 +55,29 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
                 | "none"   : ("x@b.com", Domains([ "a.com" ]), [ "y@b.com" ]) -> false
             """;
 
+    /**
+     * The same equality over two lists of one record, with {@code rule} the record's invariant:
+     * where it ties the lists, a row holding the one the conversion is worked out over empty
+     * may break it beside the entry the other holds for the equality to be reached at.
+     */
+    private static String paired(String rule) {
+        return """
+                module paired
+
+                data Pair = { domains: List<String>, emails: List<String> }%s
+
+                behavior f : (email: String, pair: Pair) -> Bool
+                let f (email, pair) =
+                    List.any(own -> own == String.lowercase(email), pair.domains)
+                        || List.any(own -> own == email, pair.emails)
+
+                example f
+                    | "domain" : ("a.com", Pair { domains = [ "a.com" ], emails = [ "q" ] }) -> true
+                    | "email"  : ("x@b.com", Pair { domains = [ "q" ], emails = [ "x@b.com" ] }) -> true
+                    | "none"   : ("x@b.com", Pair { domains = [ "a.com" ], emails = [ "y@b.com" ] }) -> false
+                """.formatted(rule);
+    }
+
     /** The places of {@code source}'s behavior a region is left open at, by what the report
      *  asks of them. */
     private static List<String> leftOpenIn(String source) {
@@ -88,5 +111,30 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
     void theStringsTheConversionIsNotExactOnStayOpenWhereTheListHoldsOne() {
         List<String> open = leftOpenIn(HELD);
         assertTrue(open.contains("email") && open.contains("emails[*]"), open.toString());
+    }
+
+    @Test
+    void listsOfOneRecordNoRuleTiesAreReadAsListsApart() {
+        List<String> open = leftOpenIn(paired(""));
+        assertTrue(!open.contains("email") && !open.contains("pair.emails[*]"), open.toString());
+    }
+
+    /** As long as each other: an entry for the equality is an entry to work the conversion over. */
+    @Test
+    void theStringsStayOpenWhereARuleHoldsTheListsToOneLength() {
+        List<String> open = leftOpenIn(paired(
+                "\n    invariant List.length(domains) == List.length(emails)"));
+        assertTrue(open.contains("email") && open.contains("pair.emails[*]"), open.toString());
+    }
+
+    /**
+     * The same said as a choice, which the region holds as no bound on either list alone: the tie
+     * is the rule's, and a row emptying the one beside the other's entry breaks it.
+     */
+    @Test
+    void theStringsStayOpenWhereARuleSaysTheOtherHoldsOneWhereThisDoes() {
+        List<String> open = leftOpenIn(paired(
+                "\n    invariant List.length(emails) == 0 || List.length(domains) >= 1"));
+        assertTrue(open.contains("email") && open.contains("pair.emails[*]"), open.toString());
     }
 }

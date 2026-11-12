@@ -4740,12 +4740,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * The containers a row holds no entry in, beside any value at {@code place}, such that the
-     * way is still met. Each is apart from {@code place}, from the containers that hold it, and
-     * from the others ({@link #apart}); the way declined nothing that may name it, and the count
-     * the region holds it at reaches nought ({@link #howManyAreHeld}). The way is met only where
-     * every statement of it is shown true on such a row ({@link RowLeavingSomeEmpty},
-     * {@link #truthOnTheRow(OnAWay, Function, List)}): one shown false, or not worked out, is no
-     * statement known to hold with a container emptied, and nothing is emptied.
+     * way is still met: the ones {@link RowLeavingSomeEmpty} lets that row empty, where the way
+     * declined nothing that may name them and the count the region holds them at reaches nought
+     * ({@link #howManyAreHeld}). The way is met only where every statement of it is shown true
+     * on the row ({@link #truthOnTheRow(OnAWay, Function, List)}): one shown false, or not worked
+     * out, is no statement known to hold with a container emptied, and nothing is emptied.
      *
      * <p>Of those the stops of {@code past} name as the ones an operator is worked out inside
      * ({@link Pullback.WorkedOutWhere}).
@@ -4758,26 +4757,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // The relation is reached only where a container of each set it stands inside holds an
         // entry, and a row holding every container of a set empty gets to nothing. Where what the
         // relation stands inside is not said, no container is emptied.
-        if (!past.relationStands().known()) {
+        if (!past.relationStands().known() || declined.isEmpty()) {
             return Set.of();
         }
-        Set<TermPath> theRelationStandsInside = past.relationStands().containers();
-        List<TermPath> pinned = new ArrayList<>(place.containersHoldingIt());
-        pinned.add(place);
-        List<TermPath> empty = new ArrayList<>();
-        for (TermPath container : past.containersAnOperatorIsWorkedOutInside()) {
-            if (theRelationStandsInside.contains(container)
-                    || declined.isEmpty() || declined.get().contains(container.head())
-                    || !pinned.stream().allMatch(at -> apart(container, at, read))
-                    || !empty.stream().allMatch(other -> apart(container, other, read))
-                    || !fewestHeld(howManyAreHeld(container, read, region))
-                            .equals(Optional.of(BigInteger.ZERO))) {
-                continue;
-            }
-            empty.add(container);
+        Optional<RowLeavingSomeEmpty> made = RowLeavingSomeEmpty.beside(place,
+                past.relationStands().containers(), read, region);
+        if (made.isEmpty()) {
+            return Set.of();
         }
-        RowLeavingSomeEmpty row = new RowLeavingSomeEmpty(place, theRelationStandsInside, empty,
-                read, region);
+        RowLeavingSomeEmpty row = made.get();
+        for (TermPath container : past.containersAnOperatorIsWorkedOutInside()) {
+            if (!declined.get().contains(container.head())
+                    && fewestHeld(howManyAreHeld(container, read, region))
+                            .equals(Optional.of(BigInteger.ZERO))) {
+                row.empty(container);
+            }
+        }
+        List<TermPath> empty = row.emptied();
         if (empty.isEmpty() || !conditions.stream().allMatch(each ->
                 truthOnTheRow(each, row::holds, empty) == Truth.TRUE)) {
             return Set.of();
@@ -4786,14 +4782,80 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * A row the relation is reached on beside any value at {@code place}, holding the containers
-     * of {@code empty} empty, and one element in each container {@code place} is at and in each
-     * the relation stands inside: a run gets to the relation only where those hold an entry, and
-     * a row holding one there is one the region leaves ({@link #oneIsHeld}).
+     * A row the relation is reached on beside any value at {@code place}: what it fixes, and the
+     * one way to fix more of it.
+     *
+     * <p>A witness and not every such row. It holds one element in each container {@code place}
+     * is at and in each the relation stands inside, since a run gets to the relation only where
+     * those hold an entry, and none in each container it empties. A way that asks more of those
+     * containers, two elements in one say, is not met on it although another row may meet it:
+     * that is something this does not show, and never something it shows false.
+     *
+     * <p>It is a row only where nothing the declarations say ties two of what it fixes: the value
+     * at the place, each container held to one, each container emptied. Two of them one of which
+     * lies within the other are fixed together. So a container is emptied only where it is apart
+     * from every one of them ({@link #apart}) — a rule holding it to a container the relation
+     * stands inside keeps it as it is — and no row is made where a rule ties the place to such a
+     * container.
      */
-    private record RowLeavingSomeEmpty(TermPath place, Set<TermPath> standsInside,
-                                       List<TermPath> empty, InputReading read,
-                                       SearchRegion region) {
+    private static final class RowLeavingSomeEmpty {
+
+        private final TermPath place;
+        /** The containers the relation stands inside, held as the set they are: what is asked of
+         *  them is whether every one, or some one, is so, which no order of them changes. */
+        private final Set<TermPath> standsInside;
+        private final List<TermPath> emptied = new ArrayList<>();
+        private final InputReading read;
+        private final SearchRegion region;
+
+        private RowLeavingSomeEmpty(TermPath place, Set<TermPath> standsInside, InputReading read,
+                                    SearchRegion region) {
+            this.place = place;
+            this.standsInside = standsInside;
+            this.read = read;
+            this.region = region;
+        }
+
+        /**
+         * The row beside any value at {@code place}, holding one element in each container it is
+         * at and in each of {@code standsInside}, and nothing emptied yet; nothing where a rule
+         * ties two of those. The place and the containers it is at lie within one another, so
+         * what is asked is each container of {@code standsInside} against the place, against the
+         * containers the place is at, and against the others.
+         */
+        static Optional<RowLeavingSomeEmpty> beside(TermPath place, Set<TermPath> standsInside,
+                                                    InputReading read, SearchRegion region) {
+            boolean tied = standsInside.stream().anyMatch(one ->
+                    tiedApart(one, place, read)
+                            || place.containersHoldingIt().stream()
+                                    .anyMatch(holder -> tiedApart(one, holder, read))
+                            || standsInside.stream().anyMatch(other -> tiedApart(one, other, read)));
+            return tied ? Optional.empty()
+                    : Optional.of(new RowLeavingSomeEmpty(place, standsInside, read, region));
+        }
+
+        /** Whether a rule ties {@code one} to {@code other} where neither lies within the other:
+         *  two values a row fixes apart from each other that it may not. */
+        private static boolean tiedApart(TermPath one, TermPath other, InputReading read) {
+            return !one.bearsOn(other) && tiedByARule(one, other, read);
+        }
+
+        /** Empties {@code container} where it is apart from everything the row fixes ({@link
+         *  #apart}), and leaves the row as it is otherwise. */
+        void empty(TermPath container) {
+            if (apart(container, place, read)
+                    && place.containersHoldingIt().stream()
+                            .allMatch(holder -> apart(container, holder, read))
+                    && standsInside.stream().allMatch(each -> apart(container, each, read))
+                    && emptied.stream().allMatch(each -> apart(container, each, read))) {
+                emptied.add(container);
+            }
+        }
+
+        /** The containers it holds empty. */
+        List<TermPath> emptied() {
+            return List.copyOf(emptied);
+        }
 
         /** How many {@code term} is on this row, where it is how many a container holds that the
          *  row fixes; null where it is anything else. */
@@ -4802,7 +4864,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     || !(taken.takenAs() instanceof TakenAs.HowManyItHolds)) {
                 return null;
             }
-            if (empty.contains(taken.position())) {
+            if (emptied.contains(taken.position())) {
                 return ExactRatio.ZERO;
             }
             return (place.containersHoldingIt().contains(taken.position())
