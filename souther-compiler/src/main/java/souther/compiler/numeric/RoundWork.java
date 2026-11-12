@@ -31,6 +31,11 @@ final class RoundWork<A> {
     /** A place holding the sum a premise's residual comes to, and how it was reached. */
     static final byte SUMMED = 1;
 
+    /** A place holding no candidate: the premise names none of the question's positions, so what
+     *  it leaves is the question beside it and is read, or passed over, from the ends as they are
+     *  when it is asked. */
+    static final byte UNNAMED = 3;
+
     /** A place whose candidate is worked out again each time it is read: a residual of two
      *  positions, which the closed differences may bound, or a sum the exact arithmetic could not
      *  hold. */

@@ -230,6 +230,17 @@ final class FormReach<A> {
 
     private long carriedOver;
 
+    /**
+     * How many sums of a premise taken off a question this has made, for a test holding a premise
+     * that names no position of the question to being passed over or merged as it always was and
+     * not summed for it. Counts and nothing else: what any question comes to is the same either way.
+     */
+    long sumsTaken() {
+        return sumsTaken;
+    }
+
+    private long sumsTaken;
+
     /** What {@code Σ coefs·position + constant} runs between. */
     Reach of(Map<A, ExactRatio> coefs, ExactRatio constant) {
         return between(inOrder(coefs), constant, null);
@@ -416,10 +427,11 @@ final class FormReach<A> {
                 // any form of one position is: see highest.
                 best = fromTheEnds(coefs, constant);
             } else {
-                best = withTheDifference(difference(coefs), constant,
-                        fromTheRanges(coefs, constant));
+                ExactCut ranges = fromTheRanges(coefs, constant);
+                best = withTheDifference(difference(coefs), constant, ranges);
                 List<Premise<A>> all = premises().each();
-                best = tightenedBy(best, candidatesOf(atom, coefs, all), all, coefs, constant);
+                best = tightenedBy(best, ranges, candidatesOf(atom, coefs, all), all, coefs,
+                        constant);
             }
             return best == null ? null : new ExactCut(best.at().negated(), best.inclusive());
         }
@@ -441,14 +453,20 @@ final class FormReach<A> {
                 before = before(atom, all.size());
             }
             BitSet left = leftOut();
+            BitSet naming = namingAnyOf(coefs);
             for (int place = 0; place < all.size(); place++) {
                 if (left.get(place)) {
                     out.kinds[place] = RoundWork.ABSENT;
                     continue;
                 }
+                if (!naming.get(place)) {
+                    out.kinds[place] = RoundWork.UNNAMED;
+                    continue;
+                }
                 Premise<A> premise = all.get(place);
                 if (before != null && place < before.places()
-                        && before.kinds[place] != RoundWork.ABSENT) {
+                        && before.kinds[place] != RoundWork.ABSENT
+                        && before.kinds[place] != RoundWork.UNNAMED) {
                     carried(before, place, premise.half(), coefs, out);
                     continue;
                 }
@@ -566,21 +584,42 @@ final class FormReach<A> {
 
     /**
      * {@code best} tightened by every premise's candidate in {@code held}, which is what
-     * {@link #highest} comes to over the premises it does not pass over: a premise passed over is one
-     * whose candidate cannot bound the form lower than what is held already, so the lowest of all the
-     * candidates is the lowest of those that were not.
+     * {@link #highest} comes to: a premise passed over is one whose candidate cannot bound the form
+     * lower than what is held already, so the lowest of all the candidates is the lowest of those
+     * that were not.
      *
-     * @param coefs the question the candidates are of
+     * <p>A premise that names a position of the question has its candidate in {@code held}. One that
+     * names none is passed over or merged as {@link #highest} does, against the ends as they are:
+     * what it leaves is the question beside it, which holds nothing to move to other ends, and
+     * which of those premises are passed over is decided from the ends and not by anything a
+     * closure before could have kept.
+     *
+     * @param ranges what the ends alone leave {@code coefs}
+     * @param coefs  the question the candidates are of
      */
-    private ExactCut tightenedBy(ExactCut best, RoundWork.Candidates held,
+    private ExactCut tightenedBy(ExactCut best, ExactCut ranges, RoundWork.Candidates held,
                                  List<Premise<A>> all, Map<A, ExactRatio> coefs,
                                  ExactRatio constant) {
         ExactCut out = best;
+        int weighs = weighed(coefs);
+        boolean residualsAreRangedOnly = weighs >= 2;
+        int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
         for (int place = 0; place < all.size(); place++) {
             ExactCut residual;
             switch (held.kinds[place]) {
                 case RoundWork.ABSENT -> {
                     continue;
+                }
+                case RoundWork.UNNAMED -> {
+                    Premise<A> each = all.get(place);
+                    if ((residualsAreRangedOnly && passesOver(each, ranges))
+                            || (ranges != null && heldAlready(each, coefs, weighs))
+                            || (residualsAreRangedOnly
+                                    && leavesNothing(each.half(), coefs, weighs, unbounded))) {
+                        continue;
+                    }
+                    merged++;
+                    residual = fromTheEndsWithout(each.half(), coefs, constant);
                 }
                 case RoundWork.ASKED -> residual =
                         fromTheEndsWithout(all.get(place).half(), coefs, constant);
@@ -620,8 +659,8 @@ final class FormReach<A> {
     private ExactCut highestKept(AffineConstraint<A> asking, int direction,
                                  Map<A, ExactRatio> coefs) {
         ExactRatio constant = ExactRatio.ZERO;
-        ExactCut best = withTheDifference(difference(coefs), constant,
-                fromTheRanges(coefs, constant));
+        ExactCut ranges = fromTheRanges(coefs, constant);
+        ExactCut best = withTheDifference(difference(coefs), constant, ranges);
         List<Premise<A>> all = premises().each();
         workOut.premisesHeld(all.size());
         RoundWork.Candidates held = new RoundWork.Candidates(all.size());
@@ -631,17 +670,23 @@ final class FormReach<A> {
                 || before.places() > all.size())) {
             before = null;
         }
+        BitSet naming = namingAnyOf(coefs);
         for (int place = 0; place < all.size(); place++) {
+            if (!naming.get(place)) {
+                held.kinds[place] = RoundWork.UNNAMED;
+                continue;
+            }
             AffineConstraint.HalfSpace<A> premise = all.get(place).half();
             if (before != null && place < before.places()
-                    && before.kinds[place] != RoundWork.ABSENT) {
+                    && before.kinds[place] != RoundWork.ABSENT
+                    && before.kinds[place] != RoundWork.UNNAMED) {
                 carried(before, place, premise, coefs, held);
             } else {
                 new Aggregate(coefs, premise).fillWhole(held, place);
             }
         }
         workOut.putWhole(asking, direction, held);
-        return tightenedBy(best, held, all, coefs, constant);
+        return tightenedBy(best, ranges, held, all, coefs, constant);
     }
 
     /**
@@ -666,6 +711,7 @@ final class FormReach<A> {
         private int weighed;
 
         Aggregate(Map<A, ExactRatio> question, AffineConstraint.HalfSpace<A> premise) {
+            sumsTaken++;
             this.premise = premise;
             this.question = question;
             sum = ExactRatio.ZERO.plus(premise.bound().at()).orNull();

@@ -80,7 +80,8 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
                     + " reaches it only where a partial sum could not be held, and there it is"
                     + " answered by FormReach#fromTheEndsWithout in the order the positions decide",
             "souther/compiler/numeric/FormReach#tightenedBy"
-                    + "(Lsouther/compiler/numeric/ExactCut;Lsouther/compiler/numeric/RoundWork$Candidates;"
+                    + "(Lsouther/compiler/numeric/ExactCut;Lsouther/compiler/numeric/ExactCut;"
+                    + "Lsouther/compiler/numeric/RoundWork$Candidates;"
                     + "Ljava/util/List;Ljava/util/Map;Lsouther/compiler/numeric/ExactRatio;)"
                     + "Lsouther/compiler/numeric/ExactCut;",
             "every caller hands the coefficients over in the one order the positions decide, and"
