@@ -2,6 +2,7 @@ package souther.compiler.fmt;
 
 import souther.compiler.cst.ContextualWord;
 import souther.compiler.cst.CstParser;
+import souther.compiler.cst.SourceSpace;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
@@ -2669,8 +2670,8 @@ public final class Formatter {
         for (SyntaxToken t : run) {
             if (consumedComments.add(t.start())) {
                 out.add(which == Carrier.TRAILING
-                        ? TokenDoc.trailing(t.text().stripTrailing())
-                        : TokenDoc.comment(t.text().stripTrailing()));
+                        ? TokenDoc.trailing(SourceSpace.stripTrailing(t.text()))
+                        : TokenDoc.comment(SourceSpace.stripTrailing(t.text())));
             }
         }
     }

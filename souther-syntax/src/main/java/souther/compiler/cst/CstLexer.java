@@ -169,7 +169,7 @@ public final class CstLexer {
         while (pos < src.length()) {
             int start = pos;
             int c = src.codePointAt(pos);
-            if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            if (SourceSpace.is(c)) {
                 whitespace(start);
             } else if (c == '/' && pos + 1 < src.length() && src.charAt(pos + 1) == '/') {
                 lineComment(start);
@@ -193,7 +193,7 @@ public final class CstLexer {
     private void whitespace(int start) {
         while (pos < src.length()) {
             char c = src.charAt(pos);
-            if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            if (SourceSpace.is(c)) {
                 pos++;
             } else {
                 break;
