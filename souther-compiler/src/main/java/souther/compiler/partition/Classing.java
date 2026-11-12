@@ -461,8 +461,9 @@ final class Classing {
         if (cells.isEmpty() && !open.isEmpty()) {
             return notComposed(mine, told, BlockReason.RelationShownOverARegion.of(
                     open.stream().flatMap(each -> each.open().stream()).toList(),
-                    open.stream().flatMap(each -> each.statement().imagesNotShown().stream())
-                            .toList(),
+                    open.stream().map(each -> each.statement().operations())
+                            .reduce(BlockReason.OperationsNotShown.NONE,
+                                    BlockReason.OperationsNotShown::and),
                     open.stream().flatMap(each -> each.byCodePoints().stream()).toList()), open);
         }
         List<PartitionClass> out = new ArrayList<>();

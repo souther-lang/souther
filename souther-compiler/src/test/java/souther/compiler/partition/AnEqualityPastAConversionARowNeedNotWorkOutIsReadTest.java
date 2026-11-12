@@ -113,6 +113,58 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
         assertTrue(open.contains("email") && open.contains("emails[*]"), open.toString());
     }
 
+    /**
+     * What each place is left open for, by why: the place, then the functions whose image is not
+     * shown, then those a run is not shown to get past.
+     */
+    private static List<String> leftOpenFor(String source) {
+        Compilation model = Compilation.ofSource(source, "Main");
+        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        model.answerEverything();
+        JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+        List<String> out = new ArrayList<>();
+        for (JsonNode module : report.path("modules")) {
+            for (JsonNode behavior : module.path("behaviors")) {
+                for (JsonNode each : behavior.path("partition").path("unanswered")) {
+                    for (JsonNode stop : each.path("stopped")) {
+                        JsonNode open = stop.path("leftOpen");
+                        if (!open.isMissingNode()) {
+                            out.add(each.path("subject").path("path").asString() + " image "
+                                    + open.path("imagesNotShown") + " past "
+                                    + open.path("notShownGottenPast"));
+                        }
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The conversion is worked out on every run to the equality, and the strings it is not
+     *  exact on are open for whether it gets the run past, not for its image. */
+    @Test
+    void theStringsAreOpenForGettingPastTheConversionNotForItsImage() {
+        List<String> open = leftOpenFor(HELD);
+        assertTrue(open.contains("email image  past [\"String.lowercase\"]"), open.toString());
+    }
+
+    /** Where the equality is with what the conversion answers, its image is what is not shown. */
+    @Test
+    void anEqualityWithWhatTheConversionAnswersIsOpenForItsImage() {
+        List<String> open = leftOpenFor("""
+                module image
+
+                behavior same : (a: String, b: String) -> Bool
+                let same (a, b) = String.lowercase(a) == b
+
+                example same
+                    | "equal" : ("ab", "ab") -> true
+                    | "differ" : ("ab", "cd") -> false
+                """);
+        assertTrue(open.contains("b image [\"String.lowercase\"] past "), open.toString());
+    }
+
     @Test
     void listsOfOneRecordNoRuleTiesAreReadAsListsApart() {
         List<String> open = leftOpenIn(paired(""));

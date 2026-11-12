@@ -193,12 +193,12 @@ public final class BehaviorSetStatements {
                          NumericTerm.FromOnePosition term,
                          AdmittedPlan whenTrue, AdmittedPlan whenFalse,
                          AdmittedPlan notShown, Long trueUpTo, List<ValuesWithin> notReached,
-                         List<String> imagesNotShown, List<CountedOpen> notCounted) {
+                         BlockReason.OperationsNotShown operations, List<CountedOpen> notCounted) {
 
         Asked(PredicateOrigin by, PredicateStatement states, NumericTerm.FromOnePosition term,
               AdmittedPlan whenTrue, AdmittedPlan whenFalse) {
-            this(by, states, term, whenTrue, whenFalse, null, null, List.of(), List.of(),
-                    List.of());
+            this(by, states, term, whenTrue, whenFalse, null, null, List.of(),
+                    BlockReason.OperationsNotShown.NONE, List.of());
         }
     }
 
@@ -312,7 +312,8 @@ public final class BehaviorSetStatements {
                 : AdmittedPlan.meeting(List.of(AdmittedPlan.of(mayBe),
                         canBe.isEmpty() ? AdmittedPlan.ANY : AdmittedPlan.without(canBe)));
         return new Asked(each.by(), each.states(), each.term(), shown,
-                AdmittedPlan.without(mayBe), notShown, null, List.of(), List.of(), List.of());
+                AdmittedPlan.without(mayBe), notShown, null, List.of(),
+                BlockReason.OperationsNotShown.NONE, List.of());
     }
 
     /**
@@ -390,7 +391,7 @@ public final class BehaviorSetStatements {
             }
             asked.add(new Asked(each.by(), each.states(), each.term(),
                     shown, whenFalse, notShown.equals(AdmittedPlan.NONE) ? null : notShown,
-                    strings.upTo(), notReached, strings.imagesNotShown(), notCounted));
+                    strings.upTo(), notReached, strings.operations(), notCounted));
         }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
@@ -674,7 +675,7 @@ public final class BehaviorSetStatements {
                             built.of(each.whenFalse()), each.states(), each.by(),
                             each.notShown() == null ? ValueSet.NONE
                                     : built.of(each.notShown()),
-                            each.notReached(), each.imagesNotShown(),
+                            each.notReached(), each.operations(),
                             each.notCounted().stream().map(open -> new SetStatement.NotCounted(
                                     built.of(open.strings()), open.why())).toList())));
         }

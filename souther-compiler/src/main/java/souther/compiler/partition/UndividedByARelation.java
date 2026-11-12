@@ -991,21 +991,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                the other side's only at these, so a string of this side is shown to be none
      *                of its values at any other
      * @param partner what the model calls the partner
-     * @param imagesNotShown the operations of the library whose image over the strings of a side is
-     *                shown only where it is exact, which are why strings of {@code mayBe} and not
-     *                of {@code canBe} are open at any length
+     * @param operations the operations of the library that are why strings of {@code mayBe} and
+     *                not of {@code canBe} are open at any length, by why: whose image over the
+     *                strings of a side is shown only where it is exact, and which a run gets to
+     *                the relation past only where it is shown to
      */
     record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo,
                                   StringsPastTheWay reached,
                                   StringsPastTheWay partnerHeldTo, String partner,
-                                  List<String> imagesNotShown)
+                                  BlockReason.OperationsNotShown operations)
             implements BehaviorSetStatements.PartnerHolds {
 
         StringsAPartnerCanHold {
-            if (canBe == null || mayBe == null || partner == null || imagesNotShown == null) {
+            if (canBe == null || mayBe == null || partner == null || operations == null) {
                 throw new IllegalArgumentException("strings a partner can hold are some strings");
             }
-            imagesNotShown = List.copyOf(imagesNotShown);
         }
 
         /**
@@ -1016,7 +1016,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          */
         static StringsAPartnerCanHold unreached(ValueSet canBe, ValueSet mayBe, Long upTo,
                                                 String partner) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, null, null, partner, List.of());
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, null, null, partner,
+                    BlockReason.OperationsNotShown.NONE);
         }
 
         /** Strings shown to be the partner's values exactly where {@code canBe} holds them, and
@@ -1026,11 +1027,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /** The same strings, with the operations whose image is not shown beyond them. */
-        StringsAPartnerCanHold withTheImagesNotShownOf(List<String> operations) {
-            List<String> all = new ArrayList<>(imagesNotShown);
-            all.addAll(operations);
+        StringsAPartnerCanHold withTheImagesNotShownOf(List<String> named) {
             return new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, partnerHeldTo, partner,
-                    all.stream().distinct().sorted().toList());
+                    operations.andImagesOf(named));
+        }
+
+        /** The same strings, with the operations a run is not shown to get past for some of
+         *  them. */
+        StringsAPartnerCanHold notShownGottenPast(List<String> named) {
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, partnerHeldTo, partner,
+                    operations.andNotGottenPast(named));
         }
 
         /**
@@ -1040,20 +1046,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          */
         StringsAPartnerCanHold showing(ValueSet canBe, ValueSet mayBe, Long upTo) {
             return new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, partnerHeldTo, partner,
-                    imagesNotShown);
+                    operations);
         }
 
         /** These, shown only at the lengths {@code lengths}, which every other length is left
          *  open at. */
         StringsAPartnerCanHold reachedAt(StringsPastTheWay lengths) {
             return new StringsAPartnerCanHold(canBe, mayBe, upTo, lengths, partnerHeldTo, partner,
-                    imagesNotShown);
+                    operations);
         }
 
         /** These, where the partner is the other side's only at the lengths {@code lengths}. */
         StringsAPartnerCanHold partnerHeldTo(StringsPastTheWay lengths) {
             return new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, lengths, partner,
-                    imagesNotShown);
+                    operations);
         }
 
         /** Whether every string is shown on one side or the other, so that none is open. */
@@ -1075,8 +1081,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         StringsAPartnerCanHold orAnother(StringsAPartnerCanHold other) {
             StringsAPartnerCanHold named = partner.equals(other.partner) ? this
                     : new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, partnerHeldTo,
-                            partner + " or " + other.partner, imagesNotShown);
-            return named.withTheImagesNotShownOf(other.imagesNotShown);
+                            partner + " or " + other.partner, operations);
+            return new StringsAPartnerCanHold(named.canBe, named.mayBe, named.upTo, named.reached,
+                    named.partnerHeldTo, named.partner, operations.and(other.operations));
         }
     }
 
@@ -3995,15 +4002,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out = out.showing(ValueSet.matching(canBeThere), ValueSet.matching(mayBeOrNot),
                     out.upTo());
         }
-        // Each conversion the run is gotten past exactly is one whose image is shown only where
-        // it is exact, and the strings it is not exact on are the ones left open.
+        // Each conversion the run is gotten past exactly is one it is not shown to get past at the
+        // strings it is not exact on, which are the ones left open: a conversion ends a run where
+        // its answer is longer than a String holds, and what was taken for a string the run gets
+        // past is a string the map is exact on. Its image is another question, and not why —
+        // unless the side reads what it answers, where its image is why those strings are open
+        // already, and getting past it opens none of its own.
         List<String> operations = new ArrayList<>();
         for (ConvertedOn each : conversions) {
             operations.addAll(operationsNotExactOver(each.conversion(),
                     each.place().equals(mine) ? languageOf(mineHolds)
                             : languageOf(theirStrings)));
         }
-        return out.withTheImagesNotShownOf(operations);
+        List<String> images = out.operations().images();
+        return out.notShownGottenPast(operations.stream()
+                .filter(each -> !images.contains(each)).toList());
     }
 
     /**

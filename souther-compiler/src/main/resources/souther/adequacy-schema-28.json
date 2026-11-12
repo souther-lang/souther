@@ -8769,6 +8769,15 @@
                           },
                           "description": "The functions of the library the other value is derived through whose image over the strings of the position is not shown, so the values they take it to are not among those the classes hold. Present only where some are open whatever their length, and sorted."
                         },
+                        "notShownGottenPast": {
+                          "type": "array",
+                          "minItems": 1,
+                          "uniqueItems": true,
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "The functions of the library a run gets to the relation past, each ending a run where its answer has more code points than a String holds, that are not shown to answer within that for some strings of the position: those strings are not among those the classes hold. Present only where some are open whatever their length, and sorted."
+                        },
                         "codePoints": {
                           "type": "array",
                           "minItems": 1,
