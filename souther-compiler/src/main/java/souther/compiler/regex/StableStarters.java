@@ -32,10 +32,24 @@ final class StableStarters {
     /** For each page worked out, which of its code points are stable starters. */
     private static final AtomicReferenceArray<long[]> WORKED = new AtomicReferenceArray<>(PAGES);
 
-    /** Every such code point. */
+    /** Every such code point, worked out once. */
     static CodePoints all() {
-        return within(CodePoints.EVERYTHING);
+        return Every.THEM;
     }
+
+    /** Held apart so that the pages are not all worked out until the first ask for every one. */
+    private static final class Every {
+        static final CodePoints THEM = readOff(CodePoints.EVERYTHING);
+    }
+
+    /**
+     * The least number of code points a set holds for {@link #within} to cut it with
+     * {@link #all} instead of reading its pages: a page walk costs a word for each
+     * {@code Long.SIZE} code points of the set, and the cut one comparison for each range of
+     * either set, so a set of a few planes is cheaper cut, and one of a few pages is cheaper
+     * read, which also leaves the pages it does not ask about unworked.
+     */
+    private static final long CUT_FROM = 1L << 16;
 
     /** Whether {@code over} holds such a code point, which stops at the first one. */
     static boolean anyWithin(CodePoints over) {
@@ -49,6 +63,11 @@ final class StableStarters {
 
     /** The code points of {@code over} that are such code points. */
     static CodePoints within(CodePoints over) {
+        return over.size() >= CUT_FROM ? all().and(over) : readOff(over);
+    }
+
+    /** The same, read a page at a time off the pages worked out. */
+    private static CodePoints readOff(CodePoints over) {
         List<CodePoints.Range> out = new ArrayList<>();
         for (CodePoints.Range range : over.ranges()) {
             int cp = range.from();

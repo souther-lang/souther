@@ -149,9 +149,12 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
         assertTrue(open.contains("email image  past [\"String.lowercase\"]"), open.toString());
     }
 
-    /** Where the equality is with what the conversion answers, its image is what is not shown. */
+    /**
+     * Where the equality is with what the conversion answers, every string the conversion leaves
+     * as it stands is its own answer, so the other side holds nothing open for the image.
+     */
     @Test
-    void anEqualityWithWhatTheConversionAnswersIsOpenForItsImage() {
+    void anEqualityWithWhatTheConversionAnswersLeavesNothingOpenForItsImage() {
         List<String> open = leftOpenFor("""
                 module image
 
@@ -162,7 +165,25 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
                     | "equal" : ("ab", "ab") -> true
                     | "differ" : ("ab", "cd") -> false
                 """);
-        assertTrue(open.contains("b image [\"String.lowercase\"] past "), open.toString());
+        assertEquals(List.of(), open);
+    }
+
+    /** A string of the converted side outside the map and not left as it stands, such as
+     *  {@code İ}, has an answer only the conversion works out, so its image is still open. */
+    @Test
+    void anEqualityBetweenTwoConversionsIsOpenForTheStringsOnlyTheConversionAnswers() {
+        List<String> open = leftOpenFor("""
+                module image
+
+                behavior same : (a: String, b: String) -> Bool
+                let same (a, b) = String.lowercase(a) == String.lowercase(b)
+
+                example same
+                    | "equal" : ("ab", "ab") -> true
+                    | "differ" : ("ab", "cd") -> false
+                """);
+        assertTrue(open.stream().anyMatch(each -> each.contains("image [\"String.lowercase\"")),
+                open.toString());
     }
 
     @Test
