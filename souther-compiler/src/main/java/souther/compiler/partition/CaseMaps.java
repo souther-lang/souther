@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntPredicate;
 
+import net.unit8.notation199x.CaseConversion;
 import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.semantics.CaseMapping;
@@ -31,7 +33,8 @@ final class CaseMaps {
     static CodeMap of(CaseMapping mapping) {
         CodeMap had = MADE.get(mapping);
         if (had == null) {
-            had = CodeMap.of(text -> BoundUnderEvaluation.mapped(mapping, text));
+            had = CodeMap.of(text -> BoundUnderEvaluation.mapped(mapping, text),
+                    leftAloneEverywhere(mapping));
             CaseMapping outermost = switch (mapping) {
                 case CaseMapping.None it -> it;
                 case CaseMapping.Lowercase _ -> CaseMapping.LOWERCASE;
@@ -46,5 +49,25 @@ final class CaseMaps {
             }
         }
         return had;
+    }
+
+    /**
+     * Whether {@code mapping} answers a code point as it is in every text, as the tables of the
+     * case conversion the run time does it with say: where each conversion it is made of does.
+     */
+    static IntPredicate leftAloneEverywhere(CaseMapping mapping) {
+        return switch (mapping) {
+            case CaseMapping.None _ -> codePoint -> true;
+            case CaseMapping.Lowercase(CaseMapping of) -> {
+                IntPredicate inner = leftAloneEverywhere(of);
+                yield codePoint -> CaseConversion.lowercaseLeavesAlone(codePoint)
+                        && inner.test(codePoint);
+            }
+            case CaseMapping.Uppercase(CaseMapping of) -> {
+                IntPredicate inner = leftAloneEverywhere(of);
+                yield codePoint -> CaseConversion.uppercaseLeavesAlone(codePoint)
+                        && inner.test(codePoint);
+            }
+        };
     }
 }

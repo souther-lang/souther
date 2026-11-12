@@ -948,8 +948,10 @@ public final class OperationFacts {
             about("String", "characters", new OperationFact.EveryElementOfItsAnswerIs(
                     new SideAnswered(AnswerAspect.EMPTINESS, true))),
             // A case mapping takes a code point that is not whitespace to some that are not, and
-            // takes whitespace to itself; the composition that follows it joins code points that
-            // are not whitespace into one that is not. Trimming takes off whitespace alone.
+            // takes whitespace to whitespace alone; the composition that follows it joins code
+            // points that are not whitespace into one that is not. Trimming takes off whitespace
+            // alone. Held to the run time's answers, of every code point, by
+            // WhatTheLibraryStatesOfACaseConversionAndWhitespaceIsWhatItAnswersTest.
             about("String", "lowercase", new OperationFact.KeepsWhetherItHoldsACodePointOf(
                     new CodePointClass.NotWhitespace(), at(0),
                     OperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy.THE_STRING)),

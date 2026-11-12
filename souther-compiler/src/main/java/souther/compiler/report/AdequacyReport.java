@@ -6879,6 +6879,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ArrayNode names = left.putArray("imagesNotShown");
             open.imagesNotShown().forEach(names::add);
         }
+        if (!open.notShownGottenPast().isEmpty()) {
+            ArrayNode names = left.putArray("notShownGottenPast");
+            open.notShownGottenPast().forEach(names::add);
+        }
     }
 
     /**
@@ -11580,6 +11584,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return leftOpen.map(BlockReason.RelationShownOverARegion::imagesNotShown)
                 .filter(names -> !names.isEmpty())
                 .map(names -> page.say(new ReportMessage.TheImageIsNotShown(
+                        String.join(", ", names))))
+                .orElse("")
+                + leftOpen.map(BlockReason.RelationShownOverARegion::notShownGottenPast)
+                .filter(names -> !names.isEmpty())
+                .map(names -> page.say(new ReportMessage.NotShownGottenPast(
                         String.join(", ", names))))
                 .orElse("");
     }

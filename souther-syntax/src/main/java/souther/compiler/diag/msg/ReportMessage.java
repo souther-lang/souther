@@ -557,6 +557,8 @@ public sealed interface ReportMessage extends Message {
 
     record TheImageIsNotShown(String names) implements ReportMessage, Prose {}
 
+    record NotShownGottenPast(String names) implements ReportMessage, Prose {}
+
     record NoRowShownComputedIn(String numbers) implements ReportMessage, Prose {}
 
     record AtLeast(String at) implements ReportMessage, Prose {}
