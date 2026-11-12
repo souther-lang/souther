@@ -319,7 +319,8 @@ class ANameReadTwiceIsFollowedOnceTest {
      */
     @Test
     void aNameIsFollowedAsOftenInAnEnvironmentMadeAfreshAsInOneThatIsNot() {
-        int links = 16;
+        // Enough links that the count doubles at each one where the key is the environment.
+        int links = 4;
 
         assertEquals(askedOverAChain(links, false), askedOverAChain(links, true),
                 "a name was followed again because it was reached in an environment made afresh,"
