@@ -240,14 +240,11 @@ final class BindingEnvironment {
         private static final ThreadLocal<Watch> RUNNING = new ThreadLocal<>();
 
         private final Handed started;
-        /** The watch this one runs inside, which is told what this one asked when it is done. */
-        private final Watch outer;
         private final Map<BindingId, Core> asked = new LinkedHashMap<>();
         private boolean unsure;
 
-        private Watch(Handed started, Watch outer) {
+        private Watch(Handed started) {
             this.started = started;
-            this.outer = outer;
         }
 
         /** What {@code reading} comes to, and what it asked of {@code on}'s handed values, which
@@ -257,7 +254,7 @@ final class BindingEnvironment {
          *  the one it is inside as well, placed from where the inner one began. */
         static <T> Watched<T> over(BindingEnvironment on, Supplier<T> reading) {
             Watch outer = RUNNING.get();
-            Watch watch = new Watch(on.handed, outer);
+            Watch watch = new Watch(on.handed);
             RUNNING.set(watch);
             try {
                 T result = reading.get();

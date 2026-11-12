@@ -750,22 +750,6 @@ public final class ReadThroughNames {
         return noOne[0] ? null : out;
     }
 
-    /** {@code each} told, itself where none of them is told anything, or null where one is no
-     *  one number. */
-    private static List<Quantity> told(List<Quantity> each, Telling telling) {
-        List<Quantity> out = new ArrayList<>(each.size());
-        boolean changed = false;
-        for (Quantity one : each) {
-            Quantity told = told(one, telling);
-            if (told == null) {
-                return null;
-            }
-            changed |= told != one;
-            out.add(told);
-        }
-        return changed ? out : each;
-    }
-
     /**
      * {@code quantity}, which holds {@code positions} and no word of which value at them it is
      * about: itself where none of them is one a name was told, and null — no one number — where
