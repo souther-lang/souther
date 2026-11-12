@@ -261,6 +261,18 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
             behavior valuesOfRewrittenAny : (l: Line) -> Bool
             let valuesOfRewrittenAny (l) =
                 List.any(v -> v == 5, Map.values(Map.mapValues((_, v) -> v + 1, l.rates)))
+            behavior takenNothing : (l: Line) -> Bool
+            let takenNothing (l) = List.contains("K", List.take(0, l.tags))
+            behavior takenBelowNothing : (l: Line) -> Bool
+            let takenBelowNothing (l) = List.contains("K", List.take(-1, l.tags))
+            behavior takenSome : (l: Line) -> Bool
+            let takenSome (l) = List.contains("K", List.take(l.n, l.tags))
+            behavior sortedNothing : (l: Line) -> Bool
+            let sortedNothing (l) = List.contains("K", List.sort(List.take(0, l.tags)))
+            behavior takenOfNothing : (l: Line) -> Bool
+            let takenOfNothing (l) = List.contains("K", List.take(l.n, List.take(0, l.tags)))
+            behavior takenNothingOfSome : (l: Line) -> Bool
+            let takenNothingOfSome (l) = List.contains("K", List.take(0, List.take(l.n, l.tags)))
             behavior containsKeyOfKept : (l: Line) -> Bool
             let containsKeyOfKept (l) =
                 Map.containsKey("K", Map.filterEntries((_, v) -> v > 3, l.rates))
@@ -585,6 +597,23 @@ class AContainerAskedForAWrittenMemberDrawsTheLineAComparisonWithItDrawsTest {
         assertEquals(Set.of("l.rates[*] 3", "l.rates[key] USD"), linesOf("filteredKeys"));
         assertEquals(Set.of("l.tags[*] K"), linesOf("taken"));
         assertEquals(Set.of("l.rates[key] USD"), linesOf("removedKeys"));
+    }
+
+    /**
+     * What holds none of the elements it was handed holds none, so a value asked of it is no line
+     * on what it was handed, and no obligation of a row there. Only where that is shown: a count
+     * the input gives may be any.
+     */
+    @Test
+    void aWindowShownToHoldNothingDrawsNoLine() {
+        assertEquals(Set.of(), linesOf("takenNothing"));
+        assertEquals(Set.of(), linesOf("takenBelowNothing"));
+        assertEquals(Set.of(), linesOf("sortedNothing"));
+        // Whichever window is outside, what is inside holds none.
+        assertEquals(Set.of(), linesOf("takenOfNothing"));
+        assertEquals(Set.of(), linesOf("takenNothingOfSome"));
+        assertTrue(linesOf("takenSome").contains("l.tags[*] K"),
+                () -> linesOf("takenSome").toString());
     }
 
     /**

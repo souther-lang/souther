@@ -3763,9 +3763,13 @@ final class Pullback {
         record Said(ALawRead read, LawNumber.HowManyMeet<DeclaredArgument> meeting, ElementAt each,
                     Denotation handed) implements Kept {}
 
-        /** An operation that held some of the elements by where they stand, as {@code List.take}
-         *  does, or by what is left out, as {@code Map.remove} does. */
-        record Unsaid() implements Kept {}
+        /**
+         * An operation that held some of the elements by where they stand, as {@code List.take}
+         * does, or by what is left out, as {@code Map.remove} does.
+         *
+         * @param window the call of the operation, whose answer may hold nothing
+         */
+        record Unsaid(Denotation window) implements Kept {}
     }
 
     /** Where a container's elements stand, what each is there for the statement quantified over
@@ -4113,7 +4117,7 @@ final class Pullback {
                                 ? DefaultBoundOperationFacts.get().keepsTheKeysOf(operation)
                                 : null;
                 if (from != null) {
-                    kept.add(new Kept.Unsaid());
+                    kept.add(new Kept.Unsaid(at));
                 }
             }
             // Whether some element meets a statement is the same of a container holding the
@@ -6453,16 +6457,26 @@ final class Pullback {
                     : new Derivation.OfWhatWasKept(answered, whatKept(kept));
         }
 
+        /** Whether what {@code window} answers is shown to hold nothing, whatever the input is:
+         *  {@code List.take(0, xs)} holds none. Where that is not shown, it may hold some. */
+        private boolean holdsNothing(Denotation window) {
+            return holdingSomething(window.value(), window.at()).concludes(Optional.empty())
+                    instanceof Proposition.Always(boolean holds) && !holds;
+        }
+
         /** How what each of {@code kept} kept its elements by was read, in their order. */
         private List<Derivation> whatKept(List<Kept> kept) {
             List<Derivation> by = new ArrayList<>();
             for (Kept one : kept) {
                 switch (one) {
-                    // No row is asked for what no statement says; the lines drawn on the elements
-                    // are those of what is stated of them.
-                    case Kept.Unsaid _ -> by.add(withoutRows(new Derivation.WrittenOut(true),
-                            unread(e, reads, new WhyUnread.AtNoPosition(
-                                    WhyUnread.AtNoPosition.Place.CONTAINER))));
+                    // What holds none of the elements it was handed holds none, so nothing is some
+                    // element of it. Otherwise no row is asked for what no statement says, and the
+                    // lines drawn on the elements are those of what is stated of them.
+                    case Kept.Unsaid(Denotation window) -> by.add(holdsNothing(window)
+                            ? new Derivation.WrittenOut(false)
+                            : withoutRows(new Derivation.WrittenOut(true), unread(e, reads,
+                                    new WhyUnread.AtNoPosition(
+                                            WhyUnread.AtNoPosition.Place.CONTAINER))));
                     case Kept.Said said when said.handed() != null -> by.add(said.read()
                             .ofTheValue(said.meeting().container(), said.meeting().ofTheElement(),
                                     said.handed()));
