@@ -2,12 +2,15 @@ package souther.compiler.meaning;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.hash.ValueHash;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ValueName;
 
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -98,6 +101,30 @@ class AnAnswerHandedTheSameAnswerTwiceIsOneValueAtEveryDepthTest {
     void aDeepAnswerSpellsInWhatGrowsWithItsCallsAndNotWithTheWaysThroughThem() {
         Spelling spelling = chain(200, "x").spelling();
         assertTrue(spelling.length() < 20_000, "spelled in " + spelling.length());
+    }
+
+    /**
+     * What a chain of answers is told apart by comes to no number it already had, however deep.
+     * The same chain hashed as {@code int}s comes round after some tens of thousands of steps, and
+     * from there every answer deeper hashes as one before it.
+     */
+    @Test
+    void aChainDeeperThanAnIntHashCanTellApartIsStillTold() {
+        Set<Long> states = new HashSet<>();
+        Set<Integer> narrow = new HashSet<>();
+        long state = 1;
+        int number = 1;
+        boolean cameRound = false;
+        for (int depth = 0; depth < 400_000; depth++) {
+            state = ValueHash.ofItsPartsWide(FLOOR_MOD.getClass(), state, state);
+            assertTrue(states.add(state), "a state repeated at depth " + depth);
+            number = ValueHash.ofItsParts(FLOOR_MOD.getClass(), number, number);
+            cameRound |= !narrow.add(number);
+        }
+        assertTrue(cameRound, "the int chain this is compared with never came round");
+        Quantity deep = chain(100_000, "x");
+        assertEquals(deep.hashCode(), chain(100_000, "x").hashCode());
+        assertNotEquals(deep, chain(100_001, "x"));
     }
 
     @Test

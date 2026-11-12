@@ -4,7 +4,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 
 import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -35,10 +34,6 @@ public final class PositionsAStatementReads {
     /** Whether a value a binding holds is read as itself rather than as nothing a place is. */
     private final boolean valuesBound;
     private final Set<Quantity.OfABinding> bound = new LinkedHashSet<>();
-    /** The answers of operations already read, by identity: one held by several others is read once
-     *  however many paths lead to it. */
-    private final Set<Quantity.WhatAnOperationAnswers> answersRead =
-            Collections.newSetFromMap(new IdentityHashMap<>());
     /** How many applications of a closure the part read is inside. */
     private int insideAnApplication;
 
@@ -261,10 +256,10 @@ public final class PositionsAStatementReads {
             case Quantity.OfABinding value -> handedOff ? readsWhatIsHanded(value)
                     : valuesBound && insideAnApplication == 0 && kept(value);
             case Quantity.HowManyCarried _, Quantity.TheKeptTotal _ -> false;
-            // Each distinct answer once: what it adds is the positions of the inputs it is made of,
-            // which a second visit adds again to a set, and what it answers is that of each one.
-            case Quantity.WhatAnOperationAnswers answers -> !answersRead.add(answers)
-                    || answers.of().stream().allMatch(this::reads);
+            // Made of numbers of the input and nothing else, so it is read as each of them is, and
+            // they are asked of the answer, which holds them once however many paths lead to them.
+            case Quantity.WhatAnOperationAnswers answers ->
+                    answers.positionsItIsMadeOf().stream().allMatch(this::reads);
             // A piece of a string is whatever the statement it is read inside says it is, and the
             // string that statement is about is no part of this quantity to collect.
             case Quantity.CodePointsOfAPiece _ -> false;

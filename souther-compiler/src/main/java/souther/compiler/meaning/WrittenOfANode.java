@@ -104,8 +104,9 @@ public final class WrittenOfANode {
             case Quantity.RemainderByAnInput remainder -> remainder.operands().stream()
                     .allMatch(this::reads);
             case Quantity.ProductOfTwo product -> product.factors().stream().allMatch(this::reads);
-            case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
-                    .allMatch(this::reads);
+            // Made of numbers of the input and nothing else, asked of the answer for them once.
+            case Quantity.WhatAnOperationAnswers answers ->
+                    answers.positionsItIsMadeOf().stream().allMatch(this::reads);
             case Quantity.APieceOf piece -> reads(piece.string());
             case Quantity.ThePieceAt piece -> reads(piece.string());
             case Quantity.IsAmongThePieces among -> reads(among.value()) && reads(among.string());

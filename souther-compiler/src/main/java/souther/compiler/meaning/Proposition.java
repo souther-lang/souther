@@ -334,8 +334,10 @@ public sealed interface Proposition {
                     isAnElementOf(taken, container);
             case DecisionAtom.ComputedOverAnAnswer computed ->
                     isAnElementOf(computed.list(), container);
-            case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
-                    .anyMatch(each -> mayBeAnElementOf(each, container));
+            // Made of numbers of the input and nothing else: it may be an element's where one of
+            // them may, asked of the answer for them once and not down every path to each.
+            case Quantity.WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf().stream()
+                    .anyMatch(term -> mayBeAnElementOf(new DecisionAtom.OfTheInput(term), container));
             // A piece of a string is whatever the statement it is read inside says it is, and
             // that statement is about the string and no container's element.
             case Quantity.CodePointsOfAPiece _ -> false;
