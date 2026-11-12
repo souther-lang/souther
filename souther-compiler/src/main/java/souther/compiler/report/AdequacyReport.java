@@ -5766,6 +5766,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The values were there and are numbers; which keys the maps hold in common is what
             // the observation of a key does not say.
             case ReadingGap.KeysNotTold _ -> new ReportMessage.TheKeysCouldNotBeToldApart();
+            // Both values were read in full; whether they are the same value is what the
+            // declaration of their type says and a row does not carry.
+            case ReadingGap.SamenessNotTold _ ->
+                    new ReportMessage.WhetherTheTwoValuesAreTheSameIsNotToldByARow();
             // The value was read; what is not known is whether the run compared anything through
             // the element it stands in, and what that turned on is what is said.
             case ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why unread) ->
@@ -11849,7 +11853,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // that was read and holds nothing is news about the row; neither of these is, and a
                 // reader weighing the document acts on both the same way.
                 case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _,
-                     ReadingGap.KeysNotTold _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
+                     ReadingGap.KeysNotTold _, ReadingGap.SamenessNotTold _ ->
+                        WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
                 // The value was read and whether the run got to it through that element was not:
                 // no news about the row either, and acted on the same way.
                 case ReadingGap.ReachNotRead _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;

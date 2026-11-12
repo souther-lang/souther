@@ -61,6 +61,16 @@ class AKeyThatIsSpelledSeveralWaysIsNoJoinOfTwoMapsTest {
         }
     }
 
+    /** A time written to the minute and the same time written to the second are one key. */
+    @Test
+    void aMomentKeptAsTheTextItWasWrittenAsCannotBeToldApartEither() {
+        ObservedValue toTheMinute = new ObservedValue.Temporal("16:00");
+        ObservedValue toTheSecond = new ObservedValue.Temporal("16:00:00");
+
+        assertFalse(ON.canTellTheKeysApart(List.of(entry(toTheMinute, 2)),
+                List.of(entry(toTheSecond, 3))));
+    }
+
     @Test
     void aKeyThatHoldsADecimalCannotBeToldApartEither() {
         ObservedValue wornTenths = new ObservedValue.Constructed(

@@ -1190,30 +1190,18 @@ final class TermReading {
     /**
      * Whether a key is the same key as another exactly where the two observations are equal.
      *
-     * <p>A map of the input is keyed by what crosses the boundary: strings, temporals, enumerations,
-     * and newtypes over those. The language writes each of those one way when it is the same key,
-     * so the observation of one is equal to the observation of the other. A decimal is the amount
-     * it stands for whatever scale it is written at, and two observations of it differ where the
-     * amounts do not, so keys of one would be told apart that the map holds as one; the same of a
-     * collection. No key that reaches this is one of those today, and one that did would be read
-     * as the sum of no products where the walk adds some.
+     * <p>Which observations are the same value exactly where they are equal is
+     * {@link ObservedValue#isSameWhereEqual}'s to say, and is not said again here. A decimal is the
+     * amount it stands for whatever scale it is written at, a collection is a list or a set by
+     * where it stands, and a moment is kept as the text it was written as, which has more than one
+     * spelling of one value; keys of those would be told apart that the map holds as one. No key
+     * that reaches this is one of those today, and one that did would be read as the sum of no
+     * products where the walk adds some.
      */
     static boolean keysCanBeTold(List<TermOrders.KeyedEntry> first,
                                  List<TermOrders.KeyedEntry> second) {
-        return first.stream().allMatch(each -> spelledOneWay(each.key()))
-                && second.stream().allMatch(each -> spelledOneWay(each.key()));
-    }
-
-    private static boolean spelledOneWay(ObservedValue key) {
-        return switch (key) {
-            case ObservedValue.Decimal _, ObservedValue.Sequence _,
-                 ObservedValue.Mapping _ -> false;
-            case ObservedValue.Constructed constructed -> constructed.fields().values().stream()
-                    .allMatch(TermReading::spelledOneWay);
-            case ObservedValue.Bool _, ObservedValue.Integer _, ObservedValue.Text _,
-                 ObservedValue.Temporal _, ObservedValue.Unit _ -> true;
-            default -> false;
-        };
+        return first.stream().allMatch(each -> each.key().isSameWhereEqual())
+                && second.stream().allMatch(each -> each.key().isSameWhereEqual());
     }
 
     /**

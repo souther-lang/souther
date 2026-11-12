@@ -3,8 +3,6 @@ package souther.architecture;
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassModel;
-import java.lang.classfile.constantpool.ClassEntry;
-import java.lang.classfile.constantpool.PoolEntry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -41,10 +39,9 @@ class TheRuntimeDoesNotKnowRaohTest {
     private static List<String> namingRaoh() {
         Set<String> out = new TreeSet<>();
         for (ClassModel each : COMPILED.classesOf(COMPILED.module("souther-runtime"))) {
-            for (PoolEntry entry : each.constantPool()) {
-                if (entry instanceof ClassEntry named
-                        && named.asInternalName().startsWith(RAOH)) {
-                    out.add(each.thisClass().asInternalName() + " -> " + named.asInternalName());
+            for (String named : CompiledOutputs.classesNamedBy(each)) {
+                if (named.startsWith(RAOH)) {
+                    out.add(each.thisClass().asInternalName() + " -> " + named);
                 }
             }
         }
