@@ -34,14 +34,23 @@ import java.util.Optional;
  * position, or anything made of one, holds other elements or the same ones in another order, and
  * the container is not this.
  *
- * @param position where the elements stand
+ * @param position where the container is: the position whose entries are walked, which what the
+ *                 walk stops at and how many it holds are asked of
+ * @param elements where the elements it holds stand: the position's own elements, or the keys of a
+ *                 map whose keys the container lists, which a comparison made on one reads at
  * @param where    what has to hold for the container to hold them
  */
-record ElementsHeldFrom(TermPath position, Proposition where) {
+record ElementsHeldFrom(TermPath position, TermPath elements, Proposition where) {
 
     ElementsHeldFrom {
         Objects.requireNonNull(position, "the elements stand somewhere");
+        Objects.requireNonNull(elements, "and each stands at some place of it");
         Objects.requireNonNull(where, "and are held under something, if only nothing");
+    }
+
+    /** The elements of the position {@code position}, held under {@code where}. */
+    ElementsHeldFrom(TermPath position, Proposition where) {
+        this(position, position.element(), where);
     }
 
     /**
@@ -57,7 +66,9 @@ record ElementsHeldFrom(TermPath position, Proposition where) {
                         instanceof PathResolution.At(TermPath map))) {
             return Optional.empty();
         }
-        return Optional.of(new ElementsHeldFrom(map, WhereAnApplicationIsMade.nothingAsked()));
+        return Optional.of(new ElementsHeldFrom(map,
+                listed.part() == MapPart.KEYS ? map.key() : map.element(),
+                WhereAnApplicationIsMade.nothingAsked()));
     }
 
     /** The position {@code container}'s elements are held from, or empty where they are not
@@ -79,7 +90,7 @@ record ElementsHeldFrom(TermPath position, Proposition where) {
             return Optional.empty();
         }
         WhatConditionsState conditions = WhatConditionsState.of(read);
-        TermPath position = null;
+        ElementsHeldFrom arrived = null;
         List<Proposition> taken = new ArrayList<>();
         for (int part = 0; part < choice.arms().size(); part++) {
             Choice.Arm arm = choice.arms().get(part);
@@ -89,16 +100,17 @@ record ElementsHeldFrom(TermPath position, Proposition where) {
             }
             Optional<ElementsHeldFrom> inTheArm = of(new Denotation(arm.answers(),
                     whole.at().choosing(arm.decidedBy(), read.symbols(), newtypes)), read);
-            if (inTheArm.isEmpty()
-                    || (position != null && !position.equals(inTheArm.get().position()))) {
+            if (inTheArm.isEmpty() || (arrived != null
+                    && !(arrived.position().equals(inTheArm.get().position())
+                            && arrived.elements().equals(inTheArm.get().elements())))) {
                 return Optional.empty();
             }
-            position = inTheArm.get().position();
+            arrived = inTheArm.get();
             taken.add(WhereAnApplicationIsMade.past(
                     conditions.arm(fork, part, whole.at()).proposition(), inTheArm.get().where()));
         }
-        return position == null ? Optional.empty()
-                : Optional.of(new ElementsHeldFrom(position,
+        return arrived == null ? Optional.empty()
+                : Optional.of(new ElementsHeldFrom(arrived.position(), arrived.elements(),
                         WhereAnApplicationIsMade.alongOneOf(taken)));
     }
 }
