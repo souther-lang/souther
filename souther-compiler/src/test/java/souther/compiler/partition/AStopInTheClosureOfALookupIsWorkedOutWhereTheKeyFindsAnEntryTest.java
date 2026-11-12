@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -49,8 +50,17 @@ class AStopInTheClosureOfALookupIsWorkedOutWhereTheKeyFindsAnEntryTest {
 
     @Test
     void aStopOutsideEveryClosureIsWorkedOutOnEveryRun() {
-        assertEquals(List.of(Pullback.WorkedOutWhere.ALWAYS),
-                wheresOfTheStops("100 / d > 3 || d > 3"));
+        List<Pullback.WorkedOutWhere> wheres = wheresOfTheStops("100 / (d * d) > 3 || d > 3");
+        assertFalse(wheres.isEmpty());
+        assertTrue(wheres.stream().allMatch(Pullback.WorkedOutWhere.ALWAYS::equals),
+                wheres.toString());
+    }
+
+    /** A division by a number the arithmetic composes into a form is told where its divisor is not
+     *  nought, and leaves no tie. */
+    @Test
+    void aDivisionByAFormIsToldAndLeavesNoStopUnsaid() {
+        assertEquals(List.of(), wheresOfTheStops("100 / d > 3 || d > 3"));
     }
 
     /** An operator owed where its total fits is worked out where the lookup finds an entry,

@@ -369,6 +369,21 @@ public interface SearchRegion {
     }
 
     /**
+     * A run of {@code term} and the values the rules of this region hold it away from, such that
+     * every value of the run but those is one some row in this region takes — or null where that
+     * is not shown, where the rules hold it away from none, and for a term held to a class
+     * ({@link #classAt}).
+     *
+     * <p>Not {@link #wholeRunOf}, which is no answer for a term with a hole: a hole is no end, and
+     * a run it is taken out of is not every value of it. The holes the rules state are the ones
+     * answered; those a search added ({@link #apartAt}) are asked of the region beside this.
+     */
+    default NumericDomain.RunBesidesItsHoles wholeRunBesidesItsHolesOf(
+            NumericTerm.FromOnePosition term) {
+        return null;
+    }
+
+    /**
      * Why nothing is left here, or empty where nothing proved it.
      *
      * <p>Empty is not "there is a value", the same as everywhere else. A search reading it that way

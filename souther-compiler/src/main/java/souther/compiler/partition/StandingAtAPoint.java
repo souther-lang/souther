@@ -1029,9 +1029,10 @@ public final class StandingAtAPoint {
          * one's. A reading that chose no element of the container has none to be last.
          *
          * <p>A value any part of which could not be read, in this element or in one after it, is no
-         * value to be equal or unequal to another: it shows that the element is not the last only
-         * by another after it that was read whole and is equal, and shows that it is by nothing.
-         * What stopped it is said ({@link ReadingGap#ofAComparisonOf}).
+         * value to be equal or unequal to another, and nor is one whose equality as records is not
+         * its sameness: it shows that the element is not the last only by another after it that
+         * was read whole and is equal, and shows that it is by nothing. What kept it from being
+         * compared is said ({@link ReadingGap#ofComparingAsRecords(ObservedValue)}).
          *
          * <p>Worked out for every element of the occurrence at once, and kept for every reading
          * that chose alike where the working out asked.
@@ -1076,7 +1077,7 @@ public final class StandingAtAPoint {
                     : (walk.readsTheOtherWay(new OrderOfAKey(container, position)) ? byElement
                             : byElement.descendingMap()).entrySet()) {
                 ObservedValue held = element.getValue().getLast();
-                ReadingGap ownNotRead = ReadingGap.ofAComparisonOf(held);
+                ReadingGap ownNotRead = ReadingGap.ofComparingAsRecords(held);
                 // One after it that was read and is equal settles it, whatever else was not.
                 out.put(element.getKey(), ownNotRead != null ? new Lastness.CouldNotTell(ownNotRead)
                         : readAfter.contains(held) ? new Lastness.NotLast()
@@ -1084,7 +1085,7 @@ public final class StandingAtAPoint {
                         : new Lastness.Last());
                 ReadingGap firstNotReadHere = null;
                 for (ObservedValue value : element.getValue()) {
-                    ReadingGap notRead = ReadingGap.ofAComparisonOf(value);
+                    ReadingGap notRead = ReadingGap.ofComparingAsRecords(value);
                     if (notRead == null) {
                         readAfter.add(value);
                     } else if (firstNotReadHere == null) {

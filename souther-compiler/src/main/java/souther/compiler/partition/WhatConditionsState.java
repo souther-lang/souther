@@ -73,6 +73,8 @@ final class WhatConditionsState {
     private final Map<ANode, List<Pullback.OfAClause>> constructions = new HashMap<>();
     private final Map<ANode, Optional<DividedInput>> dividedInputs = new HashMap<>();
     private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswer = new HashMap<>();
+    private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswerOfTheRelation =
+            new HashMap<>();
     private final Map<ANodeLeavingOut, Pullback.OperatorsAnswer> operatorsAnswerLeavingOut =
             new HashMap<>();
     private final Map<Proposition, Proposition> denials = new IdentityHashMap<>();
@@ -137,6 +139,15 @@ final class WhatConditionsState {
         heldTo(read);
         return kept(operatorsAnswer, new ANode(body, reads),
                 () -> Pullback.whereItsOperatorsAnswer(body, reads, read));
+    }
+
+    /** The same, of what the relation being read itself works out
+     *  ({@link Pullback#whereTheRelationsOwnOperatorsAnswer}). */
+    Pullback.OperatorsAnswer whereTheRelationsOwnOperatorsAnswer(Core body, InputReads reads,
+                                                                 InputReading read) {
+        heldTo(read);
+        return kept(operatorsAnswerOfTheRelation, new ANode(body, reads),
+                () -> Pullback.whereTheRelationsOwnOperatorsAnswer(body, reads, read));
     }
 
     /** The same, leaving out what may stop a run under {@code leftOut}, a node of {@code body}

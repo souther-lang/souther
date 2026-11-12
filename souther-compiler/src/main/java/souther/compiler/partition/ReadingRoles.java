@@ -33,6 +33,7 @@ final class ReadingRoles {
             Map.entry("read", FIXED),
             Map.entry("where", FIXED),
             Map.entry("freeInTheRoot", FIXED),
+            Map.entry("theRelationReadsItsOwnDivisions", FIXED),
             // The names a part is told: set for the extent of a call read about its own elements.
             Map.entry("freeInTheScope", INPUT),
             Map.entry("subjects", FIXED),

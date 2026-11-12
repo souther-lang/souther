@@ -3,13 +3,26 @@ package souther.architecture;
 import souther.test.CompiledClasses;
 import souther.test.RepositoryLayout;
 
+import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
+import java.lang.classfile.FieldModel;
+import java.lang.classfile.MethodModel;
+import java.lang.classfile.attribute.RecordComponentInfo;
+import java.lang.classfile.constantpool.ClassEntry;
+import java.lang.classfile.constantpool.DynamicConstantPoolEntry;
+import java.lang.classfile.constantpool.MemberRefEntry;
+import java.lang.classfile.constantpool.MethodTypeEntry;
+import java.lang.classfile.constantpool.PoolEntry;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The compiled outputs a rule here is about, and the order a name is looked for in them.
@@ -77,6 +90,73 @@ final class CompiledOutputs {
         }
         return Optional.empty();
     }
+
+    /**
+     * Every class {@code model} names, by internal name, wherever it names it.
+     *
+     * <p>A class is named where it is used, where it is a type a field or a method is declared with,
+     * and where it is an argument of a generic one, and those are three places in the constant
+     * pool: a class entry, a descriptor, and a signature. A rule about which classes a class depends
+     * on that read one of them would answer for a dependency that is spelled another way — a
+     * parameter nothing in the body touches names its class in the descriptor alone.
+     *
+     * <p>Read from the places a class is named and from no other string. A text a class holds that
+     * looks like a descriptor is a message, and a rule about dependencies is not answered by what a
+     * class says.
+     */
+    static Set<String> classesNamedBy(ClassModel model) {
+        Set<String> named = new TreeSet<>();
+        for (PoolEntry entry : model.constantPool()) {
+            switch (entry) {
+                case ClassEntry it -> addClass(named, it.asInternalName());
+                case MemberRefEntry it -> addEachIn(named, it.nameAndType().type().stringValue());
+                case DynamicConstantPoolEntry it ->
+                        addEachIn(named, it.nameAndType().type().stringValue());
+                case MethodTypeEntry it -> addEachIn(named, it.descriptor().stringValue());
+                default -> { }
+            }
+        }
+        model.findAttribute(Attributes.signature())
+                .ifPresent(it -> addEachIn(named, it.signature().stringValue()));
+        for (FieldModel field : model.fields()) {
+            addEachIn(named, field.fieldTypeSymbol().descriptorString());
+            field.findAttribute(Attributes.signature())
+                    .ifPresent(it -> addEachIn(named, it.signature().stringValue()));
+        }
+        for (MethodModel method : model.methods()) {
+            addEachIn(named, method.methodTypeSymbol().descriptorString());
+            method.findAttribute(Attributes.signature())
+                    .ifPresent(it -> addEachIn(named, it.signature().stringValue()));
+        }
+        model.findAttribute(Attributes.record()).ifPresent(record -> {
+            for (RecordComponentInfo component : record.components()) {
+                addEachIn(named, component.descriptor().stringValue());
+                component.findAttribute(Attributes.signature())
+                        .ifPresent(it -> addEachIn(named, it.signature().stringValue()));
+            }
+        });
+        return named;
+    }
+
+    /** A class entry names a class, or an array of one in a descriptor's spelling. */
+    private static void addClass(Set<String> named, String entry) {
+        if (entry.startsWith("[")) {
+            addEachIn(named, entry);
+        } else {
+            named.add(entry);
+        }
+    }
+
+    private static void addEachIn(Set<String> named, String descriptor) {
+        Matcher inDescriptor = IN_A_DESCRIPTOR.matcher(descriptor);
+        while (inDescriptor.find()) {
+            named.add(inDescriptor.group(1));
+        }
+    }
+
+    /** A class in a descriptor or a signature, which is written {@code Lpackage/Name;} or
+     *  {@code Lpackage/Name<} where it has type arguments. */
+    private static final Pattern IN_A_DESCRIPTOR = Pattern.compile("L([^;<]+)[;<]");
 
     /** The class {@code internalName} names, where failing to find one fails the reading. */
     ClassModel read(String internalName) {

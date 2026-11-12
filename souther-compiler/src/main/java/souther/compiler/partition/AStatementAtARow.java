@@ -30,12 +30,11 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Recognizer;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.Operand;
 import souther.compiler.values.Value;
+import souther.compiler.values.WrittenValues;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1286,6 +1285,15 @@ final class AStatementAtARow {
                     unreadValues++;
                     continue;
                 }
+                // Told apart from the others by equality as records, which is the language's
+                // sameness only for some values; for the rest the element may be one of the
+                // others or not, and is counted as one that could be another.
+                ReadingGap notTold = ReadingGap.ofComparingAsRecords(value);
+                if (notTold != null) {
+                    why.add(notTold);
+                    unreadValues++;
+                    continue;
+                }
                 (answer instanceof Answer.Holds ? meeting : maybe).add(value);
             }
             maybe.removeAll(meeting);
@@ -1923,13 +1931,12 @@ final class AStatementAtARow {
             return Said.NOTHING_THERE;
         }
         // A value any part of which could not be read is no value to be equal or unequal to
-        // another.
-        ReadingGap notRead = ReadingGap.ofAComparisonOf(left);
-        if (notRead == null) {
-            notRead = ReadingGap.ofAComparisonOf(right);
-        }
-        if (notRead != null) {
-            return new Said.NotRead(Set.of(notRead));
+        // another, and equal as records is the language's sameness only for the values that say
+        // so: a decimal at two scales and a sequence that is a list or a set are not told by a
+        // row.
+        ReadingGap notTold = ReadingGap.ofComparingAsRecords(left, right);
+        if (notTold != null) {
+            return new Said.NotRead(Set.of(notTold));
         }
         return new Said.Is(left.equals(right));
     }
@@ -1949,31 +1956,9 @@ final class AStatementAtARow {
         if (notRead != null) {
             return new Said.NotRead(Set.of(notRead));
         }
-        Boolean same = isWritten(written, seen);
+        Boolean same = WrittenValues.denotes(seen, written);
         return same == null ? new Said.NotRead(Set.of(ReadingGap.NO_VALUE))
                 : new Said.Is(same);
-    }
-
-    /** Whether {@code seen} is {@code written}, or null where the two are of kinds no row writes
-     *  alike. A scalar written is the value a position holds under whatever newtypes it wears,
-     *  so it is compared with what the row holds inside them. */
-    private static Boolean isWritten(Value written, ObservedValue seen) {
-        return switch (written) {
-            case Value.Text(String text) ->
-                    ObservedValue.scalarInside(seen) instanceof ObservedValue.Text(String got)
-                            ? got.equals(text) : null;
-            case Value.Truth(boolean truth) ->
-                    ObservedValue.scalarInside(seen) instanceof ObservedValue.Bool(boolean got)
-                            ? got == truth : null;
-            case Value.Number(BigDecimal number) -> switch (ObservedValue.scalarInside(seen)) {
-                case ObservedValue.Integer(long got) ->
-                        number.compareTo(BigDecimal.valueOf(got)) == 0;
-                case ObservedValue.Decimal(BigDecimal got) -> number.compareTo(got) == 0;
-                default -> null;
-            };
-            case Value.Case(TypeSymbol data) ->
-                    seen instanceof ObservedValue.Unit(TypeSymbol got) ? got.equals(data) : null;
-        };
     }
 
     /**

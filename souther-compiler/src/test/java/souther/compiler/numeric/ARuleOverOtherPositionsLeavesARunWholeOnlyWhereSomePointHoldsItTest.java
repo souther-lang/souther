@@ -2,7 +2,9 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -387,6 +389,139 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
             }
         }
         assertTrue(shownBesideAHole > 0, "no run was shown beside a hole, so none was asked");
+    }
+
+    /** The whole numbers from three below the box to three above it that {@code shown} says are
+     *  taken. */
+    private static List<Integer> takenFrom(NumericDomain.RunBesidesItsHoles shown) {
+        List<Integer> taken = new ArrayList<>();
+        for (int value = LOW - 3; value <= HIGH + 3; value++) {
+            if (shown.takenWithin(NumericDomain.Bounds.OPEN).holds(BigInteger.valueOf(value))) {
+                taken.add(value);
+            }
+        }
+        return taken;
+    }
+
+    private static List<Integer> values(int from, int to, int... except) {
+        List<Integer> out = new ArrayList<>();
+        for (int value = from; value <= to; value++) {
+            int at = value;
+            if (Arrays.stream(except).noneMatch(each -> each == at)) {
+                out.add(value);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A whole number the rules hold away from values is taken at every other value of its run, so
+     * long as no rule ties it to another number: one hole, several, one at an end of the run, one
+     * the run does not reach, and one that is no whole number all leave the run but for the whole
+     * numbers held away. Nothing is taken where the holes leave nothing, and a hole beside a
+     * relation to another number is read no apart.
+     */
+    @Test
+    void aWholeNumberHeldAwayFromValuesIsTakenAtEveryOtherValueOfItsRun() {
+        Written a = over("a", 1, Rel.GE);
+        assertEquals(values(LOW, HIGH, 0), takenFrom(besidesItsHoles("a", over("a", 1, Rel.NE))));
+        assertEquals(values(LOW, HIGH, 0, 1), takenFrom(besidesItsHoles("a", over("a", 1, Rel.NE),
+                new Written(Map.of("a", 1L), -1, Rel.NE))));
+        assertEquals(values(LOW, HIGH, 5), takenFrom(besidesItsHoles("a", a,
+                new Written(Map.of("a", 1L), -5, Rel.NE))));
+        assertEquals(values(LOW, HIGH, HIGH), takenFrom(besidesItsHoles("a",
+                new Written(Map.of("a", 1L), -HIGH, Rel.NE))));
+        assertEquals(values(LOW, HIGH), takenFrom(besidesItsHoles("a",
+                new Written(Map.of("a", 1L), -(HIGH + 2), Rel.NE))));
+        assertNull(besidesItsHoles("a", new Written(Map.of("a", 2L), -3, Rel.NE)),
+                "no whole number is held away, so there is no hole to read apart");
+        assertEquals(values(LOW, HIGH, 0), takenFrom(besidesItsHoles("a", over("a", 1, Rel.NE),
+                new Written(Map.of("b", 1L), -3, Rel.NE))));
+        assertEquals(values(3, HIGH, 5), takenFrom(besidesItsHoles("a",
+                new Written(Map.of("a", 1L), -3, Rel.GE),
+                new Written(Map.of("a", 1L), -5, Rel.NE))));
+
+        assertNull(besidesItsHoles("a", over("a", 1, Rel.EQ), over("a", 1, Rel.NE)),
+                "no number is left, and no number is taken");
+        assertNull(besidesItsHoles("a", new Written(Map.of("a", 1L), -3, Rel.GE),
+                new Written(Map.of("a", 1L), -3, Rel.LE), new Written(Map.of("a", 1L), -3, Rel.NE)));
+        assertNull(besidesItsHoles("a", over("a", 1, Rel.NE), new Written(coefsOf("a", 1, "b", -1),
+                0, Rel.EQ)), "a hole beside a relation to another number is not read apart");
+        assertNull(besidesItsHoles("a", over("a", 1, Rel.NE), new Written(coefsOf("a", 1, "b", 1),
+                -HIGH, Rel.LE)));
+        assertNull(besidesItsHoles("a", a), "no hole is for wholeRunOf to say");
+    }
+
+    /** A dense number held away from a value still takes every value near it, so what it takes
+     *  is the run {@code wholeRunOf} answers and no whole numbers. */
+    @Test
+    void aDenseNumberHeldAwayFromAValueHasNoWholeNumbersTaken() {
+        Map<String, Granularity> dense = Map.of("a", Granularity.DENSE, "b", Granularity.DISCRETE,
+                "c", Granularity.DISCRETE);
+        NumericDomain<String> domain = told(domainOf(List.of(over("a", 1, Rel.NE)), dense),
+                endless("a", "b", "c"));
+        assertNull(domain.wholeRunBesidesItsHolesOf("a"));
+    }
+
+    /**
+     * Enumerated: rules written at random over three whole numbers from nought to seven — bounds
+     * and holes, some of them tying two of the numbers. Every whole number a run besides holes
+     * says is taken is one some point of the rules carries, and where no rule ties a number to
+     * another the numbers it says are taken are exactly those. A number a rule ties to another is
+     * never read apart.
+     */
+    @Test
+    void theWholeNumbersTakenBesideHolesAreExactlyThoseSomePointCarries() {
+        Random random = new Random(3134);
+        int exact = 0;
+        int tied = 0;
+        for (int s = 0; s < STATES; s++) {
+            List<Written> rules = new ArrayList<>();
+            for (int r = 1 + random.nextInt(4); r > 0; r--) {
+                String atom = List.of("a", "b", "c").get(random.nextInt(3));
+                Rel rel = List.of(Rel.NE, Rel.NE, Rel.GE, Rel.LE).get(random.nextInt(4));
+                rules.add(new Written(Map.of(atom, 1L), -(random.nextInt(HIGH + 4) - 1L), rel));
+            }
+            boolean tying = random.nextInt(4) == 0;
+            if (tying) {
+                rules.add(new Written(coefsOf("a", 1, "b", random.nextBoolean() ? 1 : -1),
+                        -random.nextInt(HIGH + 1), random.nextBoolean() ? Rel.LE : Rel.NE));
+            }
+            NumericDomain<String> domain = told(domainOf(rules), endless("a", "b", "c"));
+            boolean[][] carried = valuesCarried(rules);
+            for (String atom : List.of("a", "b", "c")) {
+                NumericDomain.RunBesidesItsHoles shown = domain.wholeRunBesidesItsHolesOf(atom);
+                boolean tiedToAnother = tying && !atom.equals("c");
+                if (tiedToAnother) {
+                    tied++;
+                    assertNull(shown, () -> atom + " is tied by a rule of " + rules);
+                    continue;
+                }
+                if (shown == null) {
+                    continue;
+                }
+                List<Integer> taken = takenFrom(shown);
+                int index = List.of("a", "b", "c").indexOf(atom);
+                List<Integer> carrying = new ArrayList<>();
+                for (int value = LOW; value <= HIGH; value++) {
+                    if (carried[index][value]) {
+                        carrying.add(value);
+                    }
+                }
+                assertEquals(carrying, taken, () -> atom + " under " + rules);
+                exact++;
+            }
+        }
+        assertTrue(exact > STATES / 2, "numbers were read apart in " + exact + " reads");
+        assertTrue(tied > 0, "no number was tied by a rule, so the tie was never asked");
+    }
+
+    /** {@code atom} read apart from its holes under {@code rules}, over whole numbers from
+     *  nought to seven. */
+    private static NumericDomain.RunBesidesItsHoles besidesItsHoles(String atom,
+                                                                   Written... rules) {
+        return told(domainOf(List.of(rules)), endless("a", "b", "c"))
+                .wholeRunBesidesItsHolesOf(atom);
     }
 
     /**

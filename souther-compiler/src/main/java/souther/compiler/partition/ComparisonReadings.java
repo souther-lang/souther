@@ -755,14 +755,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         DemandReading.Answered out = DemandReading.Answered.NOTHING;
         List<ConstructionAsk> asks = new ArrayList<>();
         for (Core part : parts) {
+            boolean ofTheRelationItself = part == comparison || ofTheRelation.contains(part);
             Pullback.OperatorsAnswer operators = part != comparison && standsIn(comparison, part)
                     ? in.conditions().whereItsOperatorsAnswerLeavingOut(part, comparison, reads,
                             in.read())
+                    : ofTheRelationItself
+                    ? in.conditions().whereTheRelationsOwnOperatorsAnswer(part, reads, in.read())
                     : in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
             DemandReading.Answered ofIt = operators.answers().isPresent()
                     ? DemandReading.regionAnswered(operators.answers().get(), in.read())
                     : DemandReading.Answered.NOTHING;
-            if (part == comparison || ofTheRelation.contains(part)) {
+            if (ofTheRelationItself) {
                 out = out.and(ofIt.ofTheRelationItself(in.read().quantities().region()));
             } else {
                 out = out.and(ofIt.and(DemandReading.Answered.leavingUnsaid(operators,
