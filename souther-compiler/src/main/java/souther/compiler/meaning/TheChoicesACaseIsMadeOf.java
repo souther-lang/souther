@@ -377,6 +377,7 @@ public final class TheChoicesACaseIsMadeOf {
             // What each occurrence of each thing made, by where it stood.
             Map<Object, Map<Standing, Set<Spelling>>> occurrences = new LinkedHashMap<>();
             Map<Object, Frame> named = new LinkedHashMap<>();
+            Map<PrefixStep, Integer> prefixes = new HashMap<>();
             for (Spelling part : ofTheCase) {
                 Set<Origin> from = made.get(part);
                 if (from == null) {
@@ -384,21 +385,23 @@ public final class TheChoicesACaseIsMadeOf {
                     continue;
                 }
                 for (Origin origin : from) {
-                    List<Frame> frames = origin.frames();
-                    for (int at = 0; at < frames.size(); at++) {
-                        Frame frame = frames.get(at);
+                    int prefix = 0;
+                    for (Frame frame : origin.frames()) {
+                        prefix = prefixes.computeIfAbsent(new PrefixStep(prefix, frame),
+                                _ -> prefixes.size() + 1);
                         Object key = keyOf(frame);
                         named.putIfAbsent(key, frame);
                         occurrences.computeIfAbsent(key, _ -> new LinkedHashMap<>())
-                                .computeIfAbsent(new Standing(List.copyOf(frames.subList(0, at + 1)),
+                                .computeIfAbsent(new Standing(prefix,
                                         Optional.empty(), frame instanceof Applied applied
                                                 ? OptionalInt.of(applied.ordinal())
                                                 : OptionalInt.empty()), _ -> new HashSet<>())
                                 .add(part);
                     }
+                    int whole = prefix;
                     origin.ways().ifPresent(ways -> occurrences
                             .computeIfAbsent(keptBy(ways), _ -> new LinkedHashMap<>())
-                            .computeIfAbsent(new Standing(frames, Optional.of(new Identity(ways)),
+                            .computeIfAbsent(new Standing(whole, Optional.of(new Identity(ways)),
                                     OptionalInt.empty()), _ -> new HashSet<>())
                             .add(part));
                 }
@@ -540,9 +543,18 @@ public final class TheChoicesACaseIsMadeOf {
     /**
      * Where one occurrence of a thing stood: the frames down to it, the writing out of kept ways
      * it is where it is one, and which application of its call it is where it is an application.
+     *
+     * @param frames the frames down to it, as the number {@link PrefixStep} gives them: frames
+     *               alike are one number however many origins stand in them
      */
-    private record Standing(List<Frame> frames, Optional<Identity> writing,
-                            OptionalInt application) {}
+    private record Standing(int frames, Optional<Identity> writing, OptionalInt application) {}
+
+    /**
+     * One more frame below the frames numbered {@code before}, nought for none: what numbers the
+     * frames an occurrence stood in one frame at a time, so that frames alike are told alike
+     * without each being written out and compared again for every frame below it.
+     */
+    private record PrefixStep(int before, Frame frame) {}
 
     /** Applications of closures by calls of {@code operation} at {@code construct}. */
     private record AppliedBy(ModelOccurrence construct, ValueName.Stdlib operation) {}
