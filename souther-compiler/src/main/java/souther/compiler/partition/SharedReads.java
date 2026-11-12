@@ -7,10 +7,12 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Watched;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -84,7 +86,8 @@ final class SharedReads<C, E, M, R> {
                                  boolean askedAggregates, Object key, List<M> met, R result) {}
 
     /** A reading found, to be taken with {@link #take}. */
-    record Found<M, R>(R result, ElementsMet.Footprint footprint, List<M> met) {}
+    record Found<M, R>(R result, ElementsMet.Footprint footprint, List<M> met,
+                       HandedAnswers asked, InputReads at) {}
 
     private final Scene<C, E, M> scene;
     private final Map<Core, List<Held<C, M, R>>> held = new IdentityHashMap<>();
@@ -133,7 +136,7 @@ final class SharedReads<C, E, M, R> {
                     && elements.agrees(one.footprint()) && reads.handsAsAsked(one.asked())
                     && reads.sameButForWhatIsHanded(one.at())
                     && Objects.equals(one.key(), key)) {
-                return new Found<>(one.result(), one.footprint(), one.met());
+                return new Found<>(one.result(), one.footprint(), one.met(), one.asked(), reads);
             }
         }
         return null;
@@ -142,9 +145,29 @@ final class SharedReads<C, E, M, R> {
     /** What a reading found comes to, with the elements it asked of told and the parts it met
      *  met, as reading it would have left them. */
     R take(Found<M, R> found) {
+        found.at().takingAgain(found.asked());
         scene.elementsMet().takes(found.footprint());
         scene.meetAgain(found.met());
         return found.result();
+    }
+
+    /**
+     * {@code parts} with each part once, by what object it is, in the order they were met.
+     *
+     * <p>A reading that takes another again meets the parts of that one again, so a part met by a
+     * reading held twice stands in the list as often as the reading is taken; each part of the
+     * readings kept inside one another would stand in the outer list as many times as there are
+     * ways down to it. It is one part to whoever reads them, and is held once.
+     */
+    private List<M> eachOnce(List<M> parts) {
+        Set<M> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<M> out = new ArrayList<>(parts.size());
+        for (M each : parts) {
+            if (seen.add(each)) {
+                out.add(each);
+            }
+        }
+        return List.copyOf(out);
     }
 
     /** What {@code fresh} comes to, kept where taking it again would be the same reading. */
@@ -166,7 +189,7 @@ final class SharedReads<C, E, M, R> {
             held.computeIfAbsent(node, _ -> new ArrayList<>()).add(new Held<>(reads,
                     reads.hashButForWhatIsHanded(), read.asked(), footprint, inputs,
                     scene.aggregatesAsked() != askedBefore, key,
-                    List.copyOf(scene.metSince(metFrom)), result));
+                    eachOnce(scene.metSince(metFrom)), result));
         }
         return result;
     }

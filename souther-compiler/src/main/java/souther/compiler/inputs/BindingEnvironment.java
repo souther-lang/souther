@@ -248,20 +248,51 @@ final class BindingEnvironment {
         }
 
         /** What {@code reading} comes to, and what it asked of {@code on}'s handed values, which
-         *  is {@link HandedAnswers#UNTOLD} where it cannot be told by those alone (or another is
-         *  already watching). */
+         *  is {@link HandedAnswers#UNTOLD} where it cannot be told by those alone.
+         *
+         *  <p>A reading inside another is watched on its own, and what it asked is then asked by
+         *  the one it is inside as well, placed from where the inner one began. */
         static <T> Watched<T> over(BindingEnvironment on, Supplier<T> reading) {
-            if (RUNNING.get() != null) {
-                return new Watched<>(reading.get(), HandedAnswers.UNTOLD);
-            }
+            Watch outer = RUNNING.get();
             Watch watch = new Watch(on.handed);
             RUNNING.set(watch);
             try {
                 T result = reading.get();
+                if (outer != null) {
+                    outer.note(on.handed, watch.asked, watch.unsure);
+                }
                 return new Watched<>(result,
                         watch.unsure ? HandedAnswers.UNTOLD : new HandedAnswers(watch.asked));
             } finally {
-                RUNNING.remove();
+                if (outer == null) {
+                    RUNNING.remove();
+                } else {
+                    RUNNING.set(outer);
+                }
+            }
+        }
+
+        /** What a reading taken again asked, asked of the watch running now as the reading it
+         *  stands for would have. */
+        static void replay(BindingEnvironment at, HandedAnswers answers) {
+            Watch watch = RUNNING.get();
+            if (watch != null) {
+                watch.note(at.handed, answers.answers(), !answers.toldApart());
+            }
+        }
+
+        /** What was asked of the values handed in {@code in}, noted as this watch notes a read
+         *  there. */
+        private void note(Handed in, Map<BindingId, Core> answers, boolean notTold) {
+            if (notTold) {
+                unsure = true;
+            }
+            for (Map.Entry<BindingId, Core> each : answers.entrySet()) {
+                switch (in.placing(started, each.getKey())) {
+                    case AS_BEGUN -> asked.putIfAbsent(each.getKey(), each.getValue());
+                    case HANDED_SINCE -> { }
+                    case OFF_THE_WAY -> unsure = true;
+                }
             }
         }
 

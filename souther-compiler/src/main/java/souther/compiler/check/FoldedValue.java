@@ -89,8 +89,12 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
      */
     public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> of(
             Core e, E at, N names, Symbols symbols, Kept kept) {
-        return new FoldedValue<>(names, symbols, DeclarationNewtypes.NONE, kept.folded)
-                .eval(e, at);
+        // A fold puts a name down as "not a constant" while it is folded, which another reading of
+        // the same table must not see, so the table is read by one fold at a time.
+        synchronized (kept) {
+            return new FoldedValue<>(names, symbols, DeclarationNewtypes.NONE, kept.folded)
+                    .eval(e, at);
+        }
     }
 
     /**

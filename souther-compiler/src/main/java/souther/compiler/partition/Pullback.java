@@ -1086,8 +1086,15 @@ final class Pullback {
             }
             case Core.Read name when reads.meaningOf(name, read.rules().symbols(),
                     read.rules().newtypes()) instanceof ReadMeaning.Through through -> {
+                // A name stands for the same reading wherever it is used, so a chain of names each
+                // used twice is read once for each name and not once for each way down it.
+                Denotation denoted = through.denotes();
                 return new Derivation.ThroughABinding(
-                        observe(through.denotes().value(), asked, through.denotes().at()));
+                        asked instanceof Asked.OnASide(AnswerAspect aspect)
+                                ? sharedObservations.shared(denoted.value(), denoted.at(), aspect,
+                                        () -> observe(denoted.value(), asked, denoted.at()),
+                                        this::readToTheEnd)
+                                : observe(denoted.value(), asked, denoted.at()));
             }
             case Core.If iff -> {
                 Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, reads);
@@ -3580,15 +3587,9 @@ final class Pullback {
      * the position's strings are parted into.
      */
     private static CaseMapping conversionOf(Quantity string) {
-        return switch (string) {
-            case DecisionAtom.OfTheInput _ -> CaseMapping.NONE;
-            case Quantity.WhatAnOperationAnswers answers -> {
-                CaseMapping inner = answers.of().size() == 1
-                        ? conversionOf(answers.of().getFirst()) : null;
-                yield inner == null ? null : CaseMapping.applying(answers.operation(), inner);
-            }
-            default -> null;
-        };
+        ConvertedText.Conversion made = ConvertedText.conversionOf(string);
+        return made != null && made.from() instanceof DecisionAtom.OfTheInput
+                ? made.through() : null;
     }
 
     /**
@@ -11215,9 +11216,21 @@ final class Pullback {
     /** The readings kept and taken against this reader's state. */
     private final class TheScene implements SharedReads.Scene<ReadingState.Inputs, Guards, Met> {
 
+        /** Whether a reading is shared inside another that is watching what is handed, as one
+         *  taken again tells that one what it asked ({@link InputReads#takingAgain}). */
+        private final boolean insideAWatch;
+
+        TheScene() {
+            this(false);
+        }
+
+        TheScene(boolean insideAWatch) {
+            this.insideAWatch = insideAWatch;
+        }
+
         @Override
         public boolean mayShare() {
-            return !InputReads.watching() && !elementsMet.crowded()
+            return (insideAWatch || !InputReads.watching()) && !elementsMet.crowded()
                     && READING_STATE.holdsNothing(Pullback.this);
         }
 
@@ -11272,6 +11285,11 @@ final class Pullback {
     /** The sums of containers the body wrote out, kept ({@link #sumOfWrittenOut}). */
     private final SharedReads<ReadingState.Inputs, Guards, Met, LinearForm<Quantity>> sharedSums =
             new SharedReads<>(new TheScene());
+
+
+    /** How the value a name stands for answered each side, kept ({@link #observe}), by the side. */
+    private final SharedReads<ReadingState.Inputs, Guards, Met, Derivation> sharedObservations =
+            new SharedReads<>(new TheScene(true));
 
     /** What a law says on each application of a closure, kept ({@link ALawRead#onEachApplication}). */
     private final SharedReads<ReadingState.Inputs, Guards, Met, WrittenOutRead>

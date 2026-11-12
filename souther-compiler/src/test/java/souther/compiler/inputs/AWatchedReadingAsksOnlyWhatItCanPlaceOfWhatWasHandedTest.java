@@ -125,13 +125,48 @@ class AWatchedReadingAsksOnlyWhatItCanPlaceOfWhatWasHandedTest {
     }
 
     @Test
-    void aReadingInsideAnotherWatchIsNotToldApart() {
+    void aReadingInsideAnotherWatchIsWatchedOnItsOwnAndTheOuterOneAsksWhatItAsked() {
         BindingEnvironment on = nothingHanded().handing(EACH, written(1));
+        BindingEnvironment otherwise = nothingHanded().handing(EACH, written(2));
 
-        HandedAnswers inner = BindingEnvironment.Watch.over(on, () ->
-                BindingEnvironment.Watch.over(on, () -> on.roleOf(EACH)).asked()).result();
+        Watched<HandedAnswers> outer = BindingEnvironment.Watch.over(on, () ->
+                BindingEnvironment.Watch.over(on, () -> on.roleOf(EACH)).asked());
 
-        assertFalse(inner.toldApart());
+        assertTrue(outer.result().toldApart());
+        assertTrue(outer.result().holdsOf(on));
+        assertFalse(outer.result().holdsOf(otherwise));
+        assertTrue(outer.asked().toldApart());
+        assertTrue(outer.asked().holdsOf(on));
+        assertFalse(outer.asked().holdsOf(otherwise),
+                "what the inner reading asked of EACH is asked of the outer one as well");
+    }
+
+    @Test
+    void aReadingTakenAgainInsideAWatchTellsItWhatItAsked() {
+        BindingEnvironment on = nothingHanded().handing(EACH, written(1));
+        BindingEnvironment otherwise = nothingHanded().handing(EACH, written(2));
+        HandedAnswers asked = BindingEnvironment.Watch.over(on, () -> on.roleOf(EACH)).asked();
+
+        HandedAnswers outer = BindingEnvironment.Watch.over(on, () -> {
+            BindingEnvironment.Watch.replay(on, asked);
+            return 0;
+        }).asked();
+
+        assertTrue(outer.toldApart());
+        assertTrue(outer.holdsOf(on));
+        assertFalse(outer.holdsOf(otherwise));
+    }
+
+    @Test
+    void anUnplacedReadInsideAnotherWatchLeavesTheOuterOneUnsureToo() {
+        BindingEnvironment on = nothingHanded().handing(EACH, written(1));
+        BindingEnvironment apart = nothingHanded().handing(OTHER, written(1));
+
+        Watched<HandedAnswers> outer = BindingEnvironment.Watch.over(on, () ->
+                BindingEnvironment.Watch.over(on, () -> apart.roleOf(OTHER)).asked());
+
+        assertFalse(outer.result().toldApart());
+        assertFalse(outer.asked().toldApart());
     }
 
     @Test

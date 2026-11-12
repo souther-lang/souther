@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -651,6 +652,15 @@ final class OneOfEach {
     /** Every position {@code entry} turns on, inside its alternatives as well. */
     private static <E, S, R> void allPositions(E entry, Vocabulary<E, S, R> vocabulary,
                                                Set<TermPath> into) {
+        allPositions(entry, vocabulary, into, Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    /** Each entry once however many alternatives hold it: what it turns on is added to a set. */
+    private static <E, S, R> void allPositions(E entry, Vocabulary<E, S, R> vocabulary,
+                                               Set<TermPath> into, Set<E> visited) {
+        if (!visited.add(entry)) {
+            return;
+        }
         List<List<E>> alternatives = vocabulary.alternatives(entry);
         if (alternatives == null) {
             into.addAll(vocabulary.positions(entry));
@@ -658,7 +668,7 @@ final class OneOfEach {
         }
         for (List<E> alternative : alternatives) {
             for (E each : alternative) {
-                allPositions(each, vocabulary, into);
+                allPositions(each, vocabulary, into, visited);
             }
         }
     }

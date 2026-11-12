@@ -613,11 +613,8 @@ public final class ReadThroughNames {
             case DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
                  DecisionAtom.OfAnAnswer _, Quantity.HowManyCarried _, Quantity.TheKeptTotal _,
                  Quantity.CodePointsOfAPiece _ -> quantity;
-            case Quantity.WhatAnOperationAnswers(var operation, List<Quantity> of) -> {
-                List<Quantity> told = told(of, telling);
-                yield told == null ? null : told == of ? quantity
-                        : new Quantity.WhatAnOperationAnswers(operation, told);
-            }
+            case Quantity.WhatAnOperationAnswers answers ->
+                    answers.rebuilt(input -> told(input, telling));
             case Quantity.APieceOf(var operation, var separator, Quantity string, var within,
                                    int from, int among) -> {
                 Quantity told = told(string, telling);
@@ -751,22 +748,6 @@ public final class ReadThroughNames {
             return stated;
         });
         return noOne[0] ? null : out;
-    }
-
-    /** {@code each} told, itself where none of them is told anything, or null where one is no
-     *  one number. */
-    private static List<Quantity> told(List<Quantity> each, Telling telling) {
-        List<Quantity> out = new ArrayList<>(each.size());
-        boolean changed = false;
-        for (Quantity one : each) {
-            Quantity told = told(one, telling);
-            if (told == null) {
-                return null;
-            }
-            changed |= told != one;
-            out.add(told);
-        }
-        return changed ? out : each;
     }
 
     /**

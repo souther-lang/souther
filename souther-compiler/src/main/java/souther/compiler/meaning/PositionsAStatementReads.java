@@ -256,8 +256,10 @@ public final class PositionsAStatementReads {
             case Quantity.OfABinding value -> handedOff ? readsWhatIsHanded(value)
                     : valuesBound && insideAnApplication == 0 && kept(value);
             case Quantity.HowManyCarried _, Quantity.TheKeptTotal _ -> false;
-            case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
-                    .allMatch(this::reads);
+            // Made of numbers of the input and nothing else, so it is read as each of them is, and
+            // they are asked of the answer, which holds them once however many paths lead to them.
+            case Quantity.WhatAnOperationAnswers answers ->
+                    answers.positionsItIsMadeOf().stream().allMatch(this::reads);
             // A piece of a string is whatever the statement it is read inside says it is, and the
             // string that statement is about is no part of this quantity to collect.
             case Quantity.CodePointsOfAPiece _ -> false;

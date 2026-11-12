@@ -89,6 +89,7 @@ final class ReadingRoles {
             Map.entry("aggregatesAsked", COUNTER),
             Map.entry("sharedSums", MEMO),
             Map.entry("sharedApplications", MEMO),
+            Map.entry("sharedObservations", MEMO),
             Map.entry("keptRemainders", MEMO),
             Map.entry("keptReasons", MEMO),
             // Whether the reading of a remainder is noting what it tells the candidate, which a
