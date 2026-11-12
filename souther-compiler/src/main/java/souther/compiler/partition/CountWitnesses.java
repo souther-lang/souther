@@ -340,11 +340,25 @@ public final class CountWitnesses {
     private static List<FixtureTemplate> keysToFillWith(Type key, int fewest,
                                                         RuleReadingContext reading,
                                                         Set<Figure> stopped) {
-        int asked = Math.min(fewest + 2, MOST_VALUES + 1);
-        if (fewest + 2 > asked) {
+        long wanted = (long) fewest + 2;
+        int asked = (int) Math.min(wanted, MOST_VALUES + 1L);
+        if (wanted > asked) {
             stopped.add(CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure());
         }
-        return List.copyOf(Witnesses.distinctValuesOf(key, asked, reading, Set.of()).values());
+        return valuesMeeting(Witnesses.distinctValuesOf(key, asked, reading, Set.of()), stopped);
+    }
+
+    /**
+     * The values {@code proposed}, with every stop it met added to {@code stopped}. The values
+     * alone say nothing of where their making was cut short, and a search that found no witness
+     * among them is told apart from one that tried everything by what stopped it
+     * ({@link Proposals#values}).
+     */
+    private static List<FixtureTemplate> valuesMeeting(Proposals proposed, Set<Figure> stopped) {
+        for (CompositionBudget met : proposed.met().figures()) {
+            stopped.add(met.figure());
+        }
+        return proposed.values();
     }
 
     /** Adds to {@code keys} and to {@code values} the key and the value of each entry of
@@ -425,10 +439,10 @@ public final class CountWitnesses {
         } else {
             Slot keySlot = new Slot(container.place().key(), container.key(), true);
             // Each is tried beside one that stands for the other: an entry is both.
-            List<FixtureTemplate> aKey = Partitions.representativesOf(container.key(), reading)
-                    .values();
-            List<FixtureTemplate> aValue = Partitions.representativesOf(element, reading)
-                    .values();
+            List<FixtureTemplate> aKey = valuesMeeting(
+                    Partitions.representativesOf(container.key(), reading), stopped);
+            List<FixtureTemplate> aValue = valuesMeeting(
+                    Partitions.representativesOf(element, reading), stopped);
             if (aKey.isEmpty() || aValue.isEmpty()) {
                 return Optional.empty();
             }
@@ -750,9 +764,9 @@ public final class CountWitnesses {
         // come from decides which are tried first and never whether the figure applies. Two keys
         // that differ are what an entry needs of its key, and a value is one that stands for it.
         List<FixtureTemplate> standing = slot.ofKey()
-                ? new ArrayList<>(Witnesses.distinctValuesOf(element, valuesAskedOfAType(2),
-                        reading, Set.of()).values())
-                : Partitions.representativesOf(element, reading).values();
+                ? new ArrayList<>(valuesMeeting(Witnesses.distinctValuesOf(element,
+                        valuesAskedOfAType(2), reading, Set.of()), stopped))
+                : valuesMeeting(Partitions.representativesOf(element, reading), stopped);
         List<FixtureTemplate> out = new ArrayList<>(inTheRows);
         if (slot.ofKey()) {
             standing.stream().filter(each -> !out.contains(each)).forEach(out::add);
@@ -866,8 +880,9 @@ public final class CountWitnesses {
             int divided = Distinctions.ofType(TypeView.shapeOf(type, source.inners(),
                     source.symbols(), source.kinds(), source.sums()), source.symbols(),
                     source.kinds(), source.sums()).size();
-            List<FixtureTemplate> values = new ArrayList<>(Witnesses.distinctValuesOf(type,
-                    valuesAskedOfAType(divided), reading, Set.of()).values());
+            List<FixtureTemplate> values = new ArrayList<>(valuesMeeting(
+                    Witnesses.distinctValuesOf(type, valuesAskedOfAType(divided), reading,
+                            Set.of()), stopped));
             for (ValuesAStatementNames.Named each : named.getOrDefault(place, List.of())) {
                 if (!RowSearch.hasRoom(values)) {
                     break;
@@ -888,7 +903,8 @@ public final class CountWitnesses {
         }
         List<FixtureTemplate> out = new ArrayList<>(tried);
         for (Map<List<String>, FixtureTemplate> placed : waysTheyCanBeTogether(told, stopped)) {
-            for (FixtureTemplate one : Witnesses.holdingAt(element, placed, reading).values()) {
+            for (FixtureTemplate one : valuesMeeting(Witnesses.holdingAt(element, placed, reading),
+                    stopped)) {
                 if (!out.contains(one)) {
                     out.add(one);
                 }

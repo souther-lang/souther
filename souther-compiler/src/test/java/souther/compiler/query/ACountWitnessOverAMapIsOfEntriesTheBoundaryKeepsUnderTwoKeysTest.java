@@ -33,6 +33,15 @@ class ACountWitnessOverAMapIsOfEntriesTheBoundaryKeepsUnderTwoKeysTest {
             data Exactly = Map<String, Int>
                 invariant Map.size(value) == 2
 
+            data Long = String
+                invariant String.length(value) >= 100000
+
+            behavior ofALongKey : (m: Map<Long, Int>, k: Int) -> Bool
+            let ofALongKey (m, k) = Map.size(Map.filterEntries((key, v) -> v > 5, m)) == k
+
+            behavior ofALongValue : (m: Map<String, Long>, k: Int) -> Bool
+            let ofALongValue (m, k) = Map.size(Map.filterEntries((key, v) -> v == "a", m)) == k
+
             behavior named : (m: Map<String, Int>, k: Int) -> Bool
             let named (m, k) =
                 Map.size(Map.filterEntries((key, v) -> key == "%s", m)) == k
@@ -68,12 +77,15 @@ class ACountWitnessOverAMapIsOfEntriesTheBoundaryKeepsUnderTwoKeysTest {
                 && fields.containsKey("value") ? fields.get("value") : built;
     }
 
-    private static CountWitnesses.Witness witnessOf(String behavior) {
+    private static CountWitnesses.Sought soughtOf(String behavior) {
         List<Adequacy.WitnessOfACount> counts = ACountWitnessOverAWrittenValueMakesEveryNumberOfElementsTest
                 .askedOf(COMPILED).getOrDefault(behavior, List.of());
         assertTrue(!counts.isEmpty(), behavior + " asked a witness of its count");
-        Optional<CountWitnesses.Witness> found = COMPILED.db().ask(counts.getFirst()).value()
-                .found();
+        return COMPILED.db().ask(counts.getFirst()).value();
+    }
+
+    private static CountWitnesses.Witness witnessOf(String behavior) {
+        Optional<CountWitnesses.Witness> found = soughtOf(behavior).found();
         assertTrue(found.isPresent(), behavior + " has a witness");
         return found.get();
     }
@@ -109,5 +121,16 @@ class ACountWitnessOverAMapIsOfEntriesTheBoundaryKeepsUnderTwoKeysTest {
         CountWitnesses.Witness witness = witnessOf("held");
         holdsTwoEntriesUnderTwoKeys("held", witness);
         assertEquals(CountWitnesses.Expansion.INDEPENDENT_KEYS, witness.expansion());
+    }
+
+    /** A type the search cannot write a value of within its figures leaves no witness, and says
+     *  where it stopped: the key of an entry, and its value. */
+    @Test
+    void whereAKeyOrAValueCannotBeWrittenWithinTheFiguresTheSearchSaysWhereItStopped() {
+        for (String behavior : List.of("ofALongKey", "ofALongValue")) {
+            CountWitnesses.Sought sought = soughtOf(behavior);
+            assertTrue(sought.found().isEmpty(), behavior + " has no witness");
+            assertTrue(!sought.stoppedAt().isEmpty(), behavior + " says where it stopped");
+        }
     }
 }
