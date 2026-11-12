@@ -17,11 +17,13 @@ import java.util.function.Supplier;
  * a reading that doubles with every link without it.
  *
  * <p>What is held is keyed by the question and nothing looser: the binding, the value it was
- * given, and the environment that value is read in, the last two as the objects they are. A name
- * read again is the same question exactly where all three are the same (ADR-0111), and then the
- * answer is the same whoever asks it, so the table may be handed to another walk of the same
- * reading ({@link Answers}) — a reading that asks itself about a value part way through reading it
- * reads it once.
+ * given, and what the value is read as, the last two as the objects they are. What it is read as
+ * is the environment the value is read in, or what the reading says the name stands for where it
+ * can say less than that ({@link ValueStanding.Names#standingOf}). A name read again is the same
+ * question exactly where all three are the same (ADR-0111), and then the answer is the same
+ * whoever asks it, so the table may be handed to another walk of the same reading
+ * ({@link Answers}) — a reading that asks itself about a value part way through reading it reads
+ * it once.
  *
  * <p>A name is entered on the way to its own answer, so what is held under it was reached with it on
  * the path. That is the same path every reading of it takes: a path can hold a binding twice only

@@ -983,7 +983,8 @@ public final class AffineForms {
             // question — so the walk holds the answer rather than composing the value again.
             case ValueStanding.Named.One<E, Reading<A, E>>(
                     ValueStanding.Standing<E, Reading<A, E>> one) ->
-                    following.readingOf(r.binding(), one.value(), one.at(),
+                    following.readingOf(r.binding(), one.value(),
+                            readAs(r, at, one.at(), reading),
                             () -> of(one.value(), one.at(), one.names(), following));
             case ValueStanding.Named.OneOf<E, Reading<A, E>>(
                     List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
@@ -997,6 +998,22 @@ public final class AffineForms {
         };
         following.leave(r.binding());
         return read;
+    }
+
+    /**
+     * What tells the question about the name {@code r} apart from the same question asked
+     * elsewhere: what the reading says the name stands for where it is read
+     * ({@link ValueStanding.Names#standingOf}), and where it says nothing less than the
+     * environment, the environment the value is read in.
+     *
+     * <p>The first, because an environment a reading makes afresh at each step is a new object
+     * each time it is reached and the name in it is the same name: keyed on the object, a name
+     * reached by two ways would be read twice, and a chain of names that each reach the one before
+     * by two ways would read the bottom of it once for every way down.
+     */
+    private static <A, E> Object readAs(Core.Read r, E at, E readIn, Reading<A, E> reading) {
+        Object stands = reading.standingOf(r, at);
+        return stands == at ? readIn : stands;
     }
 
     /**
