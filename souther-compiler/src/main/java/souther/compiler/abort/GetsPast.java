@@ -119,6 +119,55 @@ public sealed interface GetsPast {
      */
     record WhereTheTextFits(int operand) implements GetsPast {}
 
+    /**
+     * It answers wherever the text it builds out of the texts it is handed, put in canonical form,
+     * and each text it is defined as building on the way to that, is no longer than a
+     * {@code String} holds, and ends a run for nothing else ({@code Strings}).
+     *
+     * @param built how it builds the text, of which of the site's operands
+     */
+    record WhereTheTextBuiltFits(TextBuilt built) implements GetsPast {}
+
+    /**
+     * How an operation builds a text of the texts and numbers it is handed, each named by which of
+     * the site's operands it is, counted from nought. Every text a {@code String} holds is in
+     * canonical form, and each of these puts what it builds in that form once it is built.
+     */
+    sealed interface TextBuilt {
+
+        /** The text at {@code first} followed by the one at {@code second}
+         *  ({@code Strings.append}, {@code ++}). */
+        record Joined(int first, int second) implements TextBuilt {}
+
+        /**
+         * The texts the list at {@code list} holds, in order, with the text at {@code separator}
+         * between each two, or with nothing between them where {@code separator} is -1
+         * ({@code Strings.join}, {@code Strings.concat}).
+         */
+        record JoinedWith(int list, int separator) implements TextBuilt {}
+
+        /** As many copies of the text at {@code text} as the {@code Int} at {@code count}, one
+         *  after another, and none where it is nought or less ({@code Strings.repeat}). */
+        record Copies(int text, int count) implements TextBuilt {}
+
+        /**
+         * The text at {@code text} widened to as many code points as the {@code Int} at
+         * {@code width} with copies of the text at {@code pad}, cut to what is needed, on one side
+         * ({@code Strings.padLeft}, {@code Strings.padRight}); the text itself where it is that
+         * wide already or {@code pad} is empty.
+         */
+        record Padded(int text, int width, int pad) implements TextBuilt {}
+
+        /** The code points of the text at {@code text} in the opposite order
+         *  ({@code Strings.reverse}). */
+        record Reversed(int text) implements TextBuilt {}
+
+        /** The text at {@code text} with each occurrence of the text at {@code target} put in place
+         *  of by the one at {@code replacement}, and the text itself where {@code target} is
+         *  empty ({@code Strings.replace}). */
+        record Replaced(int text, int target, int replacement) implements TextBuilt {}
+    }
+
     /** Nothing here says where it answers. */
     record NotKnown() implements GetsPast {}
 

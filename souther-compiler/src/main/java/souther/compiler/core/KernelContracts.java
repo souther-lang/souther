@@ -181,7 +181,9 @@ public final class KernelContracts {
      *
      * <p>A case conversion answers the text it makes of its operand, which holds more code points
      * than the operand where a code point becomes several, and ends a run only where that text is
-     * longer than a {@code String} holds.
+     * longer than a {@code String} holds. A join, a concatenation, copies, padding, a reversal and
+     * a replacement build a text of the texts they are handed, and end a run only where that text,
+     * or one they build on the way, is longer than a {@code String} holds.
      *
      * <p>{@code List.rangeInclusive} ends a run only where the span between its two numbers is
      * longer than a {@code List} holds, which it counts before it builds the list.
@@ -198,6 +200,13 @@ public final class KernelContracts {
             case SET_INSERT -> fits(GetsPast.together(1, 1));
             case MAP_INSERT -> fits(GetsPast.together(1, 2));
             case STRING_LOWERCASE, STRING_UPPERCASE -> new GetsPast.WhereTheTextFits(0);
+            case STRING_APPEND -> built(new GetsPast.TextBuilt.Joined(0, 1));
+            case STRING_JOIN -> built(new GetsPast.TextBuilt.JoinedWith(1, 0));
+            case STRING_CONCAT -> built(new GetsPast.TextBuilt.JoinedWith(0, -1));
+            case STRING_REPEAT -> built(new GetsPast.TextBuilt.Copies(1, 0));
+            case STRING_PAD_LEFT, STRING_PAD_RIGHT -> built(new GetsPast.TextBuilt.Padded(2, 0, 1));
+            case STRING_REVERSE -> built(new GetsPast.TextBuilt.Reversed(0));
+            case STRING_REPLACE -> built(new GetsPast.TextBuilt.Replaced(2, 0, 1));
             case LIST_RANGE_INCLUSIVE -> new GetsPast.WhereTheSpanFits(0, 1);
             case INT_TRUNCATING_DIVIDE -> new GetsPast.WhereTheQuotientFits(0, 1);
             case DECIMAL_TO_INT, RATIONAL_TO_INT -> new GetsPast.WhereTheRoundedNumberFits(1);
@@ -218,5 +227,9 @@ public final class KernelContracts {
 
     private static GetsPast fits(LinearForm<LawNumber<Integer>> answer) {
         return new GetsPast.WhereTheAnswerFits(answer);
+    }
+
+    private static GetsPast built(GetsPast.TextBuilt built) {
+        return new GetsPast.WhereTheTextBuiltFits(built);
     }
 }

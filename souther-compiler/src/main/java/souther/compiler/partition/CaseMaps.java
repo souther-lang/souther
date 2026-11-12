@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import java.math.BigInteger;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntPredicate;
@@ -158,6 +159,21 @@ final class CaseMaps {
                     gottenPastAtEveryStringUpTo(of) / most(CaseConversion.lowercaseGrowth());
             case CaseMapping.Uppercase(CaseMapping of) ->
                     gottenPastAtEveryStringUpTo(of) / most(CaseConversion.uppercaseGrowth());
+        };
+    }
+
+    /**
+     * A bound on the code points the conversions {@code mapping} is made of answer of a text of
+     * at most {@code codePoints}: that many times what each says one code point comes to at most,
+     * for the reason {@link #gottenPastAtEveryStringUpTo} gives.
+     */
+    static BigInteger answerBound(CaseMapping mapping, BigInteger codePoints) {
+        return switch (mapping) {
+            case CaseMapping.None _ -> codePoints;
+            case CaseMapping.Lowercase(CaseMapping of) -> answerBound(of, codePoints)
+                    .multiply(BigInteger.valueOf(most(CaseConversion.lowercaseGrowth())));
+            case CaseMapping.Uppercase(CaseMapping of) -> answerBound(of, codePoints)
+                    .multiply(BigInteger.valueOf(most(CaseConversion.uppercaseGrowth())));
         };
     }
 

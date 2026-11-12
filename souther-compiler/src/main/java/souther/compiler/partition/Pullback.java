@@ -51,6 +51,7 @@ import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.ContainerSizesUnderAWitness;
 import souther.compiler.check.WhatARunMayEndFor;
@@ -79,6 +80,7 @@ import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.OnePerElement;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.Position;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
@@ -150,6 +152,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.Operand;
+import souther.compiler.values.TextExtents;
 import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
@@ -2018,8 +2021,9 @@ final class Pullback {
      * turns on how many the collections it builds hold, or on the text it converts, and a reader
      * shows that of a witness ({@link ContainerSizesUnderAWitness}). A product of a list's numbers,
      * a span between two numbers, a whole-number quotient and a whole number made of a number turn
-     * on the numbers the places they read hold, which that reader does not read, so they tie the
-     * places they read as an operation nothing says the answers of does.
+     * on the numbers the places they read hold, which that reader does not read, and a text built
+     * of texts on how long each is, so they tie the places they read as an operation nothing says
+     * the answers of does.
      */
     private static boolean owedAProof(GetsPast completion) {
         return switch (completion) {
@@ -2027,8 +2031,8 @@ final class Pullback {
                  GetsPast.WhereTheTextFits _ -> true;
             case GetsPast.WhereTheProductFits _, GetsPast.WhereTheSpanFits _,
                  GetsPast.WhereTheQuotientFits _, GetsPast.WhereTheRoundedNumberFits _,
-                 GetsPast.WhereTheWholeNumberFits _, GetsPast.Always _,
-                 GetsPast.NotKnown _ -> false;
+                 GetsPast.WhereTheWholeNumberFits _, GetsPast.WhereTheTextBuiltFits _,
+                 GetsPast.Always _, GetsPast.NotKnown _ -> false;
         };
     }
 
@@ -2111,6 +2115,10 @@ final class Pullback {
                 return theWholeNumberFits(call, operand, reads);
             }
         }
+        if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e)
+                instanceof GetsPast.WhereTheTextBuiltFits(var built)) {
+            return theTextBuiltFits(e, built, reads);
+        }
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld held = whereItsNumberIsHeld(e);
         FormRange range = held == null ? null : exactRangeOf(e, reads);
         return range != null && range.liesWithin(held.least(), held.greatest());
@@ -2186,6 +2194,214 @@ final class Pullback {
         return least.compareTo(greatest) > 0
                 || (least.compareTo(ofAnInt.least()) >= 0
                         && greatest.compareTo(ofAnInt.greatest()) <= 0);
+    }
+
+    /**
+     * Whether every text {@code e} builds of texts ({@link GetsPast.WhereTheTextBuiltFits}) is no
+     * longer than a {@code String} holds on every run that works it out, from what each operand
+     * is at most ({@link TextsBuilt}).
+     */
+    private boolean theTextBuiltFits(Core e, GetsPast.TextBuilt built, InputReads reads) {
+        List<Core> operands = operandsOfABuilding(e);
+        return operands != null
+                && TextsBuilt.of(built, ceilingsOf(operands, reads, new HashMap<>())).fits();
+    }
+
+    /** The operands of {@code e} in the order its account of where it answers counts them, or
+     *  null where it is no call or operator. */
+    private static List<Core> operandsOfABuilding(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Call call -> call.args();
+            case Core.PreservedCall call -> call.args();
+            case Core.Binary joined -> List.of(joined.left(), joined.right());
+            default -> null;
+        };
+    }
+
+    /**
+     * What each of {@code operands} is at most on every run that works it out: a text by
+     * {@link #mostCodePointsOf}, a list of texts by {@link #mostTextsOf} and
+     * {@link #mostCodePointsOfEach}, and an {@code Int} by the greatest it comes to
+     * ({@link #exactRangeOf}). {@code known} holds what is worked out of each text met.
+     */
+    private TextsBuilt.Ceilings ceilingsOf(List<Core> operands, InputReads reads,
+                                           Map<Denotation, BigInteger> known) {
+        return new OperandCeilings(operands, reads, known);
+    }
+
+    /** {@link #ceilingsOf}: what each of {@code operands}, read in {@code reads}, is at most. */
+    private final class OperandCeilings implements TextsBuilt.Ceilings {
+
+        private final List<Core> operands;
+        private final InputReads reads;
+        private final Map<Denotation, BigInteger> known;
+
+        OperandCeilings(List<Core> operands, InputReads reads, Map<Denotation, BigInteger> known) {
+            this.operands = operands;
+            this.reads = reads;
+            this.known = known;
+        }
+
+        @Override
+        public BigInteger codePoints(int operand) {
+            return mostCodePointsOf(operands.get(operand), reads, known);
+        }
+
+        @Override
+        public BigInteger elements(int operand) {
+            return mostTextsOf(operands.get(operand), reads);
+        }
+
+        @Override
+        public BigInteger codePointsOfEach(int operand) {
+            return mostCodePointsOfEach(operands.get(operand), reads, known);
+        }
+
+        @Override
+        public BigInteger number(int operand) {
+            FormRange range = exactRangeOf(operands.get(operand), reads);
+            return range == null ? null : range.greatest().floor().orNull();
+        }
+    }
+
+    /**
+     * The most code points the text {@code e} holds on every run that works it out: the least of
+     * what its declarations leave it ({@link #declaredMostCodePointsOf}) and what it is shown to
+     * be built as. A text written out is as long as it is; a choice is no longer than its longest
+     * arm; a text built of texts, or converted, is no longer than its account says of what it is
+     * handed ({@link TextsBuilt}, {@link CaseMaps#answerBound}). Followed through the names it
+     * stands for.
+     */
+    private BigInteger mostCodePointsOf(Core e, InputReads reads, Map<Denotation, BigInteger> known) {
+        Denotation standing = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
+        BigInteger already = known.get(standing);
+        if (already != null) {
+            return already;
+        }
+        BigInteger declared = declaredMostCodePointsOf(standing.value());
+        BigInteger ofTheInput = mostCodePointsOfTheInputAt(standing);
+        if (ofTheInput != null) {
+            declared = declared.min(ofTheInput);
+        }
+        BigInteger shown = shownMostCodePointsOf(standing.value(), standing.at(), known);
+        BigInteger most = shown == null ? declared : shown.min(declared);
+        known.put(standing, most);
+        return most;
+    }
+
+    /** What {@link #mostCodePointsOf} reads off how {@code value} is built, or null where it is
+     *  built in no way read here. */
+    private BigInteger shownMostCodePointsOf(Core value, InputReads at,
+                                             Map<Denotation, BigInteger> known) {
+        Core here = Core.withoutStanding(value);
+        if (here instanceof Core.Str text) {
+            return BigInteger.valueOf(text.value().codePointCount(0, text.value().length()));
+        }
+        if (here instanceof Core.If || here instanceof Core.Match
+                || here instanceof Core.IfConstructed) {
+            BigInteger longest = BigInteger.ZERO;
+            for (Choice.Arm arm : Choice.of(here).arms()) {
+                longest = longest.max(mostCodePointsOf(arm.answers(), at.choosing(arm.decidedBy(),
+                        read.rules().symbols(), read.rules().newtypes()), known));
+            }
+            return longest;
+        }
+        if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(here)
+                instanceof GetsPast.WhereTheTextBuiltFits(var built)) {
+            List<Core> operands = operandsOfABuilding(here);
+            return operands == null ? null
+                    : TextsBuilt.of(built, ceilingsOf(operands, at, known)).answer();
+        }
+        if (AnOperationApplied.of(here) instanceof AnOperationApplied applied
+                && applied.args().size() == 1
+                && CaseMapping.applying(applied.operation(), CaseMapping.NONE)
+                        instanceof CaseMapping conversion) {
+            return CaseMaps.answerBound(conversion,
+                    mostCodePointsOf(applied.args().getFirst(), at, known));
+        }
+        return null;
+    }
+
+    /**
+     * The most code points the string a text read off the input holds, as the place it stands at
+     * says ({@link StringsHeld#lengthBoundAt}): the longest of the places it may stand at, or null
+     * where it stands at none or some place says nothing.
+     */
+    private BigInteger mostCodePointsOfTheInputAt(Denotation text) {
+        List<TermPath> places = switch (text.at().pathOf(text.value(), read.rules().newtypes())) {
+            case PathResolution.At(TermPath path) -> List.of(path);
+            case PathResolution.MayStandAt(List<TermPath> among) -> among;
+            default -> List.of();
+        };
+        BigInteger longest = null;
+        for (TermPath place : places) {
+            Position at = read.domain().at(place);
+            BigInteger bound = at == null ? null : StringsHeld.lengthBoundAt(at);
+            if (bound == null) {
+                return null;
+            }
+            longest = longest == null ? bound : longest.max(bound);
+        }
+        return longest;
+    }
+
+    /**
+     * The most code points a text of {@code e}'s type holds where {@code e} is read: what the
+     * rules of the value it is read off leave it ({@link DeclaredBounds#countsOfTheValueReadOff}),
+     * or else what its type's own rules do, and no more than a {@code String} holds.
+     */
+    private BigInteger declaredMostCodePointsOf(Core e) {
+        return mostOf(countsOf(e), BigInteger.valueOf(TextExtents.LONGEST_STRING));
+    }
+
+    /** What the rules leave a value {@code e} stands for holding: those of what it is read off,
+     *  or else those of its type. */
+    private DeclaredBounds.CountRange countsOf(Core e) {
+        DeclaredBounds.CountRange readOff = DeclaredBounds.countsOfTheValueReadOff(e, read.rules(),
+                read.rules().newtypes(), read.ruleReading());
+        return readOff != null ? readOff
+                : DeclaredBounds.countsHeld(e.type(), read.ruleReading(), null);
+    }
+
+    /** The most {@code counts} leave, no more than {@code ceiling}: {@code Integer.MAX_VALUE} is
+     *  the rules capping it in no way ({@link DeclaredBounds.CountRange}). */
+    private static BigInteger mostOf(DeclaredBounds.CountRange counts, BigInteger ceiling) {
+        return counts.most() == Integer.MAX_VALUE ? ceiling
+                : BigInteger.valueOf(counts.most()).min(ceiling);
+    }
+
+    /** The most texts the list {@code e} holds on every run that works it out: as many as it is
+     *  written out with, or what the rules leave it, and no more than a collection holds. */
+    private BigInteger mostTextsOf(Core e, InputReads reads) {
+        Denotation container = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
+        if (WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each each) {
+            return BigInteger.valueOf(each.asWritten().size());
+        }
+        return mostOf(countsOf(container.value()), GetsPast.MOST_ELEMENTS);
+    }
+
+    /** The most code points each text the list {@code e} holds holds on every run that works it
+     *  out: the longest it is written out with, or what the rules of the type of its texts leave
+     *  each. */
+    private BigInteger mostCodePointsOfEach(Core e, InputReads reads,
+                                            Map<Denotation, BigInteger> known) {
+        Denotation container = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
+        if (WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each each) {
+            BigInteger longest = BigInteger.ZERO;
+            for (ReadMeaning.Occurrence element : each.asWritten()) {
+                longest = longest.max(mostCodePointsOf(element.value().value(),
+                        element.value().at(), known));
+            }
+            return longest;
+        }
+        return TypeView.shapeOf(container.value().type(), read.rules().inners(),
+                read.rules().symbols(), read.rules().kinds(), read.rules().sums())
+                instanceof Shape.Sequence(var _, Type texts)
+                ? mostOf(DeclaredBounds.countsHeld(texts, read.ruleReading(), null),
+                        BigInteger.valueOf(TextExtents.LONGEST_STRING))
+                : BigInteger.valueOf(TextExtents.LONGEST_STRING);
     }
 
     /** The least and the greatest an {@code Int} holds, which a whole number made of a number

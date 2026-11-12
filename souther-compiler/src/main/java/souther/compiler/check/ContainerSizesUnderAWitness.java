@@ -136,9 +136,9 @@ public final class ContainerSizesUnderAWitness {
                         : most(operands.get(at))
                                 .map(most -> most.compareTo(BigInteger.ONE) <= 0).orElse(false);
             }
-            // How long a text a conversion makes turns on the text, and what a run holds of
-            // collections says nothing of it.
-            case GetsPast.WhereTheTextFits _ -> false;
+            // How long a text a conversion makes, or one built of texts, turns on the texts, and
+            // what a run holds of collections says nothing of it.
+            case GetsPast.WhereTheTextFits _, GetsPast.WhereTheTextBuiltFits _ -> false;
             // A product, a span, a quotient and a whole number made of a number turn on the
             // numbers they are handed, which a reader holding the places those are read off asks;
             // what a run holds of collections says nothing of them.
