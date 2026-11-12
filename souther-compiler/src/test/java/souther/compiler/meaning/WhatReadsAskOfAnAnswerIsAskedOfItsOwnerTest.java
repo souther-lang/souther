@@ -113,6 +113,32 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
     }
 
     @Test
+    void aChainOfCallsOfOneArgumentIsAskedOfTheOwnerInALoopFromTheInnermostOut() {
+        ValueName.Stdlib negate = ValueName.Stdlib.operation("Int", "negate");
+        Quantity answer = input("x");
+        for (int i = 0; i < 100_000; i++) {
+            answer = new Quantity.WhatAnOperationAnswers(i == 99_999 ? negate : FLOOR_MOD,
+                    List.of(answer));
+        }
+        Quantity.WhatAnOperationAnswers.OfOneArgument chain =
+                promptly(((Quantity.WhatAnOperationAnswers) answer)::chainOfOneArgument);
+        assertEquals(input("x"), chain.from());
+        assertEquals(100_000, chain.operations().size());
+        assertEquals(FLOOR_MOD, chain.operations().getFirst());
+        assertEquals(negate, chain.operations().getLast());
+    }
+
+    @Test
+    void aChainOfOneArgumentStopsAtTheFirstCallOfAnyOtherNumber() {
+        Quantity two = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(input("x"), input("y")));
+        Quantity.WhatAnOperationAnswers outer =
+                new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(two));
+        Quantity.WhatAnOperationAnswers.OfOneArgument chain = outer.chainOfOneArgument();
+        assertEquals(two, chain.from());
+        assertEquals(List.of(FLOOR_MOD), chain.operations());
+    }
+
+    @Test
     void anAnswerAHundredThousandCallsDeepIsReadWithoutOverflowingTheStack() {
         Quantity.WhatAnOperationAnswers deep = (Quantity.WhatAnOperationAnswers) chain(100_000);
         assertEquals(1, promptly(deep::positionsItIsMadeOf).size());

@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -125,6 +126,41 @@ class AnAnswerHandedTheSameAnswerTwiceIsOneValueAtEveryDepthTest {
         Quantity deep = chain(100_000, "x");
         assertEquals(deep.hashCode(), chain(100_000, "x").hashCode());
         assertNotEquals(deep, chain(100_001, "x"));
+    }
+
+    /** An answer that comes to {@code size} calls and numbers: the number, and a call each. */
+    private static Quantity negations(int size) {
+        Quantity answer = input("x");
+        for (int i = 1; i < size; i++) {
+            answer = new Quantity.WhatAnOperationAnswers(NEGATE, List.of(answer));
+        }
+        return answer;
+    }
+
+    /** Which form an answer is written in is where it comes to more calls than the figure. */
+    @Test
+    void anAnswerIsWrittenNestedUpToTheFigureAndListedPastIt() {
+        int figure = Quantity.WhatAnOperationAnswers.WRITTEN_NESTED_UP_TO;
+        assertFalse(negations(figure).spelled().contains("%"), "at the figure");
+        assertTrue(negations(figure + 1).spelled().contains("%"), "one past it");
+    }
+
+    /** Either form says what the answer is: equal answers are written alike and the rest are not,
+     *  whichever side of the figure they come to. */
+    @Test
+    void anAnswerIsWrittenAlikeWhereItIsEqualOnEverySideOfTheFigure() {
+        int figure = Quantity.WhatAnOperationAnswers.WRITTEN_NESTED_UP_TO;
+        for (int calls : new int[] {figure - 1, figure, figure + 1, figure + 2}) {
+            assertEquals(negations(calls).spelling(), negations(calls).spelling(), "" + calls);
+            assertNotEquals(negations(calls).spelling(), negations(calls + 1).spelling(),
+                    "" + calls);
+        }
+        for (int depth : new int[] {5, 6, 7, 8}) {
+            assertEquals(chain(depth, "x").spelling(), unshared(depth, "x").spelling(),
+                    "shared and made again, depth " + depth);
+            assertNotEquals(chain(depth, "x").spelling(), chain(depth, "y").spelling(),
+                    "depth " + depth);
+        }
     }
 
     @Test

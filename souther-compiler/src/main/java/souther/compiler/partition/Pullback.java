@@ -3587,15 +3587,9 @@ final class Pullback {
      * the position's strings are parted into.
      */
     private static CaseMapping conversionOf(Quantity string) {
-        return switch (string) {
-            case DecisionAtom.OfTheInput _ -> CaseMapping.NONE;
-            case Quantity.WhatAnOperationAnswers answers -> {
-                CaseMapping inner = answers.of().size() == 1
-                        ? conversionOf(answers.of().getFirst()) : null;
-                yield inner == null ? null : CaseMapping.applying(answers.operation(), inner);
-            }
-            default -> null;
-        };
+        ConvertedText.Conversion made = ConvertedText.conversionOf(string);
+        return made != null && made.from() instanceof DecisionAtom.OfTheInput
+                ? made.through() : null;
     }
 
     /**

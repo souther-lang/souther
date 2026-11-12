@@ -24,8 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * answer's to give once. A reader that goes down {@code of()} itself pays for every path, and the
  * ones that did took a quarter of a minute at twenty-six calls.
  *
- * <p>The two that still do read one argument of an answer that has one, which a chain of calls
- * each given one thing is a line and not a graph of, so there are no two paths to count.
+ * <p>A chain of calls each given one thing is a line and not a graph, and is asked of the owner
+ * too ({@code chainOfOneArgument}), in a loop: how long it is is the model's, and recursing down it
+ * is a limit of the thread reading it.
  */
 class OnlyTheAnswerOfAnOperationGoesDownItsOwnArgumentsTest {
 
@@ -36,12 +37,8 @@ class OnlyTheAnswerOfAnOperationGoesDownItsOwnArgumentsTest {
     private static final Pattern TAKEN_APART = Pattern.compile(
             "(?<![A-Za-z])WhatAnOperationAnswers\\((var|Stdlib|ValueName)");
 
-    private static final Set<String> OF_ONE_ARGUMENT = Set.of(
-            "partition/ConvertedText.java",
-            "partition/Pullback.java");
-
     @Test
-    void noReaderOutsideTheOwnerAsksAnAnswerForItsArgumentsButTheOnesOfOneArgument()
+    void noReaderOutsideTheOwnerAsksAnAnswerForItsArguments()
             throws IOException {
         Set<String> found = new TreeSet<>();
         Path main = Path.of("src/main/java/souther/compiler");
@@ -64,6 +61,6 @@ class OnlyTheAnswerOfAnOperationGoesDownItsOwnArgumentsTest {
                 }
             }
         }
-        assertEquals(OF_ONE_ARGUMENT, found);
+        assertEquals(Set.of(), found);
     }
 }

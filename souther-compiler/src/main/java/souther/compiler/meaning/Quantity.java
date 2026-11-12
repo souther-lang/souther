@@ -205,9 +205,18 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     record WhatAnOperationAnswers(ValueName.Stdlib operation, List<Quantity> of,
                                   @DecidedByTheRest Derivation derivation) implements Quantity {
 
-        /** How large an answer written out as the tree of its calls may be before it is written as
-         *  the list of the distinct ones instead. */
-        private static final int WRITTEN_NESTED_UP_TO = 64;
+        /**
+         * How many calls and numbers an answer may come to, counted down every path, before it is
+         * written as the list of the distinct ones and not as the calls written one inside another.
+         *
+         * <p>Both forms are of the structure alone, so which one an answer is written in is a
+         * matter of how it reads and not of what it says: up to the figure the nested form, which
+         * is what a model writes and what a person reads, is at most this many names long; past it
+         * the text of the nested form is the paths and not the answers, and the list is the
+         * answers. Any figure says the same of every answer; this one keeps what a model reads in a
+         * statement of a few calls as it is written and lists what is past a screenful.
+         */
+        static final int WRITTEN_NESTED_UP_TO = 64;
 
         /** What the distinct answers are numbered by in a spelling that lists them: no spelling of
          *  a number of the input starts with it. */
@@ -424,6 +433,34 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         ? new WhatAnOperationAnswers(each.operation, arguments) : each);
             }
             return rebuilt.get(this);
+        }
+
+        /**
+         * What a chain of calls each handed one thing is made of: the operations, the one applied
+         * first first, and what the first was handed.
+         *
+         * @param from       what the innermost call was handed, which is no answer of a call of
+         *                   one argument
+         * @param operations the calls, from the innermost out
+         */
+        public record OfOneArgument(Quantity from, List<ValueName.Stdlib> operations) {
+        }
+
+        /**
+         * This as the calls of one argument each that it is made of, down to what is not one: the
+         * answer of a call of one argument holds one answer or number and no other, so these are a
+         * line and not a graph, and are asked of the answer in a loop and not by going down
+         * {@link #of} where a chain of them is as long as the model writes it.
+         */
+        public OfOneArgument chainOfOneArgument() {
+            List<ValueName.Stdlib> operations = new ArrayList<>();
+            Quantity at = this;
+            while (at instanceof WhatAnOperationAnswers answers && answers.of.size() == 1) {
+                operations.add(answers.operation);
+                at = answers.of.getFirst();
+            }
+            Collections.reverse(operations);
+            return new OfOneArgument(at, List.copyOf(operations));
         }
 
         /**
