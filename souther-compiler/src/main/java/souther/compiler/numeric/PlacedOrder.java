@@ -31,9 +31,9 @@ final class PlacedOrder<A> implements CanonicalOrder<A> {
     private final Supplier<Map<A, Integer>> making;
     private final CanonicalOrder<A> order;
 
-    /** Worked out on the first walk that needs it. Two threads that meet at that walk work out the
-     *  same places and either is the one held, and a record is read whole whichever it is. */
-    private Tabled<A> tabled;
+    /** Worked out on the first walk that needs it, and seen by every thread once it is. Two threads
+     *  that meet at that walk work out the same places and either is the one held. */
+    private volatile Tabled<A> tabled;
 
     PlacedOrder(Supplier<Map<A, Integer>> making, CanonicalOrder<A> order) {
         this.making = making;

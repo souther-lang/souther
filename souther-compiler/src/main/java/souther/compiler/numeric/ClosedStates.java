@@ -10,7 +10,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -147,11 +146,22 @@ public final class ClosedStates {
      * for every form it is put, of which {@link #WALKS_KEPT} asked last are kept in each order.
      * Keyed by the order as the object it is, so an order written apart that walks alike is a walk
      * done again and nothing else. Null for a table that keeps nothing.
+     *
+     * <p>The orders asked last, {@link #ORDERS_KEPT} of them, for the reason the forms are bounded:
+     * an order written afresh at each call is an entry of its own, and a table of them grows with the
+     * calls. One that is let go is still the order of whatever was handed it, which goes on walking
+     * by it; what is lost is the walks kept in it, which are worked out again by whoever asks next.
      */
-    private final Map<CanonicalOrder<?>, CanonicalOrder<?>> walks;
+    private final LatelyAsked<CanonicalOrder<?>, CanonicalOrder<?>> walks;
 
     /** How many forms each order of {@link #walks} keeps the walk of. */
     private final int walksKept;
+
+    /**
+     * How many orders {@link #walks} keeps the walks of. A table of closures serves the atoms of one
+     * domain, whose positions are put in one order, so a few is enough for the ones written apart.
+     */
+    static final int ORDERS_KEPT = 16;
 
     private final AtomicLong workedOut = new AtomicLong();
 
@@ -173,7 +183,7 @@ public final class ClosedStates {
         this.answers = answers;
         this.places = places;
         this.walksKept = walksKept;
-        this.walks = answers == null ? null : new ConcurrentHashMap<>();
+        this.walks = answers == null ? null : new LatelyAsked<>(ORDERS_KEPT);
         this.inOneRun = inOneRun;
     }
 
@@ -194,7 +204,7 @@ public final class ClosedStates {
         // The cast holds because an entry is only ever put under the order it keeps the walks of.
         @SuppressWarnings("unchecked")
         CanonicalOrder<A> keeping =
-                (CanonicalOrder<A>) walks.computeIfAbsent(order, _ -> new Keeping<>(order));
+                (CanonicalOrder<A>) walks.answer(order, _ -> new Keeping<>(order));
         return keeping;
     }
 
@@ -223,8 +233,9 @@ public final class ClosedStates {
         public List<Map.Entry<A, ExactRatio>> walkOf(CanonicalForm<A> form,
                                                      Supplier<List<Map.Entry<A, ExactRatio>>> walk) {
             return walked.answer(form, _ -> {
+                List<Map.Entry<A, ExactRatio>> made = walk.get();
                 walkedOut.incrementAndGet();
-                return walk.get();
+                return made;
             });
         }
 
@@ -240,11 +251,16 @@ public final class ClosedStates {
     int walksHeld() {
         int held = 0;
         if (walks != null) {
-            for (CanonicalOrder<?> each : walks.values()) {
+            for (CanonicalOrder<?> each : walks.kept()) {
                 held += ((Keeping<?>) each).held();
             }
         }
         return held;
+    }
+
+    /** How many orders the walks are kept for, for the same test as {@link #walksHeld}. */
+    int ordersHeld() {
+        return walks == null ? 0 : walks.size();
     }
 
     /** How many sets of positions the places are held of, for the same test as {@link #walksHeld}. */

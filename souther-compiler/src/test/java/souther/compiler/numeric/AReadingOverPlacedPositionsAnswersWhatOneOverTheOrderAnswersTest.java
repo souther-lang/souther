@@ -14,6 +14,7 @@ import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -220,6 +221,35 @@ class AReadingOverPlacedPositionsAnswersWhatOneOverTheOrderAnswersTest {
         assertTrue(byDefault[0] > 8 && byDefault[1] > 16,
                 "the same run holds more where more is kept, so what is counted is what is held: "
                         + byDefault[0] + " sets, " + byDefault[1] + " forms");
+    }
+
+    @Test
+    void aWalkThatIsRefusedIsNotCountedAsWorkedOutAndIsAskedAgain() {
+        ClosedStates kept = ClosedStates.kept();
+        CanonicalOrder<String> keeping = kept.kept(SPELLED);
+        CanonicalForm<String> form = new CanonicalForm<>(Map.of("a", ExactRatio.ONE));
+
+        assertThrows(IllegalStateException.class, () -> keeping.walkOf(form, () -> {
+            throw new IllegalStateException("two positions are one to the order");
+        }));
+        assertEquals(0, kept.walksWorkedOut(), "walks counted as worked out that were refused");
+        assertEquals(0, kept.walksHeld());
+
+        keeping.walkOf(form, () -> List.of(Map.entry("a", ExactRatio.ONE)));
+        assertEquals(1, kept.walksWorkedOut());
+    }
+
+    @Test
+    void theOrdersTheWalksAreKeptForAreNoMoreThanTheTableWasMadeToKeep() {
+        ClosedStates kept = ClosedStates.kept();
+        for (int at = 0; at < 100; at++) {
+            int written = at;
+            // Each is an order of its own, as one written afresh at every call is.
+            CanonicalOrder<String> order = (one, other) -> one.compareTo(other) + 0 * written;
+            kept.kept(order);
+        }
+        assertTrue(kept.ordersHeld() <= ClosedStates.ORDERS_KEPT,
+                "orders the walks are kept for: " + kept.ordersHeld());
     }
 
     @Test

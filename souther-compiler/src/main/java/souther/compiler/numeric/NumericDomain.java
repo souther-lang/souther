@@ -1425,13 +1425,7 @@ public final class NumericDomain<A> {
      * itself where the closures are not kept.
      */
     private CanonicalOrder<A> orderOfTheRules() {
-        return closedStates.placing(() -> {
-            Set<A> positions = new LinkedHashSet<>();
-            for (AffineConstraint<A> rule : rules()) {
-                positions.addAll(rule.form().atomsIn(order));
-            }
-            return positions;
-        }, order);
+        return closedStates.placing(() -> ClosureQuestion.weighedBy(rules()), order);
     }
 
 
