@@ -115,7 +115,7 @@ final class NumericReadings {
         // reader of declarations can ask. Asked as "is the declared result a number", an operation
         // whose answer is what its container holds was read as answering none — and a walk that
         // adds up whole numbers answers one at every call it is given whole numbers.
-        if (!NumericAnswers.mayAnswerANumber(facts, named, entry.signature())) {
+        if (!ArithmeticAnswers.mayAnswer(facts, named, entry.signature())) {
             return List.of();
         }
         List<NumericReading> terms = new ArrayList<>();

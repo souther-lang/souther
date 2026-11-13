@@ -218,11 +218,11 @@ public final class KernelContracts {
 
     /**
      * Which operand, counted from nought, is the one {@code kernel} ends a run on alone, or -1
-     * where there is none: {@code floorMod} ends a run only where its divisor is nought, and what
-     * it divides is no part of that.
+     * where there is none: {@code floorMod} and the exact quotient end a run only where their
+     * divisor is nought, and what they divide is no part of that.
      */
     public static int theOperandItAloneStopsOn(Kernel kernel) {
-        return kernel == Kernel.INT_FLOOR_MOD ? 1 : -1;
+        return kernel == Kernel.INT_FLOOR_MOD || kernel == Kernel.RATIONAL_DIVIDE ? 1 : -1;
     }
 
     private static GetsPast fits(LinearForm<LawNumber<Integer>> answer) {
