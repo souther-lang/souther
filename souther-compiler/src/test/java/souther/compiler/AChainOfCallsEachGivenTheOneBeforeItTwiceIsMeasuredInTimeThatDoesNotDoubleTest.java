@@ -14,6 +14,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -233,15 +234,31 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
     }
 
     /**
-     * The report is worked out at any depth. A hundred additions overflow an Int, and the run that
-     * would add them says so: the arithmetic is read from what is written and not from the sizes.
+     * A hundred additions overflow an Int, and the run that would add them stops there: the
+     * sum is nought exactly where every size is, but the arithmetic the program writes is read
+     * from what is written and not from the sizes it comes to, so the stop is still said.
      */
     @Test
-    void aSizeAddedToItselfThroughAChainOfNamesHeldAgainstAnInputIsReportedAtAnyDepth() {
-        for (int depth : new int[] {24, 100}) {
-            String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                    () -> reportOfSizesAddedToThemselves(depth, "LAST == j"));
-            assertTrue(report.contains("String.length(s)"), report);
-        }
+    void aSizeAddedToItselfAHundredTimesIsStillSaidToStopAtTheOverflow() {
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
+                () -> reportOfSizesAddedToThemselves(100, "LAST == j"));
+        Pattern overflow = Pattern.compile("\\? nothing could show .*Int overflow: (\\d+) \\+ \\1\\)");
+        assertTrue(overflow.matcher(report).find(), report);
+        assertTrue(report.contains("adequacy: undetermined"), report);
+    }
+
+    /** And where the sum is held against nought the stop is the same, whatever the sum is read as. */
+    @Test
+    void aSizeAddedToItselfAHundredTimesHeldAtNoughtStopsAtTheOverflowToo() {
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
+                () -> reportOfSizesAddedToThemselves(100, "LAST == 0"));
+        assertTrue(Pattern.compile("Int overflow: (\\d+) \\+ \\1").matcher(report).find(), report);
+    }
+
+    /** A depth below the end of Int has no stop to say. */
+    @Test
+    void aSizeAddedToItselfTwentyFourTimesSaysNoStop() {
+        String report = reportOfSizesAddedToThemselves(24, "LAST == j");
+        assertFalse(report.contains("Int overflow"), report);
     }
 }

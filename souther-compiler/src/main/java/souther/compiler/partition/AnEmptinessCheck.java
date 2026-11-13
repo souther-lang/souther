@@ -43,7 +43,9 @@ final class AnEmptinessCheck {
      * What a comparison says of whether containers hold anything.
      *
      * @param containers        the containers whose sizes are added up and held against nought,
-     *                          one where a size alone is, each where it is read, each once
+     *                          one where a size alone is, each where it is read. A size written
+     *                          twice is two of them, as two values are; what is reached twice as
+     *                          one value is one
      * @param bareSize          whether it is a size alone and not a sum: a size added to itself
      *                          is a sum of one container
      * @param emptyWhereItHolds whether the comparison holding is the containers holding nothing
@@ -173,7 +175,10 @@ final class AnEmptinessCheck {
         private boolean ofASum;
     }
 
-    /** A value, by what object it is, in the reading it is read in. */
+    /**
+     * A value, by what object it is, in the reading it is read in. By the object and not by what
+     * it equals: equality over a tree that shares its parts walks every path to them.
+     */
     private record Visited(Core value, InputReads at) {
 
         @Override
