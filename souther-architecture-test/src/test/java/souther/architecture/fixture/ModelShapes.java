@@ -5,6 +5,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -351,10 +352,11 @@ public final class ModelShapes {
 
         public static AdequacyReport read(String source) {
             Compilation model = Compilation.ofSource(source, "Main");
+            List<String> dropped = new ArrayList<>();
             try {
                 TheDoor.compiles(model);
-            } catch (AssertionError dropped) {
-                dropped.getMessage();
+            } catch (AssertionError failed) {
+                dropped.add(failed.getMessage());
             }
             return AdequacyReport.of(model);
         }
