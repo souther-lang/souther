@@ -6,6 +6,10 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -44,9 +48,8 @@ public final class ACompiledModel {
     /**
      * {@code model}, answered in full, held to be refused with {@code codes} and nothing else, in
      * the order the compiler gives them, whether it reports them or stops with them. The model
-     * comes last, as the value compared stands last
-     * in an assertion, so that a test reads {@code refusedWith(List.of("E1013"), model)} as what
-     * it expects of it.
+     * comes last, as the value compared stands last in an assertion, so that a test reads
+     * {@code refusedWith(List.of("E1013"), model)} as what it expects of it.
      */
     public static Compilation refusedWith(List<String> codes, Compilation model) {
         List<String> refused;
@@ -59,5 +62,46 @@ public final class ACompiledModel {
         assertEquals(codes, refused,
                 codes.isEmpty() ? "the model compiles" : "the model is refused as meant");
         return model;
+    }
+
+    /**
+     * {@code model}, read without being compiled, because compiling it is what a test cannot do:
+     * the model is too large for the compiler's own stack, or is a buffer stopped half way
+     * through a line, and what the test asks of it is not a report. Said so, with why, and held to
+     * a closed list of the tests that may:
+     * {@code ATestThatReadsAModelsReportAsksThatTheModelCompilesTest}.
+     */
+    public static Compilation notCompiled(Compilation model, String reason) {
+        Objects.requireNonNull(reason, "a model that is not compiled says why");
+        return model;
+    }
+
+    /**
+     * Models a class of tests builds once and reads in many, each held to what it was built to be
+     * every time it is given out.
+     *
+     * <p>The model is kept and the look is not: a test reading the shared model is handed it by
+     * the call that asks, so what it reads is a model that was asked about whichever test made it.
+     * Released when the class is done with them, because a fork keeps its JVM and what is held
+     * statically is held for every class after.
+     */
+    public static final class Shared {
+
+        private final Map<String, Compilation> held = new ConcurrentHashMap<>();
+
+        /** The model {@code made} makes for {@code key}, held to compile. */
+        public Compilation compiles(String key, Supplier<Compilation> made) {
+            return refusedWith(List.of(), key, made);
+        }
+
+        /** The model {@code made} makes for {@code key}, held to be refused with {@code codes}. */
+        public Compilation refusedWith(List<String> codes, String key, Supplier<Compilation> made) {
+            return ACompiledModel.refusedWith(codes, held.computeIfAbsent(key, ignored -> made.get()));
+        }
+
+        /** Lets go of every model held. */
+        public void release() {
+            held.clear();
+        }
     }
 }

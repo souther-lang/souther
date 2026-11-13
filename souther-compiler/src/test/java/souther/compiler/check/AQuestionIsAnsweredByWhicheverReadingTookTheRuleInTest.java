@@ -142,7 +142,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
      * leave it. Read through a record, since a newtype's own value is at no path of its own. */
     private static String floorOfAFieldOf(String clause) {
         String source = beside(clause) + "\ndata Holder = { len: Length }\n";
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
         return FieldDomains.of(holder, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
@@ -389,7 +389,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
      */
     @Test
     void aClauseCanBeAnsweredWithoutTheBoundsStatingIt() {
-        Compilation compilation = Compilation.ofSource(beside("value == 3 || value == 5"), "Main");
+        Compilation compilation = ACompiledModel.answered(beside("value == 3 || value == 5"));
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         FieldDomains read = FieldDomains.of(named,

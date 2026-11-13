@@ -348,8 +348,9 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source,
+        Compilation compilation = MEASURED.computeIfAbsent(source,
                 text -> ACompiledModel.compiles(attempted(text)));
+        return ACompiledModel.compiles(compilation);
     }
 
     /** The model measured and answered in full, whether or not it compiles. */

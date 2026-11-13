@@ -329,7 +329,7 @@ class EveryLineBesideABorderIsAskedForInTheRunAfterItsPointsTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model,
-                source -> ACompiledModel.measured(source, Adequacy.Asked.fullReport()));
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(model,
+                source -> ACompiledModel.measured(source, Adequacy.Asked.fullReport())));
     }
 }

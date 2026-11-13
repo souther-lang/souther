@@ -51,7 +51,7 @@ class EveryRowOfferedStandsInWhatItsTargetRequiresTest {
         List<String> short_ = new ArrayList<>();
         int rows = 0;
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            Compilation compilation = RepositoryModels.analysed(corpus).compilation();
+            Compilation compilation = RepositoryModels.analysed(corpus).answered();
             for (String module : compilation.modules()) {
                 Offering offering = Adequacy.offeredFor(compilation.db(),
                         new OfferingRequest(module, new GenerationScope.Module()));

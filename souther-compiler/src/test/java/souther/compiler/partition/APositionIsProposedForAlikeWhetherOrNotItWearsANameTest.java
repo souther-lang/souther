@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -46,11 +47,8 @@ class APositionIsProposedForAlikeWhetherOrNotItWearsANameTest {
      * the name the second test is about.
      */
     private static RuleReadingSource refusedReading(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of("E1009"),
-                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "a newtype may not wrap an Option");
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1009"),
+                Compilation.ofSource(source, "Main"));
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

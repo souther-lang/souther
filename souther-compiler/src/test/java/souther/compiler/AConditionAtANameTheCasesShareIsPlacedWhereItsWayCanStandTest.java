@@ -120,9 +120,6 @@ class AConditionAtANameTheCasesShareIsPlacedWhereItsWayCanStandTest {
 
     private static Map<String, BodyDistinction> toldApart(String behavior) {
         Compilation c = Measured.ONCE;
-        assertEquals(List.of(), c.errors().stream()
-                .map(e -> e.diagnostic().code() + " " + e.diagnostic().said()).toList(),
-                "the model is measured");
         PartitionEvidence partition = c.db().ask(new Adequacy.Coverage("probe.place")).value()
                 .get(behavior);
         return partition.axes().stream().collect(Collectors.toMap(
@@ -137,8 +134,7 @@ class AConditionAtANameTheCasesShareIsPlacedWhereItsWayCanStandTest {
         private static Compilation measure() {
             Compilation c = Compilation.ofSource(MODEL, "Main");
             c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
-            return c;
+            return ACompiledModel.compiles(c);
         }
     }
 }

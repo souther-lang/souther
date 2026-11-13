@@ -179,7 +179,7 @@ class ACountOfAChainOfNamesIsNotTakenOnTheCallStackTest {
      */
     @Test
     void eachCountReadsTheLinkItWrapsAndTheModuleReadsEachLinkOnce() {
-        Compilation c = onASmallStack(() -> compiled(chain(BOUNDED)));
+        Compilation c = ACompiledModel.compiles(onASmallStack(() -> compiled(chain(BOUNDED))));
         said(c);
 
         assertEquals(List.of(), countsRead(c.db(), link(1)), "the bottom link read a count");

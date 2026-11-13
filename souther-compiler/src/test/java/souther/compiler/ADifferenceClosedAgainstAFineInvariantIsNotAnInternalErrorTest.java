@@ -5,10 +5,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A newtype whose invariant bounds it at a decimal of a scale near the end of the range puts its
@@ -55,11 +52,9 @@ class ADifferenceClosedAgainstAFineInvariantIsNotAnInternalErrorTest {
      * and would pass here for the wrong reason.
      */
     private static void assertAnswered(String below) {
-        Compilation compilation = Compilation.ofSource(BOUNDED + "behavior below : (a: P, b: P) -> Bool\n"
-                + below, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model is one the language admits");
+        Compilation compilation = ACompiledModel.measured(
+                BOUNDED + "behavior below : (a: P, b: P) -> Bool\n" + below,
+                Adequacy.Asked.fullReport());
         assertDoesNotThrow(() -> AdequacyReport.of(compilation));
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -201,7 +202,6 @@ class WhatARuleLeavesDoesNotTurnOnHowItsAuthorSpeltTheBooleanTest {
     }
 
     private static FieldDomains read(String source, String clause) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
         // Everything there is to answer, which is what holding a fixture to being writable costs
         // and not what these rows read.
         //
@@ -211,10 +211,7 @@ class WhatARuleLeavesDoesNotTurnOnHowItsAuthorSpeltTheBooleanTest {
         // declaration with no rule, and a declaration with no rule agrees with every spelling here
         // about everything. Which is the one way a property over spellings passes while saying
         // nothing, so the fixtures are held first and read afterwards.
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.reports().stream()
-                        .map(each -> each.report().diagnostic().code()).toList(),
-                "the model under test is a program that can be written: " + clause);
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSource(source, "Main"));
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Box"));

@@ -360,7 +360,8 @@ class TheTreesOfAModelTheBackendIsHandedAreTypedTest {
      */
     private static List<Core> treesOf(List<Compilation> population) {
         List<Core> out = new ArrayList<>();
-        for (Compilation c : population) {
+        for (Compilation each : population) {
+            Compilation c = ACompiledModel.compiles(each);
             for (String module : c.modules()) {
                 TheWalk walk = Scopes.resolved(c.db(), module).value().theWalk();
                 Bodies.ModuleCheck.Of checkedModule =

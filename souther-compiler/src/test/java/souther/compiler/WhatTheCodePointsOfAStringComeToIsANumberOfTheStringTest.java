@@ -408,12 +408,8 @@ class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source, text -> {
-            Compilation compilation = Compilation.ofSource(text, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
-        });
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(source,
+                text -> ACompiledModel.measured(text, Adequacy.Asked.fullReport())));
     }
 
     private static String report(Compilation compilation) {

@@ -103,7 +103,7 @@ class ANumberNoPlaceNamesIsNamedByItsTermTest {
     }
 
     private static RuleReadingSource rules(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

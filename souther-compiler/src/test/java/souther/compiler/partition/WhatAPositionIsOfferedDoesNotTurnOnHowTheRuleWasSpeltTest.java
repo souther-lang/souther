@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
@@ -70,14 +71,10 @@ class WhatAPositionIsOfferedDoesNotTurnOnHowTheRuleWasSpeltTest {
     }
 
     private static Model modelOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         assertNotNull(rules, "the model did not compile");
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
-                "the model under test is a program that can be written");
         return new Model(rules, module);
     }
 

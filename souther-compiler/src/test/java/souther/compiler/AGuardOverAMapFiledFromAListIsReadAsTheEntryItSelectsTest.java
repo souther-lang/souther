@@ -441,7 +441,7 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
                     | "last row short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> 1
                 """);
 
-        assertFalse(errors(compilation).isEmpty(), () -> report(compilation));
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
     }
 
     private static final String ENOUGH = """

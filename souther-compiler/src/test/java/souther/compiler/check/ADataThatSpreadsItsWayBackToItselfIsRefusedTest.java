@@ -182,8 +182,8 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
 
                 data Local = { ...Pair, local: Int }
                 """);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.refusedWith(List.of("E1027"),
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
 
         assertAll(
                 () -> assertEquals(

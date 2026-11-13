@@ -325,7 +325,8 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
         ANSWERED.forEach((model, answered) -> {
             List<String> examples = new ArrayList<>();
             Set<Integer> answers = new TreeSet<>();
-            for (List<FixtureTemplate> row : composedForTheRules(measured(model))) {
+            Compilation compilation = measured(model);
+            for (List<FixtureTemplate> row : composedForTheRules(compilation)) {
                 int answer = answered.by().apply(row.stream().map(FixtureTemplate::value).toList());
                 answers.add(answer);
                 examples.add("    | \"composed " + examples.size() + "\" : ("
@@ -334,6 +335,7 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
             }
             assertEquals(answered.composedFor(), answers,
                     () -> "a row for the rules this model has one for: " + examples + "\n" + model);
+            ACompiledModel.compiles(compilation);
         });
     }
 
@@ -347,7 +349,7 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
      */
     @Test
     void theLeastOfACountsLeftIsNoProofTheRulesLeaveNothing() {
-        String report = report(measured("""
+        Compilation compilation = ACompiledModel.compiles(measured("""
                 module p
                 data Line = { q: Int }
                     invariant big = q >= 5
@@ -360,6 +362,7 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
                     if n > 3 then 2 else 3
                 }
                 """));
+        String report = report(compilation);
         List<String> past = report.lines()
                 .filter(line -> line.contains("read as pick/n:")
                         || line.contains("decision rule"))
@@ -446,7 +449,6 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
     }
 
     private static String report(Compilation compilation) {
-        compilation.answerEverything();
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

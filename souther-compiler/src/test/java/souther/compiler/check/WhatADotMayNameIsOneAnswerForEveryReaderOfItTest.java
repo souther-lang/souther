@@ -329,7 +329,7 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
     }
 
     private static Compilation compiled() {
-        return Compilation.ofSource(MODEL, "Main");
+        return ACompiledModel.compiles(Compilation.ofSource(MODEL, "Main"));
     }
 
     private static TypeSymbol named(String declaration) {

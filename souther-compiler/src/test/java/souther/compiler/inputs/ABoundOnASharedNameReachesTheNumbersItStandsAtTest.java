@@ -9,6 +9,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeCardinality;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -126,14 +127,14 @@ class ABoundOnASharedNameReachesTheNumbersItStandsAtTest {
     }
 
     private static RuleReadingSource rulesOf(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     private static InputDomain reading(String source, String behavior) {
         Compilation compilation = ACompiledModel.compiles(
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY));
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

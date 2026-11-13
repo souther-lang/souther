@@ -1397,7 +1397,8 @@ class ACombinationIsOwedWhereARunReadsBothTest {
         });
     }
 
-    private static Measured measured(Compilation compilation, String module, String behavior) {
+    private static Measured measured(Compilation model, String module, String behavior) {
+        Compilation compilation = ACompiledModel.compiles(model);
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(module)).value();
         assertNotNull(all, "the model under test is measured");

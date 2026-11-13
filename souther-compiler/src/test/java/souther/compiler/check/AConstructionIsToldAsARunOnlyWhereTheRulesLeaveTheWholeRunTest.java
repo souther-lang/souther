@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Compilation;
@@ -28,11 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class AConstructionIsToldAsARunOnlyWhereTheRulesLeaveTheWholeRunTest {
 
     private static NumericDomain.Bounds runOf(String declaration) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module w1
                 %s
-                """.formatted(declaration), "Main");
-        compilation.answerEverything();
+                """.formatted(declaration));
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         assertNotNull(rules, "the model did not compile");
         TypeView view = TypeView.asWritten(

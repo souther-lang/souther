@@ -291,7 +291,8 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
                     | "another key holds the large value" : ("A", [("B", 10), ("A", 2)], 5) -> true
                 """);
 
-        assertFalse(compilation.errors().isEmpty(), () -> report(compilation));
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
+        assertFalse(report(compilation).isEmpty(), () -> report(compilation));
     }
 
     /** One row offered for a line: what it was offered for, and the values it writes. */

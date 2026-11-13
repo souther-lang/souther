@@ -170,14 +170,14 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 data PastMoment = DateTime
                     invariant value > DateTime("+999999999-12-31T23:59:59.999999999")
-                """, "PastMoment"));
+                """, "PastMoment", List.of("E1322")));
         assertEquals(List.of("BeforeMoment(DateTime(\"" + START_OF_THE_DAY + "\"))"),
                 representatives("""
                 module example.beforemoment
 
                 data BeforeMoment = DateTime
                     invariant value < DateTime("-999999999-01-01T00:00:00")
-                """, "BeforeMoment"));
+                """, "BeforeMoment", List.of("E1013")));
     }
 
     /** And a range inside the calendar still gives up a value from inside itself, so the two above
@@ -201,7 +201,14 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
     /** What stands for a position of {@code name}, written. */
     private static List<String> representatives(String source, String name) {
+        return representatives(source, name, List.of());
+    }
+
+    /** The same, of a model the compile refuses with {@code refusals} and nothing else. */
+    private static List<String> representatives(String source, String name,
+                                                List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(refusals, compilation);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.representativesOf(

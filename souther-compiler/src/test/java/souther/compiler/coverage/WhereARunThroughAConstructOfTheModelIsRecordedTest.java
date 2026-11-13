@@ -138,7 +138,8 @@ class WhereARunThroughAConstructOfTheModelIsRecordedTest {
      */
     private static List<Compiled> everyModule() {
         List<Compiled> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
+        for (Compilation carried : RepositoryModels.all()) {
+            Compilation compilation = ACompiledModel.compiles(carried);
             int before = out.size();
             modulesOf(compilation, out);
             assertTrue(out.size() > before,

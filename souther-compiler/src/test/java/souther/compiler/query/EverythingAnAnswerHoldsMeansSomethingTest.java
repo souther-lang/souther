@@ -73,8 +73,11 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     private static List<Db> storesOf(AnswerClosure.Scenario scenario) {
         List<Db> out = new ArrayList<>();
         switch (scenario) {
-            case THE_CORPORA -> ConformanceCorpus.all()
-                    .forEach(corpus -> out.add(corpus.analyse().compilation().db()));
+            case THE_CORPORA -> ConformanceCorpus.all().forEach(corpus -> {
+                Compilation compilation = ACompiledModel.refusedWith(
+                        corpus.refusedWith(), corpus.analyse().compilation());
+                out.add(compilation.db());
+            });
             case A_MODULE_SPOKEN_ABOUT -> {
                 Compilation compilation =
                         ACompiledModel.measured(SPOKEN_ABOUT, Adequacy.Asked.fullReport());

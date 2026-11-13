@@ -6,10 +6,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -100,8 +97,7 @@ class ADecimalOfExtremeScaleIsWrittenInBoundedNotationTest {
     private static void assertReportedInBoundedSpace(String behavior) {
         Compilation compilation = Compilation.ofSource(FINE + behavior, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model is one the language admits");
+        ACompiledModel.compiles(compilation);
         AdequacyReport report = assertDoesNotThrow(() -> AdequacyReport.of(compilation));
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
         String human = assertDoesNotThrow(() -> report.humanInEnglish(rendering));

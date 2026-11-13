@@ -69,9 +69,10 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      * @param after what the source writes after the behavior: its examples, or a helper it calls
      */
     private static Compilation compiled(String body, String after) {
-        return MEASURED.computeIfAbsent(source(body, after), source -> {
+        Compilation shared = MEASURED.computeIfAbsent(source(body, after), source -> {
             return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         });
+        return ACompiledModel.compiles(shared);
     }
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
@@ -1373,8 +1374,8 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
 
     /** The source measured, which is a source that compiles. */
     private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source,
-                text -> compiled(text, Adequacy.Asked.fullReport()));
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(source,
+                text -> compiled(text, Adequacy.Asked.fullReport())));
     }
 
     /**
@@ -1383,17 +1384,13 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
      * it.
      */
     private static Compilation read(String source) {
-        return READ.computeIfAbsent(source,
-                text -> compiled(text, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS)));
+        return ACompiledModel.compiles(READ.computeIfAbsent(source,
+                text -> compiled(text, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS))));
     }
 
     private static Compilation compiled(String source, Adequacy.Asked asked) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(asked);
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + source);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

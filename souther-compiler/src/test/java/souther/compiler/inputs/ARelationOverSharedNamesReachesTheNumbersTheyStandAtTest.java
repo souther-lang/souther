@@ -269,7 +269,7 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
     private static NumericDomain.Bounds stoppedAt(String source, String asked, String fixed,
                                                   int at, List<String> errors) {
         InputDomain read = reading(source, "read", errors);
-        Quantities quantities = read.quantities(rulesOf(source));
+        Quantities quantities = read.quantities(rulesOf(source, errors));
         return quantities
                 .given(new NumericTerm.ValueOf(pathOf(read, fixed)),
                         Count.of(BigDecimal.valueOf(at)))
@@ -288,9 +288,9 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
                                 .map(Position::path).toList()));
     }
 
-    private static RuleReadingSource rulesOf(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+    private static RuleReadingSource rulesOf(String source, List<String> errors) {
+        Compilation compilation = ACompiledModel.refusedWith(errors,
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY));
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

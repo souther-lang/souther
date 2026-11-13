@@ -547,7 +547,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
     /** What the measures answered for each named behavior. */
     private static Map<String, Measured> measured(Iterable<String> behaviors) {
-        Compilation compilation = model();
+        Compilation compilation = ACompiledModel.compiles(model());
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("example.matrix")).value();
         assertNotNull(coverage, "the model under test compiles");

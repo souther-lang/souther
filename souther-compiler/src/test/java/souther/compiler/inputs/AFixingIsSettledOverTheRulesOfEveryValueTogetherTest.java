@@ -280,7 +280,8 @@ class AFixingIsSettledOverTheRulesOfEveryValueTogetherTest {
     }
 
     private static RuleReadingSource rulesOf(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

@@ -124,7 +124,7 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
      */
     @Test
     void theRewritesTheClassesCouldNotCarryAreSaidToBeThose() {
-        Compilation compilation = measured();
+        Compilation compilation = ACompiledModel.compiles(measured());
         Map<String, ReplacementEvidence> measured = compilation.db()
                 .ask(new Replacements.Measured(compilation.modules().getFirst())).value();
 
@@ -144,7 +144,7 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
      */
     @Test
     void aRewriteTheJvmHadNoRoomForIsOneNoWiderRunAnswers() {
-        Compilation compilation = measured();
+        Compilation compilation = ACompiledModel.compiles(measured());
         ReplacementEvidence measured = compilation.db()
                 .ask(new Replacements.Measured(compilation.modules().getFirst())).value().get("f");
 

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
@@ -58,14 +59,14 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
     /** The bodies a behavior of {@code source} is lowered to, for a reader counting what stands in
      *  them. */
     private static Hir.Expr loweredBody(String source, String behavior) {
-        return Compiler.compiled(source, "m").db()
+        return ACompiledModel.compiles(Compiler.compiled(source, "m")).db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName(behavior)))
                 .value().value().definition().writtenBody();
     }
 
     /** The body a behavior is read as where the language's own operations stand. */
     private static Hir.Expr analysisBody(String source, String behavior) {
-        return Compiler.compiled(source, "m").db()
+        return ACompiledModel.compiles(Compiler.compiled(source, "m")).db()
                 .ask(new Bodies.BodyForInvariantDischarge("m", behavior))
                 .value().value().writtenBody();
     }

@@ -117,8 +117,8 @@ class WhatAContextAssumesIsReadIntoTheRulesTest {
     }
 
     private static RuleReadingSource rulesOf(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY));
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

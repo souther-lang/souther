@@ -165,6 +165,7 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
      * model has already done.
      */
     private static void readings(Compilation compilation, List<InputDomain> out) {
+        ACompiledModel.compiles(compilation);
         for (String module : compilation.modules()) {
             Answer<Map<String, InputDomain>> read =
                     compilation.db().ask(new Adequacy.Inputs(module));

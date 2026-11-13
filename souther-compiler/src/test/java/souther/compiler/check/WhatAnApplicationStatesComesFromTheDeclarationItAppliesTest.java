@@ -468,26 +468,24 @@ class WhatAnApplicationStatesComesFromTheDeclarationItAppliesTest {
     /** What the declarations of {@code source} state about the value it declares as {@code name} —
      *  for a model this class does not hold, read the same way this one is. */
     private static Type declaredTypeIn(String source, String name) {
-        Compilation read = looked(Compilation.ofSource(source, "Main"),
-                source.equals(APPLIED_TO_WHAT_IT_DOES_NOT_TAKE)
-                        || source.equals(CONSTRUCTED_FROM_ANOTHER_NUMBER));
+        List<String> refusedWith = List.of();
+        if (source.equals(APPLIED_TO_WHAT_IT_DOES_NOT_TAKE)) {
+            refusedWith = List.of("E1317");
+        } else if (source.equals(CONSTRUCTED_FROM_ANOTHER_NUMBER)) {
+            refusedWith = List.of("E1802");
+        }
+        Compilation read = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofSource(source, "Main"));
         return declaredTypeOf(read, read.modules().get(0), name);
     }
 
     /** The same, for a value one module of a compile of several declares. */
     private static Type declaredTypeAcross(List<String> sources, String module, String name) {
-        Compilation read = looked(Compilation.ofSources(sources, ModulePath.EMPTY),
-                sources.equals(ACROSS_ONE_THAT_DOES_NOT_CHECK));
+        List<String> refusedWith = sources.equals(ACROSS_ONE_THAT_DOES_NOT_CHECK)
+                ? List.of("E1317", "E1611", "E1317") : List.of();
+        Compilation read = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofSources(sources, ModulePath.EMPTY));
         return declaredTypeOf(read, module, name);
-    }
-
-    /** {@code model}, answered in full, and held to be refused where it is meant to be and to
-     *  compile everywhere else. */
-    private static Compilation looked(Compilation model, boolean refused) {
-        model.answerEverything();
-        assertEquals(refused, !model.errors().isEmpty(),
-                refused ? "the check refuses this model" : "the model under test compiles");
-        return model;
     }
 
     private static Type declaredTypeOf(Compilation read, String module, String name) {

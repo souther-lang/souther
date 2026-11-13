@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -50,8 +51,9 @@ class EachFixtureIsToldApartAsItSaysTest {
 
     /** What the compiler says the body of {@code fixture}'s behavior tells apart, by position. */
     private static Map<String, String> toldApart(ToldApartCorpus.Fixture fixture) {
-        Compilation compilation = Compiler.analyzedModules(List.of(fixture.source()),
-                ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.compiles(Compiler.analyzedModules(
+                List.of(fixture.source()), ModulePath.EMPTY, new ArrayList<>(),
+                Adequacy.Asked.fullReport()));
         Map<String, PartitionEvidence> byBehavior =
                 compilation.db().ask(new Adequacy.Coverage(fixture.module())).value();
         if (byBehavior == null || byBehavior.get(ToldApartCorpus.BEHAVIOR) == null) {

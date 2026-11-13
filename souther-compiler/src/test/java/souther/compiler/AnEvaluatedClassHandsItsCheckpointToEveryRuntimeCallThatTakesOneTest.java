@@ -26,6 +26,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -288,6 +289,7 @@ class AnEvaluatedClassHandsItsCheckpointToEveryRuntimeCallThatTakesOneTest {
     private static Map<String, ClassFileImage> evaluatedClasses() {
         Map<String, ClassFileImage> out = new LinkedHashMap<>();
         for (Compilation compilation : corpora()) {
+            ACompiledModel.refusedWith(REFUSED_WITH.getOrDefault(compilation, List.of()), compilation);
             for (String module : compilation.modules()) {
                 var artifact = compilation.db().ask(new Output.Evaluated(module, ArmObservation.OMIT)).value();
                 if (artifact != null) {
@@ -301,6 +303,7 @@ class AnEvaluatedClassHandsItsCheckpointToEveryRuntimeCallThatTakesOneTest {
     private static Map<String, ClassFileImage> shippedClasses() {
         Map<String, ClassFileImage> out = new LinkedHashMap<>();
         for (Compilation compilation : corpora()) {
+            ACompiledModel.refusedWith(REFUSED_WITH.getOrDefault(compilation, List.of()), compilation);
             for (String module : compilation.modules()) {
                 Map<String, ClassFileImage> classes = compilation.db().ask(new Output.Classes(module)).value();
                 if (classes != null) {
@@ -347,6 +350,9 @@ class AnEvaluatedClassHandsItsCheckpointToEveryRuntimeCallThatTakesOneTest {
 
     private static List<Compilation> corpora;
 
+    /** The errors a corpus is written to be refused with, by the compilation made of it. */
+    private static final Map<Compilation, List<String>> REFUSED_WITH = new IdentityHashMap<>();
+
     private static List<Compilation> corpora() {
         if (corpora != null) {
             return corpora;
@@ -362,6 +368,7 @@ class AnEvaluatedClassHandsItsCheckpointToEveryRuntimeCallThatTakesOneTest {
             }
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
             c.answerEverything();
+            REFUSED_WITH.put(c, corpus.refusedWith());
             out.add(c);
         }
         corpora = List.copyOf(out);

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -60,10 +61,7 @@ class TwoTotalsHeldEqualBalanceTheSidesHoweverTheyAreWrittenTest {
                 data N = { postings: List<Posting> }
                     invariant %s
                 """.formatted(rule), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "N"));
         FieldDomains domains = FieldDomains.of(named,

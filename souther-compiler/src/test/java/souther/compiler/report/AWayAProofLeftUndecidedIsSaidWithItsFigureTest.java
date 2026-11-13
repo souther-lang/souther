@@ -137,9 +137,10 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
 
     /** The reading of `two` under the other rules, held to {@code allowance} conditions taken in. */
     private static DecisionReading readAt(Compilation bodies, int allowance) {
+        Compilation held = ACompiledModel.compiles(bodies);
         return Allowances.DECLARED
                 .with(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, allowance)
-                .over(() -> readUnderTheOtherRules(bodies));
+                .over(() -> readUnderTheOtherRules(held));
     }
 
     /**

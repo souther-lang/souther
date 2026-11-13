@@ -144,7 +144,7 @@
                         </goals>
                         <configuration>
                             <includes>
-                                <include>souther/compiler/ACompiledModel.class</include>
+                                <include>souther/compiler/ACompiledModel*.class</include>
                             </includes>
                         </configuration>
                     </execution>

@@ -172,8 +172,9 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
     private static final Map<String, Compilation> COMPILED = new java.util.LinkedHashMap<>();
 
     private static Compilation measured(Unreadable model) {
-        return COMPILED.computeIfAbsent(model.source(),
+        Compilation shared = COMPILED.computeIfAbsent(model.source(),
                 _ -> measured(model.source(), model.overrun(), model.refusedFor()));
+        return ACompiledModel.refusedWith(model.refusedFor(), shared);
     }
 
     private static Compilation measured(String source) {

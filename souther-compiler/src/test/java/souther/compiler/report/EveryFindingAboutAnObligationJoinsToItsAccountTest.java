@@ -779,9 +779,11 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
 
     private static List<JsonNode> documents() {
         List<JsonNode> out = new ArrayList<>();
-        RepositoryModels.conformance().forEach((corpus, compilation) -> out.add(JSON.readTree(
-                AdequacyReport.of(compilation).json(
-                        new SourceRendering(corpus.names(), compilation.texts())))));
+        RepositoryModels.conformance().forEach((corpus, held) -> {
+            Compilation compilation = ACompiledModel.compiles(held);
+            out.add(JSON.readTree(AdequacyReport.of(compilation).json(
+                    new SourceRendering(corpus.names(), compilation.texts()))));
+        });
         out.add(reportOf(TWO_RULES_AT_ONE_FORK));
         out.add(reportOf(TWO_POSITIONS_ONE_CLASS_NAME));
         out.add(reportOf(TWO_RULES_ONE_ARM));

@@ -14,7 +14,6 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -68,8 +67,8 @@ class CompileExampleGenerateTest {
      * reads of them, and no test here reads the rest.
      */
     private static Compilation compiledOf(String source) {
-        return MEASURED.computeIfAbsent(source, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main").writtenOn(TestDay.DATE);
+        return SHARED.compiles(source, () -> {
+            Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
             // What `souther examples` asks for. A line a `guard` drew is only decidable where the
             // arms were measured, so below this the generator has nothing to say about one.
             compilation.measure(Adequacy.Asked.fullReport());
@@ -77,13 +76,13 @@ class CompileExampleGenerateTest {
         });
     }
 
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 
     /**
@@ -1067,7 +1066,7 @@ class CompileExampleGenerateTest {
                 + """
 
                         example submit
-                            | "a near one" : (near) -> Accepted { at = "now" }
+                            | "a near one" : (near) -> Accepted { at = "wide" }
                         """;
 
         // Every row offered, whatever it was composed for. A row through an arm is written against

@@ -144,5 +144,6 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
 
         assertTrue(StringMachineAnswers.machinesMade() > before,
                 "a reading with nothing to borrow from builds the machines its rules come to");
+        ACompiledModel.compiles(compilation);
     }
 }

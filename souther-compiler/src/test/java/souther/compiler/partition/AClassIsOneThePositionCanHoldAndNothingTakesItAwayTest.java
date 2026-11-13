@@ -95,12 +95,13 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     /** Every axis of the behavior, with what its own body draws taken in. */
     private static Partitions.Partitioning drawnByTheBody(String source, String behavior) {
         Read read = of(source, behavior);
+        Compilation compilation = ACompiledModel.compiles(read.compilation());
         Bodies.Elaborated checked =
-                read.compilation().db().ask(new Bodies.Checked(read.module())).value();
+                compilation.db().ask(new Bodies.Checked(read.module())).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, "the behavior under test has a body");
-        InputDomain inputs = read.compilation().db()
+        InputDomain inputs = compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                 .get(behavior);
         GuardThresholds.Guards guards = ThresholdFixtures.guardsOf(behavior,
@@ -434,15 +435,16 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     /** The same partitioning, with what the behavior's body draws taken in. */
     private static Partitions.Partitioning withThresholdsOf(Read read,
                                                             Partitions.Partitioning base) {
+        Compilation compilation = ACompiledModel.compiles(read.compilation());
         Bodies.Elaborated checked =
-                read.compilation().db().ask(new Bodies.Checked(read.module())).value();
+                compilation.db().ask(new Bodies.Checked(read.module())).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(read.behavior());
         assertNotNull(body, "the behavior under test has a body");
         GuardThresholds.Guards guards = ThresholdFixtures.guardsOf(read.behavior(),
                 checked.analysisBodies().get(read.behavior()), body,
                 checked.plan(),
-                read.compilation().db()
+                compilation.db()
                         .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                         .get(read.behavior()),
                 read.rules());

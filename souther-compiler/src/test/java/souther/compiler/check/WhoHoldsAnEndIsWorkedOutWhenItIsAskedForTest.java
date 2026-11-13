@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
@@ -120,8 +121,7 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
     }
 
     private static FieldDomains reading() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         TypeSymbol.AtModule held = TypeSymbols.declared(new TypeKey("demo", "Held"));
         return FieldDomains.of(held,
                 RuleReadingContext.unshared(

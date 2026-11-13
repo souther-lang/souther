@@ -171,7 +171,9 @@ class SemanticProbeBenchmark {
         if (reading == null) {
             throw new IllegalStateException("the half-written line is one the probe finishes off");
         }
-        resolve(reading.compilation(), module);
+        resolve(ACompiledModel.notCompiled(reading.compilation(),
+                "the buffer is stopped half way through a line, so it is no model that compiles,"
+                        + " and what is timed is the one name its module resolves to"), module);
     }
 
     /** A finished behavior, so what it costs is the workspace answering and nothing else. */

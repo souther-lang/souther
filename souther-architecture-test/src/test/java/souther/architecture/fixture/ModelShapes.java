@@ -6,6 +6,8 @@ import souther.compiler.report.AdequacyReport;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -34,6 +36,20 @@ public final class ModelShapes {
             model.answerEverything();
             assertEquals(codes, model.errors());
             return model;
+        }
+    }
+
+    /** Makes models in a class of its own, as a test that shares what it builds does. */
+    public static final class Factory {
+
+        private Factory() { }
+
+        public static Compilation made(String source) {
+            return Compilation.ofSource(source, "Main");
+        }
+
+        public static Compilation asked(String source) {
+            return TheDoor.answered(source);
         }
     }
 
@@ -96,6 +112,22 @@ public final class ModelShapes {
         }
     }
 
+    /** Reads the report and may leave before the ask that comes after it. */
+    public static final class LeftBeforeTheAsk {
+
+        private LeftBeforeTheAsk() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            AdequacyReport report = AdequacyReport.of(model);
+            if (report == null) {
+                return null;
+            }
+            TheDoor.compiles(model);
+            return report;
+        }
+    }
+
     /** Makes the model and has it answer for itself with a day, and reads that one. */
     public static final class ADerivedModelNeverAsked {
 
@@ -127,22 +159,6 @@ public final class ModelShapes {
         public static AdequacyReport read(String source) {
             Compilation model = Compilation.ofSource(source, "Main");
             AdequacyReport report = AdequacyReport.of(model);
-            TheDoor.compiles(model);
-            return report;
-        }
-    }
-
-    /** Reads the report and may leave before the ask that comes after it. */
-    public static final class LeftBeforeTheAsk {
-
-        private LeftBeforeTheAsk() { }
-
-        public static AdequacyReport read(String source) {
-            Compilation model = Compilation.ofSource(source, "Main");
-            AdequacyReport report = AdequacyReport.of(model);
-            if (report == null) {
-                return null;
-            }
             TheDoor.compiles(model);
             return report;
         }
@@ -185,6 +201,193 @@ public final class ModelShapes {
                 TheDoor.compiles(model);
             }
             return AdequacyReport.of(model);
+        }
+    }
+
+    /** Gives the variable the asked model on one way only, so the other reads the one it had. */
+    public static final class ReassignedOnOneWay {
+
+        private ReassignedOnOneWay() { }
+
+        public static AdequacyReport read(String source, boolean careful) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            if (careful) {
+                model = TheDoor.compiles(model);
+            }
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Asks about the model on each of the ways, and gives the variable the answer on each. */
+    public static final class AskedOnEveryWay {
+
+        private AskedOnEveryWay() { }
+
+        public static AdequacyReport read(String source, boolean careful) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            if (careful) {
+                model = TheDoor.compiles(model);
+            } else {
+                model = TheDoor.refusedWith(List.of(), model);
+            }
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Keeps the model in a field, written where it is made and never asked about. */
+    public static final class FieldNeverAsked {
+
+        private Compilation model;
+
+        public AdequacyReport read(String source) {
+            model = Compilation.ofSource(source, "Main");
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Keeps the model in a field, written only as what was asked about. */
+    public static final class FieldAskedWhereWritten {
+
+        private Compilation model;
+
+        public AdequacyReport read(String source) {
+            model = TheDoor.answered(source);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Takes a model made in a class of its own, which nobody asked about. */
+    public static final class AnotherClassMadeIt {
+
+        private AnotherClassMadeIt() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Factory.made(source);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Takes a model made in a class of its own, which asked about it. */
+    public static final class AnotherClassAskedAboutIt {
+
+        private AnotherClassAskedAboutIt() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Factory.asked(source);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** A model that is handed on through more methods than there are rounds to follow it. */
+    public static final class HandedOnManyTimes {
+
+        private HandedOnManyTimes() { }
+
+        private static Compilation a0(String source) {
+            return Compilation.ofSource(source, "Main");
+        }
+
+        private static Compilation a1(String source) {
+            return a0(source);
+        }
+
+        private static Compilation a2(String source) {
+            return a1(source);
+        }
+
+        private static Compilation a3(String source) {
+            return a2(source);
+        }
+
+        private static Compilation a4(String source) {
+            return a3(source);
+        }
+
+        private static Compilation a5(String source) {
+            return a4(source);
+        }
+
+        private static Compilation a6(String source) {
+            return a5(source);
+        }
+
+        private static Compilation a7(String source) {
+            return a6(source);
+        }
+
+        private static Compilation a8(String source) {
+            return a7(source);
+        }
+
+        private static Compilation a9(String source) {
+            return a8(source);
+        }
+
+        private static Compilation a10(String source) {
+            return a9(source);
+        }
+
+        private static Compilation a11(String source) {
+            return a10(source);
+        }
+
+        private static Compilation a12(String source) {
+            return a11(source);
+        }
+
+        private static Compilation a13(String source) {
+            return a12(source);
+        }
+
+        public static AdequacyReport read(String source) {
+            return AdequacyReport.of(a13(source));
+        }
+    }
+
+    /** Asks about the model, and drops what the failure of that said. */
+    public static final class SwallowedFailure {
+
+        private SwallowedFailure() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            try {
+                TheDoor.compiles(model);
+            } catch (AssertionError dropped) {
+                dropped.getMessage();
+            }
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Makes the model inside a lambda and reads it there. */
+    public static final class MadeInALambda {
+
+        private MadeInALambda() { }
+
+        public static Supplier<AdequacyReport> read(String source) {
+            return () -> AdequacyReport.of(Compilation.ofSource(source, "Main"));
+        }
+    }
+
+    /** Hands a model that was asked about to a lambda, which reads it. */
+    public static final class AskedThenCaptured {
+
+        private AskedThenCaptured() { }
+
+        public static Supplier<AdequacyReport> read(String source) {
+            Compilation model = TheDoor.answered(source);
+            return () -> AdequacyReport.of(model);
+        }
+    }
+
+    /** Takes a model out of a collection, where nothing says what was done with it. */
+    public static final class FromACollection {
+
+        private FromACollection() { }
+
+        public static AdequacyReport read(Map<String, Compilation> models) {
+            return AdequacyReport.of(models.get("a"));
         }
     }
 

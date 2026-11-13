@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
@@ -125,7 +126,8 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
      */
     @Test
     void aRowIsFoundAtEveryRuleTheExamplesLeaveUntaken() {
-        Map<DecisionRule, SettledAcross> searched = compiled().db()
+        Compilation compilation = compiled();
+        Map<DecisionRule, SettledAcross> searched = compilation.db()
                 .ask(new Adequacy.DecisionSearch("example.draw", "draw")).value();
 
         assertFalse(searched.isEmpty(), "the examples leave rules untaken");
@@ -135,7 +137,8 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
 
     @Test
     void theRulesAreToldApartByWhichWayEachCallWent() {
-        List<Entry> entries = entries(page(compiled()));
+        Compilation compilation = compiled();
+        List<Entry> entries = entries(page(compilation));
         assertFalse(entries.isEmpty(), "there are rules nothing settled to tell apart");
         Set<List<String>> told = new HashSet<>();
         for (Entry entry : entries) {
@@ -182,7 +185,8 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
 
     @Test
     void aConditionLeftOutIsPlacedAtTheCallsItWasMetIn() {
-        List<Entry> entries = entries(page(compiled()));
+        Compilation compilation = compiled();
+        List<Entry> entries = entries(page(compilation));
         assertTrue(entries.stream().anyMatch(entry -> !entry.leftOut().isEmpty()),
                 "some entry says what its composing went without");
         for (Entry entry : entries) {
@@ -326,28 +330,19 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
 
     /** The one model every question here is about, measured once for the class: each question
      *  reads what the compilation answered and none of them changes it. */
-    private static Compilation measured;
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
     @AfterAll
-    static synchronized void released() {
-        measured = null;
+    static void released() {
+        SHARED.release();
     }
 
-    private static synchronized Compilation compiled() {
-        if (measured == null) {
-            measured = measuredAfresh();
-        }
-        return measured;
-    }
-
-    private static Compilation measuredAfresh() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+    private static Compilation compiled() {
+        return SHARED.compiles("model", () -> {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            return compilation;
+        });
     }
 }

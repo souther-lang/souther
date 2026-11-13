@@ -1,6 +1,7 @@
 package souther.compiler.meta;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
@@ -96,7 +97,8 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
                 Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of())));
         List<Compilation> compilations = new ArrayList<>(List.of(fixture));
         compilations.addAll(RepositoryModels.all());
-        for (Compilation compilation : compilations) {
+        for (Compilation carried : compilations) {
+            Compilation compilation = asked(carried);
             Map<String, Map<String, ClassFileImage>> byModule = new LinkedHashMap<>();
             Map<String, ClassFileImage> all = new LinkedHashMap<>();
             for (String module : compilation.modules()) {
@@ -107,7 +109,7 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
                     all.putAll(classes);
                 }
             }
-            if (compilation == fixture) {
+            if (carried == fixture) {
                 assertEquals(Set.of("lib.b", "lib.c"), byModule.keySet(),
                         () -> "the fixture compiles, or it reaches nothing: "
                                 + compilation.db().allReports().stream()
@@ -136,6 +138,20 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
         assertTrue(checked > 0, "no class named a class of another module, so nothing was held");
         assertEquals(List.of(), unrecorded,
                 "a class names a class of another module no recorded declaration accounts for");
+    }
+
+    /**
+     * {@code carried}, held to compile — or, where it is a conformance corpus the manifest expects
+     * refused, to be refused as that corpus says.
+     */
+    private static Compilation asked(Compilation carried) {
+        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
+            ConformanceCorpus.Analysed analysed = RepositoryModels.analysed(corpus);
+            if (analysed.compilation() == carried) {
+                return analysed.answered();
+            }
+        }
+        return ACompiledModel.compiles(carried);
     }
 
     /**

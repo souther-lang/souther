@@ -11,7 +11,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -566,22 +565,21 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
     }
 
     /** Each model measured once for the class: some are asked for their report and for their
-     *  rows. The rows ask what they read of the measurement; the rest is asked where a report is
-     *  made. */
+     *  rows. */
     private static Compilation compiled(String model) {
-        return MEASURED.computeIfAbsent(model, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
+        return SHARED.compiles(model, () -> {
+            Compilation compilation = Compilation.ofSource(model, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             return compilation;
         });
     }
 
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 }

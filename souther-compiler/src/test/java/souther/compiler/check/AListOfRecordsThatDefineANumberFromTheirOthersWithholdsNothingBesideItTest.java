@@ -92,7 +92,12 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
     }
 
     private static boolean lineHoldsAValue(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return lineHoldsAValue(source, List.of());
+    }
+
+    private static boolean lineHoldsAValue(String source, List<String> refusedWith) {
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofSource(source, "Main"));
         String module = compilation.modules().get(0);
         TypeSymbol line = TypeSymbols.declared(new TypeKey(module, "Line"));
         return Rules.of(line, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
@@ -198,7 +203,7 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
         Compilation refused = Compilation.ofSource(source, "Main");
         ACompiledModel.refusedWith(List.of("E1013"), refused);
 
-        assertFalse(lineHoldsAValue(source));
+        assertFalse(lineHoldsAValue(source, List.of("E1013")));
         assertFalse(certified(refused, "q.lines[*].discount"));
     }
 
@@ -231,7 +236,7 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
     }
 
     private static boolean recordHoldsAValue(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         TypeSymbol record = TypeSymbols.declared(new TypeKey(module, "R"));
         return Rules.of(record, RuleReadingContext.unshared(RuleReadings.of(compilation, module),

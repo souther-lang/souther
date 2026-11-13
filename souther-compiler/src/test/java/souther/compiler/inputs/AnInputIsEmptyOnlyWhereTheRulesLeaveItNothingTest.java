@@ -444,18 +444,14 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
      * {@code refusals} that has no value, and for nothing else.
      */
     private static Optional<EmptyInput> emptinessOf(String source, String... refusals) {
-        InputDomain read = reading(source, "read", List.of(refusals));
-        return read.quantities(rulesOf(source)).emptiness();
+        Compilation compilation = ACompiledModel.refusedWith(List.of(refusals),
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
+        InputDomain read = reading(compilation, "read");
+        return read.quantities(RuleReadings.of(compilation, compilation.modules().get(0)))
+                .emptiness();
     }
 
-    private static RuleReadingSource rulesOf(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        return RuleReadings.of(compilation, compilation.modules().get(0));
-    }
-
-    private static InputDomain reading(String source, String behavior, List<String> refusals) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        ACompiledModel.refusedWith(refusals, compilation);
+    private static InputDomain reading(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

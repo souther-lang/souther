@@ -85,7 +85,7 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
     }
 
     private static String blockOf(String behavior) {
-        Compilation compilation = measured();
+        Compilation compilation = ACompiledModel.compiles(measured());
         String human = AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         StringBuilder block = new StringBuilder();
         boolean inside = false;
@@ -189,7 +189,7 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
 
     /** The lines one behavior of this model draws, as they were measured. */
     private static List<BorderAssessment> linesOf(String behavior) {
-        Compilation compilation = measured();
+        Compilation compilation = ACompiledModel.compiles(measured());
         return Adequacy.boundariesOf(compilation.db(), "example.gate").get(behavior);
     }
 }

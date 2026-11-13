@@ -1,9 +1,11 @@
 package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Answer;
+import souther.compiler.query.Compilation;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,7 +33,8 @@ class AnAnalysisComparisonInAValueIsFoundInTheMethodItIsEmittedInTest {
 
     @Test
     void theCoverageOfABehaviorIsReadThroughTheMethodsItCalls() {
-        Answer<?> coverage = Compiler.compiled(SOURCE, "m").db().ask(new Adequacy.Coverage("m"));
+        Compilation compilation = ACompiledModel.compiles(Compiler.compiled(SOURCE, "m"));
+        Answer<?> coverage = compilation.db().ask(new Adequacy.Coverage("m"));
 
         assertTrue(coverage.present(),
                 "a comparison read in `enough` has a counterpart in the method `enough` is emitted as");

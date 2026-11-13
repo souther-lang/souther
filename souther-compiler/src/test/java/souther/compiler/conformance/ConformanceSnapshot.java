@@ -73,7 +73,7 @@ final class ConformanceSnapshot {
      * which is how an obligation renamed is told from one met.
      */
     static String unread(ConformanceCorpus.Analysed analysed) {
-        Compilation compilation = analysed.compilation();
+        Compilation compilation = analysed.answered();
         List<String> lines = new ArrayList<>();
         for (String module : compilation.modules()) {
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

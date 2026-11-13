@@ -525,7 +525,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     }
 
     private static RuleReadingContext pastTheFigures() {
-        Compilation compilation = Compilation.ofSource(PAST_THE_FIGURES, "Main");
+        Compilation compilation = ACompiledModel.answered(PAST_THE_FIGURES);
         return RuleReadingContext.unshared(RuleReadings.of(compilation, "p"),
                 ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
     }
