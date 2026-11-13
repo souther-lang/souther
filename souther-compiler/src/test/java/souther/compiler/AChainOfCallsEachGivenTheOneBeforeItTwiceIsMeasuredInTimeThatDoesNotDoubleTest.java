@@ -108,7 +108,7 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 depth -> reportOfNamesEachMadeOfTheOneBefore(depth, "x", "PREV * PREV",
                         "LAST >= j"),
                 AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
-                        ::afterOneLetEachCall, 3, 30);
+                        ::afterOneLetEachCall, 3, 30, 100);
     }
 
     /** What is said of a truth does not depend on how many names it is made through. */

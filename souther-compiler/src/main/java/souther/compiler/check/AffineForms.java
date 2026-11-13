@@ -588,6 +588,23 @@ public final class AffineForms {
                 instanceof Outcome.Composed<A, E> composed ? composed.form() : null;
     }
 
+    /**
+     * What the names read through one reading came to, for every walk made with it.
+     *
+     * <p>Held by whoever reads several expressions with one reading in one state, so that a name
+     * the roots share is read once for all of them and not once for each root.
+     */
+    public static final class OfOneReading<A, E> {
+        private final BindingWalk.Answers<Outcome<A, E>> answered = new BindingWalk.Answers<>();
+        private final FoldedValue.Kept folds = new FoldedValue.Kept();
+    }
+
+    /** {@link #outcome(Core, Object, Reading)}, the names it reads held in {@code held}. */
+    public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading,
+                                               OfOneReading<A, E> held) {
+        return of(raw, at, reading, new Walk<>(held.answered, held.folds));
+    }
+
     /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */
     private static final class Walk<A, E> extends BindingWalk<Outcome<A, E>> {
 

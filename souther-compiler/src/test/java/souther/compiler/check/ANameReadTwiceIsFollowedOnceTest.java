@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A name the affine walk reads twice is followed once.
@@ -416,6 +417,49 @@ class ANameReadTwiceIsFollowedOnceTest {
         // Each value is read as what it is once, however many environments give it: the first
         // two environments give one value, and the third another.
         assertEquals(Map.of(10, 1, 11, 1), readAs);
+    }
+
+    /** How often each name was followed, over the walk of every name of a chain as a root. */
+    private static Map<BindingId, Integer> askedOverTheRootsOfAChain(int links,
+                                                                     boolean oneReading) {
+        Map<BindingId, Core> given = new HashMap<>();
+        chainOf(links, given);
+        Map<BindingId, Integer> asked = new HashMap<>();
+        Chain reading = new Chain(given, asked);
+        AffineForms.OfOneReading<String, Chain> held = new AffineForms.OfOneReading<>();
+        for (int i = 1; i <= links; i++) {
+            Core root = read(new BindingId(OWNER, i));
+            if (oneReading) {
+                AffineForms.outcome(root, reading, reading, held);
+            } else {
+                AffineForms.outcome(root, reading, reading);
+            }
+        }
+        return asked;
+    }
+
+    /**
+     * The roots a reading starts one after another, each a name of the chain, follow each name as
+     * often as one root does: what a name came to is held for the reading and not for the root. A
+     * root of its own follows the names below it again, and the roots of a chain follow its links
+     * once for each link above them.
+     */
+    @Test
+    void theRootsOfOneReadingFollowEachNameOfAChainOnce() {
+        int links = 16;
+
+        Map<BindingId, Integer> beyond = new HashMap<>();
+        askedOverTheRootsOfAChain(links, true).forEach((binding, times) -> {
+            if (times > QUESTIONS) {
+                beyond.put(binding, times);
+            }
+        });
+        assertEquals(Map.of(), beyond, "a name was followed again by the next root of the same"
+                + " reading");
+        assertTrue(askedOverTheRootsOfAChain(links, false).values().stream()
+                        .anyMatch(times -> times > QUESTIONS),
+                "roots that hold nothing for each other follow a name once for each root above it,"
+                        + " which is what holding it is measured against");
     }
 
     @Test

@@ -2327,7 +2327,7 @@ final class Pullback {
                         instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var ofTheFirst)
                 && ofTheLast.minus(ofTheFirst)
                         instanceof ExactAnswer.Held<LinearForm<Quantity>>(var difference)) {
-            together = rangeOfAComposedForm(difference, reads, new HashMap<>());
+            together = rangeOfAComposedForm(difference, reads, new RangesKnown());
         }
         FormRange span = apart == null ? together : together == null ? apart : apart.meet(together);
         return span != null && span.greatest().compareTo(
@@ -2663,7 +2663,7 @@ final class Pullback {
      * than what it divides ({@link FormRange#quotientByAWholeNumber}).
      */
     private FormRange exactRangeOf(Core e, InputReads reads) {
-        return exactRangeOf(e, reads, new HashMap<>());
+        return exactRangeOf(e, reads, new RangesKnown());
     }
 
     /**
@@ -2673,12 +2673,12 @@ final class Pullback {
      * before it twice; the answer is of the name and the reading, so it is worked out once.
      */
     private FormRange exactRangeOf(Core e, InputReads reads,
-                                   Map<BindingId, RangeOfAName> known) {
+                                   RangesKnown known) {
         DeclaredBounds.Range leftByTheRules = DeclaredBounds.ofTheValueReadOff(e, read.rules(),
                 read.rules().newtypes(), read.ruleReading());
         FormRange ofTheNewtype = leftByTheRules == null ? null
                 : FormRange.ofWhatTheRulesLeave(leftByTheRules);
-        if (AffineForms.outcome(e, reads, quantities())
+        if (known.outcome(e, reads)
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
             FormRange composed = rangeOfAComposedForm(form, reads, known);
             if (composed != null) {
@@ -2754,7 +2754,7 @@ final class Pullback {
      * Null where it is no such call or some argument's numbers are not known.
      */
     private FormRange exactRangeOfAFormItIsHanded(Core e, InputReads reads,
-                                                  Map<BindingId, RangeOfAName> known) {
+                                                  RangesKnown known) {
         AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(e));
         LinearForm<DeclaredArgument> form = applied == null ? null
                 : DefaultBoundOperationFacts.get().answersAFormOfItsArguments(applied.operation());
@@ -2778,7 +2778,7 @@ final class Pullback {
      * ({@link FormRange#heldWhereItIsOfTheInput}). Null where some atom's numbers are not known.
      */
     private FormRange rangeOfAComposedForm(LinearForm<Quantity> form, InputReads reads,
-                                           Map<BindingId, RangeOfAName> known) {
+                                           RangesKnown known) {
         FormRange composed = FormRange.ofNumbers(form, read,
                 name -> exactRangeOfAName(name, reads, known));
         return composed == null ? null : composed.heldWhereItIsOfTheInput(form, read);
@@ -2786,6 +2786,26 @@ final class Pullback {
 
     /** What a name comes to, worked out in {@code at}, which is the reading it holds in. */
     private record RangeOfAName(InputReads at, FormRange range) {}
+
+    /** What one asking of {@link #exactRangeOf} has worked out, and the reading it reads with. */
+    private final class RangesKnown {
+        private final Map<BindingId, RangeOfAName> ranges = new HashMap<>();
+        private final AffineForms.Reading<Quantity, InputReads> reading = quantities();
+        private final AffineForms.OfOneReading<Quantity, InputReads> names =
+                new AffineForms.OfOneReading<>();
+
+        RangeOfAName get(BindingId name) {
+            return ranges.get(name);
+        }
+
+        void put(BindingId name, RangeOfAName range) {
+            ranges.put(name, range);
+        }
+
+        AffineForms.Outcome<Quantity, InputReads> outcome(Core e, InputReads reads) {
+            return AffineForms.outcome(e, reads, reading, names);
+        }
+    }
 
     /**
      * The numbers a name bound to a value comes to, which are those of the value it is given where
@@ -2795,7 +2815,7 @@ final class Pullback {
      * form to read, and the numbers it lies between are no less known for that.
      */
     private FormRange exactRangeOfAName(BindingId name, InputReads reads,
-                                        Map<BindingId, RangeOfAName> known) {
+                                        RangesKnown known) {
         FormRange ofAStep = operated.stepsNames.of(name);
         if (ofAStep != null) {
             return ofAStep;
@@ -2821,7 +2841,7 @@ final class Pullback {
      * where any arm's numbers are not known, since the arm may be the one a run takes.
      */
     private FormRange exactRangeOfTheArms(Choice choice, InputReads reads,
-                                          Map<BindingId, RangeOfAName> known) {
+                                          RangesKnown known) {
         FormRange joined = null;
         for (Choice.Arm arm : choice.arms()) {
             FormRange of = exactRangeOf(arm.answers(), reads.choosing(arm.decidedBy(),
@@ -2842,7 +2862,7 @@ final class Pullback {
      * is not. Null where the list is not written out, or some element's numbers are not known.
      */
     private FormRange productOfWrittenOut(Core list, InputReads reads,
-                                          Map<BindingId, RangeOfAName> known) {
+                                          RangesKnown known) {
         Denotation container = reads.standing(list, read.rules().symbols(),
                 read.rules().newtypes());
         if (!(WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
