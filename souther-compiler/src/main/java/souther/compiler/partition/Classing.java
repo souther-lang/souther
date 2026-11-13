@@ -811,7 +811,7 @@ final class Classing {
         }
         Language strings = UndividedByARelation.languageOf(looked);
         Language within = strings == null ? null : Partitions.ofTheLengths(strings,
-                LengthsPastTheWay.Lengths.of(values), perWitness.get());
+                LengthRuns.of(values), perWitness.get());
         return within == null ? looked : ValueSet.matching(within);
     }
 

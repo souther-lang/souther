@@ -4,8 +4,9 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
-
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 
 import java.util.function.Function;
 
@@ -46,9 +47,22 @@ final class OrderedLeaf {
          *  name, a bound that is no literal of the order. */
         record NotFollowed<K>() implements Left<K> {}
 
-        /** A rule it followed to the end that stops the values nowhere — what a disequality
-         *  states, which is a set of values and not a range. */
-        record PlacesNoEnd<K>() implements Left<K> {}
+        /**
+         * A rule it followed to the end that stops the values nowhere — what a disequality
+         * states, which is a set of values and not a range.
+         *
+         * @param number   the number the rule is about
+         * @param carrier  what {@code number} is ordered on
+         * @param excluded the place the rule takes out of the order, or null where the other side is
+         *                 no literal of the order: what the rule leaves is then not worked out
+         */
+        record PlacesNoEnd<K>(K number, Carrier carrier, Place excluded) implements Left<K> {
+
+            /** The runs the rule leaves the number, or null where {@link #excluded} is not known. */
+            OrderedRuns runs() {
+                return excluded == null ? null : OrderedRuns.leftBy(Rel.NE, excluded);
+            }
+        }
 
         /**
          * A rule it followed, leaving {@code number} inside {@code range}.
@@ -139,7 +153,8 @@ final class OrderedLeaf {
         return new Read<>(switch (said.claim()) {
             case ComparisonClaim.Singled singled -> singled.holdsAtTheValue()
                     ? onlyTheValue(said.number(), carrier, written)
-                    : new Left.PlacesNoEnd<>();
+                    : new Left.PlacesNoEnd<>(said.number(), carrier,
+                            written == null ? null : carrier.literalOf(written));
             case ComparisonClaim.Cut cut ->
                     ends(said.number(), carrier, InvariantBound.at(cut, written, carrier));
         }, against);

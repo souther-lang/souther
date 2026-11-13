@@ -476,23 +476,33 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     /**
      * And only where the whole of what the rule states is what that reading holds.
      *
-     * <p>Under a choice it holds the run between what the alternatives leave, which is not the rule:
-     * {@code == 2 || == 4} leaves no length three, and a reading holding every length from two to
-     * four did not read it. Beside a conjunct nothing reads, the rule is half read. And a
-     * disequality leaves a hole that reading has no word for. Each of these is a rule this compiler
+     * <p>Beside a conjunct nothing reads, the rule is half read. Such a rule is one this compiler
      * is short of, and is said so.
      */
     @Test
     void anEqualityThatIsNotTheWholeOfWhatTheRuleStatesIsNotReadByIt() {
+        String clause = "String.length(name) == 2 && String.length(name) <= 3 - 0";
+        Measured measured = of("    invariant " + clause);
+
+        assertTrue(measured.kinds().contains("rule_unaccounted"), clause + ": "
+                + measured.kinds() + "\n" + measured.human());
+    }
+
+    /**
+     * A rule that takes lengths out from between its ends is read whole: the lengths it leaves are
+     * held as the runs they are, so the reading holds the rule and not the run between its ends.
+     * {@code == 2 || == 4} leaves no length three, and nothing is left unaccounted for it.
+     */
+    @Test
+    void aRuleThatTakesLengthsOutFromBetweenItsEndsIsReadByIt() {
         for (String clause : List.of(
                 "String.length(name) == 2 || String.length(name) == 4",
                 "String.length(name) <= 1 || String.length(name) >= 3",
-                "String.length(name) == 2 && String.length(name) <= 3 - 0",
                 "String.length(name) /= 2",
                 "name /= \"x\" && String.length(name) /= 2")) {
             Measured measured = of("    invariant " + clause);
 
-            assertTrue(measured.kinds().contains("rule_unaccounted"), clause + ": "
+            assertFalse(measured.kinds().contains("rule_unaccounted"), clause + ": "
                     + measured.kinds() + "\n" + measured.human());
         }
     }

@@ -58,6 +58,10 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                         + ".aCaseThatStopsTheFieldShorterThanTheValueAboveHoldsThatEndAlone"));
         table.put("leftAt", new Decided(Above.ASKED, "what both leave, met",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.theEndStandsUnderEachCase"));
+        table.put("runsLeftAt", new Decided(Above.ASKED,
+                "what both leave, met: the runs of lengths either takes out are runs the position "
+                        + "has, as the ends either places are ends it has",
+                "ALengthHoleAboveASumStandsUnderEachCaseTest.theRunsStandAtTheSharedFieldUnderEachCase"));
         table.put("admits", new Decided(Above.ASKED,
                 "the values both admit, and short of what either was short of",
                 "ALineDrawnOnASharedNameFallsUnderEachCaseTest"
