@@ -802,6 +802,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "names the conjunction and the disjunction, the two forms that join the"
                             + " answers of the rules a declaration was handed into one truth;"
                             + " any other operator reads something the declaration holds itself"),
+            new Held("souther.compiler.check.InvariantChecker.joined",
+                    "asks the join of two conditions for its operator, which puts two statements a"
+                            + " container makes of its elements together as the rule they are"
+                            + " parts of states them"),
             new Held("souther.compiler.partition.LineDownATree.Reading.holdsTheValue",
                     "names the equality, the one comparison that is whether a field of a node is"
                             + " the value handed beside it; an order, an inequality or a"

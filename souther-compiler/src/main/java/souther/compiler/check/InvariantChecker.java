@@ -44,6 +44,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -949,9 +950,10 @@ public final class InvariantChecker {
         // the predicate with its parameter put for the value. Each is a part of the container's own
         // rule and keeps its name, so what these say is attributed to the rule that was written.
         //
-        // Each part of a rule of the container that states something of every element, as a clause
-        // of the rule it is a part of and under the name it was given: two statements of the one
-        // rule are two parts of it, which a reading can be made without apart.
+        // One clause for each rule of the container, because a rule is read once and answered for
+        // as one: the parts of it that state something of every element, joined as its author
+        // joined them and each under the name it was given, so that a reading can be made without
+        // any one of them.
         //
         // Whatever a rule states of the element and this reading has no place for leaves the
         // position short of it, said as a rule that was not worked out. It is never dropped
@@ -960,16 +962,31 @@ public final class InvariantChecker {
         if (opened && inherited != null) {
             for (Map.Entry<RuleRef.Invariant, List<ElementGuarantee>> rule
                     : inherited.byRule().entrySet()) {
+                Clauses.AsStated clause = null;
                 for (ElementGuarantee guarantee : rule.getValue()) {
-                    Core stated = statedOfTheValue(guarantee, atTheValue, fields, bindings);
+                    Core stated = statedOfTheValue(guarantee, atTheValue, inherited.type(),
+                            fields, bindings);
                     if (stated == null) {
                         read = false;
                         gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
                         continue;
                     }
-                    toRead.add(new ClauseToRead(rule.getKey(), new Clauses.AsStated(stated,
-                            new ClauseMeaning.Parts.One(guarantee.part(), Set.of()))));
+                    Clauses.AsStated part = new Clauses.AsStated(stated,
+                            new ClauseMeaning.Parts.One(guarantee.part(), Set.of()));
+                    clause = clause == null ? part : joined(clause, part);
                 }
+                if (clause != null) {
+                    toRead.add(new ClauseToRead(rule.getKey(), clause));
+                }
+            }
+        }
+        // What a reading answers for is a rule, and one answer is kept for each. A rule handed
+        // twice would be two clauses answering for it, the second taking the place of the first.
+        Set<RuleRef.Invariant> handed = new HashSet<>();
+        for (ClauseToRead each : toRead) {
+            if (!handed.add(each.origin())) {
+                throw new IllegalStateException("a rule is read once and this one was handed twice: "
+                        + each.origin());
             }
         }
         for (ClauseToRead each : toRead) {
@@ -1496,22 +1513,33 @@ public final class InvariantChecker {
      * not a place of this value.
      *
      * <p>A value that is its own value — a newtype, or what no declaration stands under — is the
-     * element itself. A record is read through its fields, which are where its places are, so
+     * element itself, and stands where it stood as the type it was written as: a newtype is
+     * compared and opened as the newtype it is, and what it wraps is another type for the
+     * statement to meet. A record is read through its fields, which are where its places are, so
      * {@code e.size} is the field {@code size}; the element named any other way, handed to a helper
      * or compared whole, is not something a field stands for.
+     *
+     * @param element what the element is, which is what the statement was written about
      */
     private static Core statedOfTheValue(ElementGuarantee guarantee, boolean atTheValue,
-                                         Map<String, Type> fields,
+                                         Type element, Map<String, Type> fields,
                                          Map<String, BindingId> bindings) {
-        BindingId element = guarantee.predicate().params().getFirst().binding();
+        BindingId parameter = guarantee.predicate().params().getFirst().binding();
         Core body = guarantee.predicate().body();
         if (atTheValue) {
             BindingId value = bindings.get(THE_VALUE_FIELD);
-            return value == null ? null : Clauses.substituted(body, Map.of(element,
-                    new Core.Read(THE_VALUE_FIELD, value, fields.get(THE_VALUE_FIELD), NOWHERE)));
+            return value == null ? null : Clauses.substituted(body, Map.of(parameter,
+                    new Core.Read(THE_VALUE_FIELD, value, element, NOWHERE)));
         }
-        Core ofItsFields = withItsFieldsRead(body, element, fields, bindings);
-        return WhatABodyReads.binding(ofItsFields, element) ? null : ofItsFields;
+        Core ofItsFields = withItsFieldsRead(body, parameter, fields, bindings);
+        return WhatABodyReads.binding(ofItsFields, parameter) ? null : ofItsFields;
+    }
+
+    /** Two clauses stated together, as one clause of two parts. */
+    private static Clauses.AsStated joined(Clauses.AsStated left, Clauses.AsStated right) {
+        return new Clauses.AsStated(new Core.Binary(ConditionJoin.BOTH.operator(), left.states(),
+                right.states(), Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(),
+                Type.BOOL, NOWHERE), new ClauseMeaning.Parts.Both(left.parts(), right.parts()));
     }
 
     /** {@code e} with each field of {@code element} that it reads read as the field itself. */

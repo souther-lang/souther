@@ -245,6 +245,47 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
             behavior f : (ws: Ws) -> Ok
             """;
 
+    /** The element is a newtype, and the statement names it as it is or by what it wraps. */
+    private static String newtypeElements(String statement) {
+        return """
+                module bounded
+
+                data N = Int invariant value >= -100
+
+                data Ns = List<N> invariant List.all(n -> %s, value)
+
+                data Ok
+
+                behavior f : (ns: Ns) -> Ok
+                """.formatted(statement);
+    }
+
+    private static final String NEWTYPE_ELEMENTS_OVER_STRINGS = """
+            module bounded
+
+            data W = String invariant String.length(value) <= 20
+
+            data Ws = List<W> invariant List.all(w -> String.length(w.value) <= 10, value)
+
+            data Ok
+
+            behavior f : (ws: Ws) -> Ok
+            """;
+
+    private static final String NEWTYPE_FIELDS_OF_ELEMENTS = """
+            module bounded
+
+            data N = Int invariant value >= -100
+
+            data R = { n: N, k: Int }
+
+            data Rs = List<R> invariant List.all(r -> r.n.value <= 10 && r.k <= 3, value)
+
+            data Ok
+
+            behavior f : (rs: Rs) -> Ok
+            """;
+
     private static RuleReadingContext readingOf(Compilation compilation) {
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         return RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -413,6 +454,46 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
         assertEquals(Set.of(), placingTheLength(element.leavingOut(both)));
     }
 
+    /**
+     * What is said of a rule does not turn on the order its statements were written in: the parts
+     * it holds a position down by, and the ones it does not, are the same whichever comes first.
+     */
+    @Test
+    void whatIsSaidOfARuleDoesNotTurnOnTheOrderOfItsStatements() {
+        String narrows = "List.all(s -> s /= \"a\", value)";
+        String leaves = "List.all(s -> s == s, value)";
+        assertEquals(List.of(true, false), whichStatementsAreSaidToHoldTheStringsDown(
+                ws(narrows + " && " + leaves)));
+        assertEquals(List.of(false, true), whichStatementsAreSaidToHoldTheStringsDown(
+                ws(leaves + " && " + narrows)));
+    }
+
+    private static String ws(String invariant) {
+        return "module bounded\ndata Ws = List<String> invariant " + invariant
+                + "\ndata Ok\nbehavior f : (ws: Ws) -> Ok\n";
+    }
+
+    /**
+     * For each statement the list makes of its elements, in the order it was written, whether the
+     * elements' reading says it holds the strings to fewer values.
+     */
+    private static List<Boolean> whichStatementsAreSaidToHoldTheStringsDown(String source) {
+        Compilation compilation = ACompiledModel.answered(source);
+        String module = compilation.modules().get(0);
+        DeclaredSig sig =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value().get("f");
+        RuleReadingContext reading = readingOf(compilation);
+        PlacedRules container = PlacedRules.of(TermPath.of("ws"), sig.inputs().getFirst().type(),
+                reading);
+        List<ElementGuarantee> stated = container.guaranteedOfEveryElementAt(TermPath.of("ws"));
+        Set<PartId<RuleRef.Invariant>> holding =
+                FieldDomains.ofElement(null, Type.STRING, stated, reading).noLines().stream()
+                        .filter(each -> each.why()
+                                instanceof BlockReason.RuleRestrictingToAdmittedValues)
+                        .map(FieldDomains.NoLine::part).collect(Collectors.toSet());
+        return stated.stream().map(each -> holding.contains(each.part())).toList();
+    }
+
     private static Set<PartId<RuleRef.Invariant>> placingTheLength(FieldDomains domains) {
         return domains.placedAt(RuleKey.THE_VALUE).stream().map(FieldDomains.Placed::part)
                 .collect(Collectors.toSet());
@@ -477,6 +558,42 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
     @Test
     void whatIsStatedOfOnlyTheElementsThatPassATestStopsNoElement() {
         assertNull(longest(positionOf(ONLY_THE_ELEMENTS_THAT_PASS, "ws[*]")));
+    }
+
+    /**
+     * A newtype is compared by what it wraps, so naming it as it is and naming what it wraps say
+     * the same: the element holds its own rules and what the list states, either way written.
+     */
+    @Test
+    void aNewtypeElementIsStoppedTheSameWhetherItIsNamedWholeOrByWhatItWraps() {
+        Position whole = positionOf(newtypeElements("n <= 10"), "ns[*]");
+        Position wrapped = positionOf(newtypeElements("n.value <= 10"), "ns[*]");
+        for (Position each : List.of(whole, wrapped)) {
+            assertEquals(Endpoint.inclusive(Count.of(-100)),
+                    each.bounds().getFirst().admissible().min());
+            assertEquals(Endpoint.inclusive(Count.of(10)),
+                    each.bounds().getFirst().admissible().max());
+        }
+        assertEquals(whole.completeness().getClass(), wrapped.completeness().getClass());
+        assertEquals(whole.unansweredQuestions().size(), wrapped.unansweredQuestions().size());
+    }
+
+    @Test
+    void aNewtypeOverStringsIsStoppedByTheShorterOfItsOwnRuleAndTheListsStatementOfIt() {
+        assertEquals(Endpoint.inclusive(Count.of(10)),
+                longest(positionOf(NEWTYPE_ELEMENTS_OVER_STRINGS, "ws[*]")));
+    }
+
+    @Test
+    void aNewtypeFieldOfARecordElementIsStoppedAsAFieldOfOneIs() {
+        Position field = positionOf(NEWTYPE_FIELDS_OF_ELEMENTS, "rs[*].n");
+        assertEquals(Endpoint.inclusive(Count.of(-100)),
+                field.bounds().getFirst().admissible().min());
+        assertEquals(Endpoint.inclusive(Count.of(10)),
+                field.bounds().getFirst().admissible().max());
+        assertEquals(Endpoint.inclusive(Count.of(3)),
+                positionOf(NEWTYPE_FIELDS_OF_ELEMENTS, "rs[*].k").bounds().getFirst()
+                        .admissible().max());
     }
 
     /** An element that is a newtype keeps its own rules beside what the list states of it. */
