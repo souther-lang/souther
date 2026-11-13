@@ -1200,7 +1200,9 @@ final class ModelWalk {
             if (name.equals(NOT_COMPILED)) {
                 return world.exempt().contains(key) ? ModelStanding.EXEMPT : ModelStanding.LOST;
             }
-            return ModelStanding.ASKED;
+            // Only a call that is said to check a model hands it back as one that was asked about.
+            return ModelVocabulary.CHECKS.contains(name) ? ModelStanding.ASKED
+                    : ModelStanding.LOST;
         }
         String method = AMethod.of(callee, name, call.type().stringValue());
         ModelStanding standing = ModelStanding.ASKED;

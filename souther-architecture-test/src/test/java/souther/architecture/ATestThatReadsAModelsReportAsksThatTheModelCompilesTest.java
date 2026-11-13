@@ -103,15 +103,12 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                             + "Ljava/lang/String;I)V"));
 
     /**
-     * The methods of the compiler, and of what measures it, that read what a model found and stop
-     * unless it compiles. What each says is held by a test that hands it a model that does not
-     * compile and sees it stop: {@code CorpusTest#aCorpusIsNotOneForAModelThatDoesNotCompile} and
+     * The methods of the compiler that read what a model found and stop unless it compiles. What
+     * each says is held by a test that hands it a model that does not compile and sees it stop:
      * {@code AProgramIsNoneForAModelTheLanguageRefusedTest}. A method is on this list only with
      * such a test, and a method that does not stop is not on it.
      */
     private static final Set<String> VALIDATING = Set.of(
-            AMethod.of("souther/bench/Corpus", "check",
-                    "(Lsouther/compiler/query/Compilation;)V"),
             AMethod.of("souther/compiler/program/CheckedProgramAssembler", "of",
                     "(Lsouther/compiler/query/Compilation;)"
                             + "Lsouther/compiler/program/CheckedProgram;"));
