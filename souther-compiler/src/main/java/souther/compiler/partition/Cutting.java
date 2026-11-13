@@ -1575,8 +1575,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     when valuesItRelates(some) instanceof List<FilingCoordinate> values ->
                     against(values, some);
             case Proposition.OnAnApplication applied
-                    when againstAnotherValueOnEach(applied) instanceof Read.AgainstAnotherValue
-                    each -> each;
+                    when againstAnotherValueOnEach(applied, workingOf(onTheInput))
+                            instanceof Read.AgainstAnotherValue each -> each;
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term, var _), Place at, Rel proposition),
                     boolean holds, Spelling _, var _) when term.atOnePosition() != null ->
@@ -2418,7 +2418,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * name's — as the applications of a closure are — or null where one of them is anything else.
      */
     private static Read.AgainstAnotherValue againstAnotherValueOnEach(
-            Proposition.OnAnApplication applied) {
+            Proposition.OnAnApplication applied, UndividedByARelation.Working working) {
         List<FilingCoordinate> over = new ArrayList<>();
         List<UndividedByARelation> relations = new ArrayList<>();
         for (Proposition each : applied.each()) {
@@ -2428,7 +2428,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 return null;
             }
             related.stream().filter(at -> !over.contains(at)).forEach(over::add);
-            relations.addAll(against(related, each).relations());
+            relations.addAll(against(related, each, working).relations());
         }
         return new Read.AgainstAnotherValue(over, relations);
     }
@@ -2777,7 +2777,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     undrawn = undrawn == null ? why : undrawn.and(why);
                 } else if (undrawn == null) {
                     // Where it decides is carried only if a row can be asked to be there.
-                    parts.add(new Read.Several.Part(alone, against(against, each.line()),
+                    parts.add(new Read.Several.Part(alone, against(against, each.line(),
+                            workingOf(whatWasToldOrNot(working), each.line())),
                             each.cases().stream().allMatch(one ->
                                     AStatementAtARow.askableAtSomeElement(one.condition()))
                                     ? each.cases() : List.of()));
