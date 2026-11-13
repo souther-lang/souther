@@ -2107,6 +2107,36 @@ public sealed interface Proposition {
         return firstStops().read(stated).orElse(null);
     }
 
+    /**
+     * A reading of whether every part of a statement nothing read stopped for being past the parts
+     * a step is concluded with ({@link WhyUnread.MorePartsThanAreConcluded}), which is so of a
+     * statement that has no such part.
+     *
+     * <p>Asked of the statements of one concluding, so that each is read once however many
+     * statements hold it.
+     */
+    static StatementReading<Boolean> stopsOnlyPastThePartsReading() {
+        return StatementReading.over(Proposition::stopsOnlyPastThePartsAt);
+    }
+
+    private static Boolean stopsOnlyPastThePartsAt(Proposition stated,
+                                                   StatementReading<Boolean> again) {
+        return switch (stated) {
+            case Unread unread -> unread.why() instanceof WhyUnread.MorePartsThanAreConcluded;
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _, OfTheWays _ -> {
+                for (Proposition part : stated.partsHeld()) {
+                    if (!again.read(part)) {
+                        yield false;
+                    }
+                }
+                yield true;
+            }
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> true;
+        };
+    }
+
     private static StatementReading<Optional<WhyUnread>> firstStops() {
         return StatementReading.over(Proposition::firstStopAt);
     }
