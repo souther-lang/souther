@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
@@ -144,32 +145,65 @@ public final class ReadersOfAGraph {
         }
     }
 
-    /** Whether the reader answered; one that refuses throws. */
-    private static boolean ask(Method method, boolean aMethodOfIt, Object[] others, Object chain)
-            throws ReflectiveOperationException {
-        Object[] args = others.clone();
-        if (!aMethodOfIt) {
-            args[0] = chain;
+    /** The arguments of a method but the graph, made anew: the graph is the receiver of a method
+     *  of it and the first argument of a static one, and is put in by the one that asks. */
+    private static Object[] argumentsOf(Method method, boolean aMethodOfIt, Chain chain) {
+        Object[] out = new Object[method.getParameterCount()];
+        for (int at = aMethodOfIt ? 0 : 1; at < out.length; at++) {
+            out[at] = other(method.getParameterTypes()[at], chain);
         }
+        return out;
+    }
+
+    /** The first parameter of a method that is not made, by its type, or null where all are. */
+    private static String missingFrom(Method method, boolean aMethodOfIt, Chain chain) {
+        Object[] made = argumentsOf(method, aMethodOfIt, chain);
+        for (int at = aMethodOfIt ? 0 : 1; at < made.length; at++) {
+            if (made[at] == null) {
+                return method.getParameterTypes()[at].getSimpleName();
+            }
+        }
+        return null;
+    }
+
+    /** Whether the reader answered; one that refuses throws. */
+    private static boolean invoke(Method method, Object receiver, Object[] args)
+            throws ReflectiveOperationException {
         try {
-            method.invoke(aMethodOfIt ? chain : null, args);
+            method.invoke(receiver, args);
             return true;
         } catch (InvocationTargetException refused) {
             return false;
         }
     }
 
-    /** The fastest of three askings, which is what the reader costs when nothing else is running;
-     *  none where it refuses. */
-    private static OptionalLong fastest(Method method, boolean aMethodOfIt, Object[] others,
-                                        Object chain) throws ReflectiveOperationException {
+    /**
+     * The fastest of three askings, which is what the reader costs when nothing else is running;
+     * none where it refuses.
+     *
+     * <p>Each asking is given arguments made for it: a reader that gathers into the collection it
+     * is handed leaves it as it found it for no later asking, and the second would be a reader
+     * asked of what the first left. Making them is not what is timed.
+     */
+    private static OptionalLong fastest(Method method, boolean aMethodOfIt,
+                                        Supplier<Object[]> others, Supplier<Object> chains)
+            throws ReflectiveOperationException {
         long best = Long.MAX_VALUE;
         for (int times = 0; times < 3; times++) {
+            // A chain of its own too: what the compiler keeps of a statement it has met (it keeps
+            // some, held weakly, by what the statement is equal to) is not there for the next.
+            Object chain = chains.get();
+            Object[] args = others.get();
+            if (!aMethodOfIt) {
+                args[0] = chain;
+            }
             long start = System.nanoTime();
-            if (!ask(method, aMethodOfIt, others, chain)) {
+            boolean answered = invoke(method, aMethodOfIt ? chain : null, args);
+            long took = System.nanoTime() - start;
+            if (!answered) {
                 return OptionalLong.empty();
             }
-            best = Math.min(best, System.nanoTime() - start);
+            best = Math.min(best, took);
         }
         return OptionalLong.of(best);
     }
@@ -184,8 +218,10 @@ public final class ReadersOfAGraph {
         long best = Long.MAX_VALUE;
         for (int times = 0; times < 3; times++) {
             long start = System.nanoTime();
-            chain.ofLength().apply(length);
-            best = Math.min(best, System.nanoTime() - start);
+            Object made = chain.ofLength().apply(length);
+            long took = System.nanoTime() - start;
+            Objects.requireNonNull(made, "a chain of " + chain.label() + " is made");
+            best = Math.min(best, took);
         }
         return best;
     }
@@ -199,12 +235,8 @@ public final class ReadersOfAGraph {
      */
     public static Findings askEach(List<Chain> chains, Map<String, String> byTheirNature)
             throws IOException, ReflectiveOperationException, InterruptedException {
-        Map<Chain, Object> shorter = new LinkedHashMap<>();
-        Map<Chain, Object> longer = new LinkedHashMap<>();
         Set<String> slow = new TreeSet<>();
         for (Chain chain : chains) {
-            shorter.put(chain, chain.ofLength().apply(SHORT));
-            longer.put(chain, chain.ofLength().apply(LONG));
             if (goesDownEveryWay(fastestMaking(chain, SHORT), fastestMaking(chain, LONG))) {
                 slow.add("making " + chain.label());
             }
@@ -238,14 +270,8 @@ public final class ReadersOfAGraph {
                     if (!aMethodOfIt && !takesIt) {
                         continue;
                     }
-                    Object[] others = new Object[method.getParameterCount()];
-                    String missing = null;
-                    for (int at = aMethodOfIt ? 0 : 1; at < others.length; at++) {
-                        others[at] = other(method.getParameterTypes()[at], chain);
-                        if (others[at] == null && missing == null) {
-                            missing = method.getParameterTypes()[at].getSimpleName();
-                        }
-                    }
+                    Supplier<Object[]> others = () -> argumentsOf(method, aMethodOfIt, chain);
+                    String missing = missingFrom(method, aMethodOfIt, chain);
                     String told = name + " on " + chain.label();
                     if (missing != null) {
                         // The pieces of a reading, which take the reading they are a piece of,
@@ -258,9 +284,9 @@ public final class ReadersOfAGraph {
                     method.setAccessible(true);
                     Future<Boolean> run = pool.submit(() -> {
                         OptionalLong onShort = fastest(method, aMethodOfIt, others,
-                                shorter.get(chain));
+                                () -> chain.ofLength().apply(SHORT));
                         OptionalLong onLong = fastest(method, aMethodOfIt, others,
-                                longer.get(chain));
+                                () -> chain.ofLength().apply(LONG));
                         if (onShort.isEmpty() || onLong.isEmpty()) {
                             return false;
                         }

@@ -95,7 +95,8 @@ class AStatementReadThroughAReadingIsReadOnceHoweverManyStatementsHoldItTest {
         Proposition both = Proposition.all(List.of(CompoundSamples.truth("first"),
                 CompoundSamples.truth("second")));
         List<Proposition> read = new ArrayList<>();
-        EachOnce<Boolean> reading = stated -> read.add(stated);
+        StatementReading<Boolean> reading =
+                StatementReading.over((stated, again) -> read.add(stated));
 
         Iterator<Boolean> parts = both.overParts(reading).iterator();
         parts.next();

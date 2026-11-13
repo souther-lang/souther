@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -65,8 +66,14 @@ public final class CountsWrittenOut {
     /** Whether a count outside every element of a container is left as it is. */
     private boolean leavingCounts;
 
-    private CountsWrittenOut(boolean leavingCounts) {
+    /** Whether each count leaves its statements as they are, which is the count's alone to say
+     *  however many counts hold it, so a count inside many is asked once for all that is written
+     *  out here. */
+    private final Map<Proposition.SoManyHold, Boolean> leavesKept;
+
+    private CountsWrittenOut(boolean leavingCounts, Map<Proposition.SoManyHold, Boolean> kept) {
         this.leavingCounts = leavingCounts;
+        this.leavesKept = kept;
     }
 
     /** What {@code stated} is handed to such a reader as. */
@@ -106,7 +113,7 @@ public final class CountsWrittenOut {
                 return kept.orElseGet(() -> new Written(stated));
             }
         }
-        CountsWrittenOut writing = new CountsWrittenOut(leavingCounts);
+        CountsWrittenOut writing = new CountsWrittenOut(leavingCounts, new IdentityHashMap<>());
         Proposition written = writing.writtenOut(stated);
         Handed handed = written == null ? new PastAFigure(writing.stoppedAt) : new Written(written);
         synchronized (handedBefore) {
@@ -116,8 +123,36 @@ public final class CountsWrittenOut {
         return handed;
     }
 
+    /** What a statement came to written out, and how many of the parts the writing may spend it
+     *  spent. */
+    private record Done(Proposition written, long spent) {}
+
+    /** What each statement came to, by whether a count outside an element is left as it is. A
+     *  statement held in several places is written out once: written out again it comes to the
+     *  same and spends the same, which is spent again where it stands. */
+    private final Map<Proposition, Done> done = new IdentityHashMap<>();
+    private final Map<Proposition, Done> doneLeavingCounts = new IdentityHashMap<>();
+
     /** {@code stated} written out, or null where the writing stopped. */
     private Proposition writtenOut(Proposition stated) {
+        Map<Proposition, Done> kept = leavingCounts ? doneLeavingCounts : done;
+        Done known = kept.get(stated);
+        if (known != null) {
+            if (known.spent() > partsLeft) {
+                return stop(PARTS);
+            }
+            partsLeft -= known.spent();
+            return known.written();
+        }
+        long before = partsLeft;
+        Proposition written = writtenOutAfresh(stated);
+        if (written != null) {
+            kept.put(stated, new Done(written, before - partsLeft));
+        }
+        return written;
+    }
+
+    private Proposition writtenOutAfresh(Proposition stated) {
         return switch (stated) {
             case Proposition.SoManyHold counted when leavingCounts && leaves(counted) -> counted;
             case Proposition.SoManyHold counted -> {
@@ -193,8 +228,15 @@ public final class CountsWrittenOut {
 
     /** Whether no count stands inside an element of a container in the statements of
      *  {@code counted}, outside which a count is left as it is. */
-    private static boolean leaves(Proposition.SoManyHold counted) {
-        return new CountsWrittenOut(true).writtenOut(counted.statements()) == counted.statements();
+    private boolean leaves(Proposition.SoManyHold counted) {
+        Boolean known = leavesKept.get(counted);
+        if (known != null) {
+            return known;
+        }
+        boolean leaves = new CountsWrittenOut(true, leavesKept).writtenOut(counted.statements())
+                == counted.statements();
+        leavesKept.put(counted, leaves);
+        return leaves;
     }
 
     /** {@code stated}, which an element of a container meets, written out: every count in it is

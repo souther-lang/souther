@@ -136,7 +136,25 @@ public final class StatementReading<R> implements EachOnce<R> {
 
         /** The reading in {@code context}, as the parts of a statement are handed it. */
         public EachOnce<R> in(C context) {
-            return stated -> read(stated, context);
+            return new In<>(this, context);
+        }
+
+        /** This reading, in one context. */
+        public static final class In<C, R> implements EachOnce<R> {
+
+            private final InContext<C, R> reading;
+
+            private final C context;
+
+            private In(InContext<C, R> reading, C context) {
+                this.reading = reading;
+                this.context = context;
+            }
+
+            @Override
+            public R read(Proposition stated) {
+                return reading.read(stated, context);
+            }
         }
     }
 }
