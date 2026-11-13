@@ -3,11 +3,9 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 
 import java.time.Duration;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
@@ -33,11 +31,7 @@ class AChainOfCaseConversionsIsReadInTimeTest {
 
     @Test
     void theComparisonAtTheEndIsReadWithinSecondsAndNotMinutes() {
-        Compilation compilation = Compilation.ofSource(chain(), "Main");
-        assertTimeoutPreemptively(Duration.ofSeconds(30), () -> {
-            compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-            compilation.answerEverything();
-        });
-        assertEquals(0, compilation.errors().size());
+        assertTimeoutPreemptively(Duration.ofSeconds(30), () -> ACompiledModel.measured(chain(),
+                Adequacy.Asked.warningsAt(Adequacy.Level.ALL)));
     }
 }
