@@ -24,6 +24,6 @@ enum ModelStanding {
 
     /** The worse of the two. */
     ModelStanding join(ModelStanding other) {
-        return ordinal() >= other.ordinal() ? this : other;
+        return compareTo(other) >= 0 ? this : other;
     }
 }
