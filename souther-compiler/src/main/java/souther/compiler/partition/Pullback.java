@@ -13865,7 +13865,7 @@ final class Pullback {
         Inside[] found = {null};
         Core.forEachChild(e, child -> {
             if (found[0] == null) {
-                found[0] = aWayInto(new Denotation(child, stands.at()), met, explored);
+                found[0] = aWayIntoAPart(new Denotation(child, stands.at()), met, explored);
             }
         });
         // A call defined by cases is gone into once what it was handed reads as one number on
@@ -13879,6 +13879,25 @@ final class Pullback {
         }
         Inside.ATotalByKeeping total = totalByKeeping(e, stands.at());
         return total != null ? total : countByKeeping(e, stands.at());
+    }
+
+    /** What tells the search of a part of a value from the search of a stop ({@link #aWayInAt}),
+     *  which goes into the value under its accesses. */
+    private static final Object A_PART_OF_A_VALUE = new Object();
+
+    /**
+     * The way into {@code part}, a part of a value being gone into, kept as the way into a stop is.
+     *
+     * <p>The same question of one node read at one reading, asked by whoever has it among its parts:
+     * a stop that reads a name asks it of the value the name stands for, which is the stop another
+     * name was read inside of, so a chain of names that each stand for a call of the one before is
+     * gone into once and not once for every name above it.
+     */
+    private Inside aWayIntoAPart(Denotation part, Set<BindingId> met,
+                                 Map<Core, List<InputReads>> explored) {
+        return sharedWaysIn.shared(part.value(), part.at(), A_PART_OF_A_VALUE,
+                () -> spendingNothing(() -> Optional.ofNullable(aWayInto(part, met, explored))),
+                Spendless::spentNothing).value().orElse(null);
     }
 
     /** Whether {@code node}, read at {@code at}, has not been gone into: it is marked as it is
