@@ -338,8 +338,33 @@ final class FormReach<A> {
 
     /** The highest the form is proven to come to, or null where nothing bounds it above. */
     ExactCut most(Map<A, ExactRatio> coefs, ExactRatio constant) {
+        if (weighsAPositionNothingReaches(coefs)) {
+            return null;
+        }
         Map<A, ExactRatio> ordered = inOrder(coefs);
         return highest(ordered, constant, null, namingAnyOf(ordered));
+    }
+
+    /**
+     * Whether the form weighs a position that nothing here reaches on the side the form runs up on:
+     * it has no end there and no premise names it.
+     *
+     * <p>Every route to a bound on the form goes through the ends or a premise, a difference being
+     * one of the rules, and none of them holds that position. Whatever the others come to, the form
+     * is as high as the position is let to be, so it is bounded by nothing above. Asked before the
+     * form is put in order, which is the cost of a walk over its positions to come to the same
+     * answer.
+     */
+    private boolean weighsAPositionNothingReaches(Map<A, ExactRatio> coefs) {
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            A position = each.getKey();
+            int sign = each.getValue().signum();
+            ExactCut end = sign > 0 ? ends.mostOf(position) : ends.leastOf(position);
+            if (sign != 0 && end == null && !premises().naming().containsKey(position)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Reach between(Map<A, ExactRatio> coefs, ExactRatio constant, AffineConstraint<A> without) {

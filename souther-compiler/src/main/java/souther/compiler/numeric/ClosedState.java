@@ -172,10 +172,12 @@ public final class ClosedState<A> {
 
     /**
      * The highest a form comes to over these rules where they were closed in a {@link PrefixBasis}
-     * and the form is one it answers exactly, and null where it is not answered here.
+     * whose every hop was composed and the form is one it answers exactly, and null where it is not
+     * answered here.
      */
     PrefixBasis.Highest highestInBasis(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return basis == null ? null : basis.highest(coefs, constant);
+        return basis == null || holdsNothing || !everyBoundWasComposed ? null
+                : basis.highest(coefs, constant);
     }
 
     /**
@@ -356,17 +358,17 @@ public final class ClosedState<A> {
                                                           DifferenceBounds<A> differences,
                                                           Set<A> positions,
                                                           boolean everyBoundWasComposed) {
-        PrefixBasis.Closure<A> closed = prefix.close();
-        if (closed.holdsNothing()) {
+        if (prefix.holdsNothing()) {
             return empty(differences);
         }
-        Box<A> met = box.meeting(closed.box().atLeast(), closed.box().atMost());
+        Box<A> read = prefix.box();
+        Box<A> met = box.meeting(read.atLeast(), read.atMost());
         Carried<A> carried = throughDifferences(met, differences, positions);
         if (!carried.box().holdsAValue()) {
             return empty(differences);
         }
         return settled(carried.box(), differences, Set.of(), Status.STABLE,
-                everyBoundWasComposed && closed.everyBoundWasComposed()
+                everyBoundWasComposed && prefix.everyHopWasComposed()
                         && carried.everyBoundWasComposed(), prefix);
     }
 
