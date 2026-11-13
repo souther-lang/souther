@@ -486,7 +486,7 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     new Row("if %s then Digit(String.length(s) - 6) else Digit(0)", true),
                     new Row("if %s then Digit(0) else Digit(String.length(s) - 5)", true))) {
                 String body = row.body().formatted(guard);
-                boolean owed = owedBy("""
+                boolean owed = owedBySource("""
                         module demo
 
                         data Digit = Int
@@ -498,7 +498,7 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                             constructs Digit
                         let f (s) =
                             %s
-                        """.formatted(body), body);
+                        """.formatted(body));
                 if (owed != row.owed()) {
                     wrong.add(body + ": owed " + owed + ", expected " + row.owed());
                 }
@@ -564,7 +564,7 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
 
     /** Whether the discharge leaves anything owed of a behavior with {@code body}. */
     private static boolean owedBy(String body) {
-        return owedBy("""
+        return owedBySource("""
                 module demo
 
                 data Digit = Int
@@ -577,12 +577,12 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     constructs Digit
                 let f (xs, ys, xss, a, b, ma, mb, s, t, u, x) =
                     %s
-                """.formatted(body), body);
+                """.formatted(body));
     }
 
     /** The same over lists of decimals, which have no end to run over. */
     private static boolean owedByDecimals(String body) {
-        return owedBy("""
+        return owedBySource("""
                 module demo
 
                 data Share = Decimal
@@ -592,10 +592,10 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     constructs Share
                 let f (xs, ys) =
                     %s
-                """.formatted(body), body);
+                """.formatted(body));
     }
 
-    private static boolean owedBy(String source, String body) {
+    private static boolean owedBySource(String source) {
         Compilation compilation = ACompiledModel.refusedOnlyWith(Set.of("E2010"),
                 Compilation.ofSource(source, "Main"));
         return !compilation.errors().isEmpty()
