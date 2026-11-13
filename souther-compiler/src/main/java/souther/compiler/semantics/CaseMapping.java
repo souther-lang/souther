@@ -52,14 +52,24 @@ public sealed interface CaseMapping {
         return applying(operation, NONE) != null;
     }
 
-    /** What {@code operation} makes of what {@code inner} makes of the string, or null where
-     *  {@code operation} is no case conversion. */
+    /**
+     * What {@code operation} makes of what {@code inner} makes of the string, or null where
+     * {@code operation} is no case conversion.
+     *
+     * <p>A conversion applied to what the same conversion made is that conversion: the run time's
+     * lowercase and uppercase are each idempotent, in value and in where they stop, so
+     * {@code lowercase(lowercase(x))} is the mapping {@code lowercase(x)} is. A chain of one
+     * conversion is therefore one mapping however long it is, and the maps worked out for it are
+     * worked out once.
+     */
     static CaseMapping applying(ValueName operation, CaseMapping inner) {
         if (ValueName.Stdlib.operation("String", "lowercase").equals(operation)) {
-            return new Lowercase(inner);
+            return inner instanceof Lowercase ? inner : new Lowercase(inner);
         }
-        return ValueName.Stdlib.operation("String", "uppercase").equals(operation)
-                ? new Uppercase(inner) : null;
+        if (ValueName.Stdlib.operation("String", "uppercase").equals(operation)) {
+            return inner instanceof Uppercase ? inner : new Uppercase(inner);
+        }
+        return null;
     }
 
     /**
