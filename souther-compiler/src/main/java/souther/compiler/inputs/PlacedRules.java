@@ -340,10 +340,27 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // Spent from this reading's allowance, which is what every position of it is met out of.
         souther.compiler.values.Allowance.Composed made = sets.meet(
                 souther.compiler.values.Sameness.Block.of(path), here.approximation(), leaves);
-        return new AdmissibleSet(made.set(), made.gaveUp()
-                ? alsoWidened(here.completeness(),
-                        new AdmissibleSet.Widening.ExactValuesTooCostly())
-                : here.completeness());
+        if (made.gaveUp()) {
+            return new AdmissibleSet(made.set(), alsoWidened(here.completeness(),
+                    new AdmissibleSet.Widening.ExactValuesTooCostly()));
+        }
+        return new AdmissibleSet(made.set(), isShortOnlyOfWhatTheCountHolds(here, path)
+                ? AdmissibleSet.READ_IN_FULL : here.completeness());
+    }
+
+    /**
+     * Whether {@code here} is short of the rules only by parts that the count the bounds leave
+     * states, and the set and that count are the rules between them.
+     *
+     * <p>Every reason the set is short is a rule that went unread, and not that the reading could
+     * not hold what the rules say together or could not build what they leave: a count does not
+     * make up for either.
+     */
+    private boolean isShortOnlyOfWhatTheCountHolds(AdmissibleSet here, TermPath path) {
+        return here.completeness() instanceof AdmissibleSet.Completeness.Wider wider
+                && wider.why().stream().allMatch(
+                        AdmissibleSet.Widening.RuleUnread.class::isInstance)
+                && rules.valuesAndCountAreTheRulesAt(under(path));
     }
 
     /** The same completeness, and one more thing standing between the set and the rules. */

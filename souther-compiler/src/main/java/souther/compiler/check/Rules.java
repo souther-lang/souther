@@ -128,6 +128,20 @@ public sealed interface Rules {
     }
 
     /**
+     * Whether the set of values at {@code place}, met with what the bounds say of its count, is
+     * what the rules leave it ({@link FieldDomains#valuesAndCountAreTheRulesAt}).
+     *
+     * <p>Not of a value of a kind carrying no clause: there is no rule for the set to be short of,
+     * and what it is is already said by the set.
+     */
+    default boolean valuesAndCountAreTheRulesAt(RuleKey place) {
+        return switch (this) {
+            case Read read -> read.domains().valuesAndCountAreTheRulesAt(place);
+            case NoneWritten _ -> false;
+        };
+    }
+
+    /**
      * What a value of a kind carrying no clause comes to, worked out once.
      *
      * <p>Asked of the algebra rather than made here. What certifies a range is the algebra's to say,
