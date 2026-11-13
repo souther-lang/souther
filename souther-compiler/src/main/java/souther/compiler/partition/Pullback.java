@@ -13924,9 +13924,9 @@ final class Pullback {
     static final class Gone {
 
         /** A value gone into, at the reading it stood at, and when. */
-        private record Visit(InputReads at, int number) {}
+        private record GoneAt(InputReads at, int number) {}
 
-        private final Map<Core, List<Visit>> values = new IdentityHashMap<>();
+        private final Map<Core, List<GoneAt>> values = new IdentityHashMap<>();
         private final Map<BindingId, Integer> bindings = new HashMap<>();
         /** How many values and bindings have been met, which is the number the next one gets. */
         int met;
@@ -13936,14 +13936,14 @@ final class Pullback {
         /** Whether {@code node}, read at {@code at}, has not been gone into: it is marked as it is
          *  asked, the readings told apart by what they are. */
         boolean firstGoingInto(Core node, InputReads at) {
-            List<Visit> visits = values.computeIfAbsent(node, _ -> new ArrayList<>());
-            for (Visit each : visits) {
+            List<GoneAt> visits = values.computeIfAbsent(node, _ -> new ArrayList<>());
+            for (GoneAt each : visits) {
                 if (each.at() == at) {
                     turnedBackAt(each.number());
                     return false;
                 }
             }
-            visits.add(new Visit(at, met++));
+            visits.add(new GoneAt(at, met++));
             return true;
         }
 
