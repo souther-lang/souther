@@ -11916,9 +11916,14 @@ final class Pullback {
      * gives the same stop wherever it is taken. A name past that size is read once for all its
      * uses, where reading it again for each use makes a chain of names each used twice cost the
      * ways down it.
+     *
+     * <p>Asked of the steps under it and not of what it states: a step past that size states one
+     * part nothing read, and a stop that depends on the reading, such as the readings having
+     * run out, is not in that.
      */
     private boolean readToTheEndOrToItsSize(Derivation derivation) {
-        return Proposition.stopsOnlyPastTheParts(tried(derivation));
+        trying.of(derivation);
+        return !trying.stoppedBesidesItsSize(derivation);
     }
 
     /** What a law says on {@code applications}, and what else the reading of it turns on. */

@@ -2108,15 +2108,15 @@ public sealed interface Proposition {
     }
 
     /**
-     * Whether every part of {@code stated} nothing read stopped for being past the parts a step
-     * is concluded with ({@link WhyUnread.MorePartsThanAreConcluded}), which is none where every
-     * part was read.
+     * A reading of whether every part of a statement nothing read stopped for being past the parts
+     * a step is concluded with ({@link WhyUnread.MorePartsThanAreConcluded}), which is so of a
+     * statement that has no such part.
      *
-     * <p>That stop is told by what is concluded and by nothing the reading stood on, so a reading
-     * that has no other is the same wherever it is taken again.
+     * <p>Asked of the statements of one concluding, so that each is read once however many
+     * statements hold it.
      */
-    static boolean stopsOnlyPastTheParts(Proposition stated) {
-        return StatementReading.<Boolean>over(Proposition::stopsOnlyPastThePartsAt).read(stated);
+    static StatementReading<Boolean> stopsOnlyPastThePartsReading() {
+        return StatementReading.over(Proposition::stopsOnlyPastThePartsAt);
     }
 
     private static Boolean stopsOnlyPastThePartsAt(Proposition stated,
