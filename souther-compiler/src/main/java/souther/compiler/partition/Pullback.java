@@ -13756,7 +13756,8 @@ final class Pullback {
         }
         Core string = piece.split().args().get(piece.parted().string().position());
         return valueOfTheInput(string, piece.at()) != null ? null
-                : aWayInto(new Denotation(string, piece.at()), new HashSet<>());
+                : aWayIntoAPart(new Denotation(string, piece.at()), new HashSet<>(),
+                        new IdentityHashMap<>());
     }
 
     /** The innermost value the arithmetic of {@code stopped} stopped at, through the arguments of
@@ -13788,7 +13789,7 @@ final class Pullback {
         Denotation where = new Denotation(innermost.node(), innermost.at());
         return sharedWaysIn.shared(where.value(), where.at(), null,
                 () -> spendingNothing(() -> Optional.ofNullable(
-                        aWayInto(underItsAccesses(where), new HashSet<>()))),
+                        aWayIntoAfresh(underItsAccesses(where), new HashSet<>()))),
                 Spendless::spentNothing).value().orElse(null);
     }
 
@@ -13817,10 +13818,14 @@ final class Pullback {
      * of what the case taken answers, however deep the choice stands, and the reading reads it on
      * each.
      *
+     * <p>Worked out here and nowhere but by the two that keep what it comes to
+     * ({@link #aWayInAt}, {@link #aWayIntoAPart}): a part of a value gone into from anywhere else is
+     * gone into again for everything above it.
+     *
      * @param met the bindings already read through on the way here
      */
-    private Inside aWayInto(Denotation value, Set<BindingId> met) {
-        return aWayInto(value, met, new IdentityHashMap<>());
+    private Inside aWayIntoAfresh(Denotation value, Set<BindingId> met) {
+        return aWayIntoAfresh(value, met, new IdentityHashMap<>());
     }
 
     /**
@@ -13829,8 +13834,8 @@ final class Pullback {
      * it and found none: a value several names stand for, or one that several of the operands of
      * an operator are made of, is gone into once and not once for every way down to it.
      */
-    private Inside aWayInto(Denotation value, Set<BindingId> met,
-                            Map<Core, List<InputReads>> explored) {
+    private Inside aWayIntoAfresh(Denotation value, Set<BindingId> met,
+                                  Map<Core, List<InputReads>> explored) {
         Denotation chosen = chosenAt(value);
         if (chosen != null) {
             return new Inside.AChoice(chosen);
@@ -13896,7 +13901,7 @@ final class Pullback {
     private Inside aWayIntoAPart(Denotation part, Set<BindingId> met,
                                  Map<Core, List<InputReads>> explored) {
         return sharedWaysIn.shared(part.value(), part.at(), A_PART_OF_A_VALUE,
-                () -> spendingNothing(() -> Optional.ofNullable(aWayInto(part, met, explored))),
+                () -> spendingNothing(() -> Optional.ofNullable(aWayIntoAfresh(part, met, explored))),
                 Spendless::spentNothing).value().orElse(null);
     }
 
@@ -16528,7 +16533,7 @@ final class Pullback {
                     new WhyUnread.ANumberNotHeld(why);
             // Several values a name stands for, which only values written out are: a closure's
             // parameter applied to each of them. A reading goes into such a name once for each
-            // value ({@link #aWayInto}); this rule does not, and that is all it can say of why it
+            // value ({@link #aWayInAt}); this rule does not, and that is all it can say of why it
             // stopped — nothing was counted against a figure here.
             case AffineForms.Halt.ValuesDisagree<Quantity, InputReads> _ ->
                     new WhyUnread.SeveralValuesNotGoneInto();
@@ -16586,7 +16591,7 @@ final class Pullback {
                 case ReadMeaning.Element _, ReadMeaning.NoneHeld _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER);
                 // Read once for each value it can be handed where a reading goes into it
-                // ({@link #aWayInto}), and counted against the figure there; this reading did not
+                // ({@link #aWayInAt}), and counted against the figure there; this reading did not
                 // go in.
                 case ReadMeaning.OneOf _ -> new WhyUnread.SeveralValuesNotGoneInto();
                 // One of a container holding more than a walk writes out, which no reading goes
