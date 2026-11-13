@@ -179,17 +179,19 @@ public final class ReadersOfAGraph {
 
     /**
      * The fastest of three askings, which is what the reader costs when nothing else is running;
-     * none where it refuses.
+     * none where it refuses. Once an asking is no longer than {@code quickEnough} the fastest can
+     * be no longer, and no more are made.
      *
      * <p>Each asking is given arguments made for it: a reader that gathers into the collection it
      * is handed leaves it as it found it for no later asking, and the second would be a reader
      * asked of what the first left. Making them is not what is timed.
      */
     private static OptionalLong fastest(Method method, boolean aMethodOfIt,
-                                        Supplier<Object[]> others, Supplier<Object> chains)
+                                        Supplier<Object[]> others, Supplier<Object> chains,
+                                        long quickEnough)
             throws ReflectiveOperationException {
         long best = Long.MAX_VALUE;
-        for (int times = 0; times < 3; times++) {
+        for (int times = 0; times < 3 && best > quickEnough; times++) {
             // A chain of its own too: what the compiler keeps of a statement it has met (it keeps
             // some, held weakly, by what the statement is equal to) is not there for the next.
             Object chain = chains.get();
@@ -283,10 +285,17 @@ public final class ReadersOfAGraph {
                     }
                     method.setAccessible(true);
                     Future<Boolean> run = pool.submit(() -> {
-                        OptionalLong onShort = fastest(method, aMethodOfIt, others,
-                                () -> chain.ofLength().apply(SHORT));
+                        // What is told apart is a longer chain that takes more than
+                        // NANOS_TOO_SHORT_TO_TELL and many times what the shorter takes, so a
+                        // reader that is quick on the longer is not asked again, and is asked once
+                        // of the shorter, to tell whether it answers.
                         OptionalLong onLong = fastest(method, aMethodOfIt, others,
-                                () -> chain.ofLength().apply(LONG));
+                                () -> chain.ofLength().apply(LONG), NANOS_TOO_SHORT_TO_TELL);
+                        boolean quick = onLong.isPresent()
+                                && onLong.getAsLong() <= NANOS_TOO_SHORT_TO_TELL;
+                        OptionalLong onShort = fastest(method, aMethodOfIt, others,
+                                () -> chain.ofLength().apply(SHORT),
+                                quick ? Long.MAX_VALUE : 0L);
                         if (onShort.isEmpty() || onLong.isEmpty()) {
                             return false;
                         }

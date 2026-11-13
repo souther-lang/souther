@@ -82,6 +82,21 @@ public sealed interface Proposition {
         return spelling().toString();
     }
 
+    /** How many chars of a statement {@link #briefly} writes. */
+    int BRIEFLY_CHARS = 300;
+
+    /**
+     * What a message says of a statement: the text where it is short, and where it is not the
+     * first of it and how long it is. A statement made of a name used twice, many times over, is
+     * as long as the ways down to its parts, and a message that wrote it out would take as long to
+     * make as it is long, which is where a reader is told it was given what it does not read.
+     */
+    default String briefly() {
+        Spelling spelled = spelling();
+        return spelled.length() <= BRIEFLY_CHARS ? spelled.toString()
+                : spelled.beginning(BRIEFLY_CHARS) + "... (" + spelled.length() + " chars)";
+    }
+
     /** {@code opening} and the spellings of {@code parts} in a list, each part's held as it is. */
     private static Spelling spellingOf(Spelling opening, List<Proposition> parts) {
         List<Spelling> pieces = new ArrayList<>(2 * parts.size() + 1);

@@ -401,6 +401,29 @@ public final class Spelling implements Comparable<Spelling> {
         return out.toString();
     }
 
+    /**
+     * The first {@code limit} chars of the text, and no more of it written: a text that holds the
+     * text of everything below it once for each level is as long as the ways down, and a reader
+     * that wants only what it begins with must not write the rest.
+     */
+    public String beginning(int limit) {
+        StringBuilder out = new StringBuilder(Math.min(limit, length));
+        Reading reading = new Reading().from(this);
+        while (out.length() < limit) {
+            if (reading.atABoundary()) {
+                if (reading.next() == null) {
+                    break;
+                }
+                reading.enter();
+                continue;
+            }
+            int taken = Math.min(reading.text.length() - reading.at, limit - out.length());
+            out.append(reading.text, reading.at, reading.at + taken);
+            reading.at += taken;
+        }
+        return out.toString();
+    }
+
     /** The text written onto the end of {@code out}. */
     public void appendTo(StringBuilder out) {
         Reading reading = new Reading().from(this);
