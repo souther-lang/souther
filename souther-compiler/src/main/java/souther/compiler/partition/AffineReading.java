@@ -71,6 +71,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
@@ -297,8 +298,36 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                                                   InputReads reads,
                                                                   InputReading read,
                                                                   ElementsMet met) {
+        return outcomeOf(expression, reads, read, met, null);
+    }
+
+    /**
+     * The same, with what each name came to kept by {@code kept} where it is given, for another
+     * reading of the same kind to take.
+     *
+     * <p>Only here, where nothing of what is told is asked for afterwards: what a name comes to is
+     * then the form or the stop and the elements it asked of, and not what the walk inside it told.
+     */
+    static AffineForms.Outcome<NumericTerm, InputReads> outcomeOf(Core expression,
+                                                                  InputReads reads,
+                                                                  InputReading read,
+                                                                  ElementsMet met,
+                                                                  NamesKept kept) {
         return AffineForms.outcome(expression, reads,
-                reading(read, new LinkedHashSet<>(), met, new WhatWasTold()));
+                reading(read, new LinkedHashSet<>(), met, new WhatWasTold(), null, kept));
+    }
+
+    /** What the reading of a name came to, and whether it took nothing from the figures that
+     *  count the readings of one comparison. */
+    record Kept(AffineForms.Outcome<NumericTerm, InputReads> outcome, boolean spentNothing) {}
+
+    /** Where what a name came to is kept to be taken by another reading. */
+    interface NamesKept {
+
+        /** What the value a name was given comes to read at {@code at}: taken where it was read
+         *  before, and otherwise {@code fresh}. */
+        AffineForms.Outcome<NumericTerm, InputReads> answerOf(Core value, InputReads at,
+                                                             Supplier<Kept> fresh);
     }
 
     /**
@@ -535,6 +564,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static Arithmetic reading(
             InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
             StoppedValues stoppedAt) {
+        return reading(ofTheInput, named, met, told, stoppedAt, null);
+    }
+
+    private static Arithmetic reading(
+            InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
+            StoppedValues stoppedAt, NamesKept namesKept) {
         InputDomain inputs = ofTheInput.domain();
         RuleReadingSource ruleSource = ofTheInput.rules();
         ReadMeaning.WhereKept kept = KeptTruths.readIn(ofTheInput);
@@ -547,6 +582,23 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /** What a run works out to reach a value, asked once for each value this reading
              *  asks it of. */
             private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
+
+            // A name comes to the same wherever it is read again at an equal reading, where the
+            // reading holds nothing the walk before it has put in: no accumulator carried, no
+            // stopped value held aside, and none of the figures counting elements drawn on.
+            @Override
+            public AffineForms.Outcome<NumericTerm, InputReads> answerOfAName(
+                    Core value, InputReads at,
+                    Supplier<AffineForms.Outcome<NumericTerm, InputReads>> fresh) {
+                if (namesKept == null || stoppedAt != null || told.productsStop || !carried.isEmpty()) {
+                    return fresh.get();
+                }
+                return namesKept.answerOf(value, at, () -> {
+                    int before = told.elementsRead();
+                    AffineForms.Outcome<NumericTerm, InputReads> came = fresh.get();
+                    return new Kept(came, told.elementsRead() == before);
+                });
+            }
 
             /**
              * An operation of whole numbers the walk composed, told with the number it comes to:
@@ -2039,6 +2091,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         private WhatWasTold(int[] elementsRead) {
             this.elementsRead = elementsRead;
+        }
+
+        /** How many elements the reading of the comparison has read one by one so far. */
+        int elementsRead() {
+            return elementsRead[0];
         }
 
         /** Nothing told yet, for a part of the comparison read apart: what it reads element by

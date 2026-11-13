@@ -34,6 +34,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -130,6 +131,20 @@ public final class AffineForms {
         @Override
         default Reading<A, E> oneAtATime() {
             return new OneAtATime<>(this);
+        }
+
+        /**
+         * What the value a name was given comes to read at {@code at}, which is {@code fresh}
+         * unless this reading holds an answer it may give for it in place of reading the value
+         * again.
+         *
+         * <p>Asked of the reading the value is read with, so a reading that tells what it reads
+         * of a node ({@link #composed}, {@link #unobserved}) keeps the default: a kept answer
+         * would not tell what the walk inside it told. A reading that tells nothing and keeps
+         * answers where taking one again is the same reading overrides it.
+         */
+        default Outcome<A, E> answerOfAName(Core value, E at, Supplier<Outcome<A, E>> fresh) {
+            return fresh.get();
         }
 
         /**
@@ -983,9 +998,10 @@ public final class AffineForms {
             // question — so the walk holds the answer rather than composing the value again.
             case ValueStanding.Named.One<E, Reading<A, E>>(
                     ValueStanding.Standing<E, Reading<A, E>> one) ->
-                    following.readingOf(r.binding(), one.value(),
-                            readAs(r, at, one.at(), reading),
-                            () -> of(one.value(), one.at(), one.names(), following));
+                    one.names().answerOfAName(one.value(), one.at(),
+                            () -> following.readingOf(r.binding(), one.value(),
+                                    readAs(r, at, one.at(), reading),
+                                    () -> of(one.value(), one.at(), one.names(), following)));
             case ValueStanding.Named.OneOf<E, Reading<A, E>>(
                     List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
                 // Several values the name may stand for, each read apart from the operations the
