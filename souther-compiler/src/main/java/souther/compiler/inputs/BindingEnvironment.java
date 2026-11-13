@@ -8,7 +8,6 @@ import souther.compiler.check.OrderOfElements;
 import souther.compiler.core.Core;
 import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.BindingOwner;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -602,16 +601,6 @@ final class BindingEnvironment {
     BindingEnvironment overStandingCalls() {
         return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
                 true, selected, opened, answered);
-    }
-
-    /**
-     * A binding no other this environment holds is, owned by {@code within}'s pass of reading a
-     * law: numbered by how many elements it already holds a name for, which is the same for the
-     * same reading wherever it is made, and is no more than one of the names it holds at once.
-     */
-    BindingId anotherElementOf(BindingOwner within) {
-        return new BindingId(new BindingOwner.Synthesized(within, BindingOwner.Pass.LAW_READER,
-                elements.containers().size()), 0);
     }
 
     /** The same, with {@code binding} an element of the container {@code held} names, as a

@@ -147,6 +147,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.ACallOfAnOperation;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -916,7 +917,8 @@ final class Pullback {
      * the container stands for, so that the law and the closure are one comparison to read. A key
      * is what a map's name stands for in the same way, by the part of the container it is of.
      */
-    static LawComparison lawComparison(Core call, LawProposition.Same<DeclaredArgument> same,
+    static LawComparison lawComparison(Core.PreservedCall call,
+                                       LawProposition.Same<DeclaredArgument> same,
                                        AnOperationApplied applied, InputReads reads,
                                        InputReading read) {
         DeclaredArgument container;
@@ -937,6 +939,12 @@ final class Pullback {
         if (!(same.other() instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at))) {
             return null;
         }
+        // Only a call that answers whether some element is the value says nothing else of the
+        // element: what a lookup answers is read of the very entry it is filed under, in a
+        // statement the sameness is joined to.
+        if (!Type.BOOL.equals(call.type())) {
+            return null;
+        }
         Core held = applied.argument(container);
         Core handed = applied.argument(at);
         if (held == null || handed == null) {
@@ -951,10 +959,14 @@ final class Pullback {
             return null;
         }
         BindingOwner within = ownerOfTheRootOf(held);
-        if (within == null) {
+        if (within == null
+                || !(call.application() instanceof ApplicationOrigin.Identified site)) {
             return null;
         }
-        InputReads.ElementNamed named = reads.holdingAnElement(within,
+        // The element the law of this operation names, at this call: told from the element of any
+        // other call, and the same wherever the call is read and whatever else it is read beside.
+        InputReads.ElementNamed named = reads.holdingAnElement(
+                new BindingOwner.Expansion(within, applied.operation(), site),
                 new HeldIn(held, part, HowAClosureIsApplied.UNTIL_ONE_HOLDS, false));
         Core own = new Core.Read("own", named.name(), placeType, call.pos());
         return new LawComparison(new StatedComparison(
@@ -6219,7 +6231,8 @@ final class Pullback {
             if (counting != null) {
                 return null;
             }
-            LawComparison law = lawComparison(e, same, applied, reads, read);
+            LawComparison law = Core.withoutStanding(e) instanceof Core.PreservedCall call
+                    ? lawComparison(call, same, applied, reads, read) : null;
             if (law == null || !(elements.get(containerOf(same)) instanceof ElementAt.AtASubject(
                     DecisionSubject.AnInput _))) {
                 return null;

@@ -12665,25 +12665,6 @@
           "unclassifiedRows" : 0
         } ],
         "unanswered" : [ {
-          "at" : "rates.rates[key]",
-          "rule" : "comparison@5:67:39",
-          "ruleId" : {
-            "kind" : "comparison",
-            "declaredIn" : "conformance.counting",
-            "definition" : "namedUnpriced",
-            "behavior" : "namedUnpriced",
-            "ordinal" : 9,
-            "lowered" : 0
-          },
-          "question" : "notDetermined",
-          "subject" : {
-            "kind" : "filedAt",
-            "path" : "rates.rates[key]"
-          },
-          "stopped" : [ {
-            "reason" : "relation_not_shown_reached_at_every_value"
-          } ]
-        }, {
           "at" : "deals[*].currency",
           "rule" : "comparison@5:67:39",
           "ruleId" : {
@@ -12697,7 +12678,28 @@
           "question" : "notDetermined",
           "subject" : {
             "kind" : "filedAt",
-            "path" : "deals[*].currency"
+            "path" : "deals[*].currency",
+            "measure" : "deals[*].currency"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_reached_at_every_value"
+          } ]
+        }, {
+          "at" : "rates.rates[key]",
+          "rule" : "comparison@5:67:39",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.counting",
+            "definition" : "namedUnpriced",
+            "behavior" : "namedUnpriced",
+            "ordinal" : 9,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "rates.rates[key]",
+            "measure" : "rates.rates[key]"
           },
           "stopped" : [ {
             "reason" : "relation_not_shown_reached_at_every_value"
@@ -13248,8 +13250,9 @@
             "clause" : 0
           }
         }, {
-          "position" : "rates.rates[key]",
+          "position" : "deals[*].currency",
           "reason" : "relation_not_shown_reached_at_every_value",
+          "shownReachedAt" : [ "CurrencyCode(\"EUR\")" ],
           "rule" : "comparison@5:67:39",
           "ruleId" : {
             "kind" : "comparison",
@@ -13260,9 +13263,8 @@
             "lowered" : 0
           }
         }, {
-          "position" : "deals[*].currency",
+          "position" : "rates.rates[key]",
           "reason" : "relation_not_shown_reached_at_every_value",
-          "shownReachedAt" : [ "CurrencyCode(\"EUR\")" ],
           "rule" : "comparison@5:67:39",
           "ruleId" : {
             "kind" : "comparison",
@@ -13662,7 +13664,7 @@
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
-        "subject" : "rates.rates[key]",
+        "subject" : "deals[*].currency",
         "ruleId" : {
           "kind" : "comparison",
           "declaredIn" : "conformance.counting",
@@ -13675,7 +13677,7 @@
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
-        "subject" : "deals[*].currency",
+        "subject" : "rates.rates[key]",
         "ruleId" : {
           "kind" : "comparison",
           "declaredIn" : "conformance.counting",
@@ -13688,7 +13690,7 @@
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
-        "subject" : "comparison@5:67:39 — what this rule states about rates.rates[key]",
+        "subject" : "comparison@5:67:39 — what this rule states about deals[*].currency",
         "ruleId" : {
           "kind" : "comparison",
           "declaredIn" : "conformance.counting",
@@ -13700,7 +13702,7 @@
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
-        "subject" : "comparison@5:67:39 — what this rule states about deals[*].currency",
+        "subject" : "comparison@5:67:39 — what this rule states about rates.rates[key]",
         "ruleId" : {
           "kind" : "comparison",
           "declaredIn" : "conformance.counting",

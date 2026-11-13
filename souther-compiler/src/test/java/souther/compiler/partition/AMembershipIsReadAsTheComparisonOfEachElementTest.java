@@ -169,6 +169,29 @@ class AMembershipIsReadAsTheComparisonOfEachElementTest {
         sameAs("List.contains(e, es)", "List.any(own -> own == e, es)");
     }
 
+    /**
+     * The element a law names is one element of one container at one call: two memberships of one
+     * value in two lists name two elements, each divided at its own list, and two of one list at
+     * two calls are two as well.
+     */
+    @Test
+    void eachMembershipNamesTheElementOfItsOwnContainerAtItsOwnCall() {
+        String both = reportOf("List.contains(email, emails) && List.contains(email, ks)");
+        assertTrue(both.contains("emails[*]:"), both);
+        assertTrue(both.contains("ks[*]:"), both);
+        sameAs("List.contains(email, emails) && List.contains(email, ks)",
+                "List.any(own -> own == email, emails) && List.any(own -> own == email, ks)");
+        sameAs("List.contains(email, emails) && List.contains(String.lowercase(email), emails)",
+                "List.any(own -> own == email, emails)"
+                        + " && List.any(own -> own == String.lowercase(email), emails)");
+        sameAs("Bool.not(List.contains(email, emails)) && List.contains(email, ks)",
+                "List.all(own -> own /= email, emails) && List.any(own -> own == email, ks)");
+        sameAs("List.contains(email, emails) && List.contains(n, ns)"
+                        + " && Set.contains(email, sset)",
+                "List.any(own -> own == email, emails) && List.any(own -> own == n, ns)"
+                        + " && List.any(own -> own == email, Set.toList(sset))");
+    }
+
     /** What an element is compared with is told of the places that stand in the comparison, so a
      *  comparison of the elements is never reported as dividing no place. */
     @Test

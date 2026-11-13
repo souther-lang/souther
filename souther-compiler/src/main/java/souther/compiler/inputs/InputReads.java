@@ -571,16 +571,23 @@ public final class InputReads {
      * of a closure an operation applies to the elements of a container is one, and a statement a
      * law makes of some element of a container is read of the name as one a closure makes is.
      *
-     * @param within what the name is a name of a reading inside
+     * @param owner what the name belongs to: the one thing that is that element, told from every
+     *              other name by what it belongs to and not by how many names this reading holds
      */
-    public ElementNamed holdingAnElement(BindingOwner within, HeldIn held) {
-        BindingId name = names.anotherElementOf(within);
+    public ElementNamed holdingAnElement(BindingOwner owner, HeldIn held) {
+        BindingId name = new BindingId(owner, 0);
         return new ElementNamed(new InputReads(names.holdingAnElement(name, held), alternatives,
                 declared, dependencies, applied), name);
     }
 
     /** This reading with a name for an element in it, and the name. */
-    public record ElementNamed(InputReads reads, BindingId name) {}
+    public record ElementNamed(InputReads reads, BindingId name) {
+
+        public ElementNamed {
+            Objects.requireNonNull(reads, "a name is held by a reading");
+            Objects.requireNonNull(name, "an element is named");
+        }
+    }
 
     private InputReads handedAs(BindingId binding, Denotation value, DeclarationNewtypes newtypes) {
         Map<BindingId, List<ReadMeaning.Occurrence>> narrower = new LinkedHashMap<>(alternatives);

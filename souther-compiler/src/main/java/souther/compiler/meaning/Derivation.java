@@ -3793,7 +3793,8 @@ public sealed interface Derivation {
              *  answers on is how many meet it ({@link Derivation.WhereItIsAnswered}), or of their
              *  different values. */
             public Quantity counted(Conclusion numbering) {
-                Proposition meeting = Proposition.whereItHolds(numbering.of(ofTheElement));
+                Proposition meeting = Proposition.whereItHolds(
+                        numbering.askingRows().of(ofTheElement));
                 return different.<Quantity>map(values -> new Quantity.HowManyDifferentMeet(
                         container, values.at(), values.ofEachValue()
                                 ? new Quantity.HowManyDifferentMeet.Selection.OfEachValue(meeting)

@@ -218,7 +218,7 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                 example greet
                     | "both" : ("a", [1]) with known = true -> 1
                     | "unknown" : ("b", [1]) with known = false -> 0
-                    | "no zero" : ("a", [2]) with known = true -> 0
+                    | "repeated" : ("a", [2, 2]) with known = true -> 0
                 """);
 
         assertEquals(Set.of("xs", "xs[*]"), notReadAt(report),
