@@ -565,20 +565,16 @@ final class Term {
 
         private final Map<Term, Map<Term, Integer>> compared = new IdentityHashMap<>();
 
+        /** How many terms one term is compared with, as far as a table need be sized for: the
+         *  default holds sixty-four places, and a term is mostly compared with one other. */
+        private static final int AGAINST_ONE = 1;
+
         int compare(Term one, Term other) {
             if (one == other) {
                 return 0;
             }
-            Map<Term, Integer> against = compared.computeIfAbsent(one, _ -> new IdentityHashMap<>());
-            Integer known = against.get(other);
-            if (known == null) {
-                known = comparedOnce(one, other);
-                against.put(other, known);
-            }
-            return known;
-        }
-
-        private int comparedOnce(Term one, Term other) {
+            // What two terms differ in at once is asked of them and not held: only a pair that
+            // has to be told apart by its parts is reached again from other places.
             int by = one.shape.name().compareTo(other.shape.name());
             if (by != 0) {
                 return by;
@@ -587,10 +583,21 @@ final class Term {
             if (by != 0) {
                 return by;
             }
+            Map<Term, Integer> against = compared.computeIfAbsent(one,
+                    _ -> new IdentityHashMap<>(AGAINST_ONE));
+            Integer known = against.get(other);
+            if (known == null) {
+                known = comparedByParts(one, other);
+                against.put(other, known);
+            }
+            return known;
+        }
+
+        private int comparedByParts(Term one, Term other) {
             List<Term> these = inOrder(one);
             List<Term> those = inOrder(other);
             for (int at = 0; at < Math.min(these.size(), those.size()); at++) {
-                by = compare(these.get(at), those.get(at));
+                int by = compare(these.get(at), those.get(at));
                 if (by != 0) {
                     return by;
                 }
