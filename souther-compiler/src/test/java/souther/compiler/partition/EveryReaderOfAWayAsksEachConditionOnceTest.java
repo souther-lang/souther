@@ -28,7 +28,8 @@ class EveryReaderOfAWayAsksEachConditionOnceTest {
 
     /** Readers whose work is the ways down, which is what they are for. */
     private static final Map<String, String> BY_THEIR_NATURE = Map.of(
-            "OnTheWay$OneOf.toString", "the text of the condition");
+            "OnTheWay$OneOf.toString", "the text of the condition",
+            "WayToTheBorder.toString", "the text of the way, as long as the ways down to its parts");
 
     /** How many readers are asked at least, so that finding none is not a pass. */
     private static final int AT_LEAST_ASKED = 5;

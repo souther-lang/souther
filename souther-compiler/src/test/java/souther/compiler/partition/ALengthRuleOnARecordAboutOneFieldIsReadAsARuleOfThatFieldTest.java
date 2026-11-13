@@ -222,9 +222,11 @@ class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
                 notDerivable, blocked, notSeparated);
     }
 
+    /** The places a measurement says something of are the same whether the rows a line asks for
+     *  are searched or not, so they are not. */
     private static PartitionEvidence evidence(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
         assertFalse(compilation.modules().isEmpty(), "the model compiles");
         for (String module : compilation.modules()) {

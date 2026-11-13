@@ -285,9 +285,16 @@ public final class ReadersOfAGraph {
                     Future<Boolean> run = pool.submit(() -> {
                         OptionalLong onShort = fastest(method, aMethodOfIt, others,
                                 () -> chain.ofLength().apply(SHORT));
+                        // A reader that refuses the shorter chain refuses the longer, and the
+                        // message it refuses with names the whole chain: asked only once it is
+                        // known to answer, so that what it costs to say so is not paid on the
+                        // longer.
+                        if (onShort.isEmpty()) {
+                            return false;
+                        }
                         OptionalLong onLong = fastest(method, aMethodOfIt, others,
                                 () -> chain.ofLength().apply(LONG));
-                        if (onShort.isEmpty() || onLong.isEmpty()) {
+                        if (onLong.isEmpty()) {
                             return false;
                         }
                         if (goesDownEveryWay(onShort.getAsLong(), onLong.getAsLong())) {
