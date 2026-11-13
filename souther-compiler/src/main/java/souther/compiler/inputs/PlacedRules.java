@@ -274,7 +274,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     OrderedRuns runsLeftAt(TermPath path, NumberAt.OfWhatNumber kind) {
         RuleKey where = keyOf(path);
         OrderedRuns here = where == null ? null : bounds().runsLeftAt(where, kind);
-        TermPath above = alsoAt(path);        if (above == null) {
+        TermPath above = alsoAt(path);
+        if (above == null) {
             return here;
         }
         OrderedRuns outer = alsoReaching.outer().runsLeftAt(above, kind);

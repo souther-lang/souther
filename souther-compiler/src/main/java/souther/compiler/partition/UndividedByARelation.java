@@ -3472,18 +3472,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (room.counts() == null && room.place() != null) {
                 accountedFor.add(room.place());
             }
-            ValuesWithin theirStrings = stringsWithinAt(theirs.subjectPath(), read);
-            if (theirStrings == null) {
+            StringsHeld.Held theirHeld = stringsHeldAt(theirs.subjectPath(), read);
+            if (theirHeld == null) {
                 continue;
             }
+            ValuesWithin theirStrings = theirHeld.within();
             boolean partnerHeld = room.counts() != null
                     && room.limitedTo().equals(theirs.subjectPath());            // The lengths the declarations hold the partner to are read as the numbers they are
             // where this reading of the two sides can, and made into one set of strings where it
             // cannot. A set past the allowance is a figure the reading stopped at.
-            if (theirStrings.bounded()
-                    && !readsTheLengthsAsNumbers(here, there, partnerHeld, room)) {
+            // Lengths the rules take out from between the ends are no numbers this reading holds, so
+            // they are made into the set as well.
+            if (theirHeld.hasHoles() || (theirStrings.bounded()
+                    && !readsTheLengthsAsNumbers(here, there, partnerHeld, room))) {
                 Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
-                ValueSet one = StringsHeld.asOneSet(theirStrings, meter);
+                ValueSet one = StringsHeld.asOneSet(theirHeld, meter);
                 if (one == null) {
                     partnersStringsRefusedBy(meter).ifPresent(stoppedAt::add);
                     continue;
@@ -3976,8 +3979,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         StringsInsideStrings.Where where = kind.inside();
         boolean standsInside = where != null;
         // The strings the other side comes to, as far as it is shown and as far as it may come to.
-        WhatAConversionAnswers answers =
-                WhatAConversionAnswers.of(partner, theirs.through(), meter);
+        // A function of the partner's strings and the conversion alone, and as long to make as the
+        // machines are: asked for each relation and each side of it, and made once for the reading.
+        WhatAConversionAnswers answers = OneReading.conversionAnswers(theirs.through(), partner,
+                () -> WhatAConversionAnswers.of(partner, theirs.through(), meter));
         if (answers == null) {
             return null;
         }
@@ -4223,12 +4228,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * The same strings with their lengths held as numbers beside the set
-     * ({@link StringsHeld#within}), or null where they are not shown.
+     * ({@link StringsHeld#held}), or null where they are not shown.
      */
-    private static ValuesWithin stringsWithinAt(TermPath place, InputReading read) {
+    private static StringsHeld.Held stringsHeldAt(TermPath place, InputReading read) {
         Position at = read.domain().at(place);
         return at == null || sourceOf(new NumericTerm.ValueOf(place), read) == null ? null
-                : StringsHeld.within(at);
+                : StringsHeld.held(at);
     }
 
     /**

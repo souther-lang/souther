@@ -2725,26 +2725,39 @@ public final class FieldDomains {
     }
 
     /**
-     * The values {@link #leftAt} leaves the number {@code kind} of {@code path}, holes and all, or
-     * null where the rules leave no hole in it that this knows of.
+     * The values {@link #leftAt} leaves the number {@code kind} of {@code path} where they are not
+     * the values between the ends it gives, or null where they are or this has no word for them.
      *
      * <p>The same rules as {@link #leftAt} and the same reading, which answers the two together:
      * what it composed of the ends is {@code leftAt}'s, and what it composed of the values is
      * here. Met with the ends {@code leftAt} gives, so that a rule only the interval algebra read
      * narrows the runs as it narrows the ends.
+     *
+     * <p>Only where the runs and the ends are the whole of what the rules leave the length
+     * ({@link #setBoundsAndRunsAreTheRulesAt}): a reader given these holds the strings as the set
+     * of the position met with them, and a rule nothing states is a string it holds that the
+     * position does not.
+     *
+     * <p>Told apart from the ends by the values and not by how many runs there are. A choice met
+     * with a bound can leave one run that stops short of the end the bound placed —
+     * {@code length <= 8 && (length < 8 || length > 8)} leaves up to seven and its end is eight —
+     * and a reader of the ends alone holds a length the rules refuse.
      */
     public OrderedRuns runsLeftAt(RuleKey path, NumberAt.OfWhatNumber kind) {
         if (!(kind instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers)
-                || derived.byNumber().isEmpty()) {
+                || !setBoundsAndRunsAreTheRulesAt(path)) {
             return null;
         }
         DerivedNumber number = DerivedNumber.of(new NumberAt<>(path, kind));
-        OrderedRuns runs = number == null ? null : derived.runsAt(number);        if (runs == null || runs.isOneRun()) {
+        OrderedRuns runs = number == null ? null : derived.runsAt(number);
+        if (runs == null) {
             return null;
         }
         NumericDomain.Bounds ends = leftAt(path, kind);
-        return ends == null ? runs
-                : runs.meet(OrderedRuns.of(new OrderedInterval(ends.min(), ends.max())));
+        OrderedRuns between = OrderedRuns.of(
+                ends == null ? runs.hull() : new OrderedInterval(ends.min(), ends.max()));
+        OrderedRuns left = ends == null ? runs : runs.meet(between);
+        return left.sameValuesAs(between) ? null : left;
     }
 
     /**
@@ -3751,6 +3764,62 @@ public final class FieldDomains {
         }
         ProjectionEvidence rest = evidenceLeaving(heldHere);
         return rest.isCertified() || standingApart(rest, place, Set.of(named)) != null;
+    }
+
+    /**
+     * Whether the set of values, the ends of the length at {@code place} and the runs held beside
+     * the ends ({@link #runsLeftAt}) are the whole of what the rules leave the string there.
+     *
+     * <p>Not {@link #valuesAndCountAreTheRulesAt}, which is what makes the set read in full, and
+     * nothing says of a position the set is read in full for that the ends leave a hole in it: a
+     * reader of that answer holds the length as the ends and would hold the strings of the hole.
+     * This is the answer for a reader that holds the runs as well, so it has the same conditions
+     * with one more thing allowed to stand in the way: the lengths taken out, which are held.
+     *
+     * <p>The rules the set holds whole are taken out of what stands in the way, as there; and what
+     * is left is nothing, or the lengths a rule takes out from between the ends of the count.
+     */
+    private boolean setBoundsAndRunsAreTheRulesAt(RuleKey place) {
+        Counted counted = countAt.get(place);
+        if (counted == null || !notGathered.isEmpty()
+                || !DerivedNumber.isTheLengthOfAString(counted.by())
+                || !everyDerivedNumberIsALengthHeldAsRuns()
+                || unreadByName.getOrDefault(place, List.of()).stream()
+                        .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))) {
+            return false;
+        }
+        Gathered read = gathered();
+        // A rule the algebra did not prove is named by a cause beside it ({@link #gathered}), so a
+        // refusal of that kind is told apart below by what the causes are.
+        if (!(read.certification() instanceof ProjectionCertification.Certified
+                || read.certification() instanceof ProjectionCertification.NotEveryRuleIsProven)
+                || countsRelatedToAnotherNumber().contains(counted.atom())) {
+            return false;
+        }
+        List<PartUnstated> heldHere = read.unstated().stream()
+                .filter(each -> each.valuesHoldWhole() && each.paths().equals(Set.of(place)))
+                .toList();
+        ProjectionEvidence rest = evidenceLeaving(heldHere);
+        return rest.isCertified() || onlyTheHolesTheRunsHold(rest, counted);
+    }
+
+    /**
+     * Whether what stands in the way of {@code rest} is the lengths a rule takes out from between
+     * the ends of the count {@code counted}, which the runs of the derived number hold
+     * ({@link #runsLeftAt}) and the ends do not.
+     *
+     * <p>Only the length of a string, and only where no line on any number was left open: a hole
+     * in a count nothing holds as runs is a rule the bounds and the set between them do not state.
+     */
+    private boolean onlyTheHolesTheRunsHold(ProjectionEvidence rest, Counted counted) {
+        return rest instanceof ProjectionEvidence.NotCertified(var causes)
+                && DerivedNumber.isTheLengthOfAString(counted.by())
+                && everyDerivedNumberIsALengthHeldAsRuns()
+                && causes.stream().allMatch(each ->
+                        each instanceof ProjectionEvidence.Cause.Lossy lossy
+                                && lossy.unstated().equals(
+                                        Set.of(ProjectionEvidence.Cause.Unstated.A_HOLE))
+                                && lossy.atom().equals(counted.atom()));
     }
 
     /** The counts some stated constraint relates to another number, worked out the first time it

@@ -5,7 +5,6 @@ import souther.compiler.regex.Language;
 import souther.compiler.regex.StringsOfAPiece;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.values.ValueSet;
-import souther.compiler.values.ValuesWithin;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -19,7 +18,8 @@ import java.util.function.Supplier;
  * again while the reading lasts: the walk of a way ({@link WayToTheBorder#along}), what a run's
  * answers narrow a region by ({@link Reachability.Reaching#narrowedPast}), what a statement
  * says of its remainder ({@link ARemainderMoved#saidBy}), which operations of a case conversion
- * are not exact over the strings it is done to ({@link #notExactOver}), which pieces of what
+ * are not exact over the strings it is done to ({@link #notExactOver}), what it answers of them
+ * ({@link #conversionAnswers}), which pieces of what
  * it answers are pieces of its values ({@link #piecesAConversionAnswers}), whether the strings
  * a position admits are every string of the lengths its rules leave it ({@link #everyStringOf}),
  * and those strings made into one set ({@link #stringsAsOneSet}).
@@ -60,10 +60,14 @@ final class OneReading {
     private final Map<ConvertedOver, List<String>> notExact = new HashMap<>();
     /** By value, for the same reason. */
     private final Map<PiecesAsked, Optional<PiecesAnswered>> piecesAnswered = new HashMap<>();
+    /** By value, for the same reason: what a conversion answers of the strings of a language. */
+    private final Map<ConvertedOver, Optional<WhatAConversionAnswers>> conversionAnswers =
+            new HashMap<>();
     /** By value, for the same reason: a set of strings and some lengths. */
     private final Map<LengthsOver, Boolean> everyStringOfTheLengths = new HashMap<>();
-    /** By value, for the same reason: a set of strings and the lengths held beside it. */
-    private final Map<ValuesWithin, Optional<ValueSet>> asOneSet = new HashMap<>();
+    /** By value, for the same reason: a set of strings, the lengths held beside it, and the
+     *  lengths taken out from between them. */
+    private final Map<StringsHeld.Held, Optional<ValueSet>> asOneSet = new HashMap<>();
 
     private OneReading() {
     }
@@ -110,6 +114,17 @@ final class OneReading {
                 : working.get();
     }
 
+    /** What {@code conversion} answers of the strings of {@code over}, or null where the machines
+     *  for them are past the allowance: as this reading worked it out already, or
+     *  {@code working}'s, now. */
+    static WhatAConversionAnswers conversionAnswers(CaseMapping conversion, Language over,
+                                                    Supplier<WhatAConversionAnswers> working) {
+        return READING.isBound()
+                ? kept(READING.get().conversionAnswers, new ConvertedOver(conversion, over),
+                        () -> Optional.ofNullable(working.get())).orElse(null)
+                : working.get();
+    }
+
     /** The pieces of what {@code conversion} answers of {@code whole} at {@code separator} in
      *  {@code window}: as this reading worked them out already, or {@code working}'s, now. */
     static Optional<PiecesAnswered> piecesAConversionAnswers(
@@ -133,7 +148,7 @@ final class OneReading {
 
     /** The strings {@code held} holds as one set within the allowance of a piece of a language,
      *  or null where they are none: as this reading made it already, or {@code working}'s, now. */
-    static ValueSet stringsAsOneSet(ValuesWithin held, Supplier<ValueSet> working) {
+    static ValueSet stringsAsOneSet(StringsHeld.Held held, Supplier<ValueSet> working) {
         return READING.isBound()
                 ? kept(READING.get().asOneSet, held, () -> Optional.ofNullable(working.get()))
                         .orElse(null)
