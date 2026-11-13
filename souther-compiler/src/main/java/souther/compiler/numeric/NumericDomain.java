@@ -1419,16 +1419,19 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * The order a form over the rules' positions is walked in, by the places the closure of the rules
-     * kept for those positions: a form is walked once for each question put to it, and its positions
-     * are compared by a number rather than by what each is.
+     * The order a form over the rules' positions is walked in, by places worked out for those
+     * positions when a walk first needs them: a form is walked once for each question put to it, and
+     * its positions are compared by a number rather than by what each is. The order of the domain
+     * itself where the closures are not kept.
      */
     private CanonicalOrder<A> orderOfTheRules() {
-        Set<A> positions = new LinkedHashSet<>();
-        for (AffineConstraint<A> rule : rules()) {
-            positions.addAll(rule.form().atomsIn(order));
-        }
-        return closedStates.placing(positions, order);
+        return closedStates.placing(() -> {
+            Set<A> positions = new LinkedHashSet<>();
+            for (AffineConstraint<A> rule : rules()) {
+                positions.addAll(rule.form().atomsIn(order));
+            }
+            return positions;
+        }, order);
     }
 
 

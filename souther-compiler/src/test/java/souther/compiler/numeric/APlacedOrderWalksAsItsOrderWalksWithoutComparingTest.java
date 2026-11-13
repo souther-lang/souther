@@ -68,7 +68,8 @@ class APlacedOrderWalksAsItsOrderWalksWithoutComparingTest {
             List<String> all = universe(random, 12);
             List<String> placed = all.subList(0, 9);
             PlacedOrder<String> order = new PlacedOrder<>(
-                    ClosureQuestion.placesIn(new LinkedHashSet<>(placed), BY_LENGTH), BY_LENGTH);
+                    () -> ClosureQuestion.placesIn(new LinkedHashSet<>(placed), BY_LENGTH),
+                    BY_LENGTH);
             for (int each = 0; each < 20; each++) {
                 List<String> names = new ArrayList<>(all);
                 Collections.shuffle(names, random);
@@ -86,8 +87,10 @@ class APlacedOrderWalksAsItsOrderWalksWithoutComparingTest {
     void aWalkOfPlacedPositionsAsksTheOrderForNoComparison() {
         List<String> names = universe(new Random(7), 30);
         PlacedOrder<String> order = new PlacedOrder<>(
-                ClosureQuestion.placesIn(new LinkedHashSet<>(names), BY_LENGTH), BY_LENGTH);
+                () -> ClosureQuestion.placesIn(new LinkedHashSet<>(names), BY_LENGTH), BY_LENGTH);
         Map<String, ExactRatio> form = formOver(names, new Random(8));
+        // The places are worked out by the first walk, which compares; what is held is the next.
+        order.walking(form.entrySet(), Map.Entry::getKey);
         COMPARED.set(0);
         List<String> walked = keysOf(order.walking(form.entrySet(), Map.Entry::getKey));
         assertEquals(0, COMPARED.get(), "comparisons asked of the order by a walk of placed positions");
@@ -98,13 +101,31 @@ class APlacedOrderWalksAsItsOrderWalksWithoutComparingTest {
     }
 
     @Test
+    void thePlacesAreAskedForByTheFirstWalkOfTwoPositionsAndOnlyOnce() {
+        List<String> names = universe(new Random(11), 10);
+        AtomicInteger asked = new AtomicInteger();
+        PlacedOrder<String> order = new PlacedOrder<>(() -> {
+            asked.incrementAndGet();
+            return ClosureQuestion.placesIn(new LinkedHashSet<>(names), BY_LENGTH);
+        }, BY_LENGTH);
+
+        order.walking(formOver(names.subList(0, 1), new Random(1)).entrySet(), Map.Entry::getKey);
+        order.walking(Map.<String, ExactRatio>of().entrySet(), Map.Entry::getKey);
+        assertEquals(0, asked.get(), "places asked for by a walk with no two positions to put in order");
+
+        order.walking(formOver(names, new Random(2)).entrySet(), Map.Entry::getKey);
+        order.walking(formOver(names, new Random(3)).entrySet(), Map.Entry::getKey);
+        assertEquals(1, asked.get(), "places asked for once for every walk of two positions or more");
+    }
+
+    @Test
     void twoPositionsTheOrderCannotTellApartAreRefusedWhetherOrNotTheyAreWalkedByPlaces() {
         CanonicalOrder<String> byLengthOnly = (one, other) -> Integer.compare(one.length(), other.length());
         Map<String, ExactRatio> form = new LinkedHashMap<>();
         form.put("ab", ExactRatio.ONE);
         form.put("cd", ExactRatio.ONE);
         PlacedOrder<String> order = new PlacedOrder<>(
-                ClosureQuestion.placesIn(new LinkedHashSet<>(form.keySet()), byLengthOnly),
+                () -> ClosureQuestion.placesIn(new LinkedHashSet<>(form.keySet()), byLengthOnly),
                 byLengthOnly);
         assertThrows(IllegalStateException.class,
                 () -> byLengthOnly.walking(form.entrySet(), Map.Entry::getKey));

@@ -41,6 +41,13 @@ public final class LatelyAsked<Q, A> {
         this.answers = new LinkedHashMap<>(16, 0.75f, true);
     }
 
+    /** How many answers are kept now, which is never more than it was made to keep. */
+    public int size() {
+        synchronized (answers) {
+            return answers.size();
+        }
+    }
+
     /** The answer to {@code question}: the one kept, or {@code working} applied to it, kept from
      *  now on. */
     public A answer(Q question, Function<? super Q, ? extends A> working) {

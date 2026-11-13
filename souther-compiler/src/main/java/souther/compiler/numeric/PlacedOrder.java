@@ -13,21 +13,45 @@ import java.util.function.ToIntFunction;
  * <p>The places are what {@link ClosureQuestion#placesIn} says for a set of positions under the
  * order, so a walk of positions all in the set comes out as the order walks it, and without a
  * comparison of two positions in it. A comparison can be dear — it reads the structure of two
- * terms — and a form is walked once for every question put to it, where the places were worked out
+ * terms — and a form is walked once for every question put to it, where the places are worked out
  * once for the set. A walk that names a position with no place is the order's own.
+ *
+ * <p>The places are asked for when a walk first has two positions to put in order, and never
+ * before: an order that is handed to a reading and walks nothing with two positions in it costs
+ * nothing. Asked for once, and held here, so what outlives this order is whatever the supplier
+ * keeps and nothing it did not.
  *
  * @param <A> what a position is
  */
 final class PlacedOrder<A> implements CanonicalOrder<A> {
 
-    private final Map<A, Integer> places;
-    private final CanonicalOrder<A> order;
-    private final CanonicalOrder<A> byPlace;
+    /** The places, and the order that puts positions in them. */
+    private record Tabled<A>(Map<A, Integer> places, CanonicalOrder<A> byPlace) {}
 
-    PlacedOrder(Map<A, Integer> places, CanonicalOrder<A> order) {
-        this.places = places;
+    private final Supplier<Map<A, Integer>> making;
+    private final CanonicalOrder<A> order;
+
+    /** Worked out on the first walk that needs it. Two threads that meet at that walk work out the
+     *  same places and either is the one held, and a record is read whole whichever it is. */
+    private Tabled<A> tabled;
+
+    PlacedOrder(Supplier<Map<A, Integer>> making, CanonicalOrder<A> order) {
+        this.making = making;
         this.order = order;
-        this.byPlace = new CanonicalOrder<>() {
+    }
+
+    private Tabled<A> table() {
+        Tabled<A> had = tabled;
+        if (had == null) {
+            Map<A, Integer> places = making.get();
+            had = new Tabled<>(places, byPlace(places));
+            tabled = had;
+        }
+        return had;
+    }
+
+    private static <A> CanonicalOrder<A> byPlace(Map<A, Integer> places) {
+        return new CanonicalOrder<>() {
             @Override
             public int compare(A one, A other) {
                 return Integer.compare(places.get(one), places.get(other));
@@ -42,11 +66,15 @@ final class PlacedOrder<A> implements CanonicalOrder<A> {
 
     @Override
     public int compare(A one, A other) {
-        Integer placeOfOne = places.get(one);
-        Integer placeOfOther = places.get(other);
-        return placeOfOne != null && placeOfOther != null
-                ? Integer.compare(placeOfOne, placeOfOther)
-                : order.compare(one, other);
+        Tabled<A> had = tabled;
+        if (had != null) {
+            Integer placeOfOne = had.places().get(one);
+            Integer placeOfOther = had.places().get(other);
+            if (placeOfOne != null && placeOfOther != null) {
+                return Integer.compare(placeOfOne, placeOfOther);
+            }
+        }
+        return order.compare(one, other);
     }
 
     /**
@@ -57,8 +85,13 @@ final class PlacedOrder<A> implements CanonicalOrder<A> {
      */
     @Override
     public <T> List<T> walking(Collection<T> these, Function<T, A> at) {
-        boolean everyOneIsPlaced = these.stream().allMatch(each -> places.containsKey(at.apply(each)));
-        return everyOneIsPlaced ? byPlace.walking(these, at) : order.walking(these, at);
+        if (these.size() < 2) {
+            return order.walking(these, at);
+        }
+        Tabled<A> held = table();
+        boolean everyOneIsPlaced =
+                these.stream().allMatch(each -> held.places().containsKey(at.apply(each)));
+        return everyOneIsPlaced ? held.byPlace().walking(these, at) : order.walking(these, at);
     }
 
     @Override
