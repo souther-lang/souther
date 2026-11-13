@@ -41,6 +41,14 @@ final class ModelVocabulary {
      */
     static final String ADEQUACY_REPORT_OF = "of";
 
+    /**
+     * What a method that hands back what a model found names in its types: the report and the
+     * place it is told at, the errors, the offers to repair them, and the failure they make.
+     */
+    static final Set<String> REPORT_CARRIERS = Set.of("souther/compiler/query/Db$Found",
+            "souther/compiler/diag/Located", "souther/compiler/diag/Diagnostic",
+            "souther/compiler/diag/CompileException", "RepairOffer");
+
     /** The method of a model that hands out its store. */
     static final String STORE_ACCESSOR = "db";
 

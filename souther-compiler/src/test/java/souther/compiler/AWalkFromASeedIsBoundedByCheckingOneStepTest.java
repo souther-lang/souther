@@ -116,7 +116,8 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
 
     /** As {@link #checked(String)}, the source held to be refused with {@code codes}. */
     private static Compiler.Compiled checked(List<String> codes, String source) {
-        Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
+        Compilation compilation = ACompiledModel.refusedWith(codes,
+                Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT));
         CompileException structural = compilation.structuralFailure();
         if (structural != null) {
             throw structural;
@@ -127,7 +128,6 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
         CompileException failure = compilation.failure();
         Compiler.Compiled said = failure == null
                 ? new Compiler.Compiled(Map.of(), compilation.warnings()) : null;
-        ACompiledModel.refusedWith(codes, compilation);
         if (failure != null) {
             throw failure;
         }

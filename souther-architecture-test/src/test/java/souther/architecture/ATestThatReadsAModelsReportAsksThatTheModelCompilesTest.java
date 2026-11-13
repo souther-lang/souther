@@ -31,23 +31,32 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
 
     /** The shapes written for this check to read, and which of them it refuses. */
     private static final Set<String> REFUSED_SHAPES = new TreeSet<>(List.of(
-            "ADerivedModelNeverAsked", "AnotherClassMadeIt", "AnotherModelAsked",
-            "AnswerWarningsOnly", "AskedOnOneWayOnly", "ChangedOnTheWayThatFails",
-            "ChangedThenFailedAndCaught", "ChangedThroughAGenericFunction",
-            "ChangedThroughAMethod", "ChangedThroughAnInterface",
+            "ADerivedModelNeverAsked", "AllReportsOfAnAnswered", "AnotherClassMadeIt",
+            "AnotherModelAsked", "AnswerWarningsOnly", "AskedAliasOfAFieldChangedByAMethod",
+            "AskedOnOneWayOnly", "BoundMethodRefChanges", "BoundMethodRefReads", "BoxedInAnArray",
+            "ChangedOnTheWayThatFails",
+            "ChangedThenFailedAndCaught", "ChangedThroughADefaultMethod",
+            "ChangedThroughAGenericFunction", "ChangedThroughAGetter", "ChangedThroughAHolder",
+            "ChangedThroughAMethod", "ChangedThroughAnAnonymousClass",
+            "ChangedThroughAnInheritedMethod", "ChangedThroughAnInterface",
             "ChangedThroughTheDb", "DbChangedThroughAVariable", "DbHandedToAMethod",
+            "DbKeptInAFieldThenChanged",
             "DiagnosticsAreNotACompileCheck", "DiagnosticsOfAModelNobodyAsked",
             "EngineHandsItIn", "ErrorsDropped", "ErrorsKept",
             "FieldChangedByTheVariableItCameIn", "FieldChangedByTheVariableItWasReadInto",
-            "FieldMutatedAfterTheLook",
+            "FieldHandedToAConsumer", "FieldMutatedAfterTheLook",
             "FieldNeverAsked", "FromACollection", "HandedOnManyTimes",
-            "HandedToCodeThatChangesIt", "LambdaMadeNotRun", "LeftBeforeTheAsk",
-            "LeftOpenFor", "MadeInALambda", "MeasuredThenRead", "MutatedAfterTheLook",
-            "NotCompiledButReportRead", "NotCompiledOffTheList", "NotCompiledReadsAllReports",
+            "HandedToCodeThatChangesIt", "LambdaCreatedBeforeTheAsk", "LambdaMadeNotRun",
+            "LeftBeforeTheAsk", "LeftOpenFor", "MadeInALambda", "MeasuredThenRead",
+            "MutatedAfterTheLook", "NotCompiledButReportRead", "NotCompiledOffTheList",
+            "NotCompiledReadsAllReports", "OptionalIfPresentChanges",
             "ParameterNobodyPasses", "ReadThenChangedThenAsked",
             "ReadThenChangedThenAskedInAMethod", "ReassignedOnOneWay",
             "ReplacedAfterTheLook", "ReportsOfAnAnsweredModel", "ReportsReadOfAModelNobodyAsked",
-            "SwallowedFailure", "UpdatedAfterTheLook", "WarningsOfAnUnaskedModel"));
+            "StaticMethodRefReads", "StoreAskOfAnAnswered", "StreamForEachChanges",
+            "StructuralFailureOfAnUnasked", "StructuralReportsOfAnUnasked", "SwallowedFailure",
+            "ThrownOnTheReadAndCaughtByTheCaller", "UnboundMethodRefReads", "UpdatedAfterTheLook",
+            "WarningsOfAnUnaskedModel"));
 
     private static final Set<String> ACCEPTED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelAsked", "AliasOfAnAskedModel", "AnotherClassAskedAboutIt",
@@ -56,7 +65,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "ErrorsOfAnAnsweredModel", "FieldAskedWhereWritten", "HandedToAnInterfaceThatOnlyLooks",
             "HelperThatChangesAndAsks", "MarkedAndNotRun",
             "NotCompiledOnTheList",
-            "ParameterHandedByACaller", "TheErrorsAreWhatWasMeant", "ThroughTheDoor",
+            "ParameterHandedByACaller", "RequireNonNullKeepsTheAsk", "TheErrorsAreWhatWasMeant",
+            "ThroughTheDoor",
             "UpdatedThenAsked"));
 
     private static final String HELPER = "souther/compiler/ACompiledModel";
@@ -106,11 +116,12 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     @Test
     void noTestReadsTheReportOfAModelItWasNotHeldToCompiling() {
         assertEquals(List.of(), new ArrayList<>(findings().refused()),
-                "a method reads the report of a model that was not handed to ACompiledModel before"
-                        + " the read on every way to it, or after it on every way out, or of a"
-                        + " model that cannot be followed to where it was made, or that nothing"
+                () -> "a method reads the report of a model that was not handed to ACompiledModel"
+                        + " before the read on every way to it, or after it on every way out, or of"
+                        + " a model that cannot be followed to where it was made, or that nothing"
                         + " hands it, or says it did not compile it and is not on the list that may,"
-                        + " so the empty report of a model that did not compile passes it");
+                        + " so the empty report of a model that did not compile passes it; why: "
+                        + findings().why());
     }
 
     /**
@@ -137,10 +148,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
         shapes.add(COMPILED.read(FIXTURES + "Factory"));
         Set<String> refused = new TreeSet<>();
         List<ClassModel> production = new ArrayList<>();
-        for (String code : List.of("ProductionChanger", "Editor", "UpdatingEditor",
-                "LookingEditor")) {
-            production.add(COMPILED.read(FIXTURES + code));
-        }
+        production.addAll(COMPILED.inTheClassesOf("souther/architecture/fixture"));
         for (Path module : COMPILED.modules()) {
             production.addAll(COMPILED.classesOf(module));
         }

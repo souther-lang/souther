@@ -80,7 +80,8 @@ class CompileNamingAnExpressionTest {
 
     /** The same, of a model that is refused with exactly {@code codes}: a model the invariant check refuses. */
     private static String said(String source, List<String> codes) {
-        Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
+        Compilation compilation = ACompiledModel.refusedWith(codes,
+                Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT));
         String said;
         try {
             CompileException structural = compilation.structuralFailure();
@@ -103,7 +104,6 @@ class CompileNamingAnExpressionTest {
         } catch (RuntimeException e) {
             said = "raised: " + e.getMessage();
         }
-        ACompiledModel.refusedWith(codes, compilation);
         return said;
     }
 

@@ -1,5 +1,6 @@
 package souther.architecture;
 
+import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.CodeElement;
 import java.lang.classfile.MethodModel;
@@ -38,18 +39,56 @@ final class ModelEffects {
 
     private final Map<String, Set<String>> implementers;
 
+    private final Map<String, Set<String>> supers;
+
+    private final Set<String> declared;
+
     private final Set<String> withCode;
 
     private final Set<String> changers;
 
     private final Set<String> reportReaders;
 
-    private ModelEffects(Map<String, Set<String>> implementers, Set<String> withCode,
-                         Set<String> changers, Set<String> reportReaders) {
+    private ModelEffects(Map<String, Set<String>> implementers, Map<String, Set<String>> supers,
+                         Set<String> declared, Set<String> withCode, Set<String> changers,
+                         Set<String> reportReaders) {
         this.implementers = implementers;
+        this.supers = supers;
+        this.declared = declared;
         this.withCode = withCode;
         this.changers = changers;
         this.reportReaders = reportReaders;
+    }
+
+    /**
+     * Every method a call of {@code callee} may run, as {@code owner#name(descriptor)}: itself, the
+     * one it is inherited from where the class it names does not declare it, and what is declared
+     * below either. A class of the platform is not followed below: what its subclasses in the
+     * repository declare is not what a call of its method runs.
+     */
+    private static Set<String> resolved(String callee, Map<String, Set<String>> supers,
+                                        Set<String> declared,
+                                        Map<String, Set<String>> implementers) {
+        Set<String> found = new HashSet<>();
+        found.add(callee);
+        String owner = callee.substring(0, callee.indexOf('#'));
+        String member = callee.substring(callee.indexOf('#'));
+        if (owner.startsWith("java/")) {
+            return found;
+        }
+        String declaring = callee;
+        if (!declared.contains(callee)) {
+            for (String above : supers.getOrDefault(owner, Set.of())) {
+                if (declared.contains(above + member)) {
+                    declaring = above + member;
+                    found.add(declaring);
+                    break;
+                }
+            }
+        }
+        found.addAll(implementers.getOrDefault(declaring, Set.of()));
+        found.addAll(implementers.getOrDefault(callee, Set.of()));
+        return found;
     }
 
     /** The effects of the methods of {@code classes}, as {@link AMethod} says them. */
@@ -64,15 +103,20 @@ final class ModelEffects {
         }
         Map<String, Set<String>> implementers = new HashMap<>();
         Set<String> withCode = new HashSet<>();
+        Set<String> declared = new HashSet<>();
         for (ClassModel each : classes) {
             String owner = each.thisClass().asInternalName();
             for (MethodModel method : each.methods()) {
+                declared.add(AMethod.of(each, method));
                 if (method.code().isPresent()) {
                     withCode.add(AMethod.of(each, method));
                 }
                 if (overridable(method)) {
                     String self = AMethod.of(each, method);
                     for (String above : supers.get(owner)) {
+                        if (above.startsWith("java/")) {
+                            continue;
+                        }
                         implementers.computeIfAbsent(AMethod.of(above,
                                 method.methodName().stringValue(),
                                 method.methodType().stringValue()), k -> new HashSet<>())
@@ -84,6 +128,7 @@ final class ModelEffects {
         Map<String, Set<String>> calledBy = new HashMap<>();
         Set<String> changing = new HashSet<>();
         Set<String> reading = new HashSet<>();
+        Set<String> handingBack = new HashSet<>();
         for (ClassModel each : classes) {
             for (MethodModel method : each.methods()) {
                 if (method.code().isEmpty()) {
@@ -96,7 +141,8 @@ final class ModelEffects {
                             String owner = call.owner().asInternalName();
                             String name = call.name().stringValue();
                             boolean fromOutside = !each.thisClass().asInternalName()
-                                    .equals(ModelVocabulary.DB);
+                                    .equals(ModelVocabulary.DB) && !makesAModelOfItsOwn(each,
+                                    method);
                             if (fromOutside && owner.equals(ModelVocabulary.DB)
                                     && ModelVocabulary.DB_CHANGES.contains(name)) {
                                 changing.add(self);
@@ -106,8 +152,8 @@ final class ModelEffects {
                                 reading.add(self);
                             }
                             String callee = AMethod.of(owner, name, call.type().stringValue());
-                            calledBy.computeIfAbsent(callee, k -> new HashSet<>()).add(self);
-                            for (String target : implementers.getOrDefault(callee, Set.of())) {
+                            for (String target : resolved(callee, supers, declared,
+                                    implementers)) {
                                 calledBy.computeIfAbsent(target, k -> new HashSet<>()).add(self);
                             }
                         }
@@ -134,18 +180,48 @@ final class ModelEffects {
                             .contains(method.methodName().stringValue())) {
                         reading.add(AMethod.of(each, method));
                     }
+                    if (carriesReports(method)) {
+                        handingBack.add(AMethod.of(each, method));
+                    }
                 }
             }
         }
-        return new ModelEffects(implementers, withCode, close(changing, calledBy),
-                close(reading, calledBy));
+        Set<String> readers = close(reading, calledBy);
+        readers.addAll(handingBack);
+        return new ModelEffects(implementers, supers, declared, withCode,
+                close(changing, calledBy), readers);
     }
 
-    /** The methods the call of {@code callee} may run: itself and what is declared below it. */
+    /**
+     * Whether the method is of a model's own making: a constructor or a factory of the class, which
+     * work on the model they make and not on one that exists.
+     */
+    private static boolean makesAModelOfItsOwn(ClassModel each, MethodModel method) {
+        return each.thisClass().asInternalName().equals(ModelVocabulary.COMPILATION)
+                && (method.flags().has(AccessFlag.STATIC)
+                || method.methodName().stringValue().startsWith("<"));
+    }
+
+    /**
+     * Whether what the method hands back is made of what a model found, which is said by the types
+     * it names: the reports, the errors and the places they are told at, and the failure they
+     * make.
+     */
+    private static boolean carriesReports(MethodModel method) {
+        String generic = method.findAttribute(Attributes.signature())
+                .map(found -> found.signature().stringValue()).orElse("");
+        String said = method.methodTypeSymbol().returnType().descriptorString()
+                + generic.substring(generic.lastIndexOf(')') + 1);
+        String taken = method.methodType().stringValue().substring(0,
+                method.methodType().stringValue().lastIndexOf(')'))
+                + generic.substring(0, Math.max(0, generic.lastIndexOf(')')));
+        return ModelVocabulary.REPORT_CARRIERS.stream().anyMatch(said::contains)
+                && ModelVocabulary.REPORT_CARRIERS.stream().noneMatch(taken::contains);
+    }
+
+    /** The methods the call of {@code callee} may run: see {@link #resolved}. */
     Set<String> targets(String callee) {
-        Set<String> found = new HashSet<>(implementers.getOrDefault(callee, Set.of()));
-        found.add(callee);
-        return found;
+        return resolved(callee, supers, declared, implementers);
     }
 
     /** Whether {@code method} has a body among the classes. */

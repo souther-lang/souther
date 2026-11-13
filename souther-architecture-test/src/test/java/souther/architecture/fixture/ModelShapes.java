@@ -14,9 +14,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -819,6 +822,350 @@ public final class ModelShapes {
             Compilation model = stored;
             model.update(other, Set.of(), LocalDate.MIN);
             return AdequacyReport.of(stored);
+        }
+    }
+
+    /** Reads the structural reports of a model nobody answered. */
+    public static final class StructuralReportsOfAnUnasked {
+
+        private StructuralReportsOfAnUnasked() { }
+
+        public static boolean read(String source) {
+            return Compilation.ofSource(source, "Main").structuralReports().isEmpty();
+        }
+    }
+
+    /** Takes the structural failure of a model nobody answered. */
+    public static final class StructuralFailureOfAnUnasked {
+
+        private StructuralFailureOfAnUnasked() { }
+
+        public static boolean read(String source) {
+            return Compilation.ofSource(source, "Main").structuralFailure() == null;
+        }
+    }
+
+    /** Reads every report of the store of a model that was answered, and not checked. */
+    public static final class AllReportsOfAnAnswered {
+
+        private AllReportsOfAnAnswered() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.answerEverything();
+            return model.db().allReports().isEmpty();
+        }
+    }
+
+    /** Asks the store of a model that was answered, and reads what the answer reports. */
+    public static final class StoreAskOfAnAnswered {
+
+        private StoreAskOfAnAnswered() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.answerEverything();
+            return model.db().ask(new Adequacy.Witnesses("Main")).reports().isEmpty();
+        }
+    }
+
+    /** Makes a lambda that changes a model before it is asked about, and runs it after. */
+    public static final class LambdaCreatedBeforeTheAsk {
+
+        private LambdaCreatedBeforeTheAsk() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            Runnable later = () -> model.update(Map.of(), Set.of(), LocalDate.MIN);
+            TheDoor.compiles(model);
+            later.run();
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Changes a model through a method reference bound to it. */
+    public static final class BoundMethodRefChanges {
+
+        private BoundMethodRefChanges() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Function<LocalDate, Compilation> derive = model::writtenOn;
+            derive.apply(LocalDate.MIN);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Reads the warnings of a model nobody asked about through a method reference bound to it. */
+    public static final class BoundMethodRefReads {
+
+        private BoundMethodRefReads() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            Supplier<List<?>> warned = model::warnings;
+            return warned.get().isEmpty();
+        }
+    }
+
+    /** Reads the warnings of a model nobody asked about through a method reference to the class. */
+    public static final class UnboundMethodRefReads {
+
+        private UnboundMethodRefReads() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            Function<Compilation, List<?>> warned = Compilation::warnings;
+            return warned.apply(model).isEmpty();
+        }
+    }
+
+    /** Reads the report of a model nobody asked about by mapping a container of it. */
+    public static final class StaticMethodRefReads {
+
+        private StaticMethodRefReads() { }
+
+        public static boolean read(String source) {
+            return Optional.of(Compilation.ofSource(source, "Main")).map(AdequacyReport::of)
+                    .isEmpty();
+        }
+    }
+
+    /** Hands a model that is in a field to a function that changes it. */
+    public static final class FieldHandedToAConsumer {
+
+        private Compilation model;
+
+        public AdequacyReport read(String source) {
+            model = TheDoor.answered(source);
+            Consumer<Compilation> updater = each -> each.update(Map.of(), Set.of(), LocalDate.MIN);
+            updater.accept(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Puts a model in an array that is handed to a function that changes what is in it. */
+    public static final class BoxedInAnArray {
+
+        private BoxedInAnArray() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Object[] box = {model};
+            Consumer<Object[]> updater = held -> ((Compilation) held[0])
+                    .update(Map.of(), Set.of(), LocalDate.MIN);
+            updater.accept(box);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Puts a model in an Optional and changes it by what runs on what is in it. */
+    public static final class OptionalIfPresentChanges {
+
+        private OptionalIfPresentChanges() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Optional.of(model).ifPresent(each -> each.update(Map.of(), Set.of(), LocalDate.MIN));
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Puts a model in a stream and changes it by what runs on each element. */
+    public static final class StreamForEachChanges {
+
+        private StreamForEachChanges() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Stream.of(model).forEach(each -> each.update(Map.of(), Set.of(), LocalDate.MIN));
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Keeps a model and changes it when it is told to, with nothing handed to it. */
+    public static final class Holder {
+
+        private final Compilation held;
+
+        public Holder(Compilation held) {
+            this.held = held;
+        }
+
+        public void change() {
+            held.update(Map.of(), Set.of(), LocalDate.MIN);
+        }
+    }
+
+    /** Hands an asked-about model to something that keeps it, and has it changed. */
+    public static final class ChangedThroughAHolder {
+
+        private ChangedThroughAHolder() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Holder holder = new Holder(model);
+            holder.change();
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Something that is done, which is known by this name where it is run. */
+    public interface Action {
+
+        void act();
+    }
+
+    /** Changes an asked-about model from a class that is made on the spot. */
+    public static final class ChangedThroughAnAnonymousClass {
+
+        private ChangedThroughAnAnonymousClass() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            new Action() {
+                @Override
+                public void act() {
+                    model.update(Map.of(), Set.of(), LocalDate.MIN);
+                }
+            }.act();
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Changes the model of a field by a method that is handed nothing and gets it from a getter. */
+    public static final class ChangedThroughAGetter {
+
+        private Compilation model;
+
+        private Compilation current() {
+            return model;
+        }
+
+        private void change() {
+            current().update(Map.of(), Set.of(), LocalDate.MIN);
+        }
+
+        public AdequacyReport read(String source) {
+            model = TheDoor.answered(source);
+            change();
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Asks about a model it has a variable for, and has a method change the field it came from. */
+    public static final class AskedAliasOfAFieldChangedByAMethod {
+
+        private final Compilation stored = Compilation.ofSource("module a", "Main");
+
+        private void change() {
+            stored.update(Map.of(), Set.of(), LocalDate.MIN);
+        }
+
+        public AdequacyReport read() {
+            Compilation model = stored;
+            TheDoor.compiles(model);
+            change();
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Keeps the store of an asked-about model in a field, and has a method change it. */
+    public static final class DbKeptInAFieldThenChanged {
+
+        private Db store;
+
+        private void reset() {
+            store.forget(new SourceId("main.sou"), "main");
+        }
+
+        public AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            store = model.db();
+            reset();
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** A class that changes the model it is handed. */
+    public static class BaseChanger {
+
+        public void rewrite(Compilation model) {
+            model.update(Map.of(), Set.of(), LocalDate.MIN);
+        }
+    }
+
+    /** A class that does not say how the model is changed, which it inherits. */
+    public static final class SubChanger extends BaseChanger { }
+
+    /** Changes an asked-about model by a method the class it names inherits. */
+    public static final class ChangedThroughAnInheritedMethod {
+
+        private ChangedThroughAnInheritedMethod() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            new SubChanger().rewrite(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** An interface that changes the model it is handed, by a method it has a body for. */
+    public interface DefaultChanger {
+
+        default void rewrite(Compilation model) {
+            model.update(Map.of(), Set.of(), LocalDate.MIN);
+        }
+    }
+
+    /** A class that takes that method as it is. */
+    public static final class DefaultImpl implements DefaultChanger { }
+
+    /** Changes an asked-about model by a default method of an interface. */
+    public static final class ChangedThroughADefaultMethod {
+
+        private ChangedThroughADefaultMethod() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            new DefaultImpl().rewrite(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Reads the report of a model and fails before the ask that comes after, where it is caught. */
+    public static final class ThrownOnTheReadAndCaughtByTheCaller {
+
+        private ThrownOnTheReadAndCaughtByTheCaller() { }
+
+        private static boolean look(Compilation model) {
+            AdequacyReport report = AdequacyReport.of(model);
+            if (report == null) {
+                throw new IllegalStateException("none");
+            }
+            TheDoor.compiles(model);
+            return true;
+        }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            try {
+                return look(model);
+            } catch (IllegalStateException none) {
+                return true;
+            }
+        }
+    }
+
+    /** Keeps the look of a model through a check that the model is there. */
+    public static final class RequireNonNullKeepsTheAsk {
+
+        private RequireNonNullKeepsTheAsk() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Compilation same = Objects.requireNonNull(model);
+            return AdequacyReport.of(same);
         }
     }
 

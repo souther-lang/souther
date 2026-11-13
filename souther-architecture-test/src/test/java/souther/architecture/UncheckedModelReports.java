@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
@@ -45,7 +46,7 @@ import java.util.TreeSet;
 final class UncheckedModelReports {
 
     /** What was found: the methods refused, and how many methods read a model they asked about. */
-    record Findings(Set<String> refused, int asked) { }
+    record Findings(Set<String> refused, int asked, Map<String, String> why) { }
 
     private static final int ROUNDS = 100;
 
@@ -117,6 +118,7 @@ final class UncheckedModelReports {
             handed.addAll(walk.handedOn());
         }
         Set<String> refused = new TreeSet<>();
+        Map<String, String> why = new TreeMap<>();
         int asked = 0;
         for (Map.Entry<ModelWalk, ModelWalk.Result> each : results.entrySet()) {
             ModelWalk walk = each.getKey();
@@ -125,13 +127,18 @@ final class UncheckedModelReports {
                     .anyMatch(index -> !handed.contains(walk.key() + "#" + index));
             boolean theEngineHandsItIn = walk.engineRuns() && !result.readsParameter.isEmpty();
             if (result.unasked > 0 || result.lost > 0 || nobodyHandsItIn || theEngineHandsItIn) {
-                refused.add(AMethod.of(walk.owner(), walk.method()));
+                String method = AMethod.of(walk.owner(), walk.method());
+                refused.add(method);
+                why.put(method, "unasked " + result.unasked + ", origin lost " + result.lost
+                        + (nobodyHandsItIn ? ", a parameter nobody hands in" : "")
+                        + (theEngineHandsItIn ? ", a parameter the engine hands in" : "")
+                        + " " + result.notes.stream().limit(3).toList());
             }
             if (result.asked > 0) {
                 asked++;
             }
         }
-        return new Findings(refused, asked);
+        return new Findings(refused, asked, why);
     }
 
     private static ModelWalk.Facts factsOf(Map<ModelWalk, ModelWalk.Result> results) {
@@ -169,9 +176,11 @@ final class UncheckedModelReports {
             result.fieldFlows.forEach((parameter, flowing) -> fieldFlows
                     .computeIfAbsent(parameter, k -> new HashSet<>()).addAll(flowing));
         }
+        Set<String> changingMethods = new HashSet<>();
+        mutatesParameter.forEach(each -> changingMethods.add(each.substring(0,
+                each.lastIndexOf('#'))));
         return new ModelWalk.Facts(returns, returnsParameter, readsParameter,
                 readsReportParameter, readsStrictParameter, asksParameter, mutatesParameter,
-                leavesAsked, fields,
-                fieldFlows);
+                leavesAsked, fields, fieldFlows, changingMethods);
     }
 }
