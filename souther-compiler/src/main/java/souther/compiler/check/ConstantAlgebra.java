@@ -14,7 +14,7 @@ import net.unit8.notation199x.pattern.PatternMeaning;
 import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.regex.Recognizer;
-import net.unit8.notation199x.Normalization;
+import souther.compiler.values.JoinedText;
 import net.unit8.notation199x.ScalarValues;
 
 /**
@@ -99,11 +99,11 @@ final class ConstantAlgebra {
             case ADD, SUB, MUL -> arith(op, a, b);
             // `++` appends two strings or two lists (spec §an-operator-takes-the-types-it-is-defined-for);
             // the string case folds, and a list is not a constant here to begin with. Canonicalized,
-            // the same seam String.append/Strings.append has: a folded `"a" ++ pad` and the same
-            // expression run at the runtime it would otherwise be compiled to cannot answer
-            // differently just because one of them happened at compile time.
+            // the join is what Strings.append answers, length checks and limit included, so a fold
+            // and the run cannot answer differently just because one of them happened at compile
+            // time. Where the run ends, there is no constant.
             case CONCAT -> a instanceof String x && b instanceof String y
-                    ? Optional.of(Normalization.nfc(x + y)) : Optional.empty();
+                    ? JoinedText.of(x, y).map(text -> (Object) text) : Optional.empty();
             case DIV -> quotient(a, b);
             // Answered above as what it placed. Written out rather than left to a default, because
             // what would arrive here is the partition above having admitted a comparison into the

@@ -336,8 +336,18 @@ public final class Strings {
 
     /** {@link #append(String, String)}, passing {@code checkpoint} as it goes. */
     public static String append(String a, String b, WorkCheckpoint checkpoint) {
-        holds(length(a, checkpoint) + length(b, checkpoint), "String.append");
-        return canonical(a + b, "String.append", checkpoint);
+        return append(a, b, LONGEST_TEXT, checkpoint);
+    }
+
+    /** {@link #append(String, String)} for a {@code String} of {@code longest} code points at most:
+     *  this is what a test that cannot build text that long asks of it. */
+    static String append(String a, String b, long longest) {
+        return append(a, b, longest, WorkCheckpoint.NONE);
+    }
+
+    private static String append(String a, String b, long longest, WorkCheckpoint checkpoint) {
+        holds(length(a, checkpoint) + length(b, checkpoint), "String.append", longest);
+        return canonical(a + b, "String.append", longest, checkpoint);
     }
 
     /** Joins with a separator ({@code join(["a", "b"], "-") == "a-b"}). Canonicalized for the same
