@@ -2647,7 +2647,9 @@ final class Pullback {
         if (already != null && already.at() == bound.at()) {
             return already.range();
         }
-        FormRange range = exactRangeOf(bound.value(), bound.at(), known);
+        FormRange range = read.derived(RangesOfNames.class, _ -> new RangesOfNames()).of(
+                bound.value(), bound.at(),
+                () -> spendingNothing(() -> exactRangeOf(bound.value(), bound.at(), known)));
         known.put(name, new RangeOfAName(bound.at(), range));
         return range;
     }
@@ -13664,7 +13666,7 @@ final class Pullback {
      * <p>A reading taken again charges nothing, so one that was charged is not one to take again:
      * the figure would be spent once by the reading and not at all by the ones that took it.
      */
-    private record Spendless<R>(R value, boolean spentNothing) {}
+    record Spendless<R>(R value, boolean spentNothing) {}
 
     private <R> Spendless<R> spendingNothing(Supplier<R> reading) {
         long before = readingsLeft;
