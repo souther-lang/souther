@@ -15,11 +15,14 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -72,6 +75,23 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         });
     }
 
+    /**
+     * This, the range of {@code form} {@link #ofNumbers} answered, held to what the declarations
+     * say of the form as a whole ({@link #within}) where every number it is over is a number of
+     * the input: a value of the input exists only where its rules held, so the numbers a run works
+     * out of it lie where they leave them. This as it is where some number is anything else.
+     */
+    FormRange heldWhereItIsOfTheInput(LinearForm<Quantity> form, InputReading read) {
+        Map<NumericTerm, ExactRatio> terms = new LinkedHashMap<>();
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(var term, var _))
+                    || terms.put(term, each.getValue()) != null) {
+                return this;
+            }
+        }
+        return within(new LinearForm<>(form.constant(), terms), read, Map.of());
+    }
+
     /** How many elements of a container meet something: none at the fewest, and no more than a
      *  container holds ({@link GetsPast#MOST_ELEMENTS}). */
     private static final FormRange OF_A_COUNT = new FormRange(ExactRatio.ZERO,
@@ -92,7 +112,55 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         if (aTotal(term)) {
             return null;
         }
-        return read.quantities().answersFor(term) ? endsOf(term, read) : null;
+        if (!read.quantities().answersFor(term)) {
+            return null;
+        }
+        FormRange ends = endsOf(term, read);
+        FormRange quotient = aQuotientOfThePlace(term, read);
+        return ends == null || quotient == null ? ends : ends.meet(quotient);
+    }
+
+    /**
+     * The numbers a quotient truncated toward nought of the value at a place by a divisor the
+     * reading has comes to, where {@code term} is one ({@link TakenAs.TheTruncatingQuotient}): what
+     * the value there comes to, as the rules of the input leave it, divided and truncated. Dividing
+     * by a number above nought keeps the order of what it divides and below nought turns it, and
+     * truncating keeps it either way, so the ends come to the ends. Null where {@code term} is no
+     * such quotient, or the value's numbers are not known.
+     */
+    private static FormRange aQuotientOfThePlace(NumericTerm term, InputReading read) {
+        if (!(term instanceof NumericTerm.TakenOf taken)
+                || !(taken.takenAs() instanceof TakenAs.TheTruncatingQuotient quotient)
+                || !(taken.transformation() instanceof ValueTransformation.Identity)) {
+            return null;
+        }
+        BigDecimal by = quotient.read(taken.arguments());
+        if (by == null || by.signum() == 0) {
+            return null;
+        }
+        NumericTerm dividend = new NumericTerm.ValueOf(taken.position());
+        FormRange of = read.quantities().answersFor(dividend) ? endsOf(dividend, read) : null;
+        if (of == null) {
+            return null;
+        }
+        of = of.within(LinearForm.weighing(dividend, ExactRatio.ONE), read, Map.of());
+        ExactRatio divisor = ExactRatio.of(by);
+        ExactRatio one = truncated(of.least.dividedBy(divisor).orNull());
+        ExactRatio other = truncated(of.greatest.dividedBy(divisor).orNull());
+        if (one == null || other == null) {
+            return null;
+        }
+        return one.compareTo(other) <= 0 ? new FormRange(one, other) : new FormRange(other, one);
+    }
+
+    /** {@code number} with what is past its whole number dropped, toward nought; null where it is
+     *  null. */
+    private static ExactRatio truncated(ExactRatio number) {
+        if (number == null) {
+            return null;
+        }
+        BigInteger whole = (number.signum() < 0 ? number.ceiling() : number.floor()).orNull();
+        return whole == null ? null : ExactRatio.of(whole);
     }
 
     /**
@@ -294,6 +362,24 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         ExactRatio below = dividend.least.negated();
         ExactRatio farthest = below.compareTo(dividend.greatest) > 0 ? below : dividend.greatest;
         return new FormRange(farthest.negated(), farthest);
+    }
+
+    /**
+     * The whole numbers a number {@code range} holds is rounded to, whichever way it is rounded:
+     * from the greatest whole number at most its least to the least at least its greatest. Every
+     * way rounds a number to one of the two whole numbers either side of it. Null where
+     * {@code range} is, or the exact arithmetic cannot hold an end.
+     */
+    static FormRange roundedEitherWay(FormRange range) {
+        BigInteger from = range == null ? null : range.least.floor().orNull();
+        BigInteger to = range == null ? null : range.greatest.ceiling().orNull();
+        return from == null || to == null ? null
+                : new FormRange(ExactRatio.of(from), ExactRatio.of(to));
+    }
+
+    /** Whether {@code number} lies from the least this holds to the greatest. */
+    boolean holds(ExactRatio number) {
+        return least.compareTo(number) <= 0 && greatest.compareTo(number) >= 0;
     }
 
     /** Whether every number this holds lies from {@code least} to {@code greatest}. */

@@ -65,6 +65,7 @@ import souther.compiler.numeric.Today;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.UsualPlace;
+import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.observe.Figure;
@@ -94,7 +95,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.IntPredicate;
-import java.util.function.IntUnaryOperator;
 import java.util.function.Supplier;
 import java.util.Map;
 import java.util.Objects;
@@ -964,7 +964,7 @@ public final class Partitions {
             PredicateOrigin origin = each.statement().origin();
             found.regionUndetermined(origin.cited(), origin.readAt(),
                     new FilingCoordinate.AtPosition(term.position()), each.open(),
-                    each.statement().operations(), each.byCodePoints());
+                    each.operations(), each.byCodePoints());
         }
         // What a reader is told about the rules the classes were not composed out of. The account
         // for them is above, with every other rule's — this is the sentence, and only where the
@@ -4101,14 +4101,15 @@ public final class Partitions {
 
     /**
      * The strings that {@code through} makes into a string {@code meaning} accepts, so far as every
-     * one of them is known to be: the strings of the ASCII range, where a case conversion maps one
-     * code point to one and the same one however it stands among the others.
+     * one of them is known to be: the strings of the code points the conversion is exactly a map
+     * on ({@link CodeMap}), which it maps one code point to one and the same one however it stands
+     * among the others.
      *
-     * <p>Not the strings of the whole range. What a conversion makes of a text is the run time's full
-     * Unicode mapping and then NFC ({@link CaseMapping}), which a code point does not carry alone:
-     * a letter followed by a mark composes into another. So the symbols past the ASCII range are
-     * left out, which loses strings and never admits one that is not, and a pattern whose strings
-     * are all outside it is the empty language — the question has no answer there, and says so by
+     * <p>Not the strings of every code point. What a conversion makes of a text is the run time's
+     * full Unicode mapping and then NFC ({@link CaseMapping}), which a code point outside the map
+     * does not carry alone: a letter followed by a mark composes into another. So those are left
+     * out, which loses strings and never admits one that is not, and a pattern whose strings are
+     * all outside the map is the empty language — the question has no answer there, and says so by
      * offering nothing.
      */
     private static PatternMeaning beforeConversion(PatternMeaning meaning, CaseMapping through) {
@@ -4127,29 +4128,12 @@ public final class Partitions {
     }
 
     /**
-     * The code points of the ASCII range that {@code through} makes into one of {@code held}: what
-     * the outermost conversion makes of a code point is what the one inside it is then asked of.
+     * The code points {@code through} makes into one of {@code held} wherever they stand: those of
+     * the domain of the map the conversion is exactly ({@link CodeMap}) that it sends to one of
+     * them. A string of only these is converted code point by code point.
      */
     private static CodePoints before(CodePoints held, CaseMapping through) {
-        return switch (through) {
-            case CaseMapping.None _ -> held;
-            case CaseMapping.Lowercase lowercase -> before(asciiMadeInto(held,
-                    each -> each >= 'A' && each <= 'Z' ? each + ('a' - 'A') : each),
-                    lowercase.of());
-            case CaseMapping.Uppercase uppercase -> before(asciiMadeInto(held,
-                    each -> each >= 'a' && each <= 'z' ? each - ('a' - 'A') : each),
-                    uppercase.of());
-        };
-    }
-
-    private static CodePoints asciiMadeInto(CodePoints held, IntUnaryOperator convert) {
-        CodePoints out = CodePoints.NONE;
-        for (int each = 0; each < 128; each++) {
-            if (held.has(convert.applyAsInt(each))) {
-                out = out.or(CodePoints.of(each));
-            }
-        }
-        return out;
+        return through.equals(CaseMapping.NONE) ? held : CaseMaps.of(through).preimage(held);
     }
 
     /**
@@ -4166,7 +4150,7 @@ public final class Partitions {
 
     /**
      * Whether {@code through} leaves {@code text} as it is, so far as that is known of every string:
-     * the code points of the ASCII range each of which is made into itself.
+     * the code points the conversion is exactly a map on, each of which is made into itself.
      *
      * <p>For a caller that prefers a string of the input to be the string it is made into, where
      * it can be: the least string that is made into a text is a string of capitals for a text of
