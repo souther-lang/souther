@@ -145,7 +145,8 @@ class AFoldAnswersWhatTheRunTimeAnswersTest {
         List<Object> values = new ArrayList<>(TEXTS);
         values.addAll(List.of(0L, 1L, 2L));
         values.addAll(List.of(new BigDecimal("0.25"), new BigDecimal("1.50"), new BigDecimal("-3"),
-                new BigDecimal("1E+3")));
+                new BigDecimal("1E+3"), new BigDecimal("1E+2000000000"),
+                new BigDecimal("1E-2000000000")));
         List<List<Object>> out = new ArrayList<>();
         for (Object a : values) {
             out.add(List.of(a));
