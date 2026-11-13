@@ -182,7 +182,12 @@ public final class CanonicalForm<A> {
      *         typed — so the pair is named rather than chosen between
      */
     public List<Map.Entry<A, ExactRatio>> entriesIn(CanonicalOrder<A> order) {
-        return order.walking(coefs.entrySet(), Map.Entry::getKey);
+        return order.walkOf(this, () -> order.walking(coefs.entrySet(), Map.Entry::getKey));
+    }
+
+    /** Whether every position this form names is one of {@code positions}. */
+    boolean namesOnly(Set<A> positions) {
+        return positions.containsAll(coefs.keySet());
     }
 
     /** The positions this form weighs, in the one order {@code order} puts them in — see

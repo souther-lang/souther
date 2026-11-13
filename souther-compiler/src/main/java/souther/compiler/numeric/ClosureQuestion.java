@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
 /**
@@ -212,6 +213,17 @@ final class ClosureQuestion<A> {
             @Override
             public ToIntFunction<A> placeOf() {
                 return ClosureQuestion.this::placeOf;
+            }
+
+            /**
+             * The same comparison as {@code placedBy} over every position a form of these rules
+             * names, so the walk of such a form is the one {@code placedBy} keeps. A form that names
+             * a position none of the rules weighs is walked here, and refused, whatever was kept.
+             */
+            @Override
+            public List<Map.Entry<A, ExactRatio>> walkOf(
+                    CanonicalForm<A> form, Supplier<List<Map.Entry<A, ExactRatio>>> walk) {
+                return form.namesOnly(place.keySet()) ? placedBy.walkOf(form, walk) : walk.get();
             }
         };
     }

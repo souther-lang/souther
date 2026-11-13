@@ -7,9 +7,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The walk of a form is worked out once for each order it is asked under, and is the walk the form
  * itself gives.
  *
- * <p>What a walk is settled by is the form and the order, so a table that keeps what it has been
+ * <p>What a walk is settled by is the form and the order, so an order that keeps what it has been
  * asked answers the next asking from what it kept. Held here: that what comes back is
  * {@link CanonicalForm#entriesIn} in the same entries in the same order, that an order is not mixed
  * up with another, that a walk which is refused is refused each time, and that the order is put to
@@ -44,14 +44,12 @@ class AFormsWalkIsKeptForTheOrderItWasAskedUnderTest {
     @Test
     void aFormAskedAgainIsWalkedFromWhatWasKept() {
         AtomicInteger comparisons = new AtomicInteger();
-        CanonicalOrder<String> order = counting(comparisons);
-        Function<CanonicalForm<String>, List<Map.Entry<String, ExactRatio>>> walks =
-                ClosedStates.kept().walksIn(order);
+        CanonicalOrder<String> order = ClosedStates.kept().kept(counting(comparisons));
         CanonicalForm<String> form = form("c", "3", "a", "1", "d", "-2", "b", "5");
 
-        List<Map.Entry<String, ExactRatio>> first = walks.apply(form);
+        List<Map.Entry<String, ExactRatio>> first = form.entriesIn(order);
         int afterTheFirst = comparisons.get();
-        List<Map.Entry<String, ExactRatio>> second = walks.apply(form);
+        List<Map.Entry<String, ExactRatio>> second = form.entriesIn(order);
 
         assertTrue(afterTheFirst > 0, "the first asking walked the form");
         assertEquals(afterTheFirst, comparisons.get(), "the second asking put the order to its"
@@ -62,13 +60,13 @@ class AFormsWalkIsKeptForTheOrderItWasAskedUnderTest {
     @Test
     void anEqualFormWrittenApartIsTheSameWalk() {
         AtomicInteger comparisons = new AtomicInteger();
-        Function<CanonicalForm<String>, List<Map.Entry<String, ExactRatio>>> walks =
-                ClosedStates.kept().walksIn(counting(comparisons));
+        CanonicalOrder<String> order = ClosedStates.kept().kept(counting(comparisons));
 
-        List<Map.Entry<String, ExactRatio>> first = walks.apply(form("c", "3", "a", "1", "b", "5"));
+        List<Map.Entry<String, ExactRatio>> first =
+                form("c", "3", "a", "1", "b", "5").entriesIn(order);
         int afterTheFirst = comparisons.get();
         List<Map.Entry<String, ExactRatio>> second =
-                walks.apply(form("b", "5", "c", "3", "a", "1"));
+                form("b", "5", "c", "3", "a", "1").entriesIn(order);
 
         assertEquals(afterTheFirst, comparisons.get());
         assertEquals(first, second);
@@ -78,10 +76,8 @@ class AFormsWalkIsKeptForTheOrderItWasAskedUnderTest {
     void whatIsKeptIsTheWalkTheFormGives() {
         Random dice = new Random(2680);
         List<String> positions = List.of("a", "b", "cc", "x", "y", "zz", "m", "n");
-        ClosedStates kept = ClosedStates.kept();
         CanonicalOrder<String> order = CanonicalOrder.asTheyAreSpelled();
-        Function<CanonicalForm<String>, List<Map.Entry<String, ExactRatio>>> walks =
-                kept.walksIn(order);
+        CanonicalOrder<String> kept = ClosedStates.kept().kept(order);
         for (int round = 0; round < 300; round++) {
             Map<String, ExactRatio> coefs = new LinkedHashMap<>();
             int howMany = 1 + dice.nextInt(positions.size());
@@ -91,8 +87,8 @@ class AFormsWalkIsKeptForTheOrderItWasAskedUnderTest {
             }
             CanonicalForm<String> form = new CanonicalForm<>(coefs);
 
-            assertEquals(form.entriesIn(order), walks.apply(form), "asked first");
-            assertEquals(form.entriesIn(order), walks.apply(form), "asked again");
+            assertEquals(form.entriesIn(order), form.entriesIn(kept), "asked first");
+            assertEquals(form.entriesIn(order), form.entriesIn(kept), "asked again");
         }
     }
 
@@ -100,46 +96,55 @@ class AFormsWalkIsKeptForTheOrderItWasAskedUnderTest {
      *  the other. */
     @Test
     void anotherOrderIsAnotherWalk() {
-        ClosedStates kept = ClosedStates.kept();
-        CanonicalOrder<String> forwards = CanonicalOrder.asTheyAreSpelled();
-        CanonicalOrder<String> backwards = (one, other) -> other.compareTo(one);
+        ClosedStates table = ClosedStates.kept();
+        CanonicalOrder<String> forwards = table.kept(CanonicalOrder.asTheyAreSpelled());
+        CanonicalOrder<String> backwards = table.kept((one, other) -> other.compareTo(one));
         CanonicalForm<String> form = form("c", "3", "a", "1", "b", "5");
 
-        List<Map.Entry<String, ExactRatio>> up = kept.walksIn(forwards).apply(form);
-        List<Map.Entry<String, ExactRatio>> down = kept.walksIn(backwards).apply(form);
+        List<Map.Entry<String, ExactRatio>> up = form.entriesIn(forwards);
+        List<Map.Entry<String, ExactRatio>> down = form.entriesIn(backwards);
 
         assertEquals(List.of("a", "b", "c"), up.stream().map(Map.Entry::getKey).toList());
         assertEquals(List.of("c", "b", "a"), down.stream().map(Map.Entry::getKey).toList());
-        assertEquals(up, kept.walksIn(forwards).apply(form));
-        assertEquals(down, kept.walksIn(backwards).apply(form));
+        assertEquals(up, form.entriesIn(forwards));
+        assertEquals(down, form.entriesIn(backwards));
     }
 
     /** Two positions an order cannot tell apart are refused as they are by the form, each time. */
     @Test
     void aWalkThatIsRefusedIsRefusedEachTimeItIsAsked() {
-        CanonicalOrder<String> byLength = (one, other) -> Integer.compare(one.length(),
-                other.length());
-        Function<CanonicalForm<String>, List<Map.Entry<String, ExactRatio>>> walks =
-                ClosedStates.kept().walksIn(byLength);
+        CanonicalOrder<String> byLength = ClosedStates.kept().kept(
+                (one, other) -> Integer.compare(one.length(), other.length()));
         CanonicalForm<String> tied = form("a", "1", "b", "1");
 
-        assertThrows(IllegalStateException.class, () -> walks.apply(tied));
-        assertThrows(IllegalStateException.class, () -> walks.apply(tied));
+        assertThrows(IllegalStateException.class, () -> tied.entriesIn(byLength));
+        assertThrows(IllegalStateException.class, () -> tied.entriesIn(byLength));
     }
 
     @Test
     void aTableThatKeepsNothingWalksTheFormEachTime() {
         AtomicInteger comparisons = new AtomicInteger();
-        Function<CanonicalForm<String>, List<Map.Entry<String, ExactRatio>>> walks =
-                ClosedStates.NONE.walksIn(counting(comparisons));
+        CanonicalOrder<String> asked = counting(comparisons);
+        CanonicalOrder<String> order = ClosedStates.NONE.kept(asked);
         CanonicalForm<String> form = form("c", "3", "a", "1", "b", "5");
 
-        List<Map.Entry<String, ExactRatio>> first = walks.apply(form);
+        assertSame(asked, order, "a table that keeps nothing hands the order back");
+        List<Map.Entry<String, ExactRatio>> first = form.entriesIn(order);
         int afterTheFirst = comparisons.get();
-        List<Map.Entry<String, ExactRatio>> second = walks.apply(form);
+        List<Map.Entry<String, ExactRatio>> second = form.entriesIn(order);
 
         assertEquals(2 * afterTheFirst, comparisons.get());
         assertEquals(first, second);
+    }
+
+    /** An order already kept is not kept again, and one order is one entry however often asked. */
+    @Test
+    void anOrderIsKeptOnce() {
+        ClosedStates table = ClosedStates.kept();
+        CanonicalOrder<String> order = CanonicalOrder.asTheyAreSpelled();
+
+        assertSame(table.kept(order), table.kept(order));
+        assertSame(table.kept(order), table.kept(table.kept(order)));
     }
 
     /**

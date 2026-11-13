@@ -190,7 +190,7 @@ public final class NumericDomain<A> {
      */
     public static <A> NumericDomain<A> top(CanonicalOrder<A> order, ClosedStates closedStates) {
         return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(),
-                false, order, closedStates, null, null);
+                false, closedStates.kept(order), closedStates, null, null);
     }
 
     /**
@@ -206,7 +206,7 @@ public final class NumericDomain<A> {
     private List<AffineConstraint<A>> rules() {
         RulesRead<A> had = read;
         if (had == null) {
-            had = new RulesRead<>(stated, readFrom(stated, readBefore));
+            had = readFrom(stated, readBefore);
             read = had;
         }
         return had.rules();
@@ -248,14 +248,43 @@ public final class NumericDomain<A> {
      * saying more holds the other's composition at the left of its own, which is how the rules said
      * since are found without comparing anything.
      */
-    private record RulesRead<A>(StatedRules<A> of, List<AffineConstraint<A>> rules) {}
+    private record RulesRead<A>(StatedRules<A> of, List<AffineConstraint<A>> rules,
+                                AppendOnly<RuleKey<A>, Integer> places) {
+
+        /**
+         * The rule among these that {@code rule} is said again of, or null where there is none: the
+         * sum over the same form, or the very rule.
+         *
+         * <p>Found by {@link #places}, so that what a rule said after the others finds is a lookup
+         * and not a walk of every rule said before it.
+         */
+        AffineConstraint<A> among(AffineConstraint<A> rule) {
+            Integer at = places.get(RuleKey.of(rule));
+            return at == null ? null : rules.get(at);
+        }
+    }
+
+    /** What a rule is found by among the rules read. */
+    private sealed interface RuleKey<A> {
+
+        /** A sum held below a bound: its form, which has one place however much tighter its bound
+         *  comes to. */
+        record OfSum<A>(CanonicalForm<A> form) implements RuleKey<A> {}
+
+        /** Any other rule: the rule itself. */
+        record OfRule<A>(AffineConstraint<A> rule) implements RuleKey<A> {}
+
+        static <A> RuleKey<A> of(AffineConstraint<A> rule) {
+            return rule instanceof AffineConstraint.HalfSpace<A> half
+                    ? new OfSum<>(half.form()) : new OfRule<>(rule);
+        }
+    }
 
     /**
      * {@code stated} read, onto {@code before} where {@code stated} is {@code before}'s rules
      * followed by others, and from the start otherwise.
      */
-    private static <A> List<AffineConstraint<A>> readFrom(StatedRules<A> stated,
-                                                          RulesRead<A> before) {
+    private static <A> RulesRead<A> readFrom(StatedRules<A> stated, RulesRead<A> before) {
         if (before != null) {
             Deque<StatedRules<A>> since = new ArrayDeque<>();
             StatedRules<A> at = stated;
@@ -264,20 +293,25 @@ public final class NumericDomain<A> {
                 at = both.left();
             }
             if (at == before.of()) {
-                List<AffineConstraint<A>> out = before.rules();
+                RulesRead<A> out = before;
                 while (!since.isEmpty()) {
                     for (AffineConstraint<A> rule : since.pop().distinct()) {
                         out = readOnto(out, rule);
                     }
                 }
-                return out;
+                return new RulesRead<>(stated, out.rules(), out.places());
             }
         }
-        return tightest(stated.distinct());
+        List<AffineConstraint<A>> rules = tightest(stated.distinct());
+        AppendOnly<RuleKey<A>, Integer> places = AppendOnly.empty();
+        for (int at = 0; at < rules.size(); at++) {
+            places = places.with(RuleKey.of(rules.get(at)), at);
+        }
+        return new RulesRead<>(stated, rules, places);
     }
 
     /**
-     * {@code rules}, which are {@link #tightest} of the distinct rules said so far, with
+     * The rules of {@code read}, which are {@link #tightest} of the distinct rules said so far, with
      * {@code rule} said after them — what {@link #tightest} of the distinct rules with it comes to.
      *
      * <p>A rule other than a sum held below a bound is in the distinct rules exactly where it is in
@@ -285,28 +319,28 @@ public final class NumericDomain<A> {
      * sum held below a bound needs no asking: its form has one bound here, the tightest of those
      * said, and the tighter of that and one already among them is that one.
      */
-    private static <A> List<AffineConstraint<A>> readOnto(List<AffineConstraint<A>> rules,
-                                                          AffineConstraint<A> rule) {
-        if (rule instanceof AffineConstraint.HalfSpace<A> half) {
-            for (int at = 0; at < rules.size(); at++) {
-                if (rules.get(at) instanceof AffineConstraint.HalfSpace<A> held
-                        && held.form().equals(half.form())) {
-                    ExactCut kept = ExactCut.tighterUpper(held.bound(), half.bound());
-                    if (kept.equals(held.bound())) {
-                        return rules;
-                    }
-                    List<AffineConstraint<A>> out = new ArrayList<>(rules);
-                    out.set(at, new AffineConstraint.HalfSpace<>(half.form(), kept));
-                    return List.copyOf(out);
-                }
+    private static <A> RulesRead<A> readOnto(RulesRead<A> read, AffineConstraint<A> rule) {
+        List<AffineConstraint<A>> rules = read.rules();
+        AffineConstraint<A> held = read.among(rule);
+        if (held != null) {
+            if (!(rule instanceof AffineConstraint.HalfSpace<A> half)
+                    || !(held instanceof AffineConstraint.HalfSpace<A> was)) {
+                return read;
             }
-        } else if (rules.contains(rule)) {
-            return rules;
+            ExactCut kept = ExactCut.tighterUpper(was.bound(), half.bound());
+            if (kept.equals(was.bound())) {
+                return read;
+            }
+            List<AffineConstraint<A>> out = new ArrayList<>(rules);
+            out.set(read.places().get(RuleKey.of(half)),
+                    new AffineConstraint.HalfSpace<>(half.form(), kept));
+            return new RulesRead<>(read.of(), List.copyOf(out), read.places());
         }
         List<AffineConstraint<A>> out = new ArrayList<>(rules.size() + 1);
         out.addAll(rules);
         out.add(rule);
-        return List.copyOf(out);
+        return new RulesRead<>(read.of(), List.copyOf(out),
+                read.places().with(RuleKey.of(rule), rules.size()));
     }
 
     /**
@@ -430,7 +464,7 @@ public final class NumericDomain<A> {
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
         RulesRead<A> known = readLent();
-        if (known != null && alreadyAmong(known.rules(), rule)) {
+        if (known != null && alreadyAmong(known, rule)) {
             return this;
         }
         return new NumericDomain<>(stated.and(StatedRules.of(rule)), spaces, false, order,
@@ -444,18 +478,14 @@ public final class NumericDomain<A> {
      * <p>Asked of rules read from a prefix of the ones this domain states, so that a rule found here
      * is one every reading of the whole holds as well, and a rule not found settles nothing.
      */
-    private static <A> boolean alreadyAmong(List<AffineConstraint<A>> read,
-                                            AffineConstraint<A> rule) {
-        if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
-            return read.contains(rule);
+    private static <A> boolean alreadyAmong(RulesRead<A> read, AffineConstraint<A> rule) {
+        AffineConstraint<A> held = read.among(rule);
+        if (held == null) {
+            return false;
         }
-        for (AffineConstraint<A> each : read) {
-            if (each instanceof AffineConstraint.HalfSpace<A> held
-                    && held.form().equals(half.form())) {
-                return ExactCut.tighterUpper(held.bound(), half.bound()).equals(held.bound());
-            }
-        }
-        return false;
+        return !(rule instanceof AffineConstraint.HalfSpace<A> half
+                && held instanceof AffineConstraint.HalfSpace<A> was)
+                || ExactCut.tighterUpper(was.bound(), half.bound()).equals(was.bound());
     }
 
     /**
@@ -1315,10 +1345,36 @@ public final class NumericDomain<A> {
      *                  ranges either, which holds less than this does
      */
     private ExactCut highestProven(Goal<A> goal, boolean withRules) {
+        if (withRules) {
+            PrefixBasis.Highest exact = highestInTheBasis(goal);
+            if (exact instanceof PrefixBasis.Highest.Within within) {
+                return within.at();
+            }
+            if (exact instanceof PrefixBasis.Highest.Unbounded) {
+                return null;
+            }
+        }
         FormReach<A> reading = readingFor(goal.coefs());
         return withRules
                 ? reading.most(goal.coefs(), goal.constant())
                 : reading.mostFromTheEndsAndTheDifferences(goal.coefs(), goal.constant());
+    }
+
+    /**
+     * What the closure weighing every position of the goal leaves it, where that closure was made
+     * in a {@link PrefixBasis} and the goal is a form that basis answers; not answered where it was
+     * not, where the positions are of no part or of several, and where the basis does not answer
+     * the form — in each of which the rules as they are stated are asked.
+     *
+     * <p>A rule of another part names none of the goal's positions and bounds the goal no tighter
+     * than the part's own rules do, so the answer of the one part is the answer of all the rules.
+     * And it is the same answer however the closures are kept, a table that keeps nothing and one
+     * that keeps a part at a time giving a domain the same rules the same to say.
+     */
+    private PrefixBasis.Highest highestInTheBasis(Goal<A> goal) {
+        ClosedState<A> closure = parted().closureWeighing(goal.coefs().keySet());
+        return closure == null ? PrefixBasis.Highest.NOT_ANSWERED
+                : closure.highestInBasis(goal.coefs(), goal.constant());
     }
 
     /**
@@ -1337,7 +1393,7 @@ public final class NumericDomain<A> {
             ClosedState<A> part = parted.partWeighing(atom);
             if (part != null) {
                 return FormReach.over(parted.rulesOfThePartWeighing(atom), part.box(),
-                        part.differences(), order, closedStates.walksIn(order));
+                        part.differences(), order);
             }
         }
         return reading();
@@ -1355,8 +1411,7 @@ public final class NumericDomain<A> {
         FormReach<A> had = reach;
         if (had == null) {
             ClosedState<A> state = closed();
-            had = FormReach.over(rules(), state.sided(), state.box(), state.differences(), order,
-                    closedStates.walksIn(order));
+            had = FormReach.over(rules(), state.sided(), state.box(), state.differences(), order);
             reach = had;
         }
         return had;
