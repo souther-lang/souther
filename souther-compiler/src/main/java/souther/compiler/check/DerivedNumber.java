@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -157,13 +158,7 @@ record DerivedNumber(RuleKey position, ValueName operation, TakenArguments argum
      * and nothing between them, so a hole in it is a rule nothing reads.
      */
     boolean holdsItsHolesAsRuns() {
-        return how() instanceof TakenAs.HowManyItHolds && isTheLengthOfAString(operation);
-    }
-
-    /** Whether {@code operation} answers how many code points a string has. */
-    static boolean isTheLengthOfAString(ValueName operation) {
-        return operation instanceof ValueName.Stdlib library
-                && library.alias().equals("String") && library.name().equals("length");
+        return RepresentationBounds.isTheLengthOfAString(operation);
     }
 
     /**

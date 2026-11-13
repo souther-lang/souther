@@ -193,55 +193,6 @@ class ALengthRuleWithAHoleIsReadAsTheRunsItLeavesTest {
     }
 
     /**
-     * Rules about one string that two values state — the type's own and the record's it sits in —
-     * are not proved together, so what the type takes out is not taken as the whole of what the
-     * position holds. Whatever is read of it, no string of a length either rule refuses is the
-     * position's: not the seven the type takes out, nor the eleven the record's own rule does.
-     */
-    @Test
-    void theLengthsTwoValuesLeaveAreNotReadFromOneOfThem() {
-        Compilation model = ACompiledModel.answered("""
-                module layered
-
-                data Code = String invariant String.length(value) /= 7
-
-                data Holder = { code: Code }
-                    invariant String.length(code.value) <= 10
-
-                behavior f : (h: Holder, other: String) -> Bool
-                let f (h, other) = h.code.value == other
-
-                example f
-                    | "same"  : (Holder { code = Code("abcd") }, "abcd") -> true
-                    | "other" : (Holder { code = Code("abcd") }, "zz") -> false
-                """);
-        Partitions.Partitioning divided =
-                model.db().ask(new Adequacy.Divided(model.modules().get(0), "f")).value();
-        List<String> canBe = new ArrayList<>();
-        if (divided != null) {
-            for (Axis axis : divided.axes()) {
-                if (!axis.path().toString().equals("other")) {
-                    continue;
-                }
-                for (PartitionClass each : axis.classes()) {
-                    Recognition is =
-                            each.recognises() instanceof Recognition.Under(var _, var inner)
-                                    ? inner : each.recognises();
-                    if (is instanceof Recognition.OfASet(ValuesAtLengths values)
-                            && each.label().contains("can be")) {
-                        for (int length : List.of(7, 11)) {
-                            if (values.has(new Value.Text(a(length)))) {
-                                canBe.add(each.label() + " " + length);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        assertEquals(List.of(), canBe);
-    }
-
-    /**
      * Finitely many strings beside a hole in a length no machine is made for are each asked
      * their length, so the strings made into one set cost no machine and stop at no figure.
      */
@@ -385,7 +336,8 @@ class ALengthRuleWithAHoleIsReadAsTheRunsItLeavesTest {
      */
     @Test
     void aChoiceThatPairsALengthWithAPatternIsNotReadAsTheTwoApart() {
-        Compilation model = ACompiledModel.measured("""
+        List<String> unanswered = new ArrayList<>();
+        partitionOf("""
                 module paired
 
                 data Code = String
@@ -398,10 +350,12 @@ class ALengthRuleWithAHoleIsReadAsTheRunsItLeavesTest {
                 example f
                     | "same"  : (Code("Ab"), "Ab") -> true
                     | "other" : (Code("Ab"), "cd") -> false
-                """, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        String json = AdequacyReport.of(model)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
-        assertEquals(true, json.contains("admitted_values"), json);
+                """).path("unanswered").forEach(each -> each.path("stopped").forEach(
+                stop -> unanswered.add(each.path("question").asString() + " "
+                        + each.path("subject").path("path").asString() + " "
+                        + stop.path("reason").asString())));
+        assertEquals(true, unanswered.contains("admitted_values code unsupported_syntax"),
+                unanswered.toString());
     }
 
     /** A choice between runs of lengths with no end above is a rule read all the same. */

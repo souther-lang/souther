@@ -195,8 +195,7 @@ final class StringsHeld {
 
     /**
      * The runs of lengths the rules of {@code at} leave a string of it where they are not the run
-     * between the ends, or null where they are. Empty where the rules of more than one number say
-     * so, which is not worked out here.
+     * between the ends, or null where they are. Empty where the rules leave it no length at all.
      */
     private static List<NumericDomain.Bounds> runsOfTheLengths(Position at) {
         List<NumericDomain.Bounds> out = null;
@@ -206,9 +205,8 @@ final class StringsHeld {
                 continue;
             }
             if (out != null) {
-                // Two numbers of one string that both leave holes: the strings are those of both,
-                // which is not asked here.
-                return List.of();
+                throw new IllegalStateException(
+                        "a string has one length, and " + at.path() + " has two");
             }
             out = each.runsLeft().runs().stream()
                     .map(run -> new NumericDomain.Bounds(run.low(), run.high())).toList();

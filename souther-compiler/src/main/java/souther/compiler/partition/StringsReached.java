@@ -7,15 +7,16 @@ import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.ValueSet;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -96,35 +97,9 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
      */
     private boolean lineIsAtALengthTakenOut(NumericTerm term, ExactRatio lineAt) {
         OrderedRuns left = lengthsTakenOut.get(term);
-        return left != null && lineAt != null && lineAt.isWhole() && !admits(left, lineAt);
-    }
-
-    /** Whether {@code at} is a length of one of the runs of {@code left}. */
-    private static boolean admits(OrderedRuns left, ExactRatio at) {
-        for (OrderedInterval run : left.runs()) {
-            if (!startsAfter(run.low(), at) && !endsBefore(run.high(), at)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Whether a run that starts at {@code low} holds nothing as low as {@code at}. */
-    private static boolean startsAfter(Endpoint low, ExactRatio at) {
-        if (low == null) {
-            return false;
-        }
-        int order = Count.number(low.at()).exactly().compareTo(at);
-        return order > 0 || (order == 0 && !low.inclusive());
-    }
-
-    /** Whether a run that ends at {@code high} holds nothing as high as {@code at}. */
-    private static boolean endsBefore(Endpoint high, ExactRatio at) {
-        if (high == null) {
-            return false;
-        }
-        int order = Count.number(high.at()).exactly().compareTo(at);
-        return order < 0 || (order == 0 && !high.inclusive());
+        return left != null && lineAt != null && lineAt.isWhole()
+                && lineAt.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                && !left.admits(Count.of(new BigDecimal(whole)));
     }
 
     /**
@@ -294,7 +269,7 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
         // the strings are not asked for one of them.
         OrderedRuns taken = bounds.runsLeft();
         IntPredicate wanted = each -> each >= 0 && left.admits(ExactRatio.of(each))
-                && (taken == null || admits(taken, ExactRatio.of(each)));
+                && (taken == null || taken.admits(Count.of(each)));
         return TextExtents.reachesEveryLength(at, wanted, left.max() == null);
     }
 }

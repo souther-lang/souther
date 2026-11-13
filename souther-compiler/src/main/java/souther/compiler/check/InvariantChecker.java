@@ -1347,7 +1347,7 @@ public final class InvariantChecker {
         Map<RuleKey, List<FactSubject>> aliases = aliasesOf(atoms, keys);
         return new Seeded(constraints, atoms, keys, held, reading, took, read,
                 notGathered, unreadOfEveryValue, Set.copyOf(handedOn),
-                written, Map.copyOf(spaces), computed, admitted, unreadAt, notSeparated,
+                accounted, Map.copyOf(spaces), computed, admitted, unreadAt, notSeparated,
                 c.answers.facts(),
                 Collections.unmodifiableMap(new LinkedHashMap<>(endsLeftOpen)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(boundsLeftOpen)),

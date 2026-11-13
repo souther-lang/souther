@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
@@ -2664,53 +2665,18 @@ public final class FieldDomains {
     }
 
     /**
-     * Whether {@code shape} is a choice every leaf of which bounds the length of a string and
-     * nothing else: each leaf narrows only atoms of {@code lengthAtoms}, so that what the choice
-     * says is what those bounds and the runs between them say, and nothing about another place.
+     * Whether {@code shape} is a choice the reading of the numbers an operation answers took in
+     * whole: it composed the alternatives exactly, which it does only where each of them states a
+     * rule about those numbers and about nothing the other readings hold of the same position
+     * ({@link StatedByClauses.Part}). Asked of that reading's own account of the part, and not
+     * worked out again from the shape of the clause.
      */
-    private static boolean isAChoiceOfBoundsOnLengths(ClauseExpr shape) {
-        if (!(shape instanceof ClauseExpr.Joined joined)) {
-            return false;
-        }
-        List<Core> lengthsOf = new ArrayList<>();
-        if (!leavesAreBoundsOnLengths(joined, lengthsOf) || lengthsOf.isEmpty()) {
-            return false;
-        }
-        // Of one string: a choice between the length of one and the length of another holds
-        // neither to what the choice leaves it.
-        return lengthsOf.stream().allMatch(each -> Core.sameValue(lengthsOf.getFirst(), each));
-    }
-
-    /** Whether every leaf of {@code shape} compares the length of a string with a number written
-     *  out, collecting the string each leaf measures. */
-    private static boolean leavesAreBoundsOnLengths(ClauseExpr shape, List<Core> strings) {
-        if (shape instanceof ClauseExpr.Joined joined) {
-            return leavesAreBoundsOnLengths(joined.left(), strings)
-                    && leavesAreBoundsOnLengths(joined.right(), strings);
-        }
-        if (!(shape instanceof ClauseExpr.Part part)
-                || !(Core.withoutStanding(part.of()) instanceof Core.Binary comparison)) {
-            return false;
-        }
-        Core.PreservedCall onTheLeft = aLengthCall(comparison.left());
-        Core.PreservedCall onTheRight = aLengthCall(comparison.right());
-        Core.PreservedCall length =
-                onTheLeft != null && Core.withoutStanding(comparison.right()) instanceof Core.Int
-                        ? onTheLeft
-                        : onTheRight != null
-                                && Core.withoutStanding(comparison.left()) instanceof Core.Int
-                                ? onTheRight : null;
-        if (length == null) {
-            return false;
-        }
-        strings.add(length.args().getFirst());
-        return true;
-    }
-
-    /** {@code e} as a call of the length of a string, or null where it is not one. */
-    private static Core.PreservedCall aLengthCall(Core e) {
-        return Core.withoutStanding(e) instanceof Core.PreservedCall call && call.args().size() == 1
-                && DerivedNumber.isTheLengthOfAString(call.declared().operation()) ? call : null;
+    private static boolean isAChoiceTheNumbersTookInWhole(InvariantChecker.Written reading,
+                                                          ClauseExpr shape) {
+        ReadByClauses.OfAPart account = reading.adopted().get(shape.at());
+        return shape instanceof ClauseExpr.Joined joined
+                && !(joined.how() == ConditionJoin.BOTH && joined.positive())
+                && account != null && account.byDerivedNumbers().tookEveryPartInWhole();
     }
 
     /**
@@ -3782,7 +3748,7 @@ public final class FieldDomains {
     private boolean setBoundsAndRunsAreTheRulesAt(RuleKey place) {
         Counted counted = countAt.get(place);
         if (counted == null || !notGathered.isEmpty()
-                || !DerivedNumber.isTheLengthOfAString(counted.by())
+                || !RepresentationBounds.isTheLengthOfAString(counted.by())
                 || !everyDerivedNumberIsALengthHeldAsRuns()
                 || unreadByName.getOrDefault(place, List.of()).stream()
                         .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))) {
@@ -3813,7 +3779,7 @@ public final class FieldDomains {
      */
     private boolean onlyTheHolesTheRunsHold(ProjectionEvidence rest, Counted counted) {
         return rest instanceof ProjectionEvidence.NotCertified(var causes)
-                && DerivedNumber.isTheLengthOfAString(counted.by())
+                && RepresentationBounds.isTheLengthOfAString(counted.by())
                 && everyDerivedNumberIsALengthHeldAsRuns()
                 && causes.stream().allMatch(each ->
                         each instanceof ProjectionEvidence.Cause.Lossy lossy
@@ -3920,7 +3886,8 @@ public final class FieldDomains {
                 // bounds hold the ends of each alternative, and the lengths the choice takes out
                 // from between them are held beside them as runs ({@link #runsLeftAt}) and taken
                 // out of the strings.
-                if (everyDerivedNumberIsALengthHeldAsRuns() && isAChoiceOfBoundsOnLengths(shape)) {
+                if (everyDerivedNumberIsALengthHeldAsRuns()
+                        && isAChoiceTheNumbersTookInWhole(reading, shape)) {
                     return;
                 }
                 // Or the end this part placed, which is the same part in the bounds said by the
