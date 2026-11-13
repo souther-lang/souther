@@ -124,8 +124,8 @@ class ACaseConversionRepeatedIsTheConversionOnceTest {
      *  lowercase, {@code U} uppercase. */
     private static String chain(String text, String applied) {
         String made = text;
-        for (char each : applied.toCharArray()) {
-            made = each == 'L' ? Strings.lowercase(made) : Strings.uppercase(made);
+        for (int i = 0; i < applied.length(); i++) {
+            made = applied.charAt(i) == 'L' ? Strings.lowercase(made) : Strings.uppercase(made);
         }
         return made;
     }
