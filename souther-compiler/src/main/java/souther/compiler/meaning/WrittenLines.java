@@ -457,6 +457,8 @@ public final class WrittenLines {
                         }
                     }).toList();
             case Derivation.WhereAnOperationKeepsIt(var _, var _, var handed) -> List.of(handed);
+            case Derivation.TheSameAsAWrittenComparison(var _, var comparison, var asked) ->
+                    List.of(comparison, asked);
             case Derivation.LinesWithoutRows(var drawn, var _) -> List.of(drawn);
             case Derivation.ALawSettles _, Derivation.TheSameValue _,
                  Derivation.TheSameNumber _, Derivation.TheStringsInside _,

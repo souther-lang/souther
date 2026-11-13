@@ -96,6 +96,9 @@ public final class Conclusion {
         /** The figure parts are counted up to, and held at one past. */
         private final long mostParts;
         private int unread;
+        /** What is concluded for the rows asked where this concludes the lines drawn, made when
+         *  first asked ({@link Conclusion#askingRows}). */
+        private Shared askedOfRows;
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing) {
             this(where, reusing, PARTS, false);
@@ -159,6 +162,21 @@ public final class Conclusion {
     boolean concludingLinesApart() {
         shared.linesToldFromRows = true;
         return shared.drawingLines;
+    }
+
+    /**
+     * This supposing the same, concluding the rows a statement asks: what a count of the elements
+     * meeting a statement counts is the rows that statement holds at, so a count says the same
+     * whether the lines drawn or the rows asked are what is read, as the relation naming it does.
+     */
+    Conclusion askingRows() {
+        if (!shared.drawingLines) {
+            return this;
+        }
+        if (shared.askedOfRows == null) {
+            shared.askedOfRows = new Shared(shared.where, false, PARTS, false);
+        }
+        return new Conclusion(shared.askedOfRows, supposed);
     }
 
     /**

@@ -1280,6 +1280,9 @@ public sealed interface Derivation {
                     case Stopped _ -> true;
                     case TheSameValue(var part, var one, var other) -> part.equals(law)
                             && stands(law.one(), one) && stands(law.other(), other);
+                    case TheSameAsAWrittenComparison written ->
+                            written.part().equals(law) && written.comparesWhatTheLawSays(law)
+                                    && isTheSame(law, written.asked());
                     case TheSameNumber(var part, var one, var other, var _) -> part.equals(law)
                             && standsAsANumber(law.one(), one)
                             && standsAsANumber(law.other(), other);
@@ -1600,7 +1603,7 @@ public sealed interface Derivation {
     /** A step that reads one part of a law, which it holds. */
     sealed interface ALawPart extends Derivation
             permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue,
-                    TheSameNumber, TheStringsInside,
+                    TheSameAsAWrittenComparison, TheSameNumber, TheStringsInside,
                     ALawQuantifies, ALawComparison, ALawJoinsWithoutWhatImpliesAnother, WhereAnOperationKeepsIt {
 
         /** The part of the law this reads. */
@@ -1695,6 +1698,60 @@ public sealed interface Derivation {
             boolean subjectFirst = one.place().isPresent();
             return new Proposition.SameValue((subjectFirst ? one : other).place().orElseThrow(),
                     subjectFirst ? other : one, part.holds());
+        }
+    }
+
+    /**
+     * A part of a law that states two values are one, or not, for a reader of the lines it draws
+     * the comparison the source writes of them with {@code ==} or {@code !=}: {@code comparison}
+     * is that comparison read, of a name standing for the element the law names and the argument
+     * it names. For a reader of rows it is what the rows are asked, {@code asked}: which rows hold
+     * the two values at one is not what the lines of a comparison say.
+     */
+    record TheSameAsAWrittenComparison(LawProposition.Same<?> part, Derivation comparison,
+                                       Derivation asked) implements ALawPart {
+
+        public TheSameAsAWrittenComparison {
+            Objects.requireNonNull(part, "a step reads a part of a law");
+            Objects.requireNonNull(comparison, "the two read as a comparison");
+            Objects.requireNonNull(asked, "rows are asked of the two being one");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.concludingLinesApart() ? numbering.of(comparison)
+                    : numbering.of(asked);
+        }
+
+        /**
+         * Whether {@code comparison} is what {@code law} says of the two it names: the comparison
+         * of an element or a key of a container with the value the call was handed, stated as the
+         * law states it and no other — the relation the two being one is, held where the law holds
+         * them one and not where it holds them apart.
+         *
+         * <p>What the sides are is the law's to say and the reading's to bind, so it is checked
+         * here and not left to what was bound: a comparison of another relation, or of the other
+         * polarity, is the reading of another statement. Every other reading of the comparison —
+         * one no reading took to the end, a truth held against one written out — is of the sides
+         * the comparison was bound with and states no relation to hold the law's against.
+         */
+        public boolean comparesWhatTheLawSays(LawProposition.Same<?> law) {
+            if (!(law.other() instanceof LawSubject.Argument<?>)
+                    || !(law.one() instanceof LawSubject.ElementOf<?>
+                            || law.one() instanceof LawSubject.KeyOf<?>)) {
+                return false;
+            }
+            return !(Restated.through(comparison) instanceof AComparisonRead(
+                    var _, Relation relation, boolean holds, var _, var _))
+                    || (holds == law.holds() && switch (relation) {
+                        case Relation.Affine(var _, Rel rel) -> rel == Rel.EQ;
+                        case Relation.Ordered(var _, var _, Rel rel) -> rel == Rel.EQ;
+                    });
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(comparison, asked);
         }
     }
 
@@ -3736,7 +3793,8 @@ public sealed interface Derivation {
              *  answers on is how many meet it ({@link Derivation.WhereItIsAnswered}), or of their
              *  different values. */
             public Quantity counted(Conclusion numbering) {
-                Proposition meeting = Proposition.whereItHolds(numbering.of(ofTheElement));
+                Proposition meeting = Proposition.whereItHolds(
+                        numbering.askingRows().of(ofTheElement));
                 return different.<Quantity>map(values -> new Quantity.HowManyDifferentMeet(
                         container, values.at(), values.ofEachValue()
                                 ? new Quantity.HowManyDifferentMeet.Selection.OfEachValue(meeting)

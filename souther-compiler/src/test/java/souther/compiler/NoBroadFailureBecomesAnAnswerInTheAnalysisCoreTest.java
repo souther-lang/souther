@@ -261,12 +261,6 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                             + " one the run time computes, asked of the exact methods the operators"
                             + " emit — answered as a fold that does not settle it, so the run time"
                             + " is what refuses it"),
-            new Permission("souther.compiler.check.ConstantAlgebra", "arith",
-                    "(Lsouther/compiler/types/BinOp;Ljava/lang/Object;Ljava/lang/Object;)"
-                            + "Ljava/util/Optional;",
-                    "java.lang.ArithmeticException",
-                    "the same, of two written decimals, asked of the BigDecimal methods the run time"
-                            + " calls — answered as a fold that does not settle it"),
             new Permission("souther.compiler.query.Adequacy$ARowBuiltAndRun", "attempt",
                     "(Ljava/lang/String;Ljava/util/Map;"
                             + "Lsouther/compiler/partition/NumbersAskedFor;"

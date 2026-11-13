@@ -51,7 +51,7 @@ class AStopNoRowReachesIsNotReportedAsNotReadTest {
     private static final String STOP = "weekday(c, Date.addMonths(1, d)) >= 1";
 
     /** A condition no reader takes in, so the fork around it states a rule of its own. */
-    private static final String OPAQUE = "List.contains(List.length(xs), xs)";
+    private static final String OPAQUE = "List.allDistinctBy(n -> n, xs)";
 
     private static final String SEVERAL = "Int.max(weekday(c, Date.addMonths(1, d)),"
             + " weekday(c, d)) >= 3";

@@ -1467,9 +1467,12 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.AgainstAnotherValue related ->
                     AgainstAnotherValue.of(related, read, Optional.of(new DrawnBeside(behavior, at,
                             WrittenLine.THE_COMPARISON, Optional.empty())), witnesses);
+            // The comparison the application is, by the law of its operation, was not read to the
+            // end: it says why at the places it compares.
+            case Cutting.Read.Stopped stopped -> new Unread(stopped.places(), stopped.where());
             case Cutting.Read.Cuts _, Cutting.Read.CutsNothing _, Cutting.Read.AnswersNowhere _,
-                 Cutting.Read.Stopped _, Cutting.Read.NoOrderToCountOn _,
-                 Cutting.Read.NumberNoRatioHolds _, Cutting.Read.StatesNoRelation _ ->
+                 Cutting.Read.NoOrderToCountOn _, Cutting.Read.NumberNoRatioHolds _,
+                 Cutting.Read.StatesNoRelation _ ->
                     throw new IllegalArgumentException(
                             "an application states lines or values it relates: " + answered);
         };
