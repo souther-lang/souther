@@ -1445,15 +1445,15 @@ final class OperationFactBinder {
                 }
             }
         }
-        // The other case is read as a comparison of this argument with a number, in a tree whose
-        // places are on carriers, so the argument is held to a number a carrier counts. An
-        // operation answering a Rational as one case of a union is refused here, loudly, until the
-        // reader of that comparison reads one over Rationals; it is not given a statement some
-        // reader would take for a comparison it cannot make.
+        // The other case is read as a comparison of this argument with a number. Over a number on
+        // a carrier it states what the arm that took the case has established; over a Rational,
+        // which has none, the comparison is the one a model may write and every reader of it
+        // leaves unsaid ({@link Terms#computedBy} gives the number's case no meaning either), so
+        // the case is still told apart and nothing is asserted of it.
         NumericResult.TheOtherCaseWhen<DeclaredArgument> unless = rule.unless() == null ? null
                 : new NumericResult.TheOtherCaseWhen<>(
                         holdToTheDeclaration(declaration, rule.unless().argument(), null,
-                                TypeRequirement.NUMBER, "the argument a failure is decided by"),
+                                TypeRequirement.ARITHMETIC, "the argument a failure is decided by"),
                         rule.unless().op(), rule.unless().than());
         return new NumericResult<>(rule.at(), rule.computes(), unless);
     }

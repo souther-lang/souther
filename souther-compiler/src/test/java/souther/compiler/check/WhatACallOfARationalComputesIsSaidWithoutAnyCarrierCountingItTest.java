@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.core.Core;
 import souther.compiler.query.ReadAs;
 import souther.compiler.numeric.ExactRatio;
@@ -127,6 +128,36 @@ class WhatACallOfARationalComputesIsSaidWithoutAnyCarrierCountingItTest {
         assertNotNull(terms.computedBy(sum, two, Type.INT));
         assertNull(terms.computedBy(product, two, Type.RATIONAL));
         assertNull(terms.computedBy(quotient, two, Type.RATIONAL));
+    }
+
+    /**
+     * A quotient that answers a Rational as one case of a union and comes back as
+     * {@code DivisionByZero} otherwise is declared as one answering a Decimal is: what it
+     * computes is said in the case carrying the number, and the other case when its divisor is
+     * nought. The library as shipped has none, so the shipped {@code divide} is written to answer
+     * one here.
+     */
+    @Test
+    void aRationalAnsweredAsOneCaseOfAUnionIsDeclared() {
+        String shipped = "let divide (a: Rational, b: Rational): Rational =";
+        Stdlib library = StdlibLoader.load(text -> text.contains(shipped)
+                ? text.replace(shipped,
+                        "let divide (a: Rational, b: Rational): Rational | DivisionByZero =")
+                : text);
+        NumericResult<ArgumentRef> row = new NumericResult<>(
+                new NumericResult.Answered.InTheCaseCarrying(Type.RATIONAL),
+                new Arithmetic.TheOperator(BinOp.DIV),
+                new NumericResult.TheOtherCaseWhen<>(new ArgumentRef.At(1), BinOp.EQ, 0));
+        // The one statement and not the library's: what is asked is whether this one is bound, and
+        // binding the rest proves every other declaration against its body for nothing.
+        BoundOperationFacts facts = OperationFactBinder.bindAll(library, List.of(
+                new OperationFacts.Declared(rational("divide"),
+                        new OperationFact.ComputesANumber(row))));
+
+        NumericResult<DeclaredArgument> held = facts.computesANumber(rational("divide"));
+        assertNotNull(held);
+        assertEquals(new NumericResult.Answered.InTheCaseCarrying(Type.RATIONAL), held.at());
+        assertNotNull(held.unless());
     }
 
     private static void bind(ValueName operation, OperationFact fact) {
