@@ -57,6 +57,16 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     /** The door the tests of this repository go through. */
     private static final UncheckedModelReports ASKING = new UncheckedModelReports(HELPER);
 
+    /** What the repository's tests do with the models they read, worked out once for the class. */
+    private static UncheckedModelReports.Findings findings;
+
+    private static synchronized UncheckedModelReports.Findings findings() {
+        if (findings == null) {
+            findings = ASKING.of(testClasses());
+        }
+        return findings;
+    }
+
     private static List<ClassModel> testClasses() {
         List<ClassModel> tests = new ArrayList<>();
         for (Path module : COMPILED.modules()) {
@@ -71,7 +81,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
 
     @Test
     void noTestReadsTheReportOfAModelItWasNotHeldToCompiling() {
-        assertEquals(List.of(), new ArrayList<>(ASKING.of(testClasses()).refused()),
+        assertEquals(List.of(), new ArrayList<>(findings().refused()),
                 "a method reads the report of a model that was not handed to ACompiledModel before"
                         + " the read on every way to it, or after it on every way out, or of a"
                         + " model that cannot be followed to where it was made, so the empty"
@@ -143,7 +153,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
      */
     @Test
     void andTheWalkSeesModelsMadeAndAskedAbout() {
-        assertTrue(ASKING.of(testClasses()).asked() > 0,
+        assertTrue(findings().asked() > 0,
                 "no test makes a model, asks that it compiles and reads its report, so this walked"
                         + " nothing and would hold either way");
     }
