@@ -33,7 +33,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     private static final Set<String> REFUSED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelNeverAsked", "AllReportsOfAnAnswered", "AnotherClassMadeIt",
             "AnotherModelAsked", "AnswerWarningsOnly", "AskedAliasOfAFieldChangedByAMethod",
-            "AnswerKeptInAVariable", "AskedOnOneWayOnly", "BoundMethodRefChanges",
+            "AnswerKeptInAVariable", "AnswerReturnedThroughAMethod", "AskedOnOneWayOnly",
+            "BoundMethodRefChanges",
             "BoundMethodRefReads", "BoxedInAnArray", "ChangedThroughTheParentNotTheDefault",
             "ChoosesBetweenAStoreItMadeAndTheOneGiven",
             "ConditionalModelJoin", "DbHeldHandedToAConsumer",
@@ -62,7 +63,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "StaticMethodRefReads", "StoreAskOfAnAnswered", "StreamForEachChanges",
             "StructuralFailureOfAnUnasked", "StructuralReportsOfAnUnasked", "SwallowedFailure",
             "ThrownOnTheReadAndCaughtByTheCaller", "TwoBoxesOneFieldName", "UnboundMethodRefReads",
-            "UpdatedAfterTheLook",
+            "UpdatedAfterTheLook", "ValueOfAnAnswerOfAnAnsweredModel",
             "WarningsOfAnUnaskedModel"));
 
     private static final Set<String> ACCEPTED_SHAPES = new TreeSet<>(List.of(
@@ -74,7 +75,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "HelperThatChangesAndAsks", "MarkedAndNotRun",
             "NotCompiledOnTheList",
             "ParameterHandedByACaller", "ReportsOfAStoreHandedInAfterTheLook",
-            "RequireNonNullKeepsTheAsk", "TheErrorsAreWhatWasMeant",
+            "RequireNonNullKeepsTheAsk", "TheErrorsAreWhatWasMeant", "ValueOfAnAnswerOfACheckedModel",
             "ThroughTheDoor",
             "UpdatedThenAsked"));
 

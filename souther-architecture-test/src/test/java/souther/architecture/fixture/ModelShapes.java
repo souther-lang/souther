@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Answer;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.report.AdequacyReport;
@@ -912,6 +913,46 @@ public final class ModelShapes {
         public static boolean read(String source) {
             Compilation model = TheDoor.answered(source);
             return hasNoReports(model.db());
+        }
+    }
+
+    /** Reads the reports of an answer that a method handed back. */
+    public static final class AnswerReturnedThroughAMethod {
+
+        private AnswerReturnedThroughAMethod() { }
+
+        private static <T> Answer<T> keep(Answer<T> answer) {
+            return answer;
+        }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.answerEverything();
+            Answer<?> answer = keep(model.db().ask(new Adequacy.Witnesses("Main")));
+            return answer.reports().isEmpty();
+        }
+    }
+
+    /** Reads what an answered model's store answers to a question, which is empty if it stopped. */
+    public static final class ValueOfAnAnswerOfAnAnsweredModel {
+
+        private ValueOfAnAnswerOfAnAnsweredModel() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.answerEverything();
+            return model.db().ask(new Adequacy.Witnesses("Main")).value() == null;
+        }
+    }
+
+    /** Reads what the store of a model that was asked about answers to a question. */
+    public static final class ValueOfAnAnswerOfACheckedModel {
+
+        private ValueOfAnAnswerOfACheckedModel() { }
+
+        public static boolean read(String source) {
+            Compilation model = TheDoor.answered(source);
+            return model.db().ask(new Adequacy.Witnesses("Main")).value() == null;
         }
     }
 

@@ -1296,17 +1296,28 @@ final class ModelWalk {
                     String target = call.owner().asInternalName();
                     String name = call.name().stringValue();
                     String callee = AMethod.of(target, name, call.type().stringValue());
-                    if (target.equals(ANSWER) && name.equals("reports")
-                            && throughLocals(producer(at, 0), 0) instanceof Operand.Answer asked
-                            && asked.call().owner().asInternalName().equals(DB)
-                            && asked.call().name().stringValue().equals("ask")) {
-                        int arguments = 0;
-                        for (ClassDesc type : asked.call().typeSymbol().parameterList()) {
-                            arguments += sizeOf(type);
+                    if (target.equals(ANSWER) && name.equals("reports")) {
+                        Operand source = throughLocals(producer(at, 0), 0);
+                        Operand model = new Operand.Lost();
+                        Operand store = new Operand.Nothing();
+                        boolean putHere = false;
+                        if (source instanceof Operand.Answer asked
+                                && asked.call().owner().asInternalName().equals(DB)
+                                && asked.call().name().stringValue().equals("ask")) {
+                            int arguments = 0;
+                            for (ClassDesc type : asked.call().typeSymbol().parameterList()) {
+                                arguments += sizeOf(type);
+                            }
+                            store = producer(asked.at(), arguments);
+                            model = modelOfTheDb(store);
+                            putHere = true;
                         }
-                        Operand store = producer(asked.at(), arguments);
-                        Operand model = modelOfTheDb(store);
-                        if (!(model instanceof Operand.Lost)) {
+                        // The reports of an answer that a question put here to a store of no
+                        // model that can be placed are not followed. An answer that did not come
+                        // from a question put here is of a model that is not known, so it is
+                        // refused: what is read of it is not shown to be of a model that was
+                        // asked about.
+                        if (!putHere || !(model instanceof Operand.Lost)) {
                             found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
                                     callee, -1, true, true, false, false, false, false, model,
                                     store, false, true));
@@ -1341,8 +1352,11 @@ final class ModelWalk {
                             boolean answers = (receiver && target.equals(COMPILATION)
                                     && ModelVocabulary.ANSWERS.contains(name))
                                     || (helping && !asks && !name.equals(NOT_COMPILED));
-                            boolean strict = report && !(receiver
-                                    && ModelVocabulary.SHOWS_ERRORS.contains(name));
+                            // What is read through the store of a model, a question's answer or
+                            // its value, is as empty for a model that stopped as a report is, so
+                            // the store is had only of a model that was asked about.
+                            boolean strict = storeAccessor || (report && !(receiver
+                                    && ModelVocabulary.SHOWS_ERRORS.contains(name)));
                             found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
                                     callee, instance ? i - 1 : i, reads, report, asks, exempts,
                                     false, mutates, producer(at, above), new Operand.Nothing(),

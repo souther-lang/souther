@@ -6,6 +6,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -54,13 +55,7 @@ public final class ACompiledModel {
      * {@code refusedWith(List.of("E1013"), model)} as what it expects of it.
      */
     public static Compilation refusedWith(List<String> codes, Compilation model) {
-        List<String> refused;
-        try {
-            model.answerEverything();
-            refused = model.errors().stream().map(e -> e.diagnostic().code()).toList();
-        } catch (CompileException stopped) {
-            refused = stopped.diagnostics().stream().map(Diagnostic::code).toList();
-        }
+        List<String> refused = diagnosticsOf(model).stream().map(Diagnostic::code).toList();
         assertEquals(codes, refused,
                 codes.isEmpty() ? "the model compiles" : "the model is refused as meant");
         return model;
@@ -72,13 +67,7 @@ public final class ACompiledModel {
      * many of them are refused is not fixed, and what is fixed is what they can be refused with.
      */
     public static Compilation refusedOnlyWith(Set<String> allowed, Compilation model) {
-        List<String> refused;
-        try {
-            model.answerEverything();
-            refused = model.errors().stream().map(e -> e.diagnostic().code()).toList();
-        } catch (CompileException stopped) {
-            refused = stopped.diagnostics().stream().map(Diagnostic::code).toList();
-        }
+        List<String> refused = diagnosticsOf(model).stream().map(Diagnostic::code).toList();
         assertEquals(List.of(), refused.stream().filter(code -> !allowed.contains(code)).toList(),
                 "the model is refused with nothing but " + allowed);
         return model;
@@ -86,9 +75,11 @@ public final class ACompiledModel {
 
     /**
      * The errors {@code model} is refused with after it was answered in full: those it stops with,
-     * and those it reports. For a test that says what a refusal is and compares it with what it
-     * meant. It answers the model and says nothing of the model compiling, so what a test goes on
-     * to read of the model besides its errors is read of a model nobody asked about.
+     * and those it reports, where one it reports is not the one it stops with. It is what {@link #refusedWith} and
+     * {@link #refusedOnlyWith} compare with what a test meant, so what they hold the model to is
+     * the same set whichever way it is refused. It answers the model and says nothing of the model
+     * compiling, so what a test goes on to read of the model besides its errors is read of a model
+     * nobody asked about.
      */
     public static List<Diagnostic> diagnosticsOf(Compilation model) {
         List<Diagnostic> said = new ArrayList<>();
@@ -97,7 +88,13 @@ public final class ACompiledModel {
         } catch (CompileException stopped) {
             said.addAll(stopped.diagnostics());
         }
-        model.errors().forEach(found -> said.add(found.diagnostic()));
+        Set<Diagnostic.Identity> told = new HashSet<>();
+        said.forEach(each -> told.add(each.identity()));
+        model.errors().forEach(found -> {
+            if (!told.contains(found.diagnostic().identity())) {
+                said.add(found.diagnostic());
+            }
+        });
         return said;
     }
 
