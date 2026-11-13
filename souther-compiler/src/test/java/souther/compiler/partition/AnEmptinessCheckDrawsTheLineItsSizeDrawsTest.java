@@ -203,6 +203,80 @@ class AnEmptinessCheckDrawsTheLineItsSizeDrawsTest {
                 .isEmpty());
     }
 
+    /**
+     * A size written twice, or reached twice through one name, is the one container: the line is
+     * the line the size alone draws, and the geometry is the same whichever way it is added up.
+     */
+    @Test
+    void aSizeAddedToItselfDrawsTheLineTheSizeDraws() {
+        List<String> alone = geometryOf("List.length(order.lines) == 0");
+        assertEquals(List.of("bill/List.length(order.lines): List.length(order.lines) = 0"),
+                alone);
+        assertEquals(alone, geometryOf(
+                "List.length(order.lines) + List.length(order.lines) == 0"),
+                "written twice");
+        assertEquals(alone, geometryOf(
+                "List.length(order.lines) + List.length(order.lines) <= 0"),
+                "written twice, held at nought from above");
+    }
+
+    /**
+     * Each call of a helper that adds two sizes brings its own sizes: called once for each list,
+     * it is a sum of the sizes of both, and a walk that took the body once would lose the list of
+     * the second call.
+     *
+     * <p>A call is expanded into a body of its own, so what tells the two calls apart is the
+     * object the walk visits; it does not reach one body in two readings, which is what the
+     * reading in the key of what is visited is there for.
+     */
+    @Test
+    void eachCallOfAHelperThatAddsTwoSizesBringsItsOwn() {
+        String model = headerOfTwoLists() + """
+                let both (xs, ys) = List.length(xs) + List.length(ys)
+
+                behavior bill : (order: Order) -> NoBill | Discounted | Full
+                let bill (order) =
+                    if both(order.lines, order.lines) + both(order.extras, order.extras) >= 1
+                    then Discounted { total = 1 }
+                    else if order.coupon >= 10 then NoBill
+                    else Full { total = 1 }
+                """;
+        List<String> axes = linesOf(compiled(model)).stream().map(BorderAssessment::axis)
+                .distinct().toList();
+        assertTrue(axes.contains("bill/List.length(order.lines)")
+                && axes.contains("bill/List.length(order.extras)"), axes::toString);
+    }
+
+    /** A sum of two sizes held at one or more is a line on each. */
+    @Test
+    void aSumOfTwoSizesDrawsALineOnEach() {
+        String model = headerOfTwoLists() + """
+                behavior bill : (order: Order) -> NoBill | Discounted | Full
+                let bill (order) =
+                    if List.length(order.lines) + List.length(order.extras) >= 1
+                    then Discounted { total = 1 }
+                    else if order.coupon >= 10 then NoBill
+                    else Full { total = 1 }
+                """;
+        List<String> axes = linesOf(compiled(model)).stream().map(BorderAssessment::axis)
+                .distinct().toList();
+        assertTrue(axes.contains("bill/List.length(order.lines)")
+                && axes.contains("bill/List.length(order.extras)"), axes::toString);
+    }
+
+    private static String headerOfTwoLists() {
+        return """
+                module demo
+
+                data Line = { price: Int }
+                data Order = { lines: List<Line>, extras: List<Line>, coupon: Int }
+                data NoBill
+                data Discounted = { total: Int }
+                data Full = { total: Int }
+
+                """;
+    }
+
     private static ItemAssessment.Coverage coverageAtNought(String guard, String rank, String out) {
         String model = """
                 module demo
