@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -63,8 +64,7 @@ class AParameterARunDoesNotTurnOnIsTriedAtItsFirstValueAloneTest {
                                                          RowSearch.Building building,
                                                          Set<Figure> stopped,
                                                          List<List<ObservedValue>> taken) {
-        Compilation compilation = Compilation.ofSource(FLAGS, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(FLAGS);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

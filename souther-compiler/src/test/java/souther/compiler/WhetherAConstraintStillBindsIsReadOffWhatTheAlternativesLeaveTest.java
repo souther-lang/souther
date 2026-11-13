@@ -140,7 +140,7 @@ class WhetherAConstraintStillBindsIsReadOffWhatTheAlternativesLeaveTest {
     }
 
     private static String human(String clause) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module m
 
                 data Ok
@@ -148,11 +148,8 @@ class WhetherAConstraintStillBindsIsReadOffWhatTheAlternativesLeaveTest {
                     invariant one = %s
 
                 behavior f : (r: R) -> Ok
-                    constructs Ok
                 let f (r) = Ok
-                """.formatted(clause), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(clause), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

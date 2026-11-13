@@ -49,7 +49,7 @@ class AClassOffersAValueTheDeclarationsAdmitTest {
     private static String rowsFor(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         souther.compiler.query.Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule("example.away"));
         assertNotNull(offering, "the model under test compiles");

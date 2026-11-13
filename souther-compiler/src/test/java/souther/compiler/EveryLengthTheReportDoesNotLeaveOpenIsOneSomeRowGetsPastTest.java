@@ -16,7 +16,6 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -173,9 +172,7 @@ class EveryLengthTheReportDoesNotLeaveOpenIsOneSomeRowGetsPastTest {
     static void holds(Shape shape) {
         Compilation compilation = Compilation.ofSource(shape.source(), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "compiles: " + shape);
+        ACompiledModel.compiles(compilation);
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get("f");
         Set<String> classed = new TreeSet<>();

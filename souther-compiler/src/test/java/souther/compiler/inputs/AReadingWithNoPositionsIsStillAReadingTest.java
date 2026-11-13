@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -37,12 +38,12 @@ class AReadingWithNoPositionsIsStillAReadingTest {
 
             data Size = Int
 
-            behavior size : (n: Size) -> Size
-            let size (n) = n
+            behavior keep : (n: Size) -> Size
+            let keep (n) = n
             """;
 
     private static RuleReadingSource rules() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

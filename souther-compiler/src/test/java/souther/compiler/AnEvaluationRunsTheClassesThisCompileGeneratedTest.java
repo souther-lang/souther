@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * A row runs the classes this compile generated, not ones of the same name found further up.
@@ -75,10 +74,7 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
     @Test
     void aRowRunsTheImplementationBeingCompiledAndNotOneLeftOnThePath() {
         Compilation compilation = Compilation.ofSources(List.of(NOW), leftOverClassFiles());
-        compilation.answerEverything();
-
-        assertNull(compilation.failure(),
-                "the model is correct, so nothing is wrong with it");
+        ACompiledModel.compiles(compilation);
 
         SourceId sourceId = compilation.exampleSourcesOf("example.stale").getFirst();
         List<RowOutcome> rows = compilation.db()

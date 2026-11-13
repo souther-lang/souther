@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.query.Compilation;
@@ -47,7 +48,7 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
      * as the reading it comes from.
      */
     private static final String SOURCE = """
-            module demo exposing ( Held, keep )
+            module demo exposing ( Code, Common, Held, keep )
 
             data Code = String
                 invariant String.matches("[A-Z]{2}-[0-9]{4}", value)
@@ -70,8 +71,7 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
 
     @Test
     void theCounterfactualMakesNoMachineTheReadingItComesFromHolds() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         FieldDomains reading = FieldDomains.of(
                 TypeSymbols.declared(new TypeKey("demo", "Held")),
                 RuleReadingContext.of(RuleReadings.of(compilation, compilation.modules().get(0)),
@@ -101,7 +101,7 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
      */
     @Test
     void whatTheReadingBuiltOnTopIsHandedOnToo() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         TypeKey held = new TypeKey("demo", "Held");
         StringFacts whole = compilation.db().ask(new Machines.OfDeclaration(held)).value();
         assertFalse(whole.extents().isEmpty(),
@@ -144,5 +144,6 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
 
         assertTrue(StringMachineAnswers.machinesMade() > before,
                 "a reading with nothing to borrow from builds the machines its rules come to");
+        ACompiledModel.compiles(compilation);
     }
 }

@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.diag.SourceRendering;
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.AdequacyPolicy;
@@ -115,7 +115,9 @@ class AMeetingTheMeasureWouldNotWalkLeavesTheBehaviorPartialTest {
     /** And nothing is owed at a combination of a group nobody walked. */
     @Test
     void nothingIsOwedAtACombinationOfAGroupNobodyWalked() {
-        assertEquals(List.of(), AdequacyReport.of(compiled(1)).adequacyGaps().stream()
+        Compilation compilation = compiled(1);
+        ACompiledModel.compiles(compilation);
+        assertEquals(List.of(), AdequacyReport.of(compilation).adequacyGaps().stream()
                         .filter(each -> each.kind() == Adequacy.Kind.INTERACTION_UNCOVERED)
                         .map(each -> each.about().toString())
                         .toList(),
@@ -137,12 +139,14 @@ class AMeetingTheMeasureWouldNotWalkLeavesTheBehaviorPartialTest {
 
     private static AdequacyReport.BehaviorReport behaviorUnder(int cellsPerGroup) {
         Compilation compilation = compiled(cellsPerGroup);
+        ACompiledModel.compiles(compilation);
         List<AdequacyReport.BehaviorReport> behaviors =
                 AdequacyReport.of(compilation).modules().getFirst().behaviors();
         assertEquals(1, behaviors.size(), "one behavior in the model");
         return behaviors.getFirst();
     }
 
+    /** The model measured under {@code cellsPerGroup} and not yet answered. */
     private static Compilation compiled(int cellsPerGroup) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
@@ -151,10 +155,6 @@ class AMeetingTheMeasureWouldNotWalkLeavesTheBehaviorPartialTest {
                                 Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(),
-                () -> AdequacyReport.of(compilation)
-                        .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())));
         return compilation;
     }
 }

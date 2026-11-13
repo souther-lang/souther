@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -462,8 +463,7 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
                 behavior many : (x: Input) -> Bool
                 let many (x) = List.any(g -> %s, x.groups)
                 """.formatted(body), "Main");
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(made);
         List<OnTheWay> stated = statedIn(made, "many");
         List<Integer> handed = new ArrayList<>();
         List<WhyNotTaken> declined = new ArrayList<>();
@@ -527,8 +527,7 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
                     if x.gate > 0 then A else B
                 }
                 """.formatted(guard), "Main");
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(made);
         List<BorderAssessment> lines = Adequacy.readingsOf(made.db(), "probe.pastaguard").get("f");
         assertNotNull(lines, "f was measured");
         return lines.stream().map(line -> line.border().cut() + " " + new TreeSet<>(
@@ -578,17 +577,11 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
             let decide (x) = if x.gate > 0 then A else B
             """;
 
-    private static final Compilation COMPILATION = compiled(MODEL);
+    private static final Compilation COMPILATION =
+            ACompiledModel.compiles(Compilation.ofSource(MODEL, "Main"));
 
-    private static final Compilation DECIDE = compiled(DECIDING);
-
-    /** Compiled and asked nothing more: what each test asks of it is read when it is asked. */
-    private static Compilation compiled(String model) {
-        Compilation made = Compilation.ofSource(model, "Main");
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
-        return made;
-    }
+    private static final Compilation DECIDE =
+            ACompiledModel.compiles(Compilation.ofSource(DECIDING, "Main"));
 
     /** A row for `x.gate = 1` composed past shape {@code i} coming out true. */
     private static Generator.BoundaryAttempt composedPast(int i) {

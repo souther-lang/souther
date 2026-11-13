@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meta.ModulePath;
@@ -99,11 +100,11 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
 
                 example plan
                     | "a" : (100.0m, 200.0m, 346.0m, 0.1m) -> Out { within = true }
-                    | "b" : (100.0m, 3000.0m, 346.0m, 0.1m) -> Out { within = false }
+                    | "b" : (100.0m, 4000.0m, 346.0m, 0.1m) -> Out { within = false }
                 """;
         Compilation compilation = Compilation.ofSources(List.of(model), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {
@@ -159,6 +160,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
         }, model);
+        ACompiledModel.compiles(compilation);
         assertNotNull(Adequacy.readingsOf(compilation.db(), "t.m4"), model);
         assertTrue(compilation.db().ask(new Adequacy.Coverage("t.m4")).value()
                 .containsKey("plan"), model);
@@ -196,7 +198,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
                 """;
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<BorderAssessment> lines = Adequacy.readingsOf(compilation.db(), "demo").get("f");
         List<BorderAssessment> product = lines.stream()
                 .filter(each -> each.axis().contains("(a + b) * c")).toList();
@@ -245,6 +247,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
                 compilation.measure(Adequacy.Asked.fullReport());
                 compilation.answerEverything();
             }, condition);
+            ACompiledModel.compiles(compilation);
             assertNotNull(Adequacy.readingsOf(compilation.db(), "demo"), condition);
             assertNotNull(compilation.db().ask(new Adequacy.Coverage("demo")).value(), condition);
         }
@@ -284,6 +287,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
                 compilation.measure(Adequacy.Asked.fullReport());
                 compilation.answerEverything();
             }, condition);
+            ACompiledModel.compiles(compilation);
             assertNotNull(Adequacy.readingsOf(compilation.db(), "demo"), condition);
             assertNotNull(compilation.db().ask(new Adequacy.Coverage("demo")).value(), condition);
         }
@@ -322,6 +326,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
                 compilation.measure(Adequacy.Asked.fullReport());
                 compilation.answerEverything();
             }, condition);
+            ACompiledModel.compiles(compilation);
             assertNotNull(Adequacy.readingsOf(compilation.db(), "demo"), condition);
             assertNotNull(compilation.db().ask(new Adequacy.Coverage("demo")).value(), condition);
         }

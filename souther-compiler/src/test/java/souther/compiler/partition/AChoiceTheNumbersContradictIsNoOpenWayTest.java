@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -162,7 +163,7 @@ class AChoiceTheNumbersContradictIsNoOpenWayTest {
     }
 
     private static SearchRegion region() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data R = { x: Int, y: Int }
@@ -170,7 +171,7 @@ class AChoiceTheNumbersContradictIsNoOpenWayTest {
 
                 behavior f : (r: R) -> Yes
                 let f (r) = Yes
-                """, "Main");
+                """);
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         InputReading reading = inputs.reading(RuleReadings.of(compilation, "m"));

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -76,7 +77,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
                         List<BehaviorSetStatements.ForkOfItsOwn> forks) {}
 
     private static Both both(String declaration) {
-        Compilation compilation = Compilation.ofSource(PRELUDE + "\n" + declaration + "\n", "Main");
+        Compilation compilation = ACompiledModel.answered(PRELUDE + "\n" + declaration + "\n");
         assertEquals(1, compilation.modules().size(), "the model under test compiles");
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -467,11 +468,11 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
     /** Nothing this compiler composed is one of these: the forks are the ones an author wrote. */
     @Test
     void everyForkFiledIsOneAnAuthorWrote() {
-        Compilation compilation = Compilation.ofSource(PRELUDE + """
+        Compilation compilation = ACompiledModel.answered(PRELUDE + """
 
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = if List.contains(List.length(xs), xs) then High else Low
-                """, "Main");
+                """);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

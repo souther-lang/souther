@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.Replacement;
 
@@ -204,10 +205,7 @@ class AnArmARelationBetweenInputsDecidesIsRewrittenAndLookedForTest {
     private static Map<Replacement, ReplacementEvidence.Outcome> armRewritesOf(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         ReplacementEvidence its = compilation.db()
                 .ask(new Replacements.Measured(compilation.modules().get(0))).value()
                 .get("usable");

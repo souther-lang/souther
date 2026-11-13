@@ -5,6 +5,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.execute.jvm.JvmExampleDeadlines;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -24,7 +25,6 @@ import souther.compiler.report.GeneratedRows;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -157,10 +157,16 @@ class CompilePartialAdequacyTest {
                 """.formatted(groups) + tail;
     }
 
-    /** Compiles are shared between the cases that read the same model, keyed by the budget as well as
-     * the source: the two are what a compile here is, and a model read under one of them says nothing
-     * about what it would say under the other. */
-    private static final Map<String, Compilation> COMPILED = new java.util.LinkedHashMap<>();
+    /** Compiles are shared between the cases that read the same model, keyed by what makes the
+     * compile here: the source, the work that does not come back and what is asked. A model read
+     * under one of them says nothing about what it would say under another. */
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static void released() {
+        SHARED.release();
+    }
 
     /** A model that comes back, on the default budget — including {@link #budgetSpent}, which walks
      * four thousand nodes and is the reason a short budget cannot be set for the whole suite. */
@@ -169,24 +175,7 @@ class CompilePartialAdequacyTest {
     }
 
     private static Compilation warned(String source) {
-        return warned(source, null);
-    }
-
-    private static Compilation warned(String source, Duration budget) {
-        return compiled("warn:", source, budget, Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-    }
-
-    private static Compilation compiled(String what, String source, Duration budget,
-                                        Adequacy.Asked asked) {
-        return COMPILED.computeIfAbsent(what + budget + ":" + source, _ -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            if (budget != null) {
-                compilation.withExampleBudget(budget);
-            }
-            compilation.measure(asked);
-            compilation.answerEverything();
-            return compilation;
-        });
+        return measured("warn:", source, null, Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
     }
 
     /** Measured, with {@code overrun} the work this model does not get back from — for a model
@@ -213,16 +202,20 @@ class CompilePartialAdequacyTest {
      * not come back, and a model that loops plus a clock short enough to catch it also reports the
      * rows that were supposed to finish as rows that did not, on any host loaded enough to make it
      * so.
+     *
+     * <p>A row that does not come back is an example whose evaluation gives no answer (E1923), so
+     * a model with work that overruns is refused with it, once for each such row, and a model that
+     * comes back compiles.
      */
     private static Compilation measured(String key, String source, JvmExampleDeadlines overrun,
                                         Adequacy.Asked asked) {
-        return COMPILED.computeIfAbsent(key + ":" + source, _ -> {
+        List<String> refused = overrun == null ? List.of() : List.of("E1923");
+        return SHARED.refusedWith(refused, key + ":" + source, () -> {
             Compilation compilation = Compilation.ofSource(source, "Main");
             if (overrun != null) {
                 compilation.withJvmExampleDeadlines(overrun);
             }
             compilation.measure(asked);
-            compilation.answerEverything();
             return compilation;
         });
     }
@@ -500,11 +493,10 @@ class CompilePartialAdequacyTest {
             """);
 
     private static Compilation split() {
-        return COMPILED.computeIfAbsent("split", _ -> {
+        return SHARED.refusedWith(List.of("E1906"), "split", () -> {
             Compilation compilation = Compilation.ofSources(SPLIT,
                     souther.compiler.meta.ModulePath.EMPTY);
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             return compilation;
         });
     }

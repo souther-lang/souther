@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -100,13 +101,11 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
      */
     private static final int NO_CASE_TAKEN_APART = 0;
 
-    private static Compilation compiled(String model) {
+    private static Compilation made(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main").allowing(
                 Allowances.DECLARED.with(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                         NO_CASE_TAKEN_APART));
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors());
         return compilation;
     }
 
@@ -144,7 +143,9 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
 
     @Test
     void theHelperTheSearchAppliesOnEachCandidateIsNamedAtTheComparisonsItWrote() {
-        for (JsonNode reading : readings(compiled(CALLED_ON_EACH_CANDIDATE))) {
+        Compilation compilation = made(CALLED_ON_EACH_CANDIDATE);
+        ACompiledModel.compiles(compilation);
+        for (JsonNode reading : readings(compilation)) {
             JsonNode helper = onlyHelper(reading);
             assertEquals("demo.ok", helper.path("helper").asString());
             Set<String> written = new TreeSet<>();
@@ -167,7 +168,8 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
 
     @Test
     void aHelperCalledInsideOtherHelpersIsNamedWithTheHelpersItsCallHasToMoveOutOf() {
-        Compilation compilation = compiled(CALLED_INSIDE_HELPERS);
+        Compilation compilation = made(CALLED_INSIDE_HELPERS);
+        ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         for (JsonNode reading : readings(report, compilation)) {
             JsonNode helper = onlyHelper(reading);
@@ -194,19 +196,25 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
 
     @Test
     void comparisonsTheBehaviorWritesItselfNameNoHelper() {
-        readings(compiled(IN_THE_BEHAVIORS_OWN_BODY)).forEach(reading -> assertEquals(0,
+        Compilation compilation = made(IN_THE_BEHAVIORS_OWN_BODY);
+        ACompiledModel.compiles(compilation);
+        readings(compilation).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
     }
 
     @Test
     void aHelperExpandedOnceIsOneReadingWhateverItMultipliesInside() {
-        readings(compiled(EXPANDED_ONCE)).forEach(reading -> assertEquals(0,
+        Compilation compilation = made(EXPANDED_ONCE);
+        ACompiledModel.compiles(compilation);
+        readings(compilation).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
     }
 
     @Test
     void readingsChosenAmongAsAlternativesAreAddedAndNameNoHelper() {
-        readings(compiled(READINGS_THAT_ARE_ALTERNATIVES)).forEach(reading -> assertEquals(0,
+        Compilation compilation = made(READINGS_THAT_ARE_ALTERNATIVES);
+        ACompiledModel.compiles(compilation);
+        readings(compilation).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
     }
 }

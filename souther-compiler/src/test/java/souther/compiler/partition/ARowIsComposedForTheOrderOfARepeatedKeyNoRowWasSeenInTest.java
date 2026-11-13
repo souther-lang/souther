@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
@@ -779,9 +780,7 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
                         Snap { rows = [Row { code = "c", sku = "A", qty = 1 }] })
                         -> Empty { n = 0 }
                 """;
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         Map<CaseOfAStatement, RowToRun> found =
                 compilation.db().ask(new Adequacy.CaseSearch(module, "f")).value();
@@ -829,9 +828,7 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
     }
 
     private static Map<CaseOfAStatement, RowToRun> search(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         DecisionEvidence evidence = compilation.db().ask(new Adequacy.Decides(module)).value()
                 .get("f");

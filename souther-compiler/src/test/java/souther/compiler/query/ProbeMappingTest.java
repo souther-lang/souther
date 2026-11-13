@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.observe.ArmObservation;
@@ -37,9 +38,7 @@ class ProbeMappingTest {
             """;
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.answered(MODEL);
     }
 
     @Test

@@ -68,15 +68,14 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
                 | "one" : (R { a = 1 }) -> Y
             """;
 
+    /** The document of a compilation that was measured and compiles. */
     private static JsonNode documentOf(Compilation compilation) {
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     private static JsonNode behaviorOf(String source) {
-        return documentOf(Compilation.ofSource(source, "Main"))
-                .get("modules").get(0).get("behaviors").get(0);
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+        return documentOf(compilation).get("modules").get(0).get("behaviors").get(0);
     }
 
     /** What the reading left standing, as a consumer of the document reads it. */
@@ -184,7 +183,7 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
      */
     @Test
     void twoModulesDeclaringAlikeAreTwoIdentities() {
-        JsonNode document = documentOf(Compilation.ofSources(List.of("""
+        Compilation compilation = Compilation.ofSources(List.of("""
                 module a
 
                 data Amount = Int
@@ -206,7 +205,10 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
 
                 example g
                     | "one" : (Amount(1)) -> 1
-                """), ModulePath.EMPTY));
+                """), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        JsonNode document = documentOf(compilation);
 
         Set<String> rules = new LinkedHashSet<>();
         for (JsonNode module : document.get("modules")) {

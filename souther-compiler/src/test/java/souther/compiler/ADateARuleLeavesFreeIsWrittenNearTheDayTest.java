@@ -57,7 +57,7 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
     private static Compilation measured(String source, LocalDate day) {
         Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(day);
         compilation.measure(Adequacy.Asked.fullReport());
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** The block of rows offered for the module. */
@@ -370,6 +370,7 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
         AdequacyReport owedFirst = AdequacyReport.of(compilation);
         String saidFirst = owedFirst.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         compilation.writtenOn(DAYS.get(1));
+        ACompiledModel.compiles(compilation);
         List<List<LocalDate>> second = rows(compilation);
         AdequacyReport owedSecond = AdequacyReport.of(compilation);
         String saidSecond = owedSecond.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));

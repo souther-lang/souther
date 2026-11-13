@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -53,9 +54,8 @@ class MoveScopeTest {
                     .append(each.equals("pair") ? "Pair" : "Flag");
             names.append(names.isEmpty() ? "" : ", ").append(each);
         }
-        Compilation compilation = Compilation.ofSource(
-                FLAGS.formatted(declared, names, "On"), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(
+                FLAGS.formatted(declared, names, "On"));
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

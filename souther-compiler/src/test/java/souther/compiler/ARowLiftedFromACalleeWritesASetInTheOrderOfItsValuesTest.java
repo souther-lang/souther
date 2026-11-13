@@ -8,10 +8,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.GeneratedRows;
 
-import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -49,9 +47,7 @@ class ARowLiftedFromACalleeWritesASetInTheOrderOfItsValuesTest {
     void theRowOfTheCalleeIsOfferedWithItsElementsInTheOrderOfTheirValues() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code().toString()).toList());
+        ACompiledModel.compiles(compilation);
 
         String offered = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("repro.fallen")),

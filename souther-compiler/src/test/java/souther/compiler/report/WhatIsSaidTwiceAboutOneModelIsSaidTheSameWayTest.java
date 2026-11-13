@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -109,7 +110,7 @@ class WhatIsSaidTwiceAboutOneModelIsSaidTheSameWayTest {
     private static AdequacyReport report() {
         Compilation compilation = Compilation.ofSources(SOURCES, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1906", "E1906"), compilation);
         return AdequacyReport.of(compilation);
     }
 }

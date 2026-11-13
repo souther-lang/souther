@@ -2,12 +2,11 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.Located;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -25,23 +24,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
 
-    private static List<String> codesFor(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        return compilation.diagnostics().values().stream()
-                .flatMap(List::stream)
-                .map(Located::diagnostic)
-                .map(diagnostic -> diagnostic.code())
-                .toList();
+    private static void refusedWith(String code, String source) {
+        ACompiledModel.refusedWith(List.of(code), Compilation.ofSource(source, "Main"));
     }
 
+    /** {@code data} has no value to be built. */
     private static void refuses(String data, String source) {
-        List<String> codes = codesFor(source);
-        assertEquals(List.of("E1013"), codes, "`" + data + "` has no value to be built");
+        assertTrue(source.contains("data " + data), "`" + data + "` is a data the source declares");
+        refusedWith("E1013", source);
     }
 
+    /** A value of this can be written. */
     private static void admits(String source) {
-        assertEquals(List.of(), codesFor(source), "a value of this can be written");
+        ACompiledModel.compiles(Compilation.ofSource(source, "Main"));
     }
 
     // ---- a recursion through a collection the rules will not let be empty ------------------------
@@ -74,7 +69,7 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
      */
     @Test
     void aCountRuleIsWrittenOnTheNameThatWrapsTheCollection() {
-        assertEquals(List.of("E1317"), codesFor("""
+        refusedWith("E1317", """
                 module demo
 
                 data Kids = Inner
@@ -86,7 +81,7 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
                     { kids: Kids
                     , v: Int
                     }
-                """), "the rule has nothing to count where it is written, and nothing reads it");
+                """);
     }
 
     /**
@@ -100,7 +95,7 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
      */
     @Test
     void aCycleIsNotReportedBesideADeclarationThatFailedToCheck() {
-        assertEquals(List.of("E1317"), codesFor("""
+        refusedWith("E1317", """
                 module demo
 
                 data Kids = Inner
@@ -109,7 +104,7 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
                 data Inner = List<Int>
 
                 data Loop = { self: Loop }
-                """), "`Loop` has no value, and is not said to while a rule is wrong");
+                """);
     }
 
     /** And where a layer below states it, which the name the field is written with reaches through. */
@@ -458,7 +453,7 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
      */
     @Test
     void anOptionalIsNotAPositionInsideACollection() {
-        assertEquals(List.of("E2308"), codesFor("""
+        refusedWith("E2308", """
                 module demo
 
                 data Kids = List<Tree?>
@@ -468,7 +463,7 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
                     { kids: Kids
                     , v: Int
                     }
-                """));
+                """);
     }
 
     /**
@@ -587,7 +582,7 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
     /** And a mandatory reference to itself still has nowhere to stop. */
     @Test
     void aMandatoryReferenceToItselfIsStillRefused() {
-        List<String> codes = codesFor("""
+        refusedWith("E1013", """
                 module demo
 
                 data Tree =
@@ -595,6 +590,5 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
                     , v: Int
                     }
                 """);
-        assertTrue(codes.contains("E1013"), "still the case the check was written for: " + codes);
     }
 }

@@ -235,12 +235,11 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
      */
     private Judged judged(List<Row> rows, List<Map<String, Object>> inputs, String header,
                           boolean onlyWhatIsProved) throws Exception {
-        Compilation compilation = Compilation.ofSource(module(rows, header), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.refusedOnlyWith(Set.of("E2010"),
+                Compilation.ofSource(module(rows, header), "Main"));
         Set<String> owed = new LinkedHashSet<>();
         Set<String> refused = new LinkedHashSet<>();
         for (Located each : compilation.errors()) {
-            assertEquals("E2010", each.diagnostic().code(), () -> "a row compiles: " + each);
             refused.add(String.valueOf(each.diagnostic().values().get("data")));
         }
         for (Located each : compilation.warnings()) {

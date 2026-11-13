@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
@@ -68,7 +69,10 @@ class AValueAGuaranteeWalkReachesIsOneNodeHoweverFarDownTest {
         private final GuaranteeWalk walk;
 
         Reading(String source) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
+            Compilation compilation = ACompiledModel.notCompiled(
+                    Compilation.ofSource(source, "Main"),
+                    "a chain this long overflows the stack of a compile, and what is read is the"
+                            + " declarations");
             rules = RuleReadings.of(compilation, compilation.modules().get(0));
             engine = new PathEngine(RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
                     TestDay.TODAY),

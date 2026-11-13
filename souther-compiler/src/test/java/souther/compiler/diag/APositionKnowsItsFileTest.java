@@ -6,6 +6,7 @@ import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 
@@ -49,7 +50,8 @@ class APositionKnowsItsFileTest {
     private static Ast.Module parsedAs(String id, String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(id, source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), souther.compiler.meta.ModulePath.EMPTY));
         return c.db().ask(new Front.Parsed(new SourceId(id))).value().module();
     }
 

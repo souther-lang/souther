@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -241,8 +242,8 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
     private record Body(String module, String behavior, Core body) {}
 
     private static List<Body> bodiesOf(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         List<Body> out = new ArrayList<>();
         for (String module : compilation.modules()) {
             Bodies.Elaborated checked =

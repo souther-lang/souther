@@ -6,6 +6,7 @@ import souther.compiler.check.AnalysisBody;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.OccurrenceLineage;
@@ -95,7 +96,7 @@ class AComparisonOfACopyIsNotTheOneItWasCopiedFromTest {
      */
     @Test
     void aHelperCalledTwiceHoldsTwoOccurrencesOfOneWrittenComparison() {
-        for (Map.Entry<String, Core> body : bodiesOf(List.of(List.of(SPLICED)))) {
+        for (Map.Entry<String, Core> body : bodiesOf(List.of(Model.clean(List.of(SPLICED))))) {
             if (!body.getKey().equals("over")) {
                 continue;
             }
@@ -133,8 +134,8 @@ class AComparisonOfACopyIsNotTheOneItWasCopiedFromTest {
     void anOccurrenceIsOfTheTreeItStandsIn() {
         Map<String, Core> emitted = new LinkedHashMap<>();
         Map<String, Core> analysis = new LinkedHashMap<>();
-        Compilation compilation = Compilation.ofSources(List.of(COMBINATOR), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(COMBINATOR), ModulePath.EMPTY));
         for (String module : compilation.modules()) {
             Bodies.Elaborated checked =
                     compilation.db().ask(new Bodies.Checked(module)).value();
@@ -206,20 +207,34 @@ class AComparisonOfACopyIsNotTheOneItWasCopiedFromTest {
         Core.forEachChild(e, child -> walk(child, out));
     }
 
+    /** The sources of one model, and the codes it is refused with where it is meant to be. */
+    private record Model(List<String> sources, List<String> refusedFor) {
+
+        static Model clean(List<String> sources) {
+            return new Model(sources, List.of());
+        }
+    }
+
+    /** What the conformance corpora are refused for, as checked in beside each corpus: the models
+     * that say what the compiler refuses are among the ones whose bodies are walked. */
+    private static final Map<String, List<String>> CORPUS_REFUSALS =
+            Map.of("booking", List.of("E2010", "E1013"));
+
     private static List<Map.Entry<String, Core>> everyBody() {
-        List<List<String>> sources = new ArrayList<>();
-        ConformanceCorpus.all().forEach(corpus -> sources.add(corpus.sources()));
-        sources.add(List.of(SPLICED));
-        sources.add(List.of(COMBINATOR));
+        List<Model> sources = new ArrayList<>();
+        ConformanceCorpus.all().forEach(corpus -> sources.add(new Model(corpus.sources(),
+                CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()))));
+        sources.add(Model.clean(List.of(SPLICED)));
+        sources.add(Model.clean(List.of(COMBINATOR)));
         return bodiesOf(sources);
     }
 
-    /** Every body of every module of {@code sources}, in both representations. */
-    private static List<Map.Entry<String, Core>> bodiesOf(List<List<String>> sources) {
+    /** Every body of every module of {@code models}, in both representations. */
+    private static List<Map.Entry<String, Core>> bodiesOf(List<Model> models) {
         List<Map.Entry<String, Core>> out = new ArrayList<>();
-        for (List<String> each : sources) {
-            Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
-            compilation.answerEverything();
+        for (Model each : models) {
+            Compilation compilation = Compilation.ofSources(each.sources(), ModulePath.EMPTY);
+            ACompiledModel.refusedWith(each.refusedFor(), compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

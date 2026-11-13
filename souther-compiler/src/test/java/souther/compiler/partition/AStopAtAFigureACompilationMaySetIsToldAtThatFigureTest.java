@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -71,8 +72,7 @@ class AStopAtAFigureACompilationMaySetIsToldAtThatFigureTest {
             Compilation compilation = Compilation.ofSource(stopping.model(), "Main")
                     .allowing(Allowances.DECLARED.with(budget, stopping.figure()));
             compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors());
+            ACompiledModel.compiles(compilation);
             assertEquals(budget.declared(), budget.maximum(), "told where none is in force");
 
             String said = AdequacyReport.of(compilation)

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
@@ -64,11 +65,13 @@ class AReportAboutAnImportedClauseNamesWhereItIsNowTest {
         return byId;
     }
 
+    /** The workspace compiles: the report that points into the other module is a warning. */
+    private static final List<String> REFUSED_WITH = List.of();
+
     private static Compilation answered(Map<String, String> sources) {
-        Compilation compilation = Compilation.ofDocuments(sources, Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(REFUSED_WITH,
+                Compilation.ofDocuments(sources, Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
     }
 
     /**
@@ -126,7 +129,7 @@ class AReportAboutAnImportedClauseNamesWhereItIsNowTest {
     void aStoreThatAbsorbedTheEditSaysWhereTheClauseIsNow() {
         Compilation absorbed = answered(workspace(DECLARING));
         absorbed.update(workspace(MOVED), Set.of(), TestDay.DATE);
-        absorbed.answerEverything();
+        ACompiledModel.refusedWith(REFUSED_WITH, absorbed);
 
         assertEquals(placesElsewhere(answered(workspace(MOVED))), placesElsewhere(absorbed),
                 "the store names where the clause is, not where it was");

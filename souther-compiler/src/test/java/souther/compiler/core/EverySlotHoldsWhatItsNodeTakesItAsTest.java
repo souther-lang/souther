@@ -1,5 +1,6 @@
 package souther.compiler.core;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
@@ -8,6 +9,10 @@ import souther.test.ClosedWorldContract;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -122,6 +127,26 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
         Core.forEachChild(e, child -> each(child, f));
     }
 
+    /**
+     * The codes of the errors a corpus is checked in as refused with, in the order they are
+     * said; none where it is checked in with no diagnostics.
+     */
+    private static List<String> checkedInErrors(String corpus) {
+        String resource = "/souther/compiler/conformance/" + corpus + "/expected.diagnostics.txt";
+        try (InputStream in = EverySlotHoldsWhatItsNodeTakesItAsTest.class
+                .getResourceAsStream(resource)) {
+            if (in == null) {
+                return List.of();
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
+                    .filter(line -> line.startsWith("error "))
+                    .map(line -> line.split("\\s+")[1])
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     private static List<Core> trees;
 
     /**
@@ -144,6 +169,7 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
                 byId.put(corpus.files().get(i), corpus.sources().get(i));
             }
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+            ACompiledModel.refusedWith(checkedInErrors(corpus.name()), c);
             for (String module : c.modules()) {
                 Set<String> names = c.declaredBehaviors(module);
                 if (names == null) {

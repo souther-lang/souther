@@ -45,7 +45,7 @@ class AValueHeldToAClassIsOfferedAMemberOfItTest {
     private static String offered(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())

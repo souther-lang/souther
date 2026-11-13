@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -22,15 +23,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class TheContainerOfSomePieceEqualToAValueIsStatedByTheComparisonTest {
 
     private static List<String> forks(String condition) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module w2
                 data A
                 data B
                 behavior m : (email: String, d: String) -> A | B
                 let m (email, d) = if %s then A else B
-                """.formatted(condition), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(condition), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).filter(line -> line.startsWith("· not read: fork"))

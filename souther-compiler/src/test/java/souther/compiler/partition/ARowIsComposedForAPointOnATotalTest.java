@@ -1,7 +1,9 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -39,14 +41,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * rather than one element carrying the whole of it.
  */
 class ARowIsComposedForAPointOnATotalTest {
-
-    /** The answer written beside a composed row, which is not what this is about. A row is offered
-     *  with its result for an author to fill in, and an example line needs one. */
-    private static final String WHATEVER = "Yes";
-
-    /** A row whose stated answer is wrong, which is the one thing said about these rows that is not
-     *  being asked: the run reached the comparison to disagree at all. */
-    private static final String THE_ANSWER_DISAGREES = "E1905";
 
     private static final String MODULE = "example.totals";
 
@@ -228,7 +222,7 @@ class ARowIsComposedForAPointOnATotalTest {
     void everyRowComposedIsOneTheModelHolds() {
         Map<String, List<String>> refused = new LinkedHashMap<>();
         forEachComposedRow((behavior, point, row) -> {
-            List<String> said = otherThanTheAnswer(ALONE.get(behavior) + example(behavior, row));
+            List<String> said = codesOf(ALONE.get(behavior) + example(behavior, point, row));
             if (!said.isEmpty()) {
                 refused.put(point + " -> " + row, said);
             }
@@ -244,7 +238,7 @@ class ARowIsComposedForAPointOnATotalTest {
     void everyRowComposedStandsAtThePointItWasComposedFor() {
         List<String> missed = new ArrayList<>();
         forEachComposedRow((behavior, point, row) -> {
-            if (!met(ALONE.get(behavior) + example(behavior, row), behavior, point)) {
+            if (!met(ALONE.get(behavior) + example(behavior, point, row), behavior, point)) {
                 missed.add(point + " -> " + row);
             }
         });
@@ -402,9 +396,9 @@ class ARowIsComposedForAPointOnATotalTest {
         assertEquals(List.of(List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)), budgets,
                 "and what it writes some of, which is the half of the answer that says what would"
                         + " have to give for the point to be settled — and it is not a number");
-        assertEquals(List.of(), otherThanTheAnswer(ALONE.get("noShapeOfferedReachesIt")
+        assertEquals(List.of(), codesOf(ALONE.get("noShapeOfferedReachesIt")
                         + "\nexample noShapeOfferedReachesIt\n"
-                        + "    | (Two { xs = [Awkward(2), Awkward(5)] }) -> " + WHATEVER + "\n"),
+                        + "    | (Two { xs = [Awkward(2), Awkward(5)] }) -> Yes\n"),
                 "and the row an author writes for it is one the model holds, which is why the other"
                         + " sentence would have been a lie");
     }
@@ -461,8 +455,14 @@ class ARowIsComposedForAPointOnATotalTest {
                 row.inputs().stream().map(FixtureTemplate::text).toList()) + ")";
     }
 
-    private static String example(String behavior, String row) {
-        return "\nexample " + behavior + "\n    | " + row + " -> " + WHATEVER + "\n";
+    private static String example(String behavior, String point, String row) {
+        return "\nexample " + behavior + "\n    | " + row + " -> " + answerAt(point) + "\n";
+    }
+
+    /** What every behavior here answers at a point: the comparison holds on the line and inside it,
+     *  and does not on the first value off it and outside it. */
+    private static String answerAt(String point) {
+        return point.endsWith(" ON") || point.endsWith(" IN") ? "Yes" : "No";
     }
 
     /** Whether the point is met, read off the item rather than out of a report's text. */
@@ -482,23 +482,28 @@ class ARowIsComposedForAPointOnATotalTest {
         return false;
     }
 
-    /** What the compiler says about a model, less the one thing an invented answer causes. */
-    private static List<String> otherThanTheAnswer(String source) {
-        Compilation compilation = measured(source);
+    /** What the compiler says about a model. */
+    private static List<String> codesOf(String source) {
+        Compilation compilation = measured(List.of(), source);
         List<String> said = new ArrayList<>();
         for (Map.Entry<SourceId, List<Located>> each : compilation.diagnostics().entrySet()) {
             for (Located found : each.getValue()) {
-                if (!THE_ANSWER_DISAGREES.equals(found.diagnostic().code())) {
-                    said.add(found.diagnostic().code());
-                }
+                said.add(found.diagnostic().code());
             }
         }
         return said;
     }
 
+    /** The lines of a behavior of a model that compiles. */
     private static List<BorderAssessment> lines(String source, String behavior) {
-        Map<String, List<BorderAssessment>> read =
-                Adequacy.readingsOf(measured(source).db(), MODULE);
+        return lines(source, behavior, List.of());
+    }
+
+    /** The same, for a model refused for exactly {@code codes}. */
+    private static List<BorderAssessment> lines(String source, String behavior,
+                                                List<String> codes) {
+        Compilation compilation = measured(codes, source);
+        Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), MODULE);
         assertNotNull(read, () -> "the model under test compiles: " + source);
         List<BorderAssessment> lines = read.get(behavior);
         assertNotNull(lines, () -> behavior + " was measured: " + source);
@@ -506,7 +511,12 @@ class ARowIsComposedForAPointOnATotalTest {
     }
 
     /** What each model measured here answered, which is the model's and not the asking's. */
-    private static final Map<String, Compilation> MEASURED = new LinkedHashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
+
+    @AfterAll
+    static void released() {
+        SHARED.release();
+    }
 
     /**
      * A model measured, and the same answers wherever it is asked for again.
@@ -514,13 +524,13 @@ class ARowIsComposedForAPointOnATotalTest {
      * <p>The claims here walk every point of every line and read a model back for each, so the same
      * few sources are asked for many times over. A measure is settled once and read from then on:
      * what is answered does not depend on who asked, and a compile of the whole model per reading
-     * is the same answer worked out again.
+     * is the same answer worked out again. Held to be refused with {@code codes}, none for a model
+     * that compiles.
      */
-    private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source, _ -> {
+    private static Compilation measured(List<String> codes, String source) {
+        return SHARED.refusedWith(codes, source, () -> {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             return compilation;
         });
     }

@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperEntry;
 import souther.compiler.check.HelperTable;
@@ -11,7 +12,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.ReachName;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,10 +42,7 @@ class TheLibrarysPartOfADecisionReadingIsReadOnceTest {
 
     private static HelperTable table() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return compilation.db().ask(new Bodies.Expanding("demo", InliningPolicy.FULL)).value()
                 .table();
     }

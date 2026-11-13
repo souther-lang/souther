@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.partition.Partitions;
 
@@ -56,9 +57,7 @@ class AClauseAboveASumDrawsItsLineOnceTest {
             """;
 
     private static Partitions.Partitioning divided() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Partitions.Partitioning divided =
                 compilation.db().ask(new Adequacy.Divided(MODULE, "read")).value();
         assertNotNull(divided, "the model under test compiles and is measured");

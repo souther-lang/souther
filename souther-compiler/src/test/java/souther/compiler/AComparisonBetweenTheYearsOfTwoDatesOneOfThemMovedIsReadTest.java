@@ -48,6 +48,11 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
             "Date.year(on) - Date.year(Date.addDays(0 - 1, birthday)) >= 60";
 
     private static Compilation compiled(String source) {
+        return ACompiledModel.compiles(answered(source));
+    }
+
+    /** The model answered in full, whether or not it compiles. */
+    private static Compilation answered(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -136,7 +141,6 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
                 %s""".formatted(ATTAINED, rows));
         String report = report(compilation);
 
-        assertEquals(0, compilation.errors().size(), report);
         assertTrue(readSaveForWhatTheOtherYearReaches(report), report);
         assertFalse(report.contains("no row is at the ON point"), report);
         assertFalse(report.contains("no row is at the OFF point"), report);
@@ -169,7 +173,6 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
                 %s""".formatted(ATTAINED, rows));
         String report = report(compilation);
 
-        assertEquals(0, compilation.errors().size(), report);
         assertTrue(report.contains("no row is at the OFF point"), report);
         assertFalse(report.contains("no row is at the ON point"), report);
     }
@@ -305,7 +308,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
     @Test
     void aShiftUndoneAtTheEndOfTheRangeAbortsAndIsNoRowThatReachedALine() {
-        Compilation past = compiled("""
+        Compilation past = ACompiledModel.refusedWith(List.of("E1905"), answered("""
                 module p
 
                 behavior f : (birthday: Date) -> Bool
@@ -313,9 +316,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
                 example f
                     | (Date("+999999999-12-31")) -> true
-                """);
-
-        assertEquals(1, past.errors().size(), "the program aborts there: " + report(past));
+                """));
 
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(past.db(), OfferingRequest.overTheModule("p")), Map.of(),

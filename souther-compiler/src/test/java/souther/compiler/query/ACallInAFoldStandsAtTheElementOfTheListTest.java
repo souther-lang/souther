@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.TermPath;
@@ -40,9 +41,7 @@ class ACallInAFoldStandsAtTheElementOfTheListTest {
 
     @Test
     void theElementOfAFoldIsWhereTheListHoldsIt() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Db db = compilation.db();
         var spec = Adequacy.specOf(db.ask(new Shapes.CheckSurface("repro.split")).value(), "score");
         InputReading input = Adequacy.inputReadingOf(db, "repro.split", spec);

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -107,9 +108,7 @@ class ACountNoValueOfTheOrderStandsAtIsReachedAnotherWayTest {
 
     /** The lines the behavior's positions met, whosever the row at each point is. */
     private static List<BorderAssessment> measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> read =
                 Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read, "the model under test compiles");

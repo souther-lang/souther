@@ -3,6 +3,7 @@ package souther.cli;
 import org.junit.jupiter.api.Test;
 
 import souther.cli.CliProcess.Ran;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Note;
@@ -359,8 +360,7 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
     private static Measured measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         List<Message> proofs = compilation.warnings().stream()
                 .map(Located::diagnostic)

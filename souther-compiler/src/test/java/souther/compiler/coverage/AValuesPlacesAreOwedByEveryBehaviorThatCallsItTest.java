@@ -1,6 +1,7 @@
 package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.query.Bodies;
 
@@ -37,7 +38,7 @@ class AValuesPlacesAreOwedByEveryBehaviorThatCallsItTest {
             """;
 
     private static CoverageSites.Plan plan() {
-        return Compiler.compiled(SHARED, "m").db().ask(new Bodies.Checked("m")).value().plan();
+        return ACompiledModel.compiles(Compiler.compiled(SHARED, "m")).db().ask(new Bodies.Checked("m")).value().plan();
     }
 
     private static List<ConditionOutcomeSite> comparisonProbes(

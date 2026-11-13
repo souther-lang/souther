@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.meta.ModulePath;
@@ -95,7 +96,7 @@ class ACountIsPaidByWhatReadsTheRuleThatMovedTest {
         byId.put(ID, source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the module compiles to begin with: " + c.db().allReports());
         return c;

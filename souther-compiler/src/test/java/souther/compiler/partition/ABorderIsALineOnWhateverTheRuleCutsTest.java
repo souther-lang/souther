@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,11 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
     /** Two whole-number positions, each bounded, so the box is finite and the search has ends. */
     private static String guarded(String condition) {
+        return guarded(condition, "Yes { v = 1 }");
+    }
+
+    /** The same, with the answer its one example gives at (1, 1), which the condition decides. */
+    private static String guarded(String condition, String answeredAtOneOne) {
         return """
                 module example.shape
 
@@ -61,8 +67,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 }
 
                 example f
-                    | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
-                """.formatted(condition);
+                    | "one" : (Bound(1), Bound(1)) -> %s
+                """.formatted(condition, answeredAtOneOne);
     }
 
     /** The issue's own model: a rule over what an order costs, and two positions it is priced on. */
@@ -291,7 +297,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     @Test
     void aLevelTheRulesLeaveNoRowAtIsSaidToBeOutOfReach() {
         String report = report(guarded(
-                "Int.add(Int.multiply(3, a.value), Int.multiply(5, b.value)) <= 7"));
+                "Int.add(Int.multiply(3, a.value), Int.multiply(5, b.value)) <= 7",
+                "No { why = 0 }"));
 
         assertTrue(report.contains("the ON point (comparison@14:71)"), report);
         assertTrue(report.contains("read as f/3 * a + 5 * b: = 7"
@@ -303,6 +310,11 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     /** Two positions whose values fill: every distance is a distance, and no distance has a next
      *  one. */
     private static String dense(String condition) {
+        return dense(condition, "Yes { v = 1 }");
+    }
+
+    /** The same, with the answer its first example gives at (1, 50), which the condition decides. */
+    private static String dense(String condition, String answeredAtOneFifty) {
         return """
                 module example.dense
 
@@ -322,9 +334,9 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 }
 
                 example f
-                    | "under" : (D(1m), D(50m)) -> Yes { v = 1 }
+                    | "under" : (D(1m), D(50m)) -> %s
                     | "over" : (D(50m), D(1m)) -> No { why = 0 }
-                """.formatted(condition);
+                """.formatted(condition, answeredAtOneFifty);
     }
 
     /**
@@ -382,7 +394,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
      */
     @Test
     void aFormOverAnOrderThatFillsIsNotProvedEmptyByAWalkOverWholeNumbers() {
-        String report = report(dense("a.value * 2m + b.value * 4m <= 9m"));
+        String report = report(dense("a.value * 2m + b.value * 4m <= 9m", "No { why = 0 }"));
 
         assertTrue(report.contains("read as f/2 * a + 4 * b: = 9"), report);
         assertFalse(report.contains("no value can stand at 2 * a + 4 * b"),
@@ -466,7 +478,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
      */
     @Test
     void theSubjectIsTheOneTheSourceNames() {
-        String report = report(guarded("b.value > a.value"));
+        String report = report(guarded("b.value > a.value", "No { why = 0 }"));
 
         assertTrue(report.contains("read as f/b: = a"), report);
         assertFalse(report.contains("read as f/a: = b"), report);
@@ -481,7 +493,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
      */
     @Test
     void aSideOfAFormOverAnOrderThatFillsIsOfferedARow() {
-        String rows = generated(dense("a.value * 2m + b.value * 4m <= 9m"));
+        String rows = generated(dense("a.value * 2m + b.value * 4m <= 9m", "No { why = 0 }"));
 
         assertTrue(rows.contains("D(0m), D(2.25m)"),
                 "the point where the form comes to nine:\n" + rows);
@@ -719,7 +731,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     @Test
     void aThresholdOutsideWhatTheFormTakesDrawsNoLine() {
         String report = report(guarded(
-                "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= -6"));
+                "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= -6",
+                "No { why = 0 }"));
 
         assertFalse(report.contains("3 * a + 6 * b"),
                 "the form runs from nought upward, so nothing is cut at minus six:\n" + report);
@@ -775,12 +788,12 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
     }
 
     private static String report(String model) {
-        Compilation compilation = measured(model);
+        Compilation compilation = ACompiledModel.compiles(measured(model));
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String generated(String model) {
-        Compilation compilation = measured(model);
+        Compilation compilation = ACompiledModel.compiles(measured(model));
         return GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 

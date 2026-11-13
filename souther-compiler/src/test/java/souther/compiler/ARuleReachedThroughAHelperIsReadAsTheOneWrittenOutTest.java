@@ -1,9 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
@@ -156,8 +158,12 @@ class ARuleReachedThroughAHelperIsReadAsTheOneWrittenOutTest {
      */
     @ParameterizedTest
     @MethodSource("operands")
-    void aValueAnAuthorWroteIsTheSameValueThroughAHelper(String base, String rule, String named) {
-        assertEquals(admitted(base, "", rule), admitted(base, ITSELF, named),
+    void aValueAnAuthorWroteIsTheSameValueThroughAHelper(String base, String rule,
+                                                         String helpers, String named,
+                                                         String refusedWith) {
+        assertEquals(admitted(base, "", rule, List.of()),
+                admitted(base, helpers, named,
+                        refusedWith.isEmpty() ? List.of() : List.of(refusedWith)),
                 "what the position admits does not turn on which spelling the value arrived by");
     }
 
@@ -166,45 +172,44 @@ class ARuleReachedThroughAHelperIsReadAsTheOneWrittenOutTest {
             let itsSelf (s: String) = s
             let atLeast (n: Int, floor: Int) = n >= floor
             let isOne (n: Int, one: Int) = n == one
-            let matching (p: String, s: String) = String.matches(p, s)
             let atLeastOne (s: String) = String.length(s) >= 1
             """;
 
-    private static Stream<org.junit.jupiter.params.provider.Arguments> operands() {
+    /** A helper handing its pattern on, which a pattern that is not a literal refuses; what the
+     *  declaration admits is read all the same. */
+    private static final String MATCHING = "let matching (p: String, s: String) = "
+            + "String.matches(p, s)";
+
+    private static Stream<Arguments> operands() {
         return Stream.of(
                 // A binding still in the tree, standing inside the comparison.
-                org.junit.jupiter.params.provider.Arguments.of(
-                        "Int", "value >= 1", "value >= itself(1)"),
-                org.junit.jupiter.params.provider.Arguments.of(
-                        "Int", "value == 1", "value == itself(1)"),
-                org.junit.jupiter.params.provider.Arguments.of(
-                        "String", "String.matches(\"[a-z]+\", value)",
-                        "String.matches(itsSelf(\"[a-z]+\"), value)"),
+                Arguments.of("Int", "value >= 1", ITSELF, "value >= itself(1)", ""),
+                Arguments.of("Int", "value == 1", ITSELF, "value == itself(1)", ""),
+                Arguments.of("String", "String.matches(\"[a-z]+\", value)", ITSELF,
+                        "String.matches(itsSelf(\"[a-z]+\"), value)", ""),
                 // And a binding the clause's shape has already crossed, leaving a bare read of the
                 // parameter where the value was written. The two are different places for a reader
                 // to meet one, and holding only the first left the second reading nothing.
-                org.junit.jupiter.params.provider.Arguments.of(
-                        "Int", "value >= 1", "atLeast(value, 1)"),
-                org.junit.jupiter.params.provider.Arguments.of(
-                        "Int", "value == 1", "isOne(value, 1)"),
-                org.junit.jupiter.params.provider.Arguments.of(
-                        "String", "String.matches(\"[a-z]+\", value)",
-                        "matching(\"[a-z]+\", value)"),
+                Arguments.of("Int", "value >= 1", ITSELF, "atLeast(value, 1)", ""),
+                Arguments.of("Int", "value == 1", ITSELF, "isOne(value, 1)", ""),
+                Arguments.of("String", "String.matches(\"[a-z]+\", value)", MATCHING,
+                        "matching(\"[a-z]+\", value)", "E1323"),
                 // The rule #1333 was written about, which is a length rather than the value.
-                org.junit.jupiter.params.provider.Arguments.of(
-                        "String", "String.length(value) >= 1", "atLeastOne(value)"));
+                Arguments.of("String", "String.length(value) >= 1", ITSELF,
+                        "atLeastOne(value)", ""));
     }
 
     /** What the one position of a newtype is left, as the declaration's own reading says it. */
-    private static String admitted(String base, String helpers, String clause) {
-        return souther.compiler.check.RuleReadings.admittedByTheValueOf("""
+    private static String admitted(String base, String helpers, String clause,
+                                   List<String> refusedWith) {
+        return RuleReadings.admittedByTheValueOf("""
                 module demo
 
                 %s
 
                 data N = %s
                     invariant %s
-                """.formatted(helpers, base, clause));
+                """.formatted(helpers, base, clause), refusedWith);
     }
 
     /**

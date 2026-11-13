@@ -45,10 +45,9 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
             data Ok
             data R = { a: Int, b: Int }
                 invariant first  = a < b
-                invariant second = b < a
+                invariant second = a <= b
 
             behavior f : (r: R) -> Ok
-                constructs Ok
             let f (r) = Ok
             """;
 
@@ -72,8 +71,8 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
 
             behavior f : (a: Int, b: Int) -> Ok
                 constructs Ok
-                ensures low  = a < b
-                ensures high = b < a
+                ensures low  = a < b && value.v == a
+                ensures high = a <= b && value.v == a
             let f (a, b) = Ok { v = a }
             """;
 
@@ -301,7 +300,6 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
                     invariant mixed = a < b && Int.multiply(a, a) < 10
 
                 behavior f : (r: R) -> Ok
-                    constructs Ok
                 let f (r) = Ok
                 """;
 
@@ -373,14 +371,14 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
     private static PartitionEvidence measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
 
     private static String human(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
@@ -393,7 +391,7 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
     private static String json(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

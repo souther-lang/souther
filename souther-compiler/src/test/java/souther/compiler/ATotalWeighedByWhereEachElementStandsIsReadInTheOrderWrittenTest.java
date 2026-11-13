@@ -13,9 +13,7 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -652,7 +650,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                 {"(i, c) -> (c + 1) - 1", "[" + max + ", -" + max + "]"},
                 {"(i, c) -> 0 * (c + 1) + c", "[" + max + ", -" + max + "]"},
                 {"(i, c) -> (if i == 0 then 0 else 1) * (c + 1)", "[" + max + ", 10]"}}) {
-            String human = report(model(spelled[0], "xs") + """
+            String human = report(List.of("E1905"), model(spelled[0], "xs") + """
                     example check
                         | "stops" : (%s, 0) -> Bad
                     """.formatted(spelled[1]));
@@ -688,26 +686,32 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
     }
 
     /** Each model measured once for the class: several tests ask one model, and only read it. */
-    private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
-        });
-    }
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
-
-    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+    /** Given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
+    }
+
+    private static Compilation measure(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        return compilation;
+    }
+
+    private static Compilation measured(String model) {
+        return SHARED.compiles(model, () -> measure(model));
     }
 
     private static String report(String model) {
-        Compilation compilation = measured(model);
+        return report(List.of(), model);
+    }
+
+    /** The report of a model the compiler is meant to refuse with {@code refused}. */
+    private static String report(List<String> refused, String model) {
+        Compilation compilation = SHARED.refusedWith(refused, model, () -> measure(model));
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

@@ -1,5 +1,6 @@
 package souther.compiler.sites;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.BindingEvidence;
 import souther.compiler.check.ParameterFact;
 import souther.compiler.cst.SourceLayout;
@@ -54,7 +55,7 @@ class WhatEveryBehaviorDeclaresIsWorkedOutOncePerRevisionTest {
             behavior submit : (request: Draft) -> Int
                 depends on price
 
-            let submit (request, price) = request.plannedCost.value
+            let submit (request, price) = request.plannedCost.value + price(request).value
             """;
 
     private static final Bodies.DeclaredParameters FACTS = new Bodies.DeclaredParameters("m");
@@ -87,6 +88,7 @@ class WhatEveryBehaviorDeclaresIsWorkedOutOncePerRevisionTest {
 
         assertSame(facts, db.ask(FACTS), "the revision said what it says once");
         assertSame(bindings, db.ask(BINDINGS), "and so did the projection the reading walks");
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -99,8 +101,8 @@ class WhatEveryBehaviorDeclaresIsWorkedOutOncePerRevisionTest {
      */
     @Test
     void bothReadersOfTheTableAreAnsweredFromIt() {
-        Compilation compilation = Compilation.ofDocuments(
-                Map.of("m.sou", MODULE), Set.of(), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofDocuments(
+                Map.of("m.sou", MODULE), Set.of(), ModulePath.EMPTY));
 
         assertEquals("Cost", Type.show(askWhatIsLeftOfTheDot(compilation).type().type()),
                 "`request.plannedCost` is what the declarations say it is");

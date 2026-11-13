@@ -396,7 +396,8 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
     /** Each model measured once for the class: the tests here ask three models for their page
      *  and their document, and only read them. */
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, WhatTheOfferWasShortOfReachesTheAccountTest::measuring);
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(model,
+                WhatTheOfferWasShortOfReachesTheAccountTest::measuring));
     }
 
     private static final Map<String, Compilation> MEASURED = new HashMap<>();
@@ -411,10 +412,6 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
     private static Compilation measuring(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
         return compilation;
     }
 }

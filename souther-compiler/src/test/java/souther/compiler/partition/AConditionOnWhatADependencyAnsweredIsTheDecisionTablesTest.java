@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -215,9 +216,9 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                 let greet (name, xs, known) =
                     if known(name) && List.contains(List.length(xs), xs) then 1 else 0
                 example greet
-                    | "both" : ("a", [0]) with known = true -> 1
-                    | "unknown" : ("b", [0]) with known = false -> 0
-                    | "no zero" : ("a", [1]) with known = true -> 0
+                    | "both" : ("a", [1]) with known = true -> 1
+                    | "unknown" : ("b", [1]) with known = false -> 0
+                    | "no zero" : ("a", [2]) with known = true -> 0
                 """);
 
         assertEquals(Set.of("xs"), notReadAt(report),
@@ -275,9 +276,7 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
     }
 
     private static AdequacyReport measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation);
     }
 

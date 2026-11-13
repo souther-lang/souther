@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.QuotientByAValue;
@@ -315,18 +316,22 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
      */
     private static Compilation read() {
         if (compiled == null) {
-            compiled = Compilation.ofSource(MODEL, "Main");
-            compiled.answerEverything();
+            compiled = ACompiledModel.refusedWith(DIVISION_BY_NOUGHT,
+                    Compilation.ofSource(MODEL, "Main"));
         }
         return compiled;
     }
 
+    /** The one row of the model the compile refuses is the one that divides by nought, which
+     *  answers nothing. */
+    private static final List<String> DIVISION_BY_NOUGHT = List.of("E1905");
+
     /** The same, measured, which is a second compilation because the report is what it is for. */
     private static Compilation measured() {
         if (reported == null) {
-            reported = Compilation.ofSource(MODEL, "Main");
-            reported.measure(Adequacy.Asked.fullReport());
-            reported.answerEverything();
+            Compilation made = Compilation.ofSource(MODEL, "Main");
+            made.measure(Adequacy.Asked.fullReport());
+            reported = ACompiledModel.refusedWith(DIVISION_BY_NOUGHT, made);
         }
         return reported;
     }

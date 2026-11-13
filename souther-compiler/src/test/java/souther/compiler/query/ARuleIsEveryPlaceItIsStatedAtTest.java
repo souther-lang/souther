@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.partition.AnswersDemanded;
 import souther.compiler.partition.CameToNothing;
@@ -138,9 +139,7 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
     }
 
     private static Compiled compiled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         String module = compilation.modules().get(0);
         DecisionEvidence decided =
                 compilation.db().ask(new Adequacy.Decides(module)).value().get("f");

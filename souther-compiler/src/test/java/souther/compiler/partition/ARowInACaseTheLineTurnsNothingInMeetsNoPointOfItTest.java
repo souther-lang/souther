@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
@@ -211,7 +212,7 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
 
     /** What the guards of {@code e} come to in {@code source}. */
     private static GuardThresholds.Guards guardsOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().getFirst();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
@@ -311,10 +312,7 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
     private static AdequacyReport measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors()
-                .stream().map(e -> e.diagnostic().code() + " " + e.diagnostic().titleKey())
-                .toList());
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation);
     }
 

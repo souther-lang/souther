@@ -2,13 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -53,8 +53,7 @@ class ACountOverAListWhoseRulesKeepItsElementsApartIsShownOnlyAsFarAsARowWritesT
                 """.formatted(name, rule)));
         Compilation compilation = Compilation.ofSource(source.toString(), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Map<String, PartitionEvidence> measured =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
         Set<String> out = new LinkedHashSet<>();

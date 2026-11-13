@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Answer;
 import souther.compiler.query.Compilation;
@@ -32,7 +33,7 @@ class WhatMayStopARunOnTheWayIsWhatSomeRunPastItCameThroughTest {
 
     /** Every kind of thing filed as one that may stop a run on the way to a comparison. */
     private static Set<WhatMayStopARun> stopsBefore(String lines) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module w1
 
                 data Ok
@@ -45,7 +46,7 @@ class WhatMayStopARunOnTheWayIsWhatSomeRunPastItCameThroughTest {
                     guard b > 3 else No
                     Ok
                 }
-                """.formatted(lines), "Main");
+                """.formatted(lines));
         Answer<Map<String, PathReachability.Answers.AsRun>> arrived =
                 compilation.db().ask(new Adequacy.Arrived("w1"));
         Set<WhatMayStopARun> out = new LinkedHashSet<>();
@@ -57,7 +58,7 @@ class WhatMayStopARunOnTheWayIsWhatSomeRunPastItCameThroughTest {
     /** What is filed as what may stop a run on the way to the comparison {@code lines} write
      *  first, in every copy of it. */
     private static Set<WhatMayStopARun> stopsBeforeTheFirst(String lines) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module w1
 
                 data Ok
@@ -70,7 +71,7 @@ class WhatMayStopARunOnTheWayIsWhatSomeRunPastItCameThroughTest {
                     guard b > 3 else No
                     Ok
                 }
-                """.formatted(lines), "Main");
+                """.formatted(lines));
         Answer<Map<String, PathReachability.Answers.AsRun>> arrived =
                 compilation.db().ask(new Adequacy.Arrived("w1"));
         Set<WhatMayStopARun> out = new LinkedHashSet<>();

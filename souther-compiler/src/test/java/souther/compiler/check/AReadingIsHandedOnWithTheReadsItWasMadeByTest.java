@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -76,6 +77,7 @@ class AReadingIsHandedOnWithTheReadsItWasMadeByTest {
         assertEquals(List.of("read again"), store.handedOn,
                 "and what making it read is read for the second reader, which read nothing to have"
                         + " it and would otherwise be kept over an edit to the rules it is of");
+        ACompiledModel.compiles(compilation);
     }
 
     /** The terms the compilation reads under, said again here: what a reading is made under is

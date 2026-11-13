@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.inputs.InputDomain;
@@ -55,7 +56,7 @@ class ARegionLeavesARuleOutOnlyOfTheParameterItWasShownForTest {
 
     @Test
     void theParameterItWasLeftOutOfLosesTheFloorAndTheOtherKeepsIt() {
-        Compilation compilation = Compilation.ofSource(PAIRS, "Main");
+        Compilation compilation = ACompiledModel.answered(PAIRS);
         SearchRegion region = regionOf(compilation);
         assertEquals(FLOOR, floorOfTheSum(region, "x"));
         assertEquals(FLOOR, floorOfTheSum(region, "y"));
@@ -74,7 +75,7 @@ class ARegionLeavesARuleOutOnlyOfTheParameterItWasShownForTest {
 
     @Test
     void nothingLeftOutIsTheRegionItself() {
-        SearchRegion region = regionOf(Compilation.ofSource(PAIRS, "Main"));
+        SearchRegion region = regionOf(ACompiledModel.answered(PAIRS));
         assertSame(region, region.withoutTheRelationOf(Map.of()));
     }
 
@@ -101,7 +102,7 @@ class ARegionLeavesARuleOutOnlyOfTheParameterItWasShownForTest {
      */
     @Test
     void whatEachPlaceWasLeftIsKeptWhenTheRelationBetweenThemIsLeftOut() {
-        Compilation compilation = Compilation.ofSource(BAND, "Main");
+        Compilation compilation = ACompiledModel.answered(BAND);
         SearchRegion region = regionOf(compilation);
         NumericTerm.ValueOf a = new NumericTerm.ValueOf(TermPath.of("x").then("a"));
         Endpoint top = Endpoint.inclusive(Count.of(-9));

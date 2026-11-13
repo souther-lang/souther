@@ -1,5 +1,6 @@
 package souther.cli;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.WeakeningSet;
 import souther.cli.CliProcess.Ran;
@@ -260,7 +261,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
     private static List<Message> deadBranchProofs(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1327".equals(d.code()))
@@ -436,7 +437,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
      */
     private static List<CoverageSites.ArmSite> armSites() {
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         return checked.plan().arms("classify");
@@ -488,7 +489,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
      */
     private static PathReachability.Answers proving() {
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation.db()
                 .ask(new Adequacy.PathReached(compilation.modules().get(0))).value()
                 .get("classify");

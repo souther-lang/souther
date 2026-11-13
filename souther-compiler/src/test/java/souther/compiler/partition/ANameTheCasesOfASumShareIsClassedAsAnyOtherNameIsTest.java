@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputReading;
@@ -75,7 +76,7 @@ class ANameTheCasesOfASumShareIsClassedAsAnyOtherNameIsTest {
     }
 
     private static InputReading reading(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSource(model, "Main"));
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -180,7 +181,9 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
     @Test
     void aBoundMadeOfANamedFieldIsReadOutOfTheDataItIsAFieldOf() {
         String named = "{ let bound = l.lowerBound\n        if bound + 1 <= m then 2 else 1 }";
-        assertEquals(2, placesInTheDocument(helperOver(named, TWO_LIMITS)).size());
+        String source = helperOver(named, TWO_LIMITS)
+                .replace("(N { v = 100 }, true) -> 2", "(N { v = 100 }, true) -> 1");
+        assertEquals(2, placesInTheDocument(source).size());
     }
 
     /** A bound the library's own conversion carries is read out of what it converts, as the
@@ -194,14 +197,21 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
         assertEquals(2, placesInTheDocument(source).size());
     }
 
-    /** A bound the compiler folds to a number, from a string a record holds. */
-    @Test
-    void aBoundFoldedFromAStringIsReadOutOfTheDataItIsAFieldOf() {
-        String source = helperOver("if String.length(l.label) <= m then 2 else 1", TWO_LIMITS)
+    /** The helper over limits that hold a string, whose length is four at every one of them, so
+     *  that every row meets the bound and answers the greater grade. */
+    private static String labelledLimits(String body) {
+        return helperOver(body, TWO_LIMITS)
                 .replace("data Limit = { lowerBound: Int }", "data Limit = { label: String }")
                 .replace("Limit { lowerBound = 100 }", "Limit { label = \"aaaa\" }")
                 .replace("let second: Limit = Limit { label = \"aaaa\" }",
-                        "let second: Limit = Limit { label = \"bbbb\" }");
+                        "let second: Limit = Limit { label = \"bbbb\" }")
+                .replace("-> 1", "-> 2");
+    }
+
+    /** A bound the compiler folds to a number, from a string a record holds. */
+    @Test
+    void aBoundFoldedFromAStringIsReadOutOfTheDataItIsAFieldOf() {
+        String source = labelledLimits("if String.length(l.label) <= m then 2 else 1");
         Set<String> places = placesInTheDocument(source);
         assertEquals(2, places.size(), places.toString());
     }
@@ -210,11 +220,7 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
      *  it is written where it is compared. */
     @Test
     void aFoldedBoundGivenANameIsReadOutOfTheDataItIsAFieldOf() {
-        String labelled = helperOver("if String.length(l.label) <= m then 2 else 1", TWO_LIMITS)
-                .replace("data Limit = { lowerBound: Int }", "data Limit = { label: String }")
-                .replace("Limit { lowerBound = 100 }", "Limit { label = \"aaaa\" }")
-                .replace("let second: Limit = Limit { label = \"aaaa\" }",
-                        "let second: Limit = Limit { label = \"bbbb\" }");
+        String labelled = labelledLimits("if String.length(l.label) <= m then 2 else 1");
         String named = labelled.replace("if String.length(l.label) <= m then 2 else 1",
                 "{ let bound = String.length(l.label)\n        if bound <= m then 2 else 1 }");
         Set<String> placesOfNamed = placesInTheDocument(named);
@@ -257,11 +263,7 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
     /** What is in a folded expression and takes no part in its number is no data of the bound. */
     @Test
     void aNameNothingReadsInAFoldedExpressionIsNoDataOfTheBound() {
-        String labelled = helperOver("if String.length(l.label) <= m then 2 else 1", TWO_LIMITS)
-                .replace("data Limit = { lowerBound: Int }", "data Limit = { label: String }")
-                .replace("Limit { lowerBound = 100 }", "Limit { label = \"aaaa\" }")
-                .replace("let second: Limit = Limit { label = \"aaaa\" }",
-                        "let second: Limit = Limit { label = \"bbbb\" }");
+        String labelled = labelledLimits("if String.length(l.label) <= m then 2 else 1");
         String idle = labelled.replace("let first:", "let third: Limit = Limit { label = \"cccc\" }\n"
                         + "                let first:")
                 .replace("if String.length(l.label) <= m then 2 else 1",
@@ -398,9 +400,7 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
 
     /** Every place the document says a bound is read out of, each once. */
     private static Set<String> placesInTheDocument(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String json = AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts()));
         Set<String> out = new TreeSet<>();
@@ -435,9 +435,7 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
     }
 
     private static String reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("1 behavior:"), "the model was measured: " + report);

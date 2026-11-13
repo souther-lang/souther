@@ -32,17 +32,38 @@ class AFoldCountingWhatEachElementMeetsIsTheCountTest {
                 | ([0, 1, 0, 0]) -> true
             """;
 
+    private static final String ROWS_OF_A_RUN_COUNT = """
+
+            example out
+                | ([]) -> false
+                | ([0, 0, 0]) -> true
+                | ([0, 0, 0, 1]) -> false
+                | ([0, 1, 0, 0]) -> false
+            """;
+
+    private static final String ROWS_OF_A_CAPPED_COUNT = """
+
+            example out
+                | ([]) -> false
+                | ([0, 0, 0]) -> false
+                | ([0, 1, 0, 0]) -> false
+            """;
+
     private static String report(String body) {
+        return report(body, ROWS);
+    }
+
+    private static String report(String body, String rows) {
         String source = """
                 module m
 
                 behavior out : (xs: List<Int>) -> Bool
 
                 let out (xs) = %s
-                """.formatted(body) + ROWS;
+                """.formatted(body) + rows;
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -87,7 +108,7 @@ class AFoldCountingWhatEachElementMeetsIsTheCountTest {
     @Test
     void aStepThatStartsOverIsNoCount() {
         String report = report(
-                "List.fold((n, x) -> if x == 0 then n + 1 else 0, 0, xs) >= 3");
+                "List.fold((n, x) -> if x == 0 then n + 1 else 0, 0, xs) >= 3", ROWS_OF_A_RUN_COUNT);
 
         assertFalse(report.contains("#xs ["), report);
     }
@@ -97,7 +118,7 @@ class AFoldCountingWhatEachElementMeetsIsTheCountTest {
     @Test
     void aStepDecidedByWhatItCarriedIsNoCount() {
         String report = report(
-                "List.fold((n, x) -> if n < 2 then n + 1 else n, 0, xs) >= 3");
+                "List.fold((n, x) -> if n < 2 then n + 1 else n, 0, xs) >= 3", ROWS_OF_A_CAPPED_COUNT);
 
         assertFalse(report.contains("#xs ["), report);
     }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.TermPath;
@@ -136,7 +137,7 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
         for (int each = 1; each <= ASKED_OF_Q; each++) {
             fields.add("q" + each + ": Bool");
         }
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data R = { %s }
@@ -144,7 +145,7 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
 
                 behavior f : (r: R) -> Yes
                 let f (r) = Yes
-                """.formatted(fields), "Main");
+                """.formatted(fields));
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

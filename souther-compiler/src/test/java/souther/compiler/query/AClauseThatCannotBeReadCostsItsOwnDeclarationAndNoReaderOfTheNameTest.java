@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.meta.ModulePath;
@@ -58,14 +59,15 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("lib.sou", LIB);
         byId.put("app.sou", APP);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        // The clause is what does not compile.
+        return ACompiledModel.refusedWith(List.of("E1802"),
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 
     /** One mistake, in the file that wrote it. */
     @Test
     void theClauseIsTheOnlyThingWrong() {
         Compilation c = compiled();
-        c.answerEverything();
 
         List<String> said = c.diagnostics().values().stream().flatMap(List::stream)
                 .map(each -> each.diagnostic().code()).toList();
@@ -79,7 +81,6 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
     @Test
     void theDeclarationIsStillReadWhereItWasWritten() {
         Compilation c = compiled();
-        c.answerEverything();
         DerivedSymbols symbols = Scopes.derived(c.db(), "lib").value();
 
         Hir.Def wide = symbols.declaredNode(new TypeKey("lib", "Wide"));
@@ -128,8 +129,8 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
                 behavior aliased : (b: L.Bad) -> Out constructs Out
                 let aliased (b) = Out { n = 1 }
                 """);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.refusedWith(List.of("E1023"),
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
 
         assertEquals(List.of("E1023"), c.diagnostics().values().stream().flatMap(List::stream)
                         .map(each -> each.diagnostic().code()).toList(),
@@ -141,7 +142,6 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
     @Test
     void theImporterReadsTheDeclarationItNamed() {
         Compilation c = compiled();
-        c.answerEverything();
         DerivedSymbols symbols = Scopes.derived(c.db(), "app").value();
 
         assertNotNull(symbols, "`app` has names of its own to mean something");

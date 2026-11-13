@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
@@ -118,7 +119,7 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
                         ReadingPolicy policy) {}
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSource(NAMES_BELOW_A_FIELD, "Main");
+        Compilation compilation = ACompiledModel.answered(NAMES_BELOW_A_FIELD);
         String module = compilation.modules().get(0);
         RuleReadingSource source = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

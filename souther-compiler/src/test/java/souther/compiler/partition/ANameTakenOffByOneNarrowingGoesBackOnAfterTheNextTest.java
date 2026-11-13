@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredBounds;
@@ -81,10 +82,10 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
     @Test
     void aCaseThatWrapsAnOptionalKeepsItsOwnName() {
         assertEquals(List.of("MaybeTag"),
-                wornAt(A_CASE_THAT_WRAPS_AN_OPTIONAL, "d@MaybeTag", "Some"),
+                wornAt(A_CASE_THAT_WRAPS_AN_OPTIONAL, List.of("E1009"), "d@MaybeTag", "Some"),
                 "a value chosen under the presence is still missing the case's own name");
         assertEquals(List.of("MaybeTag"),
-                wornAt(A_CASE_THAT_WRAPS_AN_OPTIONAL, "d@MaybeTag", "None"),
+                wornAt(A_CASE_THAT_WRAPS_AN_OPTIONAL, List.of("E1009"), "d@MaybeTag", "None"),
                 "and so is the absence the presence settled");
     }
 
@@ -105,7 +106,13 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
 
     /** The names a value chosen for {@code classId} at {@code path} is still missing. */
     private static List<String> wornAt(String source, String path, String classId) {
-        Read read = read(source);
+        return wornAt(source, List.of(), path, classId);
+    }
+
+    /** As above, of a model the compile refuses with {@code refusedWith}. */
+    private static List<String> wornAt(String source, List<String> refusedWith, String path,
+                                       String classId) {
+        Read read = read(source, refusedWith);
         Partitions.Partitioning partitioning =
                 Partitions.of("look", read.domain().reading(read.rules()), ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
@@ -154,9 +161,9 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
     private record Read(String parameter, DeclaredSig sig, RuleReadingSource rules,
                         InputDomain domain) {}
 
-    private static Read read(String source) {
+    private static Read read(String source, List<String> refusedWith) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(refusedWith, compilation);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

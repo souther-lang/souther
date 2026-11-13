@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.publish.RuleHandleProse;
@@ -211,11 +212,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
     private static String readingOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(java.util.List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " "
-                        + each.diagnostic().primary()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         AdequacyReport.BehaviorReport read = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().stream()
                 .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();

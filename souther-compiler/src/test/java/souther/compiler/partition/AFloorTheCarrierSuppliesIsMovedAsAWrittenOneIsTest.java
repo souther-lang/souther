@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -301,9 +302,8 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
     }
 
     private static List<BorderAssessment> boundariesOf(String declaration) {
-        Compilation compilation = Compilation.ofSource(sourceOf(declaration), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(sourceOf(declaration), Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), "example.floor");
         if (boundaries == null) {
@@ -334,8 +334,7 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
     }
 
     private static Position positionOf(String declaration) {
-        Compilation compilation = Compilation.ofSource(sourceOf(declaration), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(sourceOf(declaration));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

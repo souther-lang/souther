@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.ClauseRead;
@@ -397,15 +398,15 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", prices);
         c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
     }
 
     private static Compilation started(String prices) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", prices);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());
         return c;

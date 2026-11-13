@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -40,7 +41,18 @@ class WhatAClauseDrawsALineOnTest {
 
     /** The lines one behavior's clauses draw, through the readings a report is built from. */
     private static EnsuresThresholds.Clauses drawn(String source, String behavior) {
+        return drawn(ACompiledModel.answered(source), behavior);
+    }
+
+    /** The same, over a model that is expected to be refused with {@code codes} and read anyway. */
+    private static EnsuresThresholds.Clauses drawnDespite(
+            List<String> codes, String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(codes, compilation);
+        return drawn(compilation, behavior);
+    }
+
+    private static EnsuresThresholds.Clauses drawn(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -193,9 +205,12 @@ class WhatAClauseDrawsALineOnTest {
                 """;
 
         // The same clause over the input, so that "no line" is what reading the answer comes to
-        // rather than what this reading does with every clause of this shape.
-        assertEquals(List.of("n = 0"), valuesOf(drawn(model.formatted("n"), "tally")));
-        assertEquals(List.of(), valuesOf(drawn(model.formatted("value"), "tally")),
+        // rather than what this reading does with every clause of this shape. Each clause names
+        // only one side, so each model is refused for it and is read all the same.
+        assertEquals(List.of("n = 0"),
+                valuesOf(drawnDespite(List.of("E1616"), model.formatted("n"), "tally")));
+        assertEquals(List.of(),
+                valuesOf(drawnDespite(List.of("E1617"), model.formatted("value"), "tally")),
                 "a row cannot be written at a value the behavior answers with");
     }
 

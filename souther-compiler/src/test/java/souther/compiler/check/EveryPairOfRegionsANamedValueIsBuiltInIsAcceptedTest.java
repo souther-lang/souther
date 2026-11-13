@@ -2,10 +2,13 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
+import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -115,10 +118,14 @@ class EveryPairOfRegionsANamedValueIsBuiltInIsAcceptedTest {
                 for (String second : List.of(first, REGIONS.get((at + 1) % REGIONS.size()))) {
                     String source = HEAD + holder.around(first, second);
                     out.add(DynamicTest.dynamicTest(holder + " " + first + " / " + second,
-                            () -> assertEquals(List.of(), Compiler.compiled(source, "m")
-                                    .diagnostics().values().stream().flatMap(List::stream)
-                                    .map(each -> each.diagnostic().code())
-                                    .filter(code -> !DEAD_BRANCH.equals(code)).toList())));
+                            () -> {
+                                Compilation model = Compiler.compiled(source, "m");
+                                ACompiledModel.refusedOnlyWith(Set.of(DEAD_BRANCH), model);
+                                assertEquals(List.of(), model
+                                        .diagnostics().values().stream().flatMap(List::stream)
+                                        .map(each -> each.diagnostic().code())
+                                        .filter(code -> !DEAD_BRANCH.equals(code)).toList());
+                            }));
                 }
             }
         }

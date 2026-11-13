@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -34,7 +35,7 @@ class AStringRelationIsReadPastAGuardOnTheCodePointsOfAClassTest {
     private static final String CONTAINS = "String.contains(b.value, a)";
 
     private static Compilation measured(String aType, String guards, String relation) {
-        Compilation compilation = Compilation.ofSource("""
+        return ACompiledModel.measured("""
                 module demo
 
                 data Any1 = String invariant String.matches("[\\\\s\\\\S]+", value)
@@ -47,10 +48,7 @@ class AStringRelationIsReadPastAGuardOnTheCodePointsOfAClassTest {
                     %s
                     %s
                 }
-                """.formatted(aType, guards, relation), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+                """.formatted(aType, guards, relation), Adequacy.Asked.fullReport());
     }
 
     private static Compilation guarded(String guard, String relation) {

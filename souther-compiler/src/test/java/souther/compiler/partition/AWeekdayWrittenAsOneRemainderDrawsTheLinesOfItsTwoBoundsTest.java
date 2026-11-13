@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -66,8 +67,9 @@ class AWeekdayWrittenAsOneRemainderDrawsTheLinesOfItsTwoBoundsTest {
                 """.replace("WEEKDAY", weekday).replace("KS", IntStream.range(0, candidates)
                 .mapToObj(Integer::toString).collect(Collectors.joining(", ")));
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        assertNotNull(checked, "the model compiles: " + compilation.errors());
+        assertNotNull(checked, "the model compiles");
         AnalysisBody analysis = checked.analysisBodies().get("g");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("g");

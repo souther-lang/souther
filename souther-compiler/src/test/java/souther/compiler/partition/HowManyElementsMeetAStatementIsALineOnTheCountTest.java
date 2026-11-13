@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.numeric.ExactAnswer;
@@ -241,10 +242,12 @@ class HowManyElementsMeetAStatementIsALineOnTheCountTest {
     void aCountOfStringsHeldAgainstAnotherStringFollowsTheWayTheRelationFaces() {
         String row = """
                 example pick
-                    | "two below and one above" : (["a", "b", "c", "m"], "c") -> High
+                    | "two below and one above" : (["a", "b", "c", "m"], "c") -> %s
                 """;
-        JsonNode below = countBorders(reportOf(stringsAgainstU("<") + row)).getFirst();
-        JsonNode above = countBorders(reportOf(stringsAgainstU(">") + row)).getFirst();
+        JsonNode below = countBorders(
+                reportOf(stringsAgainstU("<") + row.formatted("High"))).getFirst();
+        JsonNode above = countBorders(
+                reportOf(stringsAgainstU(">") + row.formatted("Low"))).getFirst();
 
         assertTrue(pointAt(below, "on").path("hit").asBoolean(),
                 () -> "a and b are below c, and c is not: " + below);
@@ -264,9 +267,7 @@ class HowManyElementsMeetAStatementIsALineOnTheCountTest {
     }
 
     private static JsonNode reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }

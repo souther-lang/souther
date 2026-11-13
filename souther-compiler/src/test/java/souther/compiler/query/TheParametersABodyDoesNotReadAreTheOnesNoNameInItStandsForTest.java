@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.types.ValueName;
 
 import java.util.Set;
@@ -17,14 +18,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class TheParametersABodyDoesNotReadAreTheOnesNoNameInItStandsForTest {
 
     private static Set<String> unread(String parameters, String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module example.reads
 
                 behavior f : (%s) -> Int
 
                 let f (%s) = %s
-                """.formatted(parameters, names(parameters), body), "Main");
-        compilation.answerEverything();
+                """.formatted(parameters, names(parameters), body));
         return Adequacy.unreadParametersOf(compilation.db(),
                 new ValueName.Behavior(compilation.modules().get(0), "f"));
     }

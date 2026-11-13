@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.numeric.Count;
@@ -211,6 +212,7 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
     private static List<Record> recordsRead() {
         List<Record> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
+            ACompiledModel.compiles(compilation);
             ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
             DeclarationReadings lent = RepositoryModels.knownTo(compilation);
             for (String module : compilation.modules()) {

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 
 import java.util.List;
@@ -183,11 +184,6 @@ class WhichModuleKeepsTheAccountOfARunTest {
     private static Compilation compiled(String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.db().allReports().stream()
-                        .filter(each -> each.report().isError())
-                        .map(each -> each.report().diagnostic().code()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

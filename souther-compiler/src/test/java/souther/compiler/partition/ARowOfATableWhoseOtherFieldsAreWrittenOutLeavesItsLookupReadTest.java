@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -50,9 +51,7 @@ class ARowOfATableWhoseOtherFieldsAreWrittenOutLeavesItsLookupReadTest {
     private static List<String> unread(String table) {
         Compilation compilation = Compilation.ofSource(SOURCE.formatted(table), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .filter(line -> line.contains("not read:"))
@@ -88,9 +87,7 @@ class ARowOfATableWhoseOtherFieldsAreWrittenOutLeavesItsLookupReadTest {
         Compilation compilation = Compilation.ofSource(
                 STOPPING_BEFORE_THE_NUMBER.formatted(helpers, first, second), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .filter(line -> line.contains("not read:"))

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.observe.Limits;
 import souther.compiler.query.Adequacy;
@@ -479,9 +480,7 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     }
 
     private static Rows generated(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all =
                 Adequacy.generatedOf(compilation.db(), "example.settle");
         assertNotNull(all, "the model under test compiles");

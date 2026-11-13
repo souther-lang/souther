@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
@@ -147,7 +148,7 @@ class ARuleTheBlockHadNoRoomForIsStillWeighedTest {
                         new AdequacyPolicy.OfTheGeneration(rowLimit,
                                 Budgets.generation().cellsPerGroup())));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertFalse(compilation.modules().isEmpty(), "the model compiled");
         return compilation;
     }

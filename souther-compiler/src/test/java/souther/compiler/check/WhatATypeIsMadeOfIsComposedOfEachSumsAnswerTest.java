@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
@@ -72,7 +73,7 @@ class WhatATypeIsMadeOfIsComposedOfEachSumsAnswerTest {
 
     @Test
     void twoSumsReachingEachOtherAreComposedAsOneDescentReachesThem() {
-        Module cyclic = new Module(REACHING_EACH_OTHER);
+        Module cyclic = new Module(REACHING_EACH_OTHER, List.of("E1021", "E1021"));
 
         assertEquals(List.of("Y", "X"), cyclic.composed(Type.ref(cyclic.named("P"))),
                 "a sum reaching itself through another comes back with the leaves under both");
@@ -88,8 +89,15 @@ class WhatATypeIsMadeOfIsComposedOfEachSumsAnswerTest {
         private final SumCases sums;
 
         Module(String source) {
-            resolved = Compilation.ofDocuments(Map.of("m.sou", source), Set.of(), ModulePath.EMPTY)
-                    .db().ask(new Names.Resolved("m")).value();
+            this(source, List.of());
+        }
+
+        /** A module refused for {@code refusedWith}, which is read all the same. */
+        Module(String source, List<String> refusedWith) {
+            Compilation compilation = Compilation.ofDocuments(
+                    Map.of("m.sou", source), Set.of(), ModulePath.EMPTY);
+            ACompiledModel.refusedWith(refusedWith, compilation);
+            resolved = compilation.db().ask(new Names.Resolved("m")).value();
             Symbols symbols = TypeChecker.symbols(resolved, DefaultStdlib.get());
             kinds = ScopedDeclarations.kindsOf(symbols);
             listed = ScopedDeclarations.listedOf(symbols);

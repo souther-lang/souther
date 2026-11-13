@@ -2,10 +2,10 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.UndividedPosition;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,9 +46,6 @@ class AHolidayThatDecidesWhetherTheNextDayIsAskedIsNotShownReachedAtEveryValueTe
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
         assertEquals(Map.of("c.holidays[*]", UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
                 "c.start", UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
@@ -57,6 +54,7 @@ class AHolidayThatDecidesWhetherTheNextDayIsAskedIsNotShownReachedAtEveryValueTe
                 "c.holidays[*]", UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE,
                 "c.start", UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
                 reasonsOf(evidence.get("afterAHoliday")));
+        ACompiledModel.compiles(compilation);
     }
 
     private static Map<String, UndividedPosition.Reason> reasonsOf(PartitionEvidence evidence) {

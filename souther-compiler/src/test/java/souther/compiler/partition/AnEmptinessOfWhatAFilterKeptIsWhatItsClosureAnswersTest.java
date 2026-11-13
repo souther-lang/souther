@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -250,7 +251,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
             String filter = kept.get(2);
             String through = kept.get(3);
             String filterLibrary = filter.substring(0, filter.indexOf('.'));
-            Compilation empty = compiled(model.formatted(filterLibrary + ".isEmpty(" + filter + ")"));
+            String empty = model.formatted(filterLibrary + ".isEmpty(" + filter + ")");
             assertTheSame(empty, model.formatted(library + ".isEmpty(" + through + ")"));
             String size = library.equals("List") ? "List.length(" : library + ".size(";
             assertTheSame(empty, model.formatted(size + through + ") == 0"));
@@ -271,7 +272,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                 let pick (xs) = if List.length(%s) %s then 1 else 0
                 """;
         for (String count : List.of(">= 1", "== 0")) {
-            Compilation direct = compiled(list.formatted("List.filter(x -> x > 0, xs)", count));
+            String direct = list.formatted("List.filter(x -> x > 0, xs)", count);
             for (String order : List.of("List.reverse(xs)", "List.sort(xs)",
                     "List.reverse(List.sort(xs))")) {
                 assertTheSame(direct, list.formatted(
@@ -529,10 +530,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
 
     /** Both spellings read every rule alike, tell the same apart and come to one verdict. */
     private static void assertTheSame(String one, String other) {
-        assertTheSame(compiled(one), other);
-    }
-
-    private static void assertTheSame(Compilation first, String other) {
+        Compilation first = compiled(one);
         Compilation second = compiled(other);
         assertEquals(List.of(), measured(first).notRead());
         assertEquals(notRead(measured(first)), notRead(measured(second)));
@@ -573,12 +571,8 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
     }
 
     private static Compilation compiled(String model) {
-        return COMPILED.computeIfAbsent(model, text -> {
-            Compilation compilation = Compilation.ofSource("module demo\n\n" + text, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors(), "the model compiles and its rows hold");
-            return compilation;
-        });
+        return ACompiledModel.compiles(COMPILED.computeIfAbsent(model,
+                text -> ACompiledModel.measured("module demo\n\n" + text,
+                        Adequacy.Asked.fullReport())));
     }
 }

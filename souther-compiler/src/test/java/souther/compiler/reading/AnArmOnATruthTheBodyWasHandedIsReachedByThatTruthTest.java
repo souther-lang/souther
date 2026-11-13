@@ -2,6 +2,7 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.types.WrittenOwner;
@@ -271,10 +272,7 @@ class AnArmOnATruthTheBodyWasHandedIsReachedByThatTruthTest {
     private static CoverageRead.Read readOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         CoverageRead.Read read =
                 compilation.db().ask(new Adequacy.Meets("example.settle")).value().get("settle");
         assertNotNull(read, "the body is read");

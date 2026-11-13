@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -59,9 +60,7 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
                     Matched { ids = List.map(c -> c.id, found) }
                 }
                 """.formatted(before, codes, condition);
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         PartitionEvidence screen = compilation.db()
                 .ask(new Adequacy.Coverage(MODULE)).value().get("screen");
         assertNotNull(screen, "the model under test compiles");

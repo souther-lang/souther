@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ArmReportAnchor;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
@@ -65,7 +66,8 @@ class WhereAnArmIsShownIsAskedOfTheModuleThatWroteItTest {
     }
 
     private static Compilation started(String limits) {
-        return Compilation.ofDocuments(workspace(limits), Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.compiles(
+                Compilation.ofDocuments(workspace(limits), Set.of(), ModulePath.EMPTY));
     }
 
     /** The arms `shop.orders` reaches that `shop.limits` wrote. */

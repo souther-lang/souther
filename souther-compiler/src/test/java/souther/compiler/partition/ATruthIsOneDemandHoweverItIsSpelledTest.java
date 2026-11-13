@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -176,8 +177,7 @@ class ATruthIsOneDemandHoweverItIsSpelledTest {
     private static Compilation compiled() {
         Compilation made = Compilation.ofSource(MODEL, "Main");
         made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
-        return made;
+        return ACompiledModel.compiles(made);
     }
 
     private static String module() {

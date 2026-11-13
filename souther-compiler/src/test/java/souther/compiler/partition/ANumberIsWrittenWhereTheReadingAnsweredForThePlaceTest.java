@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
@@ -14,6 +15,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
@@ -201,13 +203,9 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
     private static final Map<String, Compilation> COMPILED = new java.util.HashMap<>();
 
     private static synchronized Compilation compiled(String source) {
-        return COMPILED.computeIfAbsent(source, each -> {
-            Compilation made = Compilation.ofSource(each, "Main");
-            // Measured, because the lines a row is composed at are drawn where a behavior is.
-            made.measure(souther.compiler.query.Adequacy.Asked.fullReport());
-            made.answerEverything();
-            return made;
-        });
+        // Measured, because the lines a row is composed at are drawn where a behavior is.
+        return ACompiledModel.compiles(COMPILED.computeIfAbsent(source,
+                each -> ACompiledModel.measured(each, Adequacy.Asked.fullReport())));
     }
 
     private static String module(String source) {

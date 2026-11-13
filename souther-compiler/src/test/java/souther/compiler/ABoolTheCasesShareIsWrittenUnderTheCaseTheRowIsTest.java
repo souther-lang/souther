@@ -8,10 +8,8 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
-import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,11 +60,7 @@ class ABoolTheCasesShareIsWrittenUnderTheCaseTheRowIsTest {
     }
 
     private static Compilation measured() {
-        Compilation c = Measured.ONCE;
-        assertEquals(List.of(), c.errors().stream()
-                .map(e -> e.diagnostic().code() + " " + e.diagnostic().said()).toList(),
-                "the model is measured");
-        return c;
+        return Measured.ONCE;
     }
 
     /** The model measured once: both questions here read the one measurement. */
@@ -77,8 +71,7 @@ class ABoolTheCasesShareIsWrittenUnderTheCaseTheRowIsTest {
         private static Compilation measure() {
             Compilation c = Compilation.ofSource(MODEL, "Main");
             c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
-            return c;
+            return ACompiledModel.compiles(c);
         }
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.numeric.Count;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
@@ -185,9 +186,6 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
     }
 
     private static Compilation analysed() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 }

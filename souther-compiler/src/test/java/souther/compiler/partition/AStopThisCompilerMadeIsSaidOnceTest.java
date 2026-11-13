@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.BlockedDescent;
 import souther.compiler.inputs.RulesLeftUnread;
@@ -53,7 +54,6 @@ class AStopThisCompilerMadeIsSaidOnceTest {
                 invariant n >= 0
 
             behavior f : (h: Holder) -> Ok
-                constructs Ok
             let f (h) = Ok
             """;
 
@@ -152,7 +152,7 @@ class AStopThisCompilerMadeIsSaidOnceTest {
     private static List<Weakening> weakeningOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
         Map<String, PartitionEvidence> partitions = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         return List.copyOf(partitions.get(behavior).weakening().causes());

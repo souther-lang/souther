@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.Generator;
 
 import java.util.ArrayList;
@@ -36,9 +37,7 @@ class ACaseRowTakesRoomInTheBlockOnlyWhereTheRowsBeforeItLeaveSomeTest {
 
     @Test
     void aCaseRowIsAdmittedOnlyIntoTheRoomThatIsLeft() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), compilation.modules().getFirst());
         Adequacy.Filling filling = generated.get("f");

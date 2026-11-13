@@ -1,13 +1,14 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -41,14 +42,17 @@ class TheDesugaringAnswersForEveryDefinitionAModuleWritesTest {
     private static Compilation compiled() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", SOURCE);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        // The model is the one that has the mistake: a newtype applied to a count other than one.
+        return ACompiledModel.refusedWith(List.of("E1802"),
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 
     /** Both definitions are answered for, the one holding the application among them. */
     @Test
     void everyDefinitionIsAnsweredForWhateverItsBodyHolds() {
+        Compilation c = compiled();
         Map<String, souther.compiler.check.Desugared.Fn> fns =
-                compiled().db().ask(new Shapes.DesugaredFns("m.a")).value();
+                c.db().ask(new Shapes.DesugaredFns("m.a")).value();
 
         assertTrue(fns.containsKey("f"),
                 "the rewrite leaves what is not a construction as it was, and answers");
@@ -62,11 +66,5 @@ class TheDesugaringAnswersForEveryDefinitionAModuleWritesTest {
 
         assertTrue(c.db().ask(new Shapes.Desugared("m.a")).present(),
                 "every definition was answered for, so there is a module");
-
-        c.answerEverything();
-        assertEquals(java.util.List.of("E1802"),
-                c.diagnostics().values().stream().flatMap(java.util.List::stream)
-                        .map(each -> each.diagnostic().code()).toList(),
-                "and the application is said as a newtype wrapping a count other than one, once");
     }
 }

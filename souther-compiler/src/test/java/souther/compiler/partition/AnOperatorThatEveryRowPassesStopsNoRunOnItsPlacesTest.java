@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -24,15 +25,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class AnOperatorThatEveryRowPassesStopsNoRunOnItsPlacesTest {
 
     private static PartitionEvidence measured(String parameters, String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module probe
 
                 behavior f : (%s) -> Bool
 
                 let f (%s) = %s
-                """.formatted(parameters, names(parameters), body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(parameters, names(parameters), body), Adequacy.Asked.fullReport());
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("probe")).value().get("f");
         assertNotNull(evidence, "the model under test compiles");

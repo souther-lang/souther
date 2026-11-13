@@ -110,9 +110,6 @@ class APointTheWayLeavesNoValueIsRefutedTest {
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code().toString()).toList(), "the model is measured");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

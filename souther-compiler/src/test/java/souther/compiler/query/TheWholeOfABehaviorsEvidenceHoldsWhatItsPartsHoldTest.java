@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhatWasCompiled;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
@@ -60,28 +61,23 @@ class TheWholeOfABehaviorsEvidenceHoldsWhatItsPartsHoldTest {
             }
             """;
 
-    private static List<Compilation> population() {
-        Compilation compilation = Compilation.ofSource(WAITLIST, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
-        return List.of(compilation);
+    private static Compilation model() {
+        return ACompiledModel.measured(WAITLIST, Adequacy.Asked.fullReport());
     }
 
     /** The union over the parts, of every behavior of the model. */
     @Test
     void theWholeHoldsWhatEveryPartHolds() {
         int walked = 0;
-        for (Compilation compilation : population()) {
-            for (BehaviorEvidence evidence : behaviorsOf(compilation)) {
-                Set<RuleCitation> held = new LinkedHashSet<>();
-                for (RecordComponent part : BehaviorEvidence.class.getRecordComponents()) {
-                    held.addAll(handlesIn(valueOf(evidence, part)));
-                }
-                assertEquals(held, evidence.ruleCitations(),
-                        "a behavior's evidence holds the handles its parts hold");
-                walked += held.size();
+        Compilation compilation = model();
+        for (BehaviorEvidence evidence : behaviorsOf(compilation)) {
+            Set<RuleCitation> held = new LinkedHashSet<>();
+            for (RecordComponent part : BehaviorEvidence.class.getRecordComponents()) {
+                held.addAll(handlesIn(valueOf(evidence, part)));
             }
+            assertEquals(held, evidence.ruleCitations(),
+                    "a behavior's evidence holds the handles its parts hold");
+            walked += held.size();
         }
         // The walk found something to be about. Every assertion above holds of a walk that read no
         // value at all, which is what a check written from the field types would have been.
@@ -99,7 +95,7 @@ class TheWholeOfABehaviorsEvidenceHoldsWhatItsPartsHoldTest {
      */
     @Test
     void andWhichOfThemTheUnionWouldBeShortOfWithoutTheAsking() {
-        assertEquals(Set.of("partition", "boundaryReadings"), partsHoldingAHandleAlone(population()),
+        assertEquals(Set.of("partition", "boundaryReadings"), partsHoldingAHandleAlone(model()),
                 "the parts that hold a handle no other part of the same behavior holds");
     }
 
@@ -112,7 +108,7 @@ class TheWholeOfABehaviorsEvidenceHoldsWhatItsPartsHoldTest {
     @Test
     void thePartsThatHoldAHandleAreTheOnesWrittenDown() {
         assertEquals(Set.of("partition", "boundaryReadings", "account"),
-                partsHoldingAHandle(population()),
+                partsHoldingAHandle(model()),
                 "the parts of a behavior's evidence that hold a handle for a rule they read");
     }
 
@@ -126,44 +122,40 @@ class TheWholeOfABehaviorsEvidenceHoldsWhatItsPartsHoldTest {
      */
     @Test
     void andTheWholeReadsEachPartThatHoldsOne() {
-        assertEquals(partsHoldingAHandle(population()), partsReadBy("ruleCitations"),
+        assertEquals(partsHoldingAHandle(model()), partsReadBy("ruleCitations"),
                 "the parts a behavior's evidence reads when it is asked for its handles");
     }
 
-    /** The parts of {@code population}'s behaviors that hold a handle no other part holds. */
-    private static Set<String> partsHoldingAHandleAlone(List<Compilation> population) {
+    /** The parts of {@code compilation}'s behaviors that hold a handle no other part holds. */
+    private static Set<String> partsHoldingAHandleAlone(Compilation compilation) {
         Set<String> alone = new LinkedHashSet<>();
-        for (Compilation compilation : population) {
-            for (BehaviorEvidence evidence : behaviorsOf(compilation)) {
-                Map<String, Set<RuleCitation>> held = new LinkedHashMap<>();
-                for (RecordComponent part : BehaviorEvidence.class.getRecordComponents()) {
-                    held.put(part.getName(), handlesIn(valueOf(evidence, part)));
-                }
-                held.forEach((name, mine) -> {
-                    Set<RuleCitation> beside = new LinkedHashSet<>();
-                    held.forEach((other, cited) -> {
-                        if (!other.equals(name)) {
-                            beside.addAll(cited);
-                        }
-                    });
-                    if (!beside.containsAll(mine)) {
-                        alone.add(name);
+        for (BehaviorEvidence evidence : behaviorsOf(compilation)) {
+            Map<String, Set<RuleCitation>> held = new LinkedHashMap<>();
+            for (RecordComponent part : BehaviorEvidence.class.getRecordComponents()) {
+                held.put(part.getName(), handlesIn(valueOf(evidence, part)));
+            }
+            held.forEach((name, mine) -> {
+                Set<RuleCitation> beside = new LinkedHashSet<>();
+                held.forEach((other, cited) -> {
+                    if (!other.equals(name)) {
+                        beside.addAll(cited);
                     }
                 });
-            }
+                if (!beside.containsAll(mine)) {
+                    alone.add(name);
+                }
+            });
         }
         return alone;
     }
 
-    /** Which parts a run of {@code population} finds a handle in. */
-    private static Set<String> partsHoldingAHandle(List<Compilation> population) {
+    /** Which parts a run of {@code compilation} finds a handle in. */
+    private static Set<String> partsHoldingAHandle(Compilation compilation) {
         Set<String> holding = new LinkedHashSet<>();
-        for (Compilation compilation : population) {
-            for (BehaviorEvidence evidence : behaviorsOf(compilation)) {
-                for (RecordComponent part : BehaviorEvidence.class.getRecordComponents()) {
-                    if (!handlesIn(valueOf(evidence, part)).isEmpty()) {
-                        holding.add(part.getName());
-                    }
+        for (BehaviorEvidence evidence : behaviorsOf(compilation)) {
+            for (RecordComponent part : BehaviorEvidence.class.getRecordComponents()) {
+                if (!handlesIn(valueOf(evidence, part)).isEmpty()) {
+                    holding.add(part.getName());
                 }
             }
         }

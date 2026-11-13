@@ -29,7 +29,7 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
     private static PartitionEvidence partitionOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         for (AdequacyReport.BehaviorReport each
                 : AdequacyReport.of(compilation).modules().get(0).behaviors()) {
             if (each.name().equals(behavior)) {
@@ -65,7 +65,7 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
                     then 1 else 2
 
                 example price
-                    | "one" : (Code { text = "a" }) -> 2
+                    | "one" : (Code { text = "a" }) -> 1
                 """, "price");
 
         assertEquals(List.of("String.length(c.text)"), readFor(partition),
@@ -109,7 +109,6 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
                 data TooShort
 
                 behavior price : (c: Code) -> Ok | TooShort
-                    constructs Ok
                     ensures TooShort ->
                         String.length(c.text) <= String.length(c.text) * String.length(c.text)
                 let price (c) = TooShort
@@ -140,7 +139,7 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
 
                 behavior pick : (item: Item) -> Line
                     constructs Line
-                    ensures Line -> value.sku == item.sku
+                    ensures value.sku == item.sku
                 let pick (item) = Line { sku = item.sku }
 
                 example pick

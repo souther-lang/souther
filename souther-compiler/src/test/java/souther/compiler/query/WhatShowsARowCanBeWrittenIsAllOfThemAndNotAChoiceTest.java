@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.ItemAssessment.WritabilityEvidence.Ground;
 import souther.compiler.report.AdequacyReport;
@@ -264,7 +265,7 @@ class WhatShowsARowCanBeWrittenIsAllOfThemAndNotAChoiceTest {
     private static List<BorderAssessment> bordersOf(String model, String module, String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.searchedBoundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");
@@ -290,7 +291,7 @@ class WhatShowsARowCanBeWrittenIsAllOfThemAndNotAChoiceTest {
     private static JsonNode reportOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return tools.jackson.databind.json.JsonMapper.builder().build().readTree(
                 AdequacyReport.of(compilation).json(
                         souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())));

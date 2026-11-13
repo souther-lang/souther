@@ -294,12 +294,12 @@ class ACodePointWeighedByItsIndexIsReadAtThatIndexTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source, text -> {
-            Compilation compilation = Compilation.ofSource(text, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
+        Compilation compilation = MEASURED.computeIfAbsent(source, text -> {
+            Compilation made = Compilation.ofSource(text, "Main");
+            made.measure(Adequacy.Asked.fullReport());
+            return ACompiledModel.compiles(made);
         });
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String report(Compilation compilation) {

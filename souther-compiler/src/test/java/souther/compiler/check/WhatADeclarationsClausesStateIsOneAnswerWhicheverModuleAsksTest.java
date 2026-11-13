@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -290,9 +291,7 @@ class WhatADeclarationsClausesStateIsOneAnswerWhicheverModuleAsksTest {
     void aClauseWithNoFormIsTheSameNoFormWhicheverModuleAsks() {
         Compilation compilation =
                 Compilation.ofSources(List.of(A_CLAUSE_WITH_NO_FORM, READING_IT), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertFalse(compilation.errors().isEmpty(),
-                "this source is supposed to name something nothing declares");
+        ACompiledModel.refusedWith(List.of("E1023"), compilation);
 
         Db db = compilation.db();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo.stopped", "Amount"));
@@ -323,10 +322,6 @@ class WhatADeclarationsClausesStateIsOneAnswerWhicheverModuleAsksTest {
      */
     private static Db analysed(List<String> sources) {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of(),
-                compilation.errors().stream().map(each -> each.diagnostic().code()).toList(),
-                "these modules are supposed to compile");
-        return compilation.db();
+        return ACompiledModel.compiles(compilation).db();
     }
 }

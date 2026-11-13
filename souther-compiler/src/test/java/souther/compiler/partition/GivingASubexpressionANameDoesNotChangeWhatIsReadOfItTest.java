@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -114,17 +115,13 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
             "overTwoPositionsNamed", "overTwoPositions");
 
     private static Map<String, PartitionEvidence> measured(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return compilation.db().ask(new Adequacy.Coverage(module)).value();
     }
 
     /** The lines each behavior's positions met, whosever the row at each point is. */
     private static Map<String, List<BorderAssessment>> lines(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return Adequacy.readingsOf(compilation.db(), module);
     }
 
@@ -218,8 +215,7 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
      * the names on the way meant, which is the defect this is about one layer up.
      */
     private static List<String> cutsOf(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);

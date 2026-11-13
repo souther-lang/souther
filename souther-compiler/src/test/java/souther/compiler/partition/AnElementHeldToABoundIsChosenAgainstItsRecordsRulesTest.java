@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -103,9 +104,7 @@ class AnElementHeldToABoundIsChosenAgainstItsRecordsRulesTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(RELATED, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.answered(RELATED);
     }
 
     private static RuleReadingContext readingOf(Compilation compilation) {

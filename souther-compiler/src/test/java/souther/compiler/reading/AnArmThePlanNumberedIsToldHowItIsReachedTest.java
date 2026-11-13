@@ -3,6 +3,7 @@ package souther.compiler.reading;
 import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -14,6 +15,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -249,8 +251,13 @@ class AnArmThePlanNumberedIsToldHowItIsReachedTest {
         }
     }
 
+    /** The models emission refuses: an abort standing as an operand has no type stated for it. */
+    private static final Map<String, List<String>> REFUSED =
+            Map.of(NOTHING_ARRIVES, List.of("E1307"));
+
     private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(REFUSED.getOrDefault(source, List.of()), compilation);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

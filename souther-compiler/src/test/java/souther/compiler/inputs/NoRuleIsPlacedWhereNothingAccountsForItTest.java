@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -202,9 +203,8 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
 
     private static List<Compilation> askedAbout() {
         List<Compilation> out = new ArrayList<>(RepositoryModels.all());
-        Compilation crossed = Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY);
-        crossed.answerEverything();
-        out.add(crossed);
+        out.add(ACompiledModel.compiles(
+                Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY)));
         return List.copyOf(out);
     }
 
@@ -216,6 +216,7 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
     private static List<InputDomain> everyReading() {
         List<InputDomain> out = new ArrayList<>();
         for (Compilation compilation : ASKED_ABOUT) {
+            ACompiledModel.compiles(compilation);
             for (String module : compilation.modules()) {
                 Answer<Map<String, InputDomain>> read =
                         compilation.db().ask(new Adequacy.Inputs(module));
@@ -261,6 +262,7 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
     }
 
     private static void valuesRead(Compilation compilation, List<PlacedRules> out) {
+        ACompiledModel.compiles(compilation);
         for (String module : compilation.modules()) {
             Map<String, DeclaredSig> sigs =
                     compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

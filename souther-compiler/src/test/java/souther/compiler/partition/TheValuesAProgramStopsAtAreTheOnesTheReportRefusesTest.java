@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.ArmObservation;
@@ -102,12 +103,9 @@ class TheValuesAProgramStopsAtAreTheOnesTheReportRefusesTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         // The row at each stop says the body answers, and it aborts: a row that disagrees with the
         // model is refused at compile time, and these three are the only refusals.
-        assertEquals(List.of("E1905", "E1905", "E1905"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList());
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1905", "E1905", "E1905"), compilation);
     }
 
     private static void collect(JsonNode node, String behavior, Set<String> out) {

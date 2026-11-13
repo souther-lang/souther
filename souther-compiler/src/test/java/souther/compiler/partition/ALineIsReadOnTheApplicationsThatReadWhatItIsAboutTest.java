@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.AnApplicationOfAClosure;
@@ -11,7 +12,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,8 +64,7 @@ class ALineIsReadOnTheApplicationsThatReadWhatItIsAboutTest {
     void aLinePartingWhatSettlesARelationIsReadOnWhatReadThatRelation() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), MODEL);
+        ACompiledModel.compiles(compilation);
         Partitions.Partitioning partitioning =
                 compilation.db().ask(new Adequacy.Divided("demo", "g")).value();
         List<Set<Integer>> onN = readOnAlong(partitioning, "g/o.items[*].n");

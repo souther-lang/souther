@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Emitted;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
@@ -113,7 +114,7 @@ class AWalkIsRecordedOnceItsArgumentsAreWorkedOutTest {
 
         Run(String model) {
             Compilation compilation = Compilation.ofSource(model, "Main");
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             Bodies.Elaborated checked = compilation.db()
                     .ask(new Bodies.Checked(compilation.modules().get(0))).value();
             assertNotNull(checked, "the model under test compiles");

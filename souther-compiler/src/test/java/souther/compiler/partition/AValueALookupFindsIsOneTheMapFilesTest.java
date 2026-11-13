@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -68,9 +69,6 @@ class AValueALookupFindsIsOneTheMapFilesTest {
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the models under test compile");
         Map<String, List<String>> priced = new LinkedHashMap<>();
         judged.keySet().forEach(name -> priced.put(name, evidence.get(name).notRead().stream()
                 .filter(each -> each.at().equals("deals[*].currency"))
@@ -80,5 +78,6 @@ class AValueALookupFindsIsOneTheMapFilesTest {
         assertEquals(List.of(reached), priced.get("asFound"), priced.toString());
         assertTrue(priced.get("dividedBy").stream().noneMatch(reached::equals),
                 priced.toString());
+        ACompiledModel.compiles(compilation);
     }
 }

@@ -1,12 +1,12 @@
 package souther.compiler.program;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -55,9 +55,7 @@ class AProgramIsAssembledOfABehaviorThatComposesEnsuresAndGuardsAConstructionTes
 
     private static CheckedProgram assembled() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code() + " " + e.diagnostic().titleKey()).toList(),
-                "the model compiles");
+        ACompiledModel.compiles(compilation);
         return CheckedProgramAssembler.of(compilation);
     }
 

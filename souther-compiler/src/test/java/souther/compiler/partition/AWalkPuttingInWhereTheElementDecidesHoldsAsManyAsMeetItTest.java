@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -51,13 +52,11 @@ class AWalkPuttingInWhereTheElementDecidesHoldsAsManyAsMeetItTest {
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        // A body that does not type is no body read, and leaves nothing unread.
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the models under test compile");
         Map<String, List<String>> out = new LinkedHashMap<>();
         judged.keySet().forEach(name -> out.put(name, evidence.get(name).notRead().stream()
                 .map(each -> each.at() + "=" + each.reason()).toList()));
+        // A body that does not type is no body read, and leaves nothing unread.
+        ACompiledModel.compiles(compilation);
         return out;
     }
 

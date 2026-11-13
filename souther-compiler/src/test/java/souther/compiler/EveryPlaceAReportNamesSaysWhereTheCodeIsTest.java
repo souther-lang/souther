@@ -408,9 +408,8 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     }
 
     private static Said readEveryRenderingOnce(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(model, Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         AdequacyReport report = AdequacyReport.of(compilation);
 
         List<Diagnostic> arms = new ArrayList<>();
@@ -479,7 +478,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         Compilation compilation = Compilation.ofSources(ANOTHER_SOURCE,
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         SourceRendering names = new SourceRendering(
                 id -> "0".equals(id.value()) ? "up.sou" : "down.sou", compilation.texts());
         AdequacyReport report = AdequacyReport.of(compilation);

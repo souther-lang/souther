@@ -44,10 +44,7 @@ class TwoLinesInCasesOnOneQuantityAreToldApartTest {
     private static final Pattern PLACE = Pattern.compile("\\(line (\\d+) of (\\d+)\\)");
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static String human(String source) {
@@ -96,7 +93,7 @@ class TwoLinesInCasesOnOneQuantityAreToldApartTest {
     void theWordsDoNotDependOnTheRowsTheModelHolds() {
         List<String> without = readingsOf(human(CLAMPED), "full/n");
         List<String> withMore = readingsOf(human(CLAMPED.replace("    | (0) -> false\n",
-                "    | (0) -> false\n    | (60) -> false\n    | (51) -> false\n")), "full/n");
+                "    | (0) -> false\n    | (60) -> true\n    | (51) -> true\n")), "full/n");
         assertFalse(withMore.isEmpty());
         // A point a row answers is no longer listed; what is listed is said as it was.
         assertTrue(without.containsAll(withMore), () -> without + " and " + withMore);

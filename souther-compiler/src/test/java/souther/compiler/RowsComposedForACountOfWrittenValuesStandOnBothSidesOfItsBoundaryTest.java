@@ -72,9 +72,7 @@ class RowsComposedForACountOfWrittenValuesStandOnBothSidesOfItsBoundaryTest {
 
     @Test
     void rowsAreComposedWithOneFewerTheNumberAndOneMoreAboveNought() {
-        Compilation compilation = Compilation.ofSource(model(6, 3), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model(6, 3), Adequacy.Asked.fullReport());
 
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),

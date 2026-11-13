@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -107,7 +108,7 @@ class HandedOnTest {
     }
 
     private static InputReading read() {
-        Compilation compilation = Compilation.ofSource(MODULE, "Main");
+        Compilation compilation = ACompiledModel.answered(MODULE);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain domain = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");

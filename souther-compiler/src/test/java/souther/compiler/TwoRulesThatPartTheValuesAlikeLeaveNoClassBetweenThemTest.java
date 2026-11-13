@@ -32,7 +32,7 @@ class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
     }
 
     private static List<String> classesOf(String type, String clause, String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.parted
 
                 data No = { why: Int }
@@ -40,7 +40,7 @@ class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
                 data Result = No | Yes
 
                 behavior f : (n: %s) -> Result
-                    constructs Yes, No
+                    constructs %s
                 %s
 
                 let f (n) = {
@@ -50,10 +50,8 @@ class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
 
                 example f
                     | "one" : (%s) -> Yes { v = 1 }
-                """.formatted(type, clause, body,
-                        type.equals("Decimal") ? "0.1m" : "1"), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(type, body.isEmpty() ? "Yes" : "Yes, No", clause, body,
+                        type.equals("Decimal") ? "0.1m" : "1"), Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");

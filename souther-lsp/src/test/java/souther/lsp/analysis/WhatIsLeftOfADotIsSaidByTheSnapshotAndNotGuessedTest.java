@@ -2,7 +2,9 @@ package souther.lsp.analysis;
 
 import souther.compiler.cst.SourceLayout;
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Abandonment;
+import souther.compiler.query.Compilation;
 import souther.compiler.sites.Evidence;
 import souther.compiler.sites.MemberReceiver;
 import souther.compiler.sites.SemanticSnapshot;
@@ -12,6 +14,7 @@ import souther.compiler.types.Type;
 import souther.test.WrittenOn;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,6 +34,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the receiver is written, which is what {@link MemberReceiver#writtenAt} carries.
  */
 class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
+
+    /** The probe finishes the line off with a name of its own, which no declaration has a field
+     *  by; a line ending at a value is refused with this. */
+    private static final List<String> NO_SUCH_FIELD = List.of("E1321");
+
+    /** And a line ending at a module alias is finished off as a name nothing in scope is called. */
+    private static final List<String> NO_SUCH_NAME = List.of("E1023");
+
+    /** A helper that writes no type for its parameter, which is what its body is read for. */
+    private static final List<String> UNTYPED_HELPER_THEN_NO_SUCH_FIELD = List.of("E1811", "E1321");
 
     private static final String MODEL_URI = "file:///m.sou";
     private static final String LIB_URI = "file:///lib.sou";
@@ -65,7 +78,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
      */
     @Test
     void aFieldTakenOffAParameterIsTheTypeTheDeclarationsSay() {
-        MemberReceiver receiver = leftOfTheDot(model("request.plannedCost.\n"));
+        MemberReceiver receiver = leftOfTheDot(model("request.plannedCost.\n"), NO_SUCH_FIELD);
 
         TypeFact fact = assertInstanceOf(MemberReceiver.Value.class, receiver).type();
         assertEquals("Cost",
@@ -100,7 +113,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
                     depends on price
 
                 let submit (request, price) = request.plannedCost.
-                """);
+                """, NO_SUCH_FIELD);
 
         assertEquals("Cost",
                 assertInstanceOf(Type.Ref.class,
@@ -134,7 +147,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
                     depends on price
 
                 let submit (request, price) = price.
-                """);
+                """, NO_SUCH_NAME);
 
         Type.FnOf takes = assertInstanceOf(Type.FnOf.class,
                 assertInstanceOf(MemberReceiver.Value.class, probed.receiver()).type().type());
@@ -168,7 +181,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
                 behavior submit : (request: Draft) -> Int
                 let costOf (d) = d.plannedCost
                 let submit (request) = costOf(request).
-                """);
+                """, UNTYPED_HELPER_THEN_NO_SUCH_FIELD);
 
         assertEquals("Cost",
                 assertInstanceOf(Type.Ref.class,
@@ -198,7 +211,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
                 behavior submit : (request: Draft) -> Int
                     depends on price
                 let submit (request, price) = price(request).
-                """);
+                """, NO_SUCH_FIELD);
 
         assertEquals("Cost",
                 assertInstanceOf(Type.Ref.class,
@@ -230,7 +243,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
                 behavior distinct : (of: Shelf) -> Int
                     depends on keyOf
                 let distinct (of, keyOf) = List.distinctBy(keyOf, of.items).
-                """);
+                """, NO_SUCH_FIELD);
 
         Type.ListOf holds = assertInstanceOf(Type.ListOf.class,
                 assertInstanceOf(MemberReceiver.Value.class, receiver).type().type());
@@ -259,7 +272,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
                 behavior distinct : (of: Basket) -> Int
                     depends on keyOf
                 let distinct (of, keyOf) = List.distinctBy(keyOf, of.items).
-                """);
+                """, List.of("E1317"));
 
         assertInstanceOf(MemberReceiver.UntypedValue.class, receiver,
                 "a key of `Item` over a list of `Int` is a call no declaration states a type for");
@@ -284,7 +297,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
                 behavior make : () -> Draft
                 behavior submit : (request: Draft) -> Cost
                 let submit (request) = make().
-                """);
+                """, NO_SUCH_FIELD);
 
         assertEquals("Draft",
                 assertInstanceOf(Type.Ref.class,
@@ -312,7 +325,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
 
                 behavior submit : (request: Draft) -> Int
                 let submit (request) = larger(request, request).
-                """);
+                """, UNTYPED_HELPER_THEN_NO_SUCH_FIELD);
 
         assertInstanceOf(MemberReceiver.UntypedValue.class, receiver,
                 "the helper answers a fork, and no declaration read here says what that is");
@@ -320,7 +333,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
 
     @Test
     void anAliasIsAnsweredAsTheModuleItNames() {
-        MemberReceiver receiver = leftOfTheDot(model("l.\n"));
+        MemberReceiver receiver = leftOfTheDot(model("l.\n"), NO_SUCH_NAME);
 
         assertEquals(new MemberReceiver.Namespace.OfModule("lib", receiver.writtenAt()), receiver,
                 "the alias is resolved here, so nothing downstream has to resolve `l` again");
@@ -329,7 +342,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
     @Test
     void aCursorOnNoAccessIsToldSo() {
         String text = model("request\n");
-        Probed probed = probe(model("request.plannedCost.\n"));
+        Probed probed = probe(model("request.plannedCost.\n"), NO_SUCH_FIELD);
         SourceLayout lines = SourceLayout.of(text, new SourceId(MODEL_URI));
 
         assertTrue(probed.snapshot().memberReceiverAround(lines.placeAt(0)).isEmpty(),
@@ -346,23 +359,27 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
      */
     @Test
     void whatTheAnswerRestsOnIsSourceTheAuthorWrote() {
-        for (String body : new String[]{"request.plannedCost.\n", "l.\n"}) {
-            Probed probed = probe(model(body));
-            assertTrue(probed.reading().mayBeRead(probed.receiver().writtenAt()),
-                    "the receiver of `" + body.strip() + "` stops at the `.`, so it may be read");
-        }
+        assertReceiverMayBeRead("request.plannedCost.\n", NO_SUCH_FIELD);
+        assertReceiverMayBeRead("l.\n", NO_SUCH_NAME);
+    }
+
+    private static void assertReceiverMayBeRead(String body, List<String> refusedWith) {
+        Probed probed = probe(model(body), refusedWith);
+        assertTrue(probed.reading().mayBeRead(probed.receiver().writtenAt()),
+                "the receiver of `" + body.strip() + "` stops at the `.`, so it may be read");
     }
 
     private record Probed(SemanticProbe.Reading reading, SemanticSnapshot snapshot,
                           MemberReceiver receiver) {}
 
-    private static MemberReceiver leftOfTheDot(String text) {
-        return probe(text).receiver();
+    private static MemberReceiver leftOfTheDot(String text, List<String> refusedWith) {
+        return probe(text, refusedWith).receiver();
     }
 
-    /** The buffer with its half-written line finished off, and what the snapshot says about the
-     *  access the cursor is in — which is the question an editor puts, cursor and all. */
-    private static Probed probe(String text) {
+    /** The buffer with its half-written line finished off, which the compiler refuses with
+     *  {@code refusedWith}, and what the snapshot says about the access the cursor is in — which is
+     *  the question an editor puts, cursor and all. */
+    private static Probed probe(String text, List<String> refusedWith) {
         Map<String, String> joining = new LinkedHashMap<>();
         joining.put(LIB_URI, LIB);
         int cursor = text.lastIndexOf(".\n") + 1;
@@ -371,7 +388,9 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
         if (reading == null) {
             throw new AssertionError("the half-written line is one the probe finishes off");
         }
-        SemanticSnapshot snapshot = SemanticSnapshot.of(reading.compilation().db(), "m")
+        Compilation compilation = reading.compilation();
+        ACompiledModel.refusedWith(refusedWith, compilation);
+        SemanticSnapshot snapshot = SemanticSnapshot.of(compilation.db(), "m")
                 .orElseThrow(() -> new AssertionError("the repaired source has a snapshot"));
         // The reading's own layout, which is of the text it compiled and not of the buffer.
         MemberReceiver receiver = snapshot.memberReceiverAround(reading.placeAt(cursor))

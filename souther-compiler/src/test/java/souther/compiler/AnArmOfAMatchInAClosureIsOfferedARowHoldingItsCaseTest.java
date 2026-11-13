@@ -125,9 +125,7 @@ class AnArmOfAMatchInAClosureIsOfferedARowHoldingItsCaseTest {
     }
 
     private static List<Adequacy.GenerationDisposition> generated(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule(module));
         List<Adequacy.GenerationDisposition> out = new ArrayList<>();

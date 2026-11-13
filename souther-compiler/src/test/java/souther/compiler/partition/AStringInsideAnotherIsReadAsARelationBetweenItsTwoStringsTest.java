@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -76,9 +77,7 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
                 let f (i) =
                     if (%s) then 1 else 0
                 """.formatted(condition), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), () -> "compiles: " + condition);
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
@@ -265,9 +264,7 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     private static String reported(String body) {
         Compilation compilation = Compilation.ofSource(REPORTED.replace("BODY", body), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), () -> "compiles: " + body);
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }

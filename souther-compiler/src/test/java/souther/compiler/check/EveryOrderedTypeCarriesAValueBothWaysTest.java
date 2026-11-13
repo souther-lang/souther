@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Scopes;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
@@ -53,7 +54,7 @@ class EveryOrderedTypeCarriesAValueBothWaysTest {
             """;
 
     private static Symbols symbols() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         return Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
     }
 

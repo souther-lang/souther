@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -166,19 +167,15 @@ class TwoTablesWithAlikeBoundsAreTwoLinesTest {
 
     @Test
     void theDocumentTellsTheTwoTablesApart() {
-        Compilation compilation = Compilation.ofSource(
-                model(ALIKE, TWO_TABLES) + HEAD + rowsThrough(true), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(
+                model(ALIKE, TWO_TABLES) + HEAD + rowsThrough(true), Adequacy.Asked.fullReport());
         String json = AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(json.contains("held_in"), json);
     }
 
     private static String reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("1 behavior:"), "the model was measured: " + report);

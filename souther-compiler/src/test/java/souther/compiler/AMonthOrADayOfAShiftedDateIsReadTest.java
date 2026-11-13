@@ -13,7 +13,6 @@ import souther.compiler.report.GeneratedRows;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,22 +37,27 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
 
     /** Each source measured once for the class: the tests here only read what a measurement
      *  says, and some ask the same source different things. */
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
+
+    private static Compilation measuredOn(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
+        compilation.measure(Adequacy.Asked.fullReport());
+        return compilation;
+    }
 
     private static Compilation compiled(String source) {
-        return MEASURED.computeIfAbsent(source, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main").writtenOn(TestDay.DATE);
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
-        });
+        return SHARED.compiles(source, () -> measuredOn(source));
+    }
+
+    private static Compilation refused(List<String> codes, String source) {
+        return SHARED.refusedWith(codes, source, () -> measuredOn(source));
     }
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 
     private static String report(Compilation compilation) {
@@ -271,7 +275,8 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
     void anAgeFromTheDayBeforeABirthdayIsReadAsAnAgeFromTheBirthday() {
         String moved = report(compiled(AGE.formatted("", "", "Date.addDays(0 - 1, birthday)",
                 THE_ISSUES_ROWS)));
-        String itself = report(compiled(AGE.formatted("", "", "birthday", THE_ISSUES_ROWS)));
+        String itself = report(refused(List.of("E1905"),
+                AGE.formatted("", "", "birthday", THE_ISSUES_ROWS)));
 
         assertFalse(moved.contains("written in a form this compiler does not read"), moved);
         assertFalse(moved.contains("what it says about the values here is not worked out"),
@@ -303,7 +308,8 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
     void theRowsEitherSideOfTheAgeTheMoveDecidesAreItsAnswers() {
         Compilation moved = compiled(AGE.formatted("", "", "Date.addDays(0 - 1, birthday)",
                 THE_ISSUES_ROWS));
-        Compilation itself = compiled(AGE.formatted("", "", "birthday", THE_ISSUES_ROWS));
+        Compilation itself = refused(List.of("E1905"),
+                AGE.formatted("", "", "birthday", THE_ISSUES_ROWS));
 
         assertEquals(0, moved.errors().size(), report(moved));
         assertEquals(1, itself.errors().size(), report(itself));

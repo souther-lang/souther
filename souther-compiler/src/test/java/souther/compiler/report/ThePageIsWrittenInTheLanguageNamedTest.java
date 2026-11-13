@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -51,13 +52,11 @@ class ThePageIsWrittenInTheLanguageNamedTest {
 
     /** The model and what this run offers for it, asked once for every test here. */
     private static final class Compiled {
-        final Compilation compilation = Compilation.ofSource(LOGIN, "Main");
+        final Compilation compilation = ACompiledModel.measured(LOGIN, Adequacy.Asked.fullReport());
         final Map<String, Offering> offered;
         final SourceRendering rendering;
 
         Compiled() {
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             offered = GeneratedRows.offered(compilation, null, null);
             rendering = SourceRendering.namedByIdentity(compilation.texts());
         }

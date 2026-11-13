@@ -2,6 +2,7 @@ package souther.lsp.analysis;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
@@ -82,13 +83,24 @@ class SemanticProbeBenchmark {
         Compilation workspace = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .writtenOn(WrittenOn.DAY);
         resolve(workspace, module);
+        ACompiledModel.compiles(workspace);
 
-        double settled = medianMillis(round -> {
+        // Warmed for as many rounds as it is measured. The workspace is held to compile once its
+        // round has been timed, so that answering every report is no part of a timing.
+        List<Long> settledNanos = new ArrayList<>();
+        for (int round = 0; round < ROUNDS * 2; round++) {
             Map<String, String> now = new LinkedHashMap<>(byId);
             now.put(edited, byId.get(edited) + finished(round));
+            long began = System.nanoTime();
             workspace.update(now, Set.of(), WrittenOn.DAY);
             resolve(workspace, module);
-        }, ROUNDS);
+            long took = System.nanoTime() - began;
+            ACompiledModel.compiles(workspace);
+            if (round >= ROUNDS) {
+                settledNanos.add(took);
+            }
+        }
+        double settled = median(settledNanos);
 
         SemanticProbe kept = new SemanticProbe();
         double probed = medianMillis(round -> through(kept, byId, edited, module, round), ROUNDS);
@@ -101,12 +113,24 @@ class SemanticProbeBenchmark {
         // of them the same way. A ratio of steady state to cold that is the same for the two says the
         // probe's store is as incremental as the one it is beside — which is the question, the
         // absolute ratio being a property of the compiler's memoisation and not of the probe.
-        double workspaceCold = medianMillis(round -> {
+        // Warmed for as many rounds as it is measured. Each model is held to compile once its round
+        // has been timed, so that answering every report is no part of a timing.
+        int coldRounds = ROUNDS / 4;
+        List<Long> coldNanos = new ArrayList<>();
+        for (int round = 0; round < coldRounds * 2; round++) {
             Map<String, String> now = new LinkedHashMap<>(byId);
             now.put(edited, byId.get(edited) + finished(round));
-            resolve(Compilation.ofDocuments(now, Set.of(), ModulePath.EMPTY)
-                    .writtenOn(WrittenOn.DAY), module);
-        }, ROUNDS / 4);
+            long began = System.nanoTime();
+            Compilation cold = Compilation.ofDocuments(now, Set.of(), ModulePath.EMPTY)
+                    .writtenOn(WrittenOn.DAY);
+            resolve(cold, module);
+            long took = System.nanoTime() - began;
+            ACompiledModel.compiles(cold);
+            if (round >= coldRounds) {
+                coldNanos.add(took);
+            }
+        }
+        double workspaceCold = median(coldNanos);
 
         System.out.printf("steady: workspace %6.2f ms   probe %6.2f ms%n", settled, probed);
         System.out.printf("cold:   workspace %6.2f ms   probe %6.2f ms%n", workspaceCold, first);
@@ -127,6 +151,7 @@ class SemanticProbeBenchmark {
             long between = System.nanoTime();
             through(alongside, byId, edited, module, round);
             long closed = System.nanoTime();
+            ACompiledModel.compiles(workspace);
             if (round >= ROUNDS) {
                 workspaceTurns.add(between - opened);
                 probeTurns.add(closed - between);
@@ -141,6 +166,9 @@ class SemanticProbeBenchmark {
         long together = retainedBytes(workspace, beside);
         System.out.printf("retained: workspace %5.1f MB   workspace and probe %5.1f MB%n",
                 megabytes(alone), megabytes(together));
+
+        // Asked once everything is measured, so that answering every report is no part of a timing.
+        ACompiledModel.compiles(workspace);
     }
 
     /** One round of what an editor does: the buffer as it stands, finished off, compiled in the
@@ -155,7 +183,9 @@ class SemanticProbeBenchmark {
         if (reading == null) {
             throw new IllegalStateException("the half-written line is one the probe finishes off");
         }
-        resolve(reading.compilation(), module);
+        resolve(ACompiledModel.notCompiled(reading.compilation(),
+                "the buffer is stopped half way through a line, so it is no model that compiles,"
+                        + " and what is timed is the one name its module resolves to"), module);
     }
 
     /** A finished behavior, so what it costs is the workspace answering and nothing else. */

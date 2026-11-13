@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -103,9 +104,7 @@ class ANarrowingMayStandWhereAnotherLeftThePositionTest {
     }
 
     private static List<String> offeredFor(String point, String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         assertNotNull(Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)),
                 "the model under test compiles");
         // Both of what a person is offered at this behavior's lines. A line an `invariant` drew is

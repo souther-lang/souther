@@ -54,12 +54,12 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     private static final Map<String, Compilation> MEASURED = new HashMap<>();
 
     private static Compilation compiled(String source) {
-        return MEASURED.computeIfAbsent(source, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
-        });
+        return ACompiledModel.compiles(measuredOnce(source));
+    }
+
+    private static Compilation measuredOnce(String source) {
+        return MEASURED.computeIfAbsent(source,
+                each -> ACompiledModel.measured(each, Adequacy.Asked.fullReport()));
     }
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
@@ -257,7 +257,7 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
     /** The chain measured once, for the tests that read it. A measure of it is most of what they
      *  cost, and what each asks is of this one. */
     private static final class Measured {
-        static final Compilation CHAIN_OF_AGES = compiled(CHAIN);
+        static final Compilation CHAIN_OF_AGES = ACompiledModel.compiles(measuredOnce(CHAIN));
         static final String REPORT = report(CHAIN_OF_AGES);
     }
 

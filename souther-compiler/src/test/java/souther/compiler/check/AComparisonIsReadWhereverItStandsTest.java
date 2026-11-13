@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
@@ -66,8 +67,7 @@ class AComparisonIsReadWhereverItStandsTest {
 
     /** Which ways out of a comparison this reading proved nothing arrives at. */
     private static List<Boolean> comparisonsProvenUnreachable(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         Map<String, PathReachability.Answers> answers = compilation.db()
                 .ask(new Adequacy.PathReached("d")).value();
         assertNotNull(answers, "the model under test compiles");
@@ -99,8 +99,7 @@ class AComparisonIsReadWhereverItStandsTest {
 
     /** Which comparisons of {@code behavior} the plan numbered and this reading never answered. */
     private static List<String> numberedButUnanswered(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

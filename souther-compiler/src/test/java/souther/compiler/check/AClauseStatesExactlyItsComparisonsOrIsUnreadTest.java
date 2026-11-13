@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -47,10 +48,7 @@ class AClauseStatesExactlyItsComparisonsOrIsUnreadTest {
 
     private static ClauseAffineMeaning ofSource(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of(),
-                compilation.errors().stream().map(each -> each.diagnostic().code()).toList(),
-                source);
+        ACompiledModel.compiles(compilation);
         Db db = compilation.db();
         DeclarationMeaning.Product pair = (DeclarationMeaning.Product) ClauseReadings.meaningOf(db,
                 "demo.pair", TypeSymbols.declared(new TypeKey("demo.pair", "Pair")));

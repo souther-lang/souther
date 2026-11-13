@@ -122,7 +122,7 @@ class WhatABuildDoesAboutAFindingIsSaidOnceTest {
     /** A model with nothing to refuse over says nothing about a mark it did not write. */
     @Test
     void aReportWithNothingToMarkHasNoLegend() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module n
 
                 data Yes
@@ -138,9 +138,7 @@ class WhatABuildDoesAboutAFindingIsSaidOnceTest {
                 example classify
                     | (Ask { flag = Yes }) -> Res { n = 1 }
                     | (Ask { flag = No }) -> Res { n = 1 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         AdequacyReport report = AdequacyReport.of(compilation);
         String human = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
@@ -198,7 +196,7 @@ class WhatABuildDoesAboutAFindingIsSaidOnceTest {
      */
     @Test
     void twoArmsOfOneNameAreToldApartByWhereTheyAre() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module a
 
                 data Amount = Int
@@ -220,9 +218,7 @@ class WhatABuildDoesAboutAFindingIsSaidOnceTest {
 
                 example check
                     | "both fit" : (Req { small = Amount(20), large = Amount(50) }) -> Ok
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         JsonNode check = JSON.readTree(
                         AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())))
                 .get("modules").get(0).get("behaviors").get(0);
@@ -309,10 +305,7 @@ class WhatABuildDoesAboutAFindingIsSaidOnceTest {
     }
 
     private static AdequacyReport report() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation);
+        return AdequacyReport.of(ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport()));
     }
 
     private static List<String> marked(String human) {

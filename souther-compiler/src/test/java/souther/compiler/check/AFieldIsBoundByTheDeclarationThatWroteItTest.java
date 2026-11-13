@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Scopes;
 import souther.compiler.Compiler;
 import org.junit.jupiter.api.Test;
@@ -82,10 +83,8 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
     }
 
     private static Compilation compiled(Reached reached) {
-        Compilation c = Compilation.ofSources(List.of(DECLARING, reached.reader()),
-                ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return ACompiledModel.compiles(Compilation.ofSources(List.of(DECLARING, reached.reader()),
+                ModulePath.EMPTY));
     }
 
     private static Hir.Data range(Compilation c) {

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.RuleReadingSource;
@@ -232,8 +233,8 @@ class AFoldOverTheDayADateTimeFallsOnIsReadLikeOneOverADateTest {
     }
 
     private static InputReading readingOf(String source) {
-        Compilation read = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
-        read.answerEverything();
+        Compilation read =
+                ACompiledModel.compiles(Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE));
         RuleReadingSource rules = RuleReadings.of(read, read.modules().get(0));
         return read.db().ask(new Adequacy.Inputs(read.modules().get(0))).value().get("stale")
                 .reading(rules);
@@ -324,13 +325,7 @@ class AFoldOverTheDayADateTimeFallsOnIsReadLikeOneOverADateTest {
     }
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + source);
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static List<Row> offered(Compilation compilation) {

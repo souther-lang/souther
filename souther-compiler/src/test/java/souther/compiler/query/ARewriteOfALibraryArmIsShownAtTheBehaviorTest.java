@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceRendering;
@@ -73,11 +74,7 @@ class ARewriteOfALibraryArmIsShownAtTheBehaviorTest {
         byId.put("orders.sou", ORDERS);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         c.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        c.answerEverything();
-        assertEquals(List.of(), c.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return c;
+        return ACompiledModel.compiles(c);
     }
 
     /** The rewrites of arms of {@code behavior} no row tells apart, as findings. */

@@ -284,7 +284,7 @@ class ATotalOfFieldsTakenOneFromAnotherIsWrittenWhereverTheFieldsReachItTest {
     private static Generator.GenerationResult offeredFor(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return OfferedAtTheLines.of(compilation, compilation.modules().get(0), "m");
     }
 }

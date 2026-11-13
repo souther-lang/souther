@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -129,9 +130,7 @@ class TheStepAfterABuildIsHandedWhatTheBuildMadeTest {
 
     private static Reading read(String first) {
         Compilation compilation = Compilation.ofSource(MODEL.formatted(first), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("w1")).value();
         RuleReadingSource rules = RuleReadings.of(compilation, "w1");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("w1")).value().get("f");

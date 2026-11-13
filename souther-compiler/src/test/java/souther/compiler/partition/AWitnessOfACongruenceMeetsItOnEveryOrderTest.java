@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -97,7 +98,7 @@ class AWitnessOfACongruenceMeetsItOnEveryOrderTest {
     }
 
     private static Quantities quantities(String parameters) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module example.congruent
 
                 data Ok = { v: Int }
@@ -106,7 +107,7 @@ class AWitnessOfACongruenceMeetsItOnEveryOrderTest {
                     constructs Ok
 
                 let f (s, d) = Ok { v = 1 }
-                """.formatted(parameters), "Main");
+                """.formatted(parameters));
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");

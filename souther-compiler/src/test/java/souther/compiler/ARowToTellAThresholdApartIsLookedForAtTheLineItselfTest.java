@@ -68,6 +68,7 @@ class ARowToTellAThresholdApartIsLookedForAtTheLineItselfTest {
     void aRowOnTheLineWithTheThresholdRuledOutIsOffered() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main").writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule(compilation.modules().get(0)));
         assertNotNull(offering, "the model compiles");

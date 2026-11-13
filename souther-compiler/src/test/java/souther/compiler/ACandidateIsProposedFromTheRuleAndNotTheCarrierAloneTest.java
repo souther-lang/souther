@@ -77,7 +77,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
     private static FillResult generated(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).map(each -> each.diagnostic().code() + " "
                         + each.diagnostic().titleKey()).toList(),
@@ -572,7 +572,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         String withTheRow = model(declarations, fields, written)
                 + "    | (" + row + ") -> 1\n";
         Compilation again = Compilation.ofSource(withTheRow, "Main");
-        again.answerEverything();
+        ACompiledModel.compiles(again);
 
         assertEquals(List.of(), again.diagnostics().values().stream().flatMap(List::stream).toList(),
                 "the generated row is written the way a fixture is read: " + row);

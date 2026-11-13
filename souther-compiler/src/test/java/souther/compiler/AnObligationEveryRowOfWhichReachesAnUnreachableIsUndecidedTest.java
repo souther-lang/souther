@@ -163,10 +163,7 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
             """;
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static PartitionEvidence.PairSpace pairsOf(Compilation compilation) {
@@ -416,9 +413,8 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
         String answered = sparse + "\n" + rows.toString().replace("<?>", "0");
         Compilation amended = Compilation.ofSource(answered, "Main");
         amended.answerEverything();
-        List<String> refused = amended.db().allReports().stream()
-                .filter(found -> found.report().isError())
-                .map(found -> found.report().diagnostic().code()).toList();
+        List<String> refused = amended.errors().stream()
+                .map(error -> error.diagnostic().code()).toList();
         assertFalse(refused.contains("E1911"), () -> refused + "\n" + answered);
     }
 

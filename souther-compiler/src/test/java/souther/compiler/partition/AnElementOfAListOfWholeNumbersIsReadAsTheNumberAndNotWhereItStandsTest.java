@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -69,14 +70,11 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
      */
     @Test
     void aSumOverTheLastElementAFilterIsHandedStopsEveryRunPastIt() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module w1
                 behavior m : (a: Int) -> List<Int>
                 let m (a) = List.filter(n -> n + a >= 0, [0, 10])
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
+                """, Adequacy.Asked.fullReport());
         List<String> report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
@@ -102,15 +100,12 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
     }
 
     private static Compilation compiled(String parameters, String body) {
-        Compilation compilation = Compilation.ofSource("""
+        return ACompiledModel.measured("""
                 module w1
                 data Nat = Int invariant value >= 0
                 behavior m : (%s) -> Bool
                 let m (%s) = %s
                 """.formatted(parameters, parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), body),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+                Adequacy.Asked.fullReport());
     }
 }

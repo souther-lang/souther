@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
@@ -48,7 +49,7 @@ class ABodysOwnLinesAreOfferedBeforeTheDeclarationsTest {
             }
 
             example f
-                | "under" : (D(1m), D(50m)) -> Yes { v = 1 }
+                | "wide" : (D(1m), D(50m)) -> No { why = 0 }
                 | "over" : (D(50m), D(1m)) -> No { why = 0 }
             """;
 
@@ -119,9 +120,7 @@ class ABodysOwnLinesAreOfferedBeforeTheDeclarationsTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(DENSE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(DENSE, Adequacy.Asked.fullReport());
         return compilation;
     }
 }

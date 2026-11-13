@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -80,7 +81,8 @@ class AContainerIsComposedForACountAndATotalWhereOneMeetsBothTest {
     }
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSources(List.of(SOURCE), ModulePath.EMPTY);
+        Compilation compilation =
+                ACompiledModel.compiles(Compilation.ofSources(List.of(SOURCE), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

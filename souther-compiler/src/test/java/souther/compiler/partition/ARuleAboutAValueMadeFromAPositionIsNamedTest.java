@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -52,9 +53,7 @@ class ARuleAboutAValueMadeFromAPositionIsNamedTest {
             """;
 
     private static PartitionEvidence measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         PartitionEvidence scored = compilation.db()
                 .ask(new Adequacy.Coverage(MODULE)).value().get("scored");
         assertNotNull(scored, "the model under test compiles");
@@ -92,9 +91,7 @@ class ARuleAboutAValueMadeFromAPositionIsNamedTest {
     /** And a reader is told which of the two it is, in the words the document promises. */
     @Test
     void theReportSaysWhichOfTheTwoItIs() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         String human = AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(human.contains("it is about a value made from this one, and what it says about"

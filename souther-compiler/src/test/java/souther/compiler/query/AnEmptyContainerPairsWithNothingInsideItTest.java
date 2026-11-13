@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.ClassCoexistence;
 import souther.compiler.partition.MeasuredInput;
@@ -288,9 +289,7 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
     private static Measured QUOTE_ANSWERED;
 
     private static Measured measured(String model, String module, String behavior) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage(module)).value();
         PartitionEvidence said = coverage == null ? null : coverage.get(behavior);

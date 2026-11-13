@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -557,9 +558,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     private static String report(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
@@ -572,9 +571,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      * worded as much as to what it says.
      */
     private static List<String> notRead(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
                 .partition().notRead().stream()
                 .map(each -> each.at() + ": " + each.reason()).toList();
@@ -583,17 +580,13 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     /** How many borders the first behavior of {@code model} draws, which is what a line the
      *  quantity never reaches does not add to. */
     private static int borders(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
                 .lines().size();
     }
 
     private static String generated(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return souther.compiler.report.GeneratedRows.of(compilation, null, null,
                 SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
