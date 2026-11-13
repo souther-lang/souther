@@ -5,15 +5,15 @@ import souther.compiler.regex.PatternPlan;
 /**
  * The strings a run can have where it gets past everything its way states, when what the way
  * ties to other numbers is one count of the string: how many code points it holds
- * ({@link LengthsPastTheWay.Lengths}), or how many of them are in a class
- * ({@link CodePointsPastTheWay}).
+ * ({@link LengthsPastTheWay.Lengths}, or several runs of them, {@link LengthRuns}), or how many of
+ * them are in a class ({@link CodePointsPastTheWay}).
  *
  * <p>The two counts are different numbers of one string, and a statement of the way is about one
  * of them. What a statement of one says of the other is not worked out, so a way that states both
  * is not read.
  */
 sealed interface StringsPastTheWay
-        permits LengthsPastTheWay.Lengths, CodePointsPastTheWay {
+        permits LengthsPastTheWay.Lengths, LengthRuns, CodePointsPastTheWay {
 
     /**
      * Whether the way allows no count at all. A statement about the numbers and nothing about the

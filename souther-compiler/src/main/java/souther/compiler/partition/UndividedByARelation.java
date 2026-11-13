@@ -1008,7 +1008,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                the relation past only where it is shown to
      */
     record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo,
-                                  LengthsPastTheWay.Lengths shownAt, StringsPastTheWay reached,
+                                  LengthRuns shownAt, StringsPastTheWay reached,
                                   StringsPastTheWay partnerHeldTo, String partner,
                                   BlockReason.OperationsNotShown operations)
             implements BehaviorSetStatements.PartnerHolds {
@@ -1052,7 +1052,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         /** The same strings, shown to be the partner's values only at {@code lengths}, the
          *  partner being held to them. */
-        StringsAPartnerCanHold shownAt(LengthsPastTheWay.Lengths lengths) {
+        StringsAPartnerCanHold shownAt(LengthRuns lengths) {
             return new StringsAPartnerCanHold(canBe, mayBe, upTo, lengths, reached, partnerHeldTo,
                     partner, operations);
         }
@@ -1077,16 +1077,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /**
          * These, where the partner is the other side's only at the lengths {@code lengths} as well
          * as at those it was already held to: at the lengths of both, which are worked out only
-         * where each is a run of lengths.
+         * where each is some lengths.
          */
         StringsAPartnerCanHold partnerHeldTo(StringsPastTheWay lengths) {
-            StringsPastTheWay both = switch (partnerHeldTo) {
-                case null -> lengths;
-                case LengthsPastTheWay.Lengths had
-                        when lengths instanceof LengthsPastTheWay.Lengths more -> had.and(more);
-                default -> throw new IllegalArgumentException("the partner is held to "
-                        + partnerHeldTo + ", and " + lengths + " is no run of lengths beside it");
-            };
+            LengthRuns had = partnerHeldTo == null ? null : LengthRuns.asRuns(partnerHeldTo);
+            LengthRuns more = LengthRuns.asRuns(lengths);
+            StringsPastTheWay both;
+            if (partnerHeldTo == null) {
+                both = lengths;
+            } else if (had != null && more != null) {
+                both = had.and(more);
+            } else {
+                throw new IllegalArgumentException("the partner is held to " + partnerHeldTo
+                        + ", and " + lengths + " is no lengths beside it");
+            }
+            // One run of lengths is held as it always was, so that two ways of saying the same
+            // lengths are one value.
+            if (both instanceof LengthRuns runs) {
+                both = runs.canonical();
+            }
             return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, both, partner,
                     operations);
         }
@@ -3481,9 +3490,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && room.limitedTo().equals(theirs.subjectPath());            // The lengths the declarations hold the partner to are read as the numbers they are
             // where this reading of the two sides can, and made into one set of strings where it
             // cannot. A set past the allowance is a figure the reading stopped at.
-            // Lengths the rules take out from between the ends are no numbers this reading holds, so
-            // they are made into the set as well.
-            if (theirHeld.hasHoles() || (theirStrings.bounded()
+            // The lengths are runs where the rules take some out from between the ends, and the
+            // strings are those of any of them. Null where an end of a run is no whole count, which
+            // is no length this reading holds as a number.
+            LengthRuns theirLengths = StringsHeld.lengthRunsOf(theirHeld);
+            if (theirLengths == null || (!theirLengths.isEvery()
                     && !readsTheLengthsAsNumbers(here, there, partnerHeld, room))) {
                 Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
                 ValueSet one = StringsHeld.asOneSet(theirHeld, meter);
@@ -3492,6 +3503,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     continue;
                 }
                 theirStrings = ValuesWithin.all(one);
+                theirLengths = LengthRuns.EVERY;
             }
             // A string is inside the partner's only if the partner is a string the run gets to the
             // relation with, so the strings it is inside are those of the lengths it gets there at.
@@ -3505,6 +3517,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     continue;
                 }
                 theirStrings = ValuesWithin.all(ValueSet.matching(reaching));
+                theirLengths = LengthRuns.EVERY;
             }
             String called = inside ? calledInside(at == 0, there.text(), theirs.subjectPath())
                     : there.piece() != null
@@ -3525,6 +3538,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             ValuesWithin partnerOfThis = theirStrings;
+            LengthRuns partnerLengths = theirLengths;
             if (ofThePieces != null && here.piece() != null) {
                 Language partner = languageOf(theirStrings.values());
                 Language both = partner == null ? null : partner.and(ofThePieces,
@@ -3533,9 +3547,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     continue;
                 }
                 partnerOfThis = ValuesWithin.all(ValueSet.matching(both));
+                partnerLengths = LengthRuns.EVERY;
             }
             StringsAPartnerCanHold strings = partnerCanHold(at == 0, here, there, partnerOfThis,
-                    mineHolds, called);
+                    partnerLengths, mineHolds, called);
             if (strings != null && ofThePieces != null) {
                 strings = heldTo(strings, ofThePieces, here.piece());
             }
@@ -4054,8 +4069,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * them.
      */
     private StringsAPartnerCanHold partnerCanHold(boolean hereIsFirst, Side here, Side there,
-                                                  ValuesWithin theirs, ValueSet mine,
-                                                  String called) {
+                                                  ValuesWithin theirs, LengthRuns theirLengths,
+                                                  ValueSet mine, String called) {
         ValueSet theirStrings = theirs.values();
         if (kind.inside() != null) {
             return stringsThroughConversions(hereIsFirst, here.text(), there.text(), theirStrings,
@@ -4064,8 +4079,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (here.text() != null || there.text() != null) {
             StringsAPartnerCanHold through = stringsThroughConversions(hereIsFirst, textOf(here),
                     textOf(there), theirStrings, mine, called);
-            return through == null || !theirs.bounded() ? through
-                    : through.shownAt(LengthsPastTheWay.Lengths.of(theirs));
+            return through == null || theirLengths.isEvery() ? through
+                    : through.shownAt(theirLengths);
         }
         if (there.piece() != null) {
             return stringsThatAreThePiece(there.piece(), theirStrings, mine, called);
@@ -4077,7 +4092,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         StringsAPartnerCanHold held = StringsAPartnerCanHold.unreached(theirStrings, called);
-        return theirs.bounded() ? held.partnerHeldTo(LengthsPastTheWay.Lengths.of(theirs)) : held;
+        return theirLengths.isEvery() ? held : held.partnerHeldTo(theirLengths.canonical());
     }
 
     /**
@@ -4123,8 +4138,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (reaching == null) {
                 return null;
             }
+            // What is shown of the strings is the answer asked of; the lengths it is shown at are
+            // the ones it was given, so none are asked again.
             StringsAPartnerCanHold narrowed = partnerCanHold(hereIsFirst, here, there,
-                    theirStrings.over(ValueSet.matching(reaching)), mineHolds, strings.partner());
+                    theirStrings.over(ValueSet.matching(reaching)), LengthRuns.EVERY, mineHolds,
+                    strings.partner());
             out = narrowed == null ? strings.showing(ValueSet.NONE, strings.mayBe(), null)
                     : strings.showing(narrowed.canBe(), strings.mayBe(), narrowed.upTo());
         }

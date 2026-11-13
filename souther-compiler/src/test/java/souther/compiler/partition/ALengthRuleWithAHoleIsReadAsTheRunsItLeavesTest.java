@@ -170,6 +170,29 @@ class ALengthRuleWithAHoleIsReadAsTheRunsItLeavesTest {
     }
 
     /**
+     * Several holes are several runs, and each length a rule leaves is in the class of strings
+     * that can be the position's, and each length it takes out is in the other, whichever way
+     * between the ends it lies. The expected classes are worked out from the rule, length by
+     * length, and not from the reading.
+     */
+    @Test
+    void severalHolesAreSeveralRunsOfLengths() {
+        String rule = "String.length(value) <= 12 && String.length(value) /= 3"
+                + " && String.length(value) /= 4 && (String.length(value) < 8"
+                + " || String.length(value) > 9)";
+        List<String> texts = new ArrayList<>();
+        for (int length = 0; length <= 14; length++) {
+            texts.add(a(length));
+        }
+        List<String> expected = new ArrayList<>();
+        for (int length = 0; length <= 14; length++) {
+            boolean left = length <= 12 && length != 3 && length != 4 && (length < 8 || length > 9);
+            expected.add((left ? "x can be code " : "x is never code ") + a(length));
+        }
+        assertEquals(expected, classesHolding(rule, a(5), texts));
+    }
+
+    /**
      * Strings of a length taken out are not written for a class that is the position's, and the
      * ones written for the class of strings never the position's are of the lengths taken out or
      * of those past its ends.
@@ -210,13 +233,40 @@ class ALengthRuleWithAHoleIsReadAsTheRunsItLeavesTest {
     }
 
     /**
-     * A hole in lengths no machine is made for is a figure the reading stopped at and no strings
-     * shown, and the position's values are not read as if the hole were not there.
+     * A hole in lengths no machine is made for is read all the same: the lengths are held as the
+     * numbers they are, so a string of a million code points is the position's only at the lengths
+     * left, and the strings made into one set are not asked for.
      */
     @Test
-    void aHoleInLengthsPastTheAllowanceIsAFigureTheReadingStoppedAt() {
-        JsonNode partition = partitionOf(code("String.length(value) <= 2000000"
-                + " && String.length(value) /= 1000000", a(4)));
+    void aHoleInLongLengthsIsReadAsTheNumbersTheLengthsAre() {
+        assertEquals(List.of("x can be code " + a(4), "x is never code " + a(1_000_000),
+                        "x can be code " + a(1_000_001)),
+                classesHolding("String.length(value) <= 2000000"
+                        + " && String.length(value) /= 1000000", a(4),
+                        List.of(a(4), a(1_000_000), a(1_000_001))));
+    }
+
+    /**
+     * Where the strings are asked for as one set — the other side's are converted, and the string
+     * a position holds is no longer the string it is equal to — a hole in lengths no machine is
+     * made for is a figure the reading stopped at and no strings shown, and the position's values
+     * are not read as if the hole were not there.
+     */
+    @Test
+    void aHoleInLengthsPastTheAllowanceIsAFigureWhereTheStringsAreAskedForAsOneSet() {
+        JsonNode partition = partitionOf("""
+                module converted
+
+                data Code = String
+                    invariant String.length(value) <= 2000000 && String.length(value) /= 1000000
+
+                behavior f : (code: Code, other: String) -> Bool
+                let f (Code(code), other) = String.lowercase(other) == code
+
+                example f
+                    | "same"  : (Code("ab"), "AB") -> true
+                    | "other" : (Code("ab"), "cd") -> false
+                """);
         List<String> figures = new ArrayList<>();
         partition.path("unanswered").forEach(each -> each.path("stopped").forEach(
                 stop -> stop.path("figures").forEach(figure -> figures.add(

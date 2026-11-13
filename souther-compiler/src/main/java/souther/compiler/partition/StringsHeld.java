@@ -20,6 +20,7 @@ import souther.compiler.values.ValuesWithin;
 import net.unit8.notation199x.pattern.Meter;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -163,6 +164,26 @@ final class StringsHeld {
         }
         List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
         return runs != null && !runs.isEmpty();
+    }
+
+    /**
+     * The lengths of the strings {@code held} holds, as the runs of whole numbers they lie in, or
+     * null where an end of a run is no whole count.
+     */
+    static LengthRuns lengthRunsOf(Held held) {
+        LengthRuns between = LengthRuns.of(held.within());
+        if (!held.hasHoles()) {
+            return between;
+        }
+        List<LengthsPastTheWay.Lengths> runs = new ArrayList<>();
+        for (NumericDomain.Bounds run : held.runs()) {
+            LengthsPastTheWay.Lengths lengths = lengthsOf(run);
+            if (lengths == null) {
+                return null;
+            }
+            runs.add(lengths);
+        }
+        return between.and(LengthRuns.ofAll(runs));
     }
 
     /**

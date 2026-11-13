@@ -200,7 +200,7 @@ public final class BehaviorSetStatements {
                          NumericTerm.FromOnePosition term,
                          AdmittedPlan whenTrue, AdmittedPlan whenFalse,
                          AdmittedPlan notShown, Long trueUpTo,
-                         LengthsPastTheWay.Lengths heldTo, LengthsPastTheWay.Lengths shownAt,
+                         LengthRuns heldTo, LengthRuns shownAt,
                          List<ValuesWithin> notReached,
                          BlockReason.OperationsNotShown operations, List<CountedOpen> notCounted) {
 
@@ -380,6 +380,7 @@ public final class BehaviorSetStatements {
                 whenFalse = AdmittedPlan.meeting(List.of(whenFalse, reaching));
                 switch (strings.reached()) {
                     case LengthsPastTheWay.Lengths lengths -> notReached = lengths.outside();
+                    case LengthRuns runs -> notReached = runs.outside();
                     case CodePointsPastTheWay counts -> notCounted = counts.outside().stream()
                             .map(open -> new CountedOpen(new AdmittedPlan.Pattern(open.strings()),
                                     open.why())).toList();
@@ -391,9 +392,10 @@ public final class BehaviorSetStatements {
             // Held as the numbers they are where the strings of every other length are the whole
             // of the false side, which is then the runs of lengths outside them; made into strings
             // otherwise, to be joined with what the false side holds.
-            LengthsPastTheWay.Lengths heldTo = null;
-            if (strings.partnerHeldTo() instanceof LengthsPastTheWay.Lengths lengths
-                    && strings.mayBe().isAny() && strings.reached() == null
+            LengthRuns heldTo = null;
+            LengthRuns lengths = strings.partnerHeldTo() == null ? null
+                    : LengthRuns.asRuns(strings.partnerHeldTo());
+            if (lengths != null && strings.mayBe().isAny() && strings.reached() == null
                     && !lengths.isEvery()) {
                 heldTo = lengths;
             } else if (strings.partnerHeldTo() != null) {
@@ -689,40 +691,51 @@ public final class BehaviorSetStatements {
                     new BlockReason.BehaviorDistinctionsTooCostly(
                             Classing.ofTheDistinctions(it.refused()))));
             case Realizations.Exact built -> {
-                LengthsPastTheWay.Lengths held = each.heldTo() == null
-                        ? LengthsPastTheWay.Lengths.EVERY : each.heldTo();
+                LengthRuns held = each.heldTo() == null ? LengthRuns.EVERY : each.heldTo();
                 ValueSet holding = built.of(each.whenTrue());
                 List<ValuesWithin> notShown = new ArrayList<>();
                 if (each.notShown() != null && !built.of(each.notShown()).isEmpty()) {
-                    notShown.add(held.over(built.of(each.notShown())));
+                    notShown.addAll(held.over(built.of(each.notShown())));
                 }
                 // The true side's strings of the lengths it is not shown at are open for the
                 // operations, beside those of no length the partner is held to.
-                LengthsPastTheWay.Lengths shown = held;
+                LengthRuns shown = held;
                 if (each.shownAt() != null) {
                     shown = held.and(each.shownAt());
                     for (ValuesWithin other : each.shownAt().outside()) {
-                        ValuesWithin open = held.and(LengthsPastTheWay.Lengths.of(other))
-                                .over(holding);
-                        if (!open.shownToHoldNone()) {
-                            notShown.add(open);
+                        for (ValuesWithin open : held.and(
+                                LengthRuns.of(LengthsPastTheWay.Lengths.of(other)))
+                                .over(holding)) {
+                            if (!open.shownToHoldNone()) {
+                                notShown.add(open);
+                            }
                         }
                     }
                 }
-                ValuesWithin whenTrue = shown.over(holding);
-                ValuesWithin past = pastWhatIsShown(whenTrue, each.trueUpTo());
-                if (past != null) {
-                    whenTrue = past.shortest() == whenTrue.shortest()
-                            ? ValuesWithin.all(ValueSet.NONE)
-                            : new ValuesWithin(whenTrue.values(), whenTrue.shortest(),
-                                    past.shortest() - 1);
+                // Each run of the lengths the true side is shown at, cut where it is not shown to
+                // hold the rule any longer: what is past that is the side's, and open.
+                List<ValuesWithin> whenTrue = new ArrayList<>();
+                List<ValuesWithin> pasts = new ArrayList<>();
+                for (ValuesWithin run : shown.over(holding)) {
+                    ValuesWithin past = pastWhatIsShown(run, each.trueUpTo());
+                    if (past == null) {
+                        whenTrue.add(run);
+                        continue;
+                    }
+                    pasts.add(past);
+                    if (past.shortest() != run.shortest()) {
+                        whenTrue.add(new ValuesWithin(run.values(), run.shortest(),
+                                past.shortest() - 1));
+                    }
                 }
                 statements.add(new RuleEvidence.BySet(new SetStatement(each.term(),
-                        ValuesAtLengths.of(whenTrue),
+                        whenTrue.isEmpty()
+                                ? ValuesAtLengths.of(ValuesWithin.all(ValueSet.NONE))
+                                : ValuesAtLengths.atAnyOf(holding, whenTrue),
                         each.heldTo() == null ? ValuesAtLengths.all(built.of(each.whenFalse()))
                                 : ValuesAtLengths.atAnyOf(ValueSet.ANY, each.heldTo().outside()),
                         each.states(), each.by(), notShown,
-                        past == null ? List.of() : List.of(past), each.notReached(),
+                        pasts, each.notReached(),
                         each.operations(),
                         each.notCounted().stream().map(open -> new SetStatement.NotCounted(
                                 built.of(open.strings()), open.why())).toList())));
