@@ -83,6 +83,14 @@ final class ModelWalk {
     /** The helper's way of saying a model is read without being compiled. */
     private static final String NOT_COMPILED = "notCompiled";
 
+    /** What marks a method the test engine runs, handing it what its parameters ask for. */
+    private static final Set<String> RUN_BY_THE_ENGINE = Set.of(
+            "Lorg/junit/jupiter/api/Test;", "Lorg/junit/jupiter/api/RepeatedTest;",
+            "Lorg/junit/jupiter/api/TestFactory;", "Lorg/junit/jupiter/api/TestTemplate;",
+            "Lorg/junit/jupiter/params/ParameterizedTest;", "Lorg/junit/jupiter/api/BeforeEach;",
+            "Lorg/junit/jupiter/api/BeforeAll;", "Lorg/junit/jupiter/api/AfterEach;",
+            "Lorg/junit/jupiter/api/AfterAll;");
+
     /** What a model keeps what it is compiled from in, and hands out. */
     private static final String DB = "souther/compiler/query/Db";
 
@@ -312,8 +320,8 @@ final class ModelWalk {
         }
         this.relevant = mentions;
         this.engineRuns = method.findAttribute(Attributes.runtimeVisibleAnnotations())
-                .map(found -> found.annotations().stream().anyMatch(each -> each.classSymbol()
-                        .descriptorString().startsWith("Lorg/junit/jupiter/")))
+                .map(found -> found.annotations().stream().anyMatch(each ->
+                        RUN_BY_THE_ENGINE.contains(each.classSymbol().descriptorString())))
                 .orElse(false);
     }
 

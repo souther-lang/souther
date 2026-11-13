@@ -1,6 +1,7 @@
 package souther.architecture.fixture;
 
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.RepeatedTest;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -646,11 +647,12 @@ public final class ModelShapes {
     }
 
     /** A method the test engine runs, which a caller also calls with a model that was asked about. */
+    @Disabled("a shape written to be read by the check, and never run")
     public static final class EngineHandsItIn {
 
         private EngineHandsItIn() { }
 
-        @Test
+        @RepeatedTest(1)
         void checks(Compilation model) {
             AdequacyReport.of(model);
         }
