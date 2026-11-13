@@ -176,8 +176,11 @@ final class AnEmptinessCheck {
     }
 
     /**
-     * A value, by what object it is, in the reading it is read in. By the object and not by what
-     * it equals: equality over a tree that shares its parts walks every path to them.
+     * A value in the reading it stands in. The object identifies a node of the tree and not what
+     * it means under a reading, which is what {@link Standing} answers, so two visits are
+     * interchangeable only where both the node and the reading are the same. The node is by
+     * identity and not by what it equals: equality over a tree that shares its parts walks every
+     * path to them.
      */
     private record Visited(Core value, InputReads at) {
 
