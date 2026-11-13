@@ -915,6 +915,41 @@ public final class ModelShapes {
         }
     }
 
+    /** Makes a store of its own and hands back the one it was given when it is told to. */
+    public static final class ChoosesBetweenAStoreItMadeAndTheOneGiven {
+
+        private ChoosesBetweenAStoreItMadeAndTheOneGiven() { }
+
+        private static Db choose(Db existing, boolean useExisting) {
+            Db fresh = new Db();
+            return useExisting ? existing : fresh;
+        }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Db store = choose(model.db(), true);
+            store.forget(new SourceId("main.sou"), "main");
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Makes a store of its own on every way, and changes it. */
+    public static final class ChangesAStoreItWasHandedThatIsNoModels {
+
+        private ChangesAStoreItWasHandedThatIsNoModels() { }
+
+        private static Db made() {
+            return new Db();
+        }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Db own = made();
+            own.forget(new SourceId("main.sou"), "main");
+            return AdequacyReport.of(model);
+        }
+    }
+
     /** An interface whose method does nothing, which a class that has its own does not take. */
     public interface Silent {
 

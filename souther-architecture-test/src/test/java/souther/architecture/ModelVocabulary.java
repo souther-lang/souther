@@ -1,5 +1,6 @@
 package souther.architecture;
 
+import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
 import java.lang.reflect.AccessFlag;
@@ -77,6 +78,14 @@ final class ModelVocabulary {
     /** What reads of a store what its reports say. */
     static final Set<String> DB_READS_A_REPORT = Set.of("allReports");
 
+    /**
+     * What hands back answers, each of which holds the reports its question found. The reports of
+     * the answer of one question put to the store are followed; the reports of an answer reached
+     * through all of them are not, because they are read for the shape of what was answered and the
+     * stores they are read of are of every origin.
+     */
+    static final Set<String> DB_HOLDS_ANSWERS = Set.of("ask", "everyAnswer");
+
     /** What changes what a model is compiled from, through the store it hands out. */
     static final Set<String> DB_CHANGES = Set.of("running", "allowing", "set", "forget",
             "abandonWhen");
@@ -85,6 +94,58 @@ final class ModelVocabulary {
     static final Set<String> DB_NEITHER = Set.of("readings", "execution", "allowances", "ask",
             "dependenciesOf", "isComputed", "watching", "everyAnswer", "revision",
             "ruleReadingFor");
+
+    /**
+     * The static methods of a model that take a model or a store and are not changes: the rest of
+     * the working out takes a static method of the class to work on the model it makes and not on
+     * one that exists, which holds of them and is held here.
+     */
+    static final Set<String> STATIC_READS = Set.of("sourceIdOf");
+
+    /** The type of what a question put to a store answers, which holds the reports it found. */
+    static final String ANSWER = "souther/compiler/query/Answer";
+
+    /**
+     * The static methods of the class that take a model or a store as an argument, and are not said
+     * to be reads, as {@code Class#name}.
+     */
+    static Set<String> unsaidStatics(ClassModel compilation) {
+        Set<String> unsaid = new TreeSet<>();
+        for (MethodModel method : compilation.methods()) {
+            String taken = method.methodType().stringValue();
+            taken = taken.substring(0, taken.lastIndexOf(')'));
+            String name = method.methodName().stringValue();
+            if (method.flags().has(AccessFlag.STATIC) && !method.flags().has(AccessFlag.PRIVATE)
+                    && !method.flags().has(AccessFlag.SYNTHETIC) && !name.startsWith("<")
+                    && (taken.contains(COMPILATION_TYPE) || taken.contains(DB_TYPE))
+                    && !STATIC_READS.contains(name)) {
+                unsaid.add(compilation.thisClass().asInternalName() + "#" + name);
+            }
+        }
+        return unsaid;
+    }
+
+    /**
+     * The methods of the store that hand back what holds reports, as names: the reports themselves
+     * and the answer of a question, which holds the reports that question found.
+     */
+    static Set<String> handingBackReports(ClassModel db) {
+        Set<String> found = new TreeSet<>();
+        for (MethodModel method : db.methods()) {
+            String returned = method.methodTypeSymbol().returnType().descriptorString();
+            String generic = method.findAttribute(Attributes.signature())
+                    .map(each -> each.signature().stringValue()).orElse("");
+            String said = returned + generic.substring(generic.lastIndexOf(')') + 1);
+            String name = method.methodName().stringValue();
+            if (!method.flags().has(AccessFlag.STATIC) && !method.flags().has(AccessFlag.PRIVATE)
+                    && !method.flags().has(AccessFlag.SYNTHETIC) && !name.startsWith("<")
+                    && (said.contains(ANSWER) || REPORT_CARRIERS.stream()
+                    .anyMatch(said::contains))) {
+                found.add(name);
+            }
+        }
+        return found;
+    }
 
     /**
      * The methods of the store that are said nowhere above, as {@code Class#name}, which are the

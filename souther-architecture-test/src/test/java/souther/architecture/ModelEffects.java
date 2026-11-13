@@ -6,7 +6,6 @@ import java.lang.classfile.CodeElement;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
-import java.lang.classfile.instruction.NewObjectInstruction;
 import java.lang.reflect.AccessFlag;
 import java.util.ArrayDeque;
 import java.util.Collection;
@@ -48,20 +47,16 @@ final class ModelEffects {
 
     private final Set<String> withCode;
 
-    private final Set<String> ownStores;
-
     private final Set<String> changers;
 
     private final Set<String> reportReaders;
 
     private ModelEffects(Map<String, Set<String>> implementers, Map<String, Set<String>> supers,
                          Map<String, String> parents, Set<String> declared, Set<String> withCode,
-                         Set<String> ownStores, Set<String> changers,
-                         Set<String> reportReaders) {
+                         Set<String> changers, Set<String> reportReaders) {
         this.implementers = implementers;
         this.supers = supers;
         this.parents = parents;
-        this.ownStores = ownStores;
         this.declared = declared;
         this.withCode = withCode;
         this.changers = changers;
@@ -211,34 +206,8 @@ final class ModelEffects {
         }
         Set<String> readers = close(reading, calledBy);
         readers.addAll(handingBack);
-        Set<String> ownStores = new HashSet<>();
-        for (ClassModel each : classes) {
-            for (MethodModel method : each.methods()) {
-                if (method.code().isPresent() && method.methodTypeSymbol().returnType()
-                        .descriptorString().equals(ModelVocabulary.DB_TYPE)
-                        && makesAStoreOfItsOwn(method)) {
-                    ownStores.add(AMethod.of(each, method));
-                }
-            }
-        }
-        return new ModelEffects(implementers, supers, parents, declared, withCode, ownStores,
+        return new ModelEffects(implementers, supers, parents, declared, withCode,
                 close(changing, calledBy), readers);
-    }
-
-    private static boolean makesAStoreOfItsOwn(MethodModel method) {
-        boolean makes = false;
-        for (CodeElement element : method.code().orElseThrow().elementList()) {
-            if (element instanceof NewObjectInstruction made
-                    && made.className().asInternalName().equals(ModelVocabulary.DB)) {
-                makes = true;
-            }
-            if (element instanceof InvokeInstruction call
-                    && call.owner().asInternalName().equals(ModelVocabulary.COMPILATION)
-                    && call.name().stringValue().equals(ModelVocabulary.STORE_ACCESSOR)) {
-                return false;
-            }
-        }
-        return makes;
     }
 
     /**
@@ -271,15 +240,6 @@ final class ModelEffects {
     /** The methods the call of {@code callee} may run: see {@link #resolved}. */
     Set<String> targets(String callee) {
         return resolved(callee, supers, parents, declared, implementers);
-    }
-
-    /**
-     * Whether the method hands back a store it made, and not one it got from a model: it makes one
-     * with {@code new}, and nothing in it takes the store of a model. Reading what such a store
-     * says is reading nothing a model found.
-     */
-    boolean makesItsOwnStore(String method) {
-        return ownStores.contains(method);
     }
 
     /** Whether {@code method} has a body among the classes. */

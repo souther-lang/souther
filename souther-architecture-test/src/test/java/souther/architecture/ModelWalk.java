@@ -107,16 +107,19 @@ final class ModelWalk {
      * @param changingMethods    the methods that change some argument they are handed
      * @param storeReturns       what the model each method that answers a store hands back the
      *                           store of stands as
+     * @param storesMadeAlone    the methods that answer a store, and answer on every way out one
+     *                           that they made with {@code new} and nothing else, which no model
+     *                           owns
      */
     record Facts(Map<String, ModelStanding> returns, Set<String> returnsParameter,
                  Set<String> readsParameter, Set<String> readsReportParameter,
                  Set<String> readsStrictParameter, Set<String> asksParameter, Set<String> mutatesParameter,
                  Set<String> leavesAsked, Map<String, ModelStanding> fields,
                  Map<String, Set<String>> fieldFlows, Set<String> changingMethods,
-                 Map<String, ModelStanding> storeReturns) {
+                 Map<String, ModelStanding> storeReturns, Set<String> storesMadeAlone) {
 
         static final Facts NONE = new Facts(Map.of(), Set.of(), Set.of(), Set.of(), Set.of(),
-                Set.of(), Set.of(), Set.of(), Map.of(), Map.of(), Set.of(), Map.of());
+                Set.of(), Set.of(), Set.of(), Map.of(), Map.of(), Set.of(), Map.of(), Set.of());
     }
 
     /**
@@ -194,6 +197,8 @@ final class ModelWalk {
         ModelStanding returns = ModelStanding.ASKED;
         /** What the model a store that is answered belongs to stands as, joined over the answers. */
         ModelStanding returnsStore = ModelStanding.ASKED;
+        /** Whether every store it answers is one it made, so that it is of no model. */
+        boolean returnsOnlyStoresItMade = true;
         final Set<Integer> returnsParameter = new HashSet<>();
         final Set<Integer> readsParameter = new HashSet<>();
         final Set<Integer> readsReportParameter = new HashSet<>();
@@ -458,7 +463,7 @@ final class ModelWalk {
                         if (givenOnSeveralWays(local.slot(), site.at())) {
                             mutatesAnyAt.add(site.at());
                         }
-                    } else if (!(site.operand() instanceof Operand.Nothing)) {
+                    } else if (!noModel(site.operand())) {
                         mutatesAnyAt.add(site.at());
                     }
                 }
@@ -589,7 +594,7 @@ final class ModelWalk {
                     }
                     out.put(fieldSlot(field.key()), becomes);
                 }
-            } else if (mutating(site) && !(site.operand() instanceof Operand.Nothing)) {
+            } else if (mutating(site) && !noModel(site.operand())) {
                 if (out == null) {
                     out = new HashMap<>(state);
                 }
@@ -680,7 +685,7 @@ final class ModelWalk {
             if (!changes(site)) {
                 continue;
             }
-            if (site.operand() instanceof Operand.Nothing) {
+            if (noModel(site.operand())) {
                 continue;
             }
             if (out == null) {
@@ -980,9 +985,10 @@ final class ModelWalk {
             // What a store stands as is what the model it belongs to stands as, and a store a
             // method made is of no model.
             Operand of = modelOfTheDb(producer(at, 0));
-            ModelStanding standing = of instanceof Operand.Nothing ? ModelStanding.ASKED
+            ModelStanding standing = noModel(of) ? ModelStanding.ASKED
                     : unhanded(standing(of, state));
             result.returnsStore = result.returnsStore.join(standing);
+            result.returnsOnlyStoresItMade &= noModel(of);
         }
         if (element instanceof ReturnInstruction back && back.typeKind() == TypeKind.REFERENCE
                 && returnsModel) {
@@ -1101,6 +1107,32 @@ final class ModelWalk {
             return ModelStanding.LOST;
         }
         return facts.fields().getOrDefault(field, ModelStanding.ASKED);
+    }
+
+    /**
+     * Whether the model {@code operand} stands for is none: it is a store made here, or the answer
+     * of a call that answers only stores it made, on every way out of every method it may run.
+     */
+    private boolean noModel(Operand operand) {
+        return operand instanceof Operand.Nothing
+                || (operand instanceof Operand.Answer made && made.call().typeSymbol().returnType()
+                .descriptorString().equals(DB_TYPE) && madeAloneEverywhere(made.call()));
+    }
+
+    private boolean madeAloneEverywhere(InvokeInstruction call) {
+        boolean any = false;
+        String callee = AMethod.of(call.owner().asInternalName(), call.name().stringValue(),
+                call.type().stringValue());
+        for (String target : world.effects().targets(callee)) {
+            if (!world.effects().hasCode(target)) {
+                continue;
+            }
+            if (!facts.storesMadeAlone().contains(target)) {
+                return false;
+            }
+            any = true;
+        }
+        return any;
     }
 
     /**
@@ -1476,14 +1508,11 @@ final class ModelWalk {
                 return modelOfTheDb(producer(answer.at(), arguments), depth + 1);
             }
             if (answer.call().typeSymbol().returnType().descriptorString().equals(DB_TYPE)
-                    && world.effects().makesItsOwnStore(AMethod.of(owner,
-                    answer.call().name().stringValue(), answer.call().type().stringValue()))) {
-                return new Operand.Nothing();
-            }
-            if (answer.call().typeSymbol().returnType().descriptorString().equals(DB_TYPE)
                     && world.analysed().contains(AMethod.of(owner,
                     answer.call().name().stringValue(), answer.call().type().stringValue()))) {
-                // A method that is walked says what the model its store belongs to stands as.
+                // A method that is walked says what the model its store belongs to stands as, and
+                // whether it answers only stores it made, which {@link #noModel} asks when it is
+                // used: what it says is not known when the places a store is used are found.
                 return answer;
             }
             return new Operand.Lost();
@@ -1749,6 +1778,9 @@ final class ModelWalk {
         String owner = call.owner().asInternalName();
         if (owner.startsWith("java/util/function/") || owner.startsWith("java/util/concurrent/")
                 || owner.equals("java/lang/Runnable")) {
+            return true;
+        }
+        if (owner.startsWith("java/lang/reflect/") || owner.startsWith("java/lang/invoke/")) {
             return true;
         }
         if (!owner.startsWith("java/")) {

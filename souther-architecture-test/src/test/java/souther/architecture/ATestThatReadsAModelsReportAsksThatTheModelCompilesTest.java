@@ -35,6 +35,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "AnotherModelAsked", "AnswerWarningsOnly", "AskedAliasOfAFieldChangedByAMethod",
             "AnswerKeptInAVariable", "AskedOnOneWayOnly", "BoundMethodRefChanges",
             "BoundMethodRefReads", "BoxedInAnArray", "ChangedThroughTheParentNotTheDefault",
+            "ChoosesBetweenAStoreItMadeAndTheOneGiven",
             "ConditionalModelJoin", "DbHeldHandedToAConsumer",
             "ChangedOnTheWayThatFails",
             "ChangedThenFailedAndCaught", "ChangedThroughADefaultMethod",
@@ -67,7 +68,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     private static final Set<String> ACCEPTED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelAsked", "AliasOfAnAskedModel", "AnotherClassAskedAboutIt",
             "AskedAfterTheRead", "AskedByAMethodOfItsOwn", "AskedOnEveryWay", "AskedThenCaptured",
-            "AskedThenRead", "ConfiguredThroughTheDbBeforeTheLook", "DbHandedToAReader",
+            "AskedThenRead", "ChangesAStoreItWasHandedThatIsNoModels",
+            "ConfiguredThroughTheDbBeforeTheLook", "DbHandedToAReader",
             "ErrorsOfAnAnsweredModel", "FieldAskedWhereWritten", "HandedToAnInterfaceThatOnlyLooks",
             "HelperThatChangesAndAsks", "MarkedAndNotRun",
             "NotCompiledOnTheList",
@@ -189,6 +191,27 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
         assertEquals(Set.of(), ModelVocabulary.unsaid(COMPILED.read(ModelVocabulary.DB)),
                 "a method of Db is not said in ModelVocabulary to read a report, to change what a"
                         + " model is made of, or to do neither");
+    }
+
+    /**
+     * And what the working out takes of the shape of a method is held where it is taken.
+     *
+     * <p>A static method of the model's class is taken to work on the model it makes, so that it
+     * changes none that exists; and a method of the store that hands back reports is taken to be
+     * the reading of them or the question that holds them. A method added that is neither is one
+     * the working out would take wrong.
+     */
+    @Test
+    void whatIsTakenOfAMethodByItsShapeHoldsOfEveryMethodThatHasTheShape() {
+        assertEquals(Set.of(), ModelVocabulary.unsaidStatics(
+                        COMPILED.read(ModelVocabulary.COMPILATION)),
+                "a static method of Compilation takes a model or a store and is not said to read");
+        Set<String> reading = new TreeSet<>(ModelVocabulary.DB_READS_A_REPORT);
+        reading.addAll(ModelVocabulary.DB_HOLDS_ANSWERS);
+        assertEquals(reading,
+                ModelVocabulary.handingBackReports(COMPILED.read(ModelVocabulary.DB)),
+                "a method of Db hands back reports and is neither the reading of them nor the"
+                        + " question that holds them");
     }
 
     /**
