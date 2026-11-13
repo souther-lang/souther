@@ -11640,12 +11640,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // bounds say only where they are shown to be the whole of what the rules leave it, and
         // where no end of its order cuts them.
         Named named = namedByTheDeclarations(value.position(), read);
-        if (named == Named.UNSEEN || (named == Named.BY_A_RULE
-                && (!certifiedAsideFromTheRelationOf(at.projection(), except)
-                        || !wholeOnItsOrder(value, read)))) {
+        boolean relating = named == Named.BY_A_RULE;
+        boolean byARule = relating || named == Named.BY_ONE_PLACE;
+        if (named == Named.UNSEEN
+                || (byARule && !certifiedAsideFromTheRelationOf(at.projection(), except))
+                || (relating && !wholeOnItsOrder(value, read))) {
             return null;
         }
-        boolean byARule = named == Named.BY_A_RULE;
         NumericDomain.Bounds ends = endsOf(at.boundsFor(value), byARule);
         AdmissibleSet admitted = at.admitted();
         // Every value where nothing holds any back: the reading of the values here took every rule
@@ -11998,9 +11999,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NOT,
 
         /**
-         * A rule reads the value at the place itself, by the chain of fields down to it. What it
-         * leaves the place is in the place's bounds, and is all of it where those are shown to be
-         * the whole of what the rules leave ({@link Position#projection}).
+         * A rule of a value around it reads the value at the place itself and nothing else, so it
+         * is a rule of that place however far up it is written: it holds the place back and ties
+         * it to nothing. What it leaves the place is in the place's bounds, and is all of it where
+         * those are shown to be the whole of what the rules leave ({@link Position#projection}).
+         */
+        BY_ONE_PLACE,
+
+        /**
+         * A rule reads the value at the place itself, by the chain of fields down to it, with
+         * another place. What it leaves the place is in the place's bounds, and is all of it where
+         * those are shown to be the whole of what the rules leave ({@link Position#projection}).
          */
         BY_A_RULE,
 
@@ -12117,6 +12126,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             for (ClauseMeaning.Parts.One part : stated.parts().leaves()) {
                 for (ClauseRead reading : part.reads()) {
                     Named says = namedBy(reading, here, place, rest, read, apart);
+                    if (says == Named.BY_A_RULE && readsOnePlaceAlone(part)) {
+                        says = Named.BY_ONE_PLACE;
+                    }
                     out = out.and(says);
                     if (says != Named.NOT && nodes != null) {
                         TiedOnTheWay.Rule rule =
@@ -12133,6 +12145,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return out;
+    }
+
+    /**
+     * Whether the one part of a clause reads the values of a single place and nothing else: every
+     * reading of it is of the values at one and the same place. A part reading two places, or how
+     * many a container holds, or an element, is not a rule about one place alone.
+     */
+    private static boolean readsOnePlaceAlone(ClauseMeaning.Parts.One part) {
+        List<String> only = null;
+        for (ClauseRead each : part.reads()) {
+            if (each.kind() != ClauseRead.Kind.ITS_VALUES) {
+                return false;
+            }
+            if (only != null && !only.equals(each.at().steps())) {
+                return false;
+            }
+            only = each.at().steps();
+        }
+        return only != null;
     }
 
     /**
