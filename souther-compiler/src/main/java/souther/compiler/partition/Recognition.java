@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
+import souther.compiler.values.ValuesAtLengths;
 import souther.compiler.values.ValuesWithin;
 
 import java.util.List;
@@ -135,9 +136,16 @@ public sealed interface Recognition {
      * <p>A class shown only as far as some length holds no string longer than that, whatever the
      * set holds: such a string is shown on neither side of the rule that drew it, and is in no
      * class of the position. So the class is the set and its lengths together, and a value is in
-     * it where it is in both ({@link ValuesWithin#has}).
+     * it where it is in both ({@link ValuesAtLengths#has}). The lengths may be two runs or more:
+     * the strings shorter than a partner's fewest code points and those longer than its most are
+     * one class of strings never the partner.
      */
-    record OfASet(ValuesWithin values) implements Recognition {
+    record OfASet(ValuesAtLengths values) implements Recognition {
+
+        /** The class of the values {@code within} holds, at the one run of lengths it holds. */
+        public OfASet(ValuesWithin within) {
+            this(ValuesAtLengths.of(within));
+        }
 
         public OfASet {
             if (values == null) {

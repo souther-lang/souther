@@ -9,6 +9,7 @@ import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 
 import souther.compiler.evaluate.EvaluationContext;
+import souther.exact.BuiltTextBounds;
 import souther.runtime.Strings;
 import souther.runtime.TextAdmission;
 
@@ -192,8 +193,9 @@ public final class TextExtents {
     /**
      * Whether {@code language} holds a value of {@code least} to {@code most} code points, the two
      * already within what a {@code String} can be: shown to where a string it holds as written is
-     * of such a length ({@link Language#heldAsWritten}, the fewest code points of those), and shown
-     * not to where none of its strings is.
+     * of such a length ({@link Language#heldAsWritten}, the fewest code points of those, or one of
+     * {@code least} code points, or one of every length from {@code least} on where
+     * {@code most} is the longest string there is), and shown not to where none of its strings is.
      */
     private static Emptiness heldWithin(Language language, long least, long most) {
         if (language.isEmpty()) {
@@ -201,6 +203,11 @@ public final class TextExtents {
         }
         long written = language.shortestHeldAsWritten();
         if (written >= least && written <= most) {
+            return Emptiness.NONEMPTY;
+        }
+        if (written >= 0 && written < least && (most >= LONGEST_STRING
+                ? language.reachesEveryLength(length -> length >= least, true)
+                : language.reachesEveryLength(length -> length == least, false))) {
             return Emptiness.NONEMPTY;
         }
         Language.Ends lengths = language.lengths();
@@ -223,6 +230,10 @@ public final class TextExtents {
 
     /** The most code points a {@code String} holds, which no length, count or sum of one passes. */
     public static final long LONGEST_STRING = Strings.LONGEST_TEXT;
+
+    /** How long a text an operation building texts of texts comes to, and each it builds on the
+     *  way, as the run time's account of those operations says ({@code Strings.BUILT_TEXTS}). */
+    public static final BuiltTextBounds BUILT_TEXTS = Strings.BUILT_TEXTS;
 
     /** Whether {@link #holdsAValue(ValueSet)} settles that {@code set} holds one. */
     public static boolean shownToHoldAValue(ValueSet set) {

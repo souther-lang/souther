@@ -59,6 +59,58 @@ public sealed interface GetsPast {
     record WhereTheTotalFits(int operand) implements GetsPast {}
 
     /**
+     * It answers wherever the exact product of the {@code Int}s the list at {@code operand} holds
+     * is an {@code Int}, and ends a run for nothing else: it multiplies them exactly however far a
+     * product on the way strays, and holds only the last to the type ({@code Lists.productInt}).
+     * A nought among them makes the product nought. Not what a product of two answers, which is
+     * held to the type where it is worked out.
+     *
+     * @param operand which of the site's operands is the list, counted from nought
+     */
+    record WhereTheProductFits(int operand) implements GetsPast {}
+
+    /**
+     * It answers wherever the whole numbers from the one at {@code from} to the one at {@code to},
+     * both included, are no more than a collection holds ({@link #MOST_ELEMENTS}), and ends a run
+     * for nothing else: it counts the span before it builds anything ({@code Capacity.span}), and
+     * {@code from} above {@code to} answers the empty list.
+     *
+     * @param from which of the site's operands is the first number, counted from nought
+     * @param to   which is the last
+     */
+    record WhereTheSpanFits(int from, int to) implements GetsPast {}
+
+    /**
+     * It answers wherever the {@code Int} at {@code dividend} is not the least an {@code Int} holds
+     * or the one at {@code divisor} is not minus one, and ends a run for nothing else: a quotient
+     * truncated toward nought lies no farther from nought than what it divides, but the least
+     * {@code Int} divided by minus one is one past the greatest ({@code IntMath.divideExact}). A
+     * divisor of nought answers a case.
+     *
+     * @param dividend which of the site's operands is the number divided, counted from nought
+     * @param divisor  which is the number it is divided by
+     */
+    record WhereTheQuotientFits(int dividend, int divisor) implements GetsPast {}
+
+    /**
+     * It answers wherever the whole number it rounds the number at {@code operand} to is an
+     * {@code Int}, and ends a run for nothing else ({@code IntNarrowing.rounded}). Whatever way it
+     * is handed, that is the greatest whole number at most the number or the least at least it.
+     *
+     * @param operand which of the site's operands is the number rounded, counted from nought
+     */
+    record WhereTheRoundedNumberFits(int operand) implements GetsPast {}
+
+    /**
+     * It answers wherever the number at {@code operand}, where it is a whole number, is one an
+     * {@code Int} holds, and ends a run for nothing else: a number that is not whole answers a
+     * case before it is held to anything ({@code RationalMath.toWholeNumber}).
+     *
+     * @param operand which of the site's operands is the number, counted from nought
+     */
+    record WhereTheWholeNumberFits(int operand) implements GetsPast {}
+
+    /**
      * It answers wherever the text it makes is no longer than a {@code String} holds, and ends a
      * run for nothing else: a case conversion of the text at {@code operand}, whose answer may
      * hold more code points than the text it was handed.
@@ -66,6 +118,55 @@ public sealed interface GetsPast {
      * @param operand which of the site's operands is the text, counted from nought
      */
     record WhereTheTextFits(int operand) implements GetsPast {}
+
+    /**
+     * It answers wherever the text it builds out of the texts it is handed, put in canonical form,
+     * and each text it is defined as building on the way to that, is no longer than a
+     * {@code String} holds, and ends a run for nothing else ({@code Strings}).
+     *
+     * @param built how it builds the text, of which of the site's operands
+     */
+    record WhereTheTextBuiltFits(TextBuilt built) implements GetsPast {}
+
+    /**
+     * How an operation builds a text of the texts and numbers it is handed, each named by which of
+     * the site's operands it is, counted from nought. Every text a {@code String} holds is in
+     * canonical form, and each of these puts what it builds in that form once it is built.
+     */
+    sealed interface TextBuilt {
+
+        /** The text at {@code first} followed by the one at {@code second}
+         *  ({@code Strings.append}, {@code ++}). */
+        record Joined(int first, int second) implements TextBuilt {}
+
+        /**
+         * The texts the list at {@code list} holds, in order, with the text at {@code separator}
+         * between each two, or with nothing between them where {@code separator} is -1
+         * ({@code Strings.join}, {@code Strings.concat}).
+         */
+        record JoinedWith(int list, int separator) implements TextBuilt {}
+
+        /** As many copies of the text at {@code text} as the {@code Int} at {@code count}, one
+         *  after another, and none where it is nought or less ({@code Strings.repeat}). */
+        record Copies(int text, int count) implements TextBuilt {}
+
+        /**
+         * The text at {@code text} widened to as many code points as the {@code Int} at
+         * {@code width} with copies of the text at {@code pad}, cut to what is needed, on one side
+         * ({@code Strings.padLeft}, {@code Strings.padRight}); the text itself where it is that
+         * wide already or {@code pad} is empty.
+         */
+        record Padded(int text, int width, int pad) implements TextBuilt {}
+
+        /** The code points of the text at {@code text} in the opposite order
+         *  ({@code Strings.reverse}). */
+        record Reversed(int text) implements TextBuilt {}
+
+        /** The text at {@code text} with each occurrence of the text at {@code target} put in place
+         *  of by the one at {@code replacement}, and the text itself where {@code target} is
+         *  empty ({@code Strings.replace}). */
+        record Replaced(int text, int target, int replacement) implements TextBuilt {}
+    }
 
     /** Nothing here says where it answers. */
     record NotKnown() implements GetsPast {}

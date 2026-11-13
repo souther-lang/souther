@@ -611,6 +611,10 @@ public sealed interface SearchMessage extends Message {
 
     record StringsPartedInAll() implements SearchMessage, Prose {}
 
+    record StringsAPartnerHoldsOneMachine() implements SearchMessage, Prose {}
+
+    record StringsAPartnerHoldsInAll() implements SearchMessage, Prose {}
+
     record EvaluationSteps() implements SearchMessage, Prose {}
 
     record RecursionDepth() implements SearchMessage, Prose {}

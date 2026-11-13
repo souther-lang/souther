@@ -83,11 +83,14 @@ class WhatAConversionAnswersKeepsValuesApartFromWhatItLeavesAsItStandsTest {
         assertTrue(asked.canBe().has("z"));
     }
 
+    /** With no conversion every string of the side is its own answer, a mark that holds no
+     *  starter as well; what strings are made from is still the values alone. */
     @Test
-    void noConversionShowsValuesAlone() {
-        WhatAConversionAnswers.Shown asked = of(CaseMapping.NONE, "zz", "́")
-                .forEquality(METER);
+    void noConversionShowsEveryStringOfTheSide() {
+        WhatAConversionAnswers answers = of(CaseMapping.NONE, "zz", "́");
+        WhatAConversionAnswers.Shown asked = answers.forEquality(METER);
         assertTrue(asked.canBe().has("zz"));
-        assertFalse(asked.canBe().has("́"));
+        assertTrue(asked.canBe().has("́"));
+        assertFalse(answers.forDerivation().has("́"));
     }
 }

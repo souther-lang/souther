@@ -25,6 +25,7 @@ import souther.compiler.numeric.Text;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesAtLengths;
 import souther.compiler.values.ValuesWithin;
 
 import java.util.ArrayList;
@@ -403,8 +404,8 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
     void whatARuleLeavesOpenIsCarriedWhereTheClassesStopBeforeIt() {
         SetStatement read = matchingLowerCase();
         RuleEvidence unsettled = new RuleEvidence.BySet(new SetStatement(read.term(),
-                ValuesWithin.all(matching("a\\x{301}")), read.whenFalse(), read.statement(),
-                read.origin(), ValueSet.NONE));
+                ValuesAtLengths.all(matching("a\\x{301}")), read.whenFalse(), read.statement(),
+                read.origin(), List.of()));
         Classing.Result answered = Classing.of(read.term(),
                 List.of(unsettled, shownUpTo(read, 2L)), List.of(),
                 new Carrier.Text(), matching(".+"),
@@ -488,10 +489,15 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         assertEquals(2, answered.leftOpen().size(), "each rule leaves its own values open");
     }
 
+    /** {@code read}, its true side shown only as far as {@code longest}: the values of it longer
+     *  than that are shown on neither side, for no operation. */
     private static RuleEvidence shownUpTo(SetStatement read, long longest) {
+        ValueSet holding = read.whenTrue().values();
         return new RuleEvidence.BySet(new SetStatement(read.term(),
-                ValuesWithin.upTo(read.whenTrue().values(), longest), read.whenFalse(),
-                read.statement(), read.origin(), ValueSet.NONE));
+                ValuesAtLengths.of(ValuesWithin.upTo(holding, longest)), read.whenFalse(),
+                read.statement(), read.origin(), List.of(),
+                List.of(ValuesWithin.longerThan(holding, longest)), List.of(),
+                BlockReason.OperationsNotShown.NONE, List.of()));
     }
 
     /** {@code read}, its true side shown only as far as {@code longest}, classed over a position
