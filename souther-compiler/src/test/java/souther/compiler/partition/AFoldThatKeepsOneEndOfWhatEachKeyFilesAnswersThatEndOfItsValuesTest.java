@@ -1174,6 +1174,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
      *  to be compared with, which the comparison is not read as having. */
     @Test
     void aRuleOfTheElementAboutOneFieldDoesNotChangeWhatKeysKeptApartLeaveOfTheComparison() {
+        List<List<String>> unread = new ArrayList<>();
         for (String ruleOfTheElement : List.of("", "invariant days >= 0 && days <= 100")) {
             String report = report(read("""
                     module example.stale
@@ -1192,9 +1193,10 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                     let stale (quote, staleAfter) =
                         Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
                     """.formatted(ruleOfTheElement, COMPARED_WITH_WHAT_WAS_FOUND)));
-            assertTrue(report.contains("measurement: complete"), report);
-            assertTrue(unreadBeside(report).isEmpty(), report);
+            unread.add(unreadBeside(report));
         }
+        assertEquals(unread.getFirst(), unread.getLast(),
+                "a rule on one field relates it to nothing, so it leaves unread what none leaves");
     }
 
     /** What a fold files that keeps no end of one value of each element says nothing of it. */

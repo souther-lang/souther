@@ -13,33 +13,30 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A rule written on a record that reads one of its fields alone is read as a rule of that field,
- * as the same rule written on the field's own type is. A rule reading two of its fields together
- * still relates them.
+ * A rule written on a record that reads one place alone is read as a rule of that place, as the
+ * same rule written on the place's own type is.
+ *
+ * <p>What is held here is that the two forms are measured alike, so a later reading that measures
+ * more of them holds as well. Which rule reads one place alone is held where it is answered
+ * ({@code ARulePartReadsOnePlaceAloneOnlyWhereItReadsThatPlaceAndNothingElseTest}).
  */
 class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
 
-    private static String contact(String rules) {
-        return """
-                module bounded
+    private static final String THE_ISSUES_RECORD = """
+            module bounded
 
-                data Contact = { email: String, name: String }
-                    %s
+            data Contact = { email: String, name: String }
+                invariant String.length(email) <= 254
 
-                behavior f : (contact: Contact, emails: List<String>) -> Bool
-                let f (contact, emails) = List.any(own -> own == contact.email, emails)
+            behavior f : (contact: Contact, emails: List<String>) -> Bool
+            let f (contact, emails) = List.any(own -> own == contact.email, emails)
+            """;
 
-                example f
-                    | "in"  : (Contact { email = "a@b", name = "a@b" }, [ "a@b" ]) -> true
-                    | "out" : (Contact { email = "a@b", name = "a@b" }, [ "c@d" ]) -> false
-                """.formatted(rules);
-    }
-
-    private static final String ON_THE_FIELD_TYPE = """
+    private static final String THE_ISSUES_NEWTYPE = """
             module bounded
 
             data Em = String invariant String.length(value) <= 254
@@ -47,98 +44,23 @@ class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
 
             behavior f : (contact: Contact, emails: List<String>) -> Bool
             let f (contact, emails) = List.any(own -> own == contact.email.value, emails)
-
-            example f
-                | "in"  : (Contact { email = Em("a@b"), name = "a@b" }, [ "a@b" ]) -> true
-                | "out" : (Contact { email = Em("a@b"), name = "a@b" }, [ "c@d" ]) -> false
             """;
 
     @Test
-    void theRecordFormReadsAsTheFieldTypeFormDoes() {
-        PartitionEvidence field = evidence(ON_THE_FIELD_TYPE);
-        PartitionEvidence record = evidence(contact("invariant String.length(email) <= 254"));
+    void theRecordOfTheIssueReadsAsTheNewtypeDoes() {
+        PartitionEvidence field = evidence(THE_ISSUES_NEWTYPE);
+        PartitionEvidence record = evidence(THE_ISSUES_RECORD);
 
         assertInstanceOf(Measurement.Complete.class, field.partitioned(), "the control reads");
-        assertInstanceOf(Measurement.Complete.class, record.partitioned());
-        assertEquals(unanswered(field), unanswered(record));
-        assertEquals(notDerivable(field), notDerivable(record));
-    }
-
-    @Test
-    void ruleOfEachFieldAloneAreReadAsRulesOfThoseFields() {
-        PartitionEvidence evidence = evidence(contact(
-                "invariant String.length(email) <= 254 && String.length(name) <= 100"));
-
-        assertInstanceOf(Measurement.Complete.class, evidence.partitioned());
-        assertEquals(List.of(), unanswered(evidence));
-    }
-
-    @Test
-    void twoRulesOnOneFieldAreReadAsRulesOfThatField() {
-        PartitionEvidence evidence = evidence(contact(
-                "invariant String.length(email) <= 254\n    invariant String.length(email) >= 1"));
-
-        assertInstanceOf(Measurement.Complete.class, evidence.partitioned());
-        assertEquals(List.of(), unanswered(evidence));
-    }
-
-    @Test
-    void aRuleReadingTwoFieldsTogetherStillRelatesThem() {
-        PartitionEvidence evidence = evidence(contact(
-                "invariant String.length(email) <= 254 && email == name"));
-
-        assertInstanceOf(Measurement.FailedToMeasure.class, evidence.partitioned());
-        assertTrue(unanswered(evidence).contains("emails[*] NothingClassifiesIt"),
-                unanswered(evidence).toString());
-    }
-
-    @Test
-    void aChoiceBetweenTwoFieldsIsNotARuleOfOneOfThem() {
-        PartitionEvidence evidence = evidence(contact(
-                "invariant String.length(email) <= 254 || String.length(name) <= 254"));
-
-        assertInstanceOf(Measurement.FailedToMeasure.class, evidence.partitioned());
-        assertTrue(unanswered(evidence).contains("emails[*] NothingClassifiesIt"),
-                unanswered(evidence).toString());
-    }
-
-    @Test
-    void aPartnerHeldByARecordRulePartsTheOtherSideAsTheFieldTypeFormDoes() {
-        String record = """
-                module bounded
-                data EmpId = String invariant String.length(value) >= 1
-                data Pending = { me: EmpId, boss: EmpId } invariant String.length(boss.value) >= 2
-                behavior f : (p: Pending, approver: EmpId) -> Bool
-                let f (p, approver) = approver == p.boss
-                example f
-                    | "a" : (Pending { me = EmpId("a"), boss = EmpId("bb") }, EmpId("bb")) -> true
-                    | "b" : (Pending { me = EmpId("a"), boss = EmpId("bb") }, EmpId("c")) -> false
-                """;
-        String newtype = """
-                module bounded
-                data EmpId = String invariant String.length(value) >= 1
-                data Boss = String invariant String.length(value) >= 2
-                data Pending = { me: EmpId, boss: Boss }
-                behavior f : (p: Pending, approver: EmpId) -> Bool
-                let f (p, approver) = approver.value == p.boss.value
-                example f
-                    | "a" : (Pending { me = EmpId("a"), boss = Boss("bb") }, EmpId("bb")) -> true
-                    | "b" : (Pending { me = EmpId("a"), boss = Boss("bb") }, EmpId("c")) -> false
-                """;
-        PartitionEvidence onTheRecord = evidence(record);
-        PartitionEvidence onTheField = evidence(newtype);
-
-        assertEquals(classesOf(onTheField), classesOf(onTheRecord));
-        assertEquals(List.of("approver: x can be p.boss", "approver: x is never p.boss"),
-                classesOf(onTheRecord).get("approver"));
+        assertEquals(measured(field), measured(record));
     }
 
     /**
-     * What a behavior over a record's field {@code x} is measured to be does not depend on whether
-     * the rule on it is written on the record or on the field's own type.
+     * What a behavior over a field {@code x} of a record is measured to be does not depend on
+     * whether the rule on it is written on the record or on the field's own type.
      *
      * @param type   the type of {@code x} and of {@code y}
-     * @param rule   the rule, {@code %s} standing for the value it is about
+     * @param rule   the rule, {@code %1$s} standing for the value it is about
      * @param param  the parameter {@code other} is, as written after its name
      * @param bodies behaviors over {@code r.x}, {@code r.y} and {@code other}
      */
@@ -170,21 +92,40 @@ class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
                     "r.x < 18", "r.x == other", "r.x + r.y < 100", "r.x < 18 || other > 5",
                     "r.x <= r.y", "r.x * 2 >= other", "Int.floorMod(r.x, 3) == other",
                     "r.x == 5 && r.y == other")),
-            new Shape("String", "String.length(%s) <= 20", "List<String>", List.of(
+            new Shape("String", "String.length(%1$s) <= 20", "List<String>", List.of(
                     "String.length(r.x) > 10", "r.x == r.y", "String.startsWith(r.x, \"a\")",
                     "List.any(own -> own == r.x, other)",
                     "List.any(own -> own == String.lowercase(r.x), other)",
-                    "r.x == r.y || List.any(own -> own == r.x, other)")));
+                    "r.x == r.y || List.any(own -> own == r.x, other)")),
+            new Shape("String", "String.length(%1$s) <= 20\n    invariant String.length(%1$s) >= 1",
+                    "List<String>", List.of(
+                    "List.any(own -> own == r.x, other)", "r.x == r.y")),
+            new Shape("String", "String.length(%1$s) >= 2", "String", List.of(
+                    "r.x == other", "String.length(r.x) == String.length(other)",
+                    "r.x == other || r.x == r.y")),
+            new Shape("String", "String.length(%1$s) == 0", "List<String>", List.of(
+                    "List.any(own -> own == String.lowercase(r.x), other)"
+                            + " || List.any(own -> own == r.x, other)",
+                    "List.any(own -> own == r.x, other)", "r.x == r.y")),
+            new Shape("Int", "%1$s == 7", "Int", List.of(
+                    "r.x == other", "r.x == other || r.y == other", "r.x + r.y == other")),
+            new Shape("List<String>", "List.length(%1$s) <= 5", "String", List.of(
+                    "List.length(r.x) > 2", "List.any(own -> own == other, r.x)",
+                    "List.length(r.x) == List.length(r.y)", "r.x == r.y",
+                    "List.any(own -> own == other, r.x) || List.any(own -> own == other, r.y)")),
+            new Shape("List<Int>", "List.all(e -> e >= 0, %1$s)", "Int", List.of(
+                    "List.any(e -> e > other, r.x)", "List.length(r.x) > 2",
+                    "List.any(e -> e == other, r.x) || List.any(e -> e == other, r.y)")),
+            new Shape("List<Int>", "List.all(e -> e >= 0 && e <= 99, %1$s)", "Int", List.of(
+                    "List.any(e -> e > other, r.x)", "List.any(e -> e < other, r.x)")));
 
     @Test
     void aBehaviorIsMeasuredAsItIsWhereTheRuleIsWrittenOnTheRecordOrOnTheField() {
         List<String> differing = new ArrayList<>();
         for (Shape shape : SHAPES) {
             for (String body : shape.bodies()) {
-                PartitionEvidence record = evidence(shape.onTheRecord(body));
-                PartitionEvidence field = evidence(shape.onTheField(body));
-                String onRecord = measured(record);
-                String onField = measured(field);
+                String onRecord = measured(evidence(shape.onTheRecord(body)));
+                String onField = measured(evidence(shape.onTheField(body)));
                 if (!onRecord.equals(onField)) {
                     differing.add(body + "\n  on the record " + onRecord + "\n  on the field  "
                             + onField);
@@ -194,34 +135,81 @@ class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
         assertEquals(List.of(), differing);
     }
 
+    /** Each of two fields carries a rule of its own, and a behavior asks of each. */
+    @Test
+    void theRulesOfTwoFieldsAreEachReadAsTheRuleOfItsField() {
+        String record = """
+                module bounded
+
+                data Contact = { email: String, name: String }
+                    invariant String.length(email) <= 254 && String.length(name) <= 100
+
+                behavior f : (contact: Contact, emails: List<String>) -> Bool
+                let f (contact, emails) = %s
+                """;
+        String field = """
+                module bounded
+
+                data Em = String invariant String.length(value) <= 254
+                data Nm = String invariant String.length(value) <= 100
+                data Contact = { email: Em, name: Nm }
+
+                behavior f : (contact: Contact, emails: List<String>) -> Bool
+                let f (contact, emails) = %s
+                """;
+        List<String> differing = new ArrayList<>();
+        for (String place : List.of("email", "name")) {
+            String onRecord = measured(evidence(record.formatted(
+                    "List.any(own -> own == contact." + place + ", emails)")));
+            String onField = measured(evidence(field.formatted(
+                    "List.any(own -> own == contact." + place + ".value, emails)")));
+            if (!onRecord.equals(onField)) {
+                differing.add(place + "\n  on the record " + onRecord + "\n  on the field  "
+                        + onField);
+            }
+        }
+        assertEquals(List.of(), differing);
+    }
+
+    /** The rule is on the record around the one that holds the field. */
+    @Test
+    void aRuleReadingAFieldOfAFieldIsReadAsTheRuleOfTheInnerRecord() {
+        String outer = """
+                module bounded
+
+                data In = { a: Int, b: Int }
+                data R = { inner: In, y: Int } invariant inner.a >= 0 && inner.a <= 99
+
+                behavior f : (r: R, other: Int) -> Bool
+                let f (r, other) = r.inner.a < other || r.y == other
+                """;
+        String inner = """
+                module bounded
+
+                data In = { a: Int, b: Int } invariant a >= 0 && a <= 99
+                data R = { inner: In, y: Int }
+
+                behavior f : (r: R, other: Int) -> Bool
+                let f (r, other) = r.inner.a < other || r.y == other
+                """;
+
+        assertEquals(measured(evidence(inner)), measured(evidence(outer)));
+    }
+
     private static String measured(PartitionEvidence found) {
-        return found.partitioned().getClass().getSimpleName() + " " + unanswered(found) + " "
-                + classesOf(found);
-    }
-
-    private static Map<String, List<String>> classesOf(PartitionEvidence found) {
-        Map<String, List<String>> out = new TreeMap<>();
-        found.axes().forEach(axis -> out.put(axis.path(), axis.classes()));
-        return out;
-    }
-
-    private static List<String> notDerivable(PartitionEvidence found) {
-        List<String> out = new ArrayList<>();
-        found.notDerivable().forEach(each -> out.add(each.at().toString()));
-        return out;
-    }
-
-    private static List<String> unanswered(PartitionEvidence found) {
         List<String> out = new ArrayList<>();
         found.unanswered().forEach(each -> out.add(each.at() + " " + each.asked().getClass()
                 .getSimpleName()));
-        return out;
+        Map<String, List<String>> classes = new TreeMap<>();
+        found.axes().forEach(axis -> classes.put(axis.path(), axis.classes()));
+        return found.partitioned().getClass().getSimpleName() + " " + out + " " + classes;
     }
 
     private static PartitionEvidence evidence(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertFalse(compilation.modules().isEmpty(), "the model compiles");
         for (String module : compilation.modules()) {
             Map<String, PartitionEvidence> coverage =
                     compilation.db().ask(new Adequacy.Coverage(module)).value();

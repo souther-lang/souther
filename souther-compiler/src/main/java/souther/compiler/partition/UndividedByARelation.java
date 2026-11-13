@@ -12129,7 +12129,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             for (ClauseMeaning.Parts.One part : stated.parts().leaves()) {
                 for (ClauseRead reading : part.reads()) {
                     Named says = namedBy(reading, here, place, rest, read, apart);
-                    if (says == Named.BY_A_RULE && readsOnePlaceAlone(part)) {
+                    if (says != Named.NOT && part.readsOnePlaceAlone()
+                            && readsExactly(reading, rest)) {
                         says = Named.BY_ONE_PLACE;
                     }
                     out = out.and(says);
@@ -12150,15 +12151,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return out;
     }
 
-    /**
-     * Whether the one part of a clause reads the values of a single place and nothing else: every
-     * reading of it is of the values at one and the same place. A part reading two places, or how
-     * many a container holds, or an element, is not a rule about one place alone.
-     */
-    private static boolean readsOnePlaceAlone(ClauseMeaning.Parts.One part) {
-        return !part.reads().isEmpty()
-                && part.reads().stream().allMatch(each -> each.kind() == ClauseRead.Kind.ITS_VALUES)
-                && part.reads().stream().map(each -> each.at().steps()).distinct().count() == 1;
+    /** Whether {@code reading} is of the place {@code rest} goes down to by fields, and of no place
+     *  above or below it. */
+    private static boolean readsExactly(ClauseRead reading, List<TermPath.Step> rest) {
+        List<String> at = reading.at().steps();
+        if (at.size() != rest.size()) {
+            return false;
+        }
+        for (int i = 0; i < at.size(); i++) {
+            if (!(rest.get(i) instanceof TermPath.Step.Field field)
+                    || !field.name().equals(at.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
