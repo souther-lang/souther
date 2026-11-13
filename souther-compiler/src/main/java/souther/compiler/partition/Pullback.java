@@ -2211,7 +2211,8 @@ final class Pullback {
     private boolean theTextBuiltFits(Core e, GetsPast.TextBuilt built, InputReads reads) {
         List<Core> operands = operandsOfABuilding(e);
         return operands != null
-                && TextsBuilt.of(built, ceilingsOf(operands, reads, new HashMap<>())).fits();
+                && TextsBuilt.fits(TextsBuilt.of(built,
+                        ceilingsOf(operands, reads, new HashMap<>())));
     }
 
     /** The operands of {@code e} in the order its account of where it answers counts them, or
