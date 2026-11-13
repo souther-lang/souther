@@ -566,6 +566,16 @@ public final class InputReads {
         return handedAs(binding, value, newtypes).turningOn(binding, List.of(value));
     }
 
+    /**
+     * This reading, with {@code name} an element of the container {@code held} names, as the
+     * parameter of a closure an operation applies to the elements of a container is. A statement
+     * a law makes of some element of a container is read of the name, as one a closure makes is.
+     */
+    public InputReads holdingAnElement(BindingId name, HeldIn held) {
+        return new InputReads(names.holdingAnElement(name, held), alternatives, declared,
+                dependencies, applied);
+    }
+
     private InputReads handedAs(BindingId binding, Denotation value, DeclarationNewtypes newtypes) {
         Map<BindingId, List<ReadMeaning.Occurrence>> narrower = new LinkedHashMap<>(alternatives);
         narrower.remove(binding);

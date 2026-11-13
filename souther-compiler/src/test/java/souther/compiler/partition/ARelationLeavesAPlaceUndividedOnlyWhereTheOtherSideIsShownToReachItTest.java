@@ -3537,7 +3537,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /** How many a set holds, read down a chain of fields from a newtype wrapping a record. */
     @Test
     void aRuleOverHowManyASetFurtherDownHoldsBackNoElement() {
-        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "w.members[*]", TELLS_NOTHING_APART), left("champ: EmpId, w: Wrapped",
+        assertEquals(Map.of("champ", RELATES, "w.members[*]", RELATES), left("champ: EmpId, w: Wrapped",
                 EMPLOYEE + "\ndata Inner = { members: Set<EmpId> }"
                         + "\ndata Wrapped = Inner invariant Set.size(value.members) >= 1",
                 "Set.contains(champ, w.value.members)", "6:20"));
@@ -3548,7 +3548,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  states, says nothing of the count. */
     @Test
     void aSetsCountIsShownOfItselfBesideAFieldWhoseRuleNoRangeStates() {
-        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "o.makers[*]", TELLS_NOTHING_APART), left("champ: EmpId, o: Opp",
+        assertEquals(Map.of("champ", RELATES, "o.makers[*]", RELATES), left("champ: EmpId, o: Opp",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) >= 1"
                         + "\ndata Code = String invariant String.matches(\"[A-Z]{2}\", value)"
                         + "\ndata Opp = { code: Code, makers: Ds }",
@@ -3569,15 +3569,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  hold one; held to none, its elements are values it never holds. */
     @Test
     void aRuleOverHowManyASetHoldsHoldsBackNoElementUnlessItHoldsNone() {
-        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "ds[*]", TELLS_NOTHING_APART), left("champ: EmpId, ds: Ds",
+        assertEquals(Map.of("champ", RELATES, "ds[*]", RELATES), left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) >= 1",
                 "Set.contains(champ, ds.value)", "5:21"));
-        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "ds.members[*]", TELLS_NOTHING_APART), left("champ: EmpId, ds: Ds",
+        assertEquals(Map.of("champ", RELATES, "ds.members[*]", RELATES), left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = { members: Set<EmpId> } invariant Set.size(members) >= 1",
                 "Set.contains(champ, ds.members)", "5:21"));
-        assertEquals(NOT_SHOWN, left("champ: EmpId, ds: Ds",
+        // Held to none, no element is any value, so the membership draws its line at a value
+        // the other side never holds.
+        assertTrue(left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) <= 0",
-                "Set.contains(champ, ds.value)", "5:21").get("champ"));
+                "Set.contains(champ, ds.value)", "5:21").get("champ")
+                .contains("draws its line outside what the quantity it cuts ever holds"));
     }
 
     /** Held to more than one, a set's elements are that many values apart, which is a question

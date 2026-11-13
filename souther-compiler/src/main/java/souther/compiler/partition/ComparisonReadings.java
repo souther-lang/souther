@@ -1712,7 +1712,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         stated.proposition(), standing.read(), standing.reads(),
                         WrittenLines.of(stated.meaning().how(),
                                 application.occurrence().lineage().expansionProjection(),
-                                Optional.empty(), Optional.empty()));
+                                Optional.empty(), Optional.empty()),
+                        stated.workingOfRelation());
                 return read == null ? Optional.empty()
                         : Optional.of(new Cutting.AppliedOn(read, stated.meaning().how(),
                                 stated.proposition()));

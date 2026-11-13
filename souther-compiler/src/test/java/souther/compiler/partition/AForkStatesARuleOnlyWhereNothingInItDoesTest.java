@@ -158,7 +158,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
 
                 behavior pick : (xs: List<Bag>) -> Low | High
                 let pick (xs) =
-                    if List.any(p -> if List.contains(List.length(p.tags), p.tags) then true else false, xs)
+                    if List.any(p -> if List.allDistinctBy(k -> k, p.tags) then true else false, xs)
                         then High else Low"""));
     }
 
@@ -196,13 +196,13 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      */
     @Test
     void aForkOwnedByAnotherForkForOnePartStillStatesTheOther() {
-        assertEquals(List.of("xs[*].tags", "ys"), filedAt("""
+        assertEquals(List.of("xs[*].tags[*]", "xs[*].tags", "ys[*]", "ys"), filedAt("""
                 data Bag = { tags: List<Int> }
 
                 behavior pick : (xs: List<Bag>, ys: List<Int>) -> Low | High
                 let pick (xs, ys) =
-                    if List.any(p -> if List.contains(List.length(p.tags), p.tags) then true else false, xs)
-                            && List.contains(List.length(ys), ys)
+                    if List.any(p -> if List.allDistinctBy(k -> k, p.tags) then true else false, xs)
+                            && List.allDistinctBy(k -> k, ys)
                         then High else Low"""));
     }
 
@@ -217,12 +217,12 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      */
     @Test
     void anOwnerOfOnePartPastTheOperationLeavesTheOther() {
-        assertEquals(List.of("xs[*].tags"), filedAt("""
+        assertEquals(List.of("xs[*].tags[*]", "xs[*].tags"), filedAt("""
                 data Row = { age: Int, tags: List<Int> }
 
                 behavior pick : (xs: List<Row>) -> Low | High
                 let pick (xs) =
-                    if List.any(p -> p.age > 18 && List.contains(List.length(p.tags), p.tags), xs)
+                    if List.any(p -> p.age > 18 && List.allDistinctBy(k -> k, p.tags), xs)
                         then High else Low"""));
     }
 
@@ -237,14 +237,15 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      */
     @Test
     void aForkRuleOwningOnePartPastTheOperationLeavesTheOther() {
-        assertEquals(List.of("xs[*].tags", "xs[*].other"), filedAt("""
+        assertEquals(List.of("xs[*].tags[*]", "xs[*].tags", "xs[*].other[*]", "xs[*].other"),
+                filedAt("""
                 data Row = { tags: List<Int>, other: List<Int> }
 
                 behavior pick : (xs: List<Row>) -> Low | High
                 let pick (xs) =
                     if List.any(
-                            p -> (if List.contains(List.length(p.tags), p.tags) then true else false)
-                                    && List.contains(List.length(p.other), p.other),
+                            p -> (if List.allDistinctBy(k -> k, p.tags) then true else false)
+                                    && List.allDistinctBy(k -> k, p.other),
                             xs)
                         then High else Low"""));
     }
@@ -279,12 +280,17 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      * arithmetic it does; no position, because what it answers is made from one and is not one; no
      * predicate, because this is not a rule about the strings anywhere. What the author wrote is a
      * fork, and the question it raises about {@code xs} is the fork's.
+     *
+     * <p>{@code List.allDistinctBy(k -> k, xs)} is the truth the tests of which conditions an
+     * earlier part owes nothing for, and of what a fork states, take for one no reader takes in.
+     * This is what holds that spelling to it: the day a reader takes it in, this one fails and
+     * says that those tests need another.
      */
     @Test
     void aForkOnWhatAnOperationAnswersIsTheForksOwn() {
         assertEquals(new Owned(0, 1), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
-                let pick (xs) = if List.contains(List.length(xs), xs) then High else Low"""));
+                let pick (xs) = if List.allDistinctBy(k -> k, xs) then High else Low"""));
     }
 
     /**
@@ -300,7 +306,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
     void aForkOwningOnePartOfItsConditionStillStatesTheOtherOne() {
         assertEquals(new Owned(1, 1), read("""
                 behavior pick : (n: Int, xs: List<Int>) -> Low | High
-                let pick (n, xs) = if n > 0 && List.contains(List.length(xs), xs) then High else Low"""));
+                let pick (n, xs) = if n > 0 && List.allDistinctBy(k -> k, xs) then High else Low"""));
     }
 
     /**
@@ -309,7 +315,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      * <p>Cutting a condition stops at a name — following it there would make the parts depend on
      * how many names an author put between the fork and what it tests — and the owner holding the
      * part asks the reading what the name stands for. So this fork is answered about
-     * {@code List.contains(List.length(xs), xs)} rather than about {@code ok}, and states a rule of its own for the
+     * {@code List.allDistinctBy(k -> k, xs)} rather than about {@code ok}, and states a rule of its own for the
      * same reason the one above it does.
      */
     @Test
@@ -317,7 +323,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         assertEquals(new Owned(0, 1), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = {
-                    let ok = List.contains(List.length(xs), xs)
+                    let ok = List.allDistinctBy(k -> k, xs)
                     if ok then High else Low
                 }"""));
     }
@@ -377,9 +383,9 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      */
     @Test
     void anEmptinessCheckOverAFilterIsWhatItsClosureAnswers() {
-        String empty = "List.isEmpty(List.filter(ys -> List.contains(List.length(ys), ys), xs))";
-        String size = "List.length(List.filter(ys -> List.contains(List.length(ys), ys), xs)) == 0";
-        String some = "Bool.not(List.any(ys -> List.contains(List.length(ys), ys), xs))";
+        String empty = "List.isEmpty(List.filter(ys -> List.allDistinctBy(k -> k, ys), xs))";
+        String size = "List.length(List.filter(ys -> List.allDistinctBy(k -> k, ys), xs)) == 0";
+        String some = "Bool.not(List.any(ys -> List.allDistinctBy(k -> k, ys), xs))";
         assertEquals(everythingSaid(nested("xs", size)), everythingSaid(nested("xs", empty)));
         assertEquals(read(nested("xs", some)), read(nested("xs", empty)),
                 "what the fork owns is what the quantifier it denies owns");
@@ -411,7 +417,8 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      */
     @Test
     void aTruthNothingReadsInsideAClosureIsStillTheForks() {
-        assertEquals(List.of("xs[*]"), filedAt(nested("xs", "List.any(p -> List.contains(List.length(p), p), xs)")));
+        assertEquals(List.of("xs[*][*]", "xs[*]"),
+                filedAt(nested("xs", "List.any(p -> List.allDistinctBy(k -> k, p), xs)")));
     }
 
     /** {@code pick} forking on {@code condition}, over a list of lists named {@code name}. */
@@ -459,7 +466,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         assertEquals(new Owned(0, 0), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = {
-                    let unread = if List.contains(List.length(xs), xs) then 1 else 2
+                    let unread = if List.allDistinctBy(k -> k, xs) then 1 else 2
                     High
                 }"""));
     }
@@ -470,7 +477,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         Compilation compilation = Compilation.ofSource(PRELUDE + """
 
                 behavior pick : (xs: List<Int>) -> Low | High
-                let pick (xs) = if List.contains(List.length(xs), xs) then High else Low
+                let pick (xs) = if List.allDistinctBy(k -> k, xs) then High else Low
                 """, "Main");
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);

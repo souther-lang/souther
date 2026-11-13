@@ -37,8 +37,6 @@ class TheValuesAProgramStopsAtAreTheOnesTheReportRefusesTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private static final String NOT_SHOWN = "relation_not_shown_to_reach_every_value";
-
     private static final String MEMBERSHIP = "Bool.not(Set.contains(a, hs))";
 
     private static final String MODEL = """
@@ -88,14 +86,20 @@ class TheValuesAProgramStopsAtAreTheOnesTheReportRefusesTest {
         }
     }
 
+    /**
+     * No run past the stop reaches the membership with the value it stops at or above it, so an
+     * element of the set above what a run reaches is never that value: the report divides the
+     * elements there, as a guard keeping the value below the stop would, and leaves none of them
+     * unanswered.
+     */
     @Test
-    void theMembershipOfNoneOfThemIsShownReachedAtEveryValue() {
+    void theElementsOfTheMembershipAboveWhatNoRunReachesAreDividedThere() {
         JsonNode report = JSON.readTree(AdequacyReport.of(compiled())
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         for (String program : List.of("sum", "remainder", "cancelling")) {
             Set<String> found = new TreeSet<>();
             collect(report, program, found);
-            assertEquals(Set.of(NOT_SHOWN), found, program);
+            assertEquals(Set.of(), found, program);
         }
     }
 

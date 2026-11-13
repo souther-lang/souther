@@ -213,14 +213,14 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                 behavior greet : (name: String, xs: List<Int>) -> Int
                     depends on known
                 let greet (name, xs, known) =
-                    if known(name) && List.contains(List.length(xs), xs) then 1 else 0
+                    if known(name) && List.allDistinctBy(k -> k, xs) then 1 else 0
                 example greet
                     | "both" : ("a", [0]) with known = true -> 1
                     | "unknown" : ("b", [0]) with known = false -> 0
                     | "no zero" : ("a", [1]) with known = true -> 0
                 """);
 
-        assertEquals(Set.of("xs"), notReadAt(report),
+        assertEquals(Set.of("xs", "xs[*]"), notReadAt(report),
                 "the containment is unread at the list, and the answer is filed nowhere");
     }
 

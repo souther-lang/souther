@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.ElementProvenance;
 import souther.compiler.check.OrderOfElements;
 import souther.compiler.core.Core;
 import souther.compiler.types.ACallOfAnOperation;
@@ -600,6 +601,15 @@ final class BindingEnvironment {
     BindingEnvironment overStandingCalls() {
         return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
                 true, selected, opened, answered);
+    }
+
+    /** The same, with {@code binding} an element of the container {@code held} names, as a
+     *  parameter an operation hands the elements of a container is. */
+    BindingEnvironment holdingAnElement(BindingId binding, HeldIn held) {
+        ElementBindings wider = elements.and(new ElementBindings(Map.of(binding, List.of(held)),
+                Map.of(), ElementProvenance.NONE, Map.of()));
+        return new BindingEnvironment(roots, handed, table, newest, wider, values,
+                new HeldHash(wider, values), callsStand, selected, opened, answered);
     }
 
     /** The same, with {@code binding} standing at {@code path}. */

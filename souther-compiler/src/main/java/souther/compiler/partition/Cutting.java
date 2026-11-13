@@ -2272,7 +2272,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     static Read ofAnApplication(String behavior, Core application, Proposition stated,
                                 InputReading read, InputReads reads,
-                                AuthorsLines authors) {
+                                AuthorsLines authors,
+                                Function<Relation, UndividedByARelation.Working> working) {
         // A statement holding counts whose choices are past their figure is no rule of the
         // application's own, as one holding a part nothing read is not: what it reads is read
         // where its comparisons are written, each on its own. The rest is read as lines once,
@@ -2281,13 +2282,52 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (CountsWrittenOut.outsideElementsOf(stated)
                 instanceof CountsWrittenOut.Written(Proposition written)
                 && several(behavior, application, written.withTheValuesItHoldsCompared(), read,
-                        reads, Optional.of(authors), _ -> UndividedByARelation.Working.UNREAD,
-                        false)
+                        reads, Optional.of(authors), relation -> {
+                            UndividedByARelation.Working told = working.apply(relation);
+                            return told == null ? UndividedByARelation.Working.UNREAD : told;
+                        }, false)
                         instanceof TheParts.Drawn(Read.Several lines)) {
             return lines;
         }
         List<FilingCoordinate> related = valuesItRelates(stated);
-        return related == null ? null : against(related, stated);
+        return related == null ? againstAnotherValueOnly(stated, read, working)
+                : against(related, stated);
+    }
+
+    /**
+     * Where every relation {@code stated} makes is of the input's values to another value, read
+     * to the end, and none draws a line, those relations as one statement relates them — or null
+     * where one is anything else.
+     *
+     * <p>Some element of a container being a value is the relation of the element to that value
+     * ({@link #valuesItRelates}), whether the statement says the two are one or says it as the
+     * comparison {@code own == value}: the lines of such a statement are each read as a comparison
+     * that states it alone is.
+     */
+    private static Read.AgainstAnotherValue againstAnotherValueOnly(
+            Proposition stated, InputReading read,
+            Function<Relation, UndividedByARelation.Working> working) {
+        if (!(stated instanceof Proposition.Some(var _, Proposition.Compared _, var _, var _))) {
+            return null;
+        }
+        List<WhereEachLineDecides.Decides> lines =
+                WhereEachLineDecides.in(stated, read.quantities()::countsWhole);
+        if (lines.isEmpty()) {
+            return null;
+        }
+        List<FilingCoordinate> over = new ArrayList<>();
+        List<UndividedByARelation> relations = new ArrayList<>();
+        for (WhereEachLineDecides.Decides each : lines) {
+            List<FilingCoordinate> related = Proposition.aboutAnAnswer(each.line()) ? null
+                    : relatedToAnotherValue(each.line());
+            if (related == null) {
+                return null;
+            }
+            related.stream().filter(at -> !over.contains(at)).forEach(over::add);
+            UndividedByARelation.Working told = workingOf(working, each.line());            relations.addAll(against(related, each.line(),
+                    told == null ? UndividedByARelation.Working.NOTHING : told).relations());
+        }
+        return new Read.AgainstAnotherValue(over, relations);
     }
 
     /** The numbers of the input the string {@code quantity} is made of: itself where it is one,

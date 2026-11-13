@@ -66,6 +66,7 @@ import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.HeldIn;
 import souther.compiler.inputs.ElementComputation;
 import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
@@ -147,6 +148,7 @@ import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
@@ -244,6 +246,7 @@ final class Pullback {
         private final Meaning meaning;
         private final List<Leaf> leaves;
         private final Pulled forTheLines;
+        private final Function<Relation, UndividedByARelation.Working> workingOfRelation;
         private volatile List<Leaf> turnsOn;
 
         /**
@@ -255,9 +258,32 @@ final class Pullback {
          *                    ({@link Derivation.LinesWithoutRows}), and null where it does not
          */
         Pulled(Meaning meaning, List<Leaf> leaves, Pulled forTheLines) {
+            this(meaning, leaves, forTheLines, null);
+        }
+
+        /**
+         * @param workingOfRelation what a run works out in getting to each relation the rule that
+         *                          read the condition told the working of; null where it told none
+         */
+        private Pulled(Meaning meaning, List<Leaf> leaves, Pulled forTheLines,
+                       Function<Relation, UndividedByARelation.Working> workingOfRelation) {
             this.meaning = meaning;
             this.leaves = leaves;
             this.forTheLines = forTheLines;
+            this.workingOfRelation = workingOfRelation;
+        }
+
+        /** What a run works out in getting to {@code relation}, which the rule that read the
+         *  condition told of it, or null where it told none. */
+        Function<Relation, UndividedByARelation.Working> workingOfRelation() {
+            return workingOfRelation == null ? _ -> null : workingOfRelation;
+        }
+
+        private Pulled withWorkingOfRelation(
+                Function<Relation, UndividedByARelation.Working> working) {
+            return new Pulled(meaning, leaves,
+                    forTheLines == null ? null : forTheLines.withWorkingOfRelation(working),
+                    working);
         }
 
         /** What the condition states as a reader of the lines it draws is told: the same pull
@@ -444,8 +470,7 @@ final class Pullback {
     private final Deque<UndividedByARelation.Working> beforeTheFork = new ArrayDeque<>();
     /** The comparisons whose arms are being read, innermost first: what a run taking an arm
      *  works out is read off the innermost ({@link #readOnAnArm}). */
-    private final Deque<StatedComparison> armsOfAComparison = new ArrayDeque<>();
-    /**
+    private final Deque<StatedComparison> armsOfAComparison = new ArrayDeque<>();    /**
      * Whether an element being added up over takes an arm, as the statement read of it, with the
      * reading of the arm being taken ({@link #sizedByTheArmsOfAnElement}): what a count of the
      * elements taking it holds as how it was read.
@@ -1015,8 +1040,11 @@ final class Pullback {
         Derivation whole = Derivation.ReadThrough.of(stated, freeInTheRoot);
         Conclusion asked = new Conclusion(where);
         Pulled pulled = pulledAs(asked, whole);
-        return asked.toldLinesFromRows()
+        Pulled drawn = asked.toldLinesFromRows()
                 ? pulled.withTheLines(pulledAs(Conclusion.drawingLines(where), whole)) : pulled;
+        Trial theRule = triedAndConcluded.get(stated);
+        return theRule == null ? drawn
+                : drawn.withWorkingOfRelation(theRule::workingOfTheRelationItStates);
     }
 
     /** {@code whole} concluded by {@code conclusion}, with every part met as it came to there. */
@@ -3264,6 +3292,21 @@ final class Pullback {
         /** What the candidate says of the rows of {@code relation}, or null where it says none. */
         UndividedByARelation.Working workingOf(Relation relation) {
             return relations == null ? null : relations.get(relation);
+        }
+
+        /**
+         * What the candidate says of the rows of {@code relation}, which a statement of one
+         * relation says under the names its elements are read through ({@link ElementsNamed}) as
+         * well as without them: what it told of its one relation, where it told one and no other
+         * — null where it told none, or several that say different things.
+         */
+        UndividedByARelation.Working workingOfTheRelationItStates(Relation relation) {
+            UndividedByARelation.Working told = workingOf(relation);
+            if (told != null || relations == null || relations.isEmpty()) {
+                return told;
+            }
+            UndividedByARelation.Working first = relations.values().iterator().next();
+            return relations.values().stream().allMatch(first::equals) ? first : null;
         }
 
         /** The relations the candidate kept under this one read, held as this one's. What it
@@ -6003,6 +6046,26 @@ final class Pullback {
 
         @Override
         public Derivation same(LawProposition.Same<DeclaredArgument> same) {
+            Derivation asked = sameAsAskedOfRows(same);
+            // Two numbers one of which stands at no position are already read as the comparison
+            // of their difference with nought ({@link #sameNumber}), and a value chosen by cases
+            // is read on each case, which reads this again. What is left is the two being one
+            // where each is a subject or written, and the two the reading stopped at.
+            Derivation basis = Derivation.readOff(asked);
+            if (!(basis instanceof Derivation.TheSameValue
+                    || basis instanceof Derivation.Stopped)) {
+                return asked;
+            }
+            Derivation comparison = asTheSourceWritesIt(same);
+            return comparison == null ? asked : leaf(
+                    new Derivation.TheSameAsAWrittenComparison(same, comparison, asked), e, reads);
+        }
+
+        /**
+         * {@code same} read as what a row is asked: the two values being one, where each is a
+         * subject or a value the source wrote.
+         */
+        private Derivation sameAsAskedOfRows(LawProposition.Same<DeclaredArgument> same) {
             Operand<DecisionSubject> one = operand(same.one());
             Operand<DecisionSubject> other = operand(same.other());
             if (one != null && other != null
@@ -6026,6 +6089,55 @@ final class Pullback {
             return numbers != null ? leaf(numbers, e, reads)
                     : unread(e, reads,
                             new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE));
+        }
+
+        /**
+         * {@code same}, where it names the element standing at a position of the input and an
+         * argument, read as the comparison {@code own == argument} the source writes of them, by
+         * the rules a written comparison is read by — or null where it names no such two.
+         *
+         * <p>A name stands for the element at its position, which is what the parameter of a
+         * closure over the container stands for, so the law and the closure are one comparison to
+         * read. It is the lines the statement draws that are read so; which rows are asked is
+         * what {@link #sameAsAskedOfRows} says.
+         */
+        private Derivation asTheSourceWritesIt(LawProposition.Same<DeclaredArgument> same) {
+            // Inside the count of a comparison, what is counted is read by the count.
+            if (counting != null || !(same.one() instanceof LawSubject.ElementOf<DeclaredArgument>(
+                            DeclaredArgument container))
+                    || !(same.other() instanceof LawSubject.Argument<DeclaredArgument>(
+                            DeclaredArgument at))
+                    || !(elements.get(container) instanceof ElementAt.AtASubject(
+                            DecisionSubject.AnInput(TermPath held, var _)))) {
+                return null;
+            }
+            Core handed = applied.argument(at);
+            Type element = TypeView.shapeOf(applied.argument(container).type(),
+                    read.rules().inners(), read.rules().symbols(), read.rules().kinds(),
+                    read.rules().sums()) instanceof Shape.Container holding
+                    ? holding.element() : null;
+            if (handed == null || element == null || !element.equals(handed.type())) {
+                return null;
+            }
+            BindingId name = new BindingId(new BindingOwner.Synthesized(
+                    new BindingOwner.OfValue("souther", "law"), BindingOwner.Pass.LAW_READER,
+                    applied.argument(container).hashCode()), 0);
+            Core own = new Core.Read("own", name, element, e.pos());
+            InputReads beside = reads.holdingAnElement(name, new HeldIn(
+                    applied.argument(container), HeldIn.Part.ELEMENT,
+                    HowAClosureIsApplied.UNTIL_ONE_HOLDS, false));
+            StatedComparison stated = new StatedComparison(
+                    ComparisonClaim.stating(same.holds() ? Rel.EQ : Rel.NE),
+                    own, handed, new Core.BinaryReading.AsTheyStand());
+            Derivation comparison = restated(stated, null, fixed(e, reads), beside);
+            // What a run works out in getting to the relation is told of the relation, as a
+            // comparison written tells it, so a reader of the rows of the relation is asked.
+            if (comparison instanceof Derivation.Restated(Derivation read)
+                    && tried(read) instanceof Proposition.Compared compared) {
+                trial().tell(compared.relation(),
+                        workingOf(triedAndConcluded.get(read), arithmeticOf(stated, beside)));
+            }
+            return comparison;
         }
 
         /**

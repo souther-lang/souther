@@ -1280,6 +1280,8 @@ public sealed interface Derivation {
                     case Stopped _ -> true;
                     case TheSameValue(var part, var one, var other) -> part.equals(law)
                             && stands(law.one(), one) && stands(law.other(), other);
+                    case TheSameAsAWrittenComparison(var part, var _, var asked) ->
+                            part.equals(law) && isTheSame(law, asked);
                     case TheSameNumber(var part, var one, var other, var _) -> part.equals(law)
                             && standsAsANumber(law.one(), one)
                             && standsAsANumber(law.other(), other);
@@ -1600,7 +1602,7 @@ public sealed interface Derivation {
     /** A step that reads one part of a law, which it holds. */
     sealed interface ALawPart extends Derivation
             permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue,
-                    TheSameNumber, TheStringsInside,
+                    TheSameAsAWrittenComparison, TheSameNumber, TheStringsInside,
                     ALawQuantifies, ALawComparison, ALawJoinsWithoutWhatImpliesAnother, WhereAnOperationKeepsIt {
 
         /** The part of the law this reads. */
@@ -1695,6 +1697,34 @@ public sealed interface Derivation {
             boolean subjectFirst = one.place().isPresent();
             return new Proposition.SameValue((subjectFirst ? one : other).place().orElseThrow(),
                     subjectFirst ? other : one, part.holds());
+        }
+    }
+
+    /**
+     * A part of a law that states two values are one, or not, for a reader of the lines it draws
+     * the comparison the source writes of them with {@code ==} or {@code !=}: {@code comparison}
+     * is that comparison read, of a name standing for the element the law names and the argument
+     * it names. For a reader of rows it is what the rows are asked, {@code asked}: which rows hold
+     * the two values at one is not what the lines of a comparison say.
+     */
+    record TheSameAsAWrittenComparison(LawProposition.Same<?> part, Derivation comparison,
+                                       Derivation asked) implements ALawPart {
+
+        public TheSameAsAWrittenComparison {
+            Objects.requireNonNull(part, "a step reads a part of a law");
+            Objects.requireNonNull(comparison, "the two read as a comparison");
+            Objects.requireNonNull(asked, "rows are asked of the two being one");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.concludingLinesApart() ? numbering.of(comparison)
+                    : numbering.of(asked);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(comparison, asked);
         }
     }
 
