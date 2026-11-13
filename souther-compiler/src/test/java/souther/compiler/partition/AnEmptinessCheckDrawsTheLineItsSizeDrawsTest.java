@@ -230,7 +230,7 @@ class AnEmptinessCheckDrawsTheLineItsSizeDrawsTest {
      * reading in the key of what is visited is there for.
      */
     @Test
-    void aBodyReadUnderTwoReadingsIsNotTakenOnce() {
+    void eachCallOfAHelperThatAddsTwoSizesBringsItsOwn() {
         String model = headerOfTwoLists() + """
                 let both (xs, ys) = List.length(xs) + List.length(ys)
 
