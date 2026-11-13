@@ -666,8 +666,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(L" + CORE + "$FieldAccess;Ljava/util/Map;)Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/Pullback", "underItsAccesses", "(L" + c + "inputs/Denotation;)L"
                 + c + "inputs/Denotation;", Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "partition/Pullback", "aWayInto", "(L" + c + "inputs/Denotation;"
-                + "Ljava/util/Set;Ljava/util/Map;)L" + c + "partition/Pullback$Inside;",
+        row(out, c + "partition/Pullback", "aWayIntoAfresh", "(L" + c + "inputs/Denotation;L" + c
+                + "partition/Pullback$Gone;)L" + c + "partition/Pullback$Inside;",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/Pullback", "readOnceForEveryValue", "(" + core + reads
                 + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
