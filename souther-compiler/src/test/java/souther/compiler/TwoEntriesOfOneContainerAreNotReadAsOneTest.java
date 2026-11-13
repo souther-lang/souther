@@ -51,10 +51,7 @@ class TwoEntriesOfOneContainerAreNotReadAsOneTest {
             """;
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static String report(Compilation compilation) {
@@ -70,7 +67,7 @@ class TwoEntriesOfOneContainerAreNotReadAsOneTest {
     /** What the definition answers, whatever the analysis makes of it. */
     @Test
     void twoLookupsOfOneMapAnswerAsTheDefinitionSays() {
-        Compilation compilation = measured(TWO_LOOKUPS + """
+        measured(TWO_LOOKUPS + """
 
                 example f
                     | "A above B" : ([("A", 2), ("B", 1)]) -> true
@@ -80,8 +77,6 @@ class TwoEntriesOfOneContainerAreNotReadAsOneTest {
                     | "A absent" : ([("B", 1)]) -> false
                     | "neither" : ([]) -> false
                 """);
-
-        assertEquals(List.of(), errors(compilation), () -> report(compilation));
     }
 
     /**

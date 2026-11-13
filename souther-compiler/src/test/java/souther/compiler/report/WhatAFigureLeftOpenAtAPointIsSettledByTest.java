@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.meta.ModulePath;
@@ -49,11 +50,9 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
     }
 
     private static AdequacyReport measured(String rows) {
-        Compilation compilation = Compilation.ofSource(MODEL.formatted(
+        Compilation compilation = ACompiledModel.measured(MODEL.formatted(
                 row("one", 1, 0), row("two", 2, 0), row("three", 3, 1), row("four", 4, 0), rows),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation);
     }
 
@@ -86,7 +85,7 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
      */
     @Test
     void aPointOfABodyComparisonIsNamedByItsPlaceAndNotByItsKind() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module probe.sizes
 
                 behavior h : (s: Set<Decimal>) -> Int
@@ -103,9 +102,7 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
                 %s%s%s
                 """.formatted(row("one", 1, 0), row("two", 2, 0), row("three", 3, 1),
                 row("four", 4, 0), row("one", 1, 0), row("two", 2, 1), row("three", 3, 0)),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                Adequacy.Asked.fullReport());
         String human = human(AdequacyReport.of(compilation));
 
         List<String> points = pointsOfComparisons(human);
@@ -136,12 +133,9 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
             """;
 
     private static Compilation measuredHelperTwoBehaviorsRead() {
-        Compilation compilation = Compilation.ofSource(ONE_HELPER_TWO_READERS.formatted(
+        return ACompiledModel.measured(ONE_HELPER_TWO_READERS.formatted(
                 row("one", 1, 0) + row("two", 2, 0) + row("three", 3, 1) + row("four", 4, 0)),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+                Adequacy.Asked.fullReport());
     }
 
     /**
@@ -188,7 +182,7 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
                 """, reader.formatted("m1", rows), reader.formatted("m2", rows)),
                 ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String human = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 

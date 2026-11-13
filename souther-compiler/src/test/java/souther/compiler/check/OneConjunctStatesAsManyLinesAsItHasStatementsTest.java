@@ -1,7 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.diag.SourceLayouts;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.LineOrigin;
@@ -336,15 +338,19 @@ class OneConjunctStatesAsManyLinesAsItHasStatementsTest {
      * readings of one model came to, so a second compilation of the same source is the same answer
      * worked out again — and these ask several questions apiece of the two models.
      */
-    private static final Map<String, Compilation> READ = new LinkedHashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
-    private static synchronized Compilation compiled(String model) {
-        return READ.computeIfAbsent(model, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
+    private static Compilation compiled(String model) {
+        return SHARED.compiles(model, () -> {
+            Compilation compilation = Compilation.ofSource(model, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             return compilation;
         });
+    }
+
+    @AfterAll
+    static void released() {
+        SHARED.release();
     }
 
     /** Every boundary the model states, as a report meets them. */

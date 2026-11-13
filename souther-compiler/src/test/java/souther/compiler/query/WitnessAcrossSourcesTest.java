@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeSymbol;
 
@@ -64,12 +65,7 @@ class WitnessAcrossSourcesTest {
 
         Compilation compilation = Compilation.ofDocuments(documents, Set.of(), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(Map.of(), compilation.diagnostics().entrySet().stream()
-                        .filter(e -> !e.getValue().isEmpty())
-                        .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,
-                                Map.Entry::getValue)),
-                "the model under test compiles, so an empty result means the measure and not the model");
+        ACompiledModel.compiles(compilation);
 
         Map<String, Adequacy.SignatureEvidence> witnesses =
                 compilation.db().ask(new Adequacy.Witnesses("example.trip")).value();

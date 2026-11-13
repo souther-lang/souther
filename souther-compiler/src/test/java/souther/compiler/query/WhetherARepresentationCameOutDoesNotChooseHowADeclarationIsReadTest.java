@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.DerivedSymbols;
@@ -10,6 +11,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -70,7 +72,13 @@ class WhetherARepresentationCameOutDoesNotChooseHowADeclarationIsReadTest {
     private static Db db(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db();
+        // Where `Bad` names no type a mistake beside the constructions is said; where it names
+        // one, only the constructions in the two clauses are refused.
+        List<String> refusedFor = source.equals(SOURCE)
+                ? List.of("E1023", "E1105") :List.of("E1105", "E1105");
+        Compilation c = ACompiledModel.refusedWith(refusedFor,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
+        return c.db();
     }
 
     private static final TypeKey GOOD = new TypeKey("m", "Good");

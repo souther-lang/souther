@@ -41,7 +41,7 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 let f (x, j) = %s
                 """.formatted(body), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -60,7 +60,7 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 let f (x, j) = %s
                 """.formatted(body), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -78,7 +78,7 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 let f (x, j) = %s
                 """.formatted(body), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -97,7 +97,7 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 let f (x, j) = %s
                 """.formatted(body), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -121,6 +121,30 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                     () -> reportOfTruthsEachMadeOfTheOneBefore(100, step));
             assertEquals(shallow, deep, step);
         }
+    }
+
+    /**
+     * A name that stands for a truth with more parts than a step is concluded with is read once for
+     * all its uses: a chain of such names, each used twice, is measured in what grows with the
+     * names and not with the ways down them.
+     */
+    @Test
+    void aTruthPastTheSizeAStepIsConcludedWithIsReadOnceForEachName() {
+        assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
+            StringBuilder body = new StringBuilder("{\n    let a0 = x >= 0\n");
+            for (int i = 1; i <= 40; i++) {
+                body.append("    let a%d = a%d && (j > 3 || a%d)\n".formatted(i, i - 1, i - 1));
+            }
+            body.append("    a40\n}");
+            Compilation compilation = Compilation.ofSource("""
+                    module m
+
+                    behavior f : (x: Int, j: Int) -> Bool
+                    let f (x, j) = %s
+                    """.formatted(body), "Main");
+            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
+            compilation.answerEverything();
+        });
     }
 
     /** A place in the report, as {@code line:column} or with the file before: {@code 9:8},
@@ -214,7 +238,7 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 let f (s, j) = %s
                 """.formatted(body), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

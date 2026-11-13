@@ -199,10 +199,7 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
     private static Set<String> settledBy(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
         Map<String, Adequacy.Filling> filled = Adequacy.generatedOf(compilation.db(), module);
         assertTrue(filled != null && !filled.isEmpty(), "the module is offered rows");

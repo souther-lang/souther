@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Messages;
 
 import java.util.ArrayList;
@@ -48,7 +49,7 @@ class AReadingIsSaidInTheReportsWordsWhereItsReaderReadsEnglishTest {
 
     @Test
     void theCatalogsEnglishIsTheReportsSentence() {
-        Compilation compilation = Compilation.ofSource(TERM, "Main");
+        Compilation compilation = ACompiledModel.answered(TERM);
         List<BorderObligationPointAssessment> points = compilation.db().ask(
                 new Adequacy.Obligations("example.term", new GenerationScope.Module(),
                         HowALineIsRead.VALUES_COMPOSED)).value();

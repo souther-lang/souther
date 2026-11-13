@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
@@ -92,7 +93,7 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
         private final List<ControlPlace.Arm> arms = new ArrayList<>();
 
         Fixture() {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            Compilation compilation = ACompiledModel.answered(MODEL);
             inputs = InputsOfTheBody.of(compilation, "f");
             checked = compilation.db().ask(new Bodies.Checked(compilation.modules().get(0)))
                     .value();

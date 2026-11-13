@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.UndividedPosition;
@@ -83,15 +84,20 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
                 | "one" : (1) -> 1
             """;
 
+    /** The model whose implementation is refused: {@code mint} makes a seat of nought. */
     private static Compilation measured() {
-        return measured("0");
+        return ACompiledModel.refusedWith(List.of("E2010"), measuredWith("0"));
     }
 
-    private static Compilation measured(String constructs) {
+    /** The same model with an implementation that is accepted. */
+    private static Compilation measuredAccepted() {
+        return ACompiledModel.compiles(measuredWith("1"));
+    }
+
+    private static Compilation measuredWith(String constructs) {
         Compilation compilation =
                 Compilation.ofSources(List.of(DOWN.formatted(constructs), UP), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         return compilation;
     }
 
@@ -183,9 +189,9 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
      */
     @Test
     void neitherMeasureConcludesOverRulesItNeverRead() {
-        String read = String.valueOf(measured("1").db()
+        String read = String.valueOf(measuredAccepted().db()
                 .ask(new Adequacy.Dividing("probe.up", "omitted")).value());
-        String unread = String.valueOf(measured("0").db()
+        String unread = String.valueOf(measured().db()
                 .ask(new Adequacy.Dividing("probe.up", "omitted")).value());
 
         assertTrue(read.contains("partitionClosure=PartitionClosed")
@@ -214,8 +220,8 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
      */
     @Test
     void noPositionOfABodyNobodyReadIsSaidToBeUndividedByTheModel() {
-        List<UndividedPosition> read = undividedOf(measured("1"));
-        List<UndividedPosition> unread = undividedOf(measured("0"));
+        List<UndividedPosition> read = undividedOf(measuredAccepted());
+        List<UndividedPosition> unread = undividedOf(measured());
 
         assertEquals(List.of(), read.stream().map(each -> each.at().toString())
                         .filter(each -> each.equals("n")).toList(),

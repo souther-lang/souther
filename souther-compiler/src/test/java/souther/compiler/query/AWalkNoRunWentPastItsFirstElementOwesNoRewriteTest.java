@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.RunRewrite;
 import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.meta.ModulePath;
@@ -44,9 +45,7 @@ class AWalkNoRunWentPastItsFirstElementOwesNoRewriteTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     @Test

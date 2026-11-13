@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.EnumerationListings;
 import souther.compiler.check.Symbols;
@@ -59,9 +60,9 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
             """;
 
     private static Compilation compiled() {
-        Compilation c = Compilation.ofDocuments(Map.of("shop.sou", SOURCE), Set.of(),
-                ModulePath.EMPTY).writtenOn(TestDay.DATE);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(Map.of("shop.sou", SOURCE), Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         return c;
     }
@@ -118,7 +119,7 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
                 behavior gentler : (x: Int) -> Verdict
                 let gentler (x) = if HALF_UP < DOWN then Ok else No
                 """), Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
 
         assertEquals(List.of(), c.db().allReports().stream()
                         .map(each -> each.report().diagnostic().code()).toList(),
@@ -168,7 +169,7 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
                 behavior open : (s: Prospecting) -> Verdict
                 let open (s) = if early(s) then Ok else No
                 """), Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         Set<Key<?>> read = c.db().dependenciesOf(new Bodies.ModuleCheck(MODULE));
 
@@ -213,7 +214,7 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
                 Set.of(), ModulePath.EMPTY);
         assertTrue(c.db().ask(new Shapes.MeaningOf(key("Deal"))).present(),
                 "what `Deal` says is made before anything else is asked");
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
 
         Map<String, Set<Key<?>>> expected = Map.of(
@@ -245,6 +246,7 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
         Answer<Set<TypeSymbol>> before = c.db().ask(new Shapes.EnumerationsListing(key("Qualified")));
 
         c.update(Map.of("shop.sou", WITH_ANOTHER_ENUMERATION), Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
         Answer<Map<TypeKey, Set<TypeSymbol>>> moduleAfter =
                 c.db().ask(new Shapes.EnumerationsListingIn(MODULE));
         Answer<Set<TypeSymbol>> after = c.db().ask(new Shapes.EnumerationsListing(key("Qualified")));

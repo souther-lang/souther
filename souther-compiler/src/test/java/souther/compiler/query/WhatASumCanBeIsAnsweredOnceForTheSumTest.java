@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.SumCases;
 import souther.compiler.meta.ModulePath;
@@ -64,9 +65,8 @@ class WhatASumCanBeIsAnsweredOnceForTheSumTest {
             """;
 
     private static Compilation compiled(String source) {
-        Compilation c = Compilation.ofDocuments(Map.of("shop.sou", source), Set.of(),
-                ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(Map.of("shop.sou", source), Set.of(), ModulePath.EMPTY));
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         return c;
     }

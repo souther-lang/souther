@@ -3,6 +3,7 @@ package souther.compiler.check;
 import net.unit8.notation199x.pattern.Meter;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.observe.Figure;
@@ -181,13 +182,13 @@ class APatternPastItsFigureNamesTheFigureTest {
      */
     private static BlockReason.ReadingStopReason whatStoppedTheReading(
             PatternPlan.Budget admitted) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module demo
 
                 data Long = String
                     invariant plain = String.matches("a{300}", value)
                     invariant marked = String.matches("a{300}b?", value)
-                """, "Main");
+                """);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "Long"));
         ReadingPolicy policy = new ReadingPolicy(ReadAs.THE_COMPILATION_DOES.dnfExpansionLimit(),

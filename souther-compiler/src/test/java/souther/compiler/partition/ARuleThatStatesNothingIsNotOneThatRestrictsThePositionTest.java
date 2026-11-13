@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
@@ -252,8 +253,14 @@ class ARuleThatStatesNothingIsNotOneThatRestrictsThePositionTest {
                 .toList();
     }
 
+    /** The models whose rules leave no value to build, which the check refuses for it. */
+    private static final Map<String, List<String>> REFUSED = Map.of(
+            STATES_NOTHING, List.of("E1013"),
+            LEAVES_NOTHING, List.of("E1013"));
+
     private static Partitions.Partitioning partitioningOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(REFUSED.getOrDefault(source, List.of()), compilation);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

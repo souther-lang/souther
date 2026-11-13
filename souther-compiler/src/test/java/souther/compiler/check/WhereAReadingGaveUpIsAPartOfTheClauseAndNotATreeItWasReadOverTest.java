@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.query.Compilation;
@@ -99,8 +100,7 @@ class WhereAReadingGaveUpIsAPartOfTheClauseAndNotATreeItWasReadOverTest {
     }
 
     private static FieldDomains read(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
                 "the model this reads has to be one somebody could write");

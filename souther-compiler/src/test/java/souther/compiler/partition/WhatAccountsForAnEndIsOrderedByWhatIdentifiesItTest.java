@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -72,14 +73,9 @@ class WhatAccountsForAnEndIsOrderedByWhatIdentifiesItTest {
     private static List<String> declarationsAccountingForTheEnd() {
         Compilation compilation = Compilation.ofSources(List.of(INNER, OUTER), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), "aaa");
-        if (boundaries == null) {
-            throw new AssertionError("the model under test compiles: "
-                    + compilation.errors().stream()
-                            .map(each -> each.diagnostic().code()).toList());
-        }
         return boundaries.values().stream().flatMap(List::stream)
                 .map(each -> declarationOf(each.origin()))
                 .toList();

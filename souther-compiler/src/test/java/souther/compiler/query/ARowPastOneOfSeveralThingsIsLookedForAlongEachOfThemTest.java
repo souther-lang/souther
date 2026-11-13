@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.numeric.Count;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.Level;
@@ -271,8 +272,7 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
 
     /** What was searched for at each point of the line behind the conditions of several ways. */
     private static List<ItemAssessment.Owed> pointsOfTheInnerLine(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         List<BorderAssessment> edges = compilation.db()
                 .ask(new Adequacy.BoundarySearch("example.either", "f")).value();
         assertNotNull(edges, "the lines of this behavior were searched");

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.ExpandedClauseResult;
@@ -72,7 +73,7 @@ class AClassificationIsPlacedInsideTheClauseItIsAboutTest {
     private static Compilation compiled() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", SOURCE);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 
     /** A position is inside a region, said so that neither being absent passes for agreement —

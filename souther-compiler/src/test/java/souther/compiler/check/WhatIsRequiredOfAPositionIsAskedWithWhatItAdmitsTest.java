@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CanonicalOrder;
@@ -53,7 +54,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      *  relation leaving it at three or above. */
     @Test
     void aChoiceAndARelationThatShareNoValueAdmitNothing() {
-        assertEquals(atAField("x", new Emptiness.NoAllowedValueWithinRequiredBounds()), only("""
+        assertEquals(atAField("x", new Emptiness.NoAllowedValueWithinRequiredBounds()), refused("""
                 module demo
 
                 data Held = { x: Int, y: Int }
@@ -73,7 +74,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      */
     @Test
     void andTheSameRulesWrittenAsAConjunctionAreRefusedToo() {
-        assertEquals(new Emptiness.ConflictingRules(), only("""
+        assertEquals(new Emptiness.ConflictingRules(), refused("""
                 module demo
 
                 data Held = { x: Int, y: Int }
@@ -84,7 +85,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
     /** The same over an order the model does not add on, where the relation is an operation's. */
     @Test
     void datesAreTheSameShapeOverAnOrderTheModelDoesNotAddOn() {
-        assertEquals(atAField("a", new Emptiness.NoAllowedValueWithinRequiredBounds()), only("""
+        assertEquals(atAField("a", new Emptiness.NoAllowedValueWithinRequiredBounds()), refused("""
                 module demo
 
                 data Span = { a: Date, b: Date }
@@ -104,7 +105,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      */
     @Test
     void aBoundWrittenOnThePositionIsStillTheOrdersOwnProof() {
-        assertEquals(atAField("x", new Emptiness.EmptyOrderedInterval()), only("""
+        assertEquals(atAField("x", new Emptiness.EmptyOrderedInterval()), refused("""
                 module demo
 
                 data Held = { x: Int, y: Int }
@@ -123,7 +124,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      */
     @Test
     void everyAlternativeOutsideWhatIsRequiredIsRefusedThoughWhatTheyShareIsNot() {
-        assertEquals(atAField("x", new Emptiness.NoAllowedValueWithinRequiredBounds()), only("""
+        assertEquals(atAField("x", new Emptiness.NoAllowedValueWithinRequiredBounds()), refused("""
                 module demo
 
                 data Held = { x: Int, y: Int }
@@ -147,7 +148,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         assertEquals(new Emptiness.AtEqualPositions(
                         List.of(new Emptiness.AtAField.Where.In("p"),
                                 new Emptiness.AtAField.Where.In("r")),
-                        new Emptiness.NoAllowedValueWithinRequiredBounds()), only("""
+                        new Emptiness.NoAllowedValueWithinRequiredBounds()), refused("""
                 module demo
 
                 data Held = { p: Int, r: Int, s: Int, t: Int }
@@ -175,7 +176,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         assertEquals(new Emptiness.AtEqualPositions(
                         List.of(new Emptiness.AtAField.Where.In("p"),
                                 new Emptiness.AtAField.Where.In("r")),
-                        new Emptiness.NoCommonValueForEqualPositions()), only("""
+                        new Emptiness.NoCommonValueForEqualPositions()), refused("""
                 module demo
 
                 data Held = { p: Int, r: Int, x: Int, y: Int }
@@ -338,8 +339,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      * settles what it fixes.
      */
     private static boolean settling(int at) {
-        Compilation compilation = Compilation.ofSource(CHOICE, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(CHOICE);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         FieldDomains domains = FieldDomains.of(named(symbols, "Held"),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
@@ -355,8 +355,17 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
 
     /** What the one declaration of {@code source} was shown to have no value by, or null. */
     private static Emptiness only(String source) {
+        return only(List.of(), source);
+    }
+
+    /** As {@link #only}, of a declaration the compiler refuses with {@code codes}. */
+    private static Emptiness refused(String source) {
+        return only(List.of("E1013"), source);
+    }
+
+    private static Emptiness only(List<String> codes, String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(codes, compilation);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),

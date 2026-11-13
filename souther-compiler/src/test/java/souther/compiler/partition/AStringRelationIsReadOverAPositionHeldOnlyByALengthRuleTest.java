@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -34,7 +35,7 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
             "String.contains(String.lowercase(p.value), String.lowercase(i.text))";
 
     private static Compilation measured(String types, String relation) {
-        Compilation compilation = Compilation.ofSource("""
+        return ACompiledModel.measured("""
                 module demo
 
                 %s
@@ -43,10 +44,7 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
 
                 behavior f : (i: In) -> Bool
                 let f (i) = List.any(p -> %s, i.needs)
-                """.formatted(types, relation), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+                """.formatted(types, relation), Adequacy.Asked.fullReport());
     }
 
     private static Compilation measuredNeed(String rule, String relation) {
@@ -163,7 +161,7 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
 
     /** The behavior of a guard, then the relation, over needs held by {@code pain}. */
     private static Compilation guarded(String pain, String guard) {
-        Compilation compilation = Compilation.ofSource("""
+        return ACompiledModel.measured("""
                 module demo
 
                 data PainPoint = String invariant %s
@@ -184,10 +182,7 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
                     let stated = BusinessCase("x")
                     stated
                 }
-                """.formatted(pain, guard), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+                """.formatted(pain, guard), Adequacy.Asked.fullReport());
     }
 
     /**
@@ -261,7 +256,7 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
     void aStringLongerThanAnyThatReachesTheRelationIsShownInsideNoneOfThem() {
         for (String pain : List.of("String.length(value) >= 1",
                 "String.matches(\"[\\\\s\\\\S]+\", value)")) {
-            Compilation compilation = Compilation.ofSource("""
+            Compilation compilation = ACompiledModel.measured("""
                     module demo
 
                     data PainPoint = String invariant %s
@@ -276,9 +271,7 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
                             else Missed
                         true
                     }
-                    """.formatted(pain), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+                    """.formatted(pain), Adequacy.Asked.fullReport());
             assertEquals(List.of("needs[*]: x can be a string inside businessCase",
                     "needs[*]: x is never a string inside businessCase"),
                     classes(compilation).get("needs[*]"), pain);
@@ -289,7 +282,7 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
      *  length rule, the business case is any string, and both are lowercased. */
     @Test
     void aBusinessCaseIsReadAgainstNeedsHeldOnlyByALengthRule() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module demo
 
                 data PainPoint = String invariant String.length(value) >= 1
@@ -302,9 +295,7 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
 
                 behavior f : (businessCase: String, needs: Needs) -> Bool
                 let f (businessCase, needs) = answersANeed(businessCase, needs)
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         String json = json(compilation);
         assertFalse(json.contains("relation_not_shown_to_reach_every_value"), json);
         assertTrue(json.contains("relation_shown_over_a_region"), json);

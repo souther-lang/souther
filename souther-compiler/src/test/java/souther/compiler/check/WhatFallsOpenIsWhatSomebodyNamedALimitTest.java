@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
@@ -341,9 +342,7 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
     // --- reading the compilation ------------------------------------------------------------------
 
     private static Compilation answered(String source) {
-        Compilation c = Compilation.ofSource(source, "Main");
-        c.answerEverything();
-        return c;
+        return ACompiledModel.answered(source);
     }
 
     private static Symbols symbolsOf(Compilation c) {

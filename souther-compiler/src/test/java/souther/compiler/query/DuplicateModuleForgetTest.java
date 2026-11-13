@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.source.SourceId;
 
@@ -46,12 +47,14 @@ class DuplicateModuleForgetTest {
         both.put("b.sou", SECOND);
         Compilation c = Compilation.ofDocuments(both, Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
+        ACompiledModel.refusedWith(List.of("E1503"), c);
         Map<SourceId, List<souther.compiler.diag.Diagnostic>> first = Located.diagnosticsOf(c.diagnostics());
         assertEquals(1, first.get(new SourceId("b.sou")).size(), "the second claim is the one reported");
 
         Map<String, String> onlySecond = new LinkedHashMap<>();
         onlySecond.put("b.sou", SECOND);
         c.update(onlySecond, Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
 
         assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get(new SourceId("b.sou")),
                 "b.sou is the module now, and there is nothing wrong with it");

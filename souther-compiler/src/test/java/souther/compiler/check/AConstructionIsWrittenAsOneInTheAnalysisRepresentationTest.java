@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -66,6 +67,7 @@ class AConstructionIsWrittenAsOneInTheAnalysisRepresentationTest {
 
     private static void assertNothingLeftToNormalize(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(List.of("E1105"), compilation);
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         Hir.Module settled = compilation.db().ask(new Bodies.Lowering("demo")).value().settled();
 

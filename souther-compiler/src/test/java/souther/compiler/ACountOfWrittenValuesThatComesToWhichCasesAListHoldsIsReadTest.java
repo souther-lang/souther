@@ -89,7 +89,7 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
     private static Measured measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         JsonNode document = JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
         JsonNode behavior = document.get("modules").get(0).get("behaviors").get(0);
@@ -246,7 +246,10 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
      *  stop. */
     @Test
     void besideAnApplicationSettledForEveryRowItIsNoStop() {
-        assertEquals(List.of(), measured(readOnTwoApplications("5")).leftByTheComparison());
+        String source = readOnTwoApplications("5")
+                .replace("| \"b\" : ([], 0) -> 2", "| \"b\" : ([], 0) -> 1");
+
+        assertEquals(List.of(), measured(source).leftByTheComparison());
     }
 
     /** A form nothing reads on the other application: the reading stopped there, and that is what
@@ -426,7 +429,7 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
                 """.formatted(fields, values, zeros);
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String human = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 

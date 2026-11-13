@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -121,7 +122,7 @@ class AQuestionAskedOfANarrowerRegionFirstIsAnsweredByTheWholeTest {
 
     /** One whole number nothing narrows. */
     private static Quantities quantities() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module example.one
 
                 data Ok = { v: Int }
@@ -130,7 +131,7 @@ class AQuestionAskedOfANarrowerRegionFirstIsAnsweredByTheWholeTest {
                     constructs Ok
 
                 let f (n) = Ok { v = 1 }
-                """, "Main");
+                """);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");

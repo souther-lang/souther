@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 
@@ -64,12 +65,13 @@ class WhatAReportNumbersIsAnAnswerOfItsOwnTest {
         Compilation compilation = Compilation.ofDocuments(
                 Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static void edited(Compilation compilation, String source) {
         compilation.update(Map.of("a.sou", source), Set.of(), TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
     }
 
     /** The value has numbers in it, so the two checks below are about something. */

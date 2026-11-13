@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.UndividedPosition;
 
 import java.util.List;
@@ -76,11 +77,9 @@ class AConstructionTheCheckDischargesEndsNoRunTest {
     void aConstructionIsReachedPastOnlyWhereTheCheckDischargesIt() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
         assertEquals(reasonsOf(evidence, "control"), reasonsOf(evidence, "discharged"));
         // Not left unread by the construction a walk's closure makes, nor by the value it names.

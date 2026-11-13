@@ -54,9 +54,7 @@ class AConstantAFoldReachesIsTheNumberItIsWrittenInPlaceOfTest {
     private static Measured measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         AdequacyReport.BehaviorReport behavior =
                 AdequacyReport.of(compilation).modules().get(0).behaviors().get(0);
         return new Measured(

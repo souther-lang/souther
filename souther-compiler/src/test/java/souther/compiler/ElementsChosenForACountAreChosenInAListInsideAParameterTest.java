@@ -111,10 +111,7 @@ class ElementsChosenForACountAreChosenInAListInsideAParameterTest {
     private static final Pattern QUANTITY = Pattern.compile("quantity = (-?\\d+)");
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static String report(Compilation compilation) {

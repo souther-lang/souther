@@ -1,6 +1,7 @@
 package souther.compiler.core;
 
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.Type;
@@ -67,7 +68,7 @@ class AJoinedStepTakesTheOuterAccumulatorAndTheInnerElementTest {
     }
 
     private static Core.Block theJoinedStep(String source) {
-        Compilation c = Compilation.ofSource(source, "Main");
+        Compilation c = ACompiledModel.answered(source);
         Bodies.CheckedBody checked = c.db().ask(new Bodies.CheckedBehavior("demo", "run")).value();
         // What the check hands on keeps each walk the source wrote a loop of its own; joining
         // them is the emitter's, for the classes that record nothing.

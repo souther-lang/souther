@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.collect.HeldOnce;
 import souther.compiler.core.EnteredArm;
 import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.inputs.CasesLeft;
@@ -12,14 +11,17 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -370,11 +372,18 @@ public sealed interface OnTheWay {
         private final ElementsNamed elementsNamed;
 
         /**
-         * The ways made last. Every path through a condition of several ways reads the condition
-         * again, and what each reads is one of the same few conditions.
+         * The ways made, each kept while it is held somewhere. Every path through a condition of
+         * several ways reads the condition again, and what each reads is one of the same few
+         * conditions. Kept whole and not by slot: a way made again while an equal one is held is
+         * that one, so the ways inside one another are the same objects at every depth and an
+         * equality stops at them. Where one slot kept the newest of those that fell in it, a way
+         * pushed out was made again as a second equal object, and comparing two of them went down
+         * both through every way inside, as many ways as there are paths to it.
+         *
+         * <p>Held weakly both ways, as the propositions are kept: a way refers to the model it was
+         * read from, and a compile is done with it.
          */
-        private static final HeldOnce<OneOf> MADE = new HeldOnce<>(14);
-
+        private static final Map<OneOf, WeakReference<OneOf>> MADE = new WeakHashMap<>();
         /**
          * The condition {@code condition}, come out one of {@code alternatives} — the one made
          * before, where it is still held.
@@ -384,7 +393,16 @@ public sealed interface OnTheWay {
          */
         public static OneOf of(ConditionOccurrence condition, ConditionReportAnchor anchor,
                                List<List<OnTheWay>> alternatives, Optional<Proposition> stated) {
-            return MADE.held(new OneOf(condition, anchor, alternatives, stated));
+            OneOf made = new OneOf(condition, anchor, alternatives, stated);
+            synchronized (MADE) {
+                WeakReference<OneOf> held = MADE.get(made);
+                OneOf kept = held == null ? null : held.get();
+                if (kept != null) {
+                    return kept;
+                }
+                MADE.put(made, new WeakReference<>(made));
+                return made;
+            }
         }
 
         private OneOf(ConditionOccurrence condition, ConditionReportAnchor anchor,

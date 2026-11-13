@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
@@ -39,9 +40,9 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     private static final String LIB = """
             module lib exposing ( flatten )
 
-            let flatten (xs: List<List<Int>>) : List<Int> =
+            partial let flatten (xs: List<List<Int>>) : List<Int> =
                 if List.isEmpty(xs) then []
-                else List.head(xs, []) ++ flatten(List.drop(1, xs))
+                else Option.withDefault([], List.get(0, xs)) ++ flatten(List.drop(1, xs))
             """;
 
     private static final String APP = """
@@ -52,15 +53,15 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
             data Bag = List<Int>
 
             let own (xs: List<Int>) : List<Int> = List.map({ (x) -> x + 1 }, xs)
-            let both (xs: List<List<Int>>) : List<Int> = own(flatten(xs))
+            partial let both (xs: List<List<Int>>) : List<Int> = own(flatten(xs))
 
             behavior run : (xs: List<List<Int>>) -> Bag constructs Bag
             let run (xs) = Bag { value = both(xs) }
             """;
 
     private static Db db() {
-        return Compilation.ofDocuments(
-                Map.of("lib.sou", LIB, "app.sou", APP), Set.of(), ModulePath.EMPTY).db();
+        return ACompiledModel.compiles(Compilation.ofDocuments(
+                Map.of("lib.sou", LIB, "app.sou", APP), Set.of(), ModulePath.EMPTY)).db();
     }
 
     /** Every stage that hands a module over, by the name of the stage. */
@@ -161,7 +162,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
      */
     @Test
     void aRowIsEmittedAsItsOwnMethodsAndNothingIsTakenOnForIt() {
-        Db db = Compilation.ofDocuments(Map.of("rules.sou", """
+        Db db = ACompiledModel.compiles(Compilation.ofDocuments(Map.of("rules.sou", """
                 module rules exposing ( doubled )
 
                 let doubled (n: Int) : Int = n * 2
@@ -178,7 +179,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
 
                 example run
                     | "a row applies a published helper" : (In { n = doubled(3) }) -> Out { m = 6 }
-                """), Set.of(), ModulePath.EMPTY).db();
+                """), Set.of(), ModulePath.EMPTY)).db();
 
         souther.compiler.check.Prepared state = db.ask(new Shapes.Prepared("app")).value();
         Hir.Module prepared = state.tree();

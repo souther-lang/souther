@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -121,9 +122,7 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
     private static String json(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
@@ -148,7 +147,7 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
         String model = source(THE_SUM);
         Compilation offering = Compilation.ofSource(model, "Main");
         offering.measure(Adequacy.Asked.fullReport());
-        offering.answerEverything();
+        ACompiledModel.compiles(offering);
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("demo")),
                 Map.of(), SourceRendering.namedByIdentity(offering.texts()),
@@ -161,12 +160,9 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
         assertFalse(examples.isBlank(), block);
         Compilation running = Compilation.ofSource(model + "\nexample screen\n" + examples + "\n",
                 "Main");
-        running.answerEverything();
         // A row expecting NoDuplicate does not hold where the guard comes out the other way, which
         // is all that is wrong with any of them.
-        assertEquals(List.of(), running.errors().stream()
-                .filter(e -> !"E1905".equals(e.diagnostic().code()))
-                .map(e -> e.diagnostic().code() + " " + e.diagnostic().said()).toList(), block);
+        ACompiledModel.refusedWith(List.of("E1905", "E1905", "E1905"), running);
         Output.Examples key = Output.Examples.asked(running.db(), "demo",
                 running.sourceIds().get(0));
         Set<String> answered = running.db().ask(key).value().rows().stream()

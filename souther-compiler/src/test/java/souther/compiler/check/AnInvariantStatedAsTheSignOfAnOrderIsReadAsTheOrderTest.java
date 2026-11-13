@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -42,7 +43,8 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
                     "l.a > 3.0m"),
             new Same("{ a: Decimal, b: Decimal }", "Decimal.compare(a, b) < 0", "a < b",
                     "l.a > 3.0m"),
-            new Same("Decimal", "!(Decimal.compare(value, 5.0m) <= 0)", "!(value <= 5.0m)",
+            new Same("Decimal", "Bool.not(Decimal.compare(value, 5.0m) <= 0)",
+                    "Bool.not(value <= 5.0m)",
                     "l.value > 3.0m"));
 
     private static String report(String fields, String rule, String use) {
@@ -56,7 +58,7 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
                 let pick (l) = if %s then 1 else 0
                 """.formatted(fields, rule, use), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         // Without the places a report sends a reader to. The two spellings write one call at two
         // columns, and what is compared is what each says of the rule.
         return AdequacyReport.of(compilation)
@@ -81,7 +83,7 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
                 let pick (l) = if l.a > 3 then 1 else 0
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("not read: invariant Pair #1"), report);

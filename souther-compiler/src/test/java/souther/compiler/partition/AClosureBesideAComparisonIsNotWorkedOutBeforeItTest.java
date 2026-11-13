@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Disposition;
@@ -54,8 +55,7 @@ class AClosureBesideAComparisonIsNotWorkedOutBeforeItTest {
 
     /** The rows of the examples, each as it was run and held to what it expects. */
     private static List<RowOutcome> rowsOf(String body) {
-        Compilation compilation = Compilation.ofSource(modelOf(body), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(modelOf(body));
         SourceId source = compilation.exampleSourcesOf("probe").getFirst();
         return compilation.db()
                 .ask(new Output.Examples("probe", source, ArmObservation.OMIT)).value().rows();
@@ -97,9 +97,7 @@ class AClosureBesideAComparisonIsNotWorkedOutBeforeItTest {
     }
 
     private static PartitionEvidence measured(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return compilation.db().ask(new Adequacy.Coverage("probe")).value().get("reasons");
     }
 

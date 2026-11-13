@@ -79,6 +79,8 @@ class ABehaviorHasAtMostOneStandInTableTest {
             behavior findManager : (id: EmployeeId) -> EmployeeId
             """;
 
+    private static final List<String> TWO_BLOCKS_REFUSED = List.of("E1933", "E1933");
+
     private static final String IN_TWO_BLOCKS = """
 
             fake findManager
@@ -105,18 +107,36 @@ class ABehaviorHasAtMostOneStandInTableTest {
     private static Compilation compiled(List<String> sources) {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
+    }
+
+    /** {@code sources} compiled, measured and answered in full, refused with exactly {@code errors}. */
+    private static Compilation refused(List<String> sources, List<String> errors) {
+        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        return ACompiledModel.refusedWith(errors, compilation);
+    }
+
+    private static List<Diagnostic> diagnosticsIn(Compilation compilation) {
+        List<Diagnostic> out = new ArrayList<>();
+        compilation.diagnostics().forEach((_, found) -> out.addAll(Located.diagnosticsOf(found)));
+        return out;
     }
 
     private static List<Diagnostic> diagnosticsOf(List<String> sources) {
-        List<Diagnostic> out = new ArrayList<>();
-        compiled(sources).diagnostics().forEach((_, found) -> out.addAll(Located.diagnosticsOf(found)));
-        return out;
+        return diagnosticsIn(compiled(sources));
     }
 
     private static List<Diagnostic> diagnosticsOf(String source) {
         return diagnosticsOf(List.of(source));
+    }
+
+    private static List<Diagnostic> refusedDiagnosticsOf(List<String> sources, List<String> errors) {
+        return diagnosticsIn(refused(sources, errors));
+    }
+
+    private static List<Diagnostic> refusedDiagnosticsOf(String source, List<String> errors) {
+        return refusedDiagnosticsOf(List.of(source), errors);
     }
 
     private static List<String> codesOf(List<Diagnostic> said) {
@@ -124,9 +144,9 @@ class ABehaviorHasAtMostOneStandInTableTest {
     }
 
     /** Which file each report of {@code code} is written in, in the order they are said. */
-    private static List<SourceId> filesSaying(List<String> sources, String code) {
+    private static List<SourceId> filesSaying(List<String> sources, String code, List<String> errors) {
         List<SourceId> files = new ArrayList<>();
-        compiled(sources).diagnostics().forEach((id, found) -> {
+        refused(sources, errors).diagnostics().forEach((id, found) -> {
             for (Diagnostic said : Located.diagnosticsOf(found)) {
                 if (code.equals(said.code())) {
                     files.add(id);
@@ -136,8 +156,8 @@ class ABehaviorHasAtMostOneStandInTableTest {
         return files;
     }
 
-    private static List<RowOutcome> rowsOf(String source) {
-        Compilation compilation = compiled(List.of(source));
+    private static List<RowOutcome> rowsOf(String source, List<String> errors) {
+        Compilation compilation = refused(List.of(source), errors);
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {
@@ -155,7 +175,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
 
     @Test
     void everyBlockNamingOneBehaviorIsReported() {
-        assertEquals(List.of("E1933", "E1933"), codesOf(diagnosticsOf(BASE + IN_TWO_BLOCKS + ROWS)),
+        assertEquals(List.of("E1933", "E1933"), codesOf(refusedDiagnosticsOf(BASE + IN_TWO_BLOCKS + ROWS, TWO_BLOCKS_REFUSED)),
                 "both blocks name `findManager`, and neither of them is the one the language keeps");
     }
 
@@ -166,7 +186,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
                 fake findManager
                   | (EmployeeId("e-3")) -> EmployeeId("boss-3")
                 """ + ROWS;
-        assertEquals(List.of("E1933", "E1933", "E1933"), codesOf(diagnosticsOf(thrice)),
+        assertEquals(List.of("E1933", "E1933", "E1933"), codesOf(refusedDiagnosticsOf(thrice, List.of("E1933", "E1933", "E1933"))),
                 "each block is reported once, not once for every other block it disagrees with");
     }
 
@@ -236,7 +256,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
     @Test
     void twoSpellingsOfOneBehaviorAreOneBehavior() {
         assertEquals(List.of("E1933", "E1933"),
-                codesOf(diagnosticsOf(List.of(DECLARES, TWO_SPELLINGS))),
+                codesOf(refusedDiagnosticsOf(List.of(DECLARES, TWO_SPELLINGS), TWO_BLOCKS_REFUSED)),
                 "the bare name and the qualified one reach one declaration");
     }
 
@@ -250,7 +270,8 @@ class ABehaviorHasAtMostOneStandInTableTest {
      */
     @Test
     void bothReportsNameTheBehaviorAndPointAtEachOther() {
-        List<Diagnostic> said = diagnosticsOf(List.of(DECLARES, TWO_SPELLINGS)).stream()
+        List<Diagnostic> said = refusedDiagnosticsOf(List.of(DECLARES, TWO_SPELLINGS), TWO_BLOCKS_REFUSED)
+                .stream()
                 .filter(each -> "E1933".equals(each.code())).toList();
         assertEquals(2, said.size(), "two blocks, two reports");
 
@@ -326,7 +347,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
                 fake findManager
                   | (EmployeeId("e-2")) -> EmployeeId("boss-2")
                 """);
-        assertEquals(List.of(new SourceId("0"), new SourceId("1")), filesSaying(across, "E1933"),
+        assertEquals(List.of(new SourceId("0"), new SourceId("1")), filesSaying(across, "E1933", TWO_BLOCKS_REFUSED),
                 "a module's blocks are its own source's and its attached files', and each report is"
                         + " quoted from the file its block is written in");
     }
@@ -351,7 +372,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
                 fake findManager
                   | (EmployeeId("e-2")) -> EmployeeId("boss-2")
                 """);
-        assertEquals(List.of(new SourceId("1"), new SourceId("2")), filesSaying(across, "E1933"),
+        assertEquals(List.of(new SourceId("1"), new SourceId("2")), filesSaying(across, "E1933", TWO_BLOCKS_REFUSED),
                 "neither block is written in the module's own source, and both are the module's");
     }
 
@@ -376,8 +397,10 @@ class ABehaviorHasAtMostOneStandInTableTest {
                 fake findManager
                   | (EmployeeId("e-2")) -> EmployeeId("boss-2")
                 """;
-        assertEquals(List.of("E1933", "E1933"), codesOf(diagnosticsOf(List.of(own, attached))));
-        assertEquals(List.of("E1933", "E1933"), codesOf(diagnosticsOf(List.of(attached, own))),
+        assertEquals(TWO_BLOCKS_REFUSED,
+                codesOf(refusedDiagnosticsOf(List.of(own, attached), TWO_BLOCKS_REFUSED)));
+        assertEquals(TWO_BLOCKS_REFUSED,
+                codesOf(refusedDiagnosticsOf(List.of(attached, own), TWO_BLOCKS_REFUSED)),
                 "the module's source read second is the same two blocks");
     }
 
@@ -392,7 +415,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
      */
     @Test
     void aRowIsNotToldItsStandInIsMissingOrShort() {
-        List<String> codes = codesOf(diagnosticsOf(BASE + IN_TWO_BLOCKS + ROWS));
+        List<String> codes = codesOf(refusedDiagnosticsOf(BASE + IN_TWO_BLOCKS + ROWS, TWO_BLOCKS_REFUSED));
         assertTrue(codes.stream().noneMatch(code -> code.equals("E1908") || code.equals("E1909")),
                 "said instead of the refusal: " + codes);
     }
@@ -400,7 +423,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
     /** It stops where a row whose table would not build stops, having never entered the behavior. */
     @Test
     void aRowStopsWithoutApplyingTheBehavior() {
-        List<RowOutcome> rows = rowsOf(BASE + IN_TWO_BLOCKS + ROWS);
+        List<RowOutcome> rows = rowsOf(BASE + IN_TWO_BLOCKS + ROWS, TWO_BLOCKS_REFUSED);
         assertEquals(2, rows.size(), "both rows are read, or the assertions below say nothing");
         for (RowOutcome row : rows) {
             assertEquals(Stage.FIXTURES_VALIDATED, row.stage(),
@@ -454,7 +477,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
      */
     @Test
     void theMeasureCountsSuchARowAsWrittenAndNotAsRun() {
-        Compilation compilation = compiled(List.of(OVER_A_SUM + IN_TWO_BLOCKS));
+        Compilation compilation = refused(List.of(OVER_A_SUM + IN_TWO_BLOCKS), TWO_BLOCKS_REFUSED);
         Map<String, Adequacy.SignatureEvidence> witnesses = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value();
         assertNotNull(witnesses, "the module was measured, or this says nothing");
@@ -500,14 +523,14 @@ class ABehaviorHasAtMostOneStandInTableTest {
      */
     @Test
     void aBlockNamingNoBehaviorIsNotCounted() {
-        List<String> codes = codesOf(diagnosticsOf(BASE + """
+        List<String> codes = codesOf(refusedDiagnosticsOf(BASE + """
 
                 fake findManager
                   | (EmployeeId("e-1")) -> EmployeeId("boss-1")
 
                 fake findNobody
                   | (EmployeeId("e-2")) -> EmployeeId("boss-2")
-                """ + ROWS));
+                """ + ROWS, List.of("E1932")));
         assertTrue(codes.contains("E1932"), "the name reached no behavior: " + codes);
         assertTrue(codes.stream().noneMatch("E1933"::equals),
                 "one block names `findManager` and the other names nothing: " + codes);
@@ -524,7 +547,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
      */
     @Test
     void aFaultInsideARefusedBlockIsStillSaid() {
-        List<String> codes = codesOf(diagnosticsOf(BASE + """
+        List<String> codes = codesOf(refusedDiagnosticsOf(BASE + """
 
                 fake findManager
                   | (EmployeeId("e-1")) -> EmployeeId("boss-1")
@@ -532,7 +555,7 @@ class ABehaviorHasAtMostOneStandInTableTest {
                 fake findManager
                   | (EmployeeId("e-2")) -> EmployeeId("boss-2")
                   | (EmployeeId("e-2")) -> EmployeeId("boss-3")
-                """ + ROWS));
+                """ + ROWS, List.of("E1933", "E1933", "E1926")));
         assertTrue(codes.contains("E1926"),
                 "the second row of the second block answers nothing: " + codes);
     }
@@ -546,12 +569,12 @@ class ABehaviorHasAtMostOneStandInTableTest {
      */
     @Test
     void somethingElseBeingWrongDoesNotHideIt() {
-        List<String> codes = codesOf(diagnosticsOf(BASE + IN_TWO_BLOCKS + ROWS + """
+        List<String> codes = codesOf(refusedDiagnosticsOf(BASE + IN_TWO_BLOCKS + ROWS + """
 
                 data Unbuildable = { n: Int }
                     invariant n > 0
                     invariant n < 0
-                """));
+                """, List.of("E1013", "E1933", "E1933")));
         assertTrue(codes.contains("E1933"), "said with something else wrong: " + codes);
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
@@ -43,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatAClassMeansDoesNotTurnOnWhoIsReadingItTest {
 
     private static final String LIB = """
-            module lib exposing ( State, Present, Held, look )
+            module lib exposing ( State, Present, Held, Flag, Seen, look )
 
             data Missing
             data Present = { note: String }
@@ -70,8 +71,8 @@ class WhatAClassMeansDoesNotTurnOnWhoIsReadingItTest {
 
     /** The classes at {@code path}, as the {@code nth} module of this compilation reads them. */
     private static List<PartitionClass> classesAt(int nth, String behavior, String path) {
-        Compilation compilation = Compilation.ofSources(List.of(LIB, APP), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(LIB, APP), ModulePath.EMPTY));
         String module = compilation.modules().get(nth);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

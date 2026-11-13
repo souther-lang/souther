@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Compilation;
@@ -63,7 +64,7 @@ class EveryValueARowHoldsIsTakenAtThePositionItStandsAtTest {
     }
 
     private static List<InputsRowsRanWith.Taken> takenAt(Type type, ObservedValue value) {
-        Compilation compilation = Compilation.ofSource(MODULE, "Main");
+        Compilation compilation = ACompiledModel.answered(MODULE);
         RuleReadingSource source = Shapes.ruleReading(compilation.db(), "example.taken").value();
         assertNotNull(source, "the model under test compiles");
         List<InputsRowsRanWith.Taken> out = new ArrayList<>();

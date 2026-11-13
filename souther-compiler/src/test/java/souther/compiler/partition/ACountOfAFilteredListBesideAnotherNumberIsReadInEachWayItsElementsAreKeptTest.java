@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -68,15 +69,10 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      * @param after what the source writes after the behavior: its examples, or a helper it calls
      */
     private static Compilation compiled(String body, String after) {
-        return MEASURED.computeIfAbsent(source(body, after), source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors().stream()
-                    .map(each -> each.diagnostic().code()).toList(),
-                    "the model under test compiles");
-            return compilation;
+        Compilation shared = MEASURED.computeIfAbsent(source(body, after), source -> {
+            return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         });
+        return ACompiledModel.compiles(shared);
     }
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
@@ -419,7 +415,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      *  nothing unread. */
     @Test
     void aCountOfAListTheInputHoldsIsALineOnTheCount() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module p
                 data Ok
                 data No
@@ -428,9 +424,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
                     guard k >= List.length(List.filter(x -> x > 0, xs)) else No
                     Ok
                 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("read as f/#xs [xs[*] > 0] - k: = 0"), report);

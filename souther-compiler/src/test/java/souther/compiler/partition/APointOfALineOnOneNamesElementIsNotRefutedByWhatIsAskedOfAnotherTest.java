@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -83,11 +84,8 @@ class APointOfALineOnOneNamesElementIsNotRefutedByWhatIsAskedOfAnotherTest {
                 let %s (x) = %s
                 """.formatted(name, name, body)));
         Compilation made = Compilation.ofSource(source.toString(), "Main");
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                "the model compiles");
         made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
+        ACompiledModel.compiles(made);
         List<JsonNode> found = new ArrayList<>();
         collect(JSON.readTree(AdequacyReport.of(made)
                 .json(SourceRendering.namedByIdentity(made.texts()))), found);

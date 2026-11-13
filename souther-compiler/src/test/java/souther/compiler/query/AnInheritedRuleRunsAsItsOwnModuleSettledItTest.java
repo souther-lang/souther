@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.ValueShape;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
@@ -67,7 +68,7 @@ class AnInheritedRuleRunsAsItsOwnModuleSettledItTest {
 
     private static Compilation compiled() {
         Compilation c = Compilation.ofSources(List.of(DECLARING, READING), ModulePath.EMPTY);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertEquals(List.of(), c.db().allReports(), "the workspace compiles to begin with");
         return c;
     }

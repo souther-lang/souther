@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
@@ -2664,6 +2665,51 @@ public final class FieldDomains {
     }
 
     /**
+     * Whether {@code shape} is a choice the reading of the numbers an operation answers took in
+     * whole: it composed the alternatives exactly, which it does only where each of them states a
+     * rule about those numbers and about nothing the other readings hold of the same position
+     * ({@link StatedByClauses.Part}). Asked of that reading's own account of the part, and not
+     * worked out again from the shape of the clause.
+     */
+    private static boolean isAChoiceTheNumbersTookInWhole(InvariantChecker.Written reading,
+                                                          ClauseExpr shape) {
+        ReadByClauses.OfAPart account = reading.adopted().get(shape.at());
+        return shape instanceof ClauseExpr.Joined joined
+                && !(joined.how() == ConditionJoin.BOTH && joined.positive())
+                && account != null && account.byDerivedNumbers().tookEveryPartInWhole();
+    }
+
+    /**
+     * The values {@link #leftAt} leaves the number {@code kind} of {@code path}, as the runs they
+     * lie in, or null where this has no word for them.
+     *
+     * <p>The same rules as {@link #leftAt} and the same reading, which answers the two together:
+     * what it composed of the ends is {@code leftAt}'s, and what it composed of the values is
+     * here. Met with the ends {@code leftAt} gives, so that a rule only the interval algebra read
+     * narrows the runs as it narrows the ends.
+     *
+     * <p>Said only where the runs are the whole of what the rules leave the length
+     * ({@link #setBoundsAndRunsAreTheRulesAt}), and then said however many runs there are: a
+     * reader given these holds the strings as the set of the position met with them, and a rule
+     * nothing states is a string it holds that the position does not. So null is the one answer
+     * that says nothing, and a value that is the same as the ends is not told apart by being
+     * absent. Runs are not the ends: a choice met with a bound can leave one run that stops short
+     * of the end the bound placed — {@code length <= 8 && (length < 8 || length > 8)} leaves up
+     * to seven and its end is eight — and a rule can take out a length past the ends.
+     */
+    public OrderedRuns runsLeftAt(RuleKey path, NumberAt.OfWhatNumber kind) {
+        if (!(kind instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers)
+                || !setBoundsAndRunsAreTheRulesAt(path)) {
+            return null;
+        }
+        DerivedNumber number = DerivedNumber.of(new NumberAt<>(path, kind));
+        OrderedRuns runs = number == null ? null : derived.runsAt(number);
+        NumericDomain.Bounds ends = runs == null ? null : leftAt(path, kind);
+        return ends == null ? runs
+                : runs.meet(OrderedRuns.of(new OrderedInterval(ends.min(), ends.max())));
+    }
+
+    /**
      * Where the reading that composed this value's connectives stops one of its numbers, or null
      * where no line may be drawn on it.
      *
@@ -3587,12 +3633,17 @@ public final class FieldDomains {
      * @param paths          the names the occurrence is about
      * @param valuesHoldWhole false for a connective or a binding above the statements, which no
      *                        reading decides anything at
+     * @param runsHoldWhole  whether the part is a choice between bounds on the length of one
+     *                        string, which the runs of the length hold whole beside the ends
+     *                        ({@link #runsLeftAt}). A cause all the same for what reads the ends
+     *                        and the set without the runs: they hold nothing of it
      */
     private record PartUnstated(RuleRef.Invariant rule, Set<RuleKey> paths,
-                                boolean valuesHoldWhole) {}
+                                boolean valuesHoldWhole, boolean runsHoldWhole) {}
 
-    /** An occurrence of a part the bounds hold nothing of, and the names it is about. */
-    private record Occurrence(ClauseOccurrence at, Set<RuleKey> paths) {}
+    /** An occurrence of a part the bounds hold nothing of, the names it is about, and whether
+     *  the runs of a length hold it whole. */
+    private record Occurrence(ClauseOccurrence at, Set<RuleKey> paths, boolean runsHoldWhole) {}
 
     /**
      * What {@link #projection} says with {@code setAside} not counted among what stands in the way.
@@ -3667,6 +3718,60 @@ public final class FieldDomains {
         }
         ProjectionEvidence rest = evidenceLeaving(heldHere);
         return rest.isCertified() || standingApart(rest, place, Set.of(named)) != null;
+    }
+
+    /**
+     * Whether the set of values, the ends of the length at {@code place} and the runs held beside
+     * the ends ({@link #runsLeftAt}) are the whole of what the rules leave the string there.
+     *
+     * <p>Not {@link #valuesAndCountAreTheRulesAt}, which is what makes the set read in full, and
+     * nothing says of a position the set is read in full for that the ends leave a hole in it: a
+     * reader of that answer holds the length as the ends and would hold the strings of the hole.
+     * This is the answer for a reader that holds the runs as well, so it has the same conditions
+     * with one more thing allowed to stand in the way: the lengths taken out, which are held.
+     *
+     * <p>The rules the set holds whole are taken out of what stands in the way, as there; and what
+     * is left is nothing, or the lengths a rule takes out from between the ends of the count.
+     */
+    private boolean setBoundsAndRunsAreTheRulesAt(RuleKey place) {
+        Counted counted = countAt.get(place);
+        if (counted == null || !notGathered.isEmpty()
+                || !RepresentationBounds.isTheLengthOfAString(counted.by())
+                || unreadByName.getOrDefault(place, List.of()).stream()
+                        .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))) {
+            return false;
+        }
+        Gathered read = gathered();
+        // A rule the algebra did not prove is named by a cause beside it ({@link #gathered}), so a
+        // refusal of that kind is told apart below by what the causes are.
+        if (!(read.certification() instanceof ProjectionCertification.Certified
+                || read.certification() instanceof ProjectionCertification.NotEveryRuleIsProven)
+                || countsRelatedToAnotherNumber().contains(counted.atom())) {
+            return false;
+        }
+        List<PartUnstated> heldHere = read.unstated().stream()
+                .filter(each -> (each.valuesHoldWhole() || each.runsHoldWhole())
+                        && each.paths().equals(Set.of(place)))
+                .toList();
+        ProjectionEvidence rest = evidenceLeaving(heldHere);
+        return rest.isCertified() || onlyTheHolesTheRunsHold(rest, counted);
+    }
+
+    /**
+     * Whether what stands in the way of {@code rest} is the lengths a rule takes out from between
+     * the ends of the count {@code counted}, which the runs of the derived number hold
+     * ({@link #runsLeftAt}) and the ends do not.
+     *
+     * <p>Only holes in that count: a hole in another is a rule the bounds and the set between
+     * them do not state, and the runs hold none of it.
+     */
+    private static boolean onlyTheHolesTheRunsHold(ProjectionEvidence rest, Counted counted) {
+        return rest instanceof ProjectionEvidence.NotCertified(var causes)
+                && causes.stream().allMatch(each ->
+                        each instanceof ProjectionEvidence.Cause.Lossy lossy
+                                && lossy.unstated().equals(
+                                        Set.of(ProjectionEvidence.Cause.Unstated.A_HOLE))
+                                && lossy.atom().equals(counted.atom()));
     }
 
     /** The counts some stated constraint relates to another number, worked out the first time it
@@ -3795,7 +3900,11 @@ public final class FieldDomains {
                 if (required == null || required.obligations().isEmpty()) {
                     told.add(RuleKey.THE_VALUE);
                 }
-                pending.add(new Occurrence(shape.at(), told));
+                // A choice between bounds on the length of one string is still a part the bounds
+                // hold nothing of: they hold the ends of each alternative, and the lengths the
+                // choice takes out from between them are held beside them as runs.
+                pending.add(new Occurrence(shape.at(), told,
+                        isAChoiceTheNumbersTookInWhole(reading, shape)));
             }));
             if (pending.isEmpty()) {
                 return;
@@ -3808,7 +3917,8 @@ public final class FieldDomains {
             for (Occurrence each : pending) {
                 InvariantStatementId statement = statements.get(each.at());
                 unstated.add(new PartUnstated(rule, each.paths(),
-                        statement != null && took.valuesHoldWhole(statement)));
+                        statement != null && took.valuesHoldWhole(statement),
+                        each.runsHoldWhole()));
             }
         });
         // And what the algebra was given and what it projects does not hold.

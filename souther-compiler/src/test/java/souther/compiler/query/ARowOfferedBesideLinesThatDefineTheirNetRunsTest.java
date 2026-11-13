@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.AnswerObservation;
@@ -73,7 +74,7 @@ class ARowOfferedBesideLinesThatDefineTheirNetRunsTest {
     void everyRowOfferedIsAQuoteTheBehaviorAnswers() {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         StringBuilder offered = new StringBuilder();
         for (String module : compilation.modules()) {
             offered.append(GeneratedRows.of(
@@ -83,8 +84,8 @@ class ARowOfferedBesideLinesThatDefineTheirNetRunsTest {
         }
         assertFalse(offered.isEmpty(), "rows are offered for the comparison against the total");
 
-        Compilation pasted =
-                Compilation.ofSources(List.of(MODEL + "\n" + offered), ModulePath.EMPTY);
+        Compilation pasted = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(MODEL + "\n" + offered), ModulePath.EMPTY));
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : pasted.modules()) {
             for (SourceId id : pasted.exampleSourcesOf(module)) {

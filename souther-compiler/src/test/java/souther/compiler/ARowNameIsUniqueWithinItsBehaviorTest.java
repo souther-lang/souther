@@ -69,16 +69,17 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
     private static final String ATTACHED_HEADER = "examples for example.trip\n";
 
     /** Every diagnostic these sources have, by the source it is filed under. */
-    private static Map<SourceId, List<Diagnostic>> bySource(String... sources) {
-        Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
+    private static Map<SourceId, List<Diagnostic>> bySource(List<String> refusedWith, String... sources) {
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofSources(List.of(sources), ModulePath.EMPTY));
         Map<SourceId, List<Diagnostic>> out = new LinkedHashMap<>();
         compilation.diagnostics().forEach((id, located) -> out.put(id, Located.diagnosticsOf(located)));
         return out;
     }
 
-    private static List<Diagnostic> all(String... sources) {
+    private static List<Diagnostic> all(List<String> refusedWith, String... sources) {
         List<Diagnostic> out = new ArrayList<>();
-        bySource(sources).values().forEach(out::addAll);
+        bySource(refusedWith, sources).values().forEach(out::addAll);
         return out;
     }
 
@@ -111,7 +112,7 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
                     | "over the ceiling" : (Draft { cost = Amount(300) }) -> Rejected
                 """;
 
-        List<Diagnostic> said = collisions(all(source));
+        List<Diagnostic> said = collisions(all(List.of("E1925", "E1925"), source));
 
         assertEquals(2, said.size(), "both rows carry the name, so both are told");
         assertEquals(List.of(lineOf(source, "Amount(200)"), lineOf(source, "Amount(300)")),
@@ -136,7 +137,7 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
                     | "over the ceiling" : (Draft { cost = Amount(300) }) -> Rejected
                 """;
 
-        Map<SourceId, List<Diagnostic>> said = bySource(model, attached);
+        Map<SourceId, List<Diagnostic>> said = bySource(List.of("E1925", "E1925"), model, attached);
 
         assertEquals(1, collisions(said.get(new SourceId("0"))).size(), "the module's own row is told, on the module");
         assertEquals(1, collisions(said.get(new SourceId("1"))).size(),
@@ -155,7 +156,7 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
                     | "over the ceiling" : (Draft { cost = Amount(400) }) -> Rejected
                 """;
 
-        assertEquals(3, collisions(all(source)).size(),
+        assertEquals(3, collisions(all(List.of("E1925", "E1925", "E1925"), source)).size(),
                 "one report per row that carries the name — how they were compared is not the reader's");
     }
 
@@ -167,7 +168,7 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
                     | "" : (Draft { cost = Amount(200) }) -> Rejected
                 """;
 
-        List<Diagnostic> said = all(source).stream()
+        List<Diagnostic> said = all(List.of("E2304"), source).stream()
                 .filter(d -> d.said() instanceof ParseMessage.ARowNameSaysNothing)
                 .toList();
 
@@ -183,7 +184,8 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
                     | "   " : (Draft { cost = Amount(200) }) -> Rejected
                 """;
 
-        assertTrue(all(source).stream().anyMatch(d -> d.said() instanceof ParseMessage.ARowNameSaysNothing),
+        assertTrue(all(List.of("E2304"), source).stream()
+                        .anyMatch(d -> d.said() instanceof ParseMessage.ARowNameSaysNothing),
                 "spaces are not a name either");
     }
 
@@ -203,7 +205,8 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
                     | "%s" : (Draft { cost = Amount(200) }) -> Rejected
                 """.formatted("  ");
 
-        assertTrue(all(source).stream().anyMatch(d -> d.said() instanceof ParseMessage.ARowNameSaysNothing),
+        assertTrue(all(List.of("E2304"), source).stream()
+                        .anyMatch(d -> d.said() instanceof ParseMessage.ARowNameSaysNothing),
                 "a no-break space and a figure space are String whitespace");
         assertEquals("\u001C", new RowIdentity.Named("\u001C").name());
     }
@@ -235,7 +238,7 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
                     | "over the ceiling" : (Draft { cost = Amount(200) }) -> Rejected
                 """;
 
-        assertEquals(List.of(), collisions(all(source)),
+        assertEquals(List.of(), collisions(all(List.of(), source)),
                 "a name says which row of one behavior, so two behaviors do not collide");
     }
 
@@ -249,7 +252,7 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """;
 
-        assertEquals(List.of(), collisions(all(source)),
+        assertEquals(List.of(), collisions(all(List.of(), source)),
                 "an unnamed row carries no name, so there is nothing for two of them to share");
     }
 }

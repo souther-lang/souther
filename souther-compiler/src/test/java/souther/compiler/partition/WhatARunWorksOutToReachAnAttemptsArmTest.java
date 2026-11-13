@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
@@ -41,7 +42,7 @@ class WhatARunWorksOutToReachAnAttemptsArmTest {
 
     /** The tree of {@code pick}, written {@code body}. */
     private static Core bodyOf(String body) {
-        Compilation compilation = Compilation.ofSource(HEAD + "\n" + body, "Main");
+        Compilation compilation = ACompiledModel.answered(HEAD + "\n" + body);
         String module = compilation.modules().getFirst();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

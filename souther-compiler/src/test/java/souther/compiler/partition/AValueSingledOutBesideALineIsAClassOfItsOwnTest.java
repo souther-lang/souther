@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.RowsOfABlock;
 import souther.compiler.check.Carrier;
 import souther.compiler.diag.SourceRendering;
@@ -179,9 +180,7 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
 
     /** The classes of the one measure of {@code pick} in {@code source}. */
     private static List<PartitionClass> classesIn(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         List<Axis> axes =
                 compilation.db().ask(new Adequacy.Divided("probe", "pick")).value().axes();
         assertNotNull(axes, () -> "the model compiles: " + compilation.errors());
@@ -190,9 +189,7 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
     }
 
     private static String generatedFor(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all =
                 Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
@@ -48,14 +49,14 @@ class WhatATotalOfAFormComesToHoldsOnlyOfTheTotalsAskedTest {
 
     @Test
     void aRowWhoseTotalOfThePlaceIsPastWhereItStopsIsLeft() {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                 module g
 
                 data Line = { a: Int }
                 data Ok
 
                 behavior counted : (xs: List<Line>) -> Ok
-                """), ModulePath.EMPTY);
+                """), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading = RuleReadingContext.unshared(rules,

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import java.util.ArrayList;
@@ -58,9 +59,8 @@ class AClassCheckAndTheSearchOfAPointShareOneProofTest {
         ProofsOfNoValue.WORKED = each -> worked.add(new Worked(whileSearching(),
                 System.identityHashCode(each.region()), each.asked()));
         try {
-            Compilation compilation = Compilation.ofSource(GUARDED, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation =
+                    ACompiledModel.measured(GUARDED, Adequacy.Asked.fullReport());
             assertNotNull(Adequacy.generatedOf(compilation.db(), "example.guarded"),
                     "the model under test compiles");
         } finally {

@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.meta.ModulePath;
@@ -69,7 +70,7 @@ class WhichNamesOfARingAreAtFaultIsAskedAtTheCostOfTheRingTest {
         Compilation c = Compilation.ofDocuments(
                 new LinkedHashMap<>(Map.of("chain.sou", ring.apply(names))), Set.of(),
                 ModulePath.EMPTY);
-        c.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1013"), c);
         List<String> said = c.db().allReports().stream()
                 .map(each -> each.report().diagnostic().code().toString()).toList();
         assertEquals(1, said.size(), () -> "the ring is reported once and only once: " + said);

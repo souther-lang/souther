@@ -135,9 +135,7 @@ class RowsThatCoverEveryArmCanLeaveACombinationUnmadeTest {
     }
 
     private static AdequacyReport.BehaviorReport behaviorOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         List<AdequacyReport.BehaviorReport> behaviors =
                 AdequacyReport.of(compilation).modules().getFirst().behaviors();
         assertEquals(1, behaviors.size(), "one behavior in the model");

@@ -2,13 +2,13 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.CountWitnesses;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -23,8 +23,7 @@ class ACountWitnessIsAskedOfEveryPairBeforeItIsGivenUpTest {
     private static Optional<CountWitnesses.Witness> witnessOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         compilation.db().ask(new Adequacy.Coverage("demo"));
         Map<String, List<Adequacy.WitnessOfACount>> asked =
                 ACountWitnessOverAWrittenValueMakesEveryNumberOfElementsTest.askedOf(compilation);

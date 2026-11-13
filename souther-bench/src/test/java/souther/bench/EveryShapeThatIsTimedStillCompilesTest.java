@@ -2,6 +2,7 @@ package souther.bench;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
@@ -10,6 +11,7 @@ import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * That the shapes these measurements are taken against still compile.
@@ -82,7 +84,9 @@ class EveryShapeThatIsTimedStillCompilesTest {
      * and what makes its figure not comparable with the ones beside it.
      */
     private static void refused(String shape, List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.refusedOnlyWith(
+                Set.of(REFUSING_A_DECLARATION_NOTHING_SATISFIES),
+                Compilation.ofSources(sources, ModulePath.EMPTY));
         List<String> said = new ArrayList<>();
         for (List<Diagnostic> found : Located.diagnosticsOf(compilation.diagnostics()).values()) {
             for (Diagnostic diagnostic : found) {
@@ -182,19 +186,8 @@ class EveryShapeThatIsTimedStillCompilesTest {
     }
 
     private static void compiles(String shape, List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        List<String> errors = new ArrayList<>();
-        for (List<Diagnostic> found : Located.diagnosticsOf(compilation.diagnostics()).values()) {
-            for (Diagnostic diagnostic : found) {
-                if (diagnostic.severity() == Severity.ERROR) {
-                    errors.add(diagnostic.code() + " at " + diagnostic.primary());
-                }
-            }
-        }
-        if (!errors.isEmpty()) {
-            throw new AssertionError("the `" + shape + "` shape no longer compiles:\n  "
-                    + String.join("\n  ", errors));
-        }
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(sources, ModulePath.EMPTY));
         // Asked after the errors, and asked at all: a shape that compiles to nothing is one the
         // measurement walks past, and the timing would be of a compile that reached no back end.
         if (compilation.classes().isEmpty()) {

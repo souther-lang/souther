@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -57,13 +58,11 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        // A body that does not type is no body read, and leaves nothing unread.
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the models under test compile");
         Map<String, List<String>> out = new LinkedHashMap<>();
         judged.keySet().forEach(name -> out.put(name, evidence.get(name).notRead().stream()
                 .map(each -> each.at() + "=" + each.reason()).sorted().toList()));
+        // A body that does not type is no body read, and leaves nothing unread.
+        ACompiledModel.compiles(compilation);
         return out;
     }
 
@@ -307,9 +306,6 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the models under test compile");
         String reached = "items[*].price=" + UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
         Map<String, List<String>> unread = new LinkedHashMap<>();
         tests.keySet().forEach(name -> unread.put(name, evidence.get(name).notRead().stream()
@@ -317,6 +313,7 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
         assertTrue(unread.get("byTheFlag").contains(reached), unread.toString());
         assertTrue(unread.get("byThePrice").stream().noneMatch(reached::equals),
                 unread.toString());
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -352,9 +349,6 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the models under test compile");
         String notReached = "prices.cap="
                 + UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE;
         Map<String, List<String>> unread = new LinkedHashMap<>();
@@ -363,6 +357,7 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
         assertTrue(unread.get("priced").contains(notReached), unread.toString());
         assertTrue(unread.get("counted").stream().noneMatch(notReached::equals),
                 unread.toString());
+        ACompiledModel.compiles(compilation);
     }
 
     /** A choice by a comparison, and one by a string written out, is written in the report as the
@@ -373,10 +368,9 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
                 "compared", "List.filter(i -> i.price > 10, items)",
                 "written", "List.filter(i -> i.code == \"A\", items)");
         kinds.forEach((kind, kept) -> {
-            Compilation compilation = Compilation.ofSource(DECLARATIONS + JUDGED.formatted(kind,
-                    "List.sum(List.map(i -> i.price, " + kept + ")) >= 0"), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.measured(DECLARATIONS + JUDGED.formatted(kind,
+                    "List.sum(List.map(i -> i.price, " + kept + ")) >= 0"),
+                    Adequacy.Asked.fullReport());
             JsonNode document = JsonMapper.builder().build().readTree(
                     AdequacyReport.of(compilation)
                             .json(SourceRendering.namedByIdentity(compilation.texts())));

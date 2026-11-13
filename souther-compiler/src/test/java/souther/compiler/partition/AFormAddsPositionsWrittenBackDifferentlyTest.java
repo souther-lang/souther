@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -51,8 +52,8 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
             module example.mixed
 
             data Amount = Decimal
-                invariant value >= 0
-                invariant value <= 10
+                invariant value >= 0.0m
+                invariant value <= 10.0m
 
             data Steps = Int
                 invariant value >= 0
@@ -241,7 +242,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     }
 
     private static SearchRegion region() {
-        Compilation compilation = Compilation.ofSource(A_DECIMAL_AN_INT_AND_A_DATE, "Main");
+        Compilation compilation = ACompiledModel.answered(A_DECIMAL_AN_INT_AND_A_DATE);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

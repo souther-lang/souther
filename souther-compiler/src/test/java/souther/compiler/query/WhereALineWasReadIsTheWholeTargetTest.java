@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PointRole;
 
@@ -150,9 +151,7 @@ class WhereALineWasReadIsTheWholeTargetTest {
 
     /** Every point the module's lines are owed a row at. */
     private static List<BorderObligationPointAssessment> pointsOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         List<BorderObligationPointAssessment> points = compilation.db()
                 .ask(new Adequacy.Obligations("probe.twice", new GenerationScope.Module(),
                         HowALineIsRead.VALUES_COMPOSED)).value();

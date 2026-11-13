@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.ObligationIdentity;
@@ -220,7 +221,8 @@ class ACaseOfAnInputIsAClassOnlyWhereTheBehaviorHasThePositionTest {
     }
 
     private static List<Adequacy.Finding> findingsOf(String model) {
-        return measured(model).db().ask(new Adequacy.Findings("example.composed")).value();
+        Compilation measured = measured(model);
+        return measured.db().ask(new Adequacy.Findings("example.composed")).value();
     }
 
     private static JsonNode reportOf(String model) {
@@ -232,10 +234,6 @@ class ACaseOfAnInputIsAClassOnlyWhereTheBehaviorHasThePositionTest {
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(),
-                () -> "a model that did not compile answers every question with nothing: "
-                        + compilation.errors());
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

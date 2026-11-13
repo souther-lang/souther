@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ReachEvidence;
 import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.meta.ModulePath;
@@ -45,8 +46,7 @@ class ARowIsOfferedOnlyTheRewritesTheMeasureOwesTest {
     void aFoldTheRulesLimitToOneElementAtMostIsNotAskedWhenARowIsChosen() {
         Compilation compilation = Compilation.ofSources(List.of(TWO_FOLDS), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
 
         List<SourceConstructOrigin> folds = ComposedRows.rewritesThrough(
                         compilation, "total", "nothing").stream()
@@ -78,7 +78,7 @@ class ARowIsOfferedOnlyTheRewritesTheMeasureOwesTest {
     void aWalkIsTakenOnOnlyByTheRunThatTookASecondElementOfIt() {
         Compilation compilation = Compilation.ofSources(List.of(A_SUM), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         assertEquals(0, evidenceOf(compilation, "one").walksOn().size());
         assertEquals(1, evidenceOf(compilation, "two").walksOn().size());

@@ -14,6 +14,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.PassedConstruction;
 import souther.compiler.partition.WhereARunStopped;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.Bodies;
@@ -142,9 +143,7 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
     private static Compilation compiled() {
         Compilation bodies = Compilation.ofSource(BODIES, "Main");
         bodies.measure(Adequacy.Asked.fullReport());
-        bodies.answerEverything();
-        assertEquals(List.of(), bodies.errors(), "the model the body is read off compiles");
-        return bodies;
+        return ACompiledModel.compiles(bodies);
     }
 
     private static DecisionReading.EveryRunStops theWay(Compilation bodies) {
@@ -207,7 +206,7 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
     }
 
     private static DecisionReading readUnderTheOtherRules(Compilation bodies) {
-        RuleReadingSource rules = RuleReadings.of(Compilation.ofSource(RULES, "Main"), "demo");
+        RuleReadingSource rules = RuleReadings.of(ACompiledModel.answered(RULES), "demo");
         Bodies.Elaborated checked = bodies.db().ask(new Bodies.Checked("demo")).value();
         Map<String, InputDomain> inputs = bodies.db().ask(new Adequacy.Inputs("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("one");

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.SourceRendering;
@@ -206,7 +207,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
             // every question any of them put, and a question one of them put is in the store
             // whichever of them came first.
             ConformanceCorpus.Analysed analysed = corpus.analyse();
-            Compilation compilation = analysed.compilation();
+            Compilation compilation = analysed.answered();
             GeneratedRows.of(compilation, null, null,
                     new SourceRendering(corpus.names(), compilation.texts())).textInEnglish();
             compilation.modules().forEach(compilation::declaredBehaviors);
@@ -215,8 +216,9 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
             // And a build, which measures what the rows already established and composes no values.
             // Its own operation and not a smaller `souther examples`: what it asks for at a line is a
             // different question from what a search of that line asks.
-            into(Compiler.analyzedModules(corpus.sources(), ModulePath.EMPTY, new ArrayList<>(),
-                    Adequacy.Asked.warningsAt(Adequacy.Level.WITNESS)), out);
+            into(ACompiledModel.refusedWith(refusalsOf(compilation),
+                    Compiler.analyzedModules(corpus.sources(), ModulePath.EMPTY, new ArrayList<>(),
+                            Adequacy.Asked.warningsAt(Adequacy.Level.WITNESS))), out);
         }
         // And the same operation over a model that reads a module this compile holds no source for,
         // which is the other world this compiler works in.
@@ -226,6 +228,12 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
         // And over a model with a mistake in it, which is what a compile reports on.
         into(readingAModelWithAMistakeInIt(), out);
         return out;
+    }
+
+    /** The codes {@code compilation} is refused with, which the same corpus is refused with at
+     *  whichever level it is measured. */
+    private static List<String> refusalsOf(Compilation compilation) {
+        return compilation.errors().stream().map(each -> each.diagnostic().code()).toList();
     }
 
     /**
@@ -246,12 +254,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                 let use (count: Int): Int = count(2)
                 let run (n) = use(n)
                 """, "Main");
-        compilation.answerEverything();
-        if (compilation.errors().isEmpty()) {
-            throw new IllegalStateException("the mistake was not reported, so nothing that reports"
-                    + " one was reached");
-        }
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1803"), compilation);
     }
 
     /**
@@ -287,7 +290,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                     | "one" : (Flagged { on = true, n = 3 }) -> Res { m = 3 }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts()));
         return compilation;
@@ -349,7 +352,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                 }
                 """), ModulePath.of(published));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         AdequacyReport.of(compilation);
         return compilation;
     }

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.inputs.InputDomain;
@@ -169,7 +170,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
      */
     @Test
     void aRuleOfTheRecordNothingWasMadeOfLeavesTheMapUnanswered() {
-        Map<String, List<String>> left = unansweredAtTheFields("""
+        Map<String, List<String>> left = unansweredAtTheFieldsOfARefusedModel("""
                 module demo
 
                 data N = { key: Int, rates: Map<Int, Int> }
@@ -191,7 +192,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
      */
     @Test
     void aRuleDenyingTwoKeysTogetherLeavesTheMapAndItsKeyUnanswered() {
-        Map<String, List<String>> left = unansweredAtTheFields("""
+        Map<String, List<String>> left = unansweredAtTheFieldsOfARefusedModel("""
                 module demo
 
                 data N = { key: Int, required: Int, rates: Map<Int, Int> }
@@ -217,7 +218,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
      */
     @Test
     void aRuleCountingTheMapLeavesTheKeyUnanswered() {
-        Map<String, List<String>> left = unansweredAtTheFields("""
+        Map<String, List<String>> left = unansweredAtTheFieldsOfARefusedModel("""
                 module demo
 
                 data N = { key: Int, rates: Map<Int, Int> }
@@ -237,7 +238,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
     @Test
     void oneEntryAskedOfAMapNothingElseAsksOfLeavesTheKeyRead() {
         assertEquals(Map.of("n.key", List.of(), "n.rates", List.of()),
-                unansweredAtTheFields("""
+                unansweredAtTheFieldsOfARefusedModel("""
                         module demo
 
                         data N = { key: Int, rates: Map<Int, Int> }
@@ -272,7 +273,8 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
         for (String rule : List.of(
                 "invariant odd = Int.floorMod(Map.size(rates), 2) == 1",
                 "invariant notTwo = Bool.not(Map.size(rates) == 2)")) {
-            Map<String, List<String>> left = unansweredAtTheFields(FIXED_ENTRY.formatted(rule));
+            Map<String, List<String>> left =
+                    unansweredAtTheFieldsOfARefusedModel(FIXED_ENTRY.formatted(rule));
 
             assertFalse(left.get("n.key").isEmpty(), rule);
             assertFalse(left.get("n.rates").isEmpty(), rule);
@@ -287,7 +289,8 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
      */
     @Test
     void aKeyIsNotFreeWhereTheMapCannotHoldTheEntriesOfEveryKey() {
-        Map<String, List<String>> left = unansweredAtTheFields(FIXED_ENTRY.formatted("""
+        Map<String, List<String>> left = unansweredAtTheFieldsOfARefusedModel(
+                FIXED_ENTRY.formatted("""
                 invariant one = Map.size(rates) == 1"""));
 
         assertFalse(left.get("n.key").isEmpty(), "only the key nought has a map of one entry");
@@ -352,7 +355,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
      */
     @Test
     void anEntryAValueItsTypeRefusesIsAskedForIsReadAsLeavingNothing() {
-        Map<String, List<String>> left = unansweredAtTheFields("""
+        Map<String, List<String>> left = unansweredAtTheFieldsOfARefusedModel("""
                 module demo
 
                 data Positive = Int
@@ -404,7 +407,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
      */
     @Test
     void aCountOfTheMapWithAnEntryRemovedIsARuleReadingTheMap() {
-        Map<String, List<String>> left = unansweredAtTheFields("""
+        Map<String, List<String>> left = unansweredAtTheFieldsOfARefusedModel("""
                 module demo
 
                 data N = { key: Int, rates: Map<Int, Int> }
@@ -426,7 +429,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
      */
     @Test
     void aRuleRecognisedAndNotBuiltForIsStillARuleReadingTheMap() {
-        Map<String, List<String>> left = unansweredAtTheFields("""
+        Map<String, List<String>> left = unansweredAtTheFieldsOfARefusedModel("""
                 module demo
 
                 data N = { key: Int, rates: Map<Int, Int> }
@@ -462,7 +465,19 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
 
     /** What stands unanswered at each field of the input of {@code probe}, by field. */
     private static Map<String, List<String>> unansweredAtTheFields(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return unansweredAtTheFields(ACompiledModel.answered(source));
+    }
+
+    /**
+     * The same of a model whose record crosses the boundary with a map keyed by {@code Int}, which
+     * is refused there and read all the same.
+     */
+    private static Map<String, List<String>> unansweredAtTheFieldsOfARefusedModel(String source) {
+        Compilation model = Compilation.ofSource(source, "Main");
+        return unansweredAtTheFields(ACompiledModel.refusedWith(List.of("E1314"), model));
+    }
+
+    private static Map<String, List<String>> unansweredAtTheFields(Compilation compilation) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

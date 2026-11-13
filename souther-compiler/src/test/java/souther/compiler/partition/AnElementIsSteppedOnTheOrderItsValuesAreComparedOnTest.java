@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -144,7 +145,7 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
     void aDateItsRuleRefusesIsDisplacedAlongItsOrder() {
         Compilation compilation = Compilation.ofSource(NOT_THE_DAY, "Main").writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Adequacy.Filling filling = Adequacy.generatedOf(compilation.db(), "p").get("h");
         assertNotNull(filling, "the behavior under test is generated for");
         List<String> written = filling.rules().byRule().values().stream()
@@ -189,9 +190,8 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
     }
 
     private static RuleReadingContext reading() {
-        Compilation compilation = Compilation.ofSource(
-                MODEL.formatted(TYPES, "Set<Date>", "Set.size(s)", 3), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(
+                MODEL.formatted(TYPES, "Set<Date>", "Set.size(s)", 3));
         return RuleReadingContext.unshared(RuleReadings.of(compilation, "p"),
                 ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
     }
@@ -201,9 +201,7 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
     }
 
     private static BorderAssessment lineOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "p");
         assertNotNull(read, "the model under test compiles");
         List<BorderAssessment> lines = read.get("f");

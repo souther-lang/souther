@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -97,7 +98,11 @@ class AScopeOfAModelStillHoldsWhatItCouldNotAnswerTest {
      */
     private record OfAModel(AdequacyReport whole, List<ReportScopes> scopes) {
 
-        static OfAModel of(Compilation compilation) {
+        /** {@code source} measured in full, held to be refused with {@code refusedWith}. */
+        static OfAModel of(String source, List<String> refusedWith) {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            ACompiledModel.refusedWith(refusedWith, compilation);
             AdequacyReport whole = AdequacyReport.of(compilation);
             return new OfAModel(whole, ReportScopes.of(String.valueOf(compilation.modules()),
                     whole));
@@ -105,18 +110,11 @@ class AScopeOfAModelStillHoldsWhatItCouldNotAnswerTest {
     }
 
     private static List<OfAModel> models() {
-        return List.of(OfAModel.of(compiled(LIMITS)), OfAModel.of(compiled(REJECTS)));
+        return List.of(OfAModel.of(LIMITS, List.of()), OfAModel.of(REJECTS, List.of("E2010")));
     }
 
     private static List<ReportScopes> scopesOf(List<OfAModel> models) {
         return models.stream().flatMap(each -> each.scopes().stream()).toList();
-    }
-
-    private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
     }
 
     /**

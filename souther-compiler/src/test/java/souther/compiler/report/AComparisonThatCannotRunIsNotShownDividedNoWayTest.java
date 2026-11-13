@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -29,9 +30,7 @@ class AComparisonThatCannotRunIsNotShownDividedNoWayTest {
                 behavior f : (m: Int, n: Int, k: Int) -> Yes | No
                 let f (m, n, k) = if %s <= k then Yes else No
                 """.formatted(body);
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.UndividedPosition;
@@ -157,9 +158,6 @@ class ARelationPastAStopIsShownReachedOnlyAtTheValuesARunGotThereAtTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         Map<String, PartitionEvidence.NotRead> byPlace = new LinkedHashMap<>();
         evidence.get("priced").notRead().forEach(each -> byPlace.put(each.at(), each));
 
@@ -187,6 +185,7 @@ class ARelationPastAStopIsShownReachedOnlyAtTheValuesARunGotThereAtTest {
                 looked.reason(), ofTheLookup.toString());
         assertTrue(!looked.shownReachedAt().isEmpty()
                         && !looked.shownReachedAt().contains("\"Z\""), ofTheLookup.toString());
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -200,12 +199,10 @@ class ARelationPastAStopIsShownReachedOnlyAtTheValuesARunGotThereAtTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         List<String> shown = new ArrayList<>();
         evidence.get("anyUnpriced").notRead().forEach(each -> shown.addAll(each.shownReachedAt()));
         assertEquals(List.of(), shown, evidence.get("anyUnpriced").notRead().toString());
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -220,15 +217,13 @@ class ARelationPastAStopIsShownReachedOnlyAtTheValuesARunGotThereAtTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         assertEquals(List.of("\"X\"", "\"Y\""), shownAt(evidence, "everyUnpriced"),
                 evidence.get("everyUnpriced").notRead().toString());
         assertEquals(List.of(), shownAt(evidence, "choosingUnpriced"),
                 evidence.get("choosingUnpriced").notRead().toString());
         assertEquals(List.of(), shownAt(evidence, "firstUnpriced"),
                 evidence.get("firstUnpriced").notRead().toString());
+        ACompiledModel.compiles(compilation);
     }
 
     /** What {@code behavior}'s report shows its deals' currency reached at. */

@@ -472,15 +472,10 @@ class AdequacyLensTest {
 
     /** What a compile of {@code source} refuses it for, which is nothing where it compiles. */
     private static List<String> errorsIn(String source) {
-        List<String> said = new ArrayList<>();
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        for (souther.compiler.query.Db.Found each : compilation.db().allReports()) {
-            if (each.report().isError()) {
-                said.add(each.report().diagnostic().code());
-            }
-        }
-        return said;
+        return compilation.errors().stream()
+                .map(each -> each.diagnostic().code().toString()).toList();
     }
 
     /**

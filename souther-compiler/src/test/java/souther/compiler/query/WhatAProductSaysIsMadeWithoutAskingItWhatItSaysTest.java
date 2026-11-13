@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
@@ -50,7 +51,7 @@ class WhatAProductSaysIsMadeWithoutAskingItWhatItSaysTest {
 
         assertTrue(c.db().ask(new Shapes.MeaningOf(new TypeKey("shop", "Item"))).present(),
                 "what `Item` says is made before anything else is asked");
-        c.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1203"), c);
         assertEquals(List.of(DiagnosticCode.E1203.name()), c.db().allReports().stream()
                         .map(each -> each.report().diagnostic().code()).distinct().toList(),
                 "the arm is reported as naming no case of `Colour`");

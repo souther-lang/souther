@@ -20,14 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnEqualityBeyondWhatAnOperationAnswersDrawsNoLineTest {
 
     private static String about(String parameter, String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module m
 
                 behavior f : (%s) -> Bool
                 let f (x) = %s
-                """.formatted(parameter, body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(parameter, body), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.inputs.InputDomain;
@@ -71,7 +72,10 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
     }
 
     private static boolean certified(String source, String path) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return certified(ACompiledModel.answered(source), path);
+    }
+
+    private static boolean certified(Compilation compilation, String path) {
         String module = compilation.modules().get(0);
         RuleReadingContext reading = RuleReadingContext.unshared(
                 RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -88,7 +92,12 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
     }
 
     private static boolean lineHoldsAValue(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return lineHoldsAValue(source, List.of());
+    }
+
+    private static boolean lineHoldsAValue(String source, List<String> refusedWith) {
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofSource(source, "Main"));
         String module = compilation.modules().get(0);
         TypeSymbol line = TypeSymbols.declared(new TypeKey(module, "Line"));
         return Rules.of(line, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
@@ -191,8 +200,11 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
                         && Decimal.compare(listPrice.value, 0.0m) < 0
                 """);
 
-        assertFalse(lineHoldsAValue(source));
-        assertFalse(certified(source, "q.lines[*].discount"));
+        Compilation refused = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(List.of("E1013"), refused);
+
+        assertFalse(lineHoldsAValue(source, List.of("E1013")));
+        assertFalse(certified(refused, "q.lines[*].discount"));
     }
 
     private static final String NET = """
@@ -224,7 +236,7 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
     }
 
     private static boolean recordHoldsAValue(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         TypeSymbol record = TypeSymbols.declared(new TypeKey(module, "R"));
         return Rules.of(record, RuleReadingContext.unshared(RuleReadings.of(compilation, module),

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.partition.FixtureTemplate;
@@ -24,7 +25,8 @@ class TheWorkOfSeedingACallerIsBoundedByTheRowsTriedTest {
     private static String model(boolean distinct) {
         StringBuilder rows = new StringBuilder();
         for (int i = 1; i <= ROWS; i++) {
-            rows.append("    | (").append(distinct ? i : 1).append(") -> 0\n");
+            int input = distinct ? i : 1;
+            rows.append("    | (").append(input).append(") -> ").append(input).append('\n');
         }
         return """
                 module repro.bound
@@ -46,9 +48,7 @@ class TheWorkOfSeedingACallerIsBoundedByTheRowsTriedTest {
     private record Seeded(int built, List<Generator.GeneratedRow> rows) {}
 
     private static Seeded seeded(String source, boolean refuseAll, int limit) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Db db = compilation.db();
         var surface = db.ask(new Shapes.CheckSurface("repro.bound")).value();
         var behavior = Adequacy.specOf(surface, "g");

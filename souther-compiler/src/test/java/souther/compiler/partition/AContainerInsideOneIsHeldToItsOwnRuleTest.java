@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -48,10 +49,9 @@ class AContainerInsideOneIsHeldToItsOwnRuleTest {
             """;
 
     private static Adequacy.Filling offered(String how, String rule, String held) {
-        Compilation compilation = Compilation.ofSource(
-                MODEL.replace("HOW", how).replace("RULE", rule).replace("HELD", held), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(
+                MODEL.replace("HOW", how).replace("RULE", rule).replace("HELD", held),
+                Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), MODULE);
         assertNotNull(generated, "the model under test compiles");

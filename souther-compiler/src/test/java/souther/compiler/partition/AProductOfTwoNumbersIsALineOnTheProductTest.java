@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.OfferedAtTheLines;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.NumericTerm;
@@ -342,7 +343,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                     """.formatted(net);
             Compilation compilation = Compilation.ofSource(model, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             assertEquals(List.of(), unreadReasonsOf(measured(compilation)), net);
             List<BorderAssessment> lines = linesOf(compilation);
             assertTrue(lines.stream().anyMatch(line -> line.axis().contains("*")),
@@ -377,7 +378,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 }
                 """, "Main");
         fold.measure(Adequacy.Asked.fullReport());
-        fold.answerEverything();
+        ACompiledModel.compiles(fold);
         assertEquals(List.of(), unreadReasonsOf(measured(fold)));
     }
 
@@ -509,7 +510,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 """;
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
         String human = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).toString();
         assertTrue(human.contains("1 row does not hold"), human);
@@ -545,7 +546,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
     }
 
@@ -577,7 +578,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).map(each -> each.diagnostic().code()).toList());
         assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
@@ -609,7 +610,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
         List<BigDecimal> rows = certifiedFirstInputsOf(compilation);
         assertTrue(!rows.isEmpty());
@@ -642,7 +643,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 """.replace("KIND", kind).replace("CLAUSE", clause).replace("NUMBER", number)
                 .replace("COMPARED", compared), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 
@@ -743,7 +744,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
                 unreadReasonsOf(measured(compilation)));
     }
@@ -824,7 +825,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 """.replace("TOTAL", total).replace("RESTOCKING_FEE", restockingFee) + examples,
                 "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 
@@ -1185,7 +1186,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 examples);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 }

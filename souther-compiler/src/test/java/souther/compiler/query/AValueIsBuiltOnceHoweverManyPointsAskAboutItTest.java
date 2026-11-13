@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.RuleReadings;
@@ -133,7 +134,7 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
                 behavior read : (x: Int) -> Ok
                 behavior charge : (a: Amount) -> Ok
                 """, "Main");
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         FixturesAtTheBoundary building = Adequacy.constructing(compilation.db(), "g");
         assertNotNull(building, "the module has classes to build against");
 
@@ -194,7 +195,7 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
 
                 behavior read : (c: Code) -> Ok
                 """, "Main");
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         FixturesAtTheBoundary building = Adequacy.constructing(compilation.db(), "g");
         assertNotNull(building, "the module has classes to build against");
         Type.Ref code = assertInstanceOf(Type.Ref.class,

@@ -7,6 +7,7 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.core.Core;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.ConstructOccurrence;
@@ -371,7 +372,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     }
 
     private static Map<String, Core> bodiesOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");

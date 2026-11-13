@@ -5,6 +5,7 @@ import souther.test.ClosedWorldContract;
 import souther.test.Nightly;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DoesNotComeBack;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.query.About;
@@ -448,29 +449,27 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         List<Reported> out = new ArrayList<>();
         // The corpora as every reader of the repository's models takes them, compiled once for all
         // of those.
-        RepositoryModels.conformance().forEach((corpus, compilation) -> out.add(new Reported(
-                corpus.name(), AdequacyReport.of(compilation),
-                new SourceRendering(corpus.names(), compilation.texts()))));
-        Compilation unread = Compilation.ofSource(TOO_LARGE_TO_OBSERVE, "Main");
-        unread.measure(Adequacy.Asked.fullReport());
-        unread.answerEverything();
+        RepositoryModels.conformance().forEach((corpus, shared) -> {
+            Compilation asked = ACompiledModel.refusedWith(corpus.refusedWith(), shared);
+            out.add(new Reported(corpus.name(), AdequacyReport.of(asked),
+                    new SourceRendering(corpus.names(), asked.texts())));
+        });
+        Compilation unread =
+                ACompiledModel.measured(TOO_LARGE_TO_OBSERVE, Adequacy.Asked.fullReport());
         out.add(new Reported("example.unread", AdequacyReport.of(unread),
                 SourceRendering.namedByIdentity(unread.texts())));
         Compilation stopped = Compilation.ofSource(A_ROW_THAT_DOES_NOT_COME_BACK, "Main");
         stopped.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf("go")));
         stopped.measure(Adequacy.Asked.fullReport());
-        stopped.answerEverything();
+        ACompiledModel.compiles(stopped);
         out.add(new Reported("example.loop", AdequacyReport.of(stopped),
                 SourceRendering.namedByIdentity(stopped.texts())));
-        Compilation gate = Compilation.ofSource(ONE_ARM_OF_TWO, "Main");
-        gate.measure(Adequacy.Asked.fullReport());
-        gate.answerEverything();
+        Compilation gate = ACompiledModel.measured(ONE_ARM_OF_TWO, Adequacy.Asked.fullReport());
         out.add(new Reported("example.gate", AdequacyReport.of(gate),
                 SourceRendering.namedByIdentity(gate.texts())));
-        Compilation closed = Compilation.ofSource(GUARDS_THAT_CLOSE, "Main");
-        closed.measure(Adequacy.Asked.fullReport());
-        closed.answerEverything();
+        Compilation closed =
+                ACompiledModel.measured(GUARDS_THAT_CLOSE, Adequacy.Asked.fullReport());
         out.add(new Reported("example.closed", AdequacyReport.of(closed),
                 SourceRendering.namedByIdentity(closed.texts())));
         return out;

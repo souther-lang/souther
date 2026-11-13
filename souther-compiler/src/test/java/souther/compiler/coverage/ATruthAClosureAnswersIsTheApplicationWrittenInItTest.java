@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.SourceConstruct;
 
@@ -24,7 +25,7 @@ class ATruthAClosureAnswersIsTheApplicationWrittenInItTest {
 
     @Test
     void aClosureHandedToAMappingAnswersWithWhatItApplies() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module probe
 
                 data Low
@@ -34,8 +35,7 @@ class ATruthAClosureAnswersIsTheApplicationWrittenInItTest {
                 let pick (xs) =
                     if List.contains(true, List.map(ys -> List.contains(0, ys), xs)) then High
                     else Low
-                """, "Main");
-        compilation.answerEverything();
+                """);
         Bodies.Elaborated checked =
                 compilation.db().ask(new Bodies.Checked("probe")).value();
         assertNotNull(checked, () -> "the model compiles: " + compilation.errors());

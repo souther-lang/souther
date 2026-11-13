@@ -169,9 +169,7 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
     }
 
     private static PartitionEvidence measured(String model, String module, String behavior) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage(module)).value();
         PartitionEvidence said = coverage == null ? null : coverage.get(behavior);
@@ -210,9 +208,7 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
     }
 
     private static List<Adequacy.GenerationDisposition> generated(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule(module));
         List<Adequacy.GenerationDisposition> out = new ArrayList<>();

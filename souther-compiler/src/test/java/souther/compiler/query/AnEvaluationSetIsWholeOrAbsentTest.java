@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.ArmObservation;
 import org.junit.jupiter.api.Test;
 
@@ -40,10 +41,8 @@ class AnEvaluationSetIsWholeOrAbsentTest {
             """);
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSources(ONE_REACHES_A_BROKEN_ONE,
-                souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1319"), Compilation.ofSources(
+                ONE_REACHES_A_BROKEN_ONE, souther.compiler.meta.ModulePath.EMPTY));
     }
 
     /** The module that cannot be generated has no evaluation classes. */
@@ -75,14 +74,13 @@ class AnEvaluationSetIsWholeOrAbsentTest {
      *  refusing everything. */
     @Test
     void aWholeSetIsStillAnswered() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module example.whole
                 data N = Int
                 data Out = Int
                 behavior run : (n: N) -> Out constructs Out
                 let run (n) = Out(n.value)
-                """, "Main");
-        compilation.answerEverything();
+                """);
 
         EvaluationArtifact linked = compilation.db()
                 .ask(new Output.EvaluationLinked("example.whole", ArmObservation.OMIT)).value();

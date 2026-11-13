@@ -21,7 +21,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where a value is written down, the reading of an input and the discharge of a rule say the same
@@ -198,10 +197,7 @@ class WhereAWrittenValueIsReadTheMeasureAndTheDischargeAgreeTest {
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors()
-                .stream().map(e -> e.diagnostic().code()).toList() + "\n" + model);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static JsonNode reportOf(Compilation compilation) {

@@ -10,6 +10,7 @@ import souther.compiler.program.CheckedAssertion;
 import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedProgram;
 import souther.compiler.program.CheckedRow;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.types.TypeSymbol;
@@ -149,8 +150,7 @@ class AStatedValueIsKeptByTheLanguagesEqualityWhereverTheAnswerIsTest {
 
     private static Decided decide() {
         String source = module();
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         EvaluationArtifact runs =
                 compilation.db().ask(new Output.Evaluated("demo", ArmObservation.OMIT)).value();
         OperandRunner operands = new OperandRunner("demo",

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -70,14 +71,15 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
         return compiled(source, CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared());
     }
 
-    /** {@code source}, its lines' cases taken apart into {@code takenApartInto} at most. */
+    /**
+     * {@code source}, its lines' cases taken apart into {@code takenApartInto} at most, measured
+     * and not yet answered: the caller holds it to compile before it reads anything of it.
+     */
     private static Compilation compiled(String source, int takenApartInto) {
         Compilation compilation = Compilation.ofSource(source, "Main").allowing(
                 Allowances.DECLARED.with(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                         takenApartInto));
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), source);
         return compilation;
     }
 
@@ -162,11 +164,13 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
     @Test
     void writtenWithTheTwoBoundsTheCasesComeToFewerWays() {
         Compilation written = compiled(model(BOUNDS));
+        ACompiledModel.compiles(written);
         Proposition bounds = stated(written);
         BigInteger asWritten = waysOverEveryLine(bounds, wholeNumbers(written));
         BigInteger onePart = waysOverEveryLine(boundsAsOnePart(bounds, new int[1]),
                 wholeNumbers(written));
         Compilation absolute = compiled(model("Int.abs(2 * (x - k) - 6) <= 4"));
+        ACompiledModel.compiles(absolute);
         BigInteger oneComparison = waysOverEveryLine(stated(absolute), wholeNumbers(absolute));
         assertEquals(BigInteger.valueOf(162), asWritten);
         assertEquals(BigInteger.valueOf(740), onePart);
@@ -197,8 +201,9 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
                     Option.withDefault(0 - 1, List.find(k -> x - k >= 1 && x - k <= 5
                             && Bool.not(x + k == h), [0, 1, 2, 3, 4, 5, 6])) > 2
                 """;
-        JsonNode expansions = JSON.readTree(AdequacyReport
-                        .of(compiled(model, SEARCH_TAKEN_APART_INTO))
+        Compilation searched = compiled(model, SEARCH_TAKEN_APART_INTO);
+        ACompiledModel.compiles(searched);
+        JsonNode expansions = JSON.readTree(AdequacyReport.of(searched)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)))
                 .path("modules").get(0).path("behaviors").get(0).path("partition")
                 .path("caseExpansions");

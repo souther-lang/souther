@@ -1,10 +1,10 @@
 package souther.compiler;
 
+import souther.compiler.diag.Located;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Db;
 
 import org.junit.jupiter.api.Test;
 
@@ -61,13 +61,19 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
         return path;
     }
 
-    /** Every report a compile of {@code app} against {@code path} says, as what each says. */
+    /**
+     * Every report a compile of {@code app} against {@code path} says, as what each says; the
+     * compile is refused once, for the one thing that moved.
+     */
     private static List<Object> said(String app, Map<String, ClassFileImage> path) {
-        Compilation compilation = Compilation.ofSources(List.of(app), ModulePath.of(path));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1510"),
+                Compilation.ofSources(List.of(app), ModulePath.of(path)));
         List<Object> out = new ArrayList<>();
-        for (Db.Found found : compilation.db().allReports()) {
-            out.add(found.report().diagnostic().said());
+        for (Located found : compilation.errors()) {
+            out.add(found.diagnostic().said());
+        }
+        for (Located found : compilation.warnings()) {
+            out.add(found.diagnostic().said());
         }
         return out;
     }
@@ -289,17 +295,20 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
     void aModuleCompiledHereIsNotOneAModuleOnThePathIsHeldTo() {
         Map<String, ClassFileImage> path = Compiler.compileModules(List.of(B_CALLS_TWICE),
                 ModulePath.of(Compiler.compile(C)));
-        Compilation compilation = Compilation.ofSources(List.of("""
-                module lib.c exposing ( twice, thrice )
-                behavior twice : (n: Int) -> String
-                let twice (n) = "two"
-                behavior thrice : (n: Int) -> Int
-                let thrice (n) = n * 3
-                """, USES_ONLY_INC), ModulePath.of(path));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1511"),
+                Compilation.ofSources(List.of("""
+                        module lib.c exposing ( twice, thrice )
+                        behavior twice : (n: Int) -> String
+                        let twice (n) = "two"
+                        behavior thrice : (n: Int) -> Int
+                        let thrice (n) = n * 3
+                        """, USES_ONLY_INC), ModulePath.of(path)));
         List<Object> said = new ArrayList<>();
-        for (Db.Found found : compilation.db().allReports()) {
-            said.add(found.report().diagnostic().said());
+        for (Located found : compilation.errors()) {
+            said.add(found.diagnostic().said());
+        }
+        for (Located found : compilation.warnings()) {
+            said.add(found.diagnostic().said());
         }
 
         assertEquals(List.of(new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere("lib.b",

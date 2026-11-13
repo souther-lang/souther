@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -10,6 +11,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,7 +49,21 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
 
     /** The same beside {@code helpers}, which are declared before the type. */
     private static FieldDomains domainsWith(String helpers, String carrier, String... invariants) {
-        String source = """
+        return domainsOf(ACompiledModel.answered(source(helpers, carrier, invariants)));
+    }
+
+    /**
+     * The same where no value gets through the rules, which the compiler refuses as a type with no
+     * value.
+     */
+    private static FieldDomains domainsOfNoValue(String helpers, String carrier,
+                                                 String... invariants) {
+        return domainsOf(ACompiledModel.refusedWith(List.of("E1013"),
+                Compilation.ofSource(source(helpers, carrier, invariants), "Main")));
+    }
+
+    private static String source(String helpers, String carrier, String... invariants) {
+        return """
                 module example.worked
 
                 %s
@@ -60,7 +76,9 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
                 behavior take : (n: Subject) -> Ok
                 let take (n) = Ok
                 """.formatted(helpers, carrier, String.join("\n    ", invariants));
-        Compilation compilation = Compilation.ofSource(source, "Main");
+    }
+
+    private static FieldDomains domainsOf(Compilation compilation) {
         String module = compilation.modules().get(0);
         TypeSymbol subject = TypeSymbols.declared(new TypeKey(module, "Subject"));
         return Rules.of(subject, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
@@ -68,7 +86,7 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
     }
 
     private static void holdsNothing(String rule) {
-        FieldDomains read = domainsOf(rule);
+        FieldDomains read = domainsOfNoValue("", "Int", "invariant only = " + rule);
         assertTrue(read.holdsNothing().isPresent(), rule + " is worked out by no value");
     }
 
@@ -149,8 +167,8 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
         for (boolean choiceFirst : new boolean[] {false, true}) {
             String choice = "invariant choice = value == 0 || value + " + MAX + " > 0";
             String floor = "invariant floor = value >= 1";
-            FieldDomains read = choiceFirst ? domainsOfRules("Int", choice, floor)
-                    : domainsOfRules("Int", floor, choice);
+            FieldDomains read = choiceFirst ? domainsOfNoValue("", "Int", choice, floor)
+                    : domainsOfNoValue("", "Int", floor, choice);
             assertTrue(read.holdsNothing().isPresent(), "the choice written "
                     + (choiceFirst ? "first" : "second"));
         }
@@ -185,7 +203,7 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
     /** What a helper is handed is worked out where the helper is called, whatever it does with it. */
     @Test
     void aSumHandedToAHelperIsWorkedOut() {
-        FieldDomains read = domainsWith("let positive (n: Int): Bool = n > 0", "Int",
+        FieldDomains read = domainsOfNoValue("let positive (n: Int): Bool = n > 0", "Int",
                 "invariant only = value >= 1 && positive(value + " + MAX + ")");
         assertTrue(read.holdsNothing().isPresent());
     }
@@ -193,7 +211,7 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
     /** And through a helper that hands it on. */
     @Test
     void aSumHandedThroughTwoHelpersIsWorkedOut() {
-        FieldDomains read = domainsWith("""
+        FieldDomains read = domainsOfNoValue("""
                 let inner (n: Int): Bool = n > 0
                 let outer (n: Int): Bool = inner(n)""", "Int",
                 "invariant only = value >= 1 && outer(value + " + MAX + ")");
@@ -203,7 +221,7 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
     /** And one the helper never reads is worked out all the same. */
     @Test
     void aSumHandedToAHelperThatIgnoresItIsWorkedOut() {
-        FieldDomains read = domainsWith("let always (n: Int): Bool = true", "Int",
+        FieldDomains read = domainsOfNoValue("let always (n: Int): Bool = true", "Int",
                 "invariant only = value >= 1 && always(value + " + MAX + ")");
         assertTrue(read.holdsNothing().isPresent());
     }
@@ -222,8 +240,8 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
     void whatTwoClausesAskIsTheSameInEitherOrder() {
         String sum = "invariant sum = value + " + MAX + " > 0";
         String floor = "invariant floor = value >= 1";
-        assertTrue(domainsOfRules("Int", sum, floor).holdsNothing().isPresent());
-        assertTrue(domainsOfRules("Int", floor, sum).holdsNothing().isPresent());
+        assertTrue(domainsOfNoValue("", "Int", sum, floor).holdsNothing().isPresent());
+        assertTrue(domainsOfNoValue("", "Int", floor, sum).holdsNothing().isPresent());
     }
 
     /** A call that may end a run is no less one for not being an operator. */

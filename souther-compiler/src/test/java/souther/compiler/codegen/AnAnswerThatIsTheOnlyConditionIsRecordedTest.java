@@ -8,10 +8,9 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,11 +31,11 @@ class AnAnswerThatIsTheOnlyConditionIsRecordedTest {
      *  record at, and no arm or comparison a row is owed for. */
     @Test
     void aPlanHoldingOnlyAnAnswerHasAPlaceToRecordAt() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module p
                 behavior f : (xs: List<Bool>) -> Bool
                 let f (xs) = List.any(x -> x, xs)
-                """, "Main");
+                """);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("p")).value();
         assertNotNull(checked, "the model compiles");
         CoverageSites.Plan plan = checked.plan();
@@ -63,13 +62,10 @@ class AnAnswerThatIsTheOnlyConditionIsRecordedTest {
                 """.formatted(condition, !condition.startsWith("List.all"),
                 condition.startsWith("List.all")), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
-                report);
         assertTrue(report.contains("decision    rules 2   taken 2"), report);
     }
 }

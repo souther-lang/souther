@@ -128,9 +128,7 @@ class ARowForAPointStandsWhereTheRulesRelatingItToTheRestLeaveItTest {
     private static final Generator.GenerationResult OFFERED = offeredFor(RELATED);
 
     private static Generator.GenerationResult offeredFor(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return OfferedAtTheLines.of(compilation, compilation.modules().get(0), "f");
     }
 }

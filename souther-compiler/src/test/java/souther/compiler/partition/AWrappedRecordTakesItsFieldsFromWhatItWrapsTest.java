@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -98,7 +99,10 @@ class AWrappedRecordTakesItsFieldsFromWhatItWrapsTest {
             """;
 
     private static TypeView view(String source, String name) {
-        RuleReadingSource rules = RuleReadings.ofSource(source);
+        return view(RuleReadings.ofSource(source), name);
+    }
+
+    private static TypeView view(RuleReadingSource rules, String name) {
         return TypeView.asWritten(Type.ref(TypeSymbols.declared(
                 new TypeKey(rules.symbols().module(), name))), rules.symbols(), rules.kinds(),
                 rules.sums());
@@ -139,7 +143,11 @@ class AWrappedRecordTakesItsFieldsFromWhatItWrapsTest {
     }
 
     private static List<String> worn(String source, String name) {
-        return view(source, name).wrappers().stream().map(TypeSymbol::name).toList();
+        return worn(view(source, name));
+    }
+
+    private static List<String> worn(TypeView view) {
+        return view.wrappers().stream().map(TypeSymbol::name).toList();
     }
 
     /**
@@ -186,9 +194,15 @@ class AWrappedRecordTakesItsFieldsFromWhatItWrapsTest {
      */
     @Test
     void aNameWrittenInTermsOfItselfEndsTheWalk() {
-        TypeView cycle = view(IN_TERMS_OF_ITSELF, "A");
-        assertEquals(List.of("A", "B"), worn(IN_TERMS_OF_ITSELF, "A"));
+        Compilation compilation = Compilation.ofSource(IN_TERMS_OF_ITSELF, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        // Two names each the other's has no value to give, which is refused.
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
+        TypeView cycle = view(RuleReadings.of(compilation, compilation.modules().get(0)), "A");
+        assertEquals(List.of("A", "B"), worn(cycle));
         assertInstanceOf(Shape.Unresolved.class, cycle.shape());
-        rowsOf(IN_TERMS_OF_ITSELF);   // reaches an answer rather than walking the names forever
+        // reaches an answer rather than walking the names forever
+        GeneratedRows.of(compilation, "demo", "run",
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 }

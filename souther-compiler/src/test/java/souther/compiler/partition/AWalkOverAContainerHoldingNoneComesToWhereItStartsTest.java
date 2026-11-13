@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
@@ -45,7 +46,18 @@ class AWalkOverAContainerHoldingNoneComesToWhereItStartsTest {
     private record Read(SearchRegion region, NumericTerm total, NumericTerm counted) {}
 
     private static Read read(String source, String path, String field) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        return read(ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY)), path, field);
+    }
+
+    /** The same of a model that is refused for {@code refusedFor}, which is read all the same. */
+    private static Read readRefused(String source, String path, String field,
+                                    List<String> refusedFor) {
+        return read(ACompiledModel.refusedWith(refusedFor,
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY)), path, field);
+    }
+
+    private static Read read(Compilation compilation, String path, String field) {
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
@@ -103,7 +115,7 @@ class AWalkOverAContainerHoldingNoneComesToWhereItStartsTest {
     /** Where no element can be, the list of none still adds up to nought. */
     @Test
     void whereNoElementCanBeTheTotalIsStillNought() {
-        Read read = read("""
+        Read read = readRefused("""
                 module g
 
                 data P = { n: Int } invariant n > 10 && n < 0
@@ -111,7 +123,7 @@ class AWalkOverAContainerHoldingNoneComesToWhereItStartsTest {
                 data Ok
 
                 behavior counted : (xs: List<P>) -> Ok
-                """, "xs", "n");
+                """, "xs", "n", List.of("E1013"));
         NumericDomain.Bounds total = assertInstanceOf(NumericDomain.FormProjection.Within.class,
                 read.region().projectionOf(read.total())).bounds();
         assertTrue(total.admits(Count.of(0)), total.toString());

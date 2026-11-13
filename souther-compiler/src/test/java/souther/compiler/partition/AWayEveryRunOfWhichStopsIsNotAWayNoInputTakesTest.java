@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ElementBindings;
@@ -106,8 +107,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                 """, "Main");
         compilation.db().ask(new Bodies.Checked("broken"));
 
-        assertEquals(List.of("E2010"), compilation.errors().stream()
-                .map(said -> said.diagnostic().code().toString()).toList());
+        ACompiledModel.refusedWith(List.of("E2010"), compilation);
     }
 
     @Test
@@ -122,6 +122,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                 lines(bodies, read.everyRunStops().getFirst()));
         assertEquals(1, read.found().size(), () -> "and the way past `else` is a rule: "
                 + read.found());
+        ACompiledModel.compiles(bodies);
     }
 
     /** Of two constructions on the way, the one its inputs get past is not said. */
@@ -133,6 +134,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
         assertEquals(1, read.everyRunStops().size(), () -> "one way: " + read.everyRunStops());
         assertEquals(List.of(lineOf("Positive { n = n }", 1)),
                 lines(bodies, read.everyRunStops().getFirst()));
+        ACompiledModel.compiles(bodies);
     }
 
     /** Of two clauses of one construction, only the one the way's inputs break is named: the
@@ -148,6 +150,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                 .map(each -> assertInstanceOf(ClauseOfAConstruction.Held.class, each.clause())
                         .clause().name().map(ClauseName::value)).toList());
         assertEquals(List.of(lineOf("Bounded { n = n }", 0)), lines(bodies, way));
+        ACompiledModel.compiles(bodies);
     }
 
     /** A way whose conditions clash goes through a construction, and it is a way no input takes:
@@ -172,6 +175,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
         assertEquals(1, read.impossible().size(), () -> "the one way: " + read.impossible());
         assertEquals(List.of(), read.impossible().getFirst().way().passed(),
                 "proved of the conditions alone");
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -199,6 +203,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                         .map(each -> bodies.texts().resolve(each.at()).line()).toList());
         assertEquals(1, read.found().size(), () -> "and the way past `else` is a rule: "
                 + read.found());
+        ACompiledModel.compiles(bodies);
     }
 
     /**
@@ -222,7 +227,9 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
     /** The body of {@code behavior} of {@link #BODIES}, read under the rules of {@link #RULES}. */
     private static DecisionReading readUnderTheOtherRules(Compilation bodies, String behavior) {
         Compilation rules = Compilation.ofSource(RULES, "Main");
-        return readingOf(bodies, RuleReadings.of(rules, "demo"), behavior);
+        DecisionReading read = readingOf(bodies, RuleReadings.of(rules, "demo"), behavior);
+        ACompiledModel.compiles(rules);
+        return read;
     }
 
     /** The line of {@link #BODIES} the {@code nth} {@code text} in it is on, from one. */

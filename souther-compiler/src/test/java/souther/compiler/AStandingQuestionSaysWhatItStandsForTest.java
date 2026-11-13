@@ -8,7 +8,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
@@ -46,10 +45,8 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     private static AdequacyReport measured(String source) {
-        Compilation compilation = Compilation.ofSource(unreadable(source), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation);
+        return AdequacyReport.of(
+                ACompiledModel.measured(unreadable(source), Adequacy.Asked.fullReport()));
     }
 
     private static String reportOf(String source) {

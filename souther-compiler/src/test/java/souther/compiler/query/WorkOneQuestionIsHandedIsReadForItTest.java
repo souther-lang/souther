@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.revision.StoreWork;
 import souther.compiler.source.SourceId;
@@ -93,6 +94,7 @@ class WorkOneQuestionIsHandedIsReadForItTest {
     }
 
     private static Compilation compiled() {
-        return Compilation.ofDocuments(Map.of("demo.sou", MODULE), Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.compiles(
+                Compilation.ofDocuments(Map.of("demo.sou", MODULE), Set.of(), ModulePath.EMPTY));
     }
 }

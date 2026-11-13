@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceRendering;
@@ -15,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -106,7 +106,8 @@ class ACountOfWhatARunHoldsIsComposedARowHoldingThatManyTest {
         ANSWERED.forEach((model, answered) -> {
             List<String> examples = new ArrayList<>();
             Set<Integer> answers = new TreeSet<>();
-            for (List<FixtureTemplate> row : composedForTheRules(measured(model))) {
+            Compilation measured = measured(model);
+            for (List<FixtureTemplate> row : composedForTheRules(measured)) {
                 int answer = answered.apply(row.stream().map(FixtureTemplate::value).toList());
                 answers.add(answer);
                 examples.add("    | \"composed " + examples.size() + "\" : ("
@@ -114,7 +115,7 @@ class ACountOfWhatARunHoldsIsComposedARowHoldingThatManyTest {
                         + ") -> " + answer);
             }
             assertEquals(Set.of(0, 1), answers,
-                    () -> "a row for each rule: " + examples + "\n" + report(measured(model)));
+                    () -> "a row for each rule: " + examples + "\n" + report(measured));
 
             // Run and not measured: an example whose answer is not the program's is an error,
             // which is all this asks of the rows.
@@ -229,15 +230,19 @@ class ACountOfWhatARunHoldsIsComposedARowHoldingThatManyTest {
 
     /** Each model measured once for the class: the methods read the same models, and only read
      *  them. */
-    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source, text -> {
-            Compilation compilation = Compilation.ofSource(text, "Main");
+        return SHARED.compiles(source, () -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             return compilation;
         });
+    }
+
+    @AfterAll
+    static void released() {
+        SHARED.release();
     }
 
     private static String report(Compilation compilation) {

@@ -1,6 +1,7 @@
 package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.Emitted;
 import souther.compiler.generated.EvaluationArtifact;
@@ -59,7 +60,7 @@ class AValuesPlacesAreRecordedWhereItsMethodRunsTest {
 
     @Test
     void aRunThroughAValueRecordsThePlacesOfItsBody() {
-        Compilation compilation = Compiler.compiled(MODEL, "Main");
+        Compilation compilation = ACompiledModel.compiles(Compiler.compiled(MODEL, "Main"));
         CoverageSites.Plan plan = compilation.db()
                 .ask(new Bodies.Checked(MODULE)).value().plan();
         EvaluationArtifact artifact = compilation.db()

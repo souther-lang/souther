@@ -12,6 +12,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.WhereARunStopped;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.Bodies;
@@ -74,8 +75,7 @@ class AWayEveryRunOfWhichStopsIsSaidAndOwedNothingTest {
     void theWayIsSaidInTheReportAndTheDocumentAndLeavesTheVerdictAsItWas() {
         Compilation bodies = Compilation.ofSource(BODIES, "Main");
         bodies.measure(Adequacy.Asked.fullReport());
-        bodies.answerEverything();
-        assertEquals(List.of(), bodies.errors(), "the model the body is read off compiles");
+        ACompiledModel.compiles(bodies);
         AdequacyReport own = AdequacyReport.of(bodies);
         AdequacyReport stopping = withTheWay(bodies, own);
         SourceRendering rendering = SourceRendering.namedByIdentity(bodies.texts());
@@ -160,7 +160,7 @@ class AWayEveryRunOfWhichStopsIsSaidAndOwedNothingTest {
     }
 
     private static DecisionReading readUnderTheOtherRules(Compilation bodies) {
-        RuleReadingSource rules = RuleReadings.of(Compilation.ofSource(RULES, "Main"), "demo");
+        RuleReadingSource rules = RuleReadings.of(ACompiledModel.answered(RULES), "demo");
         Bodies.Elaborated checked = bodies.db().ask(new Bodies.Checked("demo")).value();
         Map<String, InputDomain> inputs = bodies.db().ask(new Adequacy.Inputs("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("one");

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.Figure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -95,10 +96,7 @@ class TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest {
     private static List<Unread> unread(String table, String lookup) {
         Compilation compilation = Compilation.ofSource(HEAD + table + lookup + TAIL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         List<Unread> out = new ArrayList<>();
         for (AdequacyReport.BehaviorReport each :
                 AdequacyReport.of(compilation).modules().get(0).behaviors()) {

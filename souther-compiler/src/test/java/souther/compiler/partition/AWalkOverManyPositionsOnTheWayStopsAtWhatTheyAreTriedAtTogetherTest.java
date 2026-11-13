@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -147,7 +148,7 @@ class AWalkOverManyPositionsOnTheWayStopsAtWhatTheyAreTriedAtTogetherTest {
         for (String name : names) {
             parameters.append(parameters.isEmpty() ? "" : ", ").append(name).append(": Int");
         }
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module example.many
 
                 data Ok = { v: Int }
@@ -156,7 +157,7 @@ class AWalkOverManyPositionsOnTheWayStopsAtWhatTheyAreTriedAtTogetherTest {
                     constructs Ok
 
                 let f (%s) = Ok { v = 1 }
-                """.formatted(parameters, String.join(", ", names)), "Main");
+                """.formatted(parameters, String.join(", ", names)));
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");

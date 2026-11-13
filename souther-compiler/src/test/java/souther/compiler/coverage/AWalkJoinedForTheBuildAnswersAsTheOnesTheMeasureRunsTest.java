@@ -8,6 +8,7 @@ import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.observe.ArmObservation;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 
@@ -58,8 +59,7 @@ class AWalkJoinedForTheBuildAnswersAsTheOnesTheMeasureRunsTest {
     @Test
     void theClassesThatRecordAndTheOnesABuildIsMadeOfAnswerAlike() throws Exception {
         Map<String, ClassFileImage> built = Compiler.compile(MODEL);
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(MODEL);
         EvaluationArtifact measured = compilation.db().ask(new Output.Evaluated(
                 compilation.modules().get(0), ArmObservation.RECORD)).value();
         assertNotNull(measured, "the model under test compiles");

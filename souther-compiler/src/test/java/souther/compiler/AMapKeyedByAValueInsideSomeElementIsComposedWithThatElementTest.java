@@ -117,6 +117,11 @@ class AMapKeyedByAValueInsideSomeElementIsComposedWithThatElementTest {
             BESIDE_ANOTHER_FIELD, List.of("[Item { sku = \"x\", q = 1 }]", "[(\"x\", \"x\")]"));
 
     private static Compilation measured(String source) {
+        return ACompiledModel.compiles(attempted(source));
+    }
+
+    /** The model measured and answered in full, whether or not it compiles. */
+    private static Compilation attempted(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -168,7 +173,6 @@ class AMapKeyedByAValueInsideSomeElementIsComposedWithThatElementTest {
             Compilation answered = measured(model + "    | \"filed\" : ("
                     + String.join(", ", expected) + ") -> 1\n");
 
-            assertEquals(List.of(), errors(answered), model);
             assertFalse(report(answered).contains("no row takes a decision rule"),
                     () -> report(answered));
         });
@@ -177,7 +181,7 @@ class AMapKeyedByAValueInsideSomeElementIsComposedWithThatElementTest {
     /** The control: the same rows answered as nothing filed are refused. */
     @Test
     void theSameRowsAnsweredAsNothingFiledAreRefused() {
-        COMPOSED.forEach((model, expected) -> assertFalse(errors(measured(model
+        COMPOSED.forEach((model, expected) -> assertFalse(errors(attempted(model
                 + "    | \"filed\" : (" + String.join(", ", expected) + ") -> 0\n")).isEmpty(),
                 model));
     }

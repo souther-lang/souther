@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Citation;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
@@ -305,7 +306,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
     }
 
     private static Compilation compiledFrom(String source) {
-        return Compilation.ofSource(source, "Main");
+        return ACompiledModel.answered(source);
     }
 
     /** Where a reader is sent for {@code cited}, as {@code compilation}'s sources now stand. */
@@ -349,7 +350,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
     }
 
     private static Compilation compiled(String beforeTheBody) {
-        Compilation compilation = Compilation.ofSource(model(beforeTheBody), "Main");
+        Compilation compilation = ACompiledModel.answered(model(beforeTheBody));
         assertInstanceOf(String.class, compilation.modules().get(0),
                 "the model under test compiles to a module");
         return compilation;

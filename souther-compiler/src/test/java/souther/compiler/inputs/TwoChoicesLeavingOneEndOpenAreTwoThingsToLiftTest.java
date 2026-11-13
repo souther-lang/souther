@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -84,7 +85,7 @@ class TwoChoicesLeavingOneEndOpenAreTwoThingsToLiftTest {
                         : model(clause).replace("data N = {",
                                 before[0] + "\n\ndata N = {"), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         InputDomain inputs = compilation.db()
                 .ask(new Adequacy.Inputs("demo")).value().get("check");
         List<Position> positions = inputs.positions();

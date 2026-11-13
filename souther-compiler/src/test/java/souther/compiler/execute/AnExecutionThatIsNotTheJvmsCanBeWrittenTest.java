@@ -2,6 +2,7 @@ package souther.compiler.execute;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ExampleExecutions;
 
@@ -197,7 +198,7 @@ class AnExecutionThatIsNotTheJvmsCanBeWrittenTest {
         if (budget != null) {
             compilation.withExampleBudget(budget);
         }
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         ExampleExecution reading = ExampleExecutions.of(compilation.db(), "example.terms");
         assertTrue(reading != null, "the module has to check for there to be a reading of it");
         return reading;

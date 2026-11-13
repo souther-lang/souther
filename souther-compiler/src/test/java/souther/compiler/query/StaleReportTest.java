@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.source.SourceId;
 
@@ -61,11 +62,13 @@ class StaleReportTest {
     void anExampleFailureGoesAwayWhenItsRowIsDeleted() {
         Compilation c = Compilation.ofDocuments(workspace(FAILING_ROWS), Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
+        ACompiledModel.refusedWith(List.of("E1905"), c);
         Map<SourceId, List<souther.compiler.diag.Diagnostic>> first = Located.diagnosticsOf(c.diagnostics());
         assertEquals(1, first.get(new SourceId("cart-examples.sou")).size(),
                 "the failing row is reported on the file it is written in");
 
         c.update(workspace(NO_ROWS), Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
 
         assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get(new SourceId("cart-examples.sou")),
                 "the row is gone, so its failure is gone");
@@ -75,8 +78,10 @@ class StaleReportTest {
     void aWholeCompilationStaysCleanAfterTheProblemIsRemoved() {
         Compilation c = Compilation.ofDocuments(workspace(FAILING_ROWS), Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
+        ACompiledModel.refusedWith(List.of("E1905"), c);
         Located.diagnosticsOf(c.diagnostics());
         c.update(workspace(NO_ROWS), Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
         Located.diagnosticsOf(c.diagnostics());
 
         assertFalse(c.db().allReports().stream().anyMatch(f -> f.report().isError()),

@@ -140,7 +140,7 @@ class ADiagnosticNamesThePointInTheReportsWordsTest {
     private static List<Diagnostic> warnings() {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<Diagnostic> out = new ArrayList<>();
         for (Db.Found found : compilation.db().allReports()) {
             if (!found.report().isError()) {

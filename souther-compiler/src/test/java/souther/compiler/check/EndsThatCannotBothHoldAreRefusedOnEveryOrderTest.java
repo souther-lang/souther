@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.query.Compilation;
 
@@ -30,22 +31,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class EndsThatCannotBothHoldAreRefusedOnEveryOrderTest {
 
-    private static List<String> codesFor(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+    private static void refuses(String what, String source) {
+        assertEquals(List.of("E1013"), codesOf(List.of("E1013"), source), what + " admits no value");
+    }
+
+    private static void admits(String what, String source) {
+        assertEquals(List.of(), codesOf(List.of(), source), what + " admits a value");
+    }
+
+    /** The codes of what is said of {@code source}, once it is refused with {@code refused}. */
+    private static List<String> codesOf(List<String> refused, String source) {
+        Compilation compilation = ACompiledModel.refusedWith(refused,
+                Compilation.ofSource(source, "Main"));
         return compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .map(Located::diagnostic)
                 .map(each -> each.code())
                 .toList();
-    }
-
-    private static void refuses(String what, String source) {
-        assertEquals(List.of("E1013"), codesFor(source), what + " admits no value");
-    }
-
-    private static void admits(String what, String source) {
-        assertEquals(List.of(), codesFor(source), what + " admits a value");
     }
 
     private static String newtype(String carried, String rule) {
@@ -67,16 +69,16 @@ class EndsThatCannotBothHoldAreRefusedOnEveryOrderTest {
     @Test
     void theRefusalNamesThePositionTheRulesLeftNothing() {
         assertEquals(List.of("NothingIsLeftForThatPositionToHold"),
-                saidBy(newtype("Int", "value > 5 && value < 3")));
+                saidBy(List.of("E1013"), newtype("Int", "value > 5 && value < 3")));
         assertEquals(List.of("NothingIsLeftForThatPositionToHold"),
-                saidBy(newtype("Date",
+                saidBy(List.of("E1013"), newtype("Date",
                         "value > Date(\"2020-01-01\") && value < Date(\"2010-01-01\")")),
                 "and the same sentence over an order the numbers do not carry");
         assertEquals(List.of("NothingIsLeftForThatPositionToHold"),
-                saidBy(newtype("Time", "value > Time(\"23:59:59\")")),
+                saidBy(List.of("E1013"), newtype("Time", "value > Time(\"23:59:59\")")),
                 "and where one rule names an end the order does not reach");
         assertEquals(List.of("NothingIsLeftForThatPositionToHold"),
-                saidBy(newtype("String", "value == \"A\" && value == \"B\"")),
+                saidBy(List.of("E1013"), newtype("String", "value == \"A\" && value == \"B\"")),
                 "and where two equalities name different values");
     }
 
@@ -140,26 +142,26 @@ class EndsThatCannotBothHoldAreRefusedOnEveryOrderTest {
      */
     @Test
     void aChoiceIsToldTheSameSentenceEitherWayRound() {
-        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy(List.of("E1013"), """
                 module demo
 
                 data X = { b: Int, a: String }
                     invariant no = (a < "" && b == 0) || (a < "" && b == 1)
                 """), "a position every alternative leaves nothing at is named");
-        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy(List.of("E1013"), """
                 module demo
 
                 data X = { b: Int, a: String }
                     invariant no = (a < "" && b == 1) || (a < "" && b == 0)
                 """), "and the operands the other way round");
 
-        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy("""
+        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy(List.of("E1013"), """
                 module demo
 
                 data X = { s: String, b: Bool }
                     invariant no = s < "" || (b == true && b == false)
                 """), "and where no position is at fault, the general sentence");
-        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy("""
+        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy(List.of("E1013"), """
                 module demo
 
                 data X = { s: String, b: Bool }
@@ -191,9 +193,8 @@ class EndsThatCannotBothHoldAreRefusedOnEveryOrderTest {
     }
 
     /** Which sentence a refusal is, named by the message rather than by its wording. */
-    private static List<String> saidBy(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+    private static List<String> saidBy(List<String> codes, String source) {
+        Compilation compilation = ACompiledModel.refusedWith(codes, Compilation.ofSource(source, "Main"));
         return compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .map(Located::diagnostic)

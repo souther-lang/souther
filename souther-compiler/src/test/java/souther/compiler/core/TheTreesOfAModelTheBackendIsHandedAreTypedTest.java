@@ -2,6 +2,7 @@ package souther.compiler.core;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.BindingId;
@@ -71,7 +72,7 @@ class TheTreesOfAModelTheBackendIsHandedAreTypedTest {
             """;
 
     private static Compilation compiled(String source) {
-        return Compilation.ofSource(source, "Main");
+        return ACompiledModel.answered(source);
     }
 
     private static List<Core> trees() {
@@ -359,7 +360,8 @@ class TheTreesOfAModelTheBackendIsHandedAreTypedTest {
      */
     private static List<Core> treesOf(List<Compilation> population) {
         List<Core> out = new ArrayList<>();
-        for (Compilation c : population) {
+        for (Compilation each : population) {
+            Compilation c = ACompiledModel.compiles(each);
             for (String module : c.modules()) {
                 TheWalk walk = Scopes.resolved(c.db(), module).value().theWalk();
                 Bodies.ModuleCheck.Of checkedModule =

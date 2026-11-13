@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -88,8 +89,7 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
         }
         Compilation compilation = Compilation.ofSource(source.toString(), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return compilation.db().ask(new Adequacy.Coverage("probe")).value();
     }
 
@@ -153,8 +153,7 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
                         List.filter(p -> p.qty > 3, xs)))) == k
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value().get("shortCount");
         assertNotNull(evidence);
@@ -168,8 +167,7 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
     private static boolean kIsRead(String model, String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value().get(behavior);
         assertNotNull(evidence, behavior);
@@ -243,8 +241,7 @@ class ACountOfDifferentValuesReachesWhatItIsHeldAgainstTest {
                                 && Bool.not(w.f7) && Bool.not(w.f8) && Bool.not(w.f9), xs)))) == k
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value().get("wideCount");
         assertNotNull(evidence);

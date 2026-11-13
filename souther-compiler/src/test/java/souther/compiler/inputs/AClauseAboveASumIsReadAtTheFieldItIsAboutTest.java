@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -116,8 +117,8 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
      * reads — the lines under the case named {@code under}, or with no case where it is null.
      */
     private static NumericDomain.Bounds totalOfTheAmounts(String source, String under) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain input = reading(source);
@@ -340,7 +341,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
 
                 behavior read : (h: Holder) -> Ok
                 """;
-        InputDomain sum = reading(model.replace("HELD", "Q"));
+        InputDomain sum = readingRefused(model.replace("HELD", "Q"), List.of("E1319"));
 
         for (String each : List.of("A", "B")) {
             Position at = sum.at(TermPath.of("h").then("q")
@@ -349,7 +350,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                     () -> "the clause of `Holder` about this field went unread, and the field says "
                             + "so under case " + each);
         }
-        assertFalse(reading(model.replace("HELD", "A"))
+        assertFalse(readingRefused(model.replace("HELD", "A"), List.of("E1319"))
                         .at(TermPath.of("h").then("q").then("limit")).rulesLeftUnread().isEmpty(),
                 "which is what the same clause leaves where no sum is in the way");
     }
@@ -363,7 +364,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
      */
     @Test
     void aQuestionRaisedAboveIsRaisedAtEachCase() {
-        InputDomain read = reading("""
+        InputDomain read = readingRefused("""
                 module g
 
                 data Code = String invariant shaped = String.length(value) >= 2
@@ -378,7 +379,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                 data Ok
 
                 behavior read : (h: Holder) -> Ok
-                """);
+                """, List.of("E1105"));
 
         for (String each : List.of("A", "B")) {
             Position at = read.at(TermPath.of("h").then("q")
@@ -613,8 +614,20 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
     }
 
     private static InputDomain reading(String source, String behavior) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        return readingOf(ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY)),
+                behavior);
+    }
+
+    /** The reading of a model that is refused for {@code refusedFor}, which is read all the same. */
+    private static InputDomain readingRefused(String source, List<String> refusedFor) {
+        Compilation compilation = Compilation.ofSources(List.of(source),
+                souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(refusedFor, compilation);
+        return readingOf(compilation, "read");
+    }
+
+    private static InputDomain readingOf(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -113,7 +113,7 @@ final class BoundaryReading {
          *                it. Empty where no name of this value stands for the position itself
          */
         record Bounded(DerivedNumber number, FactSubject subject, OrderedInterval range,
-                       Set<FactSubject> takenOf) implements Read {
+                       OrderedRuns runs, Set<FactSubject> takenOf) implements Read {
 
             public Bounded {
                 takenOf = Set.copyOf(takenOf);
@@ -137,8 +137,7 @@ final class BoundaryReading {
              * holds more or less of is a rule this one read and nobody carried out on the values.
              */
             Set<FactSubject> readWholeAt() {
-                return Endpoint.someValueLiesBetween(range.low(), range.high())
-                        && number.carriesOut(range) ? takenOf : Set.of();
+                return !runs.holdsNothing() && number.carriesOut(runs) ? takenOf : Set.of();
             }
         }
 
@@ -175,6 +174,14 @@ final class BoundaryReading {
         // can find a side for: the arithmetic reaches a coordinate written inside an expression and
         // the walk over the two sides does not. Such a line is one this reading left open, and
         // saying so is what keeps a choice offering it from reading as a model that draws none.
+        // A disequality on a number whose values are read back whole stops it nowhere and takes one
+        // value out of it: no end is placed, and the runs say what is left.
+        if (read.left() instanceof OrderedLeaf.Left.PlacesNoEnd<DerivedNumber> excluding
+                && excluding.number().equals(said.number()) && excluding.runs() != null
+                && said.number().carriesOut(excluding.runs())) {
+            return new Read.Bounded(excluding.number(), subject, OrderedInterval.OPEN,
+                    excluding.runs(), positions.getOrDefault(excluding.number().position(), Set.of()));
+        }
         if (!(read.left() instanceof OrderedLeaf.Left.Leaves<DerivedNumber> it)
                 || !it.number().equals(said.number())) {
             return new Read.LeftOpen(new OpenEnd(said.number()), subject);
@@ -184,7 +191,7 @@ final class BoundaryReading {
         // alternative beside it, and the second leaves that alternative saying nothing about the
         // number at all. Told apart where they compose ({@link BoundaryState}), and collapsed here
         // they would arrive there as one.
-        return new Read.Bounded(it.number(), subject, it.stated(),
+        return new Read.Bounded(it.number(), subject, it.stated(), OrderedRuns.of(it.stated()),
                 positions.getOrDefault(it.number().position(), Set.of()));
     }
 

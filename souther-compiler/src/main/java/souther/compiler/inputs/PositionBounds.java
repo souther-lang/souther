@@ -3,6 +3,8 @@ package souther.compiler.inputs;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 
 /**
  * What the rules leave one of a position's numbers.
@@ -29,12 +31,20 @@ import souther.compiler.numeric.NumericDomain;
  *                    in has been taken in, which is not what {@link #ownEnds} says: a clause placing
  *                    an end at a value another clause takes away leaves the number stopping
  *                    somewhere no rule wrote
+ * @param runsLeft    the values the number holds, as the runs they lie in — which are not always the
+ *                    values between the ends of {@code rangeLeft}, some being taken out from between
+ *                    them or one run stopping short of an end — or null where no word was read of
+ *                    them. Where it is there, the ends and these are the whole of what the rules
+ *                    of the one value that states anything say of the number; where it is null the
+ *                    ends are all there is, and whether they are the whole is the projection's
+ *                    to say
  */
 public record PositionBounds(NumericTerm.FromOnePosition term,
                              NumericDomain.Bounds admissible,
                              DeclaredBounds.Bounds ownEnds,
                              NarrowedBounds narrowedEnds,
-                             NumericDomain.Bounds rangeLeft) {
+                             NumericDomain.Bounds rangeLeft,
+                             OrderedRuns runsLeft) {
 
     public PositionBounds {
         if (term == null) {
@@ -48,5 +58,22 @@ public record PositionBounds(NumericTerm.FromOnePosition term,
             throw new IllegalArgumentException(
                     term + " has no answer about what the value it sits in leaves it");
         }
+    }
+
+    /**
+     * Whether the values the number holds are fewer than the values between its ends: some are
+     * taken out from between them, or the one run stops short of an end. Not where no word was
+     * read of them, which says nothing of what the ends leave.
+     *
+     * <p>A reader that takes what a set admits as what the position holds, with the ends as the
+     * only bound the set was met with, is wrong exactly where this holds.
+     */
+    public boolean holdsLessThanItsEnds() {
+        if (runsLeft == null) {
+            return false;
+        }
+        NumericDomain.Bounds ends = rangeLeft == null ? NumericDomain.Bounds.OPEN : rangeLeft;
+        return !runsLeft.sameValuesAs(
+                OrderedRuns.of(new OrderedInterval(ends.min(), ends.max())));
     }
 }

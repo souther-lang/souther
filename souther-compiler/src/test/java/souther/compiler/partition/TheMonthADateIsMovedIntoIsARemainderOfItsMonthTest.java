@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -239,12 +240,11 @@ class TheMonthADateIsMovedIntoIsARemainderOfItsMonthTest {
     }
 
     private static Compilation measured(String before, String comparison) {
-        return MEASURED.computeIfAbsent(MODEL.formatted(before, comparison), source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors(), source);
-            return compilation;
-        });
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(MODEL.formatted(before, comparison),
+                source -> {
+                    Compilation compilation = Compilation.ofSource(source, "Main");
+                    compilation.measure(Adequacy.Asked.fullReport());
+                    return compilation;
+                }));
     }
 }

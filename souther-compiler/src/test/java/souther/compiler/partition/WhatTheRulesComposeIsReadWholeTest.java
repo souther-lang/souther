@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -136,11 +137,7 @@ class WhatTheRulesComposeIsReadWholeTest {
     @BeforeAll
     static void read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().titleKey())
-                        .toList(),
-                "the model compiles");
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().getFirst();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         Map<String, InputDomain> inputs = compilation.db().ask(new Adequacy.Inputs(module)).value();

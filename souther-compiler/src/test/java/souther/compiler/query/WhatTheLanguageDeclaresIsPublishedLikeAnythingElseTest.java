@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.PublishedDeclarationResult;
@@ -37,8 +38,7 @@ class WhatTheLanguageDeclaresIsPublishedLikeAnythingElseTest {
 
     @Test
     void everyDeclarationTheLanguageGivesIsAnsweredFor() {
-        Compilation c = Compilation.ofSource(SOURCE, "Main");
-        c.answerEverything();
+        Compilation c = ACompiledModel.answered(SOURCE);
         Map<TypeKey, Hir.Def> language =
                 c.db().ask(new Front.Library()).value().languageDeclarations();
         assertFalse(language.isEmpty(), "the library declares something, or this asks nothing");
@@ -63,8 +63,7 @@ class WhatTheLanguageDeclaresIsPublishedLikeAnythingElseTest {
      */
     @Test
     void andTheModuleOneIsAddressedInIsNoModuleThisCompilationHolds() {
-        Compilation c = Compilation.ofSource(SOURCE, "Main");
-        c.answerEverything();
+        Compilation c = ACompiledModel.answered(SOURCE);
         Map<TypeKey, Hir.Def> language =
                 c.db().ask(new Front.Library()).value().languageDeclarations();
 

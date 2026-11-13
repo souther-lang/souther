@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
@@ -29,7 +30,7 @@ class OneEngineWorksOutEachClosureOnceTest {
 
     @Test
     void twoWalksTakingInTheSameRulesWorkTheirClosureOutOnce() {
-        Compilation compilation = Compilation.ofSource("module demo\n", "Main");
+        Compilation compilation = ACompiledModel.answered("module demo\n");
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         PathEngine engine = new PathEngine(
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),

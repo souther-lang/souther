@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.report.InEnglish;
 import souther.compiler.check.DeclaredBounds;
@@ -218,7 +219,7 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
         }
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream)
                         .map(each -> each.diagnostic().code()).toList(),

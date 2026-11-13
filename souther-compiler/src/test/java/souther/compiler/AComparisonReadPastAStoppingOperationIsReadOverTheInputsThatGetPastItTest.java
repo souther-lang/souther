@@ -190,7 +190,7 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
     private static Compilation measured(String source, Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 

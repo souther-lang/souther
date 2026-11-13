@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import net.unit8.notation199x.pattern.PatternMeaning;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -321,9 +322,6 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
                 """.formatted(truth.contains("Digits(") || lets.contains("Digits(")
                         ? "Letters, Digits" : "Letters", lets, truth);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

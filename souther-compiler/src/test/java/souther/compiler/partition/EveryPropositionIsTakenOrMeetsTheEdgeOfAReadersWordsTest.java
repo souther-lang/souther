@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import net.unit8.notation199x.pattern.PatternMeaning;
+import souther.compiler.ACompiledModel;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -313,8 +314,7 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
     }
 
     private static InputReading reading() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(MODEL);
         assertTrue(!compilation.modules().isEmpty(), () -> "the model under test compiles: "
                 + compilation.diagnostics().values().stream().flatMap(List::stream)
                         .map(each -> each.diagnostic().code()).toList());

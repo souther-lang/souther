@@ -107,12 +107,8 @@ class AFoldOverAnotherBehaviorsElementIsOfferedARowAndTheVerdictIsRefusedTest {
                     MODEL.formatted(body).replace("    | ([]) -> 0\n", "    | ([]) -> 0\n" + stated
                             + "\n"), "Main");
             statedAsTheConstant.measure(Adequacy.Asked.fullReport());
-            statedAsTheConstant.answerEverything();
-
-            assertEquals(List.of(DiagnosticCode.E1905.toString()),
-                    statedAsTheConstant.errors().stream()
-                            .map(e -> e.diagnostic().code().toString()).toList(),
-                    () -> body + ": the row " + offered + " stated as 0 does not hold of the body");
+            ACompiledModel.refusedWith(List.of(DiagnosticCode.E1905.toString()),
+                    statedAsTheConstant);
         }
     }
 
@@ -135,10 +131,6 @@ class AFoldOverAnotherBehaviorsElementIsOfferedARowAndTheVerdictIsRefusedTest {
     private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

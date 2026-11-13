@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -63,10 +64,7 @@ class ARuleOnWhatAListComesToIsAskedForHoweverTheListWasNamedTest {
     private static final String LINE = "List.sum(明細[*].金額) = 100000";
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(NAMED, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(NAMED, Adequacy.Asked.fullReport());
     }
 
     private static BorderAssessment totalsLine() {

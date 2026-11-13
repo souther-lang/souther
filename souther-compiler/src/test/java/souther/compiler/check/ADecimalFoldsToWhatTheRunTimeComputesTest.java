@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -43,6 +44,11 @@ class ADecimalFoldsToWhatTheRunTimeComputesTest {
             List.of("0.25m", "0.35m", "-0.25m", "-1.5m", "2.5m", "1.005m", "123.456m", "0.0m");
 
     private static boolean holdsAValue(String rule) {
+        return holdsAValue(rule, List.of());
+    }
+
+    /** Whether a value of the subject is shown to exist, the model being refused with {@code codes}. */
+    private static boolean holdsAValue(String rule, List<String> codes) {
         String source = """
                 module example.folded
 
@@ -54,7 +60,7 @@ class ADecimalFoldsToWhatTheRunTimeComputesTest {
                 behavior take : (n: Subject) -> Ok
                 let take (n) = Ok
                 """.formatted(rule);
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.refusedWith(codes, Compilation.ofSource(source, "Main"));
         String module = compilation.modules().get(0);
         TypeSymbol subject = TypeSymbols.declared(new TypeKey(module, "Subject"));
         return Rules.of(subject, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
@@ -85,7 +91,7 @@ class ADecimalFoldsToWhatTheRunTimeComputesTest {
 
     @Test
     void aRoundingTheRunTimeDoesNotAnswerIsNotShown() {
-        assertFalse(holdsAValue(about("Decimal.round(1, HALF_UP, 0.25m)", "0.2m")),
+        assertFalse(holdsAValue(about("Decimal.round(1, HALF_UP, 0.25m)", "0.2m"), List.of("E1013")),
                 "half up takes 0.25 to 0.3");
         assertEquals(new BigDecimal("0.3"),
                 DecimalMath.round(1, souther.runtime.HALF_UP.INSTANCE, new BigDecimal("0.25")));

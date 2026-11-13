@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -82,7 +83,7 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
 
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertTrue(compilation.diagnostics().values().stream().allMatch(List::isEmpty),
                 "the model under test compiles clean");
         return compilation;
@@ -117,7 +118,7 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
     private static long readingsMadeCompiling(String source) {
         long before = InvariantChecker.readingsMade();
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertTrue(compilation.diagnostics().values().stream().allMatch(List::isEmpty),
                 "the model under test compiles clean");
         return InvariantChecker.readingsMade() - before;

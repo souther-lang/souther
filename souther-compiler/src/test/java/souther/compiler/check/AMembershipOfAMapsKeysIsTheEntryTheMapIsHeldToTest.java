@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -32,14 +33,12 @@ class AMembershipOfAMapsKeysIsTheEntryTheMapIsHeldToTest {
     private record Read(Map<RuleKey, List<EntryHeld.Requirement>> entries, boolean accounted) {}
 
     private static Read read(String rule) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module demo
 
                 data N = { key: String, table: Map<String, String> }
                     invariant %s
-                """.formatted(rule), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+                """.formatted(rule));
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "N"));
         FieldDomains domains = FieldDomains.of(named,

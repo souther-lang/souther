@@ -39,21 +39,19 @@ class AValueSingledOutIsNotABorderTest {
                 let pick (r) = if %s then A else B
 
                 example pick
-                    | "one" : (R { cost = 1, a = 1, other = 2 }) -> B
+                    | "one" : (R { cost = 1, a = 1, other = 2 }) -> <?>
                 """;
 
     private static PartitionEvidence measured(String condition) {
-        Compilation compilation = Compilation.ofSource(SOURCE.formatted(condition), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(SOURCE.formatted(condition), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
 
     /** The lines the behavior's positions met, whosever the row at each point is. */
     private static List<souther.compiler.query.BorderAssessment> lines(String condition) {
-        Compilation compilation = Compilation.ofSource(SOURCE.formatted(condition), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(SOURCE.formatted(condition), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).lines();
     }
 

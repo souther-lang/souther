@@ -10,6 +10,7 @@ import souther.compiler.query.Scopes;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.Position;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -73,9 +74,7 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
                             .fieldTypes(), ValueOwnership.none());
 
     private static Compilation compiled(String module) {
-        Compilation c = Compilation.ofSource(module, "Main");
-        c.answerEverything();
-        return c;
+        return ACompiledModel.answered(module);
     }
 
     /** A value of {@code type}, as a helper would have answered with one: through its own decoder,

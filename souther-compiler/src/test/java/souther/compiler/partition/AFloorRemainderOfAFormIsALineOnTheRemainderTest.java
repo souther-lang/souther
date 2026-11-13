@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.About;
@@ -755,10 +756,7 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 """.formatted(prelude, parameters,
                 parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), String.join("\n    ", body),
                 examples);
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 
     private static List<String> bordersOf(String parameters, String condition) {

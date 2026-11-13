@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ValueUniverse;
 import souther.compiler.inputs.InputDomain;
@@ -9,8 +10,6 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -65,7 +64,7 @@ class ValueUniverseCountsOnlyWhatNoRuleHoldsBackTest {
 
                 let check (h) = Ok
                 """.formatted(DECLARATIONS), "Main");
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
         InputDomain domain = compilation.db().ask(new Adequacy.Inputs(module)).value()
                 .get("check");

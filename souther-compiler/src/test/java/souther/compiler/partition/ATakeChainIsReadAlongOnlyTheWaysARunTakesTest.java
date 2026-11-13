@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -246,7 +247,7 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
 
     /** What the body states of each condition it reads, as the reading of its meanings has it. */
     private static List<Proposition> stated(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("draw");
@@ -261,7 +262,7 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
     }
 
     private static DecisionReading decided(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         DecisionEvidence decided = compilation.db()
                 .ask(new Adequacy.Decides(compilation.modules().get(0))).value().get("draw");
         assertNotNull(decided, "the rules of the model are read");

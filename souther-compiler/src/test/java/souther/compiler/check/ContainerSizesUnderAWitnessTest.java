@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
@@ -31,12 +32,12 @@ class ContainerSizesUnderAWitnessTest {
 
     /** The body of {@code run}, taking {@code xs}, a list of sets, and answering {@code body}. */
     private static Core bodyOf(String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module demo
                 data Ids = Set<String>
                 behavior run : (xs: List<Ids>) -> Int
                 let run (xs) = %s
-                """.formatted(body), "Main");
+                """.formatted(body));
         return compilation.db().ask(new Bodies.CheckedBehavior("demo", "run")).value().body();
     }
 

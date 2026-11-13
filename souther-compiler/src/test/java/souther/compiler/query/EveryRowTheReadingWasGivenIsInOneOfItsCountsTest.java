@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.partition.CasesTheRowsTook;
@@ -93,8 +94,7 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1903"), compilation);
     }
 
     private static DecisionEvidence.RowsPlaced readOf(Compilation compilation) {

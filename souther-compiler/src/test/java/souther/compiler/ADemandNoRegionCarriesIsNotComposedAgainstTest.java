@@ -107,7 +107,7 @@ class ADemandNoRegionCarriesIsNotComposedAgainstTest {
     private static AdequacyReport.BehaviorReport reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).modules().stream()
                 .flatMap(module -> module.behaviors().stream())
                 .filter(each -> BEHAVIOR.equals(each.name()))

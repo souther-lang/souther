@@ -62,8 +62,7 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
      * line: the cases the list holds are what says it was read.
      */
     private static String states(String places, String rows) {
-        Compilation compilation = Compilation.ofSource(PLACED.formatted(places, rows), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(PLACED.formatted(places, rows));
         List<String> out = WhatTheComparisonsState.of(compilation, "f");
         assertEquals(1, out.size(), () -> "one comparison is written: " + out);
         return out.getFirst();
@@ -72,9 +71,7 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
     private static String measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

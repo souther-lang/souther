@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import net.unit8.notation199x.pattern.CodePoints;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
@@ -241,8 +242,7 @@ class ACountOfWhatACaseConversionAnswersIsAskedOfTheAnswerTest {
     /** The strings that stand for each class of the one position of {@code f}, in the order the
      *  classes are. */
     private static List<List<String>> representativesOfEachClass(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

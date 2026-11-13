@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
@@ -18,7 +19,6 @@ import souther.compiler.query.Shapes;
 import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * what happens to have been published, or a publication recovered from a verdict, is the
  * reconstruction the accounting exists to take away — so the population here is the positions
  * themselves and the accounts that answer for them.
+ *
  */
 @ClosedWorldContract
 class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
@@ -113,8 +114,9 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
     @Test
     void everyCorpusPositionAgrees() {
         List<String> disagreeing = new ArrayList<>();
-        for (Compilation corpus : corpora()) {
-            disagreeing.addAll(disagreeingIn(corpus));
+        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
+            Compilation analysed = analysed(corpus);
+            disagreeing.addAll(disagreeingIn(analysed));
         }
         assertEquals(List.of(), disagreeing,
                 "a verdict and what is standing at the position say different things");
@@ -143,8 +145,9 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
     @Test
     void whereNothingStandsTheVerdictFollowsTheRulesFiledAtThePosition() {
         List<String> disagreeing = new ArrayList<>();
-        for (Compilation corpus : corpora()) {
-            disagreeing.addAll(misclassifiedIn(corpus));
+        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
+            Compilation analysed = analysed(corpus);
+            disagreeing.addAll(misclassifiedIn(analysed));
         }
         for (String model : MODELS) {
             disagreeing.addAll(misclassifiedIn(analysed(model)));
@@ -290,29 +293,32 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
         }
     }
 
-    /** Each model and each corpus analysed once for the class: the tests here read what an
-     *  analysis answered, and several ask the same one. */
-    private static final Map<String, Compilation> ANALYSED = new HashMap<>();
-
-    private static final Map<ConformanceCorpus, Compilation> CORPORA = new HashMap<>();
+    /** Each model analysed once for the class: the tests here read what an analysis answered, and
+     *  several ask the same one. */
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        ANALYSED.clear();
-        CORPORA.clear();
+        SHARED.release();
     }
 
     private static Compilation analysed(String source) {
-        return ANALYSED.computeIfAbsent(source, each -> Compiler.analyzedModules(List.of(each),
-                ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport()));
+        return SHARED.refusedWith(REFUSED.getOrDefault(source, List.of()), source,
+                () -> Compiler.analyzedModules(List.of(source), ModulePath.EMPTY, new ArrayList<>(),
+                        Adequacy.Asked.fullReport()));
     }
 
-    private static List<Compilation> corpora() {
-        return ConformanceCorpus.all().stream()
-                .map(corpus -> CORPORA.computeIfAbsent(corpus,
-                        each -> each.analyse().compilation()))
-                .toList();
+    /** What a model here is refused with: a rule nothing satisfies leaves its position with no
+     *  value to divide, which is the position this reading cannot derive. */
+    private static final Map<String, List<String>> REFUSED =
+            Map.of(A_RULE_THAT_CUTS_NOTHING, List.of("E1013"));
+
+    /** The corpus analysed once for the class, held to be refused with what it is written to be
+     *  refused with. */
+    private static Compilation analysed(ConformanceCorpus corpus) {
+        return SHARED.refusedWith(corpus.refusedWith(), "corpus " + corpus.name(),
+                () -> corpus.analyse().compilation());
     }
 }

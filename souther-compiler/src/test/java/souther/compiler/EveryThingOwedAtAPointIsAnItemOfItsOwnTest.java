@@ -131,10 +131,7 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(TWO_STOPS, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(TWO_STOPS, Adequacy.Asked.fullReport());
     }
 
     private static Composition composed(Compilation compilation) {

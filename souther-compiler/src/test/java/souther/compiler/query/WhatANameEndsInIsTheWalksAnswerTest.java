@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.TypeOps;
 import souther.compiler.meta.ModulePath;
@@ -241,6 +242,7 @@ class WhatANameEndsInIsTheWalksAnswerTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("beneath.sou", BENEATH);
         byId.put("above.sou", ABOVE);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.refusedWith(List.of("E1013", "E1013"), compilation);
     }
 }

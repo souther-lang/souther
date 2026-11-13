@@ -118,7 +118,7 @@ class ARuleReadShortIsSaidOfThatRuleOnEverySurfaceTest {
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 }

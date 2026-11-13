@@ -7,6 +7,7 @@ import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Answer;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
 import souther.test.Nightly;
@@ -99,7 +100,7 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
      */
     @Test
     void andAPositionNothingWasShortOfReadsAsOne() throws Exception {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                 module probe.plain
 
                 data Red
@@ -109,8 +110,7 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
                 data Ok
 
                 behavior f : (c: Colour) -> Ok
-                """), ModulePath.EMPTY);
-        compilation.answerEverything();
+                """), ModulePath.EMPTY));
         List<InputDomain> read = new ArrayList<>();
         readings(compilation, read);
         Position at = read.get(0).positions().stream()
@@ -165,6 +165,7 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
      * model has already done.
      */
     private static void readings(Compilation compilation, List<InputDomain> out) {
+        ACompiledModel.compiles(compilation);
         for (String module : compilation.modules()) {
             Answer<Map<String, InputDomain>> read =
                     compilation.db().ask(new Adequacy.Inputs(module));

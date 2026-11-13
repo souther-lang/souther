@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
@@ -498,9 +499,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                 let f (c, a, b, d, e, sched1) =
                     if List.any(x -> x.value <= a + b + d + e, sched1(c).value) then Yes else No
                 """;
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
 
         Set<CompositionBudget> said = new HashSet<>();
@@ -572,7 +571,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
             alternatives.add("(Bool.not(v.ok) && v.n == " + each + ")");
         }
         alternatives.add("(v.ok && v.n >= 100)");
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module p
 
                 data Cat = A | B
@@ -589,9 +588,8 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                     let v = r(c)
                     if v.ok && (ALTERNATIVES) then Yes else No
                 }
-                """.replace("ALTERNATIVES", String.join(" || ", alternatives)), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.replace("ALTERNATIVES", String.join(" || ", alternatives)),
+                Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
 
         List<DemandGap.WhyNotComposed> said = new ArrayList<>();
@@ -625,7 +623,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         for (int each = 0; each < 18; each++) {
             written.add("v.n + " + each);
         }
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module p
 
                 data Cat = A | B
@@ -644,9 +642,8 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                     then Yes
                     else No
                 }
-                """.replace("WRITTEN", String.join(", ", written)), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.replace("WRITTEN", String.join(", ", written)),
+                Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
 
         List<DemandGap.WhyNotComposed> said = new ArrayList<>();
@@ -715,10 +712,9 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
      */
     @Test
     void aCountOfAnAnswersListIsNotAlsoLeftOnTheWay() {
-        Compilation compilation = Compilation.ofSource(MODEL.replace("BODY",
-                "List.length(List.filter(x -> x <= on, sched1(c).value)) >= on"), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL.replace("BODY",
+                "List.length(List.filter(x -> x <= on, sched1(c).value)) >= on"),
+                Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
 
         for (RuleSettlement each : compilation.db()
@@ -842,9 +838,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     }
 
     private static List<RowToRun> rowsFoundIn(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         List<RowToRun> rows = new ArrayList<>();
         for (RuleSettlement each : compilation.db()
@@ -880,9 +874,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     /** What composing a value for each way of {@code body} came to, whatever it came to. */
     private static List<Tried> attemptedForEachWay(String body) {
         String source = MODEL.replace("BODY", body);
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         InputDomain domain = compilation.db().ask(new Adequacy.Inputs(module)).value().get("holds");
         Partitions.Partitioning divided =
@@ -914,9 +906,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     }
 
     private static String reportOfSource(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }

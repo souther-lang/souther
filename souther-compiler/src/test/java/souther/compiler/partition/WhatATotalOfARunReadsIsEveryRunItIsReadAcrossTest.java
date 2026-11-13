@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.NumericTerm;
@@ -50,7 +51,7 @@ class WhatATotalOfARunReadsIsEveryRunItIsReadAcrossTest {
 
     @Test
     void aTotalOfARunReadsEveryRunItIsMadeOf() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module probe
 
                 data Item = { v: Int }
@@ -58,7 +59,9 @@ class WhatATotalOfARunReadsIsEveryRunItIsReadAcrossTest {
                 data Taken
 
                 behavior take : (a: List<Item>, b: List<Item>, c: List<Item>) -> Taken
-                """, "Main");
+
+                let take (a, b, c) = Taken
+                """);
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         ValueName.Stdlib sum = ValueName.Stdlib.operation("List", "sum");
         for (Written written : sources()) {

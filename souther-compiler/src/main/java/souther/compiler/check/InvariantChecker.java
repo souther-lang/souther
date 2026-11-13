@@ -1347,7 +1347,7 @@ public final class InvariantChecker {
         Map<RuleKey, List<FactSubject>> aliases = aliasesOf(atoms, keys);
         return new Seeded(constraints, atoms, keys, held, reading, took, read,
                 notGathered, unreadOfEveryValue, Set.copyOf(handedOn),
-                written, Map.copyOf(spaces), computed, admitted, unreadAt, notSeparated,
+                accounted, Map.copyOf(spaces), computed, admitted, unreadAt, notSeparated,
                 c.answers.facts(),
                 Collections.unmodifiableMap(new LinkedHashMap<>(endsLeftOpen)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(boundsLeftOpen)),
@@ -3191,7 +3191,15 @@ public final class InvariantChecker {
         }
         if (read.claim() instanceof ComparisonClaim.Singled singled
                 && !singled.holdsAtTheValue()) {
-            return NO_LINE;
+            // A denial of one value places no line. Of a number an operation answers it is still
+            // a rule about that number, which the reading of those numbers keeps the values of: it
+            // is told which number, and places no end ({@link BoundaryReading#leaf}).
+            return canonicalFormOf(read, at, byName) instanceof CanonicalForm.Over over
+                    && over.numbers().size() == 1
+                    && statedOn(over.numbers().iterator().next())
+                            instanceof StatedLines.Statement.OnADerivedNumber derived
+                    && derived.number().holdsItsHolesAsRuns()
+                    ? derived : NO_LINE;
         }
         // Whether the rule holds one of this value's positions to another, which is a fact about
         // the two sides and not about the arithmetic: {@code n >= m + 1} is over two numbers and

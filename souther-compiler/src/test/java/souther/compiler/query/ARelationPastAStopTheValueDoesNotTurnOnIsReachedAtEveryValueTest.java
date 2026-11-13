@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.UndividedPosition;
 
 import java.util.LinkedHashMap;
@@ -285,10 +286,6 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                compilation.errors().toString());
 
         // The table may be held empty, so no run is stopped at any currency.
         PartitionEvidence.NotRead free = currencyOf(evidence, "unpriced").get("deals[*].currency");
@@ -340,6 +337,7 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
             assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
                     stopped.reason(), behavior + " " + currencyOf(evidence, behavior));
         }
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -353,9 +351,6 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
         assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
                 currencyOf(evidence, "alone").get("deals[*].currency").reason(),
@@ -407,5 +402,6 @@ class ARelationPastAStopTheValueDoesNotTurnOnIsReachedAtEveryValueTest {
                     currencyOf(evidence, behavior).get("rates.rates[key]").reason(),
                     behavior + " " + currencyOf(evidence, behavior));
         }
+        ACompiledModel.compiles(compilation);
     }
 }

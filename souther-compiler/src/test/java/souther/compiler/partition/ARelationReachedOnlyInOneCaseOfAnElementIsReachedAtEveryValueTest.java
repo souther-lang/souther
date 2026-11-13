@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Adequacy;
@@ -276,9 +277,7 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
     }
 
     private static List<String> notReachedAtEveryValue(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get(behavior);
         assertNotNull(evidence, "the model under test compiles");
@@ -290,9 +289,8 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
 
     /** The reasons for which a rule of {@code behavior} came to no line, one for each place. */
     private static List<BlockReason.RuleWithoutLineReason> whyNoLine(String behavior) {
-        Compilation compilation = Compilation.ofSource(DECLARED, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(DECLARED, Adequacy.Asked.fullReport());
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get(behavior);
         assertNotNull(evidence, "the model under test compiles");

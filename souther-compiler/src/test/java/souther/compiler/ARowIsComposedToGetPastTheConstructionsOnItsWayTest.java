@@ -251,10 +251,7 @@ class ARowIsComposedToGetPastTheConstructionsOnItsWayTest {
     private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code().toString()).toList());
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String report(Compilation compilation) {

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
@@ -39,8 +40,9 @@ class ASumIsDescendedOnceForTheWorkThatHoldsItTest {
             data Mixed = Card | A
             """;
 
-    private final Hir.Module resolved = Compilation.ofDocuments(Map.of("m.sou", MODULE), Set.of(),
-            ModulePath.EMPTY).db().ask(new Names.Resolved("m")).value();
+    private final Hir.Module resolved = ACompiledModel.compiles(
+            Compilation.ofDocuments(Map.of("m.sou", MODULE), Set.of(), ModulePath.EMPTY))
+            .db().ask(new Names.Resolved("m")).value();
     private final Symbols symbols = TypeChecker.symbols(resolved, DefaultStdlib.get());
     private final DeclarationKinds kinds = ScopedDeclarations.kindsOf(symbols);
     private final ListedCases listed = ScopedDeclarations.listedOf(symbols);

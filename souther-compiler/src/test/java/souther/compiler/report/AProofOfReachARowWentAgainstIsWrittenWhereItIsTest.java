@@ -7,6 +7,7 @@ import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.DecisionReading;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -82,13 +83,11 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
      *  written once, in the order the rows met them. */
     @Test
     void everyWayGoneDownIsWrittenOnce() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module m
                 behavior f : (x: Int, y: Int) -> Int
                 let f (x, y) = (if x > 10 then (if x < 5 then 1 else 2) else 3) + (if y > 10 then (if y < 5 then 1 else 2) else 3)
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         List<DecisionReading.ImpossiblePath> impossible = compilation.db()
                 .ask(new Adequacy.Decides(compilation.modules().getFirst())).value().get("f")
                 .read().impossible();
@@ -158,9 +157,7 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
     }
 
     private static Places places() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         PathReachability.Answers read =
                 compilation.db().ask(new Adequacy.PathReached(module)).value().get("size");

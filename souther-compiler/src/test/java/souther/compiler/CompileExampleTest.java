@@ -287,7 +287,7 @@ class CompileExampleTest {
         // Every failing row is reported, not just the first: the query answers with all of them.
         Compilation compilation = Compilation.ofSource(model, "Main");
         String moduleName = compilation.modules().get(0);
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1905", "E1905"), compilation);
         List<Report> fails = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), moduleName,
                         compilation.sourceIds().get(0))).reports();

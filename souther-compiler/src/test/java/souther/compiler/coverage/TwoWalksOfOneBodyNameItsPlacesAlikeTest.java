@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -134,6 +135,11 @@ class TwoWalksOfOneBodyNameItsPlacesAlikeTest {
                 () -> "and most places have exactly one: " + byWays);
     }
 
+    /** The conformance corpus whose checked-in answer is a refusal, which its bodies are walked for. */
+    private static final List<String> REFUSED_ON_PURPOSE = ConformanceCorpus.load("booking").sources();
+
+    private static final List<String> REFUSED_ON_PURPOSE_CODES = List.of("E2010", "E1013");
+
     /** The addresses of every place of every body of {@code source}, as text, from a fresh
      *  compile. */
     private static Set<String> namesIn(String source) {
@@ -157,7 +163,9 @@ class TwoWalksOfOneBodyNameItsPlacesAlikeTest {
         List<Map.Entry<String, Core>> out = new ArrayList<>();
         for (List<String> each : sources) {
             Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
-            compilation.answerEverything();
+            ACompiledModel.refusedWith(
+                    each.equals(REFUSED_ON_PURPOSE) ? REFUSED_ON_PURPOSE_CODES : List.of(),
+                    compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

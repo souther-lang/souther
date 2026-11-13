@@ -7,6 +7,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ModelOccurrence;
 
@@ -45,7 +46,7 @@ class AnArmIsEnteredWhereWhatItsConditionStatesComesOutTest {
 
     /** Whether the arm the fork of {@code f} takes on false is closed, by how it is reached. */
     private static boolean otherArmClosed(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("probe")).value();
         assertNotNull(checked, "the model under test compiles");
         RuleReadingSource rules = RuleReadings.of(compilation, "probe");

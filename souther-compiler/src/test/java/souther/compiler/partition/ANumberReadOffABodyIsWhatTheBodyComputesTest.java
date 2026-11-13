@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -108,7 +109,8 @@ class ANumberReadOffABodyIsWhatTheBodyComputesTest {
             let accountedCount (l) = Map.size(totalsOf(l))
             """;
 
-    private static final Compilation READ = compiled(MODEL);
+    private static final Compilation READ =
+            ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
 
     /** A node, as the language's record holds it. */
     private static Map<String, Object> node(String owner, Map<?, ?>... reports) {
@@ -359,10 +361,7 @@ class ANumberReadOffABodyIsWhatTheBodyComputesTest {
     }
 
     private static Compilation compiled(String source) {
-        Compilation made = Compilation.ofSource(source, "Main");
-        made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
-        return made;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     /** The one number the rule of {@code behavior} is read as comparing. */

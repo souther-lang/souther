@@ -348,12 +348,22 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source, text -> {
-            Compilation compilation = Compilation.ofSource(text, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
-        });
+        Compilation compilation = MEASURED.computeIfAbsent(source,
+                text -> ACompiledModel.compiles(attempted(text)));
+        return ACompiledModel.compiles(compilation);
+    }
+
+    /** The model measured and answered in full, whether or not it compiles. */
+    private static Compilation attempted(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /** The model measured and answered in full, refused with exactly {@code codes}. */
+    private static Compilation refusedAs(String source, List<String> codes) {
+        return ACompiledModel.refusedWith(codes, attempted(source));
     }
 
     /** Compiled and run and not measured, for a question about what a row answers: a row the
@@ -710,7 +720,7 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
         // And the same written by count, which is the same rule: nothing is made up for it either.
         for (String model : List.of(bools, byCount(bools))) {
             List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
-            for (GenerationOutcome outcome : outcomes(measured(model))) {
+            for (GenerationOutcome outcome : outcomes(refusedAs(model, List.of("E1903")))) {
                 assertFalse(outcome instanceof GenerationOutcome.Generated, outcome::toString);
                 if (outcome instanceof GenerationOutcome.CannotGenerate(List<CameToNothing> why)) {
                     why.forEach(each -> said.add(each.why().reason()));
@@ -765,7 +775,8 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
             assertFalse(report.contains(unread), report);
         });
         String report = report(measured(SOME.replace("List.allDistinctBy(k -> k, value)",
-                "List.allDistinctBy(k -> String.length(k), value)")));
+                "List.allDistinctBy(k -> String.length(k), value)")
+                .replace("Keys([\"a\", \"b\"])", "Keys([\"a\", \"bb\"])")));
         assertTrue(report.contains(unread + " written in a form this compiler does not read"),
                 report);
     }
@@ -794,7 +805,6 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
         Compilation measured = measured(APART_AND_NOTHING_ELSE);
         String report = report(measured);
 
-        assertEquals(List.of(), errors(measured));
         assertTrue(report.contains("measurement: complete"), report);
         assertTrue(report.contains("partition   not applicable"), report);
     }
@@ -802,7 +812,7 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
     /** And a row saying one id twice is still refused, by the rule and at that row alone. */
     @Test
     void aRowSayingOneKeyTwiceIsStillRefused() {
-        Compilation measured = measured(APART_AND_NOTHING_ELSE.replace(
+        Compilation measured = attempted(APART_AND_NOTHING_ELSE.replace(
                 "Item { id = 1 }, Item { id = 2 }", "Item { id = 1 }, Item { id = 1 }"));
 
         assertEquals(1, measured.errors().size(), () -> errors(measured).toString());

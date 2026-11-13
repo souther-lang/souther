@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -45,6 +46,19 @@ class AClauseOnePartOfWhichCannotBeReadIsStoppedWholeTest {
                 """.formatted(helpers, clause));
     }
 
+    /** A clause that calls the helper left standing: the declaration is refused for answering on
+     * every path no better than the helper does, and is read all the same. */
+    private static FieldDomains readStopped(String clause) {
+        return ofRefused("""
+                module demo
+
+                %s
+
+                data N = Int
+                    invariant %s
+                """.formatted(STANDING, clause), List.of("E1106"));
+    }
+
     /** The same declaration with no rule written on it at all, which is what a clause going unread
      *  leaves the position with. */
     private static FieldDomains readNoRule(String helpers) {
@@ -58,7 +72,14 @@ class AClauseOnePartOfWhichCannotBeReadIsStoppedWholeTest {
     }
 
     private static FieldDomains of(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return of(ACompiledModel.answered(source));
+    }
+
+    private static FieldDomains ofRefused(String source, List<String> codes) {
+        return of(ACompiledModel.refusedWith(codes, Compilation.ofSource(source, "Main")));
+    }
+
+    private static FieldDomains of(Compilation compilation) {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         return FieldDomains.of(name, RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
@@ -71,7 +92,7 @@ class AClauseOnePartOfWhichCannotBeReadIsStoppedWholeTest {
         assertEquals(List.of(1, 1, 0), List.of(
                         read("", "value >= 1").placed().size(),
                         read(STANDING, "value >= 1").placed().size(),
-                        read(STANDING, "value >= 1 && step(value) >= 0").placed().size()),
+                        readStopped("value >= 1 && step(value) >= 0").placed().size()),
                 "the rule alone, the rule beside a helper nothing names, and the rule written"
                         + " beside a part this reading stops on");
     }
@@ -94,7 +115,7 @@ class AClauseOnePartOfWhichCannotBeReadIsStoppedWholeTest {
                 "AdmissibleSet[approximation=Cofinite[excluded=[]],"
                         + " completeness=Wider[why=[RuleUnread[stopped=StoppedReading["
                         + "why=NOT_REACHED, stoppedAt=[]]]]]]",
-                String.valueOf(read(STANDING, "value >= 1 && step(value) >= 0")
+                String.valueOf(readStopped("value >= 1 && step(value) >= 0")
                         .admits(RuleKey.THE_VALUE)),
                 "and where a clause one part of which could not be read stopped");
     }
@@ -112,8 +133,8 @@ class AClauseOnePartOfWhichCannotBeReadIsStoppedWholeTest {
      */
     @Test
     void theStopIsRecordedAsOftenForAClauseOfTwoPartsAsForOne() {
-        Stopping one = stopsIn(() -> read(STANDING, "step(value) >= 0"));
-        Stopping two = stopsIn(() -> read(STANDING, "value >= 1 && step(value) >= 0"));
+        Stopping one = stopsIn(() -> readStopped("step(value) >= 0"));
+        Stopping two = stopsIn(() -> readStopped("value >= 1 && step(value) >= 0"));
 
         assertEquals(List.of(true, true), List.of(one.stopped(), two.stopped()),
                 "both readings met the limit, or the counts below are of readings that never"
@@ -151,7 +172,7 @@ class AClauseOnePartOfWhichCannotBeReadIsStoppedWholeTest {
     /** And what the clause is recorded as having raised and answered. */
     @Test
     void whatTheStoppedClauseIsRecordedAsRaising() {
-        FieldDomains stopped = read(STANDING, "value >= 1 && step(value) >= 0");
+        FieldDomains stopped = readStopped("value >= 1 && step(value) >= 0");
 
         assertEquals(List.of(0, 0), List.of(
                         stopped.required().size(), stopped.accounting().size()),

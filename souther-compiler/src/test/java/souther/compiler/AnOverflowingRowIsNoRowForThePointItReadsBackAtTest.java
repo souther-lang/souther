@@ -36,7 +36,7 @@ class AnOverflowingRowIsNoRowForThePointItReadsBackAtTest {
     void aRowWhoseRunAbortsIsPassedOverForOneThatAnswers() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         List<List<String>> rows =
                 OfferedAtTheLines.of(compilation, compilation.modules().getFirst(), "f").rows()

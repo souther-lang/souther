@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Sig;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.observe.Comparisons;
@@ -14,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -115,10 +115,7 @@ class NoTwoOfferedRowsPutInTheSameValuesTest {
     private static void assertNoRepeat(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
-                "the model compiles");
+        ACompiledModel.compiles(compilation);
         Db db = compilation.db();
         Sig sig = db.ask(new Bodies.Signatures("m")).value().get("record");
         FixturesAtTheBoundary decoder = Adequacy.constructing(db, "m");

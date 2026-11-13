@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.ExampleMessage;
 
@@ -53,8 +54,7 @@ class AFindingIsPublishedUnderTheCodeItsKindNamesTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(OWED_AT_AN_ARM, "Main");
         compilation.measure(Adequacy.Level.ALL);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** The kind both findings carry, which is the rule about a row's answer and not the arm's. */

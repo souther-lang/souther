@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
@@ -151,7 +152,8 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
 
     private static Core coreOf(Map<String, String> sources, ModulePath path, String module,
                                String behavior) {
-        Compilation compilation = Compilation.ofDocuments(sources, Set.of(), path);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofDocuments(sources, Set.of(), path));
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);

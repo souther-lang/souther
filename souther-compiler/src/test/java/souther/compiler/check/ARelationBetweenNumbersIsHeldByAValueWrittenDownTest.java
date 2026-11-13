@@ -2,12 +2,15 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,6 +33,12 @@ class ARelationBetweenNumbersIsHeldByAValueWrittenDownTest {
 
     /** {@code fields} are the declaration's, and {@code rules} one invariant to a line. */
     private static boolean holdsAValue(String before, String fields, String... rules) {
+        return holdsAValue(List.of(), before, fields, rules);
+    }
+
+    /** As above, for a declaration the compiler is meant to refuse with {@code refused}. */
+    private static boolean holdsAValue(List<String> refused, String before, String fields,
+                                       String... rules) {
         String source = """
                 module example.relation
 
@@ -46,8 +55,11 @@ class ARelationBetweenNumbersIsHeldByAValueWrittenDownTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         String module = compilation.modules().get(0);
         TypeSymbol subject = TypeSymbols.declared(new TypeKey(module, "Subject"));
-        return Rules.of(subject, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).bounds().shownToHoldAValue();
+        boolean shown = Rules.of(subject,
+                RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).bounds().shownToHoldAValue();
+        ACompiledModel.refusedWith(refused, compilation);
+        return shown;
     }
 
     private static final String AMOUNTS = """
@@ -99,7 +111,7 @@ class ARelationBetweenNumbersIsHeldByAValueWrittenDownTest {
 
     @Test
     void rulesNoValueHoldsTogetherAreNotShown() {
-        assertFalse(holdsAValue("", "a: Int, b: Int",
+        assertFalse(holdsAValue(List.of("E1013"), "", "a: Int, b: Int",
                 "invariant low = a + b == 1",
                 "invariant high = a + b == 2"));
     }
