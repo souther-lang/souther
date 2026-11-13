@@ -388,7 +388,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      */
     @Test
     void aFakeAnsweringWithACaseThatCarriesFieldsNamesNoValue() {
-        List<String> codes = codesOf(Compilation.ofSource("""
+        List<String> codes = codesOf(List.of("E1023"), Compilation.ofSource("""
                 module example.order
 
                 data Id = Int
@@ -421,7 +421,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     /** The same table with the value written, which the declaration then rules out. */
     @Test
     void aFakeAnsweringWithSuchACaseWrittenOutIsHeld() {
-        List<String> codes = codesOf(Compilation.ofSource("""
+        List<String> codes = codesOf(List.of("E1929"), Compilation.ofSource("""
                 module example.order
 
                 data Id = Int
@@ -499,7 +499,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      */
     @Test
     void aStandInForABorrowedDependencyIsHeldToTheDeclaringModulesClause() {
-        List<String> codes = codesOf(Compilation.ofSources(List.of("""
+        List<String> codes = codesOf(List.of("E1929"), Compilation.ofSources(List.of("""
                 module up exposing ( Id, Found, lookup )
 
                 data Id = Int
@@ -537,7 +537,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      *  and not about the boundary it was written across. */
     @Test
     void aStandInThatKeepsTheBorrowedClauseIsAdmitted() {
-        List<String> codes = codesOf(Compilation.ofSources(List.of("""
+        List<String> codes = codesOf(List.of(), Compilation.ofSources(List.of("""
                 module up exposing ( Id, Found, lookup )
 
                 data Id = Int
@@ -578,7 +578,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      */
     @Test
     void aRefusedTableIsNotComparedWithTheRowsRecordedForTheBehavior() {
-        List<String> codes = codesOf(Compilation.ofSource("""
+        List<String> codes = codesOf(List.of("E1929"), Compilation.ofSource("""
                 module example.clash
 
                 data Id = Int
@@ -627,8 +627,8 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     }
 
     /** The codes a multi-source compile says, in the order they were said. */
-    private static List<String> codesOf(Compilation c) {
-        c.answerEverything();
+    private static List<String> codesOf(List<String> refusal, Compilation compilation) {
+        Compilation c = ACompiledModel.refusedWith(refusal, compilation);
         List<String> codes = new ArrayList<>();
         c.diagnostics().values().stream().flatMap(List::stream)
                 .forEach(d -> codes.add(d.diagnostic().code()));

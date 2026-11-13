@@ -84,7 +84,6 @@ final class ModelEffects {
         Map<String, Set<String>> calledBy = new HashMap<>();
         Set<String> changing = new HashSet<>();
         Set<String> reading = new HashSet<>();
-        Set<String> answering = new HashSet<>();
         for (ClassModel each : classes) {
             for (MethodModel method : each.methods()) {
                 if (method.code().isEmpty()) {
@@ -105,10 +104,6 @@ final class ModelEffects {
                             if (fromOutside && owner.equals(ModelVocabulary.DB)
                                     && ModelVocabulary.DB_READS_A_REPORT.contains(name)) {
                                 reading.add(self);
-                            }
-                            if (owner.equals(ModelVocabulary.COMPILATION)
-                                    && ModelVocabulary.ANSWERS.contains(name)) {
-                                answering.add(self);
                             }
                             String callee = AMethod.of(owner, name, call.type().stringValue());
                             calledBy.computeIfAbsent(callee, k -> new HashSet<>()).add(self);
@@ -135,9 +130,6 @@ final class ModelEffects {
                             .equals(ModelVocabulary.COMPILATION_TYPE)) {
                         changing.add(AMethod.of(each, method));
                     }
-                    if (ModelVocabulary.ANSWERS.contains(method.methodName().stringValue())) {
-                        answering.add(AMethod.of(each, method));
-                    }
                     if (ModelVocabulary.SAYS_WITHOUT_REPORTS
                             .contains(method.methodName().stringValue())) {
                         reading.add(AMethod.of(each, method));
@@ -145,9 +137,8 @@ final class ModelEffects {
                 }
             }
         }
-        Set<String> readers = close(reading, calledBy);
-        readers.removeAll(close(answering, calledBy));
-        return new ModelEffects(implementers, withCode, close(changing, calledBy), readers);
+        return new ModelEffects(implementers, withCode, close(changing, calledBy),
+                close(reading, calledBy));
     }
 
     /** The methods the call of {@code callee} may run: itself and what is declared below it. */

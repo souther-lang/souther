@@ -2,6 +2,7 @@ package souther.lsp.analysis;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
@@ -88,6 +89,7 @@ class WhatACodeActionCostsBenchmark {
 
         Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .writtenOn(WrittenOn.DAY);
+        ACompiledModel.refusedWith(List.of("E1023"), compilation);
         SourceId asked = new SourceId(ASKED);
         if (compilation.repairs(asked).isEmpty()) {
             throw new IllegalStateException("the corpus is meant to hold a misspelling to repair");
@@ -97,8 +99,10 @@ class WhatACodeActionCostsBenchmark {
         System.out.printf("asked:    %s%n", byTurns(compilation, asked, byId, Edit.THE_FILE_ASKED));
         System.out.printf("elsewhere:%s%n", byTurns(compilation, asked, byId, Edit.ANOTHER_FILE));
         System.out.printf("cold:      diagnostics %6.2f ms   repairs %6.2f ms%n",
-                medianMillis(round -> fresh(byId).diagnostics(), ROUNDS / 4),
-                medianMillis(round -> fresh(byId).repairs(asked), ROUNDS / 4));
+                medianMillis(round -> ACompiledModel.refusedWith(List.of("E1023"), fresh(byId))
+                        .diagnostics(), ROUNDS / 4),
+                medianMillis(round -> ACompiledModel.refusedWith(List.of("E1023"), fresh(byId))
+                        .repairs(asked), ROUNDS / 4));
 
         String own = selfContained();
         System.out.printf("alone (one self-contained document): %6.2f ms%n",
@@ -162,6 +166,7 @@ class WhatACodeActionCostsBenchmark {
                 compilation.repairs(asked);
             }
             long closed = System.nanoTime();
+            ACompiledModel.refusedWith(List.of("E1023"), compilation);
             if (round >= ROUNDS) {
                 repairing.add(repairsFirst ? between - opened : closed - between);
                 diagnosing.add(repairsFirst ? closed - between : between - opened);

@@ -6,6 +6,7 @@ import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingOwner;
 
 import java.util.LinkedHashSet;
@@ -34,7 +35,8 @@ class TwoBuildsOfOneValueExpandItsCallsUnderTwoOwnersTest {
             """;
 
     private static void accepted(String tail) {
-        assertEquals("{0=[]}", String.valueOf(Compiler.compiled(HEAD + tail, "m").diagnostics()));
+        Compilation model = ACompiledModel.compiles(Compiler.compiled(HEAD + tail, "m"));
+        assertEquals("{0=[]}", String.valueOf(model.diagnostics()));
     }
 
     @Test

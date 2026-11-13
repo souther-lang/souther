@@ -29,6 +29,7 @@ class WhereADiagnosticIsSaidTest {
     @Test
     void aCompileOfOneSourceStillFilesItsProblemsUnderThatSource() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 
@@ -40,6 +41,7 @@ class WhereADiagnosticIsSaidTest {
     @Test
     void aCompileOfOneSourceFilesUnderTheSourceItQuotesFrom() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 
@@ -131,6 +133,7 @@ class WhereADiagnosticIsSaidTest {
                 behavior g : (n: N) -> Int
                 let g (n) = joined(n)
                 """), souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1324"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 
@@ -153,6 +156,7 @@ class WhereADiagnosticIsSaidTest {
                 behavior g : (n: N) -> Int
                 let g (n) = bogusTwo
                 """), souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1023", "E1023"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 
@@ -175,6 +179,7 @@ class WhereADiagnosticIsSaidTest {
         Compilation c = Compilation.ofSources(
                 List.of("module a\n" + same, "module b\n" + same),
                 souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1023", "E1023"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 

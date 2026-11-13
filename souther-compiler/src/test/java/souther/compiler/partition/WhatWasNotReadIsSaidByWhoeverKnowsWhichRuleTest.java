@@ -171,14 +171,16 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
      */
     @Test
     void theModelThatSaysSoIsOneThisCompilerRefuses() {
-        assertTrue(isRefused(A_POSITION), A_POSITION);
-        assertFalse(isRefused(A_RULE), "and a rule read and given up on is not that");
+        assertTrue(isRefused(A_POSITION, List.of("E1319")), A_POSITION);
+        assertFalse(isRefused(A_RULE, List.of()), "and a rule read and given up on is not that");
     }
 
-    /** Whether this compiler refuses {@code source}, which is what the fixture above turns on. */
-    private static boolean isRefused(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+    /**
+     * Whether this compiler refuses {@code source}, which is what the fixture above turns on. The
+     * errors it is refused with are {@code codes}.
+     */
+    private static boolean isRefused(String source, List<String> codes) {
+        Compilation compilation = ACompiledModel.refusedWith(codes, Compilation.ofSource(source, "Main"));
         return !compilation.diagnostics().values().stream()
                 .flatMap(java.util.List::stream).toList().isEmpty();
     }

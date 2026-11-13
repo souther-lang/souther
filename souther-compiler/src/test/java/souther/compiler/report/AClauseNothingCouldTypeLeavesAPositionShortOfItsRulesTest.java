@@ -85,7 +85,7 @@ class AClauseNothingCouldTypeLeavesAPositionShortOfItsRulesTest {
     @Test
     void thisWitnessIsOneTheCompilerRefuses() {
         Compilation compilation = Compilation.ofSource(RULES_NEVER_ARRIVED_AT, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1319"), compilation);
         assertFalse(compilation.diagnostics().values().stream()
                         .flatMap(java.util.List::stream).toList().isEmpty(),
                 "a position whose rules never arrived takes a clause nothing could type");

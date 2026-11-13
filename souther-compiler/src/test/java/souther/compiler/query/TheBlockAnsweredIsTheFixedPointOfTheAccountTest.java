@@ -10,6 +10,7 @@ import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -246,7 +247,7 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
      *  nothing (#1579). */
     private static List<String> errorsIn(String model) {
         List<String> out = new ArrayList<>();
-        measured(model).diagnostics().forEach((_, said) -> said.forEach(each -> {
+        ACompiledModel.refusedOnlyWith(Set.of("E1905"), measured(model)).diagnostics().forEach((_, said) -> said.forEach(each -> {
             if (each.diagnostic().severity() == Severity.ERROR) {
                 out.add(String.valueOf(each.diagnostic().code()));
             }

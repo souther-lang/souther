@@ -59,10 +59,10 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
         return both;
     }
 
-    private static Compilation reading(String source, Map<String, ClassFileImage> path) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.of(path));
-        compilation.answerEverything();
-        return compilation;
+    private static Compilation reading(List<String> refusedWith, String source,
+                                       Map<String, ClassFileImage> path) {
+        return ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofSources(List.of(source), ModulePath.of(path)));
     }
 
     /** A module holding one thing out of another, as its own project's build produced it. */
@@ -108,7 +108,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
                 data Page = { held: Held }
                 """;
-        Compilation compilation = reading(stands, held());
+        Compilation compilation = reading(List.of("E1504", "E1504"), stands, held());
 
         SourcePos said = whereTheReportAboutIsSaid(compilation, "lib.held");
         assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("0")), said.quotedFrom(),
@@ -123,7 +123,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void theCoordinateStandsInForCodeWrittenInThatModule() {
-        Compilation compilation = reading("""
+        Compilation compilation = reading(List.of("E1504", "E1504"), """
                 module app.uses
                 import lib.held ( Held )
 
@@ -162,7 +162,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
                 data Page = { front: Front }
                 """;
-        Compilation compilation = reading(uses, and(held, front));
+        Compilation compilation = reading(List.of("E1504", "E1504"), uses, and(held, front));
 
         SourcePos said = whereTheReportAboutIsSaid(compilation, "lib.held");
         assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("0")), said.quotedFrom());
@@ -174,7 +174,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      *  still reaches the file the caller does have. */
     @Test
     void itIsPublishedOnTheSourceThatReachedIt() {
-        Compilation compilation = reading("""
+        Compilation compilation = reading(List.of("E1504", "E1504"), """
                 module app.uses
                 import lib.held ( Held )
 
@@ -200,7 +200,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void noErrorIsLeftWithNowhereToBeSaid() {
-        Compilation compilation = reading("""
+        Compilation compilation = reading(List.of("E1504", "E1504"), """
                 module app.uses
                 import lib.held ( Held )
 
@@ -226,7 +226,8 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void everySourceThatReachesItIsTold() {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1504", "E1504"),
+                Compilation.ofSources(List.of("""
                 module app.a exposing ( A )
                 import lib.held ( Held )
 
@@ -236,8 +237,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 import lib.held ( Held )
 
                 data B = { held: Held }
-                """), ModulePath.of(held()));
-        compilation.answerEverything();
+                """), ModulePath.of(held())));
 
         Map<SourceId, List<Located>> byId = compilation.diagnostics();
         assertFalse(byId.get(new SourceId("0")).isEmpty(), "the source that was reached first");
@@ -269,7 +269,8 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 data Between = { shared: Shared }
                 """, and(shared, deep()));
 
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1504", "E1504"),
+                Compilation.ofSources(List.of("""
                 module app.a exposing ( A )
                 import lib.shared ( Shared )
 
@@ -279,8 +280,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 import lib.between ( Between )
 
                 data B = { between: Between }
-                """), ModulePath.of(and(shared, between)));
-        compilation.answerEverything();
+                """), ModulePath.of(and(shared, between))));
 
         Map<SourceId, List<Located>> byId = compilation.diagnostics();
         assertEquals(byId.get(new SourceId("0")).size(), byId.get(new SourceId("1")).size(),
@@ -311,7 +311,8 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 and(middle, and(meeting, leaf)));
 
         // everything but the leaf, so what is missing is under the module the two routes meet at
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1504", "E1504"),
+                Compilation.ofSources(List.of("""
                 module app.a exposing ( A )
                 import lib.short ( Short )
 
@@ -321,8 +322,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 import lib.long ( Long )
 
                 data B = { x: Long }
-                """), ModulePath.of(and(and(meeting, shortWay), and(middle, longWay))));
-        compilation.answerEverything();
+                """), ModulePath.of(and(and(meeting, shortWay), and(middle, longWay)))));
 
         Map<SourceId, List<Located>> byId = compilation.diagnostics();
         assertEquals(byId.get(new SourceId("0")).size(), byId.get(new SourceId("1")).size(),
@@ -342,7 +342,9 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
         Map<String, ClassFileImage> left = holding("lib.left", "Left", "lib.deep", "Deep", deep());
         Map<String, ClassFileImage> right = holding("lib.right", "Right", "lib.deep", "Deep", deep());
 
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.refusedWith(
+                List.of("E1504", "E1504", "E1504", "E1504"),
+                Compilation.ofSources(List.of("""
                 module app.a exposing ( A )
                 import lib.left ( Left )
 
@@ -352,8 +354,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 import lib.right ( Right )
 
                 data B = { x: Right }
-                """), ModulePath.of(and(left, right)));
-        compilation.answerEverything();
+                """), ModulePath.of(and(left, right))));
 
         Set<String> saidAbout = new LinkedHashSet<>();
         for (Db.Found found : compilation.reports()) {
@@ -390,7 +391,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """);
         core.answerEverything();
 
-        Compilation compilation = reading("""
+        Compilation compilation = reading(List.of("E1502"), """
                 module app.uses
                 import souther.taken ( X )
 
@@ -427,9 +428,9 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
                 data Page = { twice: Twice }
                 """;
-        Compilation compilation = reading(stands, twiceNaming("lib.deep.Deep", "lib.deep.Deep"));
+        Compilation compilation = reading(List.of("E1506"), stands,
+                twiceNaming("lib.deep.Deep", "lib.deep.Deep"));
 
-        ACompiledModel.refusedWith(List.of("E1506"), compilation);
         List<Db.Found> found = compilation.db().allReports();
         assertEquals(List.of("E1506"),
                 found.stream().map(f -> f.report().diagnostic().code()).toList(),
@@ -461,14 +462,13 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void everyFieldOfAPublishedModuleIsRead() {
-        Compilation compilation = reading("""
+        Compilation compilation = reading(List.of("E1506", "E1506"), """
                 module app.uses
                 import lib.twice ( Twice )
 
                 data Page = { twice: Twice }
                 """, twiceNaming("lib.deep.Deep", "lib.deep.Other"));
 
-        ACompiledModel.refusedWith(List.of("E1506", "E1506"), compilation);
         assertEquals(List.of("Deep", "Other"),
                 compilation.db().allReports().stream()
                         .map(f -> String.valueOf(f.report().diagnostic().values().get("name")))

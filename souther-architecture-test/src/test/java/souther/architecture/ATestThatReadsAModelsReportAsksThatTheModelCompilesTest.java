@@ -32,9 +32,11 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     /** The shapes written for this check to read, and which of them it refuses. */
     private static final Set<String> REFUSED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelNeverAsked", "AnotherClassMadeIt", "AnotherModelAsked",
-            "AskedOnOneWayOnly", "ChangedOnTheWayThatFails", "ChangedThenFailedAndCaught",
+            "AnswerWarningsOnly", "AskedOnOneWayOnly", "ChangedOnTheWayThatFails",
+            "ChangedThenFailedAndCaught", "ChangedThroughAGenericFunction",
             "ChangedThroughAMethod", "ChangedThroughAnInterface",
             "ChangedThroughTheDb", "DbChangedThroughAVariable", "DbHandedToAMethod",
+            "DiagnosticsAreNotACompileCheck", "DiagnosticsOfAModelNobodyAsked",
             "EngineHandsItIn", "ErrorsDropped", "ErrorsKept",
             "FieldChangedByTheVariableItCameIn", "FieldChangedByTheVariableItWasReadInto",
             "FieldMutatedAfterTheLook",
@@ -44,14 +46,14 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "NotCompiledButReportRead", "NotCompiledOffTheList", "NotCompiledReadsAllReports",
             "ParameterNobodyPasses", "ReadThenChangedThenAsked",
             "ReadThenChangedThenAskedInAMethod", "ReassignedOnOneWay",
-            "ReplacedAfterTheLook", "ReportsReadOfAModelNobodyAsked",
+            "ReplacedAfterTheLook", "ReportsOfAnAnsweredModel", "ReportsReadOfAModelNobodyAsked",
             "SwallowedFailure", "UpdatedAfterTheLook", "WarningsOfAnUnaskedModel"));
 
     private static final Set<String> ACCEPTED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelAsked", "AliasOfAnAskedModel", "AnotherClassAskedAboutIt",
             "AskedAfterTheRead", "AskedByAMethodOfItsOwn", "AskedOnEveryWay", "AskedThenCaptured",
             "AskedThenRead", "ConfiguredThroughTheDbBeforeTheLook", "DbHandedToAReader",
-            "FieldAskedWhereWritten", "HandedToAnInterfaceThatOnlyLooks",
+            "ErrorsOfAnAnsweredModel", "FieldAskedWhereWritten", "HandedToAnInterfaceThatOnlyLooks",
             "HelperThatChangesAndAsks", "MarkedAndNotRun",
             "NotCompiledOnTheList",
             "ParameterHandedByACaller", "TheErrorsAreWhatWasMeant", "ThroughTheDoor",
@@ -125,8 +127,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                 AMethod.of(FIXTURES + "NotCompiledButReportRead", "read",
                         "(Ljava/lang/String;)Lsouther/compiler/report/AdequacyReport;"),
                 AMethod.of(FIXTURES + "NotCompiledReadsAllReports", "read",
-                        "(Ljava/lang/String;)Z")));
-        List<ClassModel> shapes = new ArrayList<>();
+                        "(Ljava/lang/String;)Z")));        List<ClassModel> shapes = new ArrayList<>();
         for (String shape : REFUSED_SHAPES) {
             shapes.add(COMPILED.read(FIXTURES + shape));
         }
@@ -202,13 +203,13 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                 changing.add(method.methodName().stringValue());
             }
         }
-        Set<String> said = new TreeSet<>(ModelVocabulary.SHOWS_ERRORS);
-        said.addAll(ModelVocabulary.SAYS_WITHOUT_REPORTS);
-        said.add("warnings");
-        assertEquals(said, reading,
-                "the methods of a model that read what it found, and do not answer it first, are"
-                        + " the ones said in ModelVocabulary to show the errors, and warnings and"
-                        + " adequacy, which a model that stopped does not show");
+        assertTrue(reading.containsAll(ModelVocabulary.SHOWS_ERRORS),
+                () -> "what shows the errors is said in ModelVocabulary and is a method that reads"
+                        + " what a model found: " + reading);
+        assertTrue(reading.containsAll(Set.of("reports", "warnings", "adequacy", "diagnostics",
+                        "repairs")),
+                () -> "what reads the whole of what a model found is found from the classes: "
+                        + reading);
         assertTrue(changing.containsAll(Set.of("update", "measure")),
                 () -> "changing a model: " + changing);
         Set<String> answersAndChanges = new TreeSet<>(changing);

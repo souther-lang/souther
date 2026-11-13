@@ -88,7 +88,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     private static boolean modelRefuses(String model, String row) {
         Compilation compilation = Compilation.ofSource(
                 model + "\nexample settle\n    | (" + row + ") -> Refused\n", "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedOnlyWith(Set.of("E1905"), compilation);
         return compilation.diagnostics().values().stream().flatMap(List::stream).findAny().isEmpty();
     }
 

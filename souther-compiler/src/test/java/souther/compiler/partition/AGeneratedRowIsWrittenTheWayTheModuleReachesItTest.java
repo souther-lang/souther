@@ -161,7 +161,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                         "Req { amount = lib.Amount(501), kind = Domestic }",
                         "Req { amount = lib.Amount(499), kind = Overseas }"),
                 rows);
-        assertEquals(List.of("E1905"), addedByPasting(source,
+        assertEquals(List.of("E1905"), addedByPasting(List.of("E1905"), source,
                         rows.stream().filter(each -> each.contains("Amount(500)"))
                                 .findFirst().orElseThrow()),
                 "and the qualified form compiles where it is offered");
@@ -192,9 +192,10 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                 .findFirst().orElseThrow();
         String declared = offered.replace("up.", "");
 
-        assertEquals(List.of("E1905"), addedByPasting(source, offered),
+        assertEquals(List.of("E1905"), addedByPasting(List.of("E1905"), source, offered),
                 "the row was read, and only the expectation pasted beside it disagrees");
-        assertEquals(List.of("E1023", "E1023"), addedByPasting(source, declared),
+        assertEquals(List.of("E1023", "E1023"),
+                addedByPasting(List.of("E1023", "E1023"), source, declared),
                 "and the declarations' own spellings are two names that are not in scope here");
     }
 
@@ -207,10 +208,10 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
      * nothing out of scope could still be a syntax error or a value of the wrong type, and a check
      * written as "no E1023" would call that a row.
      */
-    private static List<String> addedByPasting(String source, String row) {
-        List<String> before = new java.util.ArrayList<>(codesFor(source));
+    private static List<String> addedByPasting(List<String> refusedWith, String source, String row) {
+        List<String> before = new java.util.ArrayList<>(codesFor(List.of(), source));
         List<String> added = new java.util.ArrayList<>();
-        for (String each : codesFor(source + """
+        for (String each : codesFor(refusedWith, source + """
 
                 example f
                     | "boundary" : (%s) -> No
@@ -222,9 +223,9 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
         return added;
     }
 
-    /** Every diagnostic a compile of {@code source} reports. */
-    private static List<String> codesFor(String source) {
-        return attempted(source).diagnostics().values().stream().flatMap(List::stream)
+    /** Every diagnostic a compile of {@code source} reports, errors being {@code refusedWith}. */
+    private static List<String> codesFor(List<String> refusedWith, String source) {
+        return ACompiledModel.refusedWith(refusedWith, attempted(source)).diagnostics().values().stream().flatMap(List::stream)
                 .map(d -> d.diagnostic().code()).toList();
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
@@ -483,7 +484,7 @@ class ARowIsComposedForAPointOnATotalTest {
 
     /** What the compiler says about a model. */
     private static List<String> codesOf(String source) {
-        Compilation compilation = measured(source);
+        Compilation compilation = measured(List.of(), source);
         List<String> said = new ArrayList<>();
         for (Map.Entry<SourceId, List<Located>> each : compilation.diagnostics().entrySet()) {
             for (Located found : each.getValue()) {
@@ -501,7 +502,7 @@ class ARowIsComposedForAPointOnATotalTest {
     /** The same, for a model refused for exactly {@code codes}. */
     private static List<BorderAssessment> lines(String source, String behavior,
                                                 List<String> codes) {
-        Compilation compilation = ACompiledModel.refusedWith(codes, measured(source));
+        Compilation compilation = measured(codes, source);
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), MODULE);
         assertNotNull(read, () -> "the model under test compiles: " + source);
         List<BorderAssessment> lines = read.get(behavior);
@@ -510,7 +511,12 @@ class ARowIsComposedForAPointOnATotalTest {
     }
 
     /** What each model measured here answered, which is the model's and not the asking's. */
-    private static final Map<String, Compilation> MEASURED = new LinkedHashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
+
+    @AfterAll
+    static void released() {
+        SHARED.release();
+    }
 
     /**
      * A model measured, and the same answers wherever it is asked for again.
@@ -518,13 +524,13 @@ class ARowIsComposedForAPointOnATotalTest {
      * <p>The claims here walk every point of every line and read a model back for each, so the same
      * few sources are asked for many times over. A measure is settled once and read from then on:
      * what is answered does not depend on who asked, and a compile of the whole model per reading
-     * is the same answer worked out again.
+     * is the same answer worked out again. Held to be refused with {@code codes}, none for a model
+     * that compiles.
      */
-    private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source, _ -> {
+    private static Compilation measured(List<String> codes, String source) {
+        return SHARED.refusedWith(codes, source, () -> {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             return compilation;
         });
     }

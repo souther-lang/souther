@@ -44,16 +44,20 @@ final class ModelVocabulary {
     /** The method of a model that hands out its store. */
     static final String STORE_ACCESSOR = "db";
 
-    /** What answers everything a model has to answer, so that the errors it has are found. */
-    static final Set<String> ANSWERS = Set.of("answerEverything", "answerWarnings");
+    /**
+     * What answers everything a model has to answer, so that the errors it has are found. A part of
+     * it, such as the warnings of one module, is not this: it leaves the rest unanswered.
+     */
+    static final Set<String> ANSWERS = Set.of("answerEverything");
 
     /**
-     * The methods of a model that read the reports it has found and hand back the errors among
-     * them. A model that was answered shows them whether or not it compiles, so it is read through
-     * these without having been asked that it compiles; what reads the rest of what is found, which
-     * a model that stopped does not show, is read only of a model that was asked about.
+     * The methods of a model that hand back the errors and nothing else. A model that was answered
+     * shows them whether or not it compiles, so they are read of it without it having been asked
+     * that it compiles. Every other method that reads what a model found, the warnings and the
+     * whole of the reports among them, can be read as saying nothing wrong of a model that has
+     * errors, so it is read only of a model that was asked about.
      */
-    static final Set<String> SHOWS_ERRORS = Set.of("reports", "errors", "failure");
+    static final Set<String> SHOWS_ERRORS = Set.of("errors", "failure");
 
     /**
      * What reads of a model what it says without going through the reports it found: how well the

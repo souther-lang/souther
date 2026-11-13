@@ -501,7 +501,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                     if s.value < Qualified then Accepted { at = "x" }
                     else Refused { at = "y" }
                 """, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
 
         assertEquals(List.of("E1013"), compilation.diagnostics().values().stream()
                         .flatMap(List::stream)

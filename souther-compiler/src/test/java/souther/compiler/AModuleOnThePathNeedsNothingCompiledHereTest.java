@@ -260,8 +260,9 @@ class AModuleOnThePathNeedsNothingCompiledHereTest {
                 behavior go : (s: String) -> Tag
                 let go (s) = make(s)
                 """;
-        Compilation compilation = Compilation.ofSources(List.of(COMMON, user),
-                builtWith(List.of(COMMON, MAKES_A_TAG), "lib.x"));
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1511"),
+                Compilation.ofSources(List.of(COMMON, user),
+                        builtWith(List.of(COMMON, MAKES_A_TAG), "lib.x")));
 
         Located said = compilation.diagnostics().get(new SourceId("1")).stream()
                 .filter(d -> d.diagnostic().code().equals("E1511")).findFirst().orElseThrow();

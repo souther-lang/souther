@@ -68,7 +68,6 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
     @Test
     void theClauseIsTheOnlyThingWrong() {
         Compilation c = compiled();
-        c.answerEverything();
 
         List<String> said = c.diagnostics().values().stream().flatMap(List::stream)
                 .map(each -> each.diagnostic().code()).toList();
@@ -130,8 +129,8 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
                 behavior aliased : (b: L.Bad) -> Out constructs Out
                 let aliased (b) = Out { n = 1 }
                 """);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.refusedWith(List.of("E1023"),
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
 
         assertEquals(List.of("E1023"), c.diagnostics().values().stream().flatMap(List::stream)
                         .map(each -> each.diagnostic().code()).toList(),

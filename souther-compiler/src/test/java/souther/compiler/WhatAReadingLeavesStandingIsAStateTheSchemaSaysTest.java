@@ -330,8 +330,7 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
     private static boolean isRefused(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        return !compilation.diagnostics().values().stream()
-                .flatMap(java.util.List::stream).toList().isEmpty();
+        return !compilation.errors().isEmpty();
     }
 
 }

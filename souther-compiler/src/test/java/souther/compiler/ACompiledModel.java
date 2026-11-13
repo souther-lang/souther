@@ -5,6 +5,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -84,18 +85,20 @@ public final class ACompiledModel {
     }
 
     /**
-     * The errors {@code model} is refused with, whether it reports them or stops with them, after
-     * it was answered in full. For a test that says what a refusal is and compares it with what it
-     * meant, so the model is not held to compile and what comes back is the errors themselves,
-     * which a model that did not compile does not leave empty.
+     * The errors {@code model} is refused with after it was answered in full: those it stops with,
+     * and those it reports. For a test that says what a refusal is and compares it with what it
+     * meant. It answers the model and says nothing of the model compiling, so what a test goes on
+     * to read of the model besides its errors is read of a model nobody asked about.
      */
     public static List<Diagnostic> diagnosticsOf(Compilation model) {
+        List<Diagnostic> said = new ArrayList<>();
         try {
             model.answerEverything();
-            return model.errors().stream().map(found -> found.diagnostic()).toList();
         } catch (CompileException stopped) {
-            return stopped.diagnostics();
+            said.addAll(stopped.diagnostics());
         }
+        model.errors().forEach(found -> said.add(found.diagnostic()));
+        return said;
     }
 
     /**

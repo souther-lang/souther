@@ -546,8 +546,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aFloorPastWhatTheElementHasIsRefusedWhicheverWayItIsWritten() {
-        Compilation compilation = Compilation.ofSource(BEYOND, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1013", "E1013"),
+                Compilation.ofSource(BEYOND, "Main"));
 
         assertEquals(List.of("E1013", "E1013"), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())

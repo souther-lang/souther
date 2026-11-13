@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,6 +50,83 @@ public final class ModelShapes {
         public static Compilation notCompiled(Compilation model, String reason) {
             Objects.requireNonNull(reason);
             return model;
+        }
+
+        public static List<String> diagnosticsOf(Compilation model) {
+            model.answerEverything();
+            return List.of();
+        }
+    }
+
+    /** Answers the warnings of a module, which is not answering everything, and reads the errors. */
+    public static final class AnswerWarningsOnly {
+
+        private AnswerWarningsOnly() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.answerWarnings("Main");
+            return model.errors().isEmpty();
+        }
+    }
+
+    /** Takes what the errors of a model are, which does not say the model compiles, and reads. */
+    public static final class DiagnosticsAreNotACompileCheck {
+
+        private DiagnosticsAreNotACompileCheck() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            TheDoor.diagnosticsOf(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Answers a model in full and reads all it found, which holds the warnings among the errors. */
+    public static final class ReportsOfAnAnsweredModel {
+
+        private ReportsOfAnAnsweredModel() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.answerEverything();
+            return model.reports().isEmpty();
+        }
+    }
+
+    /** Answers a model in full and reads the diagnostics, which say what was found of it. */
+    public static final class DiagnosticsOfAModelNobodyAsked {
+
+        private DiagnosticsOfAModelNobodyAsked() { }
+
+        public static boolean read(String source) {
+            return Compilation.ofSource(source, "Main").diagnostics().isEmpty();
+        }
+    }
+
+    /** Answers a model in full and reads its errors, which a model that did not compile shows. */
+    public static final class ErrorsOfAnAnsweredModel {
+
+        private ErrorsOfAnAnsweredModel() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.answerEverything();
+            return model.errors().isEmpty();
+        }
+    }
+
+    /** Hands a model to a function that is known by what it takes in general, which changes it. */
+    public static final class ChangedThroughAGenericFunction {
+
+        private ChangedThroughAGenericFunction() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Consumer<Compilation> updater =
+                    each -> each.update(Map.of(), Set.of(), LocalDate.MIN);
+            updater.accept(model);
+            return AdequacyReport.of(model);
         }
     }
 

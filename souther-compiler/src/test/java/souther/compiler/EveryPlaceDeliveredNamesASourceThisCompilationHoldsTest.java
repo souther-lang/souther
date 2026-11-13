@@ -76,8 +76,7 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
 
                 data Page = { held: Held }
                 """), ModulePath.of(published()));
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1504", "E1504"), compilation);
     }
 
     /**
@@ -90,8 +89,7 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
 
                 let counted (ns: List<Int>): Int = List.length(List.filter(n -> n, ns))
                 """, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1805"), compilation);
     }
 
     /** A model of this compile's own with a rule its rows do not reach, so the adequacy document has

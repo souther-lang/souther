@@ -85,6 +85,7 @@ class CascadeStopsAtTheCauseTest {
                 "m.a is correct, and is told nothing: " + found.get(new SourceId("a.sou")));
         assertEquals(Map.of(), c.classes(),
                 "m.a is built against declarations nothing will emit, so it is not emitted either");
+        ACompiledModel.refusedWith(List.of("E1011"), c);
     }
 
     @Test

@@ -1097,13 +1097,17 @@ final class ModelWalk {
                                             && name.equals(ModelVocabulary.ADEQUACY_REPORT_OF);
                             boolean report = reads && !storeAccessor;
                             boolean helping = !receiver && isHelper(target, helper);
-                            boolean asks = helping && !name.equals(NOT_COMPILED);
+                            boolean handsTheModelBack = call.typeSymbol().returnType()
+                                    .descriptorString().equals(COMPILATION_TYPE);
+                            boolean asks = helping && !name.equals(NOT_COMPILED)
+                                    && handsTheModelBack;
                             boolean exempts = helping && name.equals(NOT_COMPILED)
                                     && world.exempt().contains(key);
                             boolean mutates = receiver && target.equals(COMPILATION)
                                     && world.effects().changes(callee);
-                            boolean answers = receiver && target.equals(COMPILATION)
-                                    && ModelVocabulary.ANSWERS.contains(name);
+                            boolean answers = (receiver && target.equals(COMPILATION)
+                                    && ModelVocabulary.ANSWERS.contains(name))
+                                    || (helping && !asks && !name.equals(NOT_COMPILED));
                             boolean strict = report && !(receiver
                                     && ModelVocabulary.SHOWS_ERRORS.contains(name));
                             found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
@@ -1130,6 +1134,18 @@ final class ModelWalk {
                                                 false, false, false, false, false, model, store,
                                                 false, false));
                             }
+                        } else if ((type.descriptorString().startsWith("L")
+                                || type.descriptorString().startsWith("["))
+                                && !inertWithAModel(target)
+                                && producer(at, above) instanceof Operand.Local held
+                                && holdsAModel(held.slot())) {
+                            // The model is handed on as something else, which is where a model
+                            // goes through a generic method and comes back as itself. What runs
+                            // there is not known by the types the call is written with, so it is
+                            // taken to change the model.
+                            found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
+                                    callee, instance ? i - 1 : i, false, false, false, false,
+                                    false, true, held, new Operand.Nothing(), false, false));
                         }
                         above += sizeOf(type);
                     }
@@ -1298,6 +1314,37 @@ final class ModelWalk {
             need = need - effect[1] + effect[0];
         }
         return new Operand.Lost();
+    }
+
+    /**
+     * Whether a class of the platform or of the assertions only holds, compares or prints what it
+     * is given as something else, and runs nothing of it. The ones that run what they are given,
+     * the functional interfaces and what runs a task, are not, and neither is the repository's own
+     * code.
+     */
+    private static boolean inertWithAModel(String owner) {
+        boolean runs = owner.startsWith("java/util/function/")
+                || owner.startsWith("java/util/concurrent/") || owner.equals("java/lang/Runnable")
+                || owner.equals("java/lang/reflect/Method")
+                || owner.equals("java/lang/invoke/MethodHandle");
+        return !runs && (owner.startsWith("java/") || owner.startsWith("org/junit/"));
+    }
+
+    /** Whether the variable is given a model: it is an argument of that type or is made of one. */
+    private boolean holdsAModel(int slot) {
+        if (modelParameters.contains(slot)) {
+            return true;
+        }
+        for (int at = 0; at < flow.size(); at++) {
+            if (flow.get(at) instanceof StoreInstruction store
+                    && store.typeKind() == TypeKind.REFERENCE && store.slot() == slot
+                    && producer(at, 0) instanceof Operand.Answer made
+                    && made.call().typeSymbol().returnType().descriptorString()
+                            .equals(COMPILATION_TYPE)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean madeADbBefore(int at) {
