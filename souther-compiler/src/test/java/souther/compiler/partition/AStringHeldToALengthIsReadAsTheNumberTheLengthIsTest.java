@@ -71,11 +71,8 @@ class AStringHeldToALengthIsReadAsTheNumberTheLengthIsTest {
     }
 
     private static String report(String source) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
-        assertEquals(List.of(), model.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        Compilation model = ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         return AdequacyReport.of(model).json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
@@ -136,10 +133,9 @@ class AStringHeldToALengthIsReadAsTheNumberTheLengthIsTest {
                         + "\"atAnyLength\":false,\"imagesNotShown\":[\"String.lowercase\"]}"),
                 leftOpenIn(emails("String.length(value) >= 1 && String.length(value) <= 254",
                         "String.lowercase(email)")));
-        Compilation model = Compilation.ofSource(
-                emails("String.length(value) <= 254", "String.lowercase(email)"), "Main");
-        model.measure(Adequacy.Asked.fullReport());
-        model.answerEverything();
+        Compilation model = ACompiledModel.measured(
+                emails("String.length(value) <= 254", "String.lowercase(email)"),
+                Adequacy.Asked.fullReport());
         String text = AdequacyReport.of(model)
                 .humanInEnglish(SourceRendering.namedByIdentity(model.texts()));
         assertTrue(text.lines().anyMatch(line -> line.contains("domains[*]")
@@ -247,8 +243,7 @@ class AStringHeldToALengthIsReadAsTheNumberTheLengthIsTest {
 
     /** Which of {@code texts} each class of {@code path} holds, as the label and the text. */
     private static List<String> classesHolding(String source, String path, List<String> texts) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.answerEverything();
+        Compilation model = ACompiledModel.answered(source);
         Partitions.Partitioning divided =
                 model.db().ask(new Adequacy.Divided(model.modules().get(0), "f")).value();
         assertNotNull(divided, "the behavior is divided");
@@ -274,8 +269,7 @@ class AStringHeldToALengthIsReadAsTheNumberTheLengthIsTest {
 
     /** The length of the value written for each class of {@code path}, by the class. */
     private static List<String> writtenFor(String source, String path) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.answerEverything();
+        Compilation model = ACompiledModel.answered(source);
         String module = model.modules().get(0);
         Partitions.Partitioning divided =
                 model.db().ask(new Adequacy.Divided(module, "f")).value();

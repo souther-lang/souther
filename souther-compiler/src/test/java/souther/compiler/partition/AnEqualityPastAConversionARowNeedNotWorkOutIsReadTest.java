@@ -85,11 +85,8 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
     /** The places of {@code source}'s behavior a region is left open at, by what the report
      *  asks of them. */
     private static List<String> leftOpenIn(String source) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
-        assertEquals(List.of(), model.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        Compilation model = ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<String> open = new ArrayList<>();
@@ -122,9 +119,8 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
      * shown, then those a run is not shown to get past.
      */
     private static List<String> leftOpenFor(String source) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
+        Compilation model = ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<String> out = new ArrayList<>();
@@ -248,11 +244,8 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
     /** The places of {@code source}'s behavior anything is left unanswered at, whatever the
      *  question: a reading that did not run leaves every place it reads. */
     private static List<String> unansweredIn(String source) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
-        assertEquals(List.of(), model.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        Compilation model = ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<String> out = new ArrayList<>();
@@ -371,6 +364,35 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
         for (String left : List.of("String.lowercase(a)", "a")) {
             List<String> open = unansweredIn(free.formatted(left));
             assertTrue(!open.contains("c"), left + " " + open);
+        }
+    }
+
+    /**
+     * A value is free to meet a statement only where nothing else holds it. Here {@code b} is
+     * read by a second statement on the way, which holds it to one string: past the two, {@code b}
+     * is {@code "1"} and apart from what the left compares it with, so at the {@code a} that is
+     * {@code "1"} no run reaches the right, and {@code c} is not shown parted by every string
+     * {@code a} holds.
+     */
+    @Test
+    void aValueASecondStatementOnTheWayHoldsIsNotFreeToMeetTheFirst() {
+        String held = """
+                module held
+
+                data A = String invariant String.length(value) <= 254
+
+                behavior f : (a: A, b: String, c: String) -> Bool
+                let f (A(a), b, c) = %s == b || b /= "1" || c == a
+
+                example f
+                    | "left"  : (A("1"), "1", "q") -> true
+                    | "other" : (A("y"), "2", "q") -> true
+                    | "right" : (A("y"), "1", "y") -> true
+                    | "none"  : (A("y"), "1", "z") -> false
+                """;
+        for (String left : List.of("String.lowercase(a)", "a")) {
+            List<String> open = unansweredIn(held.formatted(left));
+            assertTrue(open.contains("c"), left + " " + open);
         }
     }
 

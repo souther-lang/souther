@@ -797,7 +797,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * the run gets to the relation at. And with the figures making a partner's strings stopped
          * at, which are figures this stopped at.
          */
-        WhatItLeaves partnered(Partnering partnering) {
+        private WhatItLeaves partnered(Partnering partnering) {
             Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> strings = partnering.strings();
             Set<Figure> stopped = new LinkedHashSet<>(stoppedAt);
             stopped.addAll(partnering.stoppedAt());

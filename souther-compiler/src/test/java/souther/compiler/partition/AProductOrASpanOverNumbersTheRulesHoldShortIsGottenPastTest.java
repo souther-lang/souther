@@ -78,11 +78,8 @@ class AProductOrASpanOverNumbersTheRulesHoldShortIsGottenPastTest {
     /** Why {@code position} of {@code source} is not read, each reason once in the order the
      *  report gives them. */
     private static List<String> whyNotRead(String source, String position) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
-        assertEquals(List.of(), model.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        Compilation model = ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<String> out = new ArrayList<>();

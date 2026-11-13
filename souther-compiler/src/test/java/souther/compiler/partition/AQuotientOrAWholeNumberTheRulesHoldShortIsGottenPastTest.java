@@ -13,7 +13,6 @@ import souther.compiler.report.AdequacyReport;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -90,11 +89,8 @@ class AQuotientOrAWholeNumberTheRulesHoldShortIsGottenPastTest {
 
     /** Why {@code v} is not read, each reason once in the order the report gives them. */
     private static List<String> whyVIsNotRead(String source) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
-        assertEquals(List.of(), model.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        Compilation model = ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<String> out = new ArrayList<>();
