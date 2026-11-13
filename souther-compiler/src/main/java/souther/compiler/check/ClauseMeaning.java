@@ -131,6 +131,25 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
                 Objects.requireNonNull(id, "a rule an author wrote is some part of a clause");
                 reads = Set.copyOf(reads);
             }
+
+            /**
+             * Whether the rule reads one place and nothing else, so that what it holds back is
+             * that place and it relates the place to no other.
+             *
+             * <p>Said of a read of the values there, or of how many it holds. A read of the
+             * elements or of a member is of a container together with what stands in it, so what
+             * it holds back is not one place's alone.
+             *
+             * <p>A place as the rules of the value call it: a name the cases of a sum share is one
+             * place of the value, however many cases it stands at, since one value is in one case.
+             */
+            public boolean readsOnePlaceAlone() {
+                return reads.size() == 1 && switch (reads.iterator().next().kind()) {
+                    case ITS_VALUES, HOW_MANY_IT_HOLDS -> true;
+                    case EACH_ELEMENTS_RUN, ELEMENTS_THE_CLAUSE_NEEDS_APART, A_LOOKED_UP_MEMBER,
+                         A_MEMBER_THE_CLAUSE_NEEDS -> false;
+                };
+            }
         }
 
         /** The same rules joined the same way, each with the places {@code readsOf} says it reads. */

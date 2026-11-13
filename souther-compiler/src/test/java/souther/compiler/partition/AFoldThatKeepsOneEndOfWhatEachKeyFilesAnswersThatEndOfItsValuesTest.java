@@ -1174,25 +1174,30 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     /** Elements the list's own rule keeps from sharing a key have no earlier element of their key
      *  to be compared with, which the comparison is not read as having. */
     @Test
-    void aRuleKeepingTheKeysApartLeavesTheComparisonUnread() {
-        Compilation compilation = read("""
-                module example.stale
+    void aRuleOfTheElementAboutOneFieldDoesNotChangeWhatKeysKeptApartLeaveOfTheComparison() {
+        List<List<String>> unread = new ArrayList<>();
+        for (String ruleOfTheElement : List.of("", "invariant days >= 0 && days <= 100")) {
+            String report = report(read("""
+                    module example.stale
 
-                data Touch = { account: String, days: Int }
-                    invariant days >= 0 && days <= 100
+                    data Touch = { account: String, days: Int }
+                        %s
 
-                data Quote = { touches: List<Touch> }
-                    invariant List.allDistinctBy(t -> t.account, touches)
+                    data Quote = { touches: List<Touch> }
+                        invariant List.allDistinctBy(t -> t.account, touches)
 
-                let sinceOf (touches: List<Touch>): Map<String, Int> =
-                    List.fold((acc, t) -> %s, Map.empty, touches)
+                    let sinceOf (touches: List<Touch>): Map<String, Int> =
+                        List.fold((acc, t) -> %s, Map.empty, touches)
 
-                behavior stale : (quote: Quote, staleAfter: Int) -> Map<String, Int>
+                    behavior stale : (quote: Quote, staleAfter: Int) -> Map<String, Int>
 
-                let stale (quote, staleAfter) =
-                    Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
-                """.formatted(COMPARED_WITH_WHAT_WAS_FOUND));
-        assertFalse(unreadBeside(report(compilation)).isEmpty(), () -> report(compilation));
+                    let stale (quote, staleAfter) =
+                        Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(quote.touches))
+                    """.formatted(ruleOfTheElement, COMPARED_WITH_WHAT_WAS_FOUND)));
+            unread.add(unreadBeside(report));
+        }
+        assertEquals(unread.getFirst(), unread.getLast(),
+                "a rule on one field relates it to nothing, so it leaves unread what none leaves");
     }
 
     /** What a fold files that keeps no end of one value of each element says nothing of it. */

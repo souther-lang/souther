@@ -2753,7 +2753,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
             @Override
             public boolean nameNothingAt(TermPath at) {
-                return namedByTheDeclarations(at, read) == Named.NOT;
+                return !namedByTheDeclarations(at, read).isReadByARule();
             }
 
             @Override
@@ -4855,7 +4855,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private boolean theRunDoesNotTurnOn(TermPath place, DemandReading.Answered past,
                                         InputReading read, SearchRegion region,
                                         List<OnAWay> conditions) {
-        if (reachedByTheDeclarations(place, read).named() != Named.NOT) {
+        if (reachedByTheDeclarations(place, read).named().isReadByARule()) {
             return false;
         }
         for (TermPath container : place.containersHoldingIt()) {
@@ -7923,7 +7923,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // element meets the statement by are held beside none of the places it is apart at.
         int deepest = container.steps().size();
         KeptApart apart = new KeptApart();
-        if (namedDownTo(container.element(), deepest, read, null, apart) != Named.NOT) {
+        if (namedDownTo(container.element(), deepest, read, null, apart).isReadByARule()) {
             return false;
         }
         for (List<RowDemand.OfAnElement> way : statement.bySome().ways()) {
@@ -7932,7 +7932,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             for (RowDemand.OfAnElement each : way) {
                 if (each instanceof RowDemand.ATruth(TermPath at, var _)) {
                     truthsWritten &= at.isAtOrUnder(container.element())
-                            && namedDownTo(at, deepest, read, null) == Named.NOT
+                            && !namedDownTo(at, deepest, read, null).isReadByARule()
                             && apartFrom.stream().noneMatch(at::bearsOn);
                 } else {
                     ofItsNumbers.add(each);
@@ -7994,7 +7994,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         TermOrders orders = read.quantities().ordersOf(number);
         if (source == null || orders == null || orders.answered() == null
                 || (!alone && source.named())
-                || namedDownTo(number.subjectPath(), deepest, read, null) != Named.NOT) {
+                || namedDownTo(number.subjectPath(), deepest, read, null).isReadByARule()) {
             return false;
         }
         NumericDomain.Bounds shown = realized(number, source, region, Way.NARROWED);
@@ -10857,7 +10857,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         for (TermPath subject : asked.positions()) {
-            if (namedDownTo(subject, subject.steps().size(), read, null) != Named.NOT) {
+            if (namedDownTo(subject, subject.steps().size(), read, null).isReadByARule()) {
                 return false;
             }
             for (PlaceOfAnEnd each : places) {
@@ -11021,7 +11021,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                               List<OnAWay> conditions) {
         NumericTerm.ValueOf element = new NumericTerm.ValueOf(list.element());
         if (!read.domain().holdsAnElementOverAgain(list, read.rules())
-                || namedDownTo(list.element(), list.steps().size(), read, null) != Named.NOT
+                || namedDownTo(list.element(), list.steps().size(), read, null).isReadByARule()
                 || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
             return null;
         }
@@ -11102,7 +11102,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<TermPath> entry = read.domain().entryOf(container, rules);
         KeptApart apart = new KeptApart();
         for (TermPath part : entry) {
-            if (namedDownTo(part, container.steps().size(), read, null, apart) != Named.NOT) {
+            if (namedDownTo(part, container.steps().size(), read, null, apart).isReadByARule()) {
                 return heldToNone(count, container, read, region);
             }
         }
@@ -11528,7 +11528,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param onlyItsEnds whether, where that is not every value, it is the values between the ends
      *                    and nothing else
      *                    ({@link #onlyItsEnds(Position, NumericTerm.ValueOf, boolean, Set)})
-     * @param named       whether a rule of a value it sits in names it
+     * @param named       whether a rule may tie it to another place ({@link Named#mayBeTied}). A rule
+     *                    that reads it alone holds it back and ties it to nothing, so it is not
+     *                    named ({@link Named#BY_ONE_PLACE}). A source worked out of a walk's kept
+     *                    end is named wherever a rule reads the place at all
+     *                    ({@link Named#isReadByARule}), which asks no more than that.
      */
     private record Source(Takes takes, boolean onlyItsEnds, boolean named, boolean relaxed) {
 
@@ -11595,7 +11599,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         KeptApart apart = new KeptApart();
         Named ofTheElements = namedDownTo(kept.container().element(), deepest, read, null, apart);
         return new Source(each.takes(), each.onlyItsEnds(), seedNamed
-                || namedDownTo(kept.ofEach().subjectPath(), deepest, read, null) != Named.NOT
+                || namedDownTo(kept.ofEach().subjectPath(), deepest, read, null).isReadByARule()
                 || ofTheElements == Named.UNSEEN
                 || (apart.found && (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheKey
                         || writtenApart(kept.container(), read, 2) < 2
@@ -11636,17 +11640,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     instanceof NameReach.Standing.UnderTheCases(var standings)
                     ? takesUnderEvery(standings, read) : null;
         }
-        // A rule naming the place relates it to the places beside it, which leaves it whatever its
-        // bounds say only where they are shown to be the whole of what the rules leave it, and
-        // where no end of its order cuts them.
+        // A rule of a value around it leaves the place whatever its bounds say only where they are
+        // shown to be the whole of what the rules leave it. One that relates it to the places
+        // beside it also leaves it that only where no end of its order cuts them.
         Named named = namedByTheDeclarations(value.position(), read);
-        if (named == Named.UNSEEN || (named == Named.BY_A_RULE
-                && (!certifiedAsideFromTheRelationOf(at.projection(), except)
-                        || !wholeOnItsOrder(value, read)))) {
+        boolean relating = named == Named.BY_A_RULE;
+        boolean ruled = relating || named == Named.BY_ONE_PLACE;
+        if (named == Named.UNSEEN
+                || (ruled && !certifiedAsideFromTheRelationOf(at.projection(), except))
+                || (relating && !wholeOnItsOrder(value, read))) {
             return null;
         }
-        boolean byARule = named == Named.BY_A_RULE;
-        NumericDomain.Bounds ends = endsOf(at.boundsFor(value), byARule);
+        NumericDomain.Bounds ends = endsOf(at.boundsFor(value), ruled);
         AdmissibleSet admitted = at.admitted();
         // Every value where nothing holds any back: the reading of the values here took every rule
         // in, or the relation is the one rule it did not and the bounds, shown to hold all the
@@ -11654,13 +11659,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // from the longer ones.
         boolean every = ends == null && admitted.approximation().isAny()
                 && (admitted.completeness() instanceof AdmissibleSet.Completeness.Complete
-                        || (byARule && onlyARelationWentUnread(admitted)
+                        || (ruled && onlyARelationWentUnread(admitted)
                                 && at.bounds().stream()
                                         .allMatch(each -> endsOf(each, true) == null)));
         Takes takes = every ? new Takes.Every(at.type())
                 : new Takes.Some(at.type(), admitted, ends);
-        return new Source(takes, !every && onlyItsEnds(at, value, byARule, except), byARule,
-                byARule && !at.projection().isCertified());
+        return new Source(takes, !every && onlyItsEnds(at, value, ruled, except), relating,
+                ruled && !at.projection().isCertified());
     }
 
     /**
@@ -11729,11 +11734,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * {@code issuedOn >= 0 && expiresOn >= issuedOn} no rule places an end on {@code expiresOn},
      * and it stops at nought. A range with neither end is no end.
      */
-    private static NumericDomain.Bounds endsOf(PositionBounds bounds, boolean byARule) {
+    private static NumericDomain.Bounds endsOf(PositionBounds bounds, boolean ruled) {
         if (bounds == null) {
             return null;
         }
-        NumericDomain.Bounds ends = byARule ? bounds.rangeLeft() : bounds.admissible();
+        NumericDomain.Bounds ends = ruled ? bounds.rangeLeft() : bounds.admissible();
         return ends == null || ends.saysNothing() ? null : ends;
     }
 
@@ -11754,16 +11759,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * another number — how long a string is — keeps the value from some of its own values, which
      * the ends on it do not say.
      *
-     * @param byARule whether a rule of a value it sits in names it, so that what bounds each number
-     *                is where it stops once every rule is taken in ({@link #endsOf})
+     * @param ruled whether a rule of a value it sits in reads it, so that what bounds each number
+     *              is where it stops once every rule is taken in ({@link #endsOf})
      */
-    private static boolean onlyItsEnds(Position at, NumericTerm.ValueOf value, boolean byARule,
+    private static boolean onlyItsEnds(Position at, NumericTerm.ValueOf value, boolean ruled,
                                        Set<RuleRef> except) {
         if (!certifiedAsideFromTheRelationOf(at.projection(), except)) {
             return false;
         }
         for (PositionBounds each : at.bounds()) {
-            if (!each.term().equals(value) && endsOf(each, byARule) != null) {
+            if (!each.term().equals(value) && endsOf(each, ruled) != null) {
                 return false;
             }
         }
@@ -11987,20 +11992,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private record Declared(String head, Set<Object> ignoring) {}
 
     /**
-     * What the rules of the values a position sits in say of it: nothing, that one names it, or
-     * nothing anyone can tell.
+     * What the rules of the values a position sits in say of it: nothing, that one reads it alone,
+     * that one relates it to another place, or nothing anyone can tell.
      *
      * <p>In the order they hold more back, which is the order two of them are put together in.
      */
-    private enum Named {
+    enum Named {
 
         /** No rule of a value around it reads it, so none ties it to anything. */
         NOT,
 
         /**
-         * A rule reads the value at the place itself, by the chain of fields down to it. What it
-         * leaves the place is in the place's bounds, and is all of it where those are shown to be
-         * the whole of what the rules leave ({@link Position#projection}).
+         * A rule of a value around it reads the value at the place itself and nothing else, so it
+         * is a rule of that place however far up it is written: it holds the place back and ties
+         * it to nothing. What it leaves the place is in the place's bounds, and is all of it where
+         * those are shown to be the whole of what the rules leave ({@link Position#projection}).
+         */
+        BY_ONE_PLACE,
+
+        /**
+         * A rule reads the value at the place itself, by the chain of fields down to it, with
+         * another place. What it leaves the place is in the place's bounds, and is all of it where
+         * those are shown to be the whole of what the rules leave ({@link Position#projection}).
          */
         BY_A_RULE,
 
@@ -12012,6 +12025,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Named and(Named other) {
             return compareTo(other) >= 0 ? this : other;
         }
+
+        /** Whether some rule of a value around the place reads it, so that what its own type says
+         *  is not all that holds it back. */
+        boolean isReadByARule() {
+            return this != NOT;
+        }
+
+        /** Whether a rule may tie the place to another one: one that relates them, or one nothing
+         *  says what it relates. */
+        boolean mayBeTied() {
+            return compareTo(BY_A_RULE) >= 0;
+        }
     }
 
     /**
@@ -12020,7 +12045,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * that reads a place at, under or around what stands at {@code path}.
      *
      * <p>A rule on the position's own type is about it alone and ties it to nothing; one on a
-     * value around it is where a rule over two of its positions is written. A rule there that reads
+     * value around it is where a rule over two of its positions is written, unless what it reads is
+     * that place alone, which is a rule of the place as one on its own type is. A rule there that reads
      * only places beside the path leaves every value of the path standing beside some value of the
      * rest — what it holds back is which of the rest stand together — and one reading a container
      * around the path for nothing but how many it holds leaves its elements every value, wherever
@@ -12032,7 +12058,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * a place by the fields read down from the value, a newtype's own {@code value} being the value
      * itself ({@link ClauseRead}).
      */
-    private static Named namedByTheDeclarations(TermPath path, InputReading read) {
+    static Named namedByTheDeclarations(TermPath path, InputReading read) {
         return reachedByTheDeclarations(path, read).named();
     }
 
@@ -12117,8 +12143,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             for (ClauseMeaning.Parts.One part : stated.parts().leaves()) {
                 for (ClauseRead reading : part.reads()) {
                     Named says = namedBy(reading, here, place, rest, read, apart);
+                    // The place it names is where the one crossing from a name to positions puts
+                    // it, so a name the cases of a sum share is the place under each of them.
+                    if (says.isReadByARule() && part.readsOnePlaceAlone()
+                            && placesRead(reading, here, read).contains(place)) {
+                        says = Named.BY_ONE_PLACE;
+                    }
                     out = out.and(says);
-                    if (says != Named.NOT && nodes != null) {
+                    if (says.isReadByARule() && nodes != null) {
                         TiedOnTheWay.Rule rule =
                                 new TiedOnTheWay.Rule(here, worn, clause, part.id());
                         nodes.ties().add(rule);

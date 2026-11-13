@@ -3333,17 +3333,22 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertTrue(report.contains("adequacy: satisfied"), report);
     }
 
-    /** A rule of the record that names the field compared may hold it back, whether it ties it to
-     *  another field or bounds it alone. */
+    /** A rule of the record that ties the field compared to another field may hold it back, so the
+     *  boss is still every string the partner can come to and the approver is not shown. */
     @Test
-    void aRuleOfTheRecordNamingTheFieldComparedIsNotShownToLeaveItReachingEveryValue() {
-        // Tied to another field, the boss is still every string the partner can come to, so it
-        // is the approver that is not shown.
+    void aRuleOfTheRecordTyingTheFieldComparedToAnotherIsNotShownToLeaveItReachingEveryValue() {
         assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", TELLS_NOTHING_APART),
                 left("p: Pending, approver: EmpId", EMPLOYEE
                         + "\ndata Pending = { me: EmpId, boss: EmpId } invariant boss == me",
                         "approver == p.boss", "5:32"));
-        assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", TELLS_NOTHING_APART),
+    }
+
+    /** A rule of the record that bounds the field compared alone is a rule of that field, as the
+     *  same rule on the field's own type is: the approver is parted by whether the boss can be it,
+     *  and no word is left of it. */
+    @Test
+    void aRuleOfTheRecordBoundingTheFieldComparedAloneIsReadAsARuleOfThatField() {
+        assertEquals(Map.of("p.boss", TELLS_NOTHING_APART),
                 left("p: Pending, approver: EmpId", EMPLOYEE
                         + "\ndata Pending = { me: EmpId, boss: EmpId }"
                         + " invariant String.length(boss.value) >= 2",

@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
@@ -178,21 +179,55 @@ public final class ReadersOfAGraph {
     }
 
     /**
-     * The fastest of three askings, which is what the reader costs when nothing else is running;
-     * none where it refuses.
+     * How many times a reader is asked of each chain: once says nearly every reader is not one
+     * that goes down every way, and only one said to be is asked again, as the fastest of three,
+     * so that a pause of the machine is not what it is found by.
+     */
+    private static final int[] ASKINGS = {1, 3};
+
+    /**
+     * Whether the reader goes down every way, by what it costs on the longer chain against the
+     * shorter; none where it refuses.
+     *
+     * <p>A reader that refuses the shorter chain refuses the longer, and the message it refuses
+     * with names the whole chain, so the longer is asked only of a reader that answered the shorter.
+     */
+    private static Optional<Boolean> goesDownEveryWay(Method method, boolean aMethodOfIt,
+                                                      Supplier<Object[]> others, Chain chain)
+            throws ReflectiveOperationException {
+        for (int askings : ASKINGS) {
+            OptionalLong onShort = fastest(method, aMethodOfIt, others, chain, SHORT, askings);
+            if (onShort.isEmpty()) {
+                return Optional.empty();
+            }
+            OptionalLong onLong = fastest(method, aMethodOfIt, others, chain, LONG, askings);
+            if (onLong.isEmpty()) {
+                return Optional.empty();
+            }
+            if (!goesDownEveryWay(onShort.getAsLong(), onLong.getAsLong())) {
+                return Optional.of(false);
+            }
+        }
+        return Optional.of(true);
+    }
+
+    /**
+     * The fastest of {@code askings} of the reader on a chain of {@code length}; none where it
+     * refuses.
      *
      * <p>Each asking is given arguments made for it: a reader that gathers into the collection it
      * is handed leaves it as it found it for no later asking, and the second would be a reader
      * asked of what the first left. Making them is not what is timed.
      */
     private static OptionalLong fastest(Method method, boolean aMethodOfIt,
-                                        Supplier<Object[]> others, Supplier<Object> chains)
+                                        Supplier<Object[]> others, Chain of, int length,
+                                        int askings)
             throws ReflectiveOperationException {
         long best = Long.MAX_VALUE;
-        for (int times = 0; times < 3; times++) {
+        for (int times = 0; times < askings; times++) {
             // A chain of its own too: what the compiler keeps of a statement it has met (it keeps
             // some, held weakly, by what the statement is equal to) is not there for the next.
-            Object chain = chains.get();
+            Object chain = of.ofLength().apply(length);
             Object[] args = others.get();
             if (!aMethodOfIt) {
                 args[0] = chain;
@@ -282,23 +317,14 @@ public final class ReadersOfAGraph {
                         continue;
                     }
                     method.setAccessible(true);
-                    Future<Boolean> run = pool.submit(() -> {
-                        OptionalLong onShort = fastest(method, aMethodOfIt, others,
-                                () -> chain.ofLength().apply(SHORT));
-                        OptionalLong onLong = fastest(method, aMethodOfIt, others,
-                                () -> chain.ofLength().apply(LONG));
-                        if (onShort.isEmpty() || onLong.isEmpty()) {
-                            return false;
-                        }
-                        if (goesDownEveryWay(onShort.getAsLong(), onLong.getAsLong())) {
-                            synchronized (slow) {
-                                slow.add(told);
-                            }
-                        }
-                        return true;
-                    });
+                    Future<Optional<Boolean>> run = pool.submit(() ->
+                            goesDownEveryWay(method, aMethodOfIt, others, chain));
                     try {
-                        (run.get(120, TimeUnit.SECONDS) ? answered : refused).add(told);
+                        Optional<Boolean> goesDown = run.get(120, TimeUnit.SECONDS);
+                        (goesDown.isPresent() ? answered : refused).add(told);
+                        if (goesDown.orElse(false)) {
+                            slow.add(told);
+                        }
                     } catch (TimeoutException wayTooLong) {
                         run.cancel(true);
                         slow.add(told);
