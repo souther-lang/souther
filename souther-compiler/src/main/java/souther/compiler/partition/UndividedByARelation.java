@@ -3491,11 +3491,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // where this reading of the two sides can, and made into one set of strings where it
             // cannot. A set past the allowance is a figure the reading stopped at.
             // The lengths are runs where the rules take some out from between the ends, and the
-            // strings are those of any of them. Null where an end of a run is no whole count, which
-            // is no length this reading holds as a number.
-            LengthRuns theirLengths = StringsHeld.lengthRunsOf(theirHeld);
-            if (theirLengths == null || (!theirLengths.isEvery()
-                    && !readsTheLengthsAsNumbers(here, there, partnerHeld, room))) {
+            // strings are those of any of them.
+            LengthRuns theirLengths = theirHeld.lengths();
+            if (!theirLengths.isEvery()
+                    && !readsTheLengthsAsNumbers(here, there, partnerHeld, room)) {
                 Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
                 ValueSet one = StringsHeld.asOneSet(theirHeld, meter);
                 if (one == null) {

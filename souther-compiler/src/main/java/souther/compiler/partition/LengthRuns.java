@@ -104,6 +104,11 @@ record LengthRuns(List<LengthsPastTheWay.Lengths> runs) implements StringsPastTh
         return runs.isEmpty();
     }
 
+    /** Whether a string of {@code length} code points has a length of these. */
+    boolean holds(BigInteger length) {
+        return runs.stream().anyMatch(each -> each.holds(length, length));
+    }
+
     /** Whether every length a string has is one of these. */
     boolean isEvery() {
         return runs.size() == 1 && runs.getFirst().isEvery();

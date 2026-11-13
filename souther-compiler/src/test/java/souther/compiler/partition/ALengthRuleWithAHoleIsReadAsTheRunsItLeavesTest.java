@@ -193,6 +193,81 @@ class ALengthRuleWithAHoleIsReadAsTheRunsItLeavesTest {
     }
 
     /**
+     * Rules about one string that two values state — the type's own and the record's it sits in —
+     * are not proved together, so what the type takes out is not taken as the whole of what the
+     * position holds. Whatever is read of it, no string of a length either rule refuses is the
+     * position's: not the seven the type takes out, nor the eleven the record's own rule does.
+     */
+    @Test
+    void theLengthsTwoValuesLeaveAreNotReadFromOneOfThem() {
+        Compilation model = ACompiledModel.answered("""
+                module layered
+
+                data Code = String invariant String.length(value) /= 7
+
+                data Holder = { code: Code }
+                    invariant String.length(code.value) <= 10
+
+                behavior f : (h: Holder, other: String) -> Bool
+                let f (h, other) = h.code.value == other
+
+                example f
+                    | "same"  : (Holder { code = Code("abcd") }, "abcd") -> true
+                    | "other" : (Holder { code = Code("abcd") }, "zz") -> false
+                """);
+        Partitions.Partitioning divided =
+                model.db().ask(new Adequacy.Divided(model.modules().get(0), "f")).value();
+        List<String> canBe = new ArrayList<>();
+        if (divided != null) {
+            for (Axis axis : divided.axes()) {
+                if (!axis.path().toString().equals("other")) {
+                    continue;
+                }
+                for (PartitionClass each : axis.classes()) {
+                    Recognition is =
+                            each.recognises() instanceof Recognition.Under(var _, var inner)
+                                    ? inner : each.recognises();
+                    if (is instanceof Recognition.OfASet(ValuesAtLengths values)
+                            && each.label().contains("can be")) {
+                        for (int length : List.of(7, 11)) {
+                            if (values.has(new Value.Text(a(length)))) {
+                                canBe.add(each.label() + " " + length);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), canBe);
+    }
+
+    /**
+     * Finitely many strings beside a hole in a length no machine is made for are each asked
+     * their length, so the strings made into one set cost no machine and stop at no figure.
+     */
+    @Test
+    void aFiniteSetBesideAHoleInLongLengthsIsMadeWithoutAMachine() {
+        JsonNode partition = partitionOf("""
+                module converted
+
+                data Code = String
+                    invariant value == "abc" && String.length(value) <= 2000000
+                        && String.length(value) /= 1000000
+
+                behavior f : (code: Code, other: String) -> Bool
+                let f (Code(code), other) = String.lowercase(other) == code
+
+                example f
+                    | "same"  : (Code("abc"), "ABC") -> true
+                    | "other" : (Code("abc"), "cd") -> false
+                """);
+        List<String> figures = new ArrayList<>();
+        partition.path("unanswered").forEach(each -> each.path("stopped").forEach(
+                stop -> stop.path("figures").forEach(figure -> figures.add(figure.asString()))));
+        assertEquals(List.of(), figures);
+    }
+
+    /**
      * Strings of a length taken out are not written for a class that is the position's, and the
      * ones written for the class of strings never the position's are of the lengths taken out or
      * of those past its ends.

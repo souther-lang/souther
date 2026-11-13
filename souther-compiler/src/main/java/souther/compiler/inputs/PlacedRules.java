@@ -272,6 +272,14 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * {@link #leftAt} says of the ends, for a reader of values.
      */
     OrderedRuns runsLeftAt(TermPath path, NumberAt.OfWhatNumber kind) {
+        // What one value's rules say of a number is the owner's to say whole
+        // ({@link FieldDomains#runsLeftAt}), and what two values' say together is not: each system
+        // is proved apart, and met they are not proved ({@link #proofAt}). The runs are handed on
+        // only where the one system there is is the one they were proved of; with another beside
+        // it they are not, whatever the other leaves of the ends.
+        if (proofAt(path).stating() > 1) {
+            return null;
+        }
         RuleKey where = keyOf(path);
         OrderedRuns here = where == null ? null : bounds().runsLeftAt(where, kind);
         TermPath above = alsoAt(path);

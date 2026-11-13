@@ -35,7 +35,7 @@ import java.util.Set;
  * only where the bounds are shown to be the whole of the rules and the length is the one number
  * they bound. Otherwise nothing is said of the strings.
  *
- * <p>The lengths are held as the numbers they are, beside the set ({@link #within}). Made into
+ * <p>The lengths are held as the numbers they are, beside the set ({@link Held}). Made into
  * one set of strings, every string up to a length is a machine with a state for each code point
  * of it, so a rule naming a long length would be one this compiler refuses to read; a reader that
  * reads the length as a number asks nothing of that size, and one that needs the strings as one
@@ -50,40 +50,39 @@ final class StringsHeld {
 
     /**
      * What a position holds of its strings: the set it admits with the ends of their lengths, and
-     * the lengths its rules take out from between those ends.
+     * the lengths its rules leave them as the runs they lie in.
      *
-     * <p>Two things and not one set, because they are asked at different costs. The ends are
-     * numbers and stay numbers for whatever reads them so; the lengths taken out are taken out of
-     * the strings only by a reader that needs the strings as one set ({@link #asOneSet}), which
-     * pays for a machine as long as the lengths and says what stopped it where it cannot. A reader
-     * of {@link #within} alone, with the lengths taken out not asked, holds more strings than the
-     * position does, so {@link #hasHoles} says whether it may.
+     * <p>Two things and not one set, because they are asked at different costs. The lengths are
+     * numbers and stay numbers for whatever reads them so; they are taken out of the strings only
+     * by a reader that needs the strings as one set ({@link #asOneSet}), which pays for a machine
+     * as long as the lengths and says what stopped it where it cannot. A reader of {@link #within}
+     * alone, with the lengths taken out not asked, holds more strings than the position does, so
+     * {@link #hasHoles} says whether it may.
      *
-     * @param within the set the position admits, held to the ends of the lengths its rules leave
-     * @param runs   the runs of lengths that are all of them, where the rules take some out from
-     *               between the ends — two or more, lowest first — and null where they take none
+     * <p>The lengths are made once, where every rule that reaches the position has been met —
+     * the ends each of them places and the runs the rules take out from between them — so that no
+     * reader meets the set with some of them. The ends of {@code within} are the ends of
+     * {@code lengths}, whatever the way they came.
+     *
+     * @param within  the set the position admits, held to the ends of {@code lengths}
+     * @param lengths the lengths of the strings the position holds, none where it holds none
      */
-    record Held(ValuesWithin within, List<NumericDomain.Bounds> runs) {
+    record Held(ValuesWithin within, LengthRuns lengths) {
 
         Held {
-            if (within == null) {
+            if (within == null || lengths == null) {
                 throw new IllegalArgumentException("a position holds the strings of some set");
             }
-            if (runs != null && runs.size() < 2) {
-                throw new IllegalArgumentException(
-                        "lengths taken out from between the ends are two runs or more");
-            }
-            runs = runs == null ? null : List.copyOf(runs);
         }
 
         /** Strings of one run of lengths, which the ends say. */
         static Held ofOneRun(ValuesWithin within) {
-            return new Held(within, null);
+            return new Held(within, LengthRuns.of(within));
         }
 
-        /** Whether the rules take lengths out from between the ends of {@link #within}. */
+        /** Whether the lengths are several runs, which the ends of {@link #within} do not say. */
         boolean hasHoles() {
-            return runs != null;
+            return lengths.runs().size() > 1;
         }
     }
 
@@ -112,13 +111,23 @@ final class StringsHeld {
             if (runs.isEmpty()) {
                 return null;
             }
-            LengthsPastTheWay.Lengths ofTheRuns =
-                    lengthsOf(new NumericDomain.Bounds(runs.getFirst().min(), runs.getLast().max()));
-            if (ofTheRuns == null) {
+            // Met with the ends of every rule that reaches the position, which the runs are not
+            // asked of: a rule of another value may place an end past where these stop.
+            List<LengthsPastTheWay.Lengths> ofTheRuns = new ArrayList<>();
+            for (NumericDomain.Bounds run : runs) {
+                LengthsPastTheWay.Lengths lengths = lengthsOf(run);
+                if (lengths == null) {
+                    return null;
+                }
+                ofTheRuns.add(lengths);
+            }
+            LengthRuns lengths = LengthRuns.of(left).and(LengthRuns.ofAll(ofTheRuns));
+            if (lengths.isEmpty()) {
                 return null;
             }
-            ValuesWithin within = left.and(ofTheRuns).over(admitted);
-            return runs.size() == 1 ? Held.ofOneRun(within) : new Held(within, runs);
+            LengthsPastTheWay.Lengths between = new LengthsPastTheWay.Lengths(
+                    lengths.runs().getFirst().least(), lengths.runs().getLast().most());
+            return new Held(between.over(admitted), lengths);
         }
         // Where the set admitted already counts the code points and says nothing else, what it
         // says is the lengths, which are held as numbers in its place.
@@ -155,35 +164,33 @@ final class StringsHeld {
      *
      * <p>The bounds are two ends, and a hole between them is a rule they do not state. Where the
      * runs of the length are held beside the ends ({@link PositionBounds#runsLeft}), the ends and
-     * the runs are the whole of what the rules say of the length, which the owner of the rules
-     * only says where nothing else stands in the way; they are taken out of the strings below.
+     * the runs are the whole of what the rules of that value say of the length; they are taken out
+     * of the strings below.
+     *
+     * <p>That is not the position's evidence: what stands in the way of it is asked as well, and
+     * only what the runs hold and what the set of values holds may. A cause that says two values
+     * state rules about the position, or a rule relating it to another place, is one no run is the
+     * answer to, so a position with such a cause is no more shown for having runs.
      */
     static boolean boundsAreTheWholeOfTheRules(Position at) {
         if (at.projection() instanceof ProjectionEvidence.CertifiedExact) {
             return true;
         }
+        if (!(at.projection() instanceof ProjectionEvidence.NotCertified(var causes))
+                || !causes.stream().allMatch(StringsHeld::runsOrTheSetAnswerFor)) {
+            return false;
+        }
         List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
         return runs != null && !runs.isEmpty();
     }
 
-    /**
-     * The lengths of the strings {@code held} holds, as the runs of whole numbers they lie in, or
-     * null where an end of a run is no whole count.
-     */
-    static LengthRuns lengthRunsOf(Held held) {
-        LengthRuns between = LengthRuns.of(held.within());
-        if (!held.hasHoles()) {
-            return between;
-        }
-        List<LengthsPastTheWay.Lengths> runs = new ArrayList<>();
-        for (NumericDomain.Bounds run : held.runs()) {
-            LengthsPastTheWay.Lengths lengths = lengthsOf(run);
-            if (lengths == null) {
-                return null;
-            }
-            runs.add(lengths);
-        }
-        return between.and(LengthRuns.ofAll(runs));
+    /** Whether {@code cause} is one the runs of a length, or the set of the values, answer for:
+     *  a hole they hold, or a rule the set holds whole. */
+    private static boolean runsOrTheSetAnswerFor(ProjectionEvidence.Cause cause) {
+        return cause instanceof ProjectionEvidence.Cause.Unrepresented
+                || (cause instanceof ProjectionEvidence.Cause.Lossy lossy
+                        && lossy.unstated().equals(
+                                Set.of(ProjectionEvidence.Cause.Unstated.A_HOLE)));
     }
 
     /**
@@ -210,9 +217,9 @@ final class StringsHeld {
     }
 
     /**
-     * {@code admitted} met with the strings whose length is in one of {@code runs}, or null where
-     * that is not made: a run whose ends are no whole count, or strings of those lengths that are
-     * a machine past what {@code meter} allows, which {@code meter} then says.
+     * {@code admitted} met with the strings whose length is in one of {@code lengths}, or null
+     * where that is not made: strings of those lengths that are a machine past what {@code meter}
+     * allows, which {@code meter} then says.
      *
      * <p>Null at every step and never a set made of what came before it. A machine this compiler
      * could not afford says nothing of the strings, and a set built from some of the runs is a set
@@ -220,14 +227,23 @@ final class StringsHeld {
      * ({@link Sets#metUnder}), which is what takes a set of every string but a few as well as a
      * language.
      */
-    private static ValueSet withoutTheLengthsBetween(ValueSet admitted,
-                                                     List<NumericDomain.Bounds> runs,
+    private static ValueSet withoutTheLengthsBetween(ValueSet admitted, LengthRuns lengths,
                                                      Meter meter) {
+        // Finitely many strings are each asked their length, which builds nothing: a machine as
+        // long as the longest length is what a set with no end would cost, and not what this does.
+        if (admitted instanceof ValueSet.Finite finite) {
+            Set<Value> kept = new LinkedHashSet<>();
+            for (Value each : finite.values()) {
+                if (each instanceof Value.Text(String text) && lengths.holds(
+                        BigInteger.valueOf(text.codePointCount(0, text.length())))) {
+                    kept.add(each);
+                }
+            }
+            return ValueSet.oneOf(kept);
+        }
         Language ofTheRuns = null;
-        for (NumericDomain.Bounds run : runs) {
-            LengthsPastTheWay.Lengths lengths = lengthsOf(run);
-            Language here = lengths == null ? null
-                    : Partitions.ofTheLengths(Language.EVERY_STRING, lengths, meter);
+        for (LengthsPastTheWay.Lengths run : lengths.runs()) {
+            Language here = Partitions.ofTheLengths(Language.EVERY_STRING, run, meter);
             if (here == null) {
                 return null;
             }
@@ -265,7 +281,7 @@ final class StringsHeld {
      */
     static ValueSet asOneSet(Held held, Meter meter) {
         return held.hasHoles()
-                ? withoutTheLengthsBetween(held.within().values(), held.runs(), meter)
+                ? withoutTheLengthsBetween(held.within().values(), held.lengths(), meter)
                 : asOneSet(held.within(), meter);
     }
 
