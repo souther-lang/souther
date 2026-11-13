@@ -68,6 +68,9 @@ final class ReadingEvidence {
      */
     private final Set<StatementAt> statementsTaken = new HashSet<>();
 
+    /** Which statements the reading of values adopted into the set it holds. */
+    private final Set<InvariantStatementId> adoptedByValues = new HashSet<>();
+
     /**
      * What stopped the reading of values at each position of each rule.
      *
@@ -267,6 +270,32 @@ final class ReadingEvidence {
             }
         });
         return out;
+    }
+
+    /** The reading of values adopted {@code statement} into the set it holds. */
+    void valuesAdopted(InvariantStatementId statement) {
+        adoptedByValues.add(statement);
+    }
+
+    /**
+     * Whether the set the reading of values holds states {@code statement} whole.
+     *
+     * <p>Asked of the statement, which is what a reading adopts or stops at, and not of the
+     * authored part holding it: a helper's body joins two rules into one part, and one of them
+     * stopping the reading says nothing of the other. Both halves of the answer are needed. A
+     * statement adopted is one the reading saw, and a statement it was stopped by is one it did
+     * not take whole however much of it was adopted; and what is neither was never seen, which no
+     * set states.
+     *
+     * <p>Whatever else took the statement in. The arithmetic having read a statement is no account
+     * of whether the set holds it.
+     */
+    boolean valuesHoldWhole(InvariantStatementId statement) {
+        if (!adoptedByValues.contains(statement)) {
+            return false;
+        }
+        Map<RuleShortfall, Set<InvariantStatementId>> here = stopped.get(statement.rule());
+        return here == null || here.values().stream().noneMatch(in -> in.contains(statement));
     }
 
     /** The arithmetic stopped on {@code statement} of {@code rule}, which nothing took in. */
