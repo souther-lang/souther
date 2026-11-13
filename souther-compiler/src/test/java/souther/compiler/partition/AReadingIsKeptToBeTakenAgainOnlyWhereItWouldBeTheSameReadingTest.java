@@ -53,8 +53,10 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
         }
 
         @Override
-        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates) {
+        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates,
+                                  int consulted) {
             askedAggregatesWhenCompared = askedAggregates;
+            consultedWhenCompared = consulted;
             return then.equals(now);
         }
 
@@ -89,6 +91,8 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
         }
 
         int consulted;
+        /** What the reading compared with was said to have asked after. */
+        int consultedWhenCompared;
 
         @Override
         public int startConsulting() {
@@ -301,5 +305,19 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
 
         assertEquals(1, made);
         assertEquals(0, scene.consulted);
+    }
+
+    @Test
+    void whatAReadingAskedAfterIsHandedToTheComparisonThatFindsIt() {
+        reads.shared(NODE, READS, "key", () -> {
+            made++;
+            scene.consultAgain(INPUT);
+            return "read";
+        }, _ -> true);
+
+        read("key");
+
+        assertEquals(1, made);
+        assertEquals(INPUT, scene.consultedWhenCompared);
     }
 }

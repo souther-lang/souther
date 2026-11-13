@@ -65,6 +65,39 @@ class OnlyTheAccessorsAskAfterWhatAReadingMayLeaveUnconsultedTest {
         assertEquals(Set.of(), found);
     }
 
+    /**
+     * What a list or a map that is written into holds is asked by its own accessor
+     * ({@code answeringContent()}, {@code countsMetContent()}), which tells the reading it was
+     * asked, so that a reading kept is taken only where it holds what it did. The accessor of
+     * whether it is there is asked only that, or to add to it.
+     */
+    @Test
+    void whatAWrittenIntoInputHoldsIsAskedOnlyThroughTheAccessorOfWhatItHolds()
+            throws IOException {
+        Set<String> found = new TreeSet<>();
+        for (String name : List.of("answering", "countsMet")) {
+            Pattern presence = Pattern.compile("\\b" + name + "\\(\\)");
+            for (String line : Files.readAllLines(Path.of(
+                    "src/main/java/souther/compiler/partition/Pullback.java"))) {
+                String code = line.strip();
+                if (code.startsWith("*") || code.startsWith("//") || code.startsWith("/*")
+                        || !presence.matcher(code).find()) {
+                    continue;
+                }
+                boolean onlyWhetherItIsThere = code.contains(name + "() == null")
+                        || code.contains(name + "() != null")
+                        || code.contains(name + "().add(") || code.contains(name + "().addAll(")
+                        || code.contains(name + "().computeIfAbsent(")
+                        || code.matches(".* " + name + "\\(\\) \\{");
+                if (!onlyWhetherItIsThere) {
+                    found.add(name + ": " + code);
+                }
+            }
+        }
+
+        assertEquals(Set.of(), found);
+    }
+
     @Test
     void theInputsAreFoundWhereTheyAreSet() throws IOException {
         for (String name : INPUTS) {

@@ -9888,11 +9888,11 @@ final class Pullback {
      */
     private Derivation whereItsCountsAnswer(Derivation stated) {
         if (stated == null || Derivation.readOff(stated) instanceof Derivation.Stopped
-                || answering().isEmpty()) {
+                || answeringContent().isEmpty()) {
             return stated;
         }
         Derivation answered = null;
-        for (Derivation one : answering()) {
+        for (Derivation one : answeringContent()) {
             answered = answered == null ? one
                     : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
         }
@@ -11670,7 +11670,11 @@ final class Pullback {
      * ({@code OnlyTheAccessorsAskAfterWhatAReadingMayLeaveUnconsultedTest}).
      */
     private enum InputAskedAfter {
-        SIDE(1), ANSWERING(2), COUNTS(4), TELLING(8);
+        SIDE(1), ANSWERING(2), COUNTS(4), TELLING(8),
+        /** What {@code answering} holds, asked after as well as whether there is one. */
+        ANSWERING_CONTENT(16),
+        /** What {@code countsMet} holds, asked after as well as whether there is one. */
+        COUNTS_CONTENT(32);
 
         private final int bit;
 
@@ -11688,20 +11692,41 @@ final class Pullback {
      *  inputs, which are not compared. */
     private static final BitSet[] UNCONSULTED = unconsultedForEachSet();
 
+    /** For each set of the inputs above that a reading consulted: where the inputs whose contents
+     *  it asked after stand among the inputs, whose contents are compared. */
+    private static final BitSet[] CONTENT_ASKED = contentAskedForEachSet();
+
     private static BitSet[] unconsultedForEachSet() {
+        InputAskedAfter[] inputs = {InputAskedAfter.SIDE, InputAskedAfter.ANSWERING,
+                InputAskedAfter.COUNTS, InputAskedAfter.TELLING};
         int[] places = {READING_STATE.placeOfTheInput("sideAsWritten"),
                 READING_STATE.placeOfTheInput("answering"),
                 READING_STATE.placeOfTheInput("countsMet"),
                 READING_STATE.placeOfTheInput("telling")};
-        BitSet[] out = new BitSet[1 << places.length];
+        BitSet[] out = new BitSet[1 << InputAskedAfter.values().length];
         for (int consulted = 0; consulted < out.length; consulted++) {
             BitSet left = new BitSet();
             for (int each = 0; each < places.length; each++) {
-                if ((consulted & (1 << each)) == 0) {
+                if ((consulted & inputs[each].bit()) == 0) {
                     left.set(places[each]);
                 }
             }
             out[consulted] = left;
+        }
+        return out;
+    }
+
+    private static BitSet[] contentAskedForEachSet() {
+        BitSet[] out = new BitSet[1 << InputAskedAfter.values().length];
+        for (int consulted = 0; consulted < out.length; consulted++) {
+            BitSet asked = new BitSet();
+            if ((consulted & InputAskedAfter.ANSWERING_CONTENT.bit()) != 0) {
+                asked.set(READING_STATE.placeOfTheInput("answering"));
+            }
+            if ((consulted & InputAskedAfter.COUNTS_CONTENT.bit()) != 0) {
+                asked.set(READING_STATE.placeOfTheInput("countsMet"));
+            }
+            out[consulted] = asked;
         }
         return out;
     }
@@ -11721,6 +11746,19 @@ final class Pullback {
 
     private Map<Quantity.HowManyHold, List<Denotation>> countsMet() {
         consulted |= InputAskedAfter.COUNTS.bit();
+        return countsMet;
+    }
+
+    /** What {@code answering} holds, which a reading that asks it depends on and not on there being
+     *  one. */
+    private List<Derivation> answeringContent() {
+        consulted |= InputAskedAfter.ANSWERING.bit() | InputAskedAfter.ANSWERING_CONTENT.bit();
+        return answering;
+    }
+
+    /** What {@code countsMet} holds, as {@link #answeringContent} is of {@code answering}. */
+    private Map<Quantity.HowManyHold, List<Denotation>> countsMetContent() {
+        consulted |= InputAskedAfter.COUNTS.bit() | InputAskedAfter.COUNTS_CONTENT.bit();
         return countsMet;
     }
 
@@ -11773,8 +11811,9 @@ final class Pullback {
 
         @Override
         public boolean sameInputs(ReadingState.Inputs then, ReadingState.Inputs now,
-                                  boolean askedAggregates) {
-            return READING_STATE.sameInputs(then, now, askedAggregates);
+                                  boolean askedAggregates, int consulted) {
+            return READING_STATE.sameInputsBut(then, now, askedAggregates, null,
+                    CONTENT_ASKED[consulted]);
         }
 
         @Override
@@ -13599,11 +13638,11 @@ final class Pullback {
             if (read.composed().size() < numbers.size()) {
                 return null;
             }
-            if (countsMet().isEmpty() && !restMayCount.getAsBoolean()) {
+            if (countsMetContent().isEmpty() && !restMayCount.getAsBoolean()) {
                 return null;
             }
             if (!(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))
-                    || countsMet().isEmpty()) {
+                    || countsMetContent().isEmpty()) {
                 return null;
             }
             List<LinearForm<Quantity>> weighed = new ArrayList<>(List.of(others));
@@ -13633,7 +13672,8 @@ final class Pullback {
      * the comparison is.
      */
     private Inside.ATotalByKeeping aCountToKeep(Predicate<Quantity.HowManyHold> standsInTheWay) {
-        for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count : countsMet().entrySet()) {
+        for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count
+                : countsMetContent().entrySet()) {
             if (!standsInTheWay.test(count.getKey())) {
                 continue;
             }
@@ -15006,7 +15046,7 @@ final class Pullback {
         List<ReadingTaken<R>> before = table.computeIfAbsent(node, _ -> new ArrayList<>());
         for (ReadingTaken<R> each : before) {
             if (each.at() == at && READING_STATE.sameInputsBut(each.inputs(), inputs, false,
-                            UNCONSULTED[each.consulted()])
+                            UNCONSULTED[each.consulted()], CONTENT_ASKED[each.consulted()])
                     && elementsMet.agrees(each.footprint())
                     && Objects.equals(each.said(), said)) {
                 elementsMet.takes(each.footprint());

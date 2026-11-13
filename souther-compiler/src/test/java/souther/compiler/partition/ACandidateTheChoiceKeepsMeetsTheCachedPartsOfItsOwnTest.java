@@ -51,7 +51,8 @@ class ACandidateTheChoiceKeepsMeetsTheCachedPartsOfItsOwnTest {
         }
 
         @Override
-        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates) {
+        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates,
+                                  int consulted) {
             return then.equals(now);
         }
 

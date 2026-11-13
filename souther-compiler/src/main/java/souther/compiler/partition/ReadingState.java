@@ -43,8 +43,11 @@ final class ReadingState {
      * @param values what the inputs were, copied where they are collections so that a later change
      *               to the collection is not a change to this
      * @param asked  what the aggregates being read were
+     * @param contents what each input that is written into held, by the place of the input
+     *               among {@code values}, and null for each that is not or that was absent: a
+     *               reading that asked what one holds depends on that and not on its being there
      */
-    record Inputs(List<Object> values, Object asked) {}
+    record Inputs(List<Object> values, Object asked, List<Object> contents) {}
 
     private final Field[] inputs;
     private final Field asked;
@@ -52,6 +55,8 @@ final class ReadingState {
     private final Field[] flags;
     private final Field[] identities;
     private final Field[] absent;
+    /** Whether each of {@link #inputs} is written into by a reading, in the same order. */
+    private final boolean[] writtenInto;
     /** How each of {@link #inputs} is taken, in the same order. */
     private final Taken[] howEachInputIsTaken;
 
@@ -113,7 +118,9 @@ final class ReadingState {
         this.absent = absentFields.toArray(Field[]::new);
         this.asked = askedField;
         this.howEachInputIsTaken = new Taken[inputs.length];
+        this.writtenInto = new boolean[inputs.length];
         for (int at = 0; at < inputs.length; at++) {
+            writtenInto[at] = roles.get(inputs[at].getName()) == ReadingRole.WRITTEN;
             howEachInputIsTaken[at] = isAmong(flags, inputs[at]) ? Taken.AS_PRESENT
                     : isAmong(identities, inputs[at]) ? Taken.AS_THE_VERY_ONE : Taken.AS_A_COPY;
         }
@@ -144,8 +151,10 @@ final class ReadingState {
     /** The inputs of {@code owner} as they stand. */
     Inputs inputsOf(Object owner) {
         List<Object> values = new ArrayList<>(inputs.length);
+        List<Object> contents = new ArrayList<>(inputs.length);
         for (int at = 0; at < inputs.length; at++) {
             Object value = read(inputs[at], owner);
+            contents.add(writtenInto[at] && value != null ? snapshotOf(value) : null);
             values.add(switch (howEachInputIsTaken[at]) {
                 case AS_PRESENT -> Boolean.valueOf(value != null);
                 case AS_THE_VERY_ONE -> new Same(value);
@@ -153,7 +162,8 @@ final class ReadingState {
             });
         }
         return new Inputs(Collections.unmodifiableList(values),
-                asked == null ? null : snapshotOf(read(asked, owner)));
+                asked == null ? null : snapshotOf(read(asked, owner)),
+                Collections.unmodifiableList(contents));
     }
 
     private static boolean isAmong(Field[] fields, Field field) {
@@ -168,21 +178,31 @@ final class ReadingState {
     /** Whether {@code now} are the inputs {@code then} were; those of the aggregates only where
      *  the reading {@code then} was of asked after them. */
     boolean sameInputs(Inputs then, Inputs now, boolean askedMatters) {
-        return sameInputsBut(then, now, askedMatters, null);
+        return sameInputsBut(then, now, askedMatters, null, null);
     }
 
     /**
      * The same, but for the inputs at {@code unconsulted}: where the reading {@code then} never
      * asked after an input, what it stood as is no part of what the reading comes to.
      *
+     * <p>An input that is written into stands as it was where it is there or is not, and, where
+     * the reading asked what it holds, where it holds what it did.
+     *
      * @param unconsulted the places of {@link #inputs} not compared, or null where all are
+     * @param contentAsked the places of {@link #inputs} whose contents are compared as well, or
+     *                     null where none are
      */
-    boolean sameInputsBut(Inputs then, Inputs now, boolean askedMatters, BitSet unconsulted) {
+    boolean sameInputsBut(Inputs then, Inputs now, boolean askedMatters, BitSet unconsulted,
+                          BitSet contentAsked) {
         for (int at = 0; at < inputs.length; at++) {
             if (unconsulted != null && unconsulted.get(at)) {
                 continue;
             }
             if (!Objects.equals(then.values().get(at), now.values().get(at))) {
+                return false;
+            }
+            if (contentAsked != null && contentAsked.get(at)
+                    && !Objects.equals(then.contents().get(at), now.contents().get(at))) {
                 return false;
             }
         }
