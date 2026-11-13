@@ -84,6 +84,21 @@ public final class ACompiledModel {
     }
 
     /**
+     * The errors {@code model} is refused with, whether it reports them or stops with them, after
+     * it was answered in full. For a test that says what a refusal is and compares it with what it
+     * meant, so the model is not held to compile and what comes back is the errors themselves,
+     * which a model that did not compile does not leave empty.
+     */
+    public static List<Diagnostic> diagnosticsOf(Compilation model) {
+        try {
+            model.answerEverything();
+            return model.errors().stream().map(found -> found.diagnostic()).toList();
+        } catch (CompileException stopped) {
+            return stopped.diagnostics();
+        }
+    }
+
+    /**
      * {@code model}, read without being compiled, because compiling it is what a test cannot do:
      * the model is too large for the compiler's own stack, or is a buffer stopped half way
      * through a line, and what the test asks of it is not a report. Said so, with why, and held to

@@ -32,22 +32,27 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     /** The shapes written for this check to read, and which of them it refuses. */
     private static final Set<String> REFUSED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelNeverAsked", "AnotherClassMadeIt", "AnotherModelAsked",
-            "AskedOnOneWayOnly", "ChangedThenFailedAndCaught", "ChangedThroughAMethod",
+            "AskedOnOneWayOnly", "ChangedOnTheWayThatFails", "ChangedThenFailedAndCaught",
+            "ChangedThroughAMethod", "ChangedThroughAnInterface",
             "ChangedThroughTheDb", "DbChangedThroughAVariable", "DbHandedToAMethod",
-            "EngineHandsItIn", "ErrorsDropped", "ErrorsKept", "FieldMutatedAfterTheLook",
+            "EngineHandsItIn", "ErrorsDropped", "ErrorsKept",
+            "FieldChangedByTheVariableItCameIn", "FieldChangedByTheVariableItWasReadInto",
+            "FieldMutatedAfterTheLook",
             "FieldNeverAsked", "FromACollection", "HandedOnManyTimes",
             "HandedToCodeThatChangesIt", "LambdaMadeNotRun", "LeftBeforeTheAsk",
             "LeftOpenFor", "MadeInALambda", "MeasuredThenRead", "MutatedAfterTheLook",
             "NotCompiledButReportRead", "NotCompiledOffTheList", "NotCompiledReadsAllReports",
             "ParameterNobodyPasses", "ReadThenChangedThenAsked",
-            "ReadThenChangedThenAskedInAMethod", "ReassignedOnOneWay", "ReplacedAfterTheLook",
+            "ReadThenChangedThenAskedInAMethod", "ReassignedOnOneWay",
+            "ReplacedAfterTheLook", "ReportsReadOfAModelNobodyAsked",
             "SwallowedFailure", "UpdatedAfterTheLook", "WarningsOfAnUnaskedModel"));
 
     private static final Set<String> ACCEPTED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelAsked", "AliasOfAnAskedModel", "AnotherClassAskedAboutIt",
             "AskedAfterTheRead", "AskedByAMethodOfItsOwn", "AskedOnEveryWay", "AskedThenCaptured",
             "AskedThenRead", "ConfiguredThroughTheDbBeforeTheLook", "DbHandedToAReader",
-            "FieldAskedWhereWritten", "HelperThatChangesAndAsks", "MarkedAndNotRun",
+            "FieldAskedWhereWritten", "HandedToAnInterfaceThatOnlyLooks",
+            "HelperThatChangesAndAsks", "MarkedAndNotRun",
             "NotCompiledOnTheList",
             "ParameterHandedByACaller", "TheErrorsAreWhatWasMeant", "ThroughTheDoor",
             "UpdatedThenAsked"));
@@ -130,7 +135,14 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
         }
         shapes.add(COMPILED.read(FIXTURES + "Factory"));
         Set<String> refused = new TreeSet<>();
-        List<ClassModel> production = List.of(COMPILED.read(FIXTURES + "ProductionChanger"));
+        List<ClassModel> production = new ArrayList<>();
+        for (String code : List.of("ProductionChanger", "Editor", "UpdatingEditor",
+                "LookingEditor")) {
+            production.add(COMPILED.read(FIXTURES + code));
+        }
+        for (Path module : COMPILED.modules()) {
+            production.addAll(COMPILED.classesOf(module));
+        }
         for (String method : door.of(shapes, production).refused()) {
             refused.add(method.substring(method.indexOf('$') + 1, method.indexOf('#')));
         }
@@ -150,18 +162,59 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     }
 
     /**
-     * And what a model and its store can do is each said to read, to change or to do neither.
+     * And what the store can do is each said to read a report, to change what a model is made of,
+     * or to do neither.
      *
-     * <p>The check proves a read only of what it follows, so a method added to either class is
-     * one it does not know to be a change until it is said here.
+     * <p>What a method of {@code Compilation} does is worked out from what it can reach of these,
+     * so a method added to the store is one the check does not know about until it is said.
      */
     @Test
-    void everyMethodOfAModelAndItsStoreIsSaidToReadChangeOrNeither() {
-        assertEquals(Set.of(), ModelVocabulary.unsaid(
-                        COMPILED.read(ModelVocabulary.COMPILATION),
-                        COMPILED.read(ModelVocabulary.DB)),
-                "a method of Compilation or Db is not said in ModelVocabulary to read what a model"
-                        + " says, to change what it is, or to do neither");
+    void everyMethodOfAModelsStoreIsSaidToReadChangeOrNeither() {
+        assertEquals(Set.of(), ModelVocabulary.unsaid(COMPILED.read(ModelVocabulary.DB)),
+                "a method of Db is not said in ModelVocabulary to read a report, to change what a"
+                        + " model is made of, or to do neither");
+    }
+
+    /**
+     * And what is worked out of the methods of a model is what they are: every one that reads a
+     * report says so, and every one that changes the model does.
+     *
+     * <p>The methods are worked out from the classes, so this holds the working out to what a
+     * reader of the compiler knows of them, and does not list the methods the check follows.
+     */
+    @Test
+    void theMethodsOfAModelThatReadAReportOrChangeItAreFoundFromTheClasses() {
+        List<ClassModel> everything = new ArrayList<>();
+        for (Path module : COMPILED.modules()) {
+            everything.addAll(COMPILED.classesOf(module));
+        }
+        ModelEffects effects = ModelEffects.of(everything);
+        String model = ModelVocabulary.COMPILATION;
+        Set<String> reading = new TreeSet<>();
+        Set<String> changing = new TreeSet<>();
+        for (java.lang.classfile.MethodModel method : COMPILED.read(model).methods()) {
+            String key = AMethod.of(model, method.methodName().stringValue(),
+                    method.methodType().stringValue());
+            if (effects.readsReports(key)) {
+                reading.add(method.methodName().stringValue());
+            }
+            if (effects.changes(key)) {
+                changing.add(method.methodName().stringValue());
+            }
+        }
+        Set<String> said = new TreeSet<>(ModelVocabulary.SHOWS_ERRORS);
+        said.addAll(ModelVocabulary.SAYS_WITHOUT_REPORTS);
+        said.add("warnings");
+        assertEquals(said, reading,
+                "the methods of a model that read what it found, and do not answer it first, are"
+                        + " the ones said in ModelVocabulary to show the errors, and warnings and"
+                        + " adequacy, which a model that stopped does not show");
+        assertTrue(changing.containsAll(Set.of("update", "measure")),
+                () -> "changing a model: " + changing);
+        Set<String> answersAndChanges = new TreeSet<>(changing);
+        answersAndChanges.retainAll(ModelVocabulary.ANSWERS);
+        assertEquals(Set.of(), answersAndChanges,
+                () -> "answering a model changes what it is made of: " + changing);
     }
 
     /**

@@ -49,7 +49,6 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
 
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        assertTrue(compilation.errors().isEmpty(), () -> "the model compiles: " + compilation.errors());
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)

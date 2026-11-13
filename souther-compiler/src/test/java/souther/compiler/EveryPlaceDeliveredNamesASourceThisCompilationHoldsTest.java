@@ -193,20 +193,23 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
      */
     @Test
     void everyCitationDeliveredEitherPointsSomewhereHeldOrSaysWhereTheCodeIs() {
-        for (Compilation compilation : List.of(reaching(), overTheLibrary())) {
-            Set<SourceId> held = new LinkedHashSet<>(compilation.sourceIds());
-            List<Citation> delivered = citations(compilation);
+        assertEveryCitationIsPlaced(reaching());
+        assertEveryCitationIsPlaced(overTheLibrary());
+    }
 
-            assertFalse(delivered.isEmpty(), "the fixture reports something, or this checks nothing");
-            assertEquals(List.of(), delivered.stream().filter(citation -> switch (citation) {
-                case Citation.Written w -> !isHeld(w.at(), held);
-                case Citation.Reached r -> !isHeld(r.at(), held);
-                case Citation.Unplaced _ -> true;
-                case Citation.UnplacedElsewhere u -> u.provenance().reachedBy().isEmpty();
-                case Citation.OutOfSight out -> out.provenance().reachedBy().isEmpty();
-            }).toList(), "a reader is sent to a file this compilation holds, or told where the code"
-                    + " is written");
-        }
+    private static void assertEveryCitationIsPlaced(Compilation compilation) {
+        Set<SourceId> held = new LinkedHashSet<>(compilation.sourceIds());
+        List<Citation> delivered = citations(compilation);
+
+        assertFalse(delivered.isEmpty(), "the fixture reports something, or this checks nothing");
+        assertEquals(List.of(), delivered.stream().filter(citation -> switch (citation) {
+            case Citation.Written w -> !isHeld(w.at(), held);
+            case Citation.Reached r -> !isHeld(r.at(), held);
+            case Citation.Unplaced _ -> true;
+            case Citation.UnplacedElsewhere u -> u.provenance().reachedBy().isEmpty();
+            case Citation.OutOfSight out -> out.provenance().reachedBy().isEmpty();
+        }).toList(), "a reader is sent to a file this compilation holds, or told where the code"
+                + " is written");
     }
 
     private static boolean isHeld(SourcePos at, Set<SourceId> held) {

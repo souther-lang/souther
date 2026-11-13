@@ -475,7 +475,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
     }
 
     private static String report(Compilation compilation) {
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

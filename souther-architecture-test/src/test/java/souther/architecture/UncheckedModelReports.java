@@ -2,10 +2,12 @@ package souther.architecture;
 
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -63,14 +65,18 @@ final class UncheckedModelReports {
 
     /**
      * What {@code classes} do with the models they read, where {@code production} is the
-     * compiler's own code they hand models to, and a model handed to what can reach a change to
-     * one is a model that was changed.
+     * compiler's own code they hand models to. What a method of either does to a model is worked
+     * out from both ({@link ModelEffects}), and the methods of {@code classes} are walked.
+     * The helper's own methods are not walked: they are what asks, and are held by their own tests.
      */
     Findings of(Collection<ClassModel> classes, Collection<ClassModel> production) {
         Map<String, ModelWalk> walks = new LinkedHashMap<>();
         Set<String> written = new HashSet<>();
         Map<String, Integer> captured = new HashMap<>();
         for (ClassModel each : classes) {
+            if (ModelWalk.isHelper(each.thisClass().asInternalName(), helper)) {
+                continue;
+            }
             for (MethodModel method : each.methods()) {
                 if (method.code().isPresent()) {
                     ModelWalk walk = new ModelWalk(each, method, helper);
@@ -83,9 +89,11 @@ final class UncheckedModelReports {
                 }
             }
         }
+        List<ClassModel> everything = new ArrayList<>(classes);
+        everything.addAll(production);
         ModelWalk.World world = new ModelWalk.World(helper, Set.copyOf(walks.keySet()),
                 Set.copyOf(written), Map.copyOf(captured), exempt,
-                ProductionMutation.reaching(production));
+                ModelEffects.of(everything));
         ModelWalk.Facts facts = ModelWalk.Facts.NONE;
         Map<ModelWalk, ModelWalk.Result> results = new LinkedHashMap<>();
         for (int round = 0; round < ROUNDS; round++) {
@@ -131,6 +139,7 @@ final class UncheckedModelReports {
         Set<String> returnsParameter = new HashSet<>();
         Set<String> readsParameter = new HashSet<>();
         Set<String> readsReportParameter = new HashSet<>();
+        Set<String> readsStrictParameter = new HashSet<>();
         Set<String> asksParameter = new HashSet<>();
         Set<String> mutatesParameter = new HashSet<>();
         Set<String> leavesAsked = new HashSet<>();
@@ -146,6 +155,8 @@ final class UncheckedModelReports {
             result.readsParameter.forEach(index -> readsParameter.add(key + "#" + index));
             result.readsReportParameter.forEach(index -> readsReportParameter
                     .add(key + "#" + index));
+            result.readsStrictParameter.forEach(index -> readsStrictParameter
+                    .add(key + "#" + index));
             result.asksParameter.forEach(index -> asksParameter.add(key + "#" + index));
             result.mutatesParameter.forEach(index -> mutatesParameter.add(key + "#" + index));
             result.exits.forEach((index, standing) -> {
@@ -159,7 +170,8 @@ final class UncheckedModelReports {
                     .computeIfAbsent(parameter, k -> new HashSet<>()).addAll(flowing));
         }
         return new ModelWalk.Facts(returns, returnsParameter, readsParameter,
-                readsReportParameter, asksParameter, mutatesParameter, leavesAsked, fields,
+                readsReportParameter, readsStrictParameter, asksParameter, mutatesParameter,
+                leavesAsked, fields,
                 fieldFlows);
     }
 }

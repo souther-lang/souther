@@ -14,6 +14,14 @@ enum ModelStanding {
     ASKED,
 
     /**
+     * Everything there is to answer of it was answered, which a model that does not compile shows
+     * as its errors. What shows them is read without more, and what does not, such as the warnings
+     * or how well the rows cover it, is empty for a model that stopped, so it is read only of one
+     * that was asked about.
+     */
+    ANSWERED,
+
+    /**
      * The test said it is a model that cannot be compiled, so what it reads of it is what the
      * declarations say, and never a report: a report of a model nothing was asked of is empty.
      */

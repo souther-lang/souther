@@ -3,9 +3,8 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
-import souther.compiler.WhereItSits;
-import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.WhereItSits;
 import souther.compiler.diag.Primary;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -274,14 +273,7 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        List<Diagnostic> said = new ArrayList<>();
-        try {
-            c.answerEverything();
-        } catch (CompileException e) {
-            said.addAll(e.diagnostics());
-        }
-        c.errors().forEach(each -> said.add(each.diagnostic()));
-        return new Reported(said);
+        return new Reported(new ArrayList<>(ACompiledModel.diagnosticsOf(c)));
     }
 
     /** The compilation itself, for a case that asks it what it holds rather than what it said. */

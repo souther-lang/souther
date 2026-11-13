@@ -8,15 +8,15 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * What the check allows to be done to a model and to the store it hands out, said once.
+ * What is said by hand of a model's store, and the names the check needs of the classes around it.
  *
  * <p>A check that proves of any code that a read of a model is of one that was asked about has to
- * follow every way the code can reach the model, and what it does not follow it lets through. So it
- * proves it of a closed set of things done, and refuses the rest. What can be done to a model is
- * what its class has, and what its store has, and each of those methods is here, said to read what
- * the model says, to change what the model is, or to do neither. A method added to either class and
- * said here nowhere is found by {@link #unsaid}, which a test holds empty, so that a change to
- * what a model can do is a change that says which of the three it is.
+ * follow every way the code can reach the model, and what it does not follow it lets through. What
+ * a method of {@code Compilation} does is not said here: whether it reads a report or changes what
+ * the model is made of is worked out from the classes ({@link ModelEffects}) by what it can reach
+ * of the store, so it is right the day a method is added or its body is changed. What is said here
+ * is the store's own operations, which are what the rest is worked out from, and
+ * {@link #unsaid} finds a method of the store that is said nowhere, which a test holds empty.
  */
 final class ModelVocabulary {
 
@@ -36,30 +36,33 @@ final class ModelVocabulary {
     static final String NOT_COMPILED = "notCompiled";
 
     /**
-     * What a test calls on a model to read what is said of it. What these say of a model that did
-     * not compile is nothing, which is also what they say of one with nothing to say.
+     * The report of a model that reads the measures it asks of the store itself, so it is not
+     * reached from the store's reads of a report.
      */
-    static final Set<String> COMPILATION_READS = Set.of("db", "adequacy", "warnings");
+    static final String ADEQUACY_REPORT_OF = "of";
+
+    /** The method of a model that hands out its store. */
+    static final String STORE_ACCESSOR = "db";
+
+    /** What answers everything a model has to answer, so that the errors it has are found. */
+    static final Set<String> ANSWERS = Set.of("answerEverything", "answerWarnings");
 
     /**
-     * What changes a model once it has been asked about, so that what was asked is no longer what
-     * it is: the sources it is made of, and the way it is compiled and measured.
+     * The methods of a model that read the reports it has found and hand back the errors among
+     * them. A model that was answered shows them whether or not it compiles, so it is read through
+     * these without having been asked that it compiles; what reads the rest of what is found, which
+     * a model that stopped does not show, is read only of a model that was asked about.
      */
-    static final Set<String> COMPILATION_CHANGES = Set.of("update", "measure", "observe",
-            "abandonWhen", "allowing", "withExampleBudget", "withJvmExampleDeadlines",
-            "withEvaluationPolicy", "writtenOn", "withReadingPolicy", "withAdequacyPolicy");
+    static final Set<String> SHOWS_ERRORS = Set.of("reports", "errors", "failure");
 
     /**
-     * What neither reads what is said of a model nor changes it: what it is made of, what answering
-     * it has made, and the errors, which a model that did not compile does say.
+     * What reads of a model what it says without going through the reports it found: how well the
+     * rows cover it. A model that did not compile says nothing here, so it is read only of one
+     * that was asked about.
      */
-    static final Set<String> COMPILATION_NEITHER = Set.of("jvmProgramImages", "classes", "loader",
-            "module", "declaredBehaviors", "signatures", "sourceIds", "answerEverything",
-            "answerWarnings", "exampleSourcesOf", "texts", "modules", "sourceIdOf", "moduleOf",
-            "structuralReports", "diagnostics", "repairs", "reports", "failure",
-            "structuralFailure", "filedUnderOf", "publishSourceIdsOf", "errors");
+    static final Set<String> SAYS_WITHOUT_REPORTS = Set.of("adequacy");
 
-    /** What reads of a model's store what its reports say. */
+    /** What reads of a store what its reports say. */
     static final Set<String> DB_READS_A_REPORT = Set.of("allReports");
 
     /** What changes what a model is compiled from, through the store it hands out. */
@@ -72,27 +75,20 @@ final class ModelVocabulary {
             "ruleReadingFor");
 
     /**
-     * The methods of the two classes that are said nowhere above, as {@code Class#name}, which are
-     * the instance methods a caller outside can reach.
+     * The methods of the store that are said nowhere above, as {@code Class#name}, which are the
+     * instance methods a caller outside can reach.
      */
-    static Set<String> unsaid(ClassModel compilation, ClassModel db) {
+    static Set<String> unsaid(ClassModel db) {
         Set<String> unsaid = new TreeSet<>();
-        unsaid.addAll(unsaidOf(compilation, List.of(COMPILATION_READS, COMPILATION_CHANGES,
-                COMPILATION_NEITHER)));
-        unsaid.addAll(unsaidOf(db, List.of(DB_READS_A_REPORT, DB_CHANGES, DB_NEITHER)));
-        return unsaid;
-    }
-
-    private static Set<String> unsaidOf(ClassModel model, List<Set<String>> said) {
-        Set<String> unsaid = new TreeSet<>();
-        for (MethodModel method : model.methods()) {
+        List<Set<String>> said = List.of(DB_READS_A_REPORT, DB_CHANGES, DB_NEITHER);
+        for (MethodModel method : db.methods()) {
             String name = method.methodName().stringValue();
             boolean reachable = !method.flags().has(AccessFlag.STATIC)
                     && !method.flags().has(AccessFlag.PRIVATE)
                     && !method.flags().has(AccessFlag.SYNTHETIC)
                     && !name.startsWith("<") && !name.startsWith("lambda$");
             if (reachable && said.stream().noneMatch(each -> each.contains(name))) {
-                unsaid.add(model.thisClass().asInternalName() + "#" + name);
+                unsaid.add(db.thisClass().asInternalName() + "#" + name);
             }
         }
         return unsaid;

@@ -635,6 +635,115 @@ public final class ModelShapes {
         }
     }
 
+    /** Reads what a model has found without anything having been answered. */
+    public static final class ReportsReadOfAModelNobodyAsked {
+
+        private ReportsReadOfAModelNobodyAsked() { }
+
+        public static boolean read(String source) {
+            return Compilation.ofSource(source, "Main").reports().isEmpty();
+        }
+    }
+
+    /** What a model is handed to, by a name that more than one method answers to. */
+    public interface Editor {
+
+        void change(Compilation model);
+    }
+
+    /** An editor that replaces what the model is compiled from. */
+    public static final class UpdatingEditor implements Editor {
+
+        @Override
+        public void change(Compilation model) {
+            model.update(Map.of(), Set.of(), LocalDate.MIN);
+        }
+    }
+
+    /** An editor that looks at the model and leaves it as it was. */
+    public static final class LookingEditor implements Editor {
+
+        @Override
+        public void change(Compilation model) {
+            Objects.requireNonNull(model.db());
+        }
+    }
+
+    /** Hands an asked-about model to an editor that is only known by its interface. */
+    public static final class ChangedThroughAnInterface {
+
+        private ChangedThroughAnInterface() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Editor editor = new UpdatingEditor();
+            editor.change(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Hands an asked-about model to an editor that only looks at it. */
+    public static final class HandedToAnInterfaceThatOnlyLooks {
+
+        private HandedToAnInterfaceThatOnlyLooks() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            LookingEditor editor = new LookingEditor();
+            editor.change(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Asks about a model on the way it returns, and changes it on the way it fails. */
+    public static final class ChangedOnTheWayThatFails {
+
+        private ChangedOnTheWayThatFails() { }
+
+        private static void changeOrCheck(Compilation model, boolean fail) {
+            if (fail) {
+                model.update(Map.of(), Set.of(), LocalDate.MIN);
+                throw new IllegalStateException("failed");
+            }
+            TheDoor.compiles(model);
+        }
+
+        public static AdequacyReport read(String source, boolean fail) {
+            Compilation model = TheDoor.answered(source);
+            try {
+                changeOrCheck(model, fail);
+            } catch (IllegalStateException failed) {
+                return AdequacyReport.of(model);
+            }
+            return null;
+        }
+    }
+
+    /** Keeps an asked-about model in a field, and changes it by the variable it came in. */
+    public static final class FieldChangedByTheVariableItCameIn {
+
+        private Compilation stored;
+
+        public AdequacyReport read(String source, Map<String, String> other) {
+            Compilation model = TheDoor.answered(source);
+            stored = model;
+            model.update(other, Set.of(), LocalDate.MIN);
+            return AdequacyReport.of(stored);
+        }
+    }
+
+    /** Reads a model out of a field into a variable, and changes it there. */
+    public static final class FieldChangedByTheVariableItWasReadInto {
+
+        private Compilation stored = TheDoor.answered("module a");
+
+        public AdequacyReport read(Map<String, String> other) {
+            Compilation model = stored;
+            model.update(other, Set.of(), LocalDate.MIN);
+            return AdequacyReport.of(stored);
+        }
+    }
+
     /** Code that is not walked, written to change the model it is handed. */
     public static final class ProductionChanger {
 
