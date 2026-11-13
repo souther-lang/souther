@@ -71,7 +71,7 @@ class EveryFieldOfAPullbackSaysWhatAReadingKeptToBeTakenAgainDoesWithItTest {
         assertEquals(Set.of("met"), fieldsWith(ReadingRole.LEDGER));
         assertEquals(Set.of("elementsMet"), fieldsWith(ReadingRole.FOOTPRINT));
         assertEquals(Set.of("readingsLeft"), fieldsWith(ReadingRole.BUDGET));
-        assertEquals(Set.of("keptReadings", "aggregatesKept", "aggregatesAsked"),
+        assertEquals(Set.of("keptReadings", "aggregatesKept", "aggregatesAsked", "consulted"),
                 fieldsWith(ReadingRole.COUNTER));
         assertEquals(Set.of("sharedSums", "sharedApplications", "sharedConditions",
                 "sharedObservations", "sharedForms", "sharedWaysIn", "keptRemainders",

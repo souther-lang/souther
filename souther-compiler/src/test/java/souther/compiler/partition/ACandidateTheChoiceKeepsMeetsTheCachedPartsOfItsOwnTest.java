@@ -85,6 +85,27 @@ class ACandidateTheChoiceKeepsMeetsTheCachedPartsOfItsOwnTest {
             met.addAll(parts);
         }
 
+        int consulted;
+
+        @Override
+        public int startConsulting() {
+            int before = consulted;
+            consulted = 0;
+            return before;
+        }
+
+        @Override
+        public int endConsulting(int before) {
+            int mine = consulted;
+            consulted = before | mine;
+            return mine;
+        }
+
+        @Override
+        public void consultAgain(int more) {
+            consulted |= more;
+        }
+
         @Override
         public int aggregatesAsked() {
             return 0;

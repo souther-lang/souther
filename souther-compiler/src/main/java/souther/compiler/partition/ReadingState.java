@@ -6,6 +6,7 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
@@ -167,12 +168,35 @@ final class ReadingState {
     /** Whether {@code now} are the inputs {@code then} were; those of the aggregates only where
      *  the reading {@code then} was of asked after them. */
     boolean sameInputs(Inputs then, Inputs now, boolean askedMatters) {
+        return sameInputsBut(then, now, askedMatters, null);
+    }
+
+    /**
+     * The same, but for the inputs at {@code unconsulted}: where the reading {@code then} never
+     * asked after an input, what it stood as is no part of what the reading comes to.
+     *
+     * @param unconsulted the places of {@link #inputs} not compared, or null where all are
+     */
+    boolean sameInputsBut(Inputs then, Inputs now, boolean askedMatters, BitSet unconsulted) {
         for (int at = 0; at < inputs.length; at++) {
+            if (unconsulted != null && unconsulted.get(at)) {
+                continue;
+            }
             if (!Objects.equals(then.values().get(at), now.values().get(at))) {
                 return false;
             }
         }
         return !askedMatters || Objects.equals(then.asked(), now.asked());
+    }
+
+    /** Where the input held in the field called {@code name} stands among the inputs. */
+    int placeOfTheInput(String name) {
+        for (int at = 0; at < inputs.length; at++) {
+            if (inputs[at].getName().equals(name)) {
+                return at;
+            }
+        }
+        throw new IllegalArgumentException(name + " is no input of a reading");
     }
 
     /** What the state a reading must leave alone is, to be compared with it afterwards: the very
